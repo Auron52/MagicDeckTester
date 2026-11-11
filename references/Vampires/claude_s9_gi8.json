@@ -1,23 +1,10 @@
 {
-  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "seed": 9, "game_index": 8, "win_turn": 4, "won": true,
   "mulligan": { "count": 0, "bottom": [] }, "combat_swap_timing": 1, "karoo_float": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1,
+  "promoted_from_search": {"source": "handoff_T3.json", "from_turn": 3, "human_win": 5, "src": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d", "at": "2026-10-25T01:12:12+00:00"},
   "decisions": [
-    { "chosen": 1, "decision": {
-  "decision_index": 0,
-  "type": "mulligan",
-  "turn": 0,
-  "me": { "life": 20, "battlefield": [] },
-  "opponent": { "life": 20, "battlefield": [] },
-  "mulligan_count": 0,
-  "on_the_play": false,
-  "to_bottom": 0,
-  "hand": [{ "num": 32, "name": "Secluded Courtyard" }, { "num": 5, "name": "Asylum Visitor" }, { "num": 40, "name": "Stromkirk Condemned" }, { "num": 20, "name": "Falkenrath Pit Fighter" }, { "num": 28, "name": "Markov Baron" }, { "num": 1, "name": "Aether Vial" }, { "num": 13, "name": "Captivating Vampire" }],
-  "ai_choice": 0,
-  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
-}
-},
     { "chosen": 0, "decision": {
-  "decision_index": 1,
+  "decision_index": 0,
   "main_ordinal": 0,
   "type": "main_phase",
   "turn": 1,
@@ -32,15 +19,20 @@
     { "index": 1, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
     { "index": 2, "summary": "land=Secluded Courtyard; cast: Falkenrath Gorger", "land": "Secluded Courtyard", "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
     { "index": 3, "summary": "land=Secluded Courtyard; cast: (nothing)", "land": "Secluded Courtyard", "casts": [], "actions": [] },
-    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 4, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 6, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 7, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 8, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 9, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 10, "summary": "land=Secluded Courtyard; cast: Falkenrath Pit Fighter", "land": "Secluded Courtyard", "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] }
   ],
-  "plans_hidden": 6,
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 2,
+  "decision_index": 1,
   "type": "main_phase",
   "turn": 1,
   "phase": "pre_main",
@@ -56,7 +48,7 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 3,
+  "decision_index": 2,
   "type": "main_phase",
   "turn": 1,
   "phase": "post_main",
@@ -72,7 +64,7 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 4,
+  "decision_index": 3,
   "type": "vial_charge",
   "turn": 2,
   "vial": "Aether Vial", "current_counters": 0,
@@ -85,7 +77,7 @@
 }
 },
     { "chosen": 1, "cast_order": ["*", "Falkenrath Gorger", "Falkenrath Pit Fighter"], "decision": {
-  "decision_index": 5,
+  "decision_index": 4,
   "main_ordinal": 1,
   "type": "main_phase",
   "turn": 2,
@@ -102,21 +94,32 @@
     { "index": 3, "summary": "land=none; cast: Falkenrath Pit Fighter (vial)", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
     { "index": 4, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
     { "index": 5, "summary": "land=none; cast: Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
-    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 6, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 8, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 9, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 10, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 11, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 12, "summary": "land=none; cast: Falkenrath Pit Fighter, Falkenrath Gorger (vial)", "land": null, "casts": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "cast_order_canonical": ["Falkenrath Pit Fighter", "Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Pit Fighter" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 13, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 14, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 15, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 16, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 17, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 18, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] }
   ],
-  "plans_hidden": 12,
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 6,
+  "decision_index": 5,
   "type": "main_phase",
   "turn": 2,
   "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
@@ -126,13 +129,13 @@
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 7,
+  "decision_index": 6,
   "type": "main_phase",
   "turn": 2,
   "phase": "post_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
   "opponent": { "life": 20, "battlefield": [] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
@@ -142,20 +145,20 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 8,
+  "decision_index": 7,
   "type": "vial_charge",
   "turn": 3,
   "vial": "Aether Vial", "current_counters": 1,
   "perm_index": 1,
   "heuristic_default": 1,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 1 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [1], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
 }
 },
-    { "chosen": 6, "cast_order": ["*", "Asylum Visitor", "Markov Baron"], "decision": {
-  "decision_index": 9,
+    { "chosen": 0, "decision": {
+  "decision_index": 8,
   "main_ordinal": 2,
   "type": "main_phase",
   "turn": 3,
@@ -163,12 +166,14 @@
   "on_the_play": false,
   "drew": [{ "turn": 3, "card": "Falkenrath Pit Fighter" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 5, "name": "Asylum Visitor", "cost": "{1}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 28, "name": "Markov Baron", "cost": "{2}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 1, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
     { "index": 2, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
     { "index": 3, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 4, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
     { "index": 5, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
     { "index": 6, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Falkenrath Gorger #16, Falkenrath Pit Fighter #20)", "land": null, "casts": ["Asylum Visitor", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 0, "other": 2, "plan_bodies": 0, "taps": "Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }] },
     { "index": 7, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 1, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16" } }] },
@@ -182,9 +187,79 @@
     { "index": 15, "summary": "land=none; cast: Stromkirk Condemned (vial)", "land": null, "casts": ["Stromkirk Condemned"], "actions": [{ "card": "Stromkirk Condemned" }] },
     { "index": 16, "summary": "land=none; cast: Markov Baron (convoke: Falkenrath Gorger #16, Falkenrath Pit Fighter #20)", "land": null, "casts": ["Markov Baron"], "actions": [{ "card": "Markov Baron", "convoke": { "pip": 0, "other": 2, "plan_bodies": 0, "taps": "Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }] },
     { "index": 17, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 18, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 20, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 21, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 22, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 23, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 24, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 25, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 26, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 27, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 28, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 29, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 30, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 31, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 32, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 33, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 34, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 35, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 36, "summary": "land=none; cast: Asylum Visitor (vial), Markov Baron (convoke: Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Asylum Visitor #5, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 37, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 38, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 39, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 40, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 41, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 42, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 2, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 43, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 44, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 45, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 46, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 47, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 48, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter, Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16)", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter", "Markov Baron"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" } }] },
+    { "index": 49, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 50, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 51, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 52, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 53, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 54, "summary": "land=none; cast: Stromkirk Condemned (vial), Markov Baron (convoke: Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Markov Baron", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Markov Baron", "convoke": { "pip": 1, "other": 2, "plan_bodies": 1, "taps": "Stromkirk Condemned #40, Falkenrath Gorger #16, Falkenrath Pit Fighter #20" } }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 55, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 56, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 57, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 58, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 59, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 60, "summary": "land=none; cast: Asylum Visitor (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Asylum Visitor", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Asylum Visitor", "Falkenrath Pit Fighter"], "actions": [{ "card": "Asylum Visitor" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 61, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 62, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 63, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 64, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 65, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 66, "summary": "land=none; cast: Stromkirk Condemned (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Stromkirk Condemned", "Falkenrath Pit Fighter"], "actions": [{ "card": "Stromkirk Condemned" }, { "card": "Falkenrath Pit Fighter" }] },
+    { "index": 67, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 68, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 69, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 70, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 71, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
+    { "index": 72, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] }
   ],
-  "plans_hidden": 56,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "convoke", "text": "🙌 Convoke -- tapped 3 creature(s): Asylum Visitor #5, Falkenrath Pit Fighter #21, Falkenrath Gorger #16" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "tapped": true, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 7, "num": 21, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Markov Baron", "idx": 8, "num": 28, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+  ],
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
@@ -193,28 +268,12 @@
   "decision_index": 10,
   "type": "main_phase",
   "turn": 3,
-  "phase": "pre_main",
-  "on_the_play": false,
-  "events": [{ "turn": 3, "kind": "convoke", "text": "🙌 Convoke -- tapped 2 creature(s): Falkenrath Gorger #16, Falkenrath Pit Fighter #20" }],
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "tapped": true, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 11,
-  "type": "main_phase",
-  "turn": 3,
   "phase": "post_main",
   "on_the_play": false,
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Falkenrath Pit Fighter (3) — 3 to opponent (20→17)" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "tapped": true, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "tapped": true, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 7, "num": 21, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Markov Baron", "idx": 8, "num": 28, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
@@ -223,20 +282,20 @@
 }
 },
     { "chosen": 1, "decision": {
-  "decision_index": 12,
+  "decision_index": 11,
   "type": "vial_charge",
   "turn": 4,
   "vial": "Aether Vial", "current_counters": 2,
   "perm_index": 1,
   "heuristic_default": 1,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 2 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 7, "num": 21, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Markov Baron", "idx": 8, "num": 28, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [2], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
 }
 },
-    { "chosen": 0, "cast_order": ["*", "Captivating Vampire", "Falkenrath Pit Fighter"], "decision": {
-  "decision_index": 13,
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
   "main_ordinal": 3,
   "type": "main_phase",
   "turn": 4,
@@ -244,31 +303,28 @@
   "on_the_play": false,
   "drew": [{ "turn": 4, "card": "Falkenrath Gorger" }],
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Falkenrath Pit Fighter", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false, "power": 4, "toughness": 2 }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Falkenrath Pit Fighter", "idx": 7, "num": 21, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Markov Baron", "idx": 8, "num": 28, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 13, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "plans": [
-    { "index": 0, "summary": "land=none; cast: Captivating Vampire (vial), Falkenrath Pit Fighter", "land": null, "casts": ["Captivating Vampire", "Falkenrath Pit Fighter"], "cast_order_canonical": ["Captivating Vampire", "Falkenrath Pit Fighter"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Falkenrath Pit Fighter" }] },
-    { "index": 1, "summary": "land=none; cast: Captivating Vampire (vial), Falkenrath Gorger", "land": null, "casts": ["Captivating Vampire", "Falkenrath Gorger"], "cast_order_canonical": ["Captivating Vampire", "Falkenrath Gorger"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 2, "summary": "land=none; cast: Captivating Vampire (vial)", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }] },
-    { "index": 3, "summary": "land=none; cast: Falkenrath Pit Fighter", "land": null, "casts": ["Falkenrath Pit Fighter"], "actions": [{ "card": "Falkenrath Pit Fighter" }] },
-    { "index": 4, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
-    { "index": 5, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
+    { "index": 0, "summary": "land=none; cast: Captivating Vampire (vial), Falkenrath Gorger", "land": null, "casts": ["Captivating Vampire", "Falkenrath Gorger"], "cast_order_canonical": ["Captivating Vampire", "Falkenrath Gorger"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Falkenrath Gorger" }] },
+    { "index": 1, "summary": "land=none; cast: Captivating Vampire (vial)", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }] },
+    { "index": 2, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
   ],
-  "plans_hidden": 12,
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
 },
     { "chosen": -1, "decision": {
-  "decision_index": 14,
+  "decision_index": 13,
   "main_ordinal": 4,
   "type": "main_phase",
   "turn": 4,
   "phase": "pre_main",
   "on_the_play": false,
   "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Captivating Vampire", "idx": 8, "num": 13, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 9, "num": 21, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
-  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
+  "me": { "life": 20, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false, "power": 5, "toughness": 3 }, { "name": "Captivating Vampire", "idx": 9, "num": 13, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Falkenrath Gorger", "idx": 10, "num": 17, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Falkenrath Pit Fighter", "idx": 7, "num": 21, "is_land": false, "power": 4, "toughness": 3 }, { "name": "Markov Baron", "idx": 8, "num": 28, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }] },
   "plans": [
     { "index": 0, "summary": "land=none; cast: Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
     { "index": 1, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
@@ -276,87 +332,9 @@
   "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
   "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
 }
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 15,
-  "type": "main_phase",
-  "turn": 4,
-  "phase": "post_main",
-  "on_the_play": false,
-  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (4), Falkenrath Pit Fighter (4), Asylum Visitor (5), Markov Baron (3) — 16 to opponent (20→4)" }],
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "tapped": true, "is_land": false }, { "name": "Captivating Vampire", "idx": 8, "num": 13, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "tapped": true, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 9, "num": 21, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "tapped": true, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
-  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": 0, "decision": {
-  "decision_index": 16,
-  "type": "vial_charge",
-  "turn": 5,
-  "vial": "Aether Vial", "current_counters": 3,
-  "perm_index": 1,
-  "heuristic_default": 0,
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Captivating Vampire", "idx": 8, "num": 13, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 9, "num": 21, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
-  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
-  "note": "reply 1 to add a charge counter this upkeep, 0 to hold. Aether Vial deploys a creature whose mana value EQUALS its counter count."
-}
-},
-    { "chosen": 1, "cast_order": ["*", "Captivating Vampire", "Falkenrath Gorger"], "decision": {
-  "decision_index": 17,
-  "main_ordinal": 5,
-  "type": "main_phase",
-  "turn": 5,
-  "phase": "pre_main",
-  "on_the_play": false,
-  "drew": [{ "turn": 5, "card": "Vampire of the Dire Moon" }],
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Captivating Vampire", "idx": 8, "num": 13, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 9, "num": 21, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "is_land": true, "taps": "C" }], "vial_counters": [3], "hand": [{ "num": 14, "name": "Captivating Vampire", "cost": "{1}{B}{B}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Falkenrath Gorger", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
-  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: Captivating Vampire (vial), Falkenrath Gorger, Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire", "Falkenrath Gorger", "Captivating Vampire"], "cast_order_canonical": ["Captivating Vampire", "Falkenrath Gorger"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Falkenrath Gorger" }, { "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 1, "summary": "land=none; cast: Captivating Vampire (vial), Falkenrath Gorger", "land": null, "casts": ["Captivating Vampire", "Falkenrath Gorger"], "cast_order_canonical": ["Captivating Vampire", "Falkenrath Gorger"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Falkenrath Gorger" }] },
-    { "index": 2, "summary": "land=none; cast: Captivating Vampire (vial), Vampire of the Dire Moon, Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire", "Vampire of the Dire Moon", "Captivating Vampire"], "cast_order_canonical": ["Captivating Vampire", "Vampire of the Dire Moon"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Vampire of the Dire Moon" }, { "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 3, "summary": "land=none; cast: Captivating Vampire (vial), Vampire of the Dire Moon", "land": null, "casts": ["Captivating Vampire", "Vampire of the Dire Moon"], "cast_order_canonical": ["Captivating Vampire", "Vampire of the Dire Moon"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Vampire of the Dire Moon" }] },
-    { "index": 4, "summary": "land=none; cast: Captivating Vampire (vial), Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire", "Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }, { "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 5, "summary": "land=none; cast: Falkenrath Gorger, Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Falkenrath Gorger", "Captivating Vampire"], "actions": [{ "card": "Falkenrath Gorger" }, { "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 6, "summary": "land=none; cast: Captivating Vampire (vial)", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire" }] },
-    { "index": 7, "summary": "land=none; cast: Falkenrath Gorger", "land": null, "casts": ["Falkenrath Gorger"], "actions": [{ "card": "Falkenrath Gorger" }] },
-    { "index": 8, "summary": "land=none; cast: Vampire of the Dire Moon, Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Vampire of the Dire Moon", "Captivating Vampire"], "actions": [{ "card": "Vampire of the Dire Moon" }, { "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 9, "summary": "land=none; cast: Vampire of the Dire Moon", "land": null, "casts": ["Vampire of the Dire Moon"], "actions": [{ "card": "Vampire of the Dire Moon" }] },
-    { "index": 10, "summary": "land=none; cast: Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 11, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
-},
-    { "chosen": -1, "decision": {
-  "decision_index": 18,
-  "main_ordinal": 6,
-  "type": "main_phase",
-  "turn": 5,
-  "phase": "pre_main",
-  "on_the_play": false,
-  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Turntimber, Serpentine Wood"],
-  "me": { "life": 23, "battlefield": [{ "name": "Aether Vial", "idx": 1, "num": 1, "tapped": true, "is_land": false, "counters": [{ "kind": "charge", "label": "charge", "count": 3 }] }, { "name": "Asylum Visitor", "idx": 6, "num": 5, "is_land": false }, { "name": "Captivating Vampire", "idx": 8, "num": 13, "is_land": false }, { "name": "Captivating Vampire", "idx": 10, "num": 14, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 2, "num": 16, "is_land": false }, { "name": "Falkenrath Gorger", "idx": 11, "num": 17, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 3, "num": 20, "is_land": false }, { "name": "Falkenrath Pit Fighter", "idx": 9, "num": 21, "is_land": false }, { "name": "Markov Baron", "idx": 7, "num": 28, "is_land": false }, { "name": "Secluded Courtyard", "idx": 0, "num": 32, "tapped": true, "is_land": true }], "vial_counters": [3], "hand": [{ "num": 40, "name": "Stromkirk Condemned", "cost": "{B}{B}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Vampire of the Dire Moon", "cost": "{B}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 48, "land_drops_left": 1 },
-  "opponent": { "life": 4, "battlefield": [{ "name": "1/1 Creature", "idx": 5, "num": 500001, "is_land": false }, { "name": "6/6 Creature", "idx": 4, "num": 500000, "is_land": false }] },
-  "plans": [
-    { "index": 0, "summary": "land=none; cast: Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire", "src_num": 13, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 1, "summary": "land=none; cast: Captivating Vampire: tap five untapped Vampires: gain control of target creature", "land": null, "casts": ["Captivating Vampire"], "actions": [{ "card": "Captivating Vampire", "src_num": 14, "activate": true, "act_label": "tap five untapped Vampires: gain control of target creature", "verb": "steal", "x": 1 }] },
-    { "index": 2, "summary": "land=none; cast: (nothing)", "land": null, "casts": [], "actions": [] }
-  ],
-  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
-  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing"
-}
 }
   ],
   "final_events": [
-    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (5), Falkenrath Pit Fighter (5), Asylum Visitor (6), Markov Baron (4), Captivating Vampire (4), Falkenrath Pit Fighter (5) — 29 to opponent (4→-25)" }
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Falkenrath Gorger (4), Falkenrath Pit Fighter (4), Asylum Visitor (5), Falkenrath Pit Fighter (4), Markov Baron (3) — 20 to opponent (17→-3)" }
   ]
 }
