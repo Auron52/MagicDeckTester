@@ -869,7 +869,9 @@ enum Slot : int
     HYDRAS_BUCKET_DISCARD,    // MTG_HYDRAS_BUCKET_DISCARD  Hydras: the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11; LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first, net of board; HydrasProvider::CleanupDiscardCandidates). DEFAULT OFF -- a PROPOSAL the USER approves; =1 -> buckets, unset/=0 -> the generic max-MV ranking
     MUTE_NO_STORE,            // MTG_MUTE_NO_STORE  a pledger-MUTED recompute (it stands in for a plan-cache hit that never ran) refuses stores into the content-pure caches (refine memo, mana tier-1/tier-2 promotion, rollout game cache), so units cannot follow plan-pool residency (workctr::StoresAllowed, core/WorkCounters.h). Default ON since 2026-11-11; =0 restores the stores (the per-job A/B control that prices its wall)
     HASTE_HOST_DRAIN,         // MTG_HASTE_HOST_DRAIN  item 5o (mana-clean, Jumbo s30061937): before a planned unlock/release moves a haste Equipment off a fresh single-colour mana dork that cannot tap without it, tap that dork into the float (TurnSolver DrainOutgoingHasteHost). A mana-payment dominance. Default ON; =0 -> the move strands the dork as before
-    PAY_EXCESS_RELEASE,       // MTG_PAY_EXCESS_RELEASE  item 5d (mana-clean, Angels s30210844 / Jumbo s30091733): a payment that made more mana than its bill gives the excess source back when that is a pure dominance. (1) The whole-turn prepay's give-back (MTG_PREPAY_SHRINK) also runs when the solve's SOURCES fit the bill's mana points but its MANA does not (multi-unit taps: an Arbor Elf unit, Sol Ring, Remote Farm), accepting only a strict subset of the solve's own taps; (2) the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold). Default ON; =0 -> both as before
+    PAY_EXCESS_RELEASE,       // MTG_PAY_EXCESS_RELEASE  item 5d (mana-clean, Angels s30210844 / Jumbo s30091733): a payment that made more mana than its bill gives the excess source back when that is a pure dominance. (1) The whole-turn prepay's give-back (MTG_PREPAY_SHRINK) also runs when the solve's SOURCES fit the bill's mana points but its MANA does not (multi-unit taps: an Arbor Elf unit, Sol Ring, Remote Farm), accepting only a strict subset of the solve's own taps; (2) the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold) -- half (2) has its own lever, MTG_PAY_REFINE_C_FOLD, below. Default ON; =0 -> (1) as before
+    PAY_REFINE_C_FOLD,        // MTG_PAY_REFINE_C_FOLD  item 5d half (2) (mana-clean, Angels s30210844): the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold). Split from MTG_PAY_EXCESS_RELEASE so each half is A/B'd on its own. Default ON; =0 -> the per-key compare as before
+    TERA_DRAIN_DOOMED,        // MTG_TERA_DRAIN_DOOMED  item 5d (mana-clean, Stompy regression s2002 gi412): Terastodon's own-permanent destroy taps each UNTAPPED basic-land victim for its one colour into the float first (CR 605.3a; the land dies either way, so the drain only adds mana and decides no colour). SpellEffects.h, g_tera_drain_hook. Default ON; =0 -> the victim dies untapped as before
     COUNT
 };
 
@@ -1684,6 +1686,8 @@ inline const char* Name(int slot)
         "MTG_MUTE_NO_STORE",
         "MTG_HASTE_HOST_DRAIN",
         "MTG_PAY_EXCESS_RELEASE",
+        "MTG_PAY_REFINE_C_FOLD",
+        "MTG_TERA_DRAIN_DOOMED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

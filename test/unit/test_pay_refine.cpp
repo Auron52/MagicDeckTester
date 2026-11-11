@@ -216,12 +216,12 @@ TEST_CASE("payment: the refine never trades a floated unit for a source where a 
     CHECK(kept.floating_mana.Total() >= greedy.floating_mana.Total());
 }
 
-// MTG_PAY_EXCESS_RELEASE (item 5d of the mana-clean chain), the refine's {C} fold. Angels mana-clean s30210844 T3:
+// MTG_PAY_REFINE_C_FOLD (item 5d of the mana-clean chain), the refine's {C} fold. Angels mana-clean s30210844 T3:
 // Plains, Remote Farm ({T}: {W}{W}) and Sol Ring ({T}: {C}{C}) up, Serra the Benevolent {2}{W}{W}. The greedy pays
 // the first {W} off the Plains, the second off the Farm (a {W} floats), the generic drains that {W} and then Sol
 // Ring, so a {C} floats away. The Farm and Sol Ring pay exactly; the Plains given back re-makes a {W}, which covers
 // that {C} in a deck with no {C} pip -- and never in one that has one (deck_spends_c_pip, EDF).
-TEST_CASE("payment: Remote Farm + Sol Ring pay {2}{W}{W} and give the Plains back in a deck with no {C} pip (MTG_PAY_EXCESS_RELEASE, Angels s30210844)")
+TEST_CASE("payment: Remote Farm + Sol Ring pay {2}{W}{W} and give the Plains back in a deck with no {C} pip (MTG_PAY_REFINE_C_FOLD, Angels s30210844)")
 {
     for (int arm : { 0, 1 })
     {
@@ -237,9 +237,9 @@ TEST_CASE("payment: Remote Farm + Sol Ring pay {2}{W}{W} and give the Plains bac
             const int ring   = PutPr(s, num, "Sol Ring");
             const ManaCost serra = CardDatabase::Instance().Lookup("Serra the Benevolent")->card.m_mana_cost;
             GameState g = s;
-            heurarm::t_arm[heurarm::PAY_EXCESS_RELEASE] = static_cast<std::int8_t>(arm);
+            heurarm::t_arm[heurarm::PAY_REFINE_C_FOLD] = static_cast<std::int8_t>(arm);
             const bool ok = PayPr(g, serra, /*for_creature=*/true, 1);
-            heurarm::t_arm[heurarm::PAY_EXCESS_RELEASE] = -1;
+            heurarm::t_arm[heurarm::PAY_REFINE_C_FOLD] = -1;
             REQUIRE(ok);
             CHECK(TappedPr(g, farm));
             CHECK(TappedPr(g, ring));

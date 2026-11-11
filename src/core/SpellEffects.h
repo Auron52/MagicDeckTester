@@ -2752,6 +2752,15 @@ inline thread_local SuspendTutorProbe* t_suspend_tutor_probe = nullptr;
 // Diagnostic hook (MTG_STUT_AXIS_STATS, TurnSolver): an UNPINNED suspended-tutor search, so the search can count
 // the ones resolved inside the window (must read 0) apart from the permitted playout ones.
 inline void (*g_stut_unpinned_hook)(const GameState&, int controller, const CardParams& pp) = nullptr;
+// Terastodon's doomed-source drain (MTG_TERA_DRAIN_DOOMED, item 5d): taps own untapped basic land #num for its one
+// colour into the float before the destroy loop eats it. Installed by the AI layer (ManaPayment.cpp,
+// ApplyEnginePreTap); null -> no drain (the old behaviour).
+inline void (*g_tera_drain_hook)(GameState& state, int controller, int num) = nullptr;
+inline bool TeraDrainDoomedOn()
+{
+    static const bool on = EnvOn("MTG_TERA_DRAIN_DOOMED", true);
+    return heurarm::Flag(heurarm::TERA_DRAIN_DOOMED, on);
+}
 // Set by BoundaryFan::Cross while it fans the fetch, so an ordinal exhausted at rank 0 (the front, which the fan
 // DID branch on) is not counted as an uncovered pick by the census.
 inline thread_local bool t_stut_fan_crossing = false;
@@ -11995,6 +12004,60 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     {
         int k = std::min(etb_kx, p.etb_destroy_own_noncreature_max);
         int made = 0;
+        // DOOMED-SOURCE DRAIN (MTG_TERA_DRAIN_DOOMED, item 5d of the mana-clean chain; default ON). An
+        // UNTAPPED own basic land about to be destroyed here is tapped for its one colour first: with the
+        // trigger on the stack its controller holds priority and may activate the mana ability (CR 605.3a),
+        // the mana floats to the end of the phase, and the land is gone either way -- so the drain only
+        // ADDS mana, decides no colour (one printed colour), and changes nothing else. Stompy regression
+        // s2002 gi412 T4 {Sol Ring, World War Hulk -> Terastodon free, Natural Order -> Craterhoof}: the
+        // payment refine gave a Forest back from Hulk's bill (a dominance only if that Forest lives), Terastodon
+        // then ate it untapped, and Natural Order's {2}{G}{G} had to tap the last Priest of Titania -- the
+        // attacker whose 1+7 made the swing lethal. The victim set and order are the rule's own (a dry run of
+        // the loop below on a copy); the hook (g_tera_drain_hook, installed by the AI layer: ApplyEnginePreTap)
+        // is null in core-only builds, which keeps the old behaviour.
+        if (g_tera_drain_hook != nullptr && TeraDrainDoomedOn())
+        {
+            std::vector<int> victims;  // card m_numbers, the rule loop's own order (a dry run of it, below)
+            std::vector<int> doomed;   // the untapped basic-land victims among them
+            int kk = k;
+            std::vector<bool> taken(state.battlefield.size(), false);
+            for (int cls = 0; cls <= 4 && kk > 0; ++cls)
+            {
+                for (int pass = 0; pass < 2 && kk > 0; ++pass)
+                {
+                    const bool want_tapped = (pass == 0);
+                    for (std::size_t i = state.battlefield.size(); i-- > 0 && kk > 0; )
+                    {
+                        const Permanent& q = state.battlefield[i];
+                        if (taken[i] || q.tapped != want_tapped) { continue; }
+                        if (EtbDestroyVictimClass(state, controller, q) != cls) { continue; }
+                        taken[i] = true; --kk;
+                        victims.push_back(q.card.m_number);
+                        if (!q.tapped && q.card.IsLand())
+                        {
+                            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                            if (qd && qd->tmpl == CardTemplate::BasicLand && qd->params.produces.size() == 1)
+                            { doomed.push_back(q.card.m_number); }
+                        }
+                    }
+                }
+            }
+            for (int num : doomed) { g_tera_drain_hook(state, controller, num); }
+            // Destroy exactly the dry run's victims in its order: a drained victim is tapped now, and re-running
+            // the tapped-first loop would only reorder the graveyard.
+            for (int num : victims)
+            {
+                for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+                {
+                    if (state.battlefield[i].card.m_number != num) { continue; }
+                    state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+                    state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+                    ++made;
+                    break;
+                }
+            }
+            k = 0;   // the rule loop below has nothing left to do
+        }
         for (int cls = 0; cls <= 4 && k > 0; ++cls)
         {
             for (int pass = 0; pass < 2 && k > 0; ++pass)
