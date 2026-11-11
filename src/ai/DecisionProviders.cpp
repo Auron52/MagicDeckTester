@@ -48967,14 +48967,15 @@ std::vector<int> HydrasProvider::EtbChoiceCandidates(const GameState& s, int con
 }
 
 // ---- HydrasProvider: the X Hydras' X axis ------------------------------------------------------------------
-// MTG_HYDRAS_MAX_X (default OFF; EnvOn). USER 2026-11-10: "I think we should play around with the maximum X and
+// MTG_HYDRAS_MAX_X (DEFAULT ON since 2026-11-11; EnvOn, =0 -> the full X range). USER 2026-11-10: "I think we should play around with the maximum X and
 // it is probably not going to lose lines, since a huge creature will usually kill before we deck out." A
 // LOSSY narrowing (Garruk's -3 can draw us out off a huge body; mana held for a second spell) built at the
 // USER's request: ON, every "enters with X" Hydra cast is held to the most X its plan can pay (XCastBelowMax
-// below). It stays OFF until its A/B against the full X range is measured and the USER rules on it.
+// below). ADOPTED by the USER after the P1 A/B (-0.0083 turns, 0.80x ms, 2400 paired games; the one slower
+// game recovers at d8 b0), USER 2026-11-11: "Max x sounds good. Honestly, almost anything that measures better and is cheaper is a good option."
 static bool HydrasMaxXOn()
 {
-    static const bool on = EnvOn("MTG_HYDRAS_MAX_X");
+    static const bool on = EnvOn("MTG_HYDRAS_MAX_X", true);   // DEFAULT ON (USER ruling); =0 -> full X range
     return heurarm::Flag(heurarm::HYDRAS_MAX_X, on);   // per-job overridable: both arms in ONE pooled batch
 }
 

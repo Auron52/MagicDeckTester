@@ -3700,7 +3700,9 @@ public:
                                          const CardDefinition& def) const override;
     // The X Hydras' X axis (definitions carry the proofs / USER rulings): X = 0 dropped for a 0/0 body that
     // would die on entry (sound); Neverwinter Hydra always at the maximum affordable X (USER); every other
-    // X Hydra too under MTG_HYDRAS_MAX_X (USER-requested narrowing, default OFF until measured).
+    // X Hydra too under MTG_HYDRAS_MAX_X (USER-requested narrowing, DEFAULT ON since the USER adopted it
+    // 2026-11-11: "Max x sounds good. Honestly, almost anything that measures better and is cheaper is a good
+    // option."; =0 -> the full X range).
     std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
                                  int max_affordable) const override;
     bool XCastBelowMax(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,

@@ -18,6 +18,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -452,14 +453,18 @@ TEST_CASE("HydrasProvider: X = 0 dropped for a doomed 0/0, kept for Voracious an
     cands[0].cost.generic = 4;
     cands[0].chosen_x = 2;
     CHECK(!hp.XCastBelowMax(g, cands, { 0 }, 0, 6));
-    // Primordial: no rule unless MTG_HYDRAS_MAX_X is set (default OFF).
+    // Primordial: MTG_HYDRAS_MAX_X is DEFAULT ON (USER adopted 2026-11-11), so X = 1 of a 6-mana pool is below
+    // its maximum; with the slot pinned off (=0) the full X range is open again.
     Action pr = nw;
     pr.card_name = DefXh("Primordial Hydra").card.m_name;
     pr.def = &DefXh("Primordial Hydra");
     pr.cost = DefXh("Primordial Hydra").card.m_mana_cost;
     pr.cost.generic = 1;
     pr.chosen_x = 1;
+    CHECK(hp.XCastBelowMax(g, std::vector<Action>{ pr }, { 0 }, 0, 6));
+    heurarm::t_arm[heurarm::HYDRAS_MAX_X] = 0;
     CHECK(!hp.XCastBelowMax(g, std::vector<Action>{ pr }, { 0 }, 0, 6));
+    heurarm::t_arm[heurarm::HYDRAS_MAX_X] = -1;
 }
 
 // ---- EVERY AFFORDABLE X IS REACHABLE AFTER A SAME-TURN PRODUCER (I2b, 2026-11-11) -------------------------
