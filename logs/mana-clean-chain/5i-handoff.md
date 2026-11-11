@@ -1,7 +1,7 @@
 # 5i handoff (agent 2026-11-11, stopped at the 250K context cap)
 
 ## Done
-- `bb597608d` (local, NOT pushed): 5i plan-cache determinism fix.
+- `bb597608d` + `209106cc5` (smoke GT accept + this file) (local, NOT pushed): 5i plan-cache determinism fix.
   - Root cause (Gods): `GodsProvider::LoamTargetSearchCandidates` reads the FULL / guard search roots (Magus of
     the Bazaar, root graveyard land count) and `turncensus::t_probe`, none of which was in any plan-cache key;
     the Loam probe context (`g_loam_probe_offer`) was in no key either. Fix: `DecisionProvider::PlanCacheContextKey`
@@ -15,7 +15,7 @@
   `check_gt_logs.py` consistent 1101/1101 after rebase; units 2833/2833 pass on the rebased build.
 - Smoke on the rebased tree: 194 pass, only gods_smoke_d3_s1001 play-changed (score 5.36 same); the pre-5i
   binary (logs/snapshots/smoke-baseline, a6b6c0c8d) with MTG_PLAN_CACHE_KB=1 gives the new digest 37dbb911
-  exactly -> explained. **Smoke ACCEPTED (uncommitted at handoff time, see commit below).**
+  exactly -> explained. **Smoke ACCEPTED, committed in 209106cc5.**
 - Measurements: Gods d3 s2002 + ET d3/d5 s2002 identical digest AND units at default / KB=1 / KB=65536 /
   --threads 32,8,4; MTG_BP_ENUM_VERIFY=3 CONTENT-DIFF 0 of 302,384 hits (was 1,543 Gods).
 
