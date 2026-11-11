@@ -358,6 +358,49 @@ oracle off byte-identical; record 43e700b5c):
   payable, so the search can never undervalue it, and a {B} for Kolaghan stays available whenever it can. This is a
   ManaPool/payer-wide change (every `reserve.<colour>` reader, the oracle's payment model, the viewer's pool display),
   so it needs its own design + full A/B; not started. The branch's payer fixes (9507fdb5c, 658b09d45) remain separate.
+  **SUPERSEDED by item 5k below: the mechanism above is wrong, and the generic-debt proposal stays withdrawn.**
+* **Item 5k (agent 2026-11-11): gi37 VERIFIED. The hold claim is WRONG; the real cause is a lockstep defect in the
+  recorded Lotus Bloom colour, which is FIXED on HEAD.** Repro: hold branch `worktree-agent-afe476c961652c9b8`
+  (2b0a3499b), manifests `build/scratch/claude1110/5k/{off,on}_d8_g37.json` (seed 1920038, gi 37, 2HG, d8 b0).
+  Instrumentation: `MTG_FD_TRACE=1 MTG_BP_TRACE=1 MTG_SAC_COLOR_TRACE=1` plus a temporary `MTG_5K_FLIP_REPLAY=1` that
+  replays the committed line a second time with OPENER_HOLD flipped. It lives only in that worktree, uncommitted.
+  Traces are in `build/scratch/claude1110/5k/fl_{off,on}.err` and the condensed `rep_{off,on}.txt`.
+  1. At d8 the whole game is committed by the **T1** search (an 8-turn line). Both arms predict a T8 win. Off arm:
+     Bloom suspended T4, go-off T7, kill T8 (pred. opp -2). Hold arm: T4 Rite + Desperate + Scourge, Bloom T5,
+     go-off T8 (pred. opp -8).
+  2. **The off arm's line replayed with the hold ON is identical**: T7 opp 18, T8 opp -2, every payment the same. All
+     its casts are red (float B0 throughout T7 until the Bloom's BBB, which the replayed Kolaghan takes). So the hold
+     does NOT value the Apex line short. The USER's doubt was correct: Apex's 10 R is plenty.
+  3. **The hold arm's line replayed with the hold OFF fails**: T8 opp 6, which is exactly the real game's result.
+     Apex #2's {6} generic is paid WUBRG (an opener line keeps the historical order without a hold) out of
+     float B3 R13, so the Bloom's BBB is burned and Kolaghan is never cast. With the hold ON the BBB survives:
+     Song (B3 R14), then Kolaghan {3}{B}{R} out of B3 R17, so the prediction is -8. The hold therefore makes a
+     real line PAYABLE. It does not hide one.
+  4. **Why the hold arm still lost: the executor cracked Lotus Bloom for RRR where the search cracked BBB.** Search,
+     T8 continuation 0 = {Lotus Bloom crack, Rite, Apex, Karrthus}: `[sac] T8 Lotus Bloom amt=3 -> B demand B1 R5 G1
+     (FOLDED)`. Karrthus's {B}{R}{G} is the only {B} demand, and Karrthus then fails to pay (no {G}), so it is not
+     recorded. Executor: `[replay-bp] turn=8 recs=3: Lotus Bloom Rite of Flame Apex of Power` -> `[sac] ... -> R
+     demand B0 R4` -> float R14 B0 -> `Dragonlord Kolaghan ... B0 R20 -> FAILED`, opp 6. The cause is in the
+     breakpoint-continuation pre-pass (`apply_continuation_precasts`, TurnSolver.cpp). It resolves a FOLDED sac's
+     colour from the whole continuation's demand but records the action UNPINNED, so the replay re-resolves it
+     from the shorter realised list. This is the s4004 gi107 class again, by a different route.
+  5. **FIX (HEAD, lossless lockstep):** the recorded copy is pinned to the colour the apply used
+     (`chosen_float_color = sac_col`). `SacFloatColorFor` returns a pinned colour unchanged, so the replay realises
+     exactly what the search scored. On the hold branch the same pin (env-gated there) turns gi37 into a T8 win
+     with the hold ON, at d8 b0 AND at play settings (digest 8bb2b4c115f96634; off arm unchanged). On HEAD gi37 is
+     unchanged (T8, e5e1f0e1c450c002), because HEAD has no hold. Validation: units 2828/2828; smoke ALL PASS with 0
+     play-changed. Regression: every row is byte-identical
+     except extraturns_regression_d3_s2002 gi34 and _d5_s2002 gi62. In those two games the play changed but the
+     score did not, and only in the POOLED run: `--deck=extraturns` alone PASSes with BOTH the base and the new
+     binary. That is the pooled-run residency nondeterminism (item 5i class), not this change. Held-out A/B
+     (`build/scratch/claude1110/5k/ab.json`, seed 7731000+, base PGO c30b25eaf vs new): Dragonstorm Std 2,000 /
+     2HG 2,000 / Shadowborn 1,000 paired games, **0 play-changed, 0 faster, 0 slower**. The pin fires only when a
+     folded sac's continuation drops a cast whose pips decided the colour. No GT accept was needed.
+  6. **For the USER (the hold itself, Q23):** with the pin, gi37 no longer argues against the hold. ab4's other
+     slower games (gi605, 3768, 6022, 7784) were not re-checked under the pin. They must be re-measured before the
+     hold is reconsidered, and the hold remains unadopted until the USER rules. Point 3 also shows a real
+     HEAD-side cost of the historical WUBRG generic order on opener lines: it burns an off-colour float that an
+     unseen continuation (Kolaghan's {B}) needs. That is the defect the hold was built to hedge.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",

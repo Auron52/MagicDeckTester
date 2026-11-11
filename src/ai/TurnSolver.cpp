@@ -65549,10 +65549,23 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (a.kind == Action::Kind::SacForMana)
             {
-                ApplySacForMana(state, state.active_player_index, a.sac_source_id,
-                                TurnSolver::SacFloatColorFor(state, sp.actions, a),
+                // RECORD THE COLOUR THIS APPLY USED (rollout-executor lockstep). A folded sac resolves its
+                // colour from the demand of the WHOLE continuation `sp`, but the sink records only what
+                // was realised: a cast in `sp` that then fails to pay is not recorded. The executor's
+                // replay re-resolved the colour from that shorter list and could pick another one.
+                // Dragonstorm 2HG gi37 (seed 1920038, hold branch): Karrthus's {B}{R}{G} in `sp` made
+                // the search crack Lotus Bloom for BBB, Karrthus itself was unpayable and dropped, the
+                // replay saw only Rite + Apex, cracked RRR, and the searched Kolaghan {B} (and the T8
+                // kill) was lost. Pinning the recorded copy makes the replay take the colour the search
+                // scored; a pinned colour is returned unchanged by SacFloatColorFor.
+                const std::string sac_col = TurnSolver::SacFloatColorFor(state, sp.actions, a);
+                ApplySacForMana(state, state.active_player_index, a.sac_source_id, sac_col,
                                 a.ritual_float, a.sac_victim_id);
-                if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(a); }
+                if (out_breakpoint && !sink_stack.empty())
+                {
+                    sink_stack.back()->push_back(a);
+                    sink_stack.back()->back().chosen_float_color = sac_col;
+                }
             }
             else if (a.kind == Action::Kind::Suspend)
             {
