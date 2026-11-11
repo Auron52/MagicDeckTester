@@ -7920,6 +7920,12 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+            // NO CANDIDATES = NO DECISION. A per-candidate pick over an empty list consumes no choice
+            // and is never surfaced to the live viewer (it cannot exit 70), so recording it put a
+            // phantom trace entry -- stamped with the NEXT real decision's index -- in front of that
+            // decision, and the viewer's save audit refused the game (Martyr Lifegain s7 gi6,
+            // 2026-11-11: a Squadron Hawk resolving after every Hawk was already fetched).
+            if (need == 0) { return {}; }
         claude_retry_17:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
@@ -7961,6 +7967,12 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+            // NO CANDIDATES = NO DECISION. A per-candidate pick over an empty list consumes no choice
+            // and is never surfaced to the live viewer (it cannot exit 70), so recording it put a
+            // phantom trace entry -- stamped with the NEXT real decision's index -- in front of that
+            // decision, and the viewer's save audit refused the game (Martyr Lifegain s7 gi6,
+            // 2026-11-11: a Squadron Hawk resolving after every Hawk was already fetched).
+            if (need == 0) { return {}; }
         claude_retry_18:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
@@ -8002,6 +8014,12 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+            // NO CANDIDATES = NO DECISION. A per-candidate pick over an empty list consumes no choice
+            // and is never surfaced to the live viewer (it cannot exit 70), so recording it put a
+            // phantom trace entry -- stamped with the NEXT real decision's index -- in front of that
+            // decision, and the viewer's save audit refused the game (Martyr Lifegain s7 gi6,
+            // 2026-11-11: a Squadron Hawk resolving after every Hawk was already fetched).
+            if (need == 0) { return {}; }
         claude_retry_19:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
@@ -8146,6 +8164,12 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             (void)controller;
             int di = static_cast<int>(cursor);
             const int need = static_cast<int>(candidates.size());
+            // NO CANDIDATES = NO DECISION. A per-candidate pick over an empty list consumes no choice
+            // and is never surfaced to the live viewer (it cannot exit 70), so recording it put a
+            // phantom trace entry -- stamped with the NEXT real decision's index -- in front of that
+            // decision, and the viewer's save audit refused the game (Martyr Lifegain s7 gi6,
+            // 2026-11-11: a Squadron Hawk resolving after every Hawk was already fetched).
+            if (need == 0) { return {}; }
         claude_retry_21:  // --interactive: new picks arrived on stdin; re-test the consume branch
             if (cursor + need <= static_cast<int>(choices.size()))
             {
