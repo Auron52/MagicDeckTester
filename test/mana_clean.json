@@ -5049,6 +5049,45 @@
      "seed": 30272000,
      "src": "ab70b55063d8590842503c3532e40aed88ee831e",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 9,
+      "DOMINATED-LAND": 1230,
+      "DROP-COVERED": 8,
+      "PHANTOM": 139
+     },
+     "commit": "df06f89bdeaf0d4585dc83c8b25b33e35a3c2ecd",
+     "date": "2026-11-11T03:26:48Z",
+     "decisions": 43609,
+     "deck": "decks/Minotaur/Minotaur.cod",
+     "deck_sha": "7e12c6578154b7a2117d9413e67a92b07b777125",
+     "game_index": 277000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 292372,
+     "ms_on": 675293,
+     "report": "logs/mana_clean/minotaur-linereducer-20261111/report.md",
+     "run": "minotaur-linereducer-20261111",
+     "seed": 30277000,
+     "src": "725997346f4dc14496e49de101e2ce9712ae92da",
+     "verdict": "clean"
     }
    ]
   },

@@ -163,6 +163,43 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   comes from this change; GT was not accepted. After the rebase onto 7a7c2079b (whose GT accept covers those rows), smoke on
   the rebased build passes all 187 rows.
 
+## 2026-11-11: near-clean decks (breachingdragonstorm, soldiers, burn, minotaur, fluctuator, vampires, angels)
+Gate `nearclean-20261111` (src ab70b5506, PGO, 5,000 games each on the next fresh block; play identity with the
+oracle off byte-identical; record 43e700b5c):
+* **breachingdragonstorm CLEAN** (210000-214999, 0 issues; was 6 on 100k) -- leaves beta.
+* **soldiers CLEAN** (191000-195999, 0; was 6) -- leaves beta.
+* **burn CLEAN** (210000-214999, 0; was 4) -- leaves beta.
+* **fluctuator CLEAN** (210000-214999, 0; was 70) -- leaves beta.
+* **minotaur 1 issue -> FIXED (df06f89bd)**, APPLY-DROP s30273945 T4 {vial Ragemonger + Neheb + Boros Reckoner}
+  off Mountain + Rakdos Carnarium. The whole-turn prepay priced the casts on the board, where the vialed Ragemonger
+  is not yet (Vial puts ride the cast sequence), read {1}{R}{R}{R}{R} UNPAYABLE, and the per-cast greedy paid
+  Neheb's {1} with the Mountain, stranding the Karoo's {B}{R}. The prepay now applies the enumeration's
+  same-line coloured-pip reducer credit (MTG_PREPAY_LINE_REDUCER, default ON). Repro clean; unit 2770/2770;
+  smoke byte-identical; regression only gods_regression_d3_s2002 digest-only (same 5.38; Gods holds no reducer, so
+  the change is inert there; NOT accepted). **Re-gate `minotaur-linereducer-20261111` (277000-281999, PGO df06f89bd): CLEAN, 0 issues, play identity byte-identical -- leaves beta.**
+* **vampires 2 issues (ORACLE-GAP x2, one game), PARKED (analyzer-side, with an engine smell).** s30211775 T3
+  {Secluded Courtyard + Markov Baron (convoke) + vial Bloodghast + Falkenrath Pit Fighter + Voldaren Estate Blood}:
+  the engine paid Pit Fighter's {R} with a Voldaren Estate (1 life) and left the fresh Courtyard untapped, ending
+  life 18 with one Blood token; the oracle never enumerates that dominated life payment, so it cannot reproduce
+  the engine and calls it a GAP. Its nearest outcome (Courtyard {R}, life 19, a second Blood token) dominates the
+  engine's, i.e. the real defect is a DOMINATED-LIFE payment choice (not an ISSUE class; 2,142 such flags on the
+  block). Repro: `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=3 build/Release/mtg 'decks/Vampires/Vampire.cod'
+  --profile 'decks/Vampires/Vampire.profile.json' --games 1 --seed 30211775 --game-index 211775`. Fix shapes:
+  the oracle admits the engine's own payment as an option (closes the GAP), and/or the payer prefers the
+  creature-only Courtyard over a life-paying Estate for a Vampire creature spell.
+* **angels 4 issues (DOMINATED-CREATURE, 3 signatures), PARKED (per-cast GREEDY payer order).** s30210844 T3
+  {Plains + Serra the Benevolent {2}{W}{W}} off Remote Farm, Sol Ring, Plains, Giada: the greedy pays the first
+  {W} with the Plains, the second with Remote Farm ({W}{W}, one floats), then the generic drains that floating
+  {W} before Sol Ring {C}{C} -> {C} floats, and the next {W} creature (Lightstall Inquisitor) must tap Giada (a
+  vigilance flier that would attack). Farm {W}{W} + Sol Ring {C}{C} pays Serra exactly. The per-cast give-back
+  (MTG_PAY_SHRINK) lives only on the BACKTRACKER path and triggers on source count > MV; tried widening its
+  trigger to "mana left floating" -- no effect, because this payment is the greedy's (FLOAT_TRACE shows its tap
+  lines), so reverted. Sound fix shape: the same give-back after a greedy success that left floating mana (or a
+  multi-unit source taken before a single for a {W}{W} pair). Payer-wide change -> needs the payer review the
+  Jumbo DOMINATED-CREATURE item already parked. Repros: seeds 30210844 / 30213528 / 30214769 (game-index = seed
+  - 30000000), `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=3 build/Release/mtg 'decks/Angels/Angels.cod' --profile
+  'decks/Angels/Angels.profile.json' --games 1 --seed <s> --game-index <gi>`.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
