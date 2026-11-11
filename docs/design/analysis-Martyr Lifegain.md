@@ -142,6 +142,17 @@ b6 b1 Farm never pruned. DONE marker ab4/ab.DONE (waiter armed). Then: d8/b0 rec
 (pooled), land b1's defaults (rebase martyr-split onto the branch; split stays default OFF = USER's call), rebuild,
 filtered smoke accept, ref_bench must match all 10, push.
 
+ab4 RESULTS (binary = 624cd16f8 build; std 600 @77001, 2HG 200 @78001, d5 b20; mean turn std / 2HG):
+b0 committed 5.4033 / 5.5100 | b1 CANDIDATE 5.3950 / 5.5050 | b2 b1+amended split 5.4033 / 5.4800 |
+b3 Jitte ungated 5.3983 / 5.5100 | b4 no BP gate 5.3967 / 5.5050 | b5 no Jitte gain 5.3933 / 5.5050 | b6 Farm never
+pruned 5.3950 (byte-identical to b1) / 5.5100.
+Per game: b1 vs b0 std 6f/1s (net -5), 2HG 1f/0s; the one slower game (std gi220, a Jitte-gain game: b5 vs b1 1f/0s)
+RECOVERS at d8/b0 (5 vs 5) -> b1 CLEARS THE BAR, LANDING. Gate matters: ungated b3 vs b1 std 0f/2s, 2HG 0f/1s.
+BP gate: b4 vs b1 std 0f/1s. Farm at 30+: b6 vs b1 2HG 0f/1s (gi3).
+Amended split b2 vs b1: std 9f/14s (net +5), 2HG 7f/2s (net -5); d8/b0 recovery of the 16 slower: 12 recover,
+4 do NOT (std gi436, gi458, gi462; 2HG gi74) -> fails the bar as is; USER decision, stays default OFF.
+Logs: build/scratch/martyr/ab4/{run,rec}.
+
 Play viewer running from the primary (pid logs/martyr-lifegain/viewer.pid) -- do not kill.
 NOT running: 5c2 tie-break (rerun alone later).
 MACHINE: 12 threads / 10 GB. Builds only with MTG_BUILD_JOBS=4 and >= 5 GB free; never compile beside two batches.
