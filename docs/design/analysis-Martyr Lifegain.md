@@ -115,15 +115,33 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-11 ~19:40 UTC) -- RESUME HERE
+## Checkpoint (2026-11-11 ~21:30 UTC) -- RESUME HERE
 
-LANDED (local, not yet pushed): candidate b1 rebased onto origin 7458bb952 -> 30173e3e6 / 8a23edaf9 / 01a14b2fe
-(all new defaults ON, amended split OFF). Pre-rebase full smoke on d718f7d34: 192 unchanged, only martyr_smoke
-d0/d3/d5 moved (0 slower, 2 faster); martyr2hg and LHC byte-identical. Origin meanwhile moved the martyr keys itself
-(E3 rollout cache ON) and added martyr regression keys, so the pre-rebase accept was dropped
-(kept as branch martyr-pre-rebase-1111). RUNNING: rb8 = rebuild + mtg-test + FULL smoke on the rebased tree
-(logs/martyr-lifegain/rb8-*). Next: accept martyr smoke (--deck=martyr,martyr2hg if 2hg moves), scenarios,
-check_gt_logs, push, CI watch, ref_bench (10/10), then regression + overnight tiers.
+PUSHED 6b3dea976 (21:12 UTC; next shared-branch push no earlier than ~01:12 UTC, 4-hour rule): candidate b1 landed
+(all new defaults ON, amended split OFF) + martyr smoke GT (d0 6.1050, d3 5.2000, d5 5.2700; 2hg 5.4800 unchanged).
+Full smoke on the rebased tree: 192 unchanged, only martyr d0/d3/d5 moved (0 slower / 2 faster). Scenarios 492/492.
+CI watch: logs/martyr-lifegain/ci-6b3dea9.log. Branch martyr-pre-rebase-1111 = the pre-rebase tip (backup only).
+Worktree .claude/worktrees/martyr-split reset to 6b3dea976 (clean), ready for the next change.
+
+RUNNING (my own): regression tier `--regression --deck=martyr,martyr2hg` -> logs/martyr-lifegain/rb9-regression.log.
+Games done: d3/d5 s30201 PASS; d0 6.1420->6.1170, d3 s2002 5.5200 (digest only), d5 s2002 5.5800->5.5600,
+d5 s3003 5.4267->5.4133, 2hg 5.7600 (digest only) -- aggregates equal or faster; check per-game slower list,
+then accept with --deck=martyr,martyr2hg. Also stray `suite_gate.py --cost "decks/Martyr Lifegain"` (was idle).
+
+NEW USER REQUESTS (2026-11-11 ~21:20 UTC, verbatim):
+  * "Please queue up the mulligan profile and value-leaf if our performance is good enough to meet the bar."
+  * "Prior to that we may want to add a heuristic prune for the 1-drop search to get only Martyr (if we don't have
+    one and need the lifegain), Serra Ascendant or Speaker of the Heavens. Usually it will be Serra Ascendant I
+    would imagine, so that should rank first."
+PLAN: MartyrLifegainProvider::TutorCandidates override for the creature-mv<=1 tutors (Ranger-Captain of Eos ETB;
+Ranger of Eos "up to two"): admit Serra Ascendant (rank 1), Speaker of the Heavens, Martyr of Sands only when no
+Martyr in hand/battlefield AND life < the highest unmet own gate (max(30, start+7)); fall back to the generic list
+only if none of the three is in the library (surface that interpretation to the USER). Flag MTG_MARTYR_TUTOR_PRUNE
+(heurarm slot), scenarios, then a held-out A/B vs 6b3dea976 (ab4 harness build/scratch/martyr/ab4/mk.py, std 600 +
+2HG 200 on fresh seeds) and d8/b0 recovery of every slower game. Land it if it clears the bar (USER asked for it),
+accept smoke + regression, then overnight tier for martyr, remaining Stage 5 items (5c2, 5a, 5b, 5h, 5i,
+verify_deck --write-ledger), cost gate re-check (suite_gate --cost; was 0.69x Hinata), THEN `mullgen.sh run`
+(alone), THEN `valueleaf.sh run` (alone). 2-hourly session cron + PID waiters on each long stage.
 
 ### Earlier checkpoint (2026-11-11 ~14:30 UTC, history)
 
