@@ -43,10 +43,10 @@ Three Visits + Nissa's static · E Nissa's loyalty abilities + Garruk.
 | Steelbane Hydra | 3 | researched (B-x-hydras.md) | A (target) | enters_with_x_plus_counters; activated {2}{G}, remove a counter: destroy target artifact/enchantment — only legal targets here are OUR Gauntlet/Greaves/Bloom (opp spawns are creatures only). Proposed new activated mode + provider target filter (default excludes own unless it pays off); human play sees all targets. |
 | Nissa, Who Shakes the World (loyalty) | 3 | researched (E-walkers.md) | A (target, plan variants) | Loyalty 5; +1 permanent animation (0/0 Elemental, 3 counters, vigilance, haste, untap) as new `untap_land_animate` in shared ApplyLoyaltyAbility (Part the Waterveil awaken code); untap mana via new breakpoint key (Chandra +RR precedent). Two proposed target shortcuts (tap untapped target for mana first; prefer tapped Forest) — VET as exact dominance folds before adopting. -8: Forest count is searched (chosen_x into plan signature, guarded). Mana-ceiling prune must not prune while an unactivated Nissa is on board. Gauntlet does NOT pump the animated land (colourless); Kalonian DOES double it. |
 | Garruk, Primal Hunter | 3 | researched (E-walkers.md) | A | Loyalty 3. +1 Beast, -3 draw = greatest power (counters+Gauntlet), -6 Wurm per land. REQUIRED: flag -3 draws in PlanOpensBreakpoint (bit 10) or drawn cards get one fixed follow-up (Jared -6 same hole). |
-| Three Visits | 1 | researched (D-mana.md) | A (tutor_etb) | Same params as Nature's Lore; untapped; no routing signature. |
-| Vernal Bloom | 3 | researched (D-mana.md) | none | New `land_tap_bonus*` params fed into the land-aura bonus machinery (LandAuraBonus / LandAuraAddToPool / LandAuraColorMask / fold) + deck flag, so ~60 land-mana counting sites see it without per-site edits. |
-| Nissa, Who Shakes the World (static) | 2 | researched (D-mana.md) | none | Same machinery, Forests her controller taps. Same-turn credit needed (coordinate with loyalty work). |
-| Gauntlet of Power | 3 | researched (D-mana.md) | A (choose_color) | Colour via Utopia Sprawl searched choice; provider may prune to green WITH PROOF (all lands basic Forest, all creatures green, opp spawns colourless). +1/+1 = new ComputeLordBonus pass. Must be excluded from EffectiveProducesFor like Sprawl. |
+| Three Visits | 1 | implemented (294e1317e; verified I1b) | A (tutor_etb) | Same params as Nature's Lore; untapped; no routing signature. |
+| Vernal Bloom | 3 | implemented (294e1317e; verified I1b) | none | New `land_tap_bonus*` params fed into the land-aura bonus machinery (LandAuraBonus / LandAuraAddToPool / LandAuraColorMask / fold) + deck flag, so ~60 land-mana counting sites see it without per-site edits. |
+| Nissa, Who Shakes the World (static) | 2 | implemented (294e1317e; verified I1b; loyalty abilities PENDING I3) | none | Same machinery, Forests her controller taps. Same-turn credit needed (coordinate with loyalty work). |
+| Gauntlet of Power | 3 | implemented (294e1317e; verified I1b) | A (choose_color) | Colour via Utopia Sprawl searched choice; provider may prune to green WITH PROOF (all lands basic Forest, all creatures green, opp spawns colourless). +1/+1 = new ComputeLordBonus pass. Must be excluded from EffectiveProducesFor like Sprawl. |
 | Gargos, Vicious Watcher | 3 | researched (C-gargos.md) | none (fight trigger inert) | Live Oracle {3}{G}{G}{G} Legendary Hydra 8/7 vigilance; trigger is spell-only, no optional cost. Engine bug: `reduces_spell_subtype` reduction is floored on PRINTED generic before X is added (EffectiveSpellCostImpl ~4053), violating 601.2f, so X-Hydras get no discount; X range in CollectActions under-enumerated. Fix at executor/apply/CollectActions/SeqWalk/StampM1 sites (Hinata X-discount precedent). Needs inert Keyword::Fight. Routing: reduces_spell_subtype alone -> GoblinsProvider; Hydras needs own signature above fungus/goblin. |
 
 ### Mana-core defects the integration must fix (D-mana.md)
@@ -57,6 +57,34 @@ Three Visits + Nissa's static · E Nissa's loyalty abilities + Garruk.
 5. Same-turn doubler credit (Brightcap Badger precedent): count Forests still untapped after paying.
 6. X max is sized from the pre-cast board: 'doubler then max-X hydra' unfindable at any budget — fix with the mint-credit 'potential' pattern.
 Lower priority: OptimisticTurnMana assumes a land drop adds <=3 mana; dominance key lacks Gauntlet colour (MTG_DOM_PRUNE only).
+
+I1 status (294e1317e, verified by I1b): defects 1-5 fixed; OptimisticTurnMana's land-drop yield now includes
+the bonuses (a bonus source in hand, or a land-put while one is live, removes the ceiling). Defect 6 is I2's.
+Still open, all LATENT for this list (default-off or not on a Hydras path): `chosen_color` is not in the
+Dominance.h key (MTG_DOM_PRUNE only); the SpellEffects.h discount-repay walk adds a source with no Permanent
+(no land-tap bonus); Arbor Elf's `UntapLandHostsOfUncached` sees Aura hosts only, not a global bonus (an
+Arbor + Bloom list would under-count); Extraplanar Lens is absent from ManaCacheKey (Extra Turns' owner).
+HydrasProvider's Gauntlet green-only prune re-checked by I1b: every land is a basic Forest (Search for
+Tomorrow / Nature's Lore / Three Visits find only Forests in this library), every creature card is green,
+Garruk's tokens are green, Nissa's animated lands are colourless, the opponent's spawns
+(GameEngine.cpp spawn site) carry no colour and its lands never tap -- so a non-green colour changes no
+board, and the runtime composition check returns the full fan if the list ever breaks that. Human play is
+asked at resolution with all five colours (FireOwnEtbTriggers' `g_play_etb_color_chooser`, menu =
+land_tap_bonus_produces WUBRG), independent of the cast variant.
+
+I1b verification (2026-11-11): `mtg-test` full suite PASS (incl. the 12 new cases in
+test/unit/test_land_tap_bonus.cpp, which passed unchanged); `audit_card_costs.py` all 591 match;
+`audit_card_fields.py`: the four I1 cards match every hard field (snapshot refreshed; the full --update hit
+198 Scryfall 429s, so Gauntlet and Nissa were fetched in a second, targeted pass). Six PRE-EXISTING hard
+keyword mismatches remain, all Gods cards (Faithless Looting, Mystic Retrieval, Golgari Grave-Troll,
+Stinkweed Imp, Life from the Loam, Phenax): identical against the HEAD snapshot, the Gods owner's;
+coverage: Three Visits / Vernal Bloom / Nissa / Gauntlet report `full`; `provider_audit.py --check` exit 0
+(Hydras listed NOT AUDITED: no profile yet). Smoke (`MTG_PGO=0`, NOT accepted): 185 configs unchanged,
+slower=0, faster=0; 2 configs play-changed at the same score (bruna2hg_smoke_d5_s1001 gi10,
+landfall_smoke_d5_s1001 gi83 + gi98). PRE-EXISTING, not I1: a binary built from the parent fff726745
+(src tree 1deeef4ed, pre-I1) reproduces the same three digests, and parent vs 294e1317e is byte-identical on
+both keys. The drift is already in the parent tree (most likely the Gods merge f90930c9f, which combined two
+engine sides); its owner should root-cause or accept it. Not an I1 leak.
 
 ## Integration plan (serial, one fresh agent per group, each builds + unit-tests + commits)
 - I1 mana core: Vernal Bloom, Gauntlet, Three Visits, Nissa static (card entry w/ static only if loyalty not yet in), defects 1-5, HydrasProvider skeleton + signature.
