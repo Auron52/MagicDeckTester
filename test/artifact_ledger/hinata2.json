@@ -1,0 +1,51 @@
+{
+ "deck": "hinata2",
+ "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
+ "entries": [
+  {
+   "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
+   "kind": "mulligan",
+   "verdict": "trade",
+   "ident": "2acf3e509f888e50f4579e193e38498eddbe9c94",
+   "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
+   "src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "date": "2026-11-02",
+   "worker": "MagicDeckTester2-76d2cc",
+   "delta": -0.081214,
+   "cost": [
+    1.0642966817473556,
+    0.008518050181271324,
+    14
+   ],
+   "settings": {
+    "recipe": "fast",
+    "env": {},
+    "depth": null,
+    "budget": null
+   },
+   "detail": "mulligan: TRADE -- quality not worse (new-vs-old -0.081214 t) but the new table costs MORE (cost 1.064x (se 0.009, 14 seeds)): the USER's call; left live on the result branch, NOT landed"
+  },
+  {
+   "run_id": "hinata2-MagicDeckTester2-76d2cc-20261025T010853",
+   "kind": "valueleaf",
+   "verdict": "adopted",
+   "ident": "em:a08e29e983a39e62561a",
+   "frozen": "ae41aaad0b9bf6051bd86c5baa9373aec10f81cb",
+   "head": "4a5fba5db48a0fe1ec506e47606c19325b4eb582",
+   "src_tree": "1b9638ae46909112a2f99cced7cc901e36c6dfe4",
+   "date": "2026-11-11",
+   "worker": "MagicDeckTester2-76d2cc",
+   "frozen_src_tree": "0505eadb55ae1b3d2ec6f2754389db2743cfb79d",
+   "provenance_warning": "WORKTREE HEAD 4a5fba5db DIFFERS from frozen ae41aaad0 (src tree 1b9638ae4 vs 0505eadb5) -- the artifacts were generated on HEAD",
+   "detail": "valueleaf: ADOPTED (live sidecar's eval_model replaced)",
+   "decisions": [
+    "    VERDICT arm=emul_d6b60 adopt=0 delta=-0.09250 t=-19.58 cost=1.286x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.29x) with quality better (-0.09250) -- a TRADE, the user's call",
+    "    PICK arm=emul_d4b30 why=the cheapest of 2 passing arm(s) (0.83x vs live, delta -0.06463)",
+    "    previous live sidecar kept as logs/vlq_hinata2/playset/Hinata2.value.PREV.json",
+    "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
+    "",
+    "=== 2026-11-11T16:15:32  PHASE E.6: no allowance for hinata2 -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+   ]
+  }
+ ]
+}
