@@ -115,25 +115,41 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-11 ~06:00 UTC) -- RESUME HERE
+## Checkpoint (2026-11-11 ~11:30 UTC) -- RESUME HERE
 
-Local, NOT pushed (rebased onto origin b827b1fcc): 79123b78a ledger, 6f422bb8b Speaker narrow M2 + suite rows +
-profile + cost entry, b783672c9 Jitte gain lever (MTG_MARTYR_JITTE_GAIN default OFF) + rulings. Pre-rebase full smoke
-on 0a80480da: 183/183 unchanged, play-changed=0, 4 NEW martyr keys (accept dropped: origin moved, re-measure).
+Branch phase-1-2-deck-analyzer, rebased onto origin 76b90f09a, LOCAL ONLY (nothing pushed since d6b1c6b12):
+ledger checkpoints, Speaker narrow M2 + suite rows + profile + cost entry, Jitte gain lever (MTG_MARTYR_JITTE_GAIN
+default OFF), claude-play empty-pick fix (src/main.cpp: a zero-candidate chooser is not a decision -- it broke the
+viewer save of s7 gi6), references s1-s10 (all also on origin/references-autosave). Smoke GT for martyr was accepted
+twice and DROPPED both times because origin moved; re-accept after the running chain.
 
-RUNNING (primary): `logs/martyr-lifegain/rb2-*` chain = rebuild -> mtg-test -> full smoke; marker rb2-smoke.DONE.
-Then: inspect -> `regression.sh --smoke --accept` (back up GT first) -> check_gt_logs -> commit GT -> push -> watch CI.
-RUNNING: 5c2 `leaf_tiebreak_check.py` (24,000 games; ~3.7k done at 02:37 UTC; slow on the shared 12-thread box)
--> logs/martyr-lifegain/tiebreak.log.
-RUNNING (agent, worktree .claude/worktrees/martyr-split, branch martyr-split, WIP 4825e1092): Kami/Farm prune
-(MTG_MARTYR_PRUNE_SACS, ON, USER-approved), main split (MTG_MARTYR_MAIN_SPLIT, OFF, experiment), Ranger-Captain
-sub-flag, Martyr-loop route (MTG_REVEAL_CONT_PRECAST, ON: two Martyrs cast-sac-cast-sac was unfindable at d8/b0
-because a continuation's sac always trailed its casts). 7-arm pooled A/B -> logs/martyr-lifegain/split-ab.md.
-Handoff: logs/martyr-lifegain/split-handoff.md.
+RUNNING (primary): `MTG_BUILD_JOBS=4 ./build.sh` -> mtg-test -> `regression.sh --smoke
+--deck=martyr,martyr2hg,colossus,colossus2hg` (logs/martyr-lifegain/rb5-*). Expect colossus PASS + 4 NEW martyr keys
+(d0 6.1300/b9de..., d3 5.2200/a4bb..., d5 5.2800/0e36..., 2hg 5.5200/c303...). Then: accept with the SAME --deck,
+check_gt_logs, commit, fetch; if origin moved only the GT header line conflicts -> push at once; watch CI.
+RUNNING: root-cause measurement batch PID 48921 (worktree martyr-split @ 7d027cda2), DONE marker
+build/scratch/martyr/rc/ab3/ab.DONE; brief = logs/martyr-lifegain/split-rootcause-handoff.md (arms a1, a2, aA amended
+split, k Kami-only prune, n no prune, aAk; + 83 single-game aA recovery jobs). Then mtg-test + scenarios.sh on 7d027cda2.
+Play viewer running from the primary (pid in logs/martyr-lifegain/viewer.pid) -- do not kill.
+NOT running: 5c2 tie-break (crashed at 6,933/24,000 in the 06:00 OOM; rerun alone later).
 
-NEXT after the A/B: report to the USER (split, Captain, Jitte gain); land prune + loop route if they clear the bar;
-then the regression + overnight tiers for martyr (accept with --deck=martyr,martyr2hg), 5a/5b/5h/5i,
-verify_deck.py --write-ledger, Stage 6 report. Cron 7869914f (session-only status timer) stays until the end.
+MEASURED (held-out A/B, logs build/scratch/martyr/split/ab/run2): loop route MTG_REVEAL_CONT_PRECAST std 2 faster /
+0 slower, 2HG 0/0 -> LAND. Kami+Farm prune FAILS the bar (std gi31/157/253, 2HG gi81 slower and do NOT recover at
+d8/b0): the search loops Curious Farm Animals ({2} sac, dies +3 life, Abiding Grace returns it) to pump Serra ->
+Kami-only prune being measured (arm k). Jitte gain: std 3/2, 2HG 0/0, both slower games recover at d8/b0 -> USER call.
+Main split: std 13 faster / 42 slower (2HG 2/14); root causes in logs/martyr-lifegain/split-rootcause.md (Speaker gate
+needs Martyr gain in main 1; Orzhov Basilica bounce mana; Jitte equip before combat). Amended split (MTG_MARTYR_SPLIT_AMEND)
+being measured. Reference bench (shipped settings): search matches all 10 user references (5.2 vs 5.2).
+
+MACHINE: 12 threads / 10 GB. OOM at 06:00 UTC killed everything (tie-break + A/B + -j12 rebuild). Builds only with
+MTG_BUILD_JOBS=4 and >= 5 GB free; never compile beside two batches.
+
+NEXT: land loop route (+ Kami-only prune if it clears the bar) onto the branch -> rebuild -> filtered smoke -> accept ->
+re-run `scripts/ref_bench.py --deck martyr_lifegain` (must still match all 10) -> regression + overnight tiers for
+martyr (accept with --deck=martyr,martyr2hg) -> 5c2 tie-break, 5a/5b/5h/5i, verify_deck.py --write-ledger -> Stage 6
+report (USER: split/amended split, Ranger-Captain, Jitte gain, Farm Animals prune result, Innocence order, discard
+buckets, deferrals) -> THEN the mulligan profile (USER 2026-11-11: "when all of that is done pick up the mulligan
+profile"; mullgen.sh run, alone on the box). Cron 7869914f (session-only) stays until the end.
 
 ## USER rulings (2026-11-10, verbatim)
 
