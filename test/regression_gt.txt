@@ -12,10 +12,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-hydras_smoke_d0_s1001=6.0600/a4fe9761a8ca548e
+hydras_smoke_d0_s1001=6.0600/1aa956175fc911f0
 hydras_smoke_d3_s1001=5.5800/6215fb31d906a68c
-hydras_smoke_d5_s1001=5.5500/26129ed4d9c7b8aa
-hydras2hg_smoke_d5_s1001=5.9600/ef37838fad7e36f9
+hydras_smoke_d5_s1001=5.5500/e4dbae8b8031f983
+hydras2hg_smoke_d5_s1001=5.9600/ff0748b17bca176d
 extraturns_smoke_d0_s1001=5.6980/85f9b9dba82fb5d7
 extraturns_smoke_d3_s1001=4.7400/01ae387c53685a23
 extraturns_smoke_d5_s1001=4.7300/7fe10742e31e5f06
@@ -205,11 +205,11 @@ elementals_smoke_d3_s1001=4.4600/15877bad8bb35b68
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
 
 # --- regression ---
-hydras_regression_d0_s2002=6.0320/710aae075f9abb5d
-hydras_regression_d3_s2002=5.4267/eed077a611a0e392
-hydras_regression_d5_s2002=5.4133/6b1b552bd4962bb3
-hydras_regression_d5_s3003=5.5600/4f4019cb2c11c267
-hydras2hg_regression_d5_s2002=5.7467/4c6b120d861eba83
+hydras_regression_d0_s2002=6.0320/773d5978c83fd6c9
+hydras_regression_d3_s2002=5.4267/597af3b8f4608d84
+hydras_regression_d5_s2002=5.4133/f3d6697a5fd29799
+hydras_regression_d5_s3003=5.5600/04e0139f5f7810d6
+hydras2hg_regression_d5_s2002=5.7467/899173c8cf5a1d0c
 hydras_regression_d3_s30001=5.4000/da3a26feaece2293
 hydras_regression_d5_s30001=5.4000/da3a26feaece2293
 extraturns_regression_d0_s2002=5.6440/f59fae9fa37713d9

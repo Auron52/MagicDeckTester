@@ -346,3 +346,140 @@ measures it at w4:
 So the loss is pure re-pricing (the charge is inert at unlimited budget). But on Hydras' own aggregate it is
 +0.0058, and the CLAUDE.md bar is net <= 0. It does not meet the bar as it stands. A smaller weight, or a
 charge applied only past the decision ceiling, is the obvious next measurement if the USER wants it.
+
+## Claude-play sweep
+- commit: `b7a4d6eb8`
+- seeds: 50000-50015 (gi 0-15) games: 16
+- driver: Claude-play sweep (Claude, Opus agents, per the USER's same-type rule)
+- result: 16/16 matched the search's win turn (no game won faster or slower than `--depth 5 --budget-ms 20`)
+- flags (each verified against cards.json and the rules; resolutions in F1 below):
+  - g0 T5, BUG: same-plan Nissa x fetched-Forest under-credit. "Nissa, Nature's Lore, Three Visits, Gargos,
+    Kalonian Hydra" was refused by the menu and `--validate-line`, and Voracious maxed at X=4 (6 real 8).
+    FIXED, F1-A 1c1296b7f.
+  - g4 T4, SUSPECT: "Vernal Bloom, Nature's Lore, Steelbane" offered X=1 only (X=2 pays). FIXED, F1-A 1c1296b7f.
+  - ledger gap: Neverwinter's max-X counts no same-plan producer mana. FIXED, F1-A 1c1296b7f.
+  - g4 T2, SUSPECT: "suspend Search for Tomorrow, Three Visits" drops Visits but read `not_verified`.
+    Detector FIXED, F1-B e79ff8f86; the realised-order engine half is deferred to the USER
+    (docs/design/costed-suspend-realised-order.md). Not lossy for Hydras (searched second main).
+  - g2 T4, cosmetic: fight death labelled "0 toughness"; fight prompt `per_target_damage: 0`. FIXED, F1-C 7afa4d869.
+  - g6 T3, cosmetic: prompt typo "It is fights it". FIXED, F1-C 7afa4d869.
+  - g4, cosmetic: a Forest under Vernal Bloom showed `taps: G` only; `mdfc_backs` named cards not in the deck.
+    FIXED, F1-C 7afa4d869.
+  - g6 T3 / g12 T3-T4, cosmetic: "X=0 Hydra + equip Greaves to it" offered with no Gauntlet. HARMLESS, kept
+    (see F1).
+  - g1 T6: the viewer plan cap dropped the Greaves group (documented `plans_truncated`). Not a bug; census in F1.
+- flags: 0 unresolved
+
+## F1 — the Claude-play sweep fixes (2026-11-11)
+
+Worktree `.claude/worktrees/hydras-fix`, branch `hydras-sweep-fixes`. Commits: 1c1296b7f (A), e79ff8f86 (B),
+7afa4d869 (C).
+
+**A. The bonuses a plan establishes now reach the lands it fetches** (`MTG_LANDPUT_CROSS_CREDIT`, heurarm
+slot, default ON; `=0` gives the pre-F1 play).
+
+*Root cause.* A plan's same-plan credits were each stamped off the board the plan was enumerated on:
+- a land-tap bonus source's credit (`SamePlanLandTapBonusCredit`) counts only lands already on the board;
+- a land-put's credit (`LandSearchPickCredit` -> `Action::rock_mana`) counts only bonus sources already on
+  the board.
+
+So the Nissa (or Bloom / Gauntlet) bonus on each fetched Forest was in no credit. Only the odometer's scalar
+bound (`LandTapCrossBoundCredit`) had that cross term, as the TurnSolver comment said. Solve's `consider()`
+and `EnumeratePlans` then priced the plan without it, and on a Forest-only board there is no real-payment
+rescue. The plan was refused: one {G} short per fetched Forest. A second defect sat underneath:
+`LandSearchCreditFilter` matched picks to the stamp EXACTLY, so once Nissa was live every pick out-credited
+the stamp. The filter came back empty, the real-payment walk then put no land at all, and the resolution lost
+its pin restriction.
+
+*Fix.*
+- `LandPutCrossCredit`: the flat pools add each selected (source, land-put) pair's bonus on the put's picks,
+  when the realised order casts the source first.
+- `LandSearchCreditFilter`: if the exact match is empty, it falls back to the picks whose bonus-free credit is
+  within the stamp and whose live credit covers it.
+- `XMaxSamePlanExactCredit`: the always-max-X test (Neverwinter; `MTG_HYDRAS_MAX_X`) counts only the
+  same-plan producer mana that is exact in the realised order, so it still never drops the true maximum. This
+  closes the ledger's "Neverwinter's max-X counts no same-plan producer credit".
+
+*Tests.* Four `F1:*` cases in test_land_tap_bonus.cpp, each FAILING with `=0`:
+- seed 50004: Steelbane X=2;
+- seed 50000: Nissa, Lore, Visits, Gargos, Kalonian;
+- the filter fallback;
+- Neverwinter offered only at X=3 after a same-plan Bloom.
+
+*Repros (fixed binary).* g0 decision 18: `--validate-line` for that line is now **accept** (plan 497).
+Executing it puts Gargos and Kalonian on the battlefield, and Voracious now reaches X=6 (8 mana). g4 T4:
+"Vernal Bloom, Nature's Lore, Steelbane Hydra (X=2)" is offered and `not_verified` (no drops).
+
+*Was the line findable before?* As a main-1 plan, no, at any budget. The flat pool refused it, and no
+rescue walk runs on a Forest-only board. A land search opens no breakpoint (the site-9 Expedition clause
+aside), so the autonomous search has no mid-main continuation that could re-solve the leftover {G}{G}. The
+human reached it only through the viewer's segment re-prompt. The search could reach the same END STATE only
+by splitting the turn across its searched second main: Kalonian, or Steelbane at X=2, cast post-combat. That
+loses pre-combat timing (a Greaves-hasted Hydra could not attack). From the g0 T5 board, both binaries hand
+off to T6 at d5 b20 and d5 b0 (no T5 kill exists there, as the sweep found), so the game's win turn did not
+move.
+
+**B. "suspend Search for Tomorrow, Three Visits" (seed 50004 T2).**
+- *Engine.* Every apply world pays a plan's suspend in its pre-cast pass. A mana-costed suspend therefore
+  goes first, while the flat pools price the plan as a bag. The payable order (Visits, then the suspend off
+  the fetched Forest) cannot be emitted as its own plan: plans have no position for a suspend.
+- *Hydras.* Not lossy: "Visits in main 1, suspend in main 2" (the searched second main) reaches the same
+  state. The `{suspend, Visits}` plan is a phantom, scored by what it realises.
+- *Decks without a second main* (Landfall, Shadowborn, Rift Bolt lists) lose that line for the turn.
+- Deferred to the USER: docs/design/costed-suspend-realised-order.md. It is a lockstep change at the five
+  executor sites and the rollout pre-pass, and it moves those decks' GT.
+- *Detector.* The ordering expansion probes drops only when a plan has two or more reorderable hand casts.
+  It treats a suspend as fixed, so a one-cast plan was never applied and read `not_verified`. Human-play
+  plans with a costed suspend and one cast are now probed. g4 T2 plan 1 now reads `known_drops:
+  ["Three Visits"]`.
+
+**C. Cosmetic / viewer** (all display-only; the event text feeds no digest: play events go to
+`g_play_event_sink`, not the GameLogger fold).
+1. `DrainPendingZeroToughness` names the real SBA. g2 T4 now reads "1/1 Creature dies (lethal damage)". A
+   real 0/0 still reads "0 toughness" (the LHC Ballista scenario).
+2. Loyalty-style prompts, the Voracious fight among them, no longer carry `per_target_damage` (it read 0).
+   The viewer words them from `loyalty`.
+3. A land raised by a land Aura or a global land-tap bonus publishes `yield` (a Forest under Bloom + Nissa
+   shows 3).
+4. `mdfc_backs` lists only back faces of cards in this game (empty for Hydras).
+5. The fight prompt reads "It is fought by Voracious Hydra (each deals damage equal to its power to the
+   other)".
+6. "X=0 Hydra + equip Greaves to it" (no Gauntlet): KEPT, because it is harmless. The 0/0 dies to the SBA as
+   it enters, the equip finds no host and is skipped, and Greaves' equip is {0}. The plan's outcome is
+   therefore exactly that of the standalone "Greaves, Hydra X=0", which is also on the menu. Folding it would
+   need a toughness-pump-aware host test at the equip-plan emission, to remove a duplicate the human can
+   already see is dead. Not worth a second rule beside HydrasProvider's X=0 prune.
+7. The viewer plan cap is `MTG_VIEWER_PLAN_CAP` (default ON), 65,536 odometer positions per enumeration
+   (`MTG_VIEWER_PLAN_CAP_POSITIONS`). Over all 251 main-phase frames of the 16 sweep games it truncated 2
+   (0.8%): g0 T5 (Voracious group, 1.06M positions in full) and g1 T6 (Greaves group, 221k). Census:
+   logs/hydras-f1/viewer_cap_census.txt. The cap is unchanged.
+
+**Verification (fixed binary, Release, `MTG_PGO=0`).**
+- `mtg-test`: 2819/2819 PASS. The 4 `F1:*` cases FAIL under `MTG_LANDPUT_CROSS_CREDIT=0`.
+- Smoke (not accepted at first): 188 configs unchanged; only `hydras_smoke_d0/d5` and `hydras2hg_smoke_d5`
+  moved, at the same score (searched: 0 slower, 0 faster, 5 play-changed). No other deck moved: Hydras is the
+  only list with a land-tap bonus source, so Landfall, Fungus and the other land-search decks are
+  byte-identical, and the new heurarm slot moved nothing.
+- **Held-out paired A/B.** One pooled batch, 2 arms x 2400 games, arms innermost in 50-game chunks,
+  seed = 7007 + off, game_index = off, d5 b20, profile attached, 32 threads. The heartbeat read 32/32 at
+  10 min, and the run took about 20 min (the gi 25 tail). Scripts: logs/hydras-f1/{mkab.py,run_ab.sh};
+  summary: logs/hydras-f1/ab_summary.txt.
+
+| arm | avg | wins/2400 | paired delta (se) | slower / faster | ms/game (x base) | units x base |
+|---|---|---|---|---|---|---|
+| base (`=0`) | 5.5204 | 2392 | - | - | 6752 (1) | 1 |
+| fix (shipped) | 5.5171 | 2393 | **-0.0033 (0.0012)** | **0 / 8** | 5908 (0.875) | 0.889 |
+
+- A/B, continued. Faster games: gi 448, 472, 497, 1109, 1446, 1919, 1979 (unwon -> T8) and 2358, each one turn.
+  There is no slower game, so nothing needs a d8 b0 recovery check. The base arm reproduces P3's shipped
+  5.5204. The fix is better and cheaper, so it meets the USER's bar (*"almost anything that measures better
+  and is cheaper is a good option"*) on top of being a correctness fix.
+- Regression tier, `--deck=hydras,hydras2hg`:
+  - `hydras_regression_d0/d3/d5_s2002`, `_d5_s3003` and `hydras2hg_regression_d5_s2002` moved at the SAME
+    score (0 slower, 0 faster; 30 searched and 9 d0 play-changed);
+  - `_s30001` unchanged;
+  - the viewer-protocol reference check: 817 refs, 0 play-drift, 0 board-diverged, 0 enum-gap.
+- GT accepted deck-filtered for smoke and regression: 4 smoke keys and 5 regression keys, every one at an
+  UNCHANGED aggregate (only the digest moved). `check_gt_logs.py`: 1097 consistent, 0 stale. The overnight
+  `hydras*` keys are left to the periodic overnight run (CLAUDE.md).
+- `ref_bench.py --deck Hydras`: search 5.300 vs the USER's 5.600, 0/10 short. Unchanged.
