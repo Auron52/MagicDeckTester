@@ -1048,6 +1048,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("self_counter_cost"))
         p.self_counter_cost = ManaCostFromString(params["self_counter_cost"].get<std::string>());
     p.remove_counter_ping_damage = params.value("remove_counter_ping_damage", 0);
+    // X Hydras (Hydras I2) -- see CardParams.
+    p.enters_with_x_dice_sides       = params.value("enters_with_x_dice_sides", 0);
+    p.upkeep_double_self_counters    = params.value("upkeep_double_self_counters", false);
+    p.etb_modal_double_self_counters = params.value("etb_modal_double_self_counters", false);
+    p.etb_modal_fight_opp_creature   = params.value("etb_modal_fight_opp_creature", false);
+    if (params.contains("remove_counter_destroy_art_ench_cost"))
+        p.remove_counter_destroy_art_ench_cost =
+            ManaCostFromString(params["remove_counter_destroy_art_ench_cost"].get<std::string>());
     // "Each creature you control gets +1/+0 for each time it has attacked this turn" (Moraug) -- see CardParams.
     p.attack_count_team_power = params.value("attack_count_team_power", false);
     if (params.contains("tap_token_cost"))

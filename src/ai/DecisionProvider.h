@@ -3207,6 +3207,25 @@ public:
         return out;
     }
 
+    // CounterDestroyArtEnchTargets -- the destroy targets the SEARCH is offered for Steelbane Hydra's "{2}{G},
+    // Remove a +1/+1 counter from this creature: Destroy target artifact or enchantment" (one activation
+    // action per returned target). `legal` = battlefield indices of every legal target, both sides
+    // (CounterDestroyLegalTargets). RESTRICT / ORDER only. Base: every legal target (no deck-neutral proof
+    // that destroying an own artifact or enchantment never pays). Human play never consults it.
+    virtual std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
+                                                          const std::vector<int>& legal) const
+    { (void)s; (void)controller; (void)src; return legal; }
+
+    // EtbFightTargets -- the fight targets the SEARCH is offered for Voracious Hydra's modal ETB ("double the
+    // +1/+1 counters on this creature" OR "this creature fights target creature you don't control";
+    // CollectActions' enters-with-X branch emits the double mode plus one cast variant per returned
+    // target). `legal` = battlefield indices of every legal target (VoraciousFightTargets). A provider may
+    // only RESTRICT or ORDER (a returned index outside `legal` is never emitted). Base: every legal target.
+    // Human play never consults it (the viewer asks the mode and target at resolution).
+    virtual std::vector<int> EtbFightTargets(const GameState& s, int controller, const CardDefinition& def,
+                                             const std::vector<int>& legal) const
+    { (void)s; (void)controller; (void)def; return legal; }
+
     // EtbModalDefault -- the modal ETB's mode when NO searched pin rode the entry (a rollout leaf, a
     // put): 0 = the +1/+1 counter(s), 1 = the life. Only the beyond-horizon / non-cast fallback; a
     // searched cast always carries its own pin. Default: the life when the deck reads lifegain on the

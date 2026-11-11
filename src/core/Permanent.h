@@ -351,6 +351,10 @@ enum class PermAbilityMode
     // Cephalid Coliseum: threshold, {U}, {T}, sacrifice; target player draws three,
     // then discards three. Target choice is carried by Action::draw_target.
     ThresholdLoot,
+    // Steelbane Hydra: "{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or
+    // enchantment." No {T}; the counter is part of the cost. Target carried on Action::sac_victim_id
+    // (installed as the TapTargetPumpPin at both apply sites).
+    CounterDestroyArtEnch,
 };
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
@@ -377,6 +381,7 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::TransformSelf        // Bloodline Keeper: "{B}: Transform" -- no {T}
         && m != PermAbilityMode::PayCounterSelf       // Walking Ballista: "{4}: put a counter" -- no {T}
         && m != PermAbilityMode::CounterPing          // Walking Ballista: "remove a counter: 1 damage"
+        && m != PermAbilityMode::CounterDestroyArtEnch // Steelbane Hydra: "{2}{G}, remove a counter: destroy"
         && m != PermAbilityMode::PingLoop             // the Heliod + Ballista loop (pings, no {T})
         && m != PermAbilityMode::SacNamedTutorPut
         && m != PermAbilityMode::FigureTwo

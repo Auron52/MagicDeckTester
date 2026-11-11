@@ -159,8 +159,9 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // (CR 614.1c) reading the X of THIS cast (CR 107.3m), in the same pre-push window as devour, through
     // PutPlusCounters (a put, CR 122.6). The stack entry records a positive chosen_x only, so X = 0
     // enters as the printed 0/0 (FireEtbWatchers records it doomed). Lockstep twin: apply_one.
+    // Neverwinter Hydra rolls X d6 instead (EntersWithXCounterCount -- the one shared count).
     if (edef->params.enters_with_x_plus_counters && entry.chosen_x.value_or(0) > 0)
-    { PutPlusCounters(state, perm, *entry.chosen_x); }
+    { PutPlusCounters(state, perm, EntersWithXCounterCount(state, entry.controller_index, *edef, *entry.chosen_x)); }
     std::vector<DevourDeath> devoured;
     if (edef->params.devour > 0 && entry.devour_count.value_or(0) > 0)
     {

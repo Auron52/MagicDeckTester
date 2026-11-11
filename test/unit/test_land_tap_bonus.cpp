@@ -117,7 +117,7 @@ TEST_CASE("Land-tap bonus: card data and the shared colour-choice predicates")
     const CardParams& lore   = DefLtb("Nature's Lore").params;
     CHECK(visits.land_search_on_resolve == lore.land_search_on_resolve);
     CHECK(visits.land_search_count == lore.land_search_count);
-    CHECK(visits.land_search_subtype == lore.land_search_subtype);
+    CHECK(visits.land_search_subtype_id == lore.land_search_subtype_id);
     CHECK(visits.land_search_tapped == lore.land_search_tapped);
     CHECK(LandSearchPutsUntapped(DefLtb("Three Visits")));
 }

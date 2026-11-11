@@ -3309,6 +3309,85 @@ inline int DoublePlusCounters(GameState& state, Permanent& p)
     return PlusCountersOn(p) - have;
 }
 
+// ---- DICE (Neverwinter Hydra, Hydras I2 2026-11-11) ------------------------------------------------------
+// The engine has no chance nodes: a random event is a deterministic seeded value (Gamble's discard,
+// Haunted Fengraf's GyReturnRandomPick). A die is drawn from a per-game STREAM indexed by how many dice the
+// roller has rolled so far (Player::dice_rolled): die k = 1 + hash(game_seed, k) % sides, salted like every
+// mid-game random event (shuffle_salt / shuffle_salt_search under g_shuffle_eval). Rolling n dice consumes
+// the next n values, so a total is a PREFIX sum: the choice of X, the copy, or the turn cannot re-roll it.
+// The domain tag keeps the stream distinct from Gamble's and Fengraf's. Advances the counter (both worlds
+// call this exactly once per entry, so the streams stay in lockstep); emits a roll event in human play.
+inline int RollDiceTotal(GameState& state, int controller, int n, int sides, const std::string& src_name)
+{
+    if (n <= 0 || sides <= 0) { return 0; }
+    Player& pl = state.players[static_cast<std::size_t>(controller)];
+    int total = 0;
+    std::string desc;
+    for (int i = 0; i < n; ++i)
+    {
+        const uint64_t k = static_cast<uint64_t>(pl.dice_rolled) + 1;
+        uint64_t mix = static_cast<uint64_t>(state.game_seed) * 0x9E3779B97F4A7C15ull
+                     + k * 0xD1B54A32D192ED03ull
+                     + static_cast<uint64_t>(controller + 1) * 0xCA5A826395121157ull
+                     + 0x4E57D6ull;   // domain tag "NWd6": a stream distinct from Gamble's / Fengraf's
+        mix ^= mix >> 30; mix *= 0xBF58476D1CE4E5B9ull;
+        mix ^= mix >> 27; mix *= 0x94D049BB133111EBull;
+        mix ^= mix >> 31;
+        mix = SaltSeed(mix, g_shuffle_eval ? state.shuffle_salt_search : state.shuffle_salt);
+        const int die = 1 + static_cast<int>(mix % static_cast<uint64_t>(sides));
+        ++pl.dice_rolled;
+        total += die;
+        if (!desc.empty()) { desc += "+"; }
+        desc += std::to_string(die);
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "roll",
+                      src_name + " -- rolled " + std::to_string(n) + "d" + std::to_string(sides) + ": "
+                      + desc + " = " + std::to_string(total));
+    }
+    return total;
+}
+// The +1/+1 counters an "enters with X" creature takes as it enters (CR 614.1c), for the cast's X: X
+// itself (Walking Ballista, Primordial / Voracious / Steelbane Hydra), or the total of X dice
+// (Neverwinter Hydra, enters_with_x_dice_sides). THE ONE call both enter sites make
+// (EffectHandler::EnterBattlefield, apply_one), so the dice stream advances identically in both worlds.
+inline int EntersWithXCounterCount(GameState& state, int controller, const CardDefinition& def, int x)
+{
+    if (x <= 0) { return 0; }
+    if (def.params.enters_with_x_dice_sides > 0)
+    { return RollDiceTotal(state, controller, x, def.params.enters_with_x_dice_sides, def.card.m_name.str()); }
+    return x;
+}
+
+// ---- PRIMORDIAL HYDRA's UPKEEP (upkeep_double_self_counters) -------------------------------------------
+// "At the beginning of your upkeep, double the number of +1/+1 counters on this creature." Mandatory,
+// untargeted, self-scoped (CR 503.1a), through DoublePlusCounters (CR 701.10e: a put, so a counter doubler
+// applies again; clamped at kPlusCounterCap). Fired by BOTH upkeep sites at the same relative point
+// (GameEngine::UpkeepTail and TurnSolver::SimulateEndAndStartNextTurn, right after the spore-counter
+// upkeep), so the two worlds stay in lockstep. The order among our other your-upkeep counter triggers is
+// outcome-irrelevant (each only adds counters to its own body; none reads another's count). Snapshot of
+// the battlefield size: nothing is created here. Param-gated -> a board without one does nothing.
+inline void PerformUpkeepDoubleSelfCounters(GameState& state)
+{
+    const int active = state.active_player_index;
+    const int n = static_cast<int>(state.battlefield.size());
+    for (int i = 0; i < n; ++i)
+    {
+        Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != active || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.upkeep_double_self_counters) { continue; }
+        const int added = DoublePlusCounters(state, p);
+        if (added > 0 && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          p.card.m_name.str() + " -- upkeep: doubled its +1/+1 counters (+"
+                          + std::to_string(added) + ", now " + std::to_string(PlusCountersOn(p)) + ")");
+        }
+    }
+}
+
 // ---- AS-ENTERS +1/+1 COUNTERS ON A SIMULTANEOUS MULTI-PUT (CardParams::enters_with_plus_counters) ---
 // The as-enters counters are applied at the universal enter cascade (FireEtbWatchers) for every
 // SINGLE entry. A multi-put whose entrants enter SIMULTANEOUSLY (Genesis Wave, Defense of the Heart,
@@ -11319,6 +11398,37 @@ inline void DrawHowlingMineCards(GameState& state, int player, GameLogger* logge
     }
 }
 
+// VORACIOUS HYDRA's mode pin (Action::tutor_target / StackEntry::tutor_target; the Timeless Witness
+// channel -- chosen_x is the Hydra's X, so the ETB CHOICE AXIS's chosen_x pin cannot carry it). "VF<n>" =
+// fight the creature numbered n; anything else = double. ONE parser for the resolver and the enumerator.
+inline std::string VoraciousPinFight(int target_number) { return "VF" + std::to_string(target_number); }
+inline int VoraciousPinFightTarget(const std::string& pin)
+{
+    if (pin.size() < 3 || pin[0] != 'V' || pin[1] != 'F') { return 0; }
+    int n = 0;
+    for (std::size_t i = 2; i < pin.size(); ++i)
+    {
+        if (pin[i] < '0' || pin[i] > '9') { return 0; }
+        n = n * 10 + (pin[i] - '0');
+    }
+    return n;
+}
+// The legal targets of Voracious Hydra's fight mode ("target creature you don't control"): battlefield
+// indices, battlefield order. ONE predicate for the enumerator, the resolver and the human prompt.
+inline std::vector<int> VoraciousFightTargets(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == controller || q.card.m_number == 0) { continue; }
+        if (!(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (q.card.HasKeyword(Keyword::Hexproof) || CreatureHasShroud(q, state)) { continue; }
+        out.push_back(i);
+    }
+    return out;
+}
+
 // The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
@@ -11490,6 +11600,82 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                               ? " -- chose: +" + std::to_string(p.etb_modal_self_counters) + "/+"
                                 + std::to_string(p.etb_modal_self_counters) + " counter"
                               : " -- chose: gain " + std::to_string(p.etb_modal_lifegain) + " life"));
+        }
+    }
+
+    // VORACIOUS HYDRA: "When this creature enters, choose one -- * Double the number of +1/+1 counters on
+    // this creature. * This creature fights target creature you don't control." (etb_modal_double_self_
+    // counters + etb_modal_fight_opp_creature). The X counters are already on (the as-enters replacement
+    // ran in the pre-push window), so X = 3 doubles to 6. The MODE and the fight TARGET are a SEARCHED cast
+    // axis riding tutor_target (VoraciousPin*, CollectActions' enters-with-X branch): "VF<n>" = fight the
+    // creature numbered n, anything else = double. Unpinned (a rollout leaf beyond the horizon, a non-cast
+    // entry) = double. Mode B needs a legal target (CR 700.2b); with none, double is the only mode. A pinned
+    // target that left meanwhile makes the trigger do nothing (CR 608.2b). HUMAN PLAY: the cast carries no
+    // pin; the viewer asks the mode (the attack_mode chooser, trigger "etb") and then the target (the board
+    // target chooser) over the full legal set. FIGHT (CR 701.14): each deals damage equal to its power to
+    // the other, simultaneously; a lethal-damage creature dies at the enter-cascade drain in both worlds
+    // (g_pending_zero_toughness -> CounterPingSbaDead, which includes lethal damage).
+    if (p.etb_modal_double_self_counters)
+    {
+        const std::vector<int> legal = VoraciousFightTargets(state, controller);
+        int fight_num = p.etb_modal_fight_opp_creature ? VoraciousPinFightTarget(chosen_tutor) : 0;
+        if (g_play_attack_mode_chooser != nullptr && !g_tap_speculating && !legal.empty()
+            && p.etb_modal_fight_opp_creature)
+        {
+            const int human = (*g_play_attack_mode_chooser)(state, controller, def->card.m_name.str(),
+                                                            fight_num > 0 ? 1 : 0);
+            if (human == 0) { fight_num = 0; }
+            else if (human == 1)
+            {
+                int pick = 0;
+                if (g_play_loyalty_chooser != nullptr)
+                {
+                    const int c = (*g_play_loyalty_chooser)(state, controller, def->card.m_name.str(),
+                                                            "fights it (each deals damage equal to its power "
+                                                            "to the other)", legal, 0);
+                    if (c >= 0 && c < static_cast<int>(legal.size())) { pick = c; }
+                }
+                fight_num = state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])]
+                                .card.m_number;
+            }
+        }
+        if (fight_num > 0)
+        {
+            int ti = -1;
+            for (int li : legal)
+            { if (state.battlefield[static_cast<std::size_t>(li)].card.m_number == fight_num) { ti = li; break; } }
+            if (ti >= 0)
+            {
+                Permanent& self = state.battlefield[static_cast<std::size_t>(entered_index)];
+                Permanent& tgt  = state.battlefield[static_cast<std::size_t>(ti)];
+                const int my_pow  = std::max(0, CombatPowerOf(self, state));
+                const int its_pow = std::max(0, CombatPowerOf(tgt, state));
+                tgt.damage  += my_pow;
+                self.damage += its_pow;
+                g_pending_zero_toughness.push_back(tgt.card.m_number);
+                g_pending_zero_toughness.push_back(self.card.m_number);
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "etb_mode",
+                                  def->card.m_name.str() + " -- chose: fight " + tgt.card.m_name.str()
+                                  + " (deals " + std::to_string(my_pow) + ", takes " + std::to_string(its_pow) + ")");
+                }
+            }
+            else if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb_mode",
+                              def->card.m_name.str() + " -- chose: fight, but the target is gone (no effect)");
+            }
+        }
+        else
+        {
+            const int added = DoublePlusCounters(state, state.battlefield[static_cast<std::size_t>(entered_index)]);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "etb_mode",
+                              def->card.m_name.str() + " -- chose: double its +1/+1 counters (+"
+                              + std::to_string(added) + ")");
+            }
         }
     }
 
@@ -31220,6 +31406,88 @@ struct CounterPingTargetPinScope
 // N (CR 702.15b / 119.10) through the shared GainLife hook -- Heliod / Pridemate / Voice fire there.
 // `quiet` suppresses the per-ping history line (the loop prints one summary). Returns false (nothing
 // paid) when the source is gone or has no counter.
+// ---- STEELBANE HYDRA: "{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or
+// enchantment." (PermAbilityMode::CounterDestroyArtEnch; CardParams::remove_counter_destroy_art_ench_cost).
+// LEGAL TARGET: an artifact or enchantment permanent on either side, targetable by our ability (an opponent's
+// hexproof permanent is not; no artifact/enchantment shroud source exists in the engine). ONE predicate for the enumerator, the liveness check, the resolver and
+// the breakpoint availability bits.
+inline bool CounterDestroyTargetLegal(const GameState& state, const Permanent& q, int controller)
+{
+    (void)state;
+    if (q.card.m_number == 0) { return false; }
+    if (!(q.card.HasType(CardType::Artifact) || q.card.IsEnchantment())) { return false; }
+    if (q.controller_index != controller
+        && q.card.HasKeyword(Keyword::Hexproof)) { return false; }
+    return true;
+}
+inline std::vector<int> CounterDestroyLegalTargets(const GameState& state, int controller)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (CounterDestroyTargetLegal(state, state.battlefield[static_cast<std::size_t>(i)], controller)) { out.push_back(i); } }
+    return out;
+}
+// RESOLUTION (both worlds, through ApplyPermAbility; the mana half was paid by the caller). COST first: one
+// +1/+1 counter comes off (CR 602.2b), and a body left at 0 toughness dies before the ability resolves (the
+// CounterPing SBA, CounterPingKillAt). Then the PINNED target is destroyed if it is still legal and not
+// indestructible -- no substitution (a stale pin is caught by PermAbilitySourceLive). An unpinned call (never
+// emitted: every searched/human activation carries its target) takes the first legal target. The destroy is
+// Acidic Slime's (ResolveEtbDestroyMandatory): owner's graveyard, Equipment/Aura links cleared, a creature
+// through OnCreatureDies.
+inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int source_id, int target_num)
+{
+    int si = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.card.m_number == source_id && p.controller_index == controller) { si = i; break; }
+    }
+    if (si < 0 || PlusCountersOn(state.battlefield[static_cast<std::size_t>(si)]) <= 0) { return; }
+    const std::string src_name = state.battlefield[static_cast<std::size_t>(si)].card.m_name.str();
+    if (target_num == 0)
+    {
+        for (int i : CounterDestroyLegalTargets(state, controller))
+        { target_num = state.battlefield[static_cast<std::size_t>(i)].card.m_number; break; }
+    }
+    RemovePlusCounters(state.battlefield[static_cast<std::size_t>(si)], 1);
+    if (CounterPingSbaDead(state.battlefield[static_cast<std::size_t>(si)], state))
+    { CounterPingKillAt(state, static_cast<std::size_t>(si), "its last +1/+1 counter was removed"); }
+    int bi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == target_num && CounterDestroyTargetLegal(state, q, controller)) { bi = i; break; }
+    }
+    if (bi < 0) { return; }   // the target left: the ability does nothing (CR 608.2b)
+    Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+    if (q.HasKeyword(Keyword::Indestructible)) { return; }
+    const Card dead = q.card;
+    const int  dead_ctrl = q.controller_index;
+    const bool was_creature = q.card.IsCreature();
+    const bool was_token = q.is_token;
+    const int  m1 = MinusCountersOn(q);
+    const int  total_counters = TotalCountersOn(q);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "\xF0\x9F\x92\x80 " + src_name + ": destroys "
+                      + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                      + dead.m_name.str());
+    }
+    if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(dead); }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    for (Permanent& o : state.battlefield)
+    {
+        if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+        if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+    }
+    if (was_creature)
+    {
+        OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+        if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+    }
+}
+
 inline bool ResolveCounterPing(GameState& state, int controller, int source_id, bool ask_human, bool quiet)
 {
     int si = -1;
@@ -31788,6 +32056,22 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // Walking Ballista: the ping's cost is a +1/+1 counter (no counter, no activation), and the Heliod
         // loop's premise must still hold before its grant / top-up is paid (a stale plan is a no-op).
         if (mode == PermAbilityMode::CounterPing && PlusCountersOn(p) <= 0) { return false; }
+        // Steelbane Hydra: the counter is part of the cost, and the target is chosen on activation -- a
+        // pinned target that left (or stopped being legal) makes the stale plan a clean no-op.
+        if (mode == PermAbilityMode::CounterDestroyArtEnch)
+        {
+            if (PlusCountersOn(p) <= 0) { return false; }
+            const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
+            if (td == nullptr || !td->params.remove_counter_destroy_art_ench_cost.has_value()) { return false; }
+            const int want = g_tap_target_pump_pin.target;
+            bool target_ok = false;
+            for (const Permanent& q : state.battlefield)
+            {
+                if (want != 0 && q.card.m_number != want) { continue; }
+                if (CounterDestroyTargetLegal(state, q, controller)) { target_ok = true; break; }
+            }
+            if (!target_ok) { return false; }
+        }
         if (mode == PermAbilityMode::PingLoop)
         {
             ManaCost extra;
@@ -32064,6 +32348,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
         case PermAbilityMode::FigureEight: return "become an 8/8 Kithkin Spirit Warrior Avatar";
         case PermAbilityMode::CounterPing:    return "remove a +1/+1 counter: 1 damage to any target";
+        case PermAbilityMode::CounterDestroyArtEnch: return "remove a +1/+1 counter: destroy target artifact or enchantment";
         case PermAbilityMode::PingLoop:       return "Heliod loop: ping until the opponent is dead";
         case PermAbilityMode::SacNamedTutorPut:
                                               return "sacrifice six of them: search for a Demon, put it onto the battlefield";
@@ -32504,6 +32789,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
         }
         case PermAbilityMode::CounterPing:
             ResolveCounterPing(state, controller, source_id, /*ask_human=*/true, /*quiet=*/false);
+            break;
+        case PermAbilityMode::CounterDestroyArtEnch:
+            ResolveCounterDestroyArtEnch(state, controller, source_id, g_tap_target_pump_pin.target);
             break;
         case PermAbilityMode::PingLoop:
             RunPingLoop(state, controller, source_id);

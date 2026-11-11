@@ -150,6 +150,10 @@ enum class UnprunedGate
     LavamancerFuel,  // Midrange Burn: restore every graveyard fuel pair for Grim Lavamancer
     EtbColor,        // Hydras: Gauntlet of Power's searched colour fan opened to its whole menu instead of
                      // HydrasProvider::EtbChoiceCandidates' green-only dominance prune
+    EtbFight,        // Hydras: Voracious Hydra's fight-mode targets restored (HydrasProvider::EtbFightTargets
+                     // prunes every one: a fight can only damage our Hydra vs the passive opponent)
+    CounterDestroy,  // Hydras: Steelbane Hydra's destroy targets restored to every legal artifact/enchantment
+                     // (DecisionProvider::CounterDestroyArtEnchTargets' dominance prune drops our own)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -3694,6 +3698,19 @@ public:
     const char* Name() const override { return "Hydras"; }
     std::vector<int> EtbChoiceCandidates(const GameState& s, int controller,
                                          const CardDefinition& def) const override;
+    // The X Hydras' X axis (definitions carry the proofs / USER rulings): X = 0 dropped for a 0/0 body that
+    // would die on entry (sound); Neverwinter Hydra always at the maximum affordable X (USER); every other
+    // X Hydra too under MTG_HYDRAS_MAX_X (USER-requested narrowing, default OFF until measured).
+    std::vector<int> XCandidates(const GameState& s, const CardDefinition& def,
+                                 int max_affordable) const override;
+    bool XCastBelowMax(const GameState& s, const std::vector<Action>& cands, const std::vector<int>& sel,
+                       int j, int pool_total) const override;
+    // Voracious Hydra's fight mode: never offered to the search (proof at the definition).
+    std::vector<int> EtbFightTargets(const GameState& s, int controller, const CardDefinition& def,
+                                     const std::vector<int>& legal) const override;
+    // Steelbane Hydra's destroy: only opponent-controlled targets are offered (proof at the definition).
+    std::vector<int> CounterDestroyArtEnchTargets(const GameState& s, int controller, const Permanent& src,
+                                                  const std::vector<int>& legal) const override;
 };
 
 class CycloneProvider : public DeckProvider

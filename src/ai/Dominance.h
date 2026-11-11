@@ -1232,6 +1232,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                 fold(static_cast<std::uint64_t>(p.cards_cycled_or_discarded_this_turn));
             }
         }
+        // DICE ROLLED (Neverwinter Hydra; Player::dice_rolled): per-GAME, future-determining (the next
+        // roll's index into the seeded stream). Value-gated, so every deck that rolls nothing keeps its key.
+        if (p.dice_rolled > 0) { fold(0xD1CEull); fold(static_cast<std::uint64_t>(p.dice_rolled)); }
         // RAD COUNTERS (Mariposa Military Base): NOT per-turn scratch like the three counters
         // above -- they persist across untaps and are future-determining twice over (they cheapen
         // Mariposa's draw, and they mill + cost life at every precombat main). Gated on nonzero so

@@ -3872,9 +3872,19 @@ static int NoncreatureSpellTax(const CardDefinition& def, const GameState& state
     return tax;
 }
 
+// `x_excess` (nullptr at every ordinary caller): for an {X} spell, the generic reduction that the
+// floors below threw away because the printed generic (X counted as 0) was too small to absorb it. CR
+// 601.2f applies a cost reduction to the TOTAL cost, X included, so that excess still comes off the X
+// part once X is chosen -- see XSpellUnabsorbedReduction. Summing each floored step's own excess is
+// exact: for a, b >= 0, max(0, a - g) + max(0, b - max(0, g - a)) == max(0, a + b - g).
 static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameState& state, int copies,
-                                       const ManaCost* alternate_base)
+                                       const ManaCost* alternate_base, int* x_excess = nullptr)
 {
+    // One floored generic reduction, recording what the floor discarded (the X-site excess).
+    auto reduce_generic = [&](ManaCost& c, int r) {
+        if (x_excess != nullptr && r > c.generic) { *x_excess += r - c.generic; }
+        c.generic = std::max(0, c.generic - r);
+    };
     if (alternate_base == nullptr && def.params.spectacle_cost.has_value() && state.opponent_lost_life_this_turn)
     {
         // An alternative cost still takes cost increases (CR 118.9d).
@@ -3949,7 +3959,7 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
                 if (matches) { ++reduction; break; }
             }
         }
-        cost.generic = std::max(0, cost.generic - reduction);
+        reduce_generic(cost, reduction);
     }
     // THE THREE REDUCER WALKS BELOW RUN ONLY IF THE DECK CAN CONTAIN A REDUCER AT ALL.
     //
@@ -4053,7 +4063,7 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
                 { ApplyColoredPipReduction(cost, pp.reduces_subtype_colored_cost.value()); }
             }
         }
-        cost.generic = std::max(0, cost.generic - generic_reduction);
+        reduce_generic(cost, generic_reduction);
     }
     // Hollow One: "This spell costs {2} less to cast for each card you've cycled or discarded this
     // turn." Scaled by a PER-TURN counter rather than by a board state, which makes it the only
@@ -4063,13 +4073,11 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
     if (def.params.cost_less_per_cycle_or_discard > 0)
     {
         const int events = state.players[state.active_player_index].cards_cycled_or_discarded_this_turn;
-        cost.generic = std::max(0, cost.generic
-                                   - def.params.cost_less_per_cycle_or_discard * events);
+        reduce_generic(cost, def.params.cost_less_per_cycle_or_discard * events);
     }
     if (def.params.cost_less_per_opponent_noncombat_damage)
     {
-        cost.generic = std::max(0, cost.generic
-            - state.noncombat_damage_received_this_turn[1 - state.active_player_index]);
+        reduce_generic(cost, state.noncombat_damage_received_this_turn[1 - state.active_player_index]);
     }
     // Hinata's per-target cost reduction (fixed-cost spells; {X} spells apply it at the X-cost
     // sites where the whole generic, incl. X, is known -- CastSpellFromHand / apply_one).
@@ -4086,6 +4094,27 @@ ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, i
 ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
                                     const ManaCost& alternate_base)
 { return EffectiveSpellCostImpl(def, state, 1, &alternate_base); }
+
+int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)
+{
+    if (!def.card.m_mana_cost.has_x) { return 0; }
+    // Fast exit: the only generic reductions EffectiveSpellCostImpl applies are the deck-stamped reducer
+    // walk and the casting card's own affinity / Hollow One / opponent-damage clauses.
+    if (!state.deck_has_cost_reducer && !def.params.affinity_for_subtype
+        && def.params.cost_less_per_cycle_or_discard <= 0
+        && !def.params.cost_less_per_opponent_noncombat_damage) { return 0; }
+    int excess = 0;
+    (void)EffectiveSpellCostImpl(def, state, 1, nullptr, &excess);
+    return excess;
+}
+
+int XCastGenericDiscount(const CardDefinition& def, const GameState& state, int chosen_x,
+                         int crackle_targets)
+{
+    if (!def.card.m_mana_cost.has_x) { return 0; }
+    return HinataGenericDiscount(def, state, chosen_x, crackle_targets)
+         + XSpellUnabsorbedReduction(def, state);
+}
 
 // THE cast-order comparator (C1 unit 3): provider RANK first, then CHEAPEST-FIRST by the action's
 // ACTUAL cost. The rank alone is not enough -- every mana ritual shares one rank, so their relative

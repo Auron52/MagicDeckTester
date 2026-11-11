@@ -1153,7 +1153,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                          + " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                 }
                 if (a.ability_mode == Action::AbilityMode::TargetPump
-                    || a.ability_mode == Action::AbilityMode::UntapLand)
+                    || a.ability_mode == Action::AbilityMode::UntapLand
+                    || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)   // Steelbane: destroy target
                 {
                     tag += " \xE2\x86\x92 " + EnchantTargetName(s, a.sac_victim_id);
                     if (a.ability_mode == Action::AbilityMode::TargetPump && a.chosen_x > 1)
@@ -3307,6 +3308,12 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else { os << ", \"pump_count\": " << ac.chosen_x; }
             }
             if (ac.kind == Action::Kind::ActivatePermAbility
+                && ac.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)   // Steelbane Hydra
+            {
+                os << ", \"destroy_target\": " << ac.sac_victim_id
+                   << ", \"destroy_target_name\": "; JsonStr(os, EnchantTargetName(s, ac.sac_victim_id));
+            }
+            if (ac.kind == Action::Kind::ActivatePermAbility
                 && ac.ability_mode == Action::AbilityMode::UntapLand)
             {
                 os << ", \"untap_target\": " << ac.sac_victim_id
@@ -4683,6 +4690,18 @@ static void WriteAttackModeDecisionJson(std::ostream& os, const GameState& s,
         os << "],\n";
         EmitRevealsField(os, reveals);
         d.Note("reply 0 for the +1/+1 counter mode or 1 for the life-gain mode.");
+        return;
+    }
+    // Voracious Hydra's modal ENTER trigger (Hydras 2026-11-11): "double the +1/+1 counters on this
+    // creature" or "this creature fights target creature you don't control" -- asked from FireOwnEtbTriggers
+    // only when a fight target exists; the target itself is the following board-target decision.
+    if (src_def != nullptr && src_def->params.etb_modal_double_self_counters)
+    {
+        os << "  \"trigger\":\"etb\",\n";
+        os << "  \"options\":[{\"index\":0,\"text\":\"Double the number of +1/+1 counters on this creature\"},"
+              "{\"index\":1,\"text\":\"This creature fights target creature you don't control\"}],\n";
+        EmitRevealsField(os, reveals);
+        d.Note("reply 0 to double its +1/+1 counters or 1 to fight; the fight target is a separate board decision.");
         return;
     }
     os << "  \"options\":[";

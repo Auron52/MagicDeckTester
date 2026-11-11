@@ -13921,6 +13921,113 @@
    }
   },
   {
+   "name": "Primordial Hydra",
+   "mana_cost": "{X}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Hydra"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "This creature enters with X +1/+1 counters on it.\nAt the beginning of your upkeep, double the number of +1/+1 counters on this creature.\nThis creature has trample as long as it has ten or more +1/+1 counters on it. [ENTERS WITH X (enters_with_x_plus_counters, the Walking Ballista route): an AS-ENTERS replacement (CR 614.1c) in the pre-push window of BOTH creature-enter sites (EffectHandler::EnterBattlefield / TurnSolver apply_one) reading the cast's chosen_x through PutPlusCounters (a put: a counter doubler applies). X is a SEARCHED axis; any non-cast entry has X = 0 and the 0/0 dies to the SBA (CR 704.5f). MANA VALUE is 2 off the stack (CR 202.3e). Hydra spell: Gargos's {4} reduction applies to the TOTAL cost including X (CR 601.2f, XCastGenericDiscount). UPKEEP (upkeep_double_self_counters): at the beginning of OUR upkeep, DoublePlusCounters (CR 701.10e: a put; clamped at 2^20), fired by one shared helper at the same point of GameEngine::UpkeepTail and TurnSolver::SimulateEndAndStartNextTurn (after the spore-counter upkeep). Mandatory, no target, no choice. The 'Double' keyword ACTION is not a keyword tag. TRAMPLE at ten or more counters is NOT MODELLED and INERT (approved deferral 2026-11-10): the passive opponent never blocks (no blocker path; Keyword::Trample has no reader), so it is deliberately absent from keywords.]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "upkeep_double_self_counters": true
+   }
+  },
+  {
+   "name": "Voracious Hydra",
+   "mana_cost": "{X}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Hydra"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 0,
+   "toughness": 1,
+   "oracle_text": "Trample\nThis creature enters with X +1/+1 counters on it.\nWhen this creature enters, choose one —\n• Double the number of +1/+1 counters on this creature.\n• This creature fights target creature you don't control. [ENTERS WITH X (enters_with_x_plus_counters, the Walking Ballista route; X searched; X = 0 is a live 0/1). Hydra spell: Gargos's {4} applies to the total including X (CR 601.2f). MODAL ETB (etb_modal_double_self_counters + etb_modal_fight_opp_creature): DOUBLE puts as many +1/+1 counters as it has (DoublePlusCounters, CR 701.10e -- after the X counters, so X = 3 ends at 6); FIGHT (CR 701.14) makes it and target creature you don't control each deal damage equal to its power to the other, lethal damage killing at the enter-cascade drain in both worlds. The mode and the fight target are a SEARCHED cast axis (one cast variant per admitted fight target beside the double cast, pinned on tutor_target -- 'VF<n>' -- through FireOwnEtbTriggers in both worlds). The opponent's spawns (8 of 10 games) are legal fight targets; HydrasProvider admits none for the search (a fight can only damage our Hydra: they never block or attack -- proof at EtbFightTargets; MTG_UNPRUNE=etbfight restores them). Mode B with no legal target cannot be chosen (CR 700.2b). HUMAN PLAY asks the mode at resolution (attack_mode, trigger etb) and then the target over every legal creature. 'Fight' and 'Double' are keyword ACTIONS, not tags. Trample: inert vs a never-blocking opponent.]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "etb_modal_double_self_counters": true,
+    "etb_modal_fight_opp_creature": true
+   }
+  },
+  {
+   "name": "Neverwinter Hydra",
+   "mana_cost": "{X}{X}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Hydra"
+   ],
+   "keywords": [
+    "Trample",
+    "Ward"
+   ],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "As this creature enters, roll X d6. It enters with a number of +1/+1 counters on it equal to the total of those results.\nTrample\nWard {4} (Whenever this creature becomes the target of a spell or ability an opponent controls, counter it unless that player pays {4}.) [ENTERS WITH X d6 (enters_with_x_plus_counters + enters_with_x_dice_sides 6): the Walking Ballista route ({X}{X} = 2 generic per X), but the as-enters amount is the TOTAL of X six-sided dice (EntersWithXCounterCount), through PutPlusCounters. The dice are a deterministic seeded stream per game (Player::dice_rolled; RollDiceTotal, salted like every mid-game random event): rolling X dice consumes the next X values, so the total is a prefix sum -- no X, copy or timing lever re-rolls it; the count is folded into the state keys. X: per the USER ruling (2026-11-10, 'For Neverwinter I would rather not have it figuring out how to game X. Trying the maximum is a good way to minimize this.') the search casts it only at the maximum X its plan can pay (HydrasProvider::XCastBelowMax); human play offers every X. X = 0 enters as a 0/0 and dies (offered only while a toughness pump like Gauntlet of Power is on our battlefield or in hand). Hydra spell: Gargos's {4} applies to the total including both X pips (X = 2 costs {G}{G}). Ward {4}: inert tag -- it triggers only on an opponent's spell or ability and the passive opponent never casts or activates. Trample: inert vs a never-blocking opponent.]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "enters_with_x_dice_sides": 6
+   }
+  },
+  {
+   "name": "Steelbane Hydra",
+   "mana_cost": "{X}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Turtle",
+    "Hydra"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 0,
+   "oracle_text": "This creature enters with X +1/+1 counters on it.\n{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact or enchantment. [ENTERS WITH X (enters_with_x_plus_counters, the Walking Ballista route; X searched; X = 0 enters as a 0/0 and dies unless a green Gauntlet of Power makes it 1/1). Hydra spell: Gargos's {4} applies to the total including X (CR 601.2f). ACTIVATION (remove_counter_destroy_art_ench_cost {2}{G}, PermAbilityMode::CounterDestroyArtEnch): no {T}, so repeatable and legal while summoning-sick (CR 302.6); the counter is part of the COST (CR 602.2b) -- no counter, no activation, and a body left at 0 toughness dies; the destroy then resolves on the target if it is still a legal artifact or enchantment (indestructible survives). The target is chosen on activation, one searched action per ADMITTED target (DecisionProvider::CounterDestroyArtEnchTargets, a dominance fold: an opponent's artifact/enchantment, or one of ours only when its leaving pays). Vs the passive opponent the legal set is our own Gauntlet of Power / Lightning Greaves / Vernal Bloom and destroying one buys nothing, so the search is offered none (MTG_UNPRUNE=counterdestroy restores them). Human play sees every legal target. Instant-speed timing collapsed to our main phase (approved deferral 2026-11-10: inert vs the passive opponent).]",
+   "template": "custom",
+   "parameters": {
+    "enters_with_x_plus_counters": true,
+    "remove_counter_destroy_art_ench_cost": "{2}{G}"
+   }
+  },
+  {
+   "name": "Gargos, Vicious Watcher",
+   "mana_cost": "{3}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Hydra"
+   ],
+   "keywords": [
+    "Vigilance"
+   ],
+   "power": 8,
+   "toughness": 7,
+   "oracle_text": "Vigilance\nHydra spells you cast cost {4} less to cast.\nWhenever a creature you control becomes the target of a spell, Gargos fights up to one target creature you don't control. [COST REDUCTION via reduces_spell_subtype 'Hydra' + reduces_spell_subtype_amount 4 (the Goblin Warchief reducer scaled to {4}). It reduces GENERIC only, never the {G} pips. Per CR 601.2f the reduction applies to the TOTAL cost after X is chosen (XSpellUnabsorbedReduction / XCastGenericDiscount at every X-cost site, both worlds): a {X}{G}{G} Hydra at X = 4 costs {G}{G}, Neverwinter {X}{X}{G}{G} at X = 2 costs {G}{G}, Kalonian {3}{G}{G} costs {G}{G}. Gargos is itself a Hydra, so a resident Gargos discounts a second one to {G}{G}{G}, but it is LEGENDARY: the duplicate is legend-ruled at once (CR 704.5j), so two never stack. Vigilance: carried (practically inert here). 'Fight' is a keyword ACTION, not a tag. PARTIAL (approved deferral 2026-11-10): the 'becomes the target of a SPELL' fight trigger is NOT modelled -- it is INERT in this list because no SPELL here targets a creature we control (Greaves' equip, Nissa's and Garruk's loyalty abilities and Voracious Hydra's ETB are all abilities, which do not trigger it). The opponent DOES control creatures in 8 of 10 games, so if a list adds a creature-targeting spell this becomes real.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_spell_subtype": "Hydra",
+    "reduces_spell_subtype_amount": 4
+   }
+  },
+  {
    "name": "Skyshroud Claim",
    "mana_cost": "{3}{G}",
    "types": [

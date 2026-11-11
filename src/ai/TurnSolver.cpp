@@ -6331,6 +6331,23 @@ static std::uint64_t BpActivationKey(int number, int ability)
 // Returns a bitmask over PermAbilityMode. Mirrors the emission CONDITIONS only; the K axis, the
 // interchangeable-source fold and the condemnation gate change which VARIANTS emit, never whether
 // the ability is available.
+// STEELBANE HYDRA's admitted destroy targets (battlefield indices): the full legal set (CounterDestroyLegalTargets)
+// in human play, else the provider's restriction of it (DecisionProvider::CounterDestroyArtEnchTargets -- an
+// index outside the legal set is dropped: a provider may only restrict or order). ONE function for the
+// CollectActions emission and the breakpoint availability bits.
+static std::vector<int> CounterDestroyAdmittedTargets(const GameState& state, int ctrl, const Permanent& src)
+{
+    std::vector<int> legal = CounterDestroyLegalTargets(state, ctrl);
+    if (legal.empty() || HumanPlayActive()) { return legal; }
+    std::vector<int> out;
+    for (int ti : ResolveProvider(state).CounterDestroyArtEnchTargets(state, ctrl, src, legal))
+    {
+        if (std::find(legal.begin(), legal.end(), ti) != legal.end()
+            && std::find(out.begin(), out.end(), ti) == out.end()) { out.push_back(ti); }
+    }
+    return out;
+}
+
 static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const Permanent& src,
                                                   const CardDefinition& sd, const ManaPool& pool)
 {
@@ -6452,6 +6469,12 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
             { bits |= 1ull << static_cast<int>(PermAbilityMode::TargetPump); break; }
         }
     }
+    // Steelbane Hydra: the out-of-band block's condition, mirrored (a counter, the mana, and an ADMITTED target
+    // -- the provider's CounterDestroyArtEnchTargets, human play the full legal set). See CollectActions.
+    if (sd.params.remove_counter_destroy_art_ench_cost.has_value() && PlusCountersOn(src) > 0
+        && pool.CanPay(EffectiveActivationCost(state, ctrl, src.card, *sd.params.remove_counter_destroy_art_ench_cost))
+        && !CounterDestroyAdmittedTargets(state, ctrl, src).empty())
+    { bits |= 1ull << static_cast<int>(PermAbilityMode::CounterDestroyArtEnch); }
     // Walking Ballista's counter ping and the Heliod loop: the out-of-band blocks' conditions, mirrored
     // (the shared CollectCounterPingOffers / PingLoopLiveNow). See CollectActions, "WALKING BALLISTA".
     if (sd.params.remove_counter_ping_damage > 0)
@@ -11094,7 +11117,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
                 ec.generic += a.chosen_x * pips;
                 ec.generic  = std::max(0, ec.generic
-                                - HinataGenericDiscount(def, cp, a.chosen_x,
+                                - XCastGenericDiscount(def, cp, a.chosen_x,
                                       IsCrackleCountSpell(def) ? a.crackle_targets : -1));
             }
             // Convoke (Chord of Calling): the committed action's taps reduce this cast's cost
@@ -13933,9 +13956,15 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         }
         // Walking Ballista: enters with X counters (the cast's X) -- the body it IS, doubler-aware like
         // the line above. Its ping reach is the projection's (CounterPingReach), not this score's.
+        // Neverwinter Hydra scores the EXPECTED dice total (X d6 -> X*(sides+1)/2; an ordering score only,
+        // it rolls nothing); Voracious Hydra's default (double) mode doubles the X it enters with.
         if (def.params.enters_with_x_plus_counters && chosen_x > 0)
         {
-            dyn += chosen_x << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
+            int body = chosen_x;
+            if (def.params.enters_with_x_dice_sides > 0)
+            { body = (chosen_x * (def.params.enters_with_x_dice_sides + 1)) / 2; }
+            if (def.params.etb_modal_double_self_counters) { body *= 2; }
+            dyn += body << DoublerShift(state, state.active_player_index, /*for_tokens=*/false);
         }
         // "Whenever you gain life, put a +1/+1 counter on this creature" (Ajani's Pridemate /
         // Voice of the Blessed): the body enters INTO its own entry's enter-watcher gains -- one
@@ -30167,6 +30196,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::FigureEight,        &pp.figure_eight_cost              },
         { PermAbilityMode::TargetPump,         &pp.target_pump_cost              },
         { PermAbilityMode::ThresholdLoot,      &pp.threshold_loot_cost          },
+        { PermAbilityMode::CounterDestroyArtEnch, &pp.remove_counter_destroy_art_ench_cost },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -33541,7 +33571,16 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         if (pa.awaken && pd != nullptr && pd->params.awaken_cost.has_value())
                         { ec = *pd->params.awaken_cost; }
                         if (ec.has_x && pa.chosen_x > 0)
-                        { ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips)); }
+                        {
+                            ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips));
+                            // CR 601.2f: a Gargos-style reduction the printed generic could not
+                            // absorb comes off the X part (XSpellUnabsorbedReduction). Hinata's
+                            // per-target X discount was never applied in this flat sum (a
+                            // pre-existing over-count on Hinata boards); it is left as it was so
+                            // those decks stay byte-identical.
+                            if (pd != nullptr)
+                            { ec.generic = std::max(0, ec.generic - XSpellUnabsorbedReduction(*pd, state)); }
+                        }
                         // Convoke: the committed taps reduce the cast's mana cost (lockstep with
                         // the enumeration's reduced emission -- shared ApplyConvokeReduction).
                         if (pd != nullptr && pd->params.convoke)
@@ -37421,6 +37460,57 @@ static std::vector<std::string> HumanPlayCycleSources(const GameState& state)
     return out;
 }
 
+// SAME-PLAN X POTENTIAL (Hydras defect 6, 2026-11-11). An "enters with X" creature's max X is sized off
+// the board before the turn's casts, so a line that first casts a same-plan mana producer and then the
+// largest X was never emitted -- unfindable at any budget. This is an UPPER bound on the mana the OTHER
+// hand cards can add net of their own cost, summed over every such card (whether or not a plan casts it):
+//   * a land-tap bonus source (Vernal Bloom / Nissa / Gauntlet of Power): its same-plan credit
+//     (SamePlanLandTapBonusCredit, the rock_mana CollectActions stamps; for a colour chooser the best
+//     colour) minus its mana value;
+//   * an untapped land-put spell (Search for Tomorrow / Nature's Lore / Three Visits): its widest pick
+//     credit (LandSearchCreditGroups, the land-put post-pass's rock_mana) minus its mana value, plus the
+//     land-tap x land-put cross term (every bonus source in hand fires on each fetched land: the
+//     LandTapCrossBoundCredit over-count).
+// An over-estimate only offers X values the subset payer then rejects; an under-estimate would make a line
+// unfindable, so every term is a bound in the generous direction. A card nets nothing without a live or
+// same-plan land-tap bonus (a basic taps for 1 and every land-put costs >= 2), so this is 0 for every hand
+// that holds no land-tap bonus source and no fetch under a live bonus.
+static int XPotentialFromSamePlanProducers(const GameState& state, int self_hand_index)
+{
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    int total = 0, bonus_sum = 0;
+    std::vector<std::pair<int, int>> land_puts;   // (net credit - cost, untapped picks)
+    for (int k = 0; k < static_cast<int>(ap.hand.size()); ++k)
+    {
+        if (k == self_hand_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(k)]);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (d->params.land_tap_bonus > 0 && LandTapCastCreditOn())
+        {
+            int best = 0;
+            if (d->params.etb_choose_color)
+            {
+                for (int c = 0; c < 5; ++c)
+                { best = std::max(best, static_cast<int>(SamePlanLandTapBonusCredit(state, me, *d, c).Total())); }
+            }
+            else { best = static_cast<int>(SamePlanLandTapBonusCredit(state, me, *d).Total()); }
+            total += std::max(0, best - EffectiveCost(*d, state).ManaValue());
+            bonus_sum += d->params.land_tap_bonus;
+        }
+        else if (state.deck_has_land_search && LandSearchPutsUntapped(*d))
+        {
+            int best = 0;
+            for (const ManaPool& g : LandSearchCreditGroups(state, me, LandSearchSpecOf(d->params)))
+            { best = std::max(best, static_cast<int>(g.Total())); }
+            const int picks = std::max(0, d->params.land_search_count - d->params.land_search_to_hand);
+            land_puts.emplace_back(best - EffectiveCost(*d, state).ManaValue(), picks);
+        }
+    }
+    for (const auto& lp : land_puts) { total += std::max(0, lp.first + lp.second * bonus_sum); }
+    return total;
+}
+
 static std::vector<Action> CollectActions(const GameState& state, bool is_pre_combat)
 {
     CollectMemoScope collect_memo_scope(state);   // per-call memo for the emission helpers (CollectMemo)
@@ -38058,9 +38148,29 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const ManaCost base = EffectiveCost(def, state);
                 int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
                 const ManaPool bpool = turn_pool();
-                int max_x = (static_cast<int>(bpool.Total()) - base.ManaValue()) / pips;
+                // CR 601.2f: a reduction the printed generic could not absorb (Gargos's {4} on
+                // {X}{G}{G}) comes off X -- it widens max X and prices every X (XCastGenericDiscount).
+                const int x_excess = XSpellUnabsorbedReduction(def, state);
+                int max_x = (static_cast<int>(bpool.Total()) - base.ManaValue() + x_excess) / pips;
                 if (max_x < 0) { continue; }   // cannot pay even the base -> uncastable now
-                for (int x : ResolveProvider(state).XCandidates(state, def, max_x))
+                // SAME-PLAN X POTENTIAL (Hydras defect 6, 2026-11-11; the MTG_MINT_CREDIT_EXACT shape). max X
+                // above is sized off the board BEFORE the turn's casts, so "Vernal Bloom (or a land-put, or
+                // Gauntlet), then the largest X" was unfindable at any budget: that X was never emitted.
+                // XPotentialFromSamePlanProducers is an UPPER bound on what the plan's other casts can add
+                // net of their own cost; the extra X are offered beside the board's range and the subset
+                // payer (which credits each producer's rock_mana only where it really pays) rejects
+                // every one a plan cannot fund. 0 whenever no other hand card nets mana -> every hand
+                // without a land-tap bonus source emits exactly what it did.
+                const int x_potential = XPotentialFromSamePlanProducers(state, i);
+                std::vector<int> xs = ResolveProvider(state).XCandidates(state, def, max_x);
+                if (x_potential >= pips)
+                {
+                    const int wide = max_x + x_potential / pips;
+                    for (int xv : ResolveProvider(state).XCandidates(state, def, wide))
+                    { if (xv > max_x && std::find(xs.begin(), xs.end(), xv) == xs.end()) { xs.push_back(xv); } }
+                    max_x = wide;
+                }
+                for (int x : xs)
                 {
                     if (x < 0 || x > max_x) { continue; }
                     Action a;
@@ -38069,11 +38179,36 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.hand_index     = i;
                     a.cost           = base;
                     a.cost.generic  += x * pips;
+                    a.cost.generic   = std::max(0, a.cost.generic - XCastGenericDiscount(def, state, x));
                     a.chosen_x       = x;
                     a.eval           = EvalCard(def, state, x);
                     a.is_noncreature = false;
                     a.card_mv        = def.card.m_mana_cost.ManaValue();   // 0: X is 0 off the stack
+                    // VORACIOUS HYDRA's modal ETB: the base action (no pin) is the DOUBLE mode; in the
+                    // DECISION space one variant per ADMITTED fight target is appended beside it (same
+                    // hand_index -> mutually exclusive; plan_signature's #VM keeps the dedup lossless).
+                    // The provider may only restrict/order the targets (EtbFightTargets). Human play gets no
+                    // variants: the unpinned cast asks the mode and target at resolution. A rollout leaf
+                    // (estimating) keeps the base only -- the beyond-horizon playout.
+                    const std::size_t base_at = actions.size();
                     actions.push_back(std::move(a));
+                    if (def.params.etb_modal_fight_opp_creature && !HumanPlayActive()
+                        && (g_search_candidate_enum || g_condemn_root_turn < 0))
+                    {
+                        const std::vector<int> legal = VoraciousFightTargets(state, state.active_player_index);
+                        if (!legal.empty())
+                        {
+                            for (int ti : ResolveProvider(state).EtbFightTargets(state, state.active_player_index,
+                                                                                 def, legal))
+                            {
+                                if (std::find(legal.begin(), legal.end(), ti) == legal.end()) { continue; }   // restrict only
+                                Action v = actions[base_at];   // copy BEFORE push_back (reallocation)
+                                v.tutor_target = VoraciousPinFight(state.battlefield[static_cast<std::size_t>(ti)]
+                                                                       .card.m_number);
+                                actions.push_back(std::move(v));
+                            }
+                        }
+                    }
                 }
                 continue;
             }
@@ -38090,7 +38225,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 int pips = def.card.m_mana_cost.x_pips; if (pips < 1) { pips = 1; }
                 ManaCost xcost = EffectiveCost(def, state);
                 xcost.generic += x * pips;
-                xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x));
+                xcost.generic = std::max(0, xcost.generic - XCastGenericDiscount(def, state, x));
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
@@ -38363,7 +38498,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ManaCost tbase  = EffectiveCost(def, state);
                 ManaPool tpool  = turn_pool();
                 int tpips = def.card.m_mana_cost.x_pips; if (tpips < 1) { tpips = 1; }
-                const int tmax = (tpool.Total() - tbase.ManaValue()) / tpips;
+                const int tx   = XSpellUnabsorbedReduction(def, state);   // CR 601.2f excess (0: no reducer)
+                const int tmax = (tpool.Total() - tbase.ManaValue() + tx) / tpips;
                 if (tmax < 0) { continue; }   // cannot pay even the base -> uncastable now
                 for (int x : ResolveProvider(state).XCandidates(state, def, tmax))
                 {
@@ -38372,7 +38508,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.kind           = Action::Kind::CastFromHand;
                     a.card_name      = ap.hand[i].m_name;
                     a.hand_index     = i;
-                    ManaCost c = tbase; c.generic += x * tpips;
+                    ManaCost c = tbase; c.generic = std::max(0, c.generic + x * tpips - tx);
                     a.cost           = c;
                     a.chosen_x       = x;
                     a.eval           = 1;   // removing a passive spawn: near-zero clock payoff
@@ -38398,7 +38534,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ManaPool qpool = turn_pool();
                 qpool.AddPool(state.floating_mana);
                 int qpips = def.card.m_mana_cost.x_pips; if (qpips < 1) { qpips = 1; }
-                const int qmax = (qpool.Total() - qbase.ManaValue()) / qpips;
+                const int qx   = XSpellUnabsorbedReduction(def, state);   // CR 601.2f excess (0: no reducer)
+                const int qmax = (qpool.Total() - qbase.ManaValue() + qx) / qpips;
                 if (qmax < 0) { continue; }   // cannot pay even the base -> uncastable now
                 const int heads = gamesetup::OpponentHeads();
                 for (int x : ResolveProvider(state).XCandidates(state, def, qmax))
@@ -38408,7 +38545,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.kind           = Action::Kind::CastFromHand;
                     a.card_name      = ap.hand[i].m_name;
                     a.hand_index     = i;
-                    ManaCost c = qbase; c.generic += x * qpips;
+                    ManaCost c = qbase; c.generic = std::max(0, c.generic + x * qpips - qx);
                     a.cost           = c;
                     a.chosen_x       = x;
                     a.eval           = x * heads;
@@ -38447,7 +38584,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // the subset credit prices it, so an X only one feeder ordering funds is offered and
                 // a subset that cannot fund it is rejected there). 0 for every board without a live
                 // scaled dork -> byte-identical.
-                const int gmax = (gpool.Total() + DorkGrowthXPotential(state, i) - gbase.ManaValue()) / gpips;
+                const int gx   = XSpellUnabsorbedReduction(def, state);   // CR 601.2f excess (0: no reducer)
+                const int gmax = (gpool.Total() + DorkGrowthXPotential(state, i) - gbase.ManaValue() + gx) / gpips;
                 if (gmax < 0) { continue; }   // cannot pay even the base -> uncastable now
                 // HUMAN PLAY MUST BE OFFERED EVERY LEGAL X, and that is NOT free here:
                 // GenericProvider::XCandidates' generic path returns only {max_affordable} and does
@@ -38480,7 +38618,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.kind           = Action::Kind::CastFromHand;
                     a.card_name      = ap.hand[i].m_name;
                     a.hand_index     = i;
-                    ManaCost c = gbase; c.generic += xv * gpips;
+                    ManaCost c = gbase; c.generic = std::max(0, c.generic + xv * gpips - gx);
                     a.cost           = c;
                     a.chosen_x       = xv;
                     // Price the cast in the SAME unit every other candidate uses (EvalCard), summed
@@ -38529,7 +38667,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 ManaPool dpool = turn_pool();
                 dpool.AddPool(state.floating_mana);                 // the Rolling Earthquake shape
                 int dpips = def.card.m_mana_cost.x_pips; if (dpips < 1) { dpips = 1; }
-                const int dmax = (dpool.Total() - dbase.ManaValue()) / dpips;
+                const int dx   = XSpellUnabsorbedReduction(def, state);   // CR 601.2f excess (0: no reducer)
+                const int dmax = (dpool.Total() - dbase.ManaValue() + dx) / dpips;
                 if (dmax < 0) { continue; }   // cannot pay even the base -> uncastable now
                 constexpr int DMG = 100;      // EvalCard's unit (one card drawn = one damage-equivalent)
                 const int ntargets = def.params.draw_target_player ? 2 : 1;
@@ -38544,7 +38683,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.kind           = Action::Kind::CastFromHand;
                         a.card_name      = ap.hand[i].m_name;
                         a.hand_index     = i;
-                        ManaCost c = dbase; c.generic += xv * dpips;
+                        ManaCost c = dbase; c.generic = std::max(0, c.generic + xv * dpips - dx);
                         a.cost           = c;
                         a.chosen_x       = xv;
                         a.draw_target    = tgt;
@@ -38601,7 +38740,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             int mult = def.params.x_damage_multiplier; if (mult < 1) { mult = 1; }
             // Hinata's discount frees up mana for a larger X. Two cases:
             int max_x;
-            int P = std::max(0, xpool.Total() - assumed_her_mv), bmv = base.ManaValue();
+            // + a reduction the printed generic could not absorb (CR 601.2f; 0 without a reducer).
+            int P = std::max(0, xpool.Total() - assumed_her_mv) + XSpellUnabsorbedReduction(def, state),
+                bmv = base.ManaValue();
             if (def.params.discount_targets_scale_x && (HinataInPlay(state) || hinata_assumed))
             {
                 // Crackle: discount = min(X, avail) -> cost(X) = pips*X + bmv - min(X, avail),
@@ -38690,7 +38831,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     // Hinata reduces the whole generic (incl. X) by the target count. For Crackle the
                     // discount derives from `count` (min(X,1+count)); for other X spells (Reality
                     // Spasm) `count` is -1 and it uses the auto formula (unchanged).
-                    xcost.generic = std::max(0, xcost.generic - HinataGenericDiscount(def, state, x, count));
+                    xcost.generic = std::max(0, xcost.generic - XCastGenericDiscount(def, state, x, count));
                     Action a;
                     a.kind            = Action::Kind::CastFromHand;
                     a.card_name       = ap.hand[i].m_name;
@@ -39836,7 +39977,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (def.card.m_mana_cost.has_x)
             {
                 const ManaPool xp = turn_pool();
-                int max_x = (xp.Total() - base_cost.ManaValue()) / x_pips;
+                int max_x = (xp.Total() - base_cost.ManaValue()
+                             + XSpellUnabsorbedReduction(def, state)) / x_pips;   // CR 601.2f excess
                 if (max_x < 0) { max_x = 0; }
                 for (int xv : ResolveProvider(state).XCandidates(state, def, max_x))
                 { if (xv > 0) { x_values.push_back(xv); } }
@@ -39918,7 +40060,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.card_mv        = def.card.m_mana_cost.ManaValue();
                 a.enchant_target = tgt_num;
                 a.trick_hand_target = hand_name;
-                if (xv > 0) { a.cost.generic += xv * x_pips; a.chosen_x = xv; }
+                if (xv > 0)
+                {
+                    a.cost.generic = std::max(0, a.cost.generic + xv * x_pips
+                                                 - XSpellUnabsorbedReduction(def, state));   // CR 601.2f
+                    a.chosen_x = xv;
+                }
                 // MTG_MINT_CREDIT_EXACT: the Treasures THIS variant mints (its target's fan), the
                 // way ritual_float / rock_mana ride the Action -- see Action::mint_gain.
                 if (def.params.creates_treasures > 0 && MintCreditExactOn())
@@ -44974,6 +45121,38 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             a.is_noncreature = true;
                             actions.push_back(std::move(a));
                         }
+                    }
+                }
+            }
+
+            // ---- Steelbane Hydra: "{2}{G}, Remove a +1/+1 counter from this creature: Destroy target artifact
+            // or enchantment." No {T} (repeatable, legal while summoning-sick); the counter is part of the cost.
+            // One action per ADMITTED target (CounterDestroyAdmittedTargets: the provider's restriction of the
+            // legal set; human play the full legal set), the target pinned on sac_victim_id. Each activation
+            // is its own decision (no count axis): the phase re-prompts.
+            if (sd->params.remove_counter_destroy_art_ench_cost.has_value() && PlusCountersOn(src) > 0)
+            {
+                const int me = state.active_player_index;
+                const ManaCost cost = EffectiveActivationCost(state, me, src.card,
+                                                               *sd->params.remove_counter_destroy_art_ench_cost);
+                ManaPool have = turn_pool();
+                have.AddPool(state.floating_mana);
+                if (have.CanPay(cost))
+                {
+                    for (int ti : CounterDestroyAdmittedTargets(state, me, src))
+                    {
+                        Action a;
+                        a.kind = Action::Kind::ActivatePermAbility;
+                        a.card_name = src.card.m_name;
+                        a.def = sd;
+                        a.hand_index = -1;
+                        a.sac_source_id = src.card.m_number;
+                        a.sac_victim_id = state.battlefield[static_cast<std::size_t>(ti)].card.m_number;
+                        a.ability_mode = Action::AbilityMode::CounterDestroyArtEnch;
+                        a.cost = cost;
+                        a.eval = 0;
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
                     }
                 }
             }
@@ -65102,7 +65281,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ManaPool xpool = AvailableManaPool(state);   // credits the float itself (FloatLeftoverMana)
             if (!FloatLeftoverManaEnabled()) { xpool.AddPool(state.floating_mana); }
             int xpips = def.card.m_mana_cost.x_pips; if (xpips < 1) { xpips = 1; }
-            const int xmax = (static_cast<int>(xpool.Total()) - ec.ManaValue()) / xpips;
+            // + the reduction the printed generic could not absorb (CR 601.2f; 0 without a reducer).
+            const int xmax = (static_cast<int>(xpool.Total()) - ec.ManaValue()
+                              + XSpellUnabsorbedReduction(def, state)) / xpips;
             if (xmax >= 0)
             {
                 const bool at_opp = def.params.draw_target_player && cast_draw_tgt != 0;
@@ -65128,7 +65309,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Crackle: discount DERIVES from the declared count (crackle_targets); the enumeration
             // costed it the same way -> lockstep. Non-Crackle X spells pass -1 (auto formula).
             ec.generic = std::max(0, ec.generic
-                           - HinataGenericDiscount(def, state, chosen_x,
+                           - XCastGenericDiscount(def, state, chosen_x,
                                  IsCrackleCountSpell(def) ? crackle_targets : -1));
         }
         // Convoke (Chord of Calling): the plan's taps reduce this cast's cost -- the SAME shared
@@ -66428,8 +66609,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // doubled, CR 121.6/614.1c). Death triggers are deferred to after the cascade below.
             // WALKING BALLISTA: enters with X +1/+1 counters (the cast's X, CR 107.3m) -- the as-enters
             // replacement, lockstep twin of EffectHandler::EnterBattlefield's pre-push window.
+            // Neverwinter Hydra rolls X d6 instead (EntersWithXCounterCount -- the one shared count).
             if (def.params.enters_with_x_plus_counters && chosen_x > 0)
-            { PutPlusCounters(state, perm, chosen_x); }
+            { PutPlusCounters(state, perm, EntersWithXCounterCount(state, state.active_player_index, def, chosen_x)); }
             std::vector<DevourDeath> devoured;
             if (def.params.devour > 0 && cast_devour > 0)
             {
@@ -69487,7 +69669,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Kessig Wolf Run's searched TARGET + X (TapTargetPump), read by the liveness check, the
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
-            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump;
+            const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
+                                  || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch;   // Steelbane's target
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
@@ -72299,6 +72482,7 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
     // Spore counters (the Thallid family), before the other upkeep triggers. Mirrors
     // GameEngine::UpkeepStep (lockstep). Param-gated -> byte-identical elsewhere.
     PerformUpkeepSporeCounters(state);
+    PerformUpkeepDoubleSelfCounters(state);   // Primordial Hydra (lockstep: GameEngine::UpkeepTail)
     // Fading (Saproling Burst): remove one, or sacrifice if you cannot -- and the LTB then
     // destroys every token it made. Lockstep twin in GameEngine::UpkeepTail.
     PerformUpkeepFading(state);
@@ -73811,6 +73995,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (act.twobrid_colored > 0) { w.Put("#W"); w.Int(act.twobrid_colored); }
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
+                if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (!act.pitch_name.empty()) { w.Put("#EX"); w.Put(act.pitch_name); }   // PITCH EVOKE (Fury)
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
@@ -73970,7 +74155,8 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 // legacy builder.
                 if (act.ability_mode == Action::AbilityMode::TapTargetPump
                     || act.ability_mode == Action::AbilityMode::TargetPump
-                    || act.ability_mode == Action::AbilityMode::UntapLand)
+                    || act.ability_mode == Action::AbilityMode::UntapLand
+                    || act.ability_mode == Action::AbilityMode::CounterDestroyArtEnch)
                 { w.Put("#P"); w.Int(act.sac_victim_id); }
                 // Walking Ballista's ping: WHICH target (0 = face) is a decision. Every other ability: no tag.
                 if (act.ability_mode == Action::AbilityMode::CounterPing && act.sac_victim_id != 0)
@@ -79057,6 +79243,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (cd && cd->params.x_damage_each_creature_and_player) { k += "#Q"; k += std::to_string(act.chosen_x); }
                         // Walking Ballista: X is its body AND its reach -- distinct X are DISTINCT plans.
                         if (cd && cd->params.enters_with_x_plus_counters) { k += "#BX"; k += std::to_string(act.chosen_x); }
+                        // Voracious Hydra: double vs fight <target> are DISTINCT plans (the #G precedent).
+                        if (cd && cd->params.etb_modal_fight_opp_creature) { k += "#VM"; k += act.tutor_target.str(); }
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
@@ -79312,7 +79500,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                   // (chosen_x above is its X) -- the Gamble lesson. Every other ability: no tag.
                                   + ((act.ability_mode != Action::AbilityMode::TapTargetPump
                                       && act.ability_mode != Action::AbilityMode::TargetPump
-                                      && act.ability_mode != Action::AbilityMode::UntapLand)
+                                      && act.ability_mode != Action::AbilityMode::UntapLand
+                                      && act.ability_mode != Action::AbilityMode::CounterDestroyArtEnch)
                                      ? std::string() : "#P" + std::to_string(act.sac_victim_id))
                                   // Walking Ballista's ping target (0 = the face, untagged).
                                   + (act.ability_mode != Action::AbilityMode::CounterPing || act.sac_victim_id == 0
@@ -90049,7 +90238,8 @@ static std::string PlanDomKey(const Action& a)
     if (a.kind == Action::Kind::ActivatePermAbility
         && (a.ability_mode == Action::AbilityMode::TapTargetPump
             || a.ability_mode == Action::AbilityMode::TargetPump
-            || a.ability_mode == Action::AbilityMode::UntapLand))
+            || a.ability_mode == Action::AbilityMode::UntapLand
+            || a.ability_mode == Action::AbilityMode::CounterDestroyArtEnch))
     { k += "|T"; k += std::to_string(a.sac_victim_id); }   // Kessig Wolf Run: the pump's target
     if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::CounterPing
         && a.sac_victim_id != 0)
@@ -94047,6 +94237,10 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             if (reads_cycles)
             { Fold(k, 0xC7C1); Fold(k, static_cast<uint64_t>(p.cards_cycled_or_discarded_this_turn)); }
         }
+        // DICE ROLLED (Neverwinter Hydra): the index into the seeded per-game dice stream, so two states
+        // that differ only in dice consumed roll different totals later. Value-gated: 0 forever (and the
+        // prior key exactly) for every deck that rolls nothing.
+        if (p.dice_rolled > 0) { Fold(k, 0xD1CE); Fold(k, static_cast<uint64_t>(p.dice_rolled)); }
         // RAD COUNTERS (Mariposa Military Base). Unlike the two counters above this is NOT
         // turn-scoped scratch -- it persists across untaps, and it is future-determining twice
         // over: it reduces Mariposa's "{5}, {T}: Draw a card" by {1} each, and it fires a MILL plus
