@@ -1546,6 +1546,42 @@ other player gave no reasons, so the readings below are inferred.
   2 more mana is quite a bit more painful." So exactly as implemented: at 3 projected mana every lacking combo bucket
   leads the mana bucket, in every state; below 3 the mana bucket leads (the 2026-10-20 order).
 
+### Two follow-up Wish levers + a held-out check of the two amendments (2026-11-11) -- MEASURED, DEFAULT OFF, the USER's call
+
+The USER, after confirming COMBO_FIRST: "The less common and crucial combo piece like alchemist is the only question.
+Is that more crucial than a mana source at 2 mana? It might be." / "I think we could very well test an alchemist
+exception." And: "Another thing to consider, though: If we have multiple living wish (such that we have more than we
+need for combo pieces) we may want to prioritize mana first." Two levers in `AaWishBucketSet`, both DEFAULT OFF:
+
+* `MTG_AA_WISH_ALCH_FIRST_AT2` -- at exactly 2 projected mana a lacking Alchemist ranks ahead of the mana bucket (the
+  other combo buckets stay behind it).
+* `MTG_AA_WISH_SPARE_MANA_FIRST` -- when the wishes (the resolving one + Living Wishes in hand) outnumber the lacking
+  combo buckets, COMBO_FIRST and ALCH_FIRST_AT2 are suppressed and the mana bucket leads.
+
+A/B (`logs/aa_alch2/ab.sh`, `ab2.sh`, `compare.py`; MTG_PGO=0, Alchemist cells of all three tiers, paired per game vs
+the committed default, loss = 9; arm 00 reproduced smoke + regression GT byte for byte). NOTE: the first run's
+spare-wish arms ran a binary whose `DecisionProviders.o` predated that lever (byte-identical to 00); they were rerun on
+a fresh build (the AT2 arm reproduces exactly on it, d0 s4004 6.3525). Turns summed, negative = faster:
+
+| arm | searched smoke+regression (710 g) | searched OVERNIGHT held-out (2535 g) | d0 (smoke 1000 / regression 1000 / overnight 4x2000) |
+|---|---|---|---|
+| ALCH_FIRST_AT2 | 0 | **-6 (0 slower / 5 faster)** | -7 / -22 / -19 -45 -37 -21 (every seed faster) |
+| SPARE_MANA_FIRST | 0 | 0 | +2 / +9 / -5 -2 -6 -3 (neutral) |
+| both | 0 | -4 (0 slower / 4 faster) | -6 / -13 / -26 -43 -46 -16 |
+| COMBO_FIRST=0 + UNTAP_NET=0 (the two adopted amendments OFF) | -- | **+12 (10 slower / 2 faster)** | overnight +26 +15 +17 -13 |
+
+Readings. (1) AT2 passes the bar (0 slower, net negative on held-out seeds) and is the only lever that moves the
+search; d0 improves on every seed (~-0.015/game). (2) SPARE_MANA_FIRST is neutral: the spare-wish state is real (~39
+d0 resolutions per 2000 games at 2-3 mana) but the mana bucket is still OFFERED under COMBO_FIRST, so the search
+already reaches it; only the d0 rollout order changes, by noise. With AT2 it adds nothing. (3) The held-out check
+VALIDATES the USER-confirmed COMBO_FIRST + UNTAP_NET: turning them off is 10 slower / 2 faster. (4) The current tree
+is ~+0.045/game slower than the committed OVERNIGHT GT at d5 (e.g. s5005 4.9800 -> 5.0283); per (3) that drift is not
+the Wish amendments -- it lines up with the 2026-11-10 attacker-tap legality fix (`1ab127b24`, which removed illegal
+fast Ezuri lines and moved smoke/regression the same way). The periodic overnight accept will take it.
+
+Recommendation to the USER: adopt ALCH_FIRST_AT2; leave SPARE_MANA_FIRST off (no measurable effect). Both stay
+DEFAULT OFF until the USER decides.
+
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 
 Commits (branch `accomplished-alchemist`): 86ba02b3 (AppendSubdecisionAxes), 22d15f95 (UntapLandHosts),

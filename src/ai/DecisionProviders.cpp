@@ -49684,9 +49684,34 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // "At below 3 this might be a different story. Getting 2 more mana is quite a bit more painful." -- hence 3 only.
     static const bool s_combo_first = EnvOn("MTG_AA_WISH_COMBO_FIRST", true);
     static const bool s_alch_first  = EnvOn("MTG_AA_WISH_ALCH_FIRST", true);
-    const bool combo_first   = s_combo_first && c.mana >= 3 && c.mana < 4;
+    // PROPOSED (default OFF; the USER 2026-11-11, an idea to test): "If we have multiple living wish (such that we
+    // have more than we need for combo pieces) we may want to prioritize mana first." With MORE wishes (this one plus
+    // the Living Wishes still in hand) than lacking combo buckets, a spare wish can fetch the pieces later, so the
+    // mana bucket leads again (overrides COMBO_FIRST and ALCH_FIRST_AT2).
+    static const bool s_spare_mana = EnvOn("MTG_AA_WISH_SPARE_MANA_FIRST", false);
+    bool spare_wish = false;
+    if (s_spare_mana)
+    {
+        int wishes = 1;                                   // the resolving wish
+        for (const Card& h : s.players[controller].hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (d != nullptr && d->params.wish_from_sideboard) { ++wishes; }
+        }
+        const bool witch_u = c.witch && (witch_win || c.gain_total >= 5);
+        const bool untap_need = !c.untapper && !witch_u;  // (UNTAP_NET's refinement is not re-read here)
+        const bool win_need = !(c.wincon || (witch_win && c.witch));
+        const int lacking = int(!c.alchemist) + int(!c.lifegain) + int(untap_need) + int(win_need);
+        spare_wish = wishes > lacking;
+    }
+    const bool combo_first   = s_combo_first && !spare_wish && c.mana >= 3 && c.mana < 4;
     const bool alch_first    = !s_combo_first && s_alch_first && c.mana >= 3 && c.mana < 4
                             && !c.alchemist && c.untapper && c.wincon;
+    // PROPOSED (default OFF; the USER's open question 2026-11-11): "The less common and crucial combo piece like
+    // alchemist is the only question. Is that more crucial than a mana source at 2 mana? It might be." At exactly 2
+    // projected mana a lacking Alchemist alone ranks ahead of the mana bucket; the other combo buckets stay behind it.
+    static const bool s_alch_at2 = EnvOn("MTG_AA_WISH_ALCH_FIRST_AT2", false);
+    const bool alch_at2      = s_alch_at2 && !spare_wish && c.mana >= 2 && c.mana < 3 && !c.alchemist;
     const bool mana_lacking  = c.mana < 4;
     // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
     // and no Wincon.
@@ -49747,7 +49772,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         if (d == nullptr) { continue; }
         const CardParams& p = d->params;
         int r = -1;
-        if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = alch_first ? kAlchFirst : kAlch; } }
+        if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = (alch_first || alch_at2) ? kAlchFirst : kAlch; } }
         else if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty())
                                                         { if (mana_lacking) { r = kElf + mana_shift; } }
         else if (d->card.IsLand())

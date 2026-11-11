@@ -24,28 +24,13 @@ the two Living Wish amendments (`MTG_AA_WISH_COMBO_FIRST`, `MTG_AA_WISH_UNTAP_NE
 (`analysis-Unpredictable Cyclone.md`, Remand rulings). Replayed on the seeds: T2 suggests Brindle Boar, T5 Galvanic
 Alchemist, and 23746 offers Remand on Ulamog, the Infinite Gyre (it returns to hand, Remand draws).
 
-## IN FLIGHT (2026-11-11): Living Wish 2-mana Alchemist exception + spare-wish A/B
+## Living Wish follow-up levers (2026-11-11) -- MEASURED, awaiting the USER
 
-State: every reported issue is fixed and pushed (last commit `37e408257`). Both earlier Wish amendments are
-USER-CONFIRMED (ledger `analysis-AccomplishedAlchemist.md`, "Other player's reports on seed 23742"). Two NEW
-default-OFF levers are UNCOMMITTED in `src/ai/DecisionProviders.cpp` (`AaWishBucketSet`), being A/B'd:
-
-* `MTG_AA_WISH_ALCH_FIRST_AT2` -- USER: "The less common and crucial combo piece like alchemist is the only
-  question. Is that more crucial than a mana source at 2 mana? It might be." / "I think we could very well test an
-  alchemist exception." At exactly 2 projected mana a lacking Alchemist ranks ahead of the mana bucket.
-* `MTG_AA_WISH_SPARE_MANA_FIRST` -- USER: "If we have multiple living wish (such that we have more than we need
-  for combo pieces) we may want to prioritize mana first." Wishes (resolving + in hand) > lacking combo buckets ->
-  COMBO_FIRST and ALCH_FIRST_AT2 are suppressed (mana leads).
-
-Running: `bash logs/aa_alch2/ab.sh` (PID 2292826; started 2026-11-11 ~12:00 UTC). Four arms 00/10/01/11
-(<AT2><SPARE>) x smoke/regression/overnight, Alchemist cells only (smoke also alchemist2hg), MTG_PGO=0, one
-binary. Logs `logs/aa_alch2/<mode>_<arm>.log`; per-game wins copied to `build/scratch/aa_alch2/<mode>_<arm>/`;
-DONE marker `logs/aa_alch2/DONE`. Arm 00 must match smoke/regression GT byte for byte (sanity).
-
-Next: `python3 logs/aa_alch2/compare.py` (paired per game vs arm 00, loss = 9; searched pooled line per arm; weigh
-the held-out OVERNIGHT seeds most). Report to the USER with numbers; adoption is the USER's call. If adopted: flip
-the default, unit cases, accept alchemist smoke+regression GT with a note, ledger entry, commit + push, watch CI.
-If not: commit the levers default-OFF with the measurement in the ledger. Do not run the overnight tier for GT.
+`MTG_AA_WISH_ALCH_FIRST_AT2` and `MTG_AA_WISH_SPARE_MANA_FIRST` are committed DEFAULT OFF in `AaWishBucketSet`.
+The A/B and its readings are in `analysis-AccomplishedAlchemist.md`, "Two follow-up Wish levers". In short, AT2 is
+0 slower / 5 faster on held-out seeds and faster at d0 on every seed (recommended), SPARE is neutral, and the two
+adopted amendments are validated (off = 10 slower / 2 faster). If the USER adopts AT2: flip its default, add a unit
+case, accept alchemist smoke + regression GT with a note, commit + push, watch CI. No overnight run for GT.
 
 ## Changes made
 
