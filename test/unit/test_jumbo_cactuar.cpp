@@ -168,6 +168,149 @@ TEST_CASE("Jumbo Cactuar has a unique cast rank for every mainboard card")
     CHECK(rank("Lightning Greaves") < rank("Arbor Elf"));
     CHECK(rank("Voyaging Satyr") < rank("Chariot of Victory"));
     CHECK(rank("Surrak and Goreclaw") < rank("Jumbo Cactuar"));
+    // USER 2026-11-11: Surrak's default is after the untappers and Chariot, before Tooth and Nail.
+    CHECK(rank("Chariot of Victory") < rank("Surrak and Goreclaw"));
+    CHECK(rank("Surrak and Goreclaw") < rank("Tooth and Nail"));
+}
+
+namespace
+{
+Action JumboCast(GameState& s, const char* name, int number, int host = 0, const char* target = nullptr)
+{
+    s.players[0].hand.push_back(CopyOf(name, number));
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    REQUIRE(d != nullptr);
+    Action a;
+    a.kind = Action::Kind::CastFromHand;
+    a.card_name = name;
+    a.def = d;
+    a.cost = d->card.m_mana_cost;
+    a.enchant_target = host;
+    a.is_noncreature = !d->card.IsCreature();
+    if (target != nullptr) { a.tutor_target = target; }
+    return a;
+}
+
+std::vector<std::string> ArrangedNames(GameState& s, const std::vector<Action>& acts)
+{
+    std::vector<int> order(acts.size());
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i) { order[static_cast<std::size_t>(i)] = i; }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+    { return CastOrderLess(s, acts[x], acts[y]); });
+    ApplyDeckCastArrangement(s, acts, order);
+    std::vector<std::string> names;
+    for (int i : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        names.push_back(a.tutor_target.str().empty() ? a.card_name.str()
+                                                     : a.card_name.str() + "->" + a.tutor_target.str());
+    }
+    return names;
+}
+
+GameState JumboBoard(JumboCactuarProvider& provider, int forests)
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 5;
+    s.deck_has_land_aura = true;
+    s.deck_has_creature_enter_watcher = true;
+    s.m_provider = &provider;
+    for (int i = 0; i < forests; ++i) { PutOnBoard(s, "Forest", 10 + i); }
+    return s;
+}
+}
+
+// USER 2026-11-11: a tutor ranked by its target "should always go after the cheaper cast-from-hand option".
+TEST_CASE("Jumbo Cactuar ranks a targeted tutor after the hand copy of its target")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s = JumboBoard(provider, 0);
+    const auto rank = [&](const char* name)
+    { return provider.CastOrderRank(s, *CardDatabase::Instance().Lookup(name)); };
+    for (const char* tutor : {"Green Sun's Zenith", "Finale of Devastation"})
+    {
+        for (const char* target : {"Arbor Elf", "Surrak and Goreclaw", "Jumbo Cactuar"})
+        {
+            Action a = JumboCast(s, tutor, 90, 0, target);
+            const int r = provider.CastOrderActionRank(s, a, rank(tutor));
+            CHECK(r > rank(target));
+        }
+    }
+    Action elf_tutor = JumboCast(s, "Green Sun's Zenith", 91, 0, "Arbor Elf");
+    CHECK(provider.CastOrderActionRank(s, elf_tutor, rank("Green Sun's Zenith")) < rank("Voyaging Satyr"));
+    // Hand Elf, then the Zenith fetching the second Elf.
+    const std::vector<Action> acts{JumboCast(s, "Green Sun's Zenith", 92, 0, "Arbor Elf"),
+                                   JumboCast(s, "Arbor Elf", 2)};
+    CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Arbor Elf", "Green Sun's Zenith->Arbor Elf"});
+}
+
+// USER 2026-11-11: Chariot after the FIRST untapper only when two or more untappers enter in the line.
+TEST_CASE("Jumbo Cactuar casts Chariot after the first untapper only in a multi-untapper line")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    {
+        GameState s = JumboBoard(provider, 8);
+        const std::vector<Action> acts{JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Arbor Elf", "Chariot of Victory"});
+    }
+    {
+        GameState s = JumboBoard(provider, 8);
+        const std::vector<Action> acts{JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Voyaging Satyr", 53),
+                                       JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts)
+              == std::vector<std::string>{"Arbor Elf", "Chariot of Victory", "Voyaging Satyr"});
+    }
+    {
+        GameState s = JumboBoard(provider, 8);
+        const std::vector<Action> acts{JumboCast(s, "Chariot of Victory", 5),
+                                       JumboCast(s, "Green Sun's Zenith", 92, 0, "Arbor Elf"),
+                                       JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Arbor Elf", "Chariot of Victory",
+                                                                 "Green Sun's Zenith->Arbor Elf"});
+    }
+}
+
+// USER 2026-11-11: Surrak "earlier only if mana allows" -- ahead of the untappers it hastes only when the
+// exact sequential walk pays every cast in that order.
+TEST_CASE("Jumbo Cactuar moves Surrak ahead of an untapper only when the earlier order pays")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    {
+        GameState s = JumboBoard(provider, 8);
+        const std::vector<Action> acts{JumboCast(s, "Surrak and Goreclaw", 43), JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Surrak and Goreclaw", "Arbor Elf"});
+    }
+    {
+        // Six Forests pay Surrak but not Surrak + Elf: the earlier order is unproven, so the default stands.
+        GameState s = JumboBoard(provider, 6);
+        const std::vector<Action> acts{JumboCast(s, "Surrak and Goreclaw", 43), JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Arbor Elf", "Surrak and Goreclaw"});
+    }
+    {
+        // Surrak goes ahead of the FIRST untapper; Chariot stays right after it.
+        GameState s = JumboBoard(provider, 12);
+        const std::vector<Action> acts{JumboCast(s, "Surrak and Goreclaw", 43), JumboCast(s, "Chariot of Victory", 5),
+                                       JumboCast(s, "Voyaging Satyr", 53), JumboCast(s, "Arbor Elf", 2)};
+        CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Surrak and Goreclaw", "Arbor Elf",
+                                                                 "Chariot of Victory", "Voyaging Satyr"});
+    }
+}
+
+// USER 2026-11-11: "I don't understand how Overgrowth ever goes before Wild Growth, I don't think it should."
+TEST_CASE("Jumbo Cactuar never casts Overgrowth before a same-host Wild Growth")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s = JumboBoard(provider, 1);
+    PutOnBoard(s, "Voyaging Satyr", 53);
+    PutOnBoard(s, "Voyaging Satyr", 54);
+    const std::vector<Action> acts{JumboCast(s, "Tooth and Nail", 60), JumboCast(s, "Overgrowth", 39, 10),
+                                   JumboCast(s, "Wild Growth", 57, 10)};
+    CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Wild Growth", "Overgrowth", "Tooth and Nail"});
 }
 
 TEST_CASE("Jumbo Cactuar moves Overgrowth before Sprawl when only that order funds the payoffs")

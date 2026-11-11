@@ -41,21 +41,32 @@ place. This order has no card-level ties.
 | 3 | Utopia Sprawl | 4 | 20 | Second one-mana Aura, with the color fixed to green. |
 | 4 | Overgrowth | 4 | 30 | Larger Aura after its cheap enablers. |
 | 5 | Lightning Greaves | 1 | 35 | Cast before a fresh untapper so its free equip can unlock mana. |
-| 6 | Surrak and Goreclaw | 2 | 37 | Enter before a newly hasted mana untapper or Cactuar. |
-| 7 | Arbor Elf | 4 | 40 | First mana untapper; existing haste equipment can attach immediately. |
-| 8 | Voyaging Satyr | 4 | 50 | Second mana untapper; existing haste equipment can attach immediately. |
-| 9 | Chariot of Victory | 4 | 60 | Cast after both untappers; its equip can still unlock mana for a later spell. |
+| 6 | Arbor Elf | 4 | 40 | First mana untapper; existing haste equipment can attach immediately. |
+| 7 | Voyaging Satyr | 4 | 50 | Second mana untapper; existing haste equipment can attach immediately. |
+| 8 | Chariot of Victory | 4 | 60 | Cast after the untapper; with two or more untappers in the line, right after the FIRST (set-level rule). |
+| 9 | Surrak and Goreclaw | 2 | 70 | Default after the mana setup; moves ahead of the untappers it hastes only when that order provably pays (set-level rule). |
 | 10 | Nylea, God of the Hunt | 1 | 80 | Board support after mana setup. |
 | 11 | Tooth and Nail | 4 | 90 | Fetch and put both kill pieces when entwined. |
 | 12 | Green Sun's Zenith | 4 | 110 | Tutor; its actual target can move this action earlier. |
 | 13 | Finale of Devastation | 1 | 120 | Tutor or twelve-mana haste finisher. |
 | 14 | Jumbo Cactuar | 4 | 130 | Enter after haste setup. |
 
-The tutor action's target refines its rank: Arbor Elf at 38, Surrak and
-Goreclaw at 95, and Jumbo Cactuar at 125. Thus two Zeniths, or Zenith plus a
-hand-cast Cactuar, still resolve Surrak first. The card-level table is a
-proposed order for user review; the viewer repro and regression checks below
-measure its effects.
+The tutor action's target refines its rank, always just after the hand copy of
+that target (USER 2026-11-11): Arbor Elf at 45, Surrak and Goreclaw at 95, and
+Jumbo Cactuar at 135. Thus two Zeniths, or Zenith plus a hand-cast Cactuar,
+still resolve Surrak first.
+
+Set-level rules (`JumboCactuarProvider::ArrangeCastOrder`, applied in this order
+after the rank sort):
+1. Chariot of Victory: when two or more untapper entries (a hand Arbor Elf or
+   Voyaging Satyr, or a tutor fetching one) are in the line, the first Chariot
+   cast moves to right after the FIRST untapper. With one untapper the rank
+   order stands.
+2. Overgrowth before a same-host Utopia Sprawl only when the ranked order fails
+   and the swapped order pays every cast (OrderPaysSequentially). Never before
+   Wild Growth.
+3. Surrak and Goreclaw moves to just before the first untapper entry ahead of
+   it when the moved order pays every cast (OrderPaysSequentially).
 
 ### USER cast-order rulings (2026-11-11)
 

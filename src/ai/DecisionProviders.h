@@ -2371,6 +2371,9 @@ public:
     int CastOrderActionRank(const GameState& s, const Action& a, int base_rank) const override;
     void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
                           std::vector<int>& order) const override;
+    // Overgrowth before a same-host Utopia Sprawl, only when that alone pays the line (never Wild Growth).
+    static void ArrangeLandAuraSwap(const GameState& s, const std::vector<Action>& actions,
+                                    std::vector<int>& order);
     int ActivationOrderRankForAction(const GameState& s, const CardDefinition& d,
                                      const Action& a) const override;
     bool ToothAndNailCandidateOk(const GameState& s, int controller, int mode,

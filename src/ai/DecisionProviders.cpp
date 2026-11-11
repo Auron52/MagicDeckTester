@@ -24863,12 +24863,14 @@ int JumboCactuarProvider::CastOrderRank(const GameState& s,
     if (name == "Utopia Sprawl")        { return 20; }
     if (name == "Overgrowth")           { return 30; }
     if (name == "Lightning Greaves")    { return 35; }
-    // Surrak gives a hand-cast untapper haste. In the same subset it must
-    // resolve before Arbor Elf and before the Tooth and Nail it can fund.
-    if (name == "Surrak and Goreclaw")  { return 37; }
     if (name == "Arbor Elf")            { return 40; }
     if (name == "Voyaging Satyr")       { return 50; }
     if (name == "Chariot of Victory")   { return 60; }
+    // USER 2026-11-11: "Surrak and Goreclaw is risky in the 6th spot ... the kind of card you want to
+    // put earlier only if mana allows." Default after the untappers and Chariot, before Tooth and
+    // Nail; ArrangeCastOrder moves it ahead of the untappers it would haste when the earlier order
+    // provably pays every cast.
+    if (name == "Surrak and Goreclaw")  { return 70; }
     if (name == "Nylea, God of the Hunt") { return 80; }
     if (name == "Tooth and Nail")       { return 90; }
     if (name == "Green Sun's Zenith")   { return 110; }
@@ -24882,21 +24884,98 @@ int JumboCactuarProvider::CastOrderActionRank(const GameState&,
 {
     // Two GSZs (or a GSZ plus Finale) can put both bodies in one turn. The
     // action's pinned target, unlike the spell name, distinguishes their order.
+    // USER 2026-11-11: a tutor ranked by its target "should always go after the
+    // cheaper cast-from-hand option", so each target rank sits just after the
+    // hand copy's rank (Arbor Elf 40, Surrak 70, Jumbo Cactuar 130).
     if (a.def && (a.def->params.tutor_mv_max_is_x
                   || a.def->params.finale_of_devastation))
     {
         const auto& target = a.tutor_target.str();
-        if (target.find("Arbor Elf") != std::string::npos) { return 38; }
+        if (target.find("Arbor Elf") != std::string::npos) { return 45; }
         if (target.find("Surrak and Goreclaw") != std::string::npos) { return 95; }
-        if (target.find("Jumbo Cactuar") != std::string::npos) { return 125; }
+        if (target.find("Jumbo Cactuar") != std::string::npos) { return 135; }
     }
     return base_rank;
+}
+
+namespace
+{
+bool JumboUntapperEntry(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return false; }
+    const std::string& name = a.card_name.str();
+    if (name == "Arbor Elf" || name == "Voyaging Satyr") { return true; }
+    if (a.def && (a.def->params.tutor_mv_max_is_x || a.def->params.finale_of_devastation))
+    {
+        const auto& target = a.tutor_target.str();
+        return target.find("Arbor Elf") != std::string::npos
+            || target.find("Voyaging Satyr") != std::string::npos;
+    }
+    return false;
+}
+
+// USER 2026-11-11: Chariot after the first Elf/Satyr, but "with only one elf/satyr" the ranked
+// order (untapper, then Chariot) stands: "It pretty much has to be multiples coming into play to
+// need the chariot cast earlier." So only a line with two or more untapper entries moves the first
+// Chariot cast to right after the FIRST untapper.
+void JumboChariotAfterFirstUntapper(const std::vector<Action>& acts, std::vector<int>& order)
+{
+    int first_untapper = -1, untappers = 0, chariot = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[p])];
+        if (JumboUntapperEntry(a))
+        {
+            if (first_untapper < 0) { first_untapper = p; }
+            ++untappers;
+        }
+        else if (chariot < 0 && a.kind == Action::Kind::CastFromHand
+                 && a.card_name.str() == "Chariot of Victory") { chariot = p; }
+    }
+    if (untappers < 2 || chariot < 0 || chariot <= first_untapper + 1) { return; }
+    const int moved = order[static_cast<std::size_t>(chariot)];
+    order.erase(order.begin() + chariot);
+    order.insert(order.begin() + first_untapper + 1, moved);
+}
+
+// USER 2026-11-11: Surrak "earlier only if mana allows". Surrak (ranked after the untappers and
+// Chariot) moves to just before the first untapper entry it would haste, only when the exact
+// sequential walk proves the earlier order pays every cast (the Aura swap's pattern).
+void JumboSurrakEarlyIfPaid(const GameState& s, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    int first_untapper = -1, surrak = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[p])];
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Surrak and Goreclaw")
+        { surrak = p; break; }
+        if (first_untapper < 0 && JumboUntapperEntry(a)) { first_untapper = p; }
+    }
+    if (surrak < 0 || first_untapper < 0) { return; }
+    std::vector<int> trial = order;
+    const int moved = trial[static_cast<std::size_t>(surrak)];
+    trial.erase(trial.begin() + surrak);
+    trial.insert(trial.begin() + first_untapper, moved);
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
+}
 }
 
 void JumboCactuarProvider::ArrangeCastOrder(const GameState& s,
                                              const std::vector<Action>& acts,
                                              std::vector<int>& order) const
 {
+    JumboChariotAfterFirstUntapper(acts, order);
+    ArrangeLandAuraSwap(s, acts, order);
+    JumboSurrakEarlyIfPaid(s, acts, order);
+}
+
+void JumboCactuarProvider::ArrangeLandAuraSwap(const GameState& s,
+                                               const std::vector<Action>& acts,
+                                               std::vector<int>& order)
+{
+    // USER 2026-11-11: "I don't understand how Overgrowth ever goes before Wild Growth, I don't
+    // think it should." This swap therefore never covers Wild Growth. Whether the Utopia Sprawl
+    // swap below should also go is an open USER question.
     // The one-mana Aura normally precedes Overgrowth because it can pay for
     // Overgrowth. On an already stacked Forest with untappers, the reverse can
     // instead preserve a tap of that Forest for the expensive spells. Move only
