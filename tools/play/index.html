@@ -671,6 +671,7 @@ const IMAGE_REFS = {};
 const scryImg = (name, ver) => IMAGE_REFS[name]
   ? 'https://api.scryfall.com/cards/'+IMAGE_REFS[name]+'?format=image&version='+(ver||'small')
   : 'https://api.scryfall.com/cards/named?exact='+encodeURIComponent(name)+'&format=image&version='+(ver||'small')+(MDFC_BACKS.has(name)?'&face=back':'');
+const CARD_BACK_IMG = 'https://backs.scryfall.io/normal/0/a/0aeebaf5-8c7d-4636-9e82-8c27447861f7.jpg';
 
 // S.plan is the ordered turn plan: [{name, kind}] in the sequence the player queued them.
 // kind: 'land' | 'permanent' | 'spell'(instant/sorcery). At most one land.
@@ -681,7 +682,7 @@ const scryImg = (name, ver) => IMAGE_REFS[name]
 const MAX_TURNS = 8;
 // The server behaviour this page assumes (see SERVER_API in server.js and checkServerFresh below).
 // Bump BOTH together when a server.js change alters what the client can rely on.
-const CLIENT_API = 4;
+const CLIENT_API = 5;
 let S = { choices:[], history:[], decision:null, prev:null, over:false, result:null,
           plan:[], hadReject:false, busy:false, leMode:false, vialMode:null, firebreathe:{}, storageHold:{}, castOrder:{}, jitte:{},
           // MANUAL TAP/PAY (docs/design/viewer-manual-tap-pay.md). `tapMode` armed => clicking one of
@@ -726,6 +727,7 @@ function cfg(extra) {
     firebreathe:S.firebreathe||{},   // #4 turn-keyed side-channel (separate from the positional choices)
     jitte:S.jitte||{},               // Umezawa's Jitte counter-spend, turn-keyed like firebreathe
     storageHold:S.storageHold||{},   // #6 (turn,land_idx)-keyed tap-vs-charge side-channel
+    magusUpkeepPrompt:true,          // offer the Magus activation before the turn draw
     castOrder:S.castOrder||{},       // #10 main-ordinal-keyed cast-order side-channel
     fullEnum:S.fullEnum||[],         // [{ord,names}] cards PINNED into the valve (the "play it anyway" override)
   }, extra || {});
@@ -1428,6 +1430,7 @@ function activatableSources(){
       // docs/design/activation-picker-not-multiplicative.md.
       const actKey = (a.act_label || '') + (a.sacout ? '|sac'+(a.sac_count||1) : '');
       const key = (a.verb||'cast')+'|'+(a.mode!=null?a.mode:'')+'|'+payload+'|'+actKey
+                + (a.target ? '|target'+a.target : '')
                 + (a.verb==='blink' ? '|'+a.blink_target+'|'+(a.blink_count||1) : '')
                 // An activated UNTAPPER (untapact=) is the blink case: the TARGET is the choice, and
                 // the SOURCE copy joins the key too (two Staffs / two Crab Umbras share a name).
@@ -1436,6 +1439,7 @@ function activatableSources(){
       // action) -- OR'd over the plans, since the swap-only line is the one that carries it.
       const inCombat = !!a.in_combat || !!((opts[src]||{})[key] || {}).inCombat;
       (opts[src]=opts[src]||{})[key] = { verb:a.verb||'cast', mode:(a.mode!=null?a.mode:null), name:payload,
+                                         target:a.target||undefined,
                                          repeatable:!!a.repeatable, inCombat,
                                          // What the picker SHOWS for this ability. Without it two
                                          // abilities of one permanent render as the same bare card
@@ -1772,6 +1776,7 @@ function queueActivation(src, opt, clickedNum){
   const srcNum = actionSourceNum(src, clickedNum);
   S.plan.push({ name:opt.name, src, kind:'activate', verb:(sac ? 'sacout' : (opt.verb||'cast')),
                 mode:opt.mode, sacout: sac || undefined, srcNum: srcNum || undefined,
+                target:opt.target || undefined,
                 sacMana: (sac && opt.sacMana) || undefined,
                 // Stackable: repeats of this entry commit as their own consecutive segments.
                 repeatable: opt.repeatable || undefined,
@@ -2354,7 +2359,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2699,7 +2704,8 @@ function renderBoard() {
          `</h3><div class="row">`+(hrow||'<span class="hint">none</span>')+`</div></div>`;
   }
   if (me.graveyard && me.graveyard.length) {
-    const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace
+    const rset = new Set(me.retrace_gy||[]);   // graveyard spells castable via Retrace or Flashback
+    const fbset = new Set(me.flashback_gy||[]);
     const gset = new Set(me.gycast_gy||[]);    // graveyard permanents castable via Lurrus of the Dream-Den
     const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
     const gyThumbs = me.graveyard.map(n => eset.has(n)
@@ -2707,15 +2713,15 @@ function renderBoard() {
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="Eternalize — activate from here">⟳</span><em>${esc(n)}</em></span>`
       : rset.has(n)
-      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-retrace="1" title="click to cast from graveyard via Retrace (discards a land)">`+
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-retrace="1" title="${fbset.has(n)?'click to cast from graveyard via Flashback (exile afterward)':'click to cast from graveyard via Retrace (discards a land)'}">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
-        `<span class="rtbadge" title="Retrace — cast from here, discarding a land">↩</span><em>${esc(n)}</em></span>`
+        `<span class="rtbadge" title="${fbset.has(n)?'Flashback — cast from here, then exile':'Retrace — cast from here, discarding a land'}">↩</span><em>${esc(n)}</em></span>`
       : gset.has(n)
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-gycast="1" title="click to CAST from the graveyard with Lurrus of the Dream-Den (pay its cost; once each turn)">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="Lurrus — cast from here (once each turn)">↩</span><em>${esc(n)}</em></span>`
       : bfThumb({name:n,is_land:false}));
-    const hint = rset.size ? ` <span class="help">↩ click a Retrace card to cast it from here (discards a land)</span>`
+    const hint = rset.size ? ` <span class="help">↩ click a Retrace or Flashback card to cast it from here</span>`
                : gset.size ? ` <span class="help">↩ click a highlighted permanent to cast it from here with Lurrus (once each turn)</span>` : '';
     var gyZone = `<div class="zone gy"><h3>Graveyard (${me.graveyard.length})${hint}</h3>`+zoneRow(gyThumbs)+`</div>`;
   }
@@ -3257,17 +3263,21 @@ function eternalizeCard(name) {
   renderBoard();
 }
 
-// Click a Retrace card in the graveyard to add a graveyard cast (the engine discards a land as
-// the additional cost; you need a land in hand). Toggles off if already queued.
+// Click a Retrace or Flashback card in the graveyard to add a graveyard cast. Only Retrace
+// discards a land; Flashback pays its alternate mana cost and exiles the spell afterward.
 function retraceCard(name) {
   if (S.over || !S.decision || S.decision.type!=='main_phase') return;
   hideVerdict();
   const existing = S.plan.findIndex(p=>p.kind==='retrace' && p.name===name);
   if (existing >= 0) { S.plan.splice(existing,1); renderBoard(); return; }
-  const hasLand = (S.decision.me.hand||[]).some(c=>c.kind==='land');
-  if (!hasLand) { flashHint(`Retrace needs a land in hand to discard.`); return; }
+  const flashback = (S.decision.me.flashback_gy||[]).includes(name);
+  if (!flashback && !(S.decision.me.hand||[]).some(c=>c.kind==='land')) {
+    flashHint('Retrace needs a land in hand to discard.'); return;
+  }
   S.plan.push({name, kind:'retrace'});
-  flashHint(`Retracing ${name} from the graveyard (a land will be discarded). Commit to resolve.`);
+  flashHint(flashback
+    ? `Casting ${name} via Flashback from the graveyard (exile afterward). Commit to resolve.`
+    : `Retracing ${name} from the graveyard (a land will be discarded). Commit to resolve.`);
   renderBoard();
 }
 
@@ -3560,8 +3570,53 @@ function renderChooseDialog(v, line){
       if (hit){ const next=remaining.filter(x=>choiceOf(x,dim.key)===hit.choice);
                 return stepChoose(next, picks.concat([{key:dim.key, choice:hit.choice}])); }
     }
+    if (dim.kind==='tutor' && dim.key==='Life from the Loam →' && (S.decision.loam_lands||[]).length)
+      return renderLoamPick(dim, choices, remaining, picks);
     if (dim.kind==='borostarget') return renderBorosTargetPick(dim, choices, remaining, picks);
     renderDimPick(dim, choices, remaining, picks);
+  }
+
+  function renderLoamPick(dim, choices, remaining, picks){
+    const lands=S.decision.loam_lands||[], allowed=new Set(choices.map(c=>c.choice));
+    const available=lands.filter(c=>choices.some(x=>x.choice.split(/[,L]/).includes(String(c.number))));
+    const selected=new Set();
+    const panel=$('decpanel'), back=$('decback');
+    const pin=()=> 'L'+available.filter(c=>selected.has(c.number)).map(c=>c.number).join(',');
+    function draw(){
+      const target=pin(), valid=allowed.has(target);
+      back.className='modal'; back.style.display='block'; panel.className='show modal';
+      let h=`<div class="dimhead">${cardMini('Life from the Loam','dimsrc')}`+
+            `<div class="dimtext"><h3>Life from the Loam — return lands</h3>`+
+            `<div class="sub">Choose up to three land cards from your graveyard to return to your hand.</div></div></div>`;
+      h+=`<div class="tutgrid">`;
+      available.forEach(c=>{
+        const on=selected.has(c.number);
+        h+=`<span class="cardmini tdig${on?' sel':''}" data-loam="${c.number}" title="${esc(c.name)}${on?' — selected':''}">`+
+           `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/>`+
+           `<em>${esc(c.name)}</em>${on?'<span class="deftag">✓</span>':''}</span>`;
+      });
+      h+=`</div><div class="pbtns"><span class="pcount">${selected.size} / 3 selected</span>`+
+          (picks.length?`<button id="chooseback" class="ghost">Back</button>`:'')+
+          `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button>`+
+          `<button id="loamconfirm" class="primary" ${valid?'':'disabled'}>Return ${selected.size} land${selected.size===1?'':'s'}</button></div>`;
+      panel.innerHTML=h;
+      panel.querySelectorAll('[data-loam]').forEach(tile=>tile.onclick=()=>{
+        const number=+tile.dataset.loam;
+        if(selected.has(number)) selected.delete(number);
+        else if(selected.size<3) selected.add(number);
+        draw();
+      });
+      $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
+      if(picks.length) $('chooseback').onclick=()=>replay(picks.slice(0,-1));
+      $('loamconfirm').onclick=()=>{
+        const c=choices.find(x=>x.choice===pin());
+        if(!c) return;
+        stepChoose(remaining.filter(x=>choiceOf(x,dim.key)===c.choice),
+                   picks.concat([{key:dim.key,choice:c.choice,
+                                  label:selected.size?`${selected.size} graveyard land${selected.size===1?'':'s'}`:'no lands'}]));
+      };
+    }
+    draw();
   }
 
   function renderBorosTargetPick(dim, choices, remaining, picks){
@@ -4409,7 +4464,7 @@ function wireDivideBoard(d){
 function renderDecisionPanel(d, dec){
   const panel=$('decpanel'), back=$('decback');
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
-  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='expressive_iteration' || dec==='retrace_discard'
+  const isModal = isLook || dec==='dig' || dec==='discard' || dec==='dredge' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
                 || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_abilities'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
@@ -4429,6 +4484,7 @@ function renderDecisionPanel(d, dec){
   panel.className = 'show ' + (isModal?'modal':'prompt');
   panel.innerHTML = isLook ? lookPanelHtml(d, dec) : dec==='dig' ? digPanelHtml(d)
                   : dec==='discard' ? discardPanelHtml(d)
+                  : dec==='dredge' ? dredgePanelHtml(d)
                   : dec==='expressive_iteration' ? eiPanelHtml(d)
                   : dec==='retrace_discard' ? retraceDiscardPanelHtml(d)
                   : dec==='replicate' ? replicatePanelHtml(d)
@@ -4875,18 +4931,26 @@ function freeCastPanelHtml(d){
      `<button class="ghost" data-opt="-1">${src.indexOf('(ripple)')>=0?'Cast no more':'Decline'}</button></div>`;
   return h;
 }
-// ETB tutor fired by a PUT rather than a cast (a Lackey cheat / Vial deploy / Muxus reveal dropping a
-// Goblin Matron): IMAGE-based central modal, SINGLE-SELECT over the library candidates. A tutor from a
-// CAST is picked in the variant dialog instead and never lands here. Declining is legal ("you may
-// search"), so it gets its own button. The AI's pick is tagged.
+// Tutor target picker: IMAGE-based central modal, SINGLE-SELECT over legal candidates.
+// Library searches may be declined; targeted graveyard returns use -1 for the AI target.
 function tutorPanelHtml(d){
   const cands=d.candidates||[];
-  let h=`<h3>${esc(d.source||'Tutor')} — search your library</h3>`;
-  h+=d.upkeep_cast
+  if(d.upkeep_ability){
+    return `<h3>Magus of the Bazaar — activate in upkeep?</h3>`+
+      `<div class="sub">Tap Magus before your draw step: draw two cards, then discard three. `+
+      `You can dredge on either draw, and the discarded dredgers will be in your graveyard for your turn draw.</div>`+
+      `<div class="cardrow" style="justify-content:center;margin:8px 0">${cardMini('Magus of the Bazaar','','normal')}</div>`+
+      `<div class="pbtns"><button class="primary" data-opt="0">Activate now</button>`+
+      `<span class="spacer"></span><button class="ghost" data-opt="-1">Leave untapped</button></div>`;
+  }
+  let h=`<h3>${esc(d.source||'Tutor')} — ${d.from_graveyard?'choose a graveyard card':'search your library'}</h3>`;
+  h+=d.from_graveyard
+    ? `<div class="sub">Choose a card in your graveyard to return to your hand.</div>`
+    : d.upkeep_cast
     ? `<div class="sub">Cast during upkeep and pay mana now. Choose a card to put on top of your library before this turn's draw, or hold the tutor.</div>`
     : `<div class="sub"><b>${esc(d.source||'Tutor')}</b> searches your library. Choose a card, or decline when the search is optional.</div>`;
   h+=`<div class="tutgrid">`;
-  if(!cands.length) h+=`<span class="hint">No legal card to search up.</span>`;
+  if(!cands.length) h+=`<span class="hint">${d.from_graveyard?'No legal graveyard target.':'No legal card to search up.'}</span>`;
   // `suggested` = the engine's narrowed candidate set (Bruna's Glittering Wish rule, USER 2026-10-06):
   // a green badge + ring like the Aura host mark -- the tiles keep their order (replays index into it).
   cands.forEach(c=>{
@@ -4897,7 +4961,7 @@ function tutorPanelHtml(d){
        (c.suggested?`<span class="suggbadge" title="the engine's candidate rule searches this card">suggested</span>`:'')+`</span>`;
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
-     `<button class="${d.heuristic_default===-1?'primary':'ghost'}" data-opt="-1">${d.upkeep_cast?'Hold tutor':'Decline — search for nothing'}${d.heuristic_default===-1?'  ·  AI':''}</button></div>`;
+     `<button class="${d.heuristic_default===-1?'primary':'ghost'}" data-opt="-1">${d.from_graveyard?'Use AI target':d.upkeep_cast?'Hold tutor':'Decline — search for nothing'}${d.heuristic_default===-1?'  ·  AI':''}</button></div>`;
   return h;
 }
 // Echo pay-or-sacrifice panel: central modal, BINARY. At upkeep an echo creature is sacrificed unless
@@ -4958,17 +5022,30 @@ function aiDiscardSet(d){
   return (d.ai_set && d.ai_set.length) ? d.ai_set.slice()
        : (d.heuristic_default!=null ? [d.heuristic_default] : []);
 }
+function dredgePanelHtml(d){
+  let h='<h3>Replace this draw?</h3><div class="sub">Choose a card in your graveyard to dredge, or draw normally. Dredging mills the printed number of cards and returns that card to your hand.</div><div class="tutgrid">';
+  (d.options||[]).forEach(o=>{
+    const normal=o.index===0;
+    const ai=o.index===d.heuristic_default;
+    h+=`<span class="cardmini tdig${ai?' def':''}" data-opt="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
+       `<img loading="lazy" src="${normal?CARD_BACK_IMG:scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/>`+
+       `<em>${esc(o.name)}</em>${ai?'<span class="deftag">AI pick</span>':''}</span>`;
+  });
+  return h+'</div>';
+}
 function discardPanelHtml(d){
   // A COST discard (Burning-Fist's activation, Neheb's trigger) reuses this decision type but is
   // exactly ONE card and not a hand-size shed — the cleanup framing read "Select -5 cards" there.
-  const costCtx=d.discard_context==='cost';
-  const over=costCtx?1:(d.over_by||1);
+  const costCtx=d.discard_context==='cost', effectCtx=d.discard_context==='effect';
+  const over=d.over_by||1;
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._discardFor !== d.decision_index){ S._discardFor=d.decision_index; S.discardSel=new Set(aiDiscardSet(d)); }
   const sel=S.discardSel, aiSet=new Set(aiDiscardSet(d));
-  let h=`<h3>${costCtx?'Discard a card':'Discard to hand size'}</h3>`;
+  let h=`<h3>${costCtx?'Discard a card as a cost':effectCtx?'Choose cards to discard':'Discard to hand size'}</h3>`;
   h+= costCtx
     ? `<div class="sub">${esc(d.source||'Ability')}: discard <b>1</b> card as part of the cost. The AI’s pick is preselected.</div>`
+    : effectCtx
+    ? `<div class="sub">${esc(d.source||'Effect')}: choose <b>${over}</b> card${over===1?'':'s'} from your hand to discard as the effect resolves. The AI’s picks are preselected.</div>`
     : `<div class="sub">Your hand is over the maximum (7). Select <b>${over}</b> card${over===1?'':'s'} to discard — the rest stay. The AI’s picks are preselected.</div>`;
   h+=`<div class="tutgrid">`;
   (d.options||[]).forEach(o=>{
@@ -5467,6 +5544,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitTutor(d, +b.dataset.opt));
   else if (dec==='echo')
     panel.querySelectorAll('button[data-echo]').forEach(b=>b.onclick=()=>commitEcho(d, +b.dataset.echo));
+  else if (dec==='dredge')
+    panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitDredge(d, +b.dataset.opt));
   else if (dec==='discard'){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>toggleDiscard(d, +b.dataset.opt));
     const ai=panel.querySelector('#discardai'); if (ai) ai.onclick=()=>{ S.discardSel=new Set(aiDiscardSet(d)); renderDecisionPanel(d,'discard'); };
@@ -5552,6 +5631,10 @@ function wireDecisionPanel(d, dec){
   }
 }
 function pushChoice(d, oi, lab){ pushChoices(d, [oi], lab); }
+function commitDredge(d, oi){
+  const option=(d.options||[]).find(o=>o.index===oi);
+  pushChoice(d, oi, oi===0?'Draw a card':`Dredge ${option?.name||''}`);
+}
 // A decision's answer is one-or-more integers appended atomically; S.steps records how many each
 // decision contributed so undo can pop a whole variable-length step (divide sends one int per legal
 // target). Existing single-int decisions record a step of 1 -> behaviour unchanged.
@@ -5721,16 +5804,19 @@ function commitDemonstrate(d, v){
   pushChoice(d, v, `${d.source||'Demonstrate'}: ${v?'copied the spell':'declined the copy'}`);
 }
 function commitTutor(d, oi){
+  if(d.upkeep_ability){
+    pushChoice(d, oi, `Magus of the Bazaar: ${oi===0?'activate in upkeep':'leave untapped'}`);
+    return;
+  }
   const c=(d.candidates||[]).find(x=>x.index===oi);
-  pushChoice(d, oi, `${d.source||'Tutor'}: ${oi<0||!c?(d.upkeep_cast?'held for later':'declined the search'):'searched up '+c.name}`);
+  const target=oi<0||!c ? (d.candidates||[]).find(x=>x.index===d.heuristic_default) : c;
+  pushChoice(d, oi, `${d.source||'Tutor'}: ${d.from_graveyard
+    ? ('returned '+(target?target.name:'AI target')+' from graveyard')
+    : oi<0||!c?(d.upkeep_cast?'held for later':'declined the search'):'searched up '+c.name}`);
 }
 function commitEcho(d, v){ pushChoice(d, v, `Echo ${d.creature||''}: ${v?'pay':'sacrifice'}`); }
-// Multi-select cleanup discard: toggle a card in/out of the discard set (capped at over_by), then
-// commit all at once. The engine reads one hand-index per discard decision, against a hand that shrinks
-// by the card just discarded, so the picks are submitted IN THE ORDER THEY WERE CLICKED (USER 2026-10-22:
-// "The viewer should use exactly the order I give.") with each index re-based onto the hand as it will
-// stand at its own decision (LB.shrinkingIndices). They used to go in DESCENDING hand-index order, which
-// kept every index valid but discarded the cards in an order nobody chose.
+// Multi-select discard: cleanup sheds rebase each next pick onto the shrinking hand. A looting
+// effect chooses all cards from the SAME post-draw hand, so its indices must stay unchanged.
 function toggleDiscard(d, oi){
   const over=d.over_by||1, sel=S.discardSel||(S.discardSel=new Set());
   if (sel.has(oi)) { sel.delete(oi); }
@@ -5743,7 +5829,8 @@ function commitDiscardBatch(d){
   // `sel` is the Set's insertion order, i.e. the click order (a deselect-reselect moves a card last).
   const names=sel.map(i=>{ const c=(d.options||[]).find(x=>x.index===i); return c?c.name:'card'; });
   S._discardFor=null; S.discardSel=null;      // clear the per-decision selection guard
-  pushChoices(d, LB.shrinkingIndices(sel), `discard: ${names.join(', ')}`);
+  pushChoices(d, d.discard_context==='effect' ? sel : LB.shrinkingIndices(sel),
+              `discard: ${names.join(', ')}`);
 }
 // Multi-select Dragonstorm put override: toggle a candidate Dragon in/out of the put set (capped at
 // max_puts), then commit all at once. The engine reads ONE int per candidate (1 = put), in candidate
@@ -6523,7 +6610,7 @@ function isDeadOpponentMain(dec){
 // captured now so the skip stops once the engine advances to the next turn.
 function commitTurn(){ if (S.busy) return; S.commitTurn = S.decision ? turnKey(S.decision) : undefined; S.commitTurnPasses = 0; commitLine(); }
 function renderHistory() {
-  $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span><span class="lab">${esc(h.label)}</span>`
+  $('hist').innerHTML=S.history.map((h,i)=>`<li class="${h.rej?'rej':''} ${h.win?'win':''} ${h.cls||''}"><span class="t">T${h.turn}</span> <span class="lab">${esc(h.label)}</span>`
     + (h.note ? ` <span class="sbadge" data-h="${i}" title="${esc(h.note.tip)} — click for details">⚠ search can’t pay</span>` : '') + `</li>`).join('');
   $('hist').querySelectorAll('.sbadge').forEach(b => b.onclick = () => { const h = S.history[+b.getAttribute('data-h')]; if (h) showSearchNote(h.note); });
 }

@@ -213,7 +213,7 @@ function intParam(v, dflt) {
 // compares it against its own constant and, crucially, treats its ABSENCE as "older than the day
 // this check was added" -- which is the only way a stale server can be detected at all, since a
 // stale server cannot serve a field it has never heard of.
-const SERVER_API = 4;   // 3 = sessionBin pin + @cast-order/@validate-line stdin directives
+const SERVER_API = 5;   // 5 = viewer opt-in for Magus upkeep activation
                         // 4 = reference-safety: save-reference returns `backup`, /api/decks `referenceSafety`
 
 // Build the argv for one --claude-play invocation.
@@ -339,6 +339,7 @@ function buildArgs(p, logDir, validateLine, exhaustiveKeep) {
     if (trips.length) args.push('--storage-hold', trips.join(','));
   }
   args.push('--storage-hold-prompt');
+  if (p.magusUpkeepPrompt) args.push('--magus-upkeep-prompt');
   if (validateLine != null) args.push('--validate-line', validateLine);
   return args;
 }
