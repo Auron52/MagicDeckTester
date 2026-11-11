@@ -228,6 +228,8 @@ Worktree `.claude/worktrees/xturn`, branch `xturn-cache` rebased on origin `d4bf
      387k -> 479k rollout calls -- the budget the hits free is spent on more completed search (the doctrine's "search
      further"), at no quality gain on Gods. The d5 aborted-pass waste (above) is the only true waste. A gate price
      scoped to hits the deeper pass will not see again stays an OPTION, not owed: there is no loss to repair.
+  **USER 2026-11-11: "If the losses are recoverable on Gods it is okay to waive."** They are (every slower game
+  recovers at 4x/16x), so Gods' +3 regression-seed game-turns are WAIVED against the strict per-deck bar; E3 stays ON.
 
 ## Method
 
