@@ -478,6 +478,31 @@ oracle off byte-identical; record 43e700b5c):
   rebase, 3 of 3 full pooled regression manifests (the tier run + P1 + P2, build/scratch/claude1111/et) match
   GT on every game of all 309 jobs. If it recurs: rerun with MTG_PLAN_POOL_STATS=1 and compare the refused count
   around ET d3 gi34, then MTG_BP_ENUM_VERIFY=3 on that pooled manifest.
+* **Item 5b (agent 2026-11-11): Mirrorwing hedges H1 + H2 BUILT and A/B'd: INERT, PARKED (no src change on the
+  branch).** Definitions: followups s8 Q25b (USER 2026-11-06, "build both"). Code kept on
+  `wip/mc-mirrorwing-hedges-5b` (94a2e94c0, pushed): levers `MTG_PAY_HEDGE_H1` / `MTG_PAY_HEDGE_H2` (HeuristicArm
+  slots, default off) at the per-pip scarcity selection, gated on `g_line_opens_unseen` (the line casts a cantrip),
+  re-picking the lowest-rank untapped `usable()` land that makes the pip; plus a count-only audit
+  `MTG_PAY_HEDGE_AUDIT` at `TapSourceIntoFloat` (H1/H2 SUPERSETS: any attack-capable creature tapped on a copy-magnet
+  pre-combat attack turn / any Treasure cracked, while an untapped land makes that colour).
+  **A/B** (one pooled Release batch, base / H1 / H2 / H1+H2, Std 20,000 seed 32000000+gi, 2HG 10,000 seed
+  33000000+gi): every arm **byte-identical** to base on all 30,000 paired games (0 digest diffs; Std avg 4.1399,
+  2HG 4.4436); the levers **fired 0 times**. Why: in the scarcity key a plain-tier land (key[0]=0) always beats a
+  creature (creature band, key[0]=rank>=60), and a land that makes the pip loses to a Treasure only via a reservation
+  (`usable()` false), which the hedge correctly does not override. **Audit** (120,000 games, all arms): REAL play
+  H1-superset 48 of 29,180 attacker taps, H2-superset 4 of 123,720 Treasure cracks; search applies 0.13% / 0.06%.
+  Those come from the other payer paths (whole-turn prepay / backtracker / scripted taps; a hedge-site debug print
+  showed the per-pip selection never chose the creature there), and are supersets (no cantrip test), so the real
+  rules fire at most ~1 in 2,500 games. Alt land in nearly all: Sandstone Needle (depletion hold / waste band).
+  The 11-08 gate's 66 DOMINATED-ONESHOT flags are not H2-shaped: e.g. s30016508 T5 (search apply of Draught + GR +
+  GR + Anger) cracks the Treasure only after every land is tapped; the waste is an {R} left floating from Needle's
+  {R}{R}, a float-order miss, not a land-vs-Treasure rank. Reopen H1/H2 only on a REAL trace from
+  `MTG_PAY_HEDGE_AUDIT=2` (on the WIP branch) whose path is then hedged where it taps.
+  **Gate `mirrorwing-5b-20261111`** (PGO, src 385dfc9897a0, block 19000-23999, 5,000 games): **12,272 issues** (11-08
+  block 14000: 12,549), play byte-identical oracle off. ENUM-GAP 6,889 (7,128), APPLY-DROP 1,570 (1,301),
+  APPLY-DROP-ORDER 99 (183), DOMINATED-CREATURE 227 (198), DOMINATED-ONESHOT 124 (66), ORACLE-GAP 2,924 (3,082),
+  UNMODELED 8 (0), CAPPED 431 (591). ENUM-GAP (off-menu) and ORACLE-GAP dominate: Mirrorwing's remaining work is
+  menu/oracle coverage, not payer order. Next fresh block 24000.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
