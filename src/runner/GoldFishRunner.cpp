@@ -99,8 +99,15 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // not yet activated in, so the search chooses main 1 or main 2 for it; nothing is moved out of
         // main 1 (the phase filter is a provider opt-in Hydras does not take). Keyed on the effect, which
         // no other card in cards.json carries, so no other deck's main phases move.
-        for (const auto& ab : def->params.loyalty_abilities)
-        { if (ab.effect == "draw_greatest_power") { return true; } }
+        // MTG_HYDRAS_SECOND_MAIN=0 is the MEASUREMENT arm only (prices the main 2 for the 3x-Hinata gate);
+        // the USER ruling stands, so it is DEFAULT ON. heurarm slot so both arms share one pooled batch
+        // (ParseJob evaluates this predicate under the job's arm).
+        static const bool s_hydras_m2 = EnvOn("MTG_HYDRAS_SECOND_MAIN", true);
+        if (heurarm::Flag(heurarm::HYDRAS_SECOND_MAIN, s_hydras_m2))
+        {
+            for (const auto& ab : def->params.loyalty_abilities)
+            { if (ab.effect == "draw_greatest_power") { return true; } }
+        }
         // MELIRA POD (2026-09-04). Birthing Pod (pod_mv_delta): the classic line is "attack with
         // Kitchen Finks / Murderous Redcap, THEN sac the attacker to Pod post-combat" -- banking
         // the combat damage AND the ladder climb off one body; a single main forces the trade.

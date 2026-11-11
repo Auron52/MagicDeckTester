@@ -48975,7 +48975,7 @@ std::vector<int> HydrasProvider::EtbChoiceCandidates(const GameState& s, int con
 static bool HydrasMaxXOn()
 {
     static const bool on = EnvOn("MTG_HYDRAS_MAX_X");
-    return on;
+    return heurarm::Flag(heurarm::HYDRAS_MAX_X, on);   // per-job overridable: both arms in ONE pooled batch
 }
 
 // X = 0 FOR A 0/0 BODY IS DOMINATED (sound, default ON). A Primordial / Neverwinter / Steelbane Hydra cast with
@@ -49086,6 +49086,79 @@ std::vector<int> HydrasProvider::CounterDestroyArtEnchTargets(const GameState& s
         if (!covered) { return legal; }   // an own permanent the proof does not cover: the list changed
     }
     return out;
+}
+
+// ---- HydrasProvider: the cast order (MTG_HYDRAS_CAST_ORDER) ----------------------------------------------
+// USER 2026-11-10, on the agent draft docs/design/cast-order-drafts-2026-10-14/Hydras.md section 3: "Doublers and
+// Gargos should be before the Hydras as you mentioned." DEFAULT ON; =0 => DeckProvider::CastOrderRank (the
+// generic tiers: Gargos 8 as a subtype reducer, every creature 10, Bloom / Gauntlet / Nissa / the fetches /
+// Greaves / Garruk 20, ties in plan order). Per-job overridable (heurarm) so both arms share ONE pooled batch.
+// TOTAL (CastOrderTotalByName): a rank tie between two different cards goes to the NAME, never hand order.
+// The land drop keeps its default slot (played before the casts). Re-checked against the real params:
+//   1 Vernal Bloom      land_tap_bonus (every Forest tapped adds {G}); the cheapest doubler (4), so it goes
+//                       before everything it helps pay for, the 5-mana doublers included.
+//   2 Gauntlet of Power, Nissa, Who Shakes the World   land_tap_bonus; each adds exactly one {G} per Forest
+//                       tap (every land here is a basic Forest) and neither reads the other, so either
+//                       order pays the same total. Nissa's +1 / -8 are activations that trail the casts.
+//   3 Nature's Lore, Search for Tomorrow, Three Visits   land_search_on_resolve: an UNTAPPED Forest, after the
+//                       doublers (it taps for more) and before every creature (it helps pay). Same effect,
+//                       so the same total in any order. Search's suspend is a special action, not a cast.
+//   4 Gargos            reduces_spell_subtype Hydra {4}: before every Hydra, Kalonian included. A 6-drop,
+//                       so after the fetches.
+//   5 Lightning Greaves, 6 Garruk, 7 Kalonian Hydra    the FIXED-cost casts, ahead of the X sinks. Greaves'
+//                       equip and Garruk's loyalty abilities trail every cast (Garruk's -3 still sees the
+//                       Hydras cast after him); Kalonian's attack trigger doubles whatever was cast before
+//                       combat.
+//   8 the X Hydras (Neverwinter, Primordial, Steelbane, Voracious)   enters_with_x_plus_counters: LAST, taking
+//                       what is left. Each one's counters depend only on its own X and none reads another's
+//                       ETB or cast, so their order changes nothing (name order).
+// A card not in the list takes its role slot from its params (a doubler 2, a land fetch 3, a Hydra reducer
+// 4, an X Hydra 8), else 200 + its generic rank, after every listed card.
+static bool HydrasCastOrderOn()
+{
+    static const bool on = EnvOn("MTG_HYDRAS_CAST_ORDER", true);   // DEFAULT ON (USER ruling); =0 -> generic
+    return heurarm::Flag(heurarm::HYDRAS_CAST_ORDER, on);
+}
+
+static constexpr int kHydrasUnlisted = 200;
+int HydrasProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!HydrasCastOrderOn()) { return DeckProvider::CastOrderRank(s, def); }
+    static const std::pair<const char*, int> kRow[] = {
+        {"Vernal Bloom", 1},
+        {"Gauntlet of Power", 2},     {"Nissa, Who Shakes the World", 2},
+        {"Nature's Lore", 3},         {"Search for Tomorrow", 3},          {"Three Visits", 3},
+        {"Gargos, Vicious Watcher", 4},
+        {"Lightning Greaves", 5},     {"Garruk, Primal Hunter", 6},       {"Kalonian Hydra", 7},
+        {"Neverwinter Hydra", 8},     {"Primordial Hydra", 8},  {"Steelbane Hydra", 8},  {"Voracious Hydra", 8},
+    };
+    for (const auto& [name, r] : kRow) { if (def.card.m_name == name) { return r; } }
+    const CardParams& p = def.params;
+    if (p.land_tap_bonus > 0)                                   { return 2; }
+    if (p.land_search_on_resolve && !def.card.IsLand())         { return 3; }
+    if (p.reduces_spell_subtype == "Hydra")                     { return 4; }
+    if (p.enters_with_x_plus_counters)                          { return 8; }
+    return kHydrasUnlisted + DeckProvider::CastOrderRank(s, def);
+}
+
+bool HydrasProvider::CastOrderTotalByName() const { return HydrasCastOrderOn(); }
+
+const char* HydrasProvider::CastOrderTierName(int rank) const
+{
+    if (!HydrasCastOrderOn()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case 1: return "CHEAPEST MANA DOUBLER (Vernal Bloom): first -- every Forest tapped after it adds {G}";
+        case 2: return "MANA DOUBLER (Gauntlet of Power, Nissa): before the fetches and every creature";
+        case 3: return "UNTAPPED FOREST FETCH (Nature's Lore, Search for Tomorrow, Three Visits): after the doublers, before every creature";
+        case 4: return "HYDRA COST REDUCER (Gargos): before every Hydra (USER)";
+        case 5: return "FIXED COST (Lightning Greaves): ahead of the X sinks; the equip trails";
+        case 6: return "FIXED COST (Garruk): ahead of the X sinks; the loyalty abilities trail";
+        case 7: return "FIXED-COST HYDRA (Kalonian Hydra): ahead of the X sinks";
+        case 8: return "X HYDRA (Neverwinter, Primordial, Steelbane, Voracious): LAST, takes the mana that is left";
+        default: break;
+    }
+    return rank >= kHydrasUnlisted ? "NOT IN THE HYDRAS ORDER: after every listed card, by name" : nullptr;
 }
 
 // ---- AccomplishedAlchemistProvider::EtbChoiceCandidates -------------------------------------------
