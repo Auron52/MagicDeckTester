@@ -17675,6 +17675,81 @@ static bool PlanHasPendingAuraOn(const GameState& state, const std::vector<Actio
     return false;
 }
 
+// DRAIN THE OUTGOING HASTED DORK (MTG_HASTE_HOST_DRAIN, default ON; item 5o of the mana-clean chain).
+// A planned unlock / release that MOVES a haste-granting Equipment off a fresh mana dork takes away the
+// only thing that let that dork tap this turn (CR 302.6). Its mana is gone for the rest of the turn the
+// moment the Equipment moves -- unless it is tapped first. Jumbo s30061937 T4: GSZ -> Arbor Elf, Greaves
+// -> Elf, Voyaging Satyr (paid from GSZ's float), Greaves -> Satyr, Tooth and Nail. The plan is offered
+// because BOTH untappers re-tap the Overgrowth + Utopia Sprawl Forest (4 mana each); the apply moved
+// Greaves to the Satyr with the Elf still untapped, so the Elf's four were stranded and Tooth and Nail
+// dropped (the mana oracle's APPLY-DROP: "keep the engine's first 2 mana decisions, re-make the rest").
+// So: tap the outgoing host into the float FIRST, through the same engine tap the oracle's scripted
+// payments use (ApplyEnginePreTap).
+//
+// Why this is sound (a mana-payment choice, the payer's standing exemption, and a dominance):
+//   * after the move the host cannot tap for mana again this turn (checked on a copy, so a second haste
+//     source -- an attached Chariot -- keeps the host live and nothing is drained);
+//   * the move is a sorcery-speed main-phase action, and the float lasts to the end of that phase, so
+//     every cast the plan still owes in it can spend the drained mana -- the drain only ADDS mana;
+//   * a tapped host loses nothing it still had: it cannot attack (summoning-sick once the haste leaves)
+//     and a goldfish never blocks. A host the plan RE-equips with haste later in the same list is left
+//     alone (it could still tap, or attack, then);
+//   * no colour is chosen: only a dork with ONE printed colour is drained (Arbor Elf / Voyaging Satyr /
+//     Llanowar Elves); an any-colour dork keeps today's behaviour.
+// Fires inside ApplyManaUnlockEquips only, which the rollout and the executor both call (lockstep).
+static bool HasteHostDrainOn()
+{
+    static const bool on = EnvOn("MTG_HASTE_HOST_DRAIN", true);
+    return heurarm::Flag(heurarm::HASTE_HOST_DRAIN, on);
+}
+static void DrainOutgoingHasteHost(GameState& state, const std::vector<Action>& acts, std::size_t ai)
+{
+    if (!HasteHostDrainOn()) { return; }
+    const Action& a  = acts[ai];
+    const int active = state.active_player_index;
+    int from = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.m_number == a.sac_source_id) { from = p.equipped_to; break; }
+    }
+    if (from <= 0 || from == a.sac_victim_id) { return; }
+    const Permanent* host = nullptr;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == active && p.card.m_number == from) { host = &p; break; }
+    }
+    if (host == nullptr || host->tapped || !host->entered_this_turn) { return; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(host->card);
+    if (d == nullptr || d->tmpl != CardTemplate::ManaDork || d->params.produces.size() != 1) { return; }
+    if (d->params.gy_land_exile_mana || !CanTapNow(*host, state.battlefield)) { return; }
+    // A later equip in the list that hastes the host again: it keeps its tap (and its attack) for then.
+    for (std::size_t k = ai + 1; k < acts.size(); ++k)
+    {
+        const Action& b = acts[k];
+        if (b.kind != Action::Kind::Equip || b.sac_victim_id != from) { continue; }
+        const CardDefinition* bd = b.def ? b.def : CardDatabase::Instance().LookupInterned(b.card_name);
+        if (bd && bd->params.equip_grants_haste) { return; }
+    }
+    // Does the move really lock it? (Another haste source keeps it live: nothing to drain.)
+    {
+        GameState probe = state;
+        ApplyEquip(probe, active, a.sac_source_id, a.sac_victim_id);
+        for (const Permanent& p : probe.battlefield)
+        {
+            if (p.controller_index == active && p.card.m_number == from)
+            {
+                if (CanTapNow(p, probe.battlefield)) { return; }
+                break;
+            }
+        }
+    }
+    TurnSolver::PreTap t;
+    t.name  = host->card.m_name.str();
+    t.num   = from;
+    t.color = static_cast<int>(d->params.produces[0]);
+    (void)ApplyEnginePreTap(state, t);   // refused -> nothing tapped, exactly the old behaviour
+}
+
 int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action>& acts,
                                       std::vector<Action>* fired_out)
 {
@@ -17708,6 +17783,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
                                   EquipActionCostNow(state, active, a.sac_source_id, a.cost,
                                                      a.sac_victim_id),
                                   /*for_creature=*/false)) { continue; }
+            DrainOutgoingHasteHost(state, acts, static_cast<std::size_t>(&a - acts.data()));
             ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
             if (fired_out != nullptr) { fired_out->push_back(a); }
             ++fired;
@@ -17752,6 +17828,7 @@ int TurnSolver::ApplyManaUnlockEquips(GameState& state, const std::vector<Action
                               EquipActionCostNow(state, active, a.sac_source_id, a.cost,
                                                  a.sac_victim_id),
                               /*for_creature=*/false)) { continue; }
+        DrainOutgoingHasteHost(state, acts, static_cast<std::size_t>(&a - acts.data()));
         ApplyEquip(state, active, a.sac_source_id, a.sac_victim_id);
         if (fired_out != nullptr) { fired_out->push_back(a); }
         ++unlocked;

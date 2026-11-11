@@ -768,3 +768,49 @@ TEST_CASE("Jumbo Cactuar offers Chariot onto the Arbor Elf a Green Sun's Zenith 
     });
     CHECK(found);
 }
+
+// Item 5o (mana-clean chain, Jumbo s30061937 T4): a planned unlock that moves Lightning Greaves off a fresh
+// Arbor Elf onto a fresh Voyaging Satyr takes the Elf's haste for the rest of the turn. Its re-tap of the
+// enchanted Forest is taken into the float BEFORE the move (MTG_HASTE_HOST_DRAIN), so the line keeps it.
+TEST_CASE("Jumbo Cactuar drains a hasted Arbor Elf before Greaves moves to the Satyr")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 4;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 27, /*tapped=*/true);
+    PutOnBoard(s, "Overgrowth", 39);
+    s.battlefield.back().aura_attached_to = 27;
+    PutOnBoard(s, "Arbor Elf", 1);
+    s.battlefield.back().entered_this_turn = true;
+    PutOnBoard(s, "Voyaging Satyr", 55);
+    s.battlefield.back().entered_this_turn = true;
+    PutOnBoard(s, "Lightning Greaves", 37);
+    s.battlefield.back().equipped_to = 1;
+
+    const CardDefinition* greaves = CardDatabase::Instance().Lookup("Lightning Greaves");
+    REQUIRE(greaves != nullptr);
+    Action to_elf;
+    to_elf.kind = Action::Kind::Equip;
+    to_elf.def = greaves;
+    to_elf.card_name = greaves->card.m_name;
+    to_elf.sac_source_id = 37;
+    to_elf.sac_victim_id = 1;
+    Action to_satyr = to_elf;
+    to_satyr.sac_victim_id = 55;
+    const std::vector<Action> acts = {to_elf, to_satyr};
+
+    TurnSolver::ApplyManaUnlockEquips(s, acts);
+    auto perm = [&](int num) -> const Permanent& {
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == num) { return p; } }
+        FAIL("missing permanent");
+        return s.battlefield.front();
+    };
+    CHECK(perm(37).equipped_to == 55);          // Greaves moved to the Satyr
+    CHECK(perm(1).tapped);                      // the Elf was used first...
+    CHECK(s.floating_mana.Total() == 3);        // ...for the Overgrowth Forest's {G}{G}{G}
+    CHECK(!perm(55).tapped);                    // the Satyr is hasted and still untapped
+}

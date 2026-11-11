@@ -857,6 +857,7 @@ enum Slot : int
     UNTAPPER_UNLOCK_HOSTS,    // MTG_UNTAPPER_UNLOCK_HOSTS  USER 2026-11-11 (Jumbo, "Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana creatures enter"): every fresh untap-target-land source (Arbor Elf / Voyaging Satyr) is an offered haste-equip unlock host, the copy a battlefield-put tutor (GSZ / Finale) fetches included (TurnSolver TutoredUntapperHostId); ApplyManaUnlockEquips fires the chosen one as both pieces are in play. Options only. Default ON; =0 -> the single best unlock host, hand/battlefield only
     HYDRAS_BUCKET_DISCARD,    // MTG_HYDRAS_BUCKET_DISCARD  Hydras: the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11; LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first, net of board; HydrasProvider::CleanupDiscardCandidates). DEFAULT OFF -- a PROPOSAL the USER approves; =1 -> buckets, unset/=0 -> the generic max-MV ranking
     MUTE_NO_STORE,            // MTG_MUTE_NO_STORE  a pledger-MUTED recompute (it stands in for a plan-cache hit that never ran) refuses stores into the content-pure caches (refine memo, mana tier-1/tier-2 promotion, rollout game cache), so units cannot follow plan-pool residency (workctr::StoresAllowed, core/WorkCounters.h). Default ON since 2026-11-11; =0 restores the stores (the per-job A/B control that prices its wall)
+    HASTE_HOST_DRAIN,         // MTG_HASTE_HOST_DRAIN  item 5o (mana-clean, Jumbo s30061937): before a planned unlock/release moves a haste Equipment off a fresh single-colour mana dork that cannot tap without it, tap that dork into the float (TurnSolver DrainOutgoingHasteHost). A mana-payment dominance. Default ON; =0 -> the move strands the dork as before
     COUNT
 };
 
@@ -1658,6 +1659,7 @@ inline const char* Name(int slot)
         "MTG_UNTAPPER_UNLOCK_HOSTS",
         "MTG_HYDRAS_BUCKET_DISCARD",
         "MTG_MUTE_NO_STORE",
+        "MTG_HASTE_HOST_DRAIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
