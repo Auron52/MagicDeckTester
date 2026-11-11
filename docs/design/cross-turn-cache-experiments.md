@@ -103,6 +103,59 @@ the default pool vs 510,772 at 1 KB, single-threaded, same digest, with E1/E2 on
 hits, CONTENT-DIFF 0, so not the bp list. Charge-accumulator residuals are already unstorable (cachecharge Done). Next:
 bisect by cache (canon front / enum memo / shadow ledger) with each one's own verify switch.
 
+## 2026-11-11 session (USER: "Go ahead and try them all out")
+
+Worktree `.claude/worktrees/xturn`, branch `xturn-cache` rebased on origin `d4bfb2071`. Scratch `build/scratch/xturn/`
+(`x4/` chain, `hin27/` gi27 repro, `pr/` pristine check). Pristine origin build: `.claude/worktrees/xturn-pristine`.
+
+* **Probe NOT unit-neutral -- FIXED.** Cause: `BuildSimKeyBase` bills `workctr::kSimKey` to the PRICED meter the priced
+  decision ceiling reads (`MTG_DECISION_PRICED_X`, default 100), so the probe's extra boundary keys moved the ceiling.
+  The probe now mutes the meter (and restores the combat-pin read witness) around its own keys. Regression tier with
+  the probe on vs off: **295/295 digests and units identical**.
+* **E4 (`MTG_ID_HINT_ANYDEPTH`, hint from any recorded depth) -- REJECTED, code removed.** Regression A/B: win turns
+  identical in all 295 jobs, 15 changed line, units +0.01% overall (Extra Turns +2.2%, nothing better than -0.5%).
+* **Item "carry FSLineCache past-cutoff / provisional entries across decisions" -- nothing sound left.** The game line
+  cache already carries a past-cutoff win as a no-win refutation under its cutoff (the only sound reading: a win past
+  the cutoff is a line the node met, not its best). Provisional entries are budget-spent dead ends of ONE pass
+  (`ProvisionalLive`, keyed on `g_prov_epoch`): serving them elsewhere is exactly the budget-state dependence
+  `MTG_CACHE_READ_GUARD` removes.
+* **E3 disagreements, root cause so far.** Probe now records whether the FRESH rollout was clean and each side's
+  leaf/beam/m2/labeller context. Regression: 48 same-cutoff disagreements in 95,293 usable; **24 have an unclean fresh
+  side** (budget artifact). The 24 clean ones are NivMizzetCombo (21) and Shadowborn (13 incl. d3); contexts equal on
+  both sides; unchanged with E1, E2, both, the game line cache, or the mana cache off. Same-decision matches agree
+  13/13. So: within-decision tie-path dependence of the rollout's inner depth-1 solves (sound memos returning one of
+  several tied lines). E3 as a cache is therefore a play change, not an identity -- built as `MTG_ROLLOUT_GAME_CACHE`
+  (default OFF, heurarm slot) for an A/B.
+* **The 1-unit Hinata residual -- FIXED (`MTG_MUTE_NO_STORE`, default ON).** It went through the PRICED ceiling
+  (with `MTG_DECISION_PRICED_X=0` both pools gave 1,786,203 units). Mechanism: where the plan pool cannot hold an
+  entry, the priced ledger (pledger) mutes the recompute so its work counts as the unlimited cache's free hit -- but
+  the muted recompute still STORED into the game-persistent payment-refine memo (ManaOracle.cpp `t_refine_memo`),
+  whose later hits skip `RefinePaymentImpl` and with it priced payment work. So the priced meter, the priced ceiling
+  and the units followed residency. Found by tracing the priced meter at every unit charge (`MTG_PRICED_TRACE_UNITS`,
+  `[pt]`/`[pe]` lines) to one bp derivation that cost 241,859 ns at the default pool and 176,013 ns at 1 KB, then
+  `MTG_PAY_PROBE_MEMO=0 MTG_PAY_REFINE_MEMO=0` (both pools 510,270). Rule now in core/WorkCounters.h: a muted
+  recompute stands in for a hit that never ran, so it stores nothing (`workctr::StoresAllowed()`): refine memo and
+  mana cache (incl. tier-2 promotion). gi27 now 510,771 at both pools; regression tier: 0 digest and 0 unit changes at
+  the default pool (it only matters where a pool is starved).
+* **Gods d3/d5 s2002 residency -- FIXED (provider enumeration context).** `GodsProvider::LoamTargetSearchCandidates`
+  narrows Life from the Loam's target fan using the SEARCH ROOT (Magus of the Bazaar there, its graveyard land
+  count), the probe mode and DecisionUnpruned -- none in any key. Breakpoint lists live for the game, so a list
+  narrowed under one root (299 target sets) was served under another (fresh: 1 set): `MTG_BP_ENUM_VERIFY=3`
+  CONTENT-DIFF, the state swap re-derived 1 on the stored state too (a global input), mana cache / Loam-probe fold
+  ruled out. Fix: `DecisionProvider::EnumerationContextKey` (default 0), folded by BuildBreakpointKey when nonzero;
+  Gods returns the exact branch inputs, only while a Loam-class card is in hand. gi39: both pools 33,587 units, same
+  digest, verify CONTENT-DIFF 0 of 9,199. (Also kept: a fold of "inside a Loam probe", a smaller real hole.)
+  The mana-clean agent had parked this as a determinism defect (docs/design/mana-clean-pass-checkpoint.md).
+* **E3 (`MTG_ROLLOUT_GAME_CACHE`) A/B.** Regression seeds (295 jobs, pooled): 32 jobs changed line, 12 moved avg
+  win turn -- 10 faster, 2 slower, net -24 game-turns (NivMizzetCombo, Shadowborn, Gods, Bruna, Hinata, Cyclone);
+  units +0.56%, thread-ms +0.47%; 206k hits. HELD-OUT seeds 4004/5005 (324 jobs, pooled): 16 changed line, net -5.4
+  game-turns (Niv -4, Niv 2HG -1, Hinata 2HG -1); the one "+1" is a budget-0 backstop row where E3 FINISHED a game the
+  base abandoned at its 2M-unit ceiling (3 played vs 2) -- no slower game. Units +0.7%, thread-ms -3.4% (contended).
+  Default OFF pending the USER's call.
+* **Origin GT is stale for 4 regression jobs** (gods d3 s2002, fivecolour d3/d5 s2002, landfall d5 s3003; avg equal,
+  digest differs): pristine origin `d4bfb2071` reproduces the new digests exactly, so it came with the Gods merge
+  `f90930c9f`, not with this work.
+
 ## Method
 
 One pooled `mtg --batch` per experiment, both arms as per-job `flags` in the same manifest (paired seeds,

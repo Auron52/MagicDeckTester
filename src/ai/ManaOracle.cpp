@@ -2381,8 +2381,12 @@ bool RefinePayment(const GameState& pre, const GameState& post, const ManaCost& 
     RefineMemoEntry e;
     e.found = RefinePaymentImpl(pre, post, cost, for_creature, creature_ability, useful, no_trade, e.opt);
     if (e.found) { out = e.opt; }
-    if (t_refine_memo.size() >= 8192) { t_refine_memo.clear(); }
     const bool found = e.found;
+    // Not inside a MUTED recompute (workctr::StoresAllowed): it stands in for a plan-cache hit that never ran, and an
+    // entry it left would let a later refine skip the payments it counts -- the priced meter (and through the priced
+    // ceiling, the units) then followed plan-pool residency. Hinata regression d5 s3003 gi27, 2026-11-11.
+    if (!workctr::StoresAllowed()) { return found; }
+    if (t_refine_memo.size() >= 8192) { t_refine_memo.clear(); }
     t_refine_memo.emplace(std::move(k), std::move(e));
     return found;
 }

@@ -22328,6 +22328,52 @@ std::vector<std::string> GodsProvider::LoamTargetSearchCandidates(
     return {target};
 }
 
+// The Loam narrowing above reads more than the state it is asked about: the search ROOT (Magus of the Bazaar in its
+// hand or on its battlefield, its graveyard land count), the probe mode and DecisionUnpruned. Breakpoint lists live for
+// the whole game, so without this a list narrowed under one decision's root was served under another's -- Gods
+// regression d3 s2002 gi39 T4: a 299-set Loam fan served where a fresh derivation offers 1 set, and since whether it
+// was served depended on the plan pool, MTG_PLAN_CACHE_KB=1 moved the game (2026-11-11). The word mirrors exactly the
+// branches LoamTargetSearchCandidates takes; 0 (no fold) when the active player holds no Loam-class card.
+std::uint64_t GodsProvider::EnumerationContextKey(const GameState& s) const
+{
+    const int controller = s.active_player_index;
+    const Player& pl = s.players[static_cast<std::size_t>(controller)];
+    bool loam = false;
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.return_up_to_gy_lands > 0) { loam = true; break; }
+    }
+    if (!loam) { return 0; }
+    auto has_magus = [controller](const GameState& g)
+    {
+        for (const Card& c : g.players[static_cast<std::size_t>(controller)].hand)
+        { if (c.m_name == "Magus of the Bazaar") { return true; } }
+        for (const Permanent& p : g.battlefield)
+        { if (p.controller_index == controller && p.card.m_name == "Magus of the Bazaar") { return true; } }
+        return false;
+    };
+    std::uint64_t w = 1;   // nonzero marker
+    if (DecisionUnpruned()) { w |= 2; }
+    if (turncensus::t_probe == 0) { w |= 4; }
+    const GameState* full = TurnSolver::CurrentFullSearchRootState();
+    if (full != nullptr) { w |= 8; if (has_magus(*full)) { w |= 16; } }
+    const GameState* guard = full != nullptr ? full : TurnSolver::CurrentSearchRootState();
+    if (guard != nullptr)
+    {
+        w |= 32;
+        if (has_magus(*guard)) { w |= 64; }
+        int root_lands = 0;
+        for (const Card& c : guard->players[static_cast<std::size_t>(controller)].graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d ? d->card.IsLand() : c.IsLand()) { ++root_lands; }
+        }
+        w |= static_cast<std::uint64_t>(std::min(root_lands, 15)) << 8;   // both thresholds (6, 8) are below 15
+    }
+    return w;
+}
+
 bool GodsProvider::KeranosDamageFaceOnly(const GameState&) const
 {
     // The current Loam policy recovered the earlier two-headed counterexample.

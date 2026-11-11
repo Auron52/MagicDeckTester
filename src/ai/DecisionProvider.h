@@ -838,6 +838,13 @@ public:
         const GameState& s, int controller, int maximum) const
     { (void)s; (void)controller; (void)maximum; return {}; }
 
+    // ENUMERATION CONTEXT the plan caches must key on: a digest of every input OTHER THAN THE STATE that this
+    // provider's enumeration-time narrowing reads (a search-root board, a probe mode, ...). BuildBreakpointKey
+    // folds a nonzero answer, so every memo keyed on it (the breakpoint list cache, the enum / solve memos)
+    // keeps a list narrowed under one context from being served under another. 0 = nothing beyond the state
+    // (every provider but one today). See GodsProvider's Loam narrowing for why this exists.
+    virtual std::uint64_t EnumerationContextKey(const GameState& s) const { (void)s; return 0; }
+
     // The first actual own-turn draw may make Keranos deal 3 damage. A provider
     // may choose the opponent as the single autonomous in-plan target.
     virtual bool KeranosDamageFaceOnly(const GameState& s) const { (void)s; return false; }

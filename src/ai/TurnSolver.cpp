@@ -1958,6 +1958,30 @@ static inline long long PricedUnits(SearchBudget* budget, long long n)
     if (budget == nullptr || budget->Unlimited() || !pricedbudget::Active()) { pricedbudget::Drop(); return n; }
     return pricedbudget::Bill(n);
 }
+// MTG_PRICED_TRACE_UNITS=a:b (DIAGNOSTIC, default off; raw getenv: a range): print the game's units and the priced
+// meter at every charge while the game's units lie in [a, b]. Diff two runs to find the first charge interval whose
+// priced work differs (2026-11-11, Hinata gi27's pool-dependent 1-unit residual).
+static inline void PricedTraceAt(int site, long long n)
+{
+    static const std::pair<long long, long long> r = []{
+        const char* e = std::getenv("MTG_PRICED_TRACE_UNITS");
+        long long a = -1, b = -1;
+        if (e != nullptr && *e != '\0' && std::sscanf(e, "%lld:%lld", &a, &b) == 2) { return std::make_pair(a, b); }
+        return std::make_pair(-1LL, -1LL); }();
+    if (r.first < 0 || gamework::t_used < r.first || gamework::t_used > r.second) { return; }
+    std::fprintf(stderr, "[pt] u=%lld p=%lld s=%d n=%lld k=%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n", gamework::t_used, workctr::t_priced, site, n,
+                 workctr::t_n[3], workctr::t_n[4], workctr::t_n[5], workctr::t_n[6], workctr::t_n[7], workctr::t_n[8], workctr::t_n[9], workctr::t_n[2]);
+}
+static inline void PricedTraceEv(const char* what, long long v)   // same range as MTG_PRICED_TRACE_UNITS
+{
+    static const std::pair<long long, long long> r = []{
+        const char* e = std::getenv("MTG_PRICED_TRACE_UNITS");
+        long long a = -1, b = -1;
+        if (e != nullptr && *e != '\0' && std::sscanf(e, "%lld:%lld", &a, &b) == 2) { return std::make_pair(a, b); }
+        return std::make_pair(-1LL, -1LL); }();
+    if (r.first < 0 || gamework::t_used < r.first || gamework::t_used > r.second) { return; }
+    std::fprintf(stderr, "[pe] u=%lld p=%lld mute=%d %s %lld\n", gamework::t_used, workctr::t_priced, workctr::t_mute, what, v);
+}
 static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
 {
     if (budget == nullptr) { if (pricedbudget::On()) { pricedbudget::Drop(); } return; }
@@ -1965,6 +1989,7 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     { g_units_after_spent.fetch_add(1, std::memory_order_relaxed); }
     const long long u = PricedUnits(budget, 1);
     budget->Consume(u);
+    PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
@@ -2005,6 +2030,7 @@ static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long lo
     if (budget == nullptr || n <= 0) { if (budget == nullptr && pricedbudget::On()) { pricedbudget::Drop(); } return; }
     const long long u = bill ? PricedUnits(budget, n) : n;
     budget->Consume(u);
+    PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
@@ -93121,6 +93147,24 @@ namespace enummemo
     { static const std::size_t v = static_cast<std::size_t>(EnvInt("MTG_ENUM_MEMO_CAP", 8192)); return v; }
 
     inline std::atomic<uint64_t> g_hits{0}, g_misses{0}, g_clears{0};
+    // MTG_ENUM_MEMO_REFUSE_HITS=a:b (DIAGNOSTIC, default off; raw getenv because the value is a range): the
+    // a-th..(b-1)-th servable hits of the process (m1 and m2 counted together) are treated as misses. A
+    // bisection instrument for a hit-vs-recompute difference (2026-11-11, Hinata gi27's 1-unit residual).
+    // Evaluated BEFORE CacheHitCharge, which charges the replayed units.
+    inline std::atomic<uint64_t> g_servable{0};
+    inline bool RefuseHit()
+    {
+        static const std::pair<long long, long long> r = []{
+            const char* e = std::getenv("MTG_ENUM_MEMO_REFUSE_HITS");
+            long long a = -1, b = -1;
+            if (e != nullptr && *e != '\0' && std::sscanf(e, "%lld:%lld", &a, &b) == 2) { return std::make_pair(a, b); }
+            return std::make_pair(-1LL, -1LL); }();
+        if (r.first < 0) { return false; }
+        const long long i = static_cast<long long>(g_servable.fetch_add(1, std::memory_order_relaxed));
+        const bool refuse = i >= r.first && i < r.second;
+        if (refuse) { std::fprintf(stderr, "[enum-memo-refuse] hit #%lld refused\n", i); }
+        return refuse;
+    }
     inline std::atomic<uint64_t> g_verified{0}, g_mismatches{0};
     // MTG_ENUM_MEMO_STATS (diagnostic, print-only): WHY the memo misses. `second` = misses on a key
     // already marked this decision (the promotion visit: the plans are computed again and only now
@@ -93833,9 +93877,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
     { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
     // MTG_CACHE_HIT_CHARGE: a hit is served at the units its enumeration charged, or not at all.
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && (!led || sh_hit) && CacheHitCharge(it->second.cost))
+        && (!led || sh_hit) && !enummemo::RefuseHit() && CacheHitCharge(it->second.cost))
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM1);
+        PricedTraceEv("m1_real_hit", 0);
         if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
         {
             const cachecharge::Cost stored = it->second.cost;
@@ -93914,6 +93959,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         return it->second.plans;
     }
 
+    PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
@@ -94102,9 +94148,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         && led && !sh_hit)
     { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }   // the unlimited cache recomputes here
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
-        && (!led || sh_hit) && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
+        && (!led || sh_hit) && !enummemo::RefuseHit() && CacheHitCharge(it->second.cost))   // MTG_CACHE_HIT_CHARGE
     {
         enummemo::g_hits.fetch_add(1, std::memory_order_relaxed); PlanCacheNoteHit(plancache::kCatM2);
+        PricedTraceEv("m2_real_hit", 0);
         if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY (diagnostic)
         {
             const cachecharge::Cost stored = it->second.cost;
@@ -94168,6 +94215,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         return it->second.plans;
     }
 
+    PricedTraceEv("enum_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     enummemo::g_misses.fetch_add(1, std::memory_order_relaxed);
     const bool second_visit = (it != cache.end() && it->second.epoch == g_decision_epoch);
@@ -96048,17 +96096,61 @@ static bool EtChainTrialBudgetExceeded()
 }
 
 
-// MTG_ROLLOUT_SUFFIX_PROBE (diagnostic, 2026-11-10; NOT unit-neutral: Extra Turns regression d3 s2002 961,979 -> 961,601 units with it on, same digest, at any pool size -- cause not found; see docs/design/cross-turn-cache-experiments.md).
+// MTG_ROLLOUT_SUFFIX_PROBE (diagnostic, 2026-11-10; unit-neutral since 2026-11-11 -- its boundary keys used to bill the
+// priced meter the priced ceiling reads, now muted: regression tier probe on vs off 295/295 digests and units identical).
 // A leaf rollout plays turn by turn; the state at each later turn boundary is where a FRESH rollout would start if
 // a deeper pass (or the next decision) makes the rollout's start an interior node -- its greedy child IS that
 // boundary. Only start keys reach the TT today. This counts, per game, how many outermost rollouts start at a key an
 // earlier rollout already passed through, whether that rollout's (result, cutoff) would answer the new query, whether
 // it agrees with the fresh result, and the fresh rollout's units. Boundaries are recorded only when the rollout's
 // first turn has no per-deck depth override (else a fresh start plays that turn differently).
+static std::uint64_t SfxProbeCtx(const GameState& state);   // defined after gamelc: the leaf/beam/m2/labeller modes
+// E3 -- GAME-PERSISTENT ROLLOUT CACHE (MTG_ROLLOUT_GAME_CACHE, experimental, default OFF; heurarm ROLLOUT_GAME_CACHE).
+// The leaf table (TranspositionTable) lives for one decision, and only a rollout's START key reaches it; the states a
+// rollout passes at its later turn boundaries are thrown away. The next decision of the same game starts many rollouts
+// on exactly those states: MTG_ROLLOUT_SUFFIX_PROBE measured 6.8% of rollout units (1.9% of all units, regression
+// tier) on earlier-decision start + boundary matches. This map keeps, for the rest of the GAME, every outermost
+// rollout's answer under its start key AND under each turn-boundary key it passed, with the leaf table's own rules:
+//   * stored only from a CLEAN rollout (no truncation, no budget bind, no condemnation drop) and never from a muted
+//     recompute (workctr::StoresAllowed); a no-win only where the leaf table's no-win half is armed;
+//   * a WIN is served when it lies within the query's cutoff, else the query gets the no-win a fresh run returns there;
+//     a NO-WIN only to a query no wider than its bound, publishing the graded quantity only for a full run;
+//   * keyed by the leaf-table key folded with the leaf/beam/second-main/labeller context (SfxProbeCtx);
+//   * outermost rollouts only, and only without a first-turn depth override (that turn plays differently fresh);
+//   * per GAME, entry-capped (MTG_ROLLOUT_GAME_CACHE_CAP, default 262144; a full map stops storing), so residency is a
+//     function of the game alone.
+// NOT an identity: a rollout's inner depth-1 solves break ties by what the decision has searched before, so the same
+// start state can roll out differently in a later decision (probe: 24 clean same-cutoff disagreements in 95,293 usable
+// matches on the regression tier, all within-decision tie paths -- unchanged with E1, E2, the game line cache or the
+// mana cache off). A served answer is one such path. Measured as a play change.
+namespace rgc
+{
+    struct E { int result; int bound; long long tb; long long life; bool win; };
+    inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
+    inline std::atomic<long long> g_hits{0}, g_win_hits{0}, g_lookups{0}, g_stores{0}, g_full{0};
+    inline std::size_t Cap()
+    { static const std::size_t v = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ROLLOUT_GAME_CACHE_CAP", 262144))); return v; }
+    inline TranspositionTable::Key Key(TranspositionTable::Key k, std::uint64_t ctx) { Fold(k, 0xE3C0FFEEull); Fold(k, ctx); return k; }
+    struct Reporter
+    {
+        ~Reporter()
+        {
+            if (g_lookups.load() == 0) { return; }
+            std::cerr << "[rollout-game-cache] lookups=" << g_lookups.load() << " hits=" << g_hits.load()
+                      << " win_hits=" << g_win_hits.load() << " stores=" << g_stores.load() << " full_refusals=" << g_full.load() << "\n";
+        }
+    };
+    inline Reporter g_reporter;
+}
+static bool RolloutGameCacheOn()
+{
+    static const bool env = EnvOn("MTG_ROLLOUT_GAME_CACHE");
+    return heurarm::Flag(heurarm::ROLLOUT_GAME_CACHE, env);
+}
 namespace sfxprobe
 {
     inline bool On() { static const bool v = EnvOn("MTG_ROLLOUT_SUFFIX_PROBE"); return v; }
-    struct E { int result; int cutoff; std::uint64_t epoch; bool start; };
+    struct E { int result; int cutoff; std::uint64_t epoch; bool start; std::uint64_t ctx; };
     inline thread_local std::unordered_map<TranspositionTable::Key, E, TranspositionTable::KeyHash> t_map;
     inline thread_local std::vector<TranspositionTable::Key> t_pending;
     inline thread_local bool t_collect = false;
@@ -96067,6 +96159,8 @@ namespace sfxprobe
     inline std::atomic<long long> g_m[2][2], g_usable[2][2], g_agree[2][2], g_u_usable[2][2], g_u_match[2][2];
     // disagreement census: [same cutoff][stored win]
     inline std::atomic<long long> g_eqc_usable{0}, g_eqc_agree{0}, g_dis[2][2];
+    // same-cutoff matches whose FRESH rollout was not clean (a bind or truncation), and how many of those disagree
+    inline std::atomic<long long> g_eqc_fresh_unclean{0}, g_eqc_dis_unclean{0};
     inline std::atomic<int> g_printed{0};
     inline void Clear() { t_map.clear(); t_pending.clear(); t_collect = false; }
     struct Reporter
@@ -96083,13 +96177,14 @@ namespace sfxprobe
             }
             std::cerr << " | same_cutoff: usable=" << g_eqc_usable.load() << " agree=" << g_eqc_agree.load()
                       << " | DIS[samecut][win]: " << g_dis[1][1].load() << "/" << g_dis[1][0].load()
-                      << " diffcut " << g_dis[0][1].load() << "/" << g_dis[0][0].load();
+                      << " diffcut " << g_dis[0][1].load() << "/" << g_dis[0][0].load()
+                      << " | same_cutoff fresh_unclean=" << g_eqc_fresh_unclean.load() << " dis_unclean=" << g_eqc_dis_unclean.load();
             std::cerr << "\n";
         }
     };
     inline Reporter g_reporter;
 }
-static void RolloutSuffixProbeClear() { sfxprobe::Clear(); }
+static void RolloutSuffixProbeClear() { sfxprobe::Clear(); rgc::t_map.clear(); }   // + E3's map (same lifetime)
 
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
@@ -96134,7 +96229,14 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     {
         if (sfxprobe::t_collect && g_rollout_nest == 1 && state.turn_number > roll_start && first_turn_depth < 0)
         {
+            // MUTED: BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
+            // (decisionwork::PricedExceeded), so an unmuted probe key moved the ceiling and with it play.
+            // Same for the combat-pin read witness the put-bounce fold's clean test compares.
+            const unsigned long long cp_reads0 = combatpin::t_reads;
+            ++workctr::t_mute;
             TranspositionTable::Key bk = BuildSimKey(state, depth, max_turns, second_main);
+            --workctr::t_mute;
+            combatpin::t_reads = cp_reads0;
             if (CanonSimKeyOn()) { Fold(bk, FsOrderSig(state)); }
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
             sfxprobe::t_pending.push_back(bk);
@@ -97138,17 +97240,65 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         && cutoff_turn < max_turns)
     { ko_vcopy = std::make_unique<GameState>(state); }
     const bool sfx_on = sfxprobe::On() && tt != nullptr && g_rollout_nest == 0 && !sfxprobe::t_collect;
+    // E3 (see namespace rgc): outermost rollouts with no first-turn depth override only.
+    const bool rgc_on = tt != nullptr && g_rollout_nest == 0 && !sfxprobe::t_collect && RolloutGameCacheOn()
+                     && !((s_fd_leaf_depth_env == nullptr || *s_fd_leaf_depth_env == '\0') && t_search_leaf_first_turn_depth >= 0);
     const sfxprobe::E* sfx_hit = nullptr; sfxprobe::E sfx_copy{};
     const long long sfx_u0 = gamework::t_used;
-    if (sfx_on)
+    const std::uint64_t sfx_ctx = (sfx_on || rgc_on) ? SfxProbeCtx(state) : 0;
+    if (rgc_on)
     {
-        auto it = sfxprobe::t_map.find(key);
-        if (it != sfxprobe::t_map.end()) { sfx_copy = it->second; sfx_hit = &sfx_copy; }
+        rgc::g_lookups.fetch_add(1, std::memory_order_relaxed);
+        const auto it = rgc::t_map.find(rgc::Key(key, sfx_ctx));
+        if (it != rgc::t_map.end())
+        {
+            const rgc::E& e = it->second;
+            if (e.win)
+            {
+                rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (e.result <= cutoff_turn) { return e.result; }
+                leafeval::Publish(leafeval::kInvalid);   // what a fresh run publishes when it aborts at the cutoff
+                return max_turns + 1;
+            }
+            if (nowin_armed && cutoff_turn <= e.bound)
+            {
+                rgc::g_hits.fetch_add(1, std::memory_order_relaxed);
+                if (cutoff_turn >= max_turns) { leafeval::Publish(e.tb); leafeval::PublishLife(e.life); }
+                else                          { leafeval::Publish(leafeval::kInvalid); }
+                return max_turns + 1;
+            }
+        }
+    }
+    if (sfx_on || rgc_on)
+    {
+        if (sfx_on)
+        {
+            auto it = sfxprobe::t_map.find(key);
+            if (it != sfxprobe::t_map.end()) { sfx_copy = it->second; sfx_hit = &sfx_copy; }
+        }
         sfxprobe::t_pending.clear();
         sfxprobe::t_pending.push_back(key);   // [0] = this rollout's own start key
         sfxprobe::t_collect = true;
     }
     int result = SimulateToEndImpl(state, depth, max_turns, budget, cutoff_turn, second_main, tt);
+    if (rgc_on)
+    {
+        if (!sfx_on) { sfxprobe::t_collect = false; }
+        const bool rgc_clean = g_fs_trunc_events == trunc_at_entry && budgetbind::t_binds == binds_at_entry
+                            && g_condemn_drops == drops_at_entry && workctr::StoresAllowed();
+        const bool win = result <= max_turns;
+        if (rgc_clean && (win || (nowin_armed && NoWinStoreUngradedOn())))
+        {
+            const rgc::E e{ result, std::min(cutoff_turn, max_turns + 1), leafeval::t_tb, leafeval::t_life, win };
+            for (std::size_t i = 0; i < sfxprobe::t_pending.size(); ++i)
+            {
+                if (rgc::t_map.size() >= rgc::Cap()) { rgc::g_full.fetch_add(1, std::memory_order_relaxed); break; }
+                if (rgc::t_map.emplace(rgc::Key(sfxprobe::t_pending[i], sfx_ctx), e).second)
+                { rgc::g_stores.fetch_add(1, std::memory_order_relaxed); }
+            }
+        }
+        if (!sfx_on) { sfxprobe::t_pending.clear(); }
+    }
     if (sfx_on)
     {
         sfxprobe::t_collect = false;
@@ -97173,14 +97323,19 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
                 const int fc = std::min(cutoff_turn, max_turns + 1);
                 const bool samecut = fc == sfx_hit->cutoff;
                 if (samecut) { sfxprobe::g_eqc_usable.fetch_add(1); if (agree) { sfxprobe::g_eqc_agree.fetch_add(1); } }
+                if (samecut && !clean) { sfxprobe::g_eqc_fresh_unclean.fetch_add(1); if (!agree) { sfxprobe::g_eqc_dis_unclean.fetch_add(1); } }
                 if (!agree)
                 {
                     sfxprobe::g_dis[samecut ? 1 : 0][cwin ? 1 : 0].fetch_add(1);
-                    if (sfxprobe::g_printed.fetch_add(1) < 40)
+                    if (sfxprobe::g_printed.fetch_add(1) < 400)
                     {
-                        std::fprintf(stderr, "[sfx-dis] kind=%s dec=%s stored=(res %d cut %d) fresh=(res %d cut %d) t%d depth=%d ftd=%d max=%d m2=%d nest=%d\n",
+                        std::fprintf(stderr, "[sfx-dis] job=%s kind=%s dec=%s stored=(res %d cut %d ep %llu ctx %llx) fresh=(res %d cut %d ep %llu clean %d ctx %llx) t%d depth=%d ftd=%d max=%d m2=%d nest=%d\n",
+                                     heurarm::t_job_name ? heurarm::t_job_name : "-",
                                      k == 0 ? "start" : "suffix", d == 0 ? "same" : "prev", sfx_hit->result, sfx_hit->cutoff,
-                                     result, fc, state.turn_number, depth, t_search_leaf_first_turn_depth, max_turns, second_main ? 1 : 0, g_fsline_nest);
+                                     static_cast<unsigned long long>(sfx_hit->epoch), static_cast<unsigned long long>(sfx_hit->ctx),
+                                     result, fc, static_cast<unsigned long long>(g_decision_epoch), clean ? 1 : 0,
+                                     static_cast<unsigned long long>(sfx_ctx),
+                                     state.turn_number, depth, t_search_leaf_first_turn_depth, max_turns, second_main ? 1 : 0, g_fsline_nest);
                     }
                 }
             }
@@ -97188,7 +97343,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
         if (clean)
         {
             for (std::size_t i = 0; i < sfxprobe::t_pending.size() && sfxprobe::t_map.size() < (1u << 22); ++i)
-            { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0 }); }
+            { sfxprobe::t_map.emplace(sfxprobe::t_pending[i], sfxprobe::E{ result, std::min(cutoff_turn, max_turns + 1), g_decision_epoch, i == 0, sfx_ctx }); }
         }
         sfxprobe::t_pending.clear();
     }
@@ -102913,6 +103068,23 @@ namespace gamelc
     };
     inline Reporter g_reporter;
 }
+// MTG_ROLLOUT_SUFFIX_PROBE's context word: what gamelc::Tag folds (leaf kind, escalation beam, coarse-m2 key mode, labeller
+// mode) plus the raw leaf forcings, one field per byte, so a disagreement names the mode that differed.
+static std::uint64_t SfxProbeCtx(const GameState& state)
+{
+    const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
+                                  && state.m_value_model && !state.m_value_model->empty())
+                               ? state.m_value_model : nullptr;
+    const unsigned leaf = (g_force_constant_leaf || (vm && vm->constant)) ? 2u : (vm ? 1u : 0u);
+    std::uint64_t c = leaf;
+    c |= static_cast<std::uint64_t>(std::min(g_esc_beam_width, 255) & 0xFF) << 8;
+    c |= static_cast<std::uint64_t>(g_esc_beam_leafdepth == 2147483647 ? 0xFF : (g_esc_beam_leafdepth & 0xFF)) << 16;
+    c |= static_cast<std::uint64_t>(g_esc_beam_static ? 1 : 0) << 24;
+    c |= static_cast<std::uint64_t>(g_simkey_m2coarse & 0xFF) << 32;
+    c |= static_cast<std::uint64_t>(g_unbounded_label_search & 0xFF) << 40;
+    c |= static_cast<std::uint64_t>((g_force_heuristic_leaf ? 1 : 0) | (g_force_value_leaf ? 2 : 0) | (g_force_constant_leaf ? 4 : 0)) << 48;
+    return c;
+}
 static void GameLineCacheClear() { gamelc::Clear(); pastcut::t_rec.clear(); }
 // MTG_INWIN_CACHE (default ON since 2026-11-10; verify: 12,960 hits re-searched, 0 MATERIAL; A/B: units -0.5% budgeted, win turns identical): DEPTH-FREE IN-WINDOW PROOFS.
 // A node at turn T with remaining depth k searches turns T..T+k-1 exhaustively; only what lies past T+k-1 comes from
@@ -108297,9 +108469,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         bool on; int turn;
         DwDbgFs(bool o, int t) : on(o), turn(t) {}
         ~DwDbgFs()
-        { if (on) { std::fprintf(stderr, "[dw] t%d(fs) armed=%lld used=%lld exceeded=%d\n", turn,
+        { if (on) { std::fprintf(stderr, "[dw] t%d(fs) armed=%lld used=%lld exceeded=%d priced=%lld gu=%lld n=%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n", turn,
                                  decisionwork::t_limit, decisionwork::t_used,
-                                 decisionwork::Exceeded() ? 1 : 0); } }
+                                 decisionwork::Exceeded() ? 1 : 0, workctr::t_priced, gamework::t_used,
+                                 workctr::t_n[0], workctr::t_n[1], workctr::t_n[2], workctr::t_n[3], workctr::t_n[4],
+                                 workctr::t_n[5], workctr::t_n[6], workctr::t_n[7], workctr::t_n[8], workctr::t_n[9]); } }
     } _dwdbg_fs(s_dw_debug_fs && fs_decision_root, state.turn_number);
     GreedyChargeGuard _gcg_fs(state, budget);   // MTG_SOLVE_CHARGE: root-level greedy walks bill here
     // TurnSolver::DecisionBudget(): the executor's decision root (the other one is
@@ -110818,9 +110992,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         bool on; int turn;
         DwDbg(bool o, int t) : on(o), turn(t) {}
         ~DwDbg()
-        { if (on) { std::fprintf(stderr, "[dw] t%d armed=%lld used=%lld exceeded=%d\n", turn,
+        { if (on) { std::fprintf(stderr, "[dw] t%d armed=%lld used=%lld exceeded=%d priced=%lld gu=%lld n=%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld,%lld\n", turn,
                                  decisionwork::t_limit, decisionwork::t_used,
-                                 decisionwork::Exceeded() ? 1 : 0); } }
+                                 decisionwork::Exceeded() ? 1 : 0, workctr::t_priced, gamework::t_used,
+                                 workctr::t_n[0], workctr::t_n[1], workctr::t_n[2], workctr::t_n[3], workctr::t_n[4],
+                                 workctr::t_n[5], workctr::t_n[6], workctr::t_n[7], workctr::t_n[8], workctr::t_n[9]); } }
     } _dwdbg(s_dw_debug && decision_root, state.turn_number);
 
     if (depth <= 0)
@@ -114088,6 +114264,14 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     // the same misindexed-replay class the FSLineEntry.order_sig guard cures. Order-exact key.
     if (CanonSimKeyOn()) { Fold(k, FsOrderSig(state)); }
     Fold(k, 0xB9E4);   // section tag: mid-turn scalars
+    // INSIDE A LIFE FROM THE LOAM PROBE (g_loam_probe_offer set; AppendSubdecisionAxes' Loam fan): the enumeration
+    // skips the Loam target expansion there (it runs only with no probe open), so the same state enumerates a
+    // different list inside and outside one. Nonzero-gated: every key outside a probe is unchanged. (Found while
+    // chasing Gods gi39, 2026-11-11, whose actual hole was the provider context folded just below.)
+    if (g_loam_probe_offer != nullptr) { Fold(k, 0x10A3B0BEull); }
+    // The provider's own enumeration context (DecisionProvider::EnumerationContextKey; nonzero only where a
+    // narrowing reads something besides the state -- the Gods Loam fan reads the search root).
+    if (const std::uint64_t pc = ResolveProvider(state).EnumerationContextKey(state); pc != 0) { Fold(k, 0xEC0C7Eull); Fold(k, pc); }
     const ManaPool& f = state.floating_mana;
     Fold(k, static_cast<uint64_t>(f.white));
     Fold(k, static_cast<uint64_t>(f.blue));
@@ -116967,12 +117151,14 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             if (it != cache.end() && CacheHitCharge(it->second.cost))
             {
                 BpSideReplay(it->second.cost);
+                PricedTraceEv("bp_real_hit", 0);
                 PlanCacheNoteHit(plancache::kCatBp);
                 return &it->second;
             }
         }
     }
 
+    PricedTraceEv("bp_miss_sh_exact", sh_exact ? 1 : 0);
     if (sh_exact) { led_mute.Arm(); }   // the unlimited cache served the exact key: nothing below counts
     // THE TUTOR-PIN ALIAS (MTG_BP_TUTOR_PIN_ALIAS, DEFAULT ON; =0 keys every list on its live tutor pin as
     // before). An IDENTITY FOLD, found on EldraziDisplacerFlicker seed 5826 gi821 (docs/design/
@@ -117254,6 +117440,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         }
     }
 
+    PricedTraceEv("bp_derived_n", static_cast<long long>(CandSeq(plans, &plans_lz, &plans_ord).size()));
+    PricedTraceEv("bp_derived_storable", (keyed && !bp_interrupted && !aa_cut_inside && bp_cost.storable) ? 1 : 0);
     // MTG_PLAN_PRICED_LEDGER: the unlimited cache's store rule on its shadow -- the entry cap's wholesale clear,
     // never the byte pool's -- for a COUNTED derivation only (a muted one never ran in that world).
     if (led && !led_mute.on && !bp_interrupted && !aa_cut_inside && bp_cost.storable
@@ -117336,6 +117524,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             enummemo::t_cache.clear();
             plancache::Release(plancache::t_enum_bytes);
         }
+        PricedTraceEv("bp_store_fits", plancache::Fits(psz) ? 1 : 0);
         if (plancache::Fits(psz))
         {
             plancache::Acquire(psz, plancache::t_bp_bytes, plancache::kCatBp);
@@ -117602,6 +117791,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             && CacheHitCharge(it->second.cost))
         {
             BpSideReplay(it->second.cost);
+            PricedTraceEv("front_full_hit", 0);
             if (s_rollout_stats) { bpcanon::g_full_hits.fetch_add(1, std::memory_order_relaxed); }
             const CandSeq v = it->second.View();   // M1: the entry may be lazy
             if (v.empty()) { return false; }
@@ -117614,12 +117804,14 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
             && CacheHitCharge(jt->second.cost))
         {
             BpSideReplay(jt->second.cost);
+            PricedTraceEv("front_hit", 0);
             if (s_rollout_stats) { bpcanon::g_hits.fetch_add(1, std::memory_order_relaxed); }
             if (!jt->second.has) { return false; }
             out = jt->second.front;
             return true;
         }
     }
+    PricedTraceEv("front_miss_sh", sh_hit ? 1 : 0);
     if (sh_hit) { led_mute.Arm(); }   // MTG_PLAN_PRICED_LEDGER: a free virtual-cache hit
     const std::uint64_t aa_cuts0 = AlchemistComboRouteCuts();   // see BpEnumEntryFor's twin
     // An INTERRUPTED derivation (the per-game backstop, or MTG_BP_DERIVE_METER=2) returns EMPTY: served, never

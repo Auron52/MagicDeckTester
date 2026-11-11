@@ -58,6 +58,15 @@ inline thread_local long long t_priced = 0;   // running sum of price x count th
 // recompute that the deterministic virtual cache would have served as a hit: there the work never ran, so it must not
 // reach t_priced (the priced decision ceiling reads it) or the per-kind counts. Zero outside such a recompute.
 inline thread_local int t_mute = 0;
+// MTG_MUTE_NO_STORE (DEFAULT ON since 2026-11-11; =0 restores the old stores, A/B control). A muted recompute stands in
+// for a hit the unlimited cache would have served, so it must leave NO TRACE: besides counting no work, it may not store
+// into another cache. It used to: a recompute the plan pool could not hold (and the priced ledger therefore muted) still
+// filled the mana cache, whose later tier-1 hits skip priced solve work -- so the priced meter, the priced decision
+// ceiling read off it, and through that the units, followed plan-pool residency (Hinata regression d5 s3003 gi27:
+// 510,771 units at the default pool vs 510,772 at MTG_PLAN_CACHE_KB=1; equal with MTG_DECISION_PRICED_X=0).
+// Content-pure caches consult this before every store; a refused store only costs wall.
+bool MuteNoStoreOn();
+inline bool StoresAllowed() { return t_mute == 0 || !MuteNoStoreOn(); }
 inline void Inc(int k, long long n = 1) { if (t_mute != 0) { return; } t_n[k] += n; t_priced += kPriceNs[k] * n; }
 inline void BeginGame() { for (int k = 0; k < kKinds; ++k) { t_n[k] = 0; } t_priced = 0; }
 }

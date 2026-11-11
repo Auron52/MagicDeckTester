@@ -271,6 +271,12 @@ oracle off byte-identical; record 43e700b5c):
   may consult the budget without marking `budgetbind::t_reads`. Repro: `MTG_BP_ENUM_VERIFY=3 build/Release/mtg
   --batch build/scratch/p1/m.json --threads 32 --game-log-dir <dir>` (one job: gods_regression_d3_s2002). Until fixed,
   this row can fail a pooled regression with no code change: re-run it alone before attributing.
+  **FIXED 2026-11-11 (cross-turn cache session; docs/design/cross-turn-cache-experiments.md, "Gods d3/d5 s2002
+  residency").** The cause was neither candidate: `GodsProvider::LoamTargetSearchCandidates` narrows Loam's target fan
+  from the SEARCH ROOT (Magus of the Bazaar there, its graveyard land count), the probe mode and DecisionUnpruned, none
+  of which any key carried. `DecisionProvider::EnumerationContextKey` now returns those inputs and BuildBreakpointKey
+  folds them (plus a "inside a Loam probe" fold). gi39: CONTENT-DIFF 0 of 9,199; the whole regression manifest at
+  `MTG_PLAN_CACHE_KB=1` matches the default pool on every row's digest and units. GT re-accepted.
 * **Dragonstorm 2HG gi37 opener hold (followups s8 Q23): PARKED with a mechanism diagnosis (agent 2026-11-11).** The
   hold is not on HEAD (only on `worktree-agent-afe476c961652c9b8`), so HEAD plays gi37 as the off arm. Re-read the d8 b0
   traces (`build/scratch/ds13/tr/d8_g37_h{0,1}`): the arms first differ at T4, where the hold arm spends Rite of Flame

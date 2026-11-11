@@ -3672,6 +3672,7 @@ public:
     bool PutBackSingleCandidate(const GameState& s) const override;
     std::vector<std::string> LoamTargetSearchCandidates(
         const GameState& s, int controller, int maximum) const override;
+    std::uint64_t EnumerationContextKey(const GameState& s) const override;
     bool KeranosDamageFaceOnly(const GameState& s) const override;
     bool UpkeepOnlyTapDraw(const GameState& s, const CardDefinition& source) const override;
     bool PrunesGodTargetAxes() const override;

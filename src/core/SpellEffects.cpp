@@ -31,6 +31,9 @@
 #include <bit>            // std::popcount -- portable replacement for __builtin_popcount (MSVC has no such builtin)
 #include <memory>         // std::unique_ptr (MTG_MANA_CACHE_VERIFY_TAPS)
 
+// core/WorkCounters.h: MTG_MUTE_NO_STORE (default ON; see the declaration).
+bool workctr::MuteNoStoreOn() { static const bool v = EnvOn("MTG_MUTE_NO_STORE", true); return v; }
+
 // The live scry-watcher chain (Galadriel; see the SCRY WATCHERS block in SpellEffects.h).
 thread_local ScryChainState g_scry_chain;
 
@@ -6670,7 +6673,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
         {
             mc_ctx_pay = McT2PayWord(state);
             mc_ctx_traits = CurrentPlanTraitsHash();
-            if (tier2::On() && g_mana_t2.Size() != 0)
+            if (tier2::On() && g_mana_t2.Size() != 0 && workctr::StoresAllowed())   // a promotion is a tier-1 store
             {
                 auto t2 = g_mana_t2.Find(mk1);
                 if (t2 != g_mana_t2.End() && t2->second.verify == mk2 && t2->second.work_known)
@@ -6987,7 +6990,8 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
     }
 
     // ---- Store (negatives always; a positive records its tap-set + the two order-dependent deltas) --
-    if (mc_active)
+    // Never inside a muted recompute (workctr::StoresAllowed): it stands in for a plan-cache hit that did not run.
+    if (mc_active && workctr::StoresAllowed())
     {
         if (g_mana_cache.size() > 500000) { McTier1Clear(); g_mana_cache_bytes = 0; tier1::Set(tier1::kMana, 0); }   // bound cross-rollout growth
         ManaCacheEntry e; e.verify = mk2; e.payable = ok; e.drip_life = 0; e.self_life = 0;
