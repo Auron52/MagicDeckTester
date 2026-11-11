@@ -100,6 +100,22 @@ Source of the work: `logs/mana_clean/lastweek-20261110-shadowborn-order/report.m
   pump shape: the nearest oracle outcome has the SAME taps and float, only the pump TARGET differs -- the pump target
   follows the moment each Elf is tapped, so the oracle must compare modulo pump target or replay the engine's; analyzer
   side, parked), UNMODELED 39. Play identity oracle-off: byte-identical.
+* **FIXED (item 5h): Jumbo USER cast-order rulings 2026-11-11** (90f089561, 671f06816). Tutor-by-target ranks after
+  the hand copy (Elf 45, Surrak 95, Cactuar 135); Surrak 37 -> 70, moved ahead of the first untapper only when
+  OrderPaysSequentially proves it; Chariot right after the FIRST untapper only with 2+ untapper entries; the
+  Overgrowth-before-Sprawl swap DELETED (USER: "Yes, I can't see why we would want Utopia Sprawl after Overgrowth").
+  s30029950 T6 and the old swap's test board are NOT payment defects: one enchanted Forest tapped three times yields
+  one mana less with the cheap Aura first (13 vs 14 for a 14-mana line), so no payment of that order exists.
+  Tiers: only Jumbo rows; searched 0 slower; d0 regression s2002 gi315 4->5 (greedy runner), smoke d0 2 faster.
+  Held-out A/B vs the pre-ruling order (d5 b20 seeds 7100001 x3000, d3 b10 7200001 x1500): d5 4.0597 -> 4.0580,
+  d3 4.0640 -> 4.0633; 6 faster, 0 slower. ExtraTurns d3 s2002 gi23 / d5 s2002 gi73 moved in-batch only (replay
+  alone = GT digest): run-context flaps, left out of GT.
+* **Gate `jumbo-userorder-20261111` (6b4f57bc866d, PGO, games 35000-39999): 1,195 issues** (was 1,336): ENUM-GAP 327,
+  APPLY-DROP 156, APPLY-DROP-ORDER 336 (was 427), DOMINATED-CREATURE 223, ORACLE-GAP 153. Play identity oracle-off
+  byte-identical. Top APPLY-DROP-ORDER now: (1) Overgrowth-first lines the USER rule forbids (x24+x20+x20+x20; the
+  same count effect as s30029950, the search keeps the sub-lines); (2) Chariot cast before a single hand Voyaging
+  Satyr with GSZ (x15+x10), which the USER's one-untapper ruling keeps. **USER DECISION (surfaced):** both shapes are
+  the USER's order working as ruled; no change proposed unless the USER wants a proven swap for either.
 * **Shadowborn sb-victimclaim follow-up (agent 2026-11-10 night), all ANALYZER-side; play byte-identical
   (smoke 183/183 unchanged; regression below):**
   - **UNMODELED 1,658: FIXED (oracle).** Every one was "too many actions to try every order": the PHANTOM (NO) claim
