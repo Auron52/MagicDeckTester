@@ -1,0 +1,471 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 8, "name": "Kami of False Hope" }, { "num": 17, "name": "Plains" }, { "num": 18, "name": "Plains" }, { "num": 10, "name": "Martyr of Sands" }, { "num": 50, "name": "Squadron Hawk" }, { "num": 19, "name": "Plains" }, { "num": 38, "name": "Ranger-Captain of Eos" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Plains", "cast=Martyr of Sands"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Unexpectedly Absent" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "Martyr of Sands", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 17, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Kami of False Hope", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Kami of False Hope"], "actions": [{ "card": "Kami of False Hope" }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands" }] },
+    { "index": 2, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 10,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "cast_order": ["**", "land=Plains", "cast=Squadron Hawk"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Swords to Plowshares" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Kami of False Hope, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Kami of False Hope", "Martyr of Sands"], "actions": [{ "card": "Kami of False Hope" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=Plains; cast: Kami of False Hope", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Kami of False Hope"], "actions": [{ "card": "Kami of False Hope" }] },
+    { "index": 4, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 5, "summary": "land=none; cast: Kami of False Hope", "declared_order_payability": "not_verified", "land": null, "casts": ["Kami of False Hope"], "actions": [{ "card": "Kami of False Hope" }] },
+    { "index": 6, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 15,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": [1, 1, 1], "decision": {
+  "decision_index": 5,
+  "type": "sac_tutor",
+  "source": "Squadron Hawk (put in HAND)",
+  "turn": 2,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "max_puts": 3,
+  "ai_set": [0, 1, 2],
+  "candidates": [{ "index": 0, "def": true, "name": "Squadron Hawk" }, { "index": 1, "def": true, "name": "Squadron Hawk" }, { "index": 2, "def": true, "name": "Squadron Hawk" }],
+  "note": "reply one int per candidate (1 = put this card into your hand), up to max_puts total. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }, { "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }, { "turn": 2, "kind": "tutor", "text": "🔍 Squadron Hawk -- searched to hand (Squadron Hawk)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Martyr of Sands (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "discard",
+  "turn": 2,
+  "over_by": 1,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 8, "name": "Kami of False Hope", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": [], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "ai_set": [0],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "name": "Kami of False Hope" }, { "index": 1, "name": "Plains" }, { "index": 2, "name": "Ranger-Captain of Eos" }, { "index": 3, "name": "Unexpectedly Absent" }, { "index": 4, "name": "Swords to Plowshares" }, { "index": 5, "name": "Squadron Hawk" }, { "index": 6, "name": "Squadron Hawk" }, { "index": 7, "name": "Squadron Hawk" }],
+  "note": "reply the `index` VALUE of one of the options below (the engine's draw-order hand index) -- NOT a position in the displayed `me.hand`, which is sorted by name. An index that is not in options is silently replaced by the AI's pick. Default = the AI's pick."
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Plains", "cast=Ranger-Captain of Eos"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Abiding Grace" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 18, "is_land": true, "taps": "W" }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 19, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 38, "name": "Ranger-Captain of Eos", "cost": "{1}{W}{W}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Squadron Hawk, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Martyr of Sands"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=Plains; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=Plains; cast: Ranger-Captain of Eos → Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Serra Ascendant" }] },
+    { "index": 4, "summary": "land=Plains; cast: Ranger-Captain of Eos → Martyr of Sands", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Martyr of Sands" }] },
+    { "index": 5, "summary": "land=Plains; cast: Ranger-Captain of Eos → Curious Farm Animals", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Curious Farm Animals" }] },
+    { "index": 6, "summary": "land=Plains; cast: Ranger-Captain of Eos → Thraben Inspector", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Thraben Inspector" }] },
+    { "index": 7, "summary": "land=Plains; cast: Ranger-Captain of Eos → Speaker of the Heavens", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Speaker of the Heavens" }] },
+    { "index": 8, "summary": "land=Plains; cast: Ranger-Captain of Eos → Mother of Runes", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "tutor_target": "Mother of Runes" }] },
+    { "index": 9, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 10, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 11, "summary": "land=Plains; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 12, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 3, "source": "Ranger-Captain of Eos (searched)", "cards": [{ "name": "Serra Ascendant", "disposition": "to hand" }] }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 38, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 42, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Martyr of Sands (1), Squadron Hawk (1) — 2 to opponent (19→17)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 38, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 42, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope"], "library_size": 46, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Plains", "sacout=Martyr of Sands#10", "cast=Serra Ascendant", "cast=Squadron Hawk"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 8, "num": 19, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 29, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 42, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Serra Ascendant, Squadron Hawk, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Squadron Hawk", "Martyr of Sands"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 1, "summary": "land=Plains; cast: Squadron Hawk, Serra Ascendant, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Serra Ascendant", "Martyr of Sands"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=Plains; cast: Serra Ascendant, Squadron Hawk, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Squadron Hawk", "Martyr of Sands", "Ranger-Captain of Eos"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 3, "summary": "land=Plains; cast: Squadron Hawk, Serra Ascendant, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Serra Ascendant", "Martyr of Sands", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 4, "summary": "land=Plains; cast: Squadron Hawk, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Martyr of Sands"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 5, "summary": "land=Plains; cast: Squadron Hawk, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=Plains; cast: Serra Ascendant, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Martyr of Sands"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 7, "summary": "land=Plains; cast: Serra Ascendant, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Squadron Hawk, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Martyr of Sands"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Squadron Hawk, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Serra Ascendant, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant", "Martyr of Sands"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Serra Ascendant, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant", "Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=Plains; cast: Abiding Grace, Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Martyr of Sands"], "actions": [{ "card": "Abiding Grace" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 13, "summary": "land=Plains; cast: Abiding Grace, Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=Plains; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 15, "summary": "land=Plains; cast: Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 16, "summary": "land=none; cast: Martyr of Sands: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }] },
+    { "index": 17, "summary": "land=none; cast: Martyr of Sands: sac 1 creature, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Martyr of Sands", "Ranger-Captain of Eos"], "actions": [{ "card": "Martyr of Sands", "src_num": 10, "activate": true, "activation_cost": "{1}", "sacout": true, "sac_count": 1 }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 18, "summary": "land=Plains; cast: Squadron Hawk, Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Squadron Hawk"], "cast_order_canonical": ["Squadron Hawk", "Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Squadron Hawk" }] },
+    { "index": 19, "summary": "land=Plains; cast: Squadron Hawk, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 20, "summary": "land=Plains; cast: Serra Ascendant, Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Squadron Hawk"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }] },
+    { "index": 21, "summary": "land=Plains; cast: Squadron Hawk, Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Serra Ascendant"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }] },
+    { "index": 22, "summary": "land=Plains; cast: Serra Ascendant, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 23, "summary": "land=Plains; cast: Squadron Hawk, Serra Ascendant, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Serra Ascendant", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 24, "summary": "land=none; cast: Serra Ascendant, Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant", "Squadron Hawk"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }] },
+    { "index": 25, "summary": "land=none; cast: Squadron Hawk, Serra Ascendant", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Serra Ascendant"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }] },
+    { "index": 26, "summary": "land=none; cast: Serra Ascendant, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Serra Ascendant", "Squadron Hawk"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 27, "summary": "land=none; cast: Squadron Hawk, Serra Ascendant, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Serra Ascendant", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Serra Ascendant"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Serra Ascendant" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 28, "summary": "land=Plains; cast: Abiding Grace, Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Serra Ascendant"], "cast_order_canonical": ["Abiding Grace", "Serra Ascendant"], "actions": [{ "card": "Abiding Grace" }, { "card": "Serra Ascendant" }] },
+    { "index": 29, "summary": "land=Plains; cast: Serra Ascendant, Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Abiding Grace"], "cast_order_canonical": ["Serra Ascendant", "Abiding Grace"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Abiding Grace" }] },
+    { "index": 30, "summary": "land=Plains; cast: Abiding Grace, Serra Ascendant, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Serra Ascendant", "Ranger-Captain of Eos"], "cast_order_canonical": ["Abiding Grace", "Serra Ascendant"], "actions": [{ "card": "Abiding Grace" }, { "card": "Serra Ascendant" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 31, "summary": "land=Plains; cast: Serra Ascendant, Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Abiding Grace", "Ranger-Captain of Eos"], "cast_order_canonical": ["Serra Ascendant", "Abiding Grace"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 32, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 33, "summary": "land=Plains; cast: Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 34, "summary": "land=Plains; cast: Serra Ascendant", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 35, "summary": "land=Plains; cast: Serra Ascendant, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Serra Ascendant", "Ranger-Captain of Eos"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 36, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 37, "summary": "land=none; cast: Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 38, "summary": "land=none; cast: Serra Ascendant", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant"], "actions": [{ "card": "Serra Ascendant" }] },
+    { "index": 39, "summary": "land=none; cast: Serra Ascendant, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Serra Ascendant", "Ranger-Captain of Eos"], "actions": [{ "card": "Serra Ascendant" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 40, "summary": "land=Plains; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 41, "summary": "land=Plains; cast: Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 42, "summary": "land=none; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 43, "summary": "land=none; cast: Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 44, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 45, "summary": "land=Plains; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 46, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 47, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 7, "decision": {
+  "decision_index": 15,
+  "type": "x_value",
+  "source": "Martyr of Sands",
+  "turn": 4,
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 20, "battlefield": [{ "name": "Martyr of Sands", "idx": 5, "num": 10, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 8, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 10, "num": 29, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 9, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Squadron Hawk", "idx": 7, "num": 50, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 42, "name": "Serra Ascendant", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope"], "library_size": 45, "land_drops_left": 0, "floating_mana": {"W": 2} },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "x_kind": "reveal_gain",
+  "life_per_x": 3,
+  "min_x": 0,
+  "max_x": 7,
+  "heuristic_default": 7,
+  "note": "reply how many white cards to reveal for Martyr of Sands (0..7; you gain 3 life per card), or -1 for the default (7)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "sacrifice", "text": "💀 Martyr of Sands: sacrificed Martyr of Sands (gain 21 life)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 41, "battlefield": [{ "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 29, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 45, "land_drops_left": 0, "life_gained_this_turn": 21 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Squadron Hawk (1), Ranger-Captain of Eos (3) — 4 to opponent (17→13)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 41, "battlefield": [{ "name": "Plains", "idx": 4, "num": 17, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 5, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 29, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 45, "land_drops_left": 0, "life_gained_this_turn": 21 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "cast=Mother of Runes", "cast=Squadron Hawk"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Mother of Runes" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 41, "battlefield": [{ "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 7, "num": 19, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 29, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 14, "name": "Mother of Runes", "cost": "{W}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Squadron Hawk, Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Squadron Hawk"], "cast_order_canonical": ["Squadron Hawk", "Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Squadron Hawk" }] },
+    { "index": 1, "summary": "land=none; cast: Squadron Hawk, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Mother of Runes, Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes", "Squadron Hawk"], "cast_order_canonical": ["Mother of Runes", "Squadron Hawk"], "actions": [{ "card": "Mother of Runes" }, { "card": "Squadron Hawk" }] },
+    { "index": 3, "summary": "land=none; cast: Squadron Hawk, Mother of Runes", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Mother of Runes"], "cast_order_canonical": ["Squadron Hawk", "Mother of Runes"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Mother of Runes" }] },
+    { "index": 4, "summary": "land=none; cast: Mother of Runes, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Mother of Runes", "Squadron Hawk"], "actions": [{ "card": "Mother of Runes" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Squadron Hawk, Mother of Runes, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Mother of Runes", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Mother of Runes"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Mother of Runes" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Abiding Grace, Mother of Runes", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace", "Mother of Runes"], "cast_order_canonical": ["Abiding Grace", "Mother of Runes"], "actions": [{ "card": "Abiding Grace" }, { "card": "Mother of Runes" }] },
+    { "index": 7, "summary": "land=none; cast: Mother of Runes, Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes", "Abiding Grace"], "cast_order_canonical": ["Mother of Runes", "Abiding Grace"], "actions": [{ "card": "Mother of Runes" }, { "card": "Abiding Grace" }] },
+    { "index": 8, "summary": "land=none; cast: Abiding Grace, Mother of Runes, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace", "Mother of Runes", "Ranger-Captain of Eos"], "cast_order_canonical": ["Abiding Grace", "Mother of Runes"], "actions": [{ "card": "Abiding Grace" }, { "card": "Mother of Runes" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=none; cast: Mother of Runes, Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes", "Abiding Grace", "Ranger-Captain of Eos"], "cast_order_canonical": ["Mother of Runes", "Abiding Grace"], "actions": [{ "card": "Mother of Runes" }, { "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 10, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 11, "summary": "land=none; cast: Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 13, "summary": "land=none; cast: Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=none; cast: Mother of Runes", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes"], "actions": [{ "card": "Mother of Runes" }] },
+    { "index": 15, "summary": "land=none; cast: Mother of Runes, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Mother of Runes", "Ranger-Captain of Eos"], "actions": [{ "card": "Mother of Runes" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 16, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 41, "battlefield": [{ "name": "Mother of Runes", "idx": 12, "num": 14, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 29, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 13, "num": 52, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Squadron Hawk (1), Ranger-Captain of Eos (3), Serra Ascendant (6), Squadron Hawk (1) — 11 to opponent (13→2)" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 47, "battlefield": [{ "name": "Mother of Runes", "idx": 12, "num": 14, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 18, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 7, "num": 19, "tapped": true, "is_land": true }, { "name": "Plains", "idx": 9, "num": 29, "tapped": true, "is_land": true }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "tapped": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 13, "num": 52, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 44, "land_drops_left": 1, "life_gained_this_turn": 6 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Plains" }],
+  "mdfc_backs": ["Boulderloft Pathway", "Lord of Lineage", "Moonrage Brute", "Slitherbore Pathway", "Soporific Springs", "Turntimber, Serpentine Wood"],
+  "me": { "life": 47, "battlefield": [{ "name": "Mother of Runes", "idx": 12, "num": 14, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Plains", "idx": 4, "num": 17, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 5, "num": 18, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 7, "num": 19, "is_land": true, "taps": "W" }, { "name": "Plains", "idx": 9, "num": 29, "is_land": true, "taps": "W" }, { "name": "Ranger-Captain of Eos", "idx": 8, "num": 38, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Serra Ascendant", "idx": 10, "num": 42, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Squadron Hawk", "idx": 6, "num": 50, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 11, "num": 51, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Squadron Hawk", "idx": 13, "num": 52, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 4, "name": "Abiding Grace", "cost": "{2}{W}", "mv": 3, "kind": "permanent" }, { "num": 28, "name": "Plains", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Squadron Hawk", "cost": "{1}{W}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 54, "name": "Swords to Plowshares", "cost": "{W}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Unexpectedly Absent", "cost": "{X}{W}{W}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Kami of False Hope", "Martyr of Sands"], "library_size": 43, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Plains; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 1, "summary": "land=Plains; cast: Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 2, "summary": "land=Plains; cast: Abiding Grace, Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Squadron Hawk"], "cast_order_canonical": ["Abiding Grace", "Squadron Hawk"], "actions": [{ "card": "Abiding Grace" }, { "card": "Squadron Hawk" }] },
+    { "index": 3, "summary": "land=Plains; cast: Squadron Hawk, Abiding Grace", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Abiding Grace"], "cast_order_canonical": ["Squadron Hawk", "Abiding Grace"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Abiding Grace" }] },
+    { "index": 4, "summary": "land=Plains; cast: Abiding Grace, Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Abiding Grace", "Squadron Hawk", "Ranger-Captain of Eos"], "cast_order_canonical": ["Abiding Grace", "Squadron Hawk"], "actions": [{ "card": "Abiding Grace" }, { "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 5, "summary": "land=Plains; cast: Squadron Hawk, Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Abiding Grace", "Ranger-Captain of Eos"], "cast_order_canonical": ["Squadron Hawk", "Abiding Grace"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Abiding Grace", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace"], "actions": [{ "card": "Abiding Grace" }] },
+    { "index": 7, "summary": "land=none; cast: Abiding Grace, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Abiding Grace", "Ranger-Captain of Eos"], "actions": [{ "card": "Abiding Grace" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 8, "summary": "land=Plains; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 9, "summary": "land=Plains; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 10, "summary": "land=Plains; cast: Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": "Plains", "casts": ["Squadron Hawk", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Ranger-Captain of Eos"], "actions": [{ "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 12, "summary": "land=none; cast: Squadron Hawk", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk"], "actions": [{ "card": "Squadron Hawk" }] },
+    { "index": 13, "summary": "land=none; cast: Squadron Hawk, Ranger-Captain of Eos: sac 1 creature", "declared_order_payability": "not_verified", "land": null, "casts": ["Squadron Hawk", "Ranger-Captain of Eos"], "actions": [{ "card": "Squadron Hawk" }, { "card": "Ranger-Captain of Eos", "src_num": 38, "activate": true, "sacout": true, "sac_count": 1 }] },
+    { "index": 14, "summary": "land=Plains; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Plains", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Squadron Hawk (1), Ranger-Captain of Eos (3), Serra Ascendant (6), Squadron Hawk (1), Mother of Runes (1), Squadron Hawk (1) — 13 to opponent (2→-11)" }
+  ]
+}
