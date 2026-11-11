@@ -49380,6 +49380,8 @@ struct AaWishCensus
     bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
     int  mana = 0;
     int  gain_total = 0;      // read only by the wish rule's =0 path (MTG_AA_WISH_WITCH_WIN=0) and its trace
+    int  gain_storm = 0;      // a held storm lifegain's ONE extra copy (Weather the Storm: +3) -- read only by
+                              // the wish rule's UNTAP_NET test (the USER 2026-11-11, below)
     int  mana_board = 0;      // `mana` before the hand's lands: the battlefield's projected mana (the discard cap)
     int  forest_bonus = 0;    // the best land-Aura bonus on one of our Forests (what an Arbor Elf re-tap adds)
     bool ezuri = false;       // a team pump (Ezuri) held -- read ONLY by the Elvish Harbinger rule's Wincon bucket
@@ -49465,6 +49467,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         roles(pp);
         const int gain = pp.cast_lifegain + pp.sac_outlet_lifegain + pp.etb_modal_lifegain;
         if (gain > 0) { c.lifegain = true; c.gain_total += gain; }
+        if (pp.storm && pp.cast_lifegain > 0) { c.gain_storm += pp.cast_lifegain; }
         if (d->card.IsLand()) { ++c.mana; }
         if ((AaHasColour(pp.produces, Color::Blue) && !pp.mana_per_life_gained)
             || (pp.is_land_aura && AaHasColour(pp.land_aura_produces, Color::Blue))) { c.blue = true; }
@@ -49526,9 +49529,12 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // Untap). The Alchemist taps for X = the life gained; an untap loop that costs >= X makes no mana. Staff of
     // Domination's is {3} + {1} (its own untap) = 4, so with only Brindle Boar's 4 held it is neutral and Untap is
     // still lacking (Galvanic Alchemist's {2}{U} nets +1) -- the Witch's 2026-10-20 "4 life rule" applied to the
-    // Staff. Judged only once a lifegain card is held (before that the Lifegain bucket is what is lacking), and
-    // only when the wishable untapper's own loop DOES net at that life (Weather the Storm's 3 with a held Crab
-    // Umbra: Galvanic's {2}{U} is no better, so Untap stays filled).
+    // Staff. CONFIRMED by the USER 2026-11-11: "I agree that staff is not an untapper when you gain 4 life. In that
+    // situation you would count it just as the wincon and prefer alchemist." Judged only once a lifegain card is held (before that the Lifegain bucket is what is lacking), and
+    // only when the wishable untapper's own loop DOES net at that life. A held STORM lifegain counts one copy
+    // more (it is cast after at least one spell): the USER, 2026-11-11, "Weather is pretty much always okay unless
+    // you are really mana starved. At 5 mana Staff + Weather does the trick" -- the Staff, then Weather at storm 1,
+    // gains 6, so the Staff's 4-mana loop nets +2 and Untap is filled.
     static const bool s_untap_net = EnvOn("MTG_AA_WISH_UNTAP_NET", true);
     int wish_untap_loop = 0;                       // the cheapest wishable Galvanic-style loop; 0 = none offered
     for (const std::string& nm : all)
@@ -49539,8 +49545,8 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         if (wish_untap_loop == 0 || l < wish_untap_loop) { wish_untap_loop = l; }
     }
     const bool untapper_nets = c.untapper
-                            && !(s_untap_net && c.lifegain && c.untap_loop_min >= c.gain_total
-                                 && wish_untap_loop > 0 && wish_untap_loop < c.gain_total);
+                            && !(s_untap_net && c.lifegain && c.untap_loop_min >= c.gain_total + c.gain_storm
+                                 && wish_untap_loop > 0 && wish_untap_loop < c.gain_total + c.gain_storm);
     const bool untap_lacking = !untapper_nets && !witch_untaps;
     const bool win_held      = c.wincon || (witch_win && c.witch);
     const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && win_held;

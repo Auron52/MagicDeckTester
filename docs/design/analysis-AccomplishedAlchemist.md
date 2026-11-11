@@ -1506,7 +1506,7 @@ a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f
 not in the suite, so nothing else could move. Not accepted. Unit: mtg-test 1512 / 1512 (13 new wish cases, also
 green under `MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
-### Other player's reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON, AWAITING THE USER
+### Other player's reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON; UNTAP_NET USER-CONFIRMED, COMBO_FIRST AWAITING THE USER
 
 Another player's viewer reports (NOT the USER's; relayed by the USER), verbatim: "Living Wish suggested getting Arbor Elf instead of a combo piece" (T2: two
 Forests + Wild Growth = 3 projected mana; Accomplished Alchemist and two Staffs of Domination in hand) and, later,
@@ -1530,9 +1530,19 @@ other player gave no reasons, so the readings below are inferred.
   and 16x budget). d0 improves: smoke 6.2950 -> 6.2780, regression 6.3310 -> 6.2830. Strict references 0 drift.
   Both GT tiers accepted with notes. Unit cases: "COMBO FIRST at three mana -- seed 23742 T2" and "a mana-neutral
   Staff loop leaves Untap lacking -- seed 23742 T5". `=0` on either flag restores the prior reading.
-* OPEN for the USER (the rule's owner): these are inferred readings of another player's two reports, generalised -- confirm (a) combo before mana at exactly 3
-  mana in every state, not only with the Alchemist in hand, and (b) the Staff-at-4-life reading of "instead of
-  Galvanic Alchemist".
+* **USER ruling 2026-11-11 on Weather the Storm**, verbatim: "Weather is pretty much always okay unless you are
+  really mana starved. At 5 mana Staff + Weather does the trick." Asked first: "The staff only breaking even is,
+  in particular for when you gain 4 life?" -- yes: with lifegain held, the rule drops the Staff as untapper only at
+  a held total of 4 (Brindle Boar or Trufflesnout alone). The UNTAP_NET test now counts a held storm lifegain one
+  copy more (`gain_storm`; Weather = 6), so Staff + Weather fills Untap on the arithmetic rather than by accident
+  (it already did: Galvanic's 3 could not beat Weather's printed 3). No decision changed.
+* **USER CONFIRMED `MTG_AA_WISH_UNTAP_NET` 2026-11-11**, verbatim: "Plus, no other effect really does better than
+  staff in this case. But yes, I agree that staff is not an untapper when you gain 4 life. In that situation you
+  would count it just as the wincon and prefer alchemist." (Galvanic Alchemist.) Implemented exactly that way: at
+  a held 4 the Staff still fills Wincon/Draw, Untap is lacking, Galvanic is offered.
+* OPEN for the USER (the rule's owner) -- `MTG_AA_WISH_COMBO_FIRST` only: an inferred reading of another player's
+  T2 report, generalised -- confirm combo before mana at exactly 3 mana in every state, not only with the Alchemist in
+  hand.
 
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 

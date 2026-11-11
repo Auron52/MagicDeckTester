@@ -2292,6 +2292,9 @@ TEST_CASE("Wish buckets: a mana-neutral Staff loop leaves Untap lacking -- seed 
     GameState nour = s;
     HandAa(nour, "Nourish");                             // 6 life: the Staff's 4-mana loop nets +2
     ExpectWishAa(nour, { "Scholar of Athreos" });
+    GameState wea = s;                                   // USER 2026-11-11: "At 5 mana Staff + Weather does the
+    HandAa(wea, "Weather the Storm");                    // trick" -- Weather at storm 1 gains 6
+    ExpectWishAa(wea, { "Scholar of Athreos" });
 }
 
 TEST_CASE("Wish buckets: MANA -- < 4 projected mana; hand lands count; Island only without a blue source")
