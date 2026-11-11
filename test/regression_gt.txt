@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b10fd8c94  date 2026-11-11
+# Regression ground truth -- commit e55b07bd6  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-11): E3 rollout game cache ON (USER 2026-11-11), rebased on origin cd0368564: smoke 3 slower/13 faster net -11 game-turns; slower games gods d3 gi19 churn (recovers at 4x/16x), shadowborn2hg d3 gi9 T8->loss churn (recovers to 8), shadowborn d5 gi85 T8->loss churn and better at 4x (7)
@@ -56,9 +56,9 @@ kithkin_smoke_d5_s1001=4.4923/9f8e611919545b90
 antilife_smoke_d0_s1001=4.9000/607c0e5d81f6a61c
 antilife_smoke_d3_s1001=4.0533/27f0d4944fbefc06
 antilife_smoke_d5_s1001=4.2154/222f61fa58175c02
-hinata_smoke_d0_s1001=6.7840/83750f1f1c650711
-hinata_smoke_d3_s1001=6.0200/877d5c6c8b68f282
-hinata_smoke_d5_s1001=5.7200/588eb28f5ebec260
+hinata_smoke_d0_s1001=6.7640/918fc745ba7171d2
+hinata_smoke_d3_s1001=5.5600/9ac1c7312877fb4f
+hinata_smoke_d5_s1001=5.4600/a21600be8dbe20f8
 cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
 cyclone_smoke_d5_s1001=4.7300/6d785912b84076d6
@@ -115,7 +115,7 @@ melira_smoke_d5_s1001=4.6200/0bb099f0f0ccbe82
 angels_smoke_d0_s1001=5.2600/7b9b092ba94cc19d
 angels_smoke_d3_s1001=4.5333/d2f8e60259be3e61
 angels_smoke_d5_s1001=4.6154/db3aaecbcbf4a950
-hinata2hg_smoke_d5_s1001=5.8000/fcaae4fe8ec6977d
+hinata2hg_smoke_d5_s1001=5.2800/b529340658beef94
 antilife2hg_smoke_d5_s1001=3.9500/cca6a4dbd63380de
 minotaur2hg_smoke_d5_s1001=5.3300/e4cd44da8730235a
 goblins2hg_smoke_d5_s1001=4.0133/835d639e125e00ad
@@ -262,8 +262,8 @@ giants_regression_d3_s30001=6.0000/297458e077f74659
 giants_regression_d5_s30001=6.0000/bd7f00c0ffc0b7e9
 goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
-hinata_regression_d3_s30001=5.4000/dc809bb9e08d2f85
-hinata_regression_d5_s30001=5.4000/db27f852782561fd
+hinata_regression_d3_s30001=5.2500/ce9c505b3c5b7b98
+hinata_regression_d5_s30001=5.2500/ce9c505b3c5b7b98
 jumbo_regression_d3_s30001=4.2500/093712beec5968b7
 jumbo_regression_d5_s30001=4.2500/4e11ac11d1db0ede
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
@@ -334,10 +334,10 @@ antilife_regression_d0_s2002=5.0120/5be41ad99b2c4002
 antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/56d7579d625f44e3
 antilife_regression_d5_s3003=4.1960/1fc0e711597a121e
-hinata_regression_d0_s2002=6.8480/d6c43486796d220d
-hinata_regression_d3_s2002=5.6933/03ce433095a5465b
-hinata_regression_d5_s2002=5.5800/8771716c5f993495
-hinata_regression_d5_s3003=5.6533/e4f5eeabe18a73e3
+hinata_regression_d0_s2002=6.8030/67ff269c897fb564
+hinata_regression_d3_s2002=5.5867/498e330ff6a1f50f
+hinata_regression_d5_s2002=5.4133/94774e75d5454d3c
+hinata_regression_d5_s3003=5.7067/6c661e03aa9656fd
 gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
 gods_regression_d3_s2002=5.4200/f78b14b908a115f4
 gods_regression_d5_s2002=5.1800/f7d03bd076c8d626
@@ -416,7 +416,7 @@ angels_regression_d0_s2002=5.2530/c75747feb668552f
 angels_regression_d3_s2002=4.6600/fbeb83c79a683f84
 angels_regression_d5_s2002=4.6040/22c5f344d4cc2621
 angels_regression_d5_s3003=4.6200/634ec04e8b45e88c
-hinata2hg_regression_d5_s2002=5.5467/d327e5311c489d82
+hinata2hg_regression_d5_s2002=5.3867/d12007d5554d80c3
 antilife2hg_regression_d5_s2002=4.2667/95674c7904df2834
 minotaur2hg_regression_d5_s2002=5.3733/adb92c8ebcfdf734
 goblins2hg_regression_d5_s2002=4.0267/7dc943690102b7e8
