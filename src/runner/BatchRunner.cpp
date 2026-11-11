@@ -828,6 +828,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
     if (jspec.contains("priced_unit_ns")) { j.arm.priced_unit_ns = jspec["priced_unit_ns"].get<int>(); }
     if (jspec.contains("decision_priced_gate")) { j.arm.decision_priced_gate = jspec["decision_priced_gate"].get<bool>() ? 1 : 0; }
     if (jspec.contains("bp_priced_stop")) { j.arm.bp_priced_stop = jspec["bp_priced_stop"].get<bool>() ? 1 : 0; }
+    if (jspec.contains("read_guard_kind")) { j.arm.read_guard_kind = jspec["read_guard_kind"].get<bool>() ? 1 : 0; }
     if (jspec.contains("sac_dup_fold")) { j.arm.sac_dup_fold = jspec["sac_dup_fold"].get<bool>() ? 1 : 0; }
     if (jspec.contains("dup_action_fold")) { j.arm.dup_action_fold = jspec["dup_action_fold"].get<bool>() ? 1 : 0; }
     if (jspec.contains("two_stage_fold_prefix"))

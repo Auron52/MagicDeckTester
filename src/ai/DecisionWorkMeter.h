@@ -30,7 +30,12 @@
 // that read one depends on budget STATE even when it charged nothing, so a hit is exact only where the same reads
 // would answer the same way (cachecharge::Cost::budget_read; MTG_CACHE_READ_GUARD). budgetbind::t_binds alone cannot
 // see this: it counts only the reads that answered true, so an entry stored before a cut looks state-free.
-namespace budgetbind { inline thread_local unsigned long long t_reads = 0; }
+//
+// t_preads: the subset of t_reads that were PRICED-ceiling reads (a decisionwork::PricedExceeded poll). A computation
+// whose every read was a priced read (t_reads and t_preads moved by the same amount) depends only on the PRICED
+// ceiling, so its hit is exact wherever that ceiling has not tripped -- whatever the SearchBudget it ran under says
+// (cachecharge::Cost::budget_read_sb, cachecharge::ReadCutNow; MTG_CACHE_READ_GUARD_KIND). Hydras P4 2026-11-11.
+namespace budgetbind { inline thread_local unsigned long long t_reads = 0, t_preads = 0; }
 namespace decisionwork
 {
 inline thread_local long long t_used  = 0;
@@ -60,7 +65,9 @@ inline bool PricedExceededQuiet() { return t_pr_limit > 0 && workctr::t_priced -
 // decision whose ceiling had tripped, where a recompute stops at its first subset and returns nothing.
 // MTG_BP_ENUM_VERIFY=3 on extraturns_regression_d3/d5_s2002: CONTENT-DIFF served=338 fresh=0, ctx dec_ovr+,
 // FP-EQUAL -- so a game's play followed whether the plan pool still held the entry (pooled-run residency).
-inline bool PricedExceeded() { ++budgetbind::t_reads; return PricedExceededQuiet(); }
+// It counts as a PRICED read (t_preads) either way: an entry whose only reads were this poll is refused once the
+// priced ceiling has tripped (cachecharge::ReadCutNow), which is exactly the context the disarmed derivation missed.
+inline bool PricedExceeded() { ++budgetbind::t_reads; ++budgetbind::t_preads; return PricedExceededQuiet(); }
 // The PRICED START GATE (FullSearchLine's ladder): decline to START a pass whose projected priced cost does not fit
 // the decision's remaining priced allowance. Per-job arm "decision_priced_gate" (ValueArm) else MTG_DECISION_PRICED_GATE
 // (default OFF since 2026-11-03: it projects the next pass as prev x prev/prev2, which overshoots when the growth ratio
