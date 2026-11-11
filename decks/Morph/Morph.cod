@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Blistering Firecat"/>
+        <card number="2" name="Hystrodon"/>
+        <card number="2" name="Vines of Vastwood"/>
+        <card number="4" name="Den Protector"/>
+        <card number="3" name="Temur Battle Rage"/>
+        <card number="4" name="Berserk"/>
+        <card number="4" name="Wild Defiance"/>
+        <card number="4" name="Birds of Paradise"/>
+        <card number="4" name="Gruul Turf"/>
+        <card number="4" name="Might of Old Krosa"/>
+        <card number="7" name="Forest"/>
+        <card number="1" name="Fire-Lit Thicket"/>
+        <card number="4" name="Stomping Ground"/>
+        <card number="1" name="Rootbound Crag"/>
+        <card number="4" name="Ignoble Hierarch"/>
+        <card number="1" name="Spellskite"/>
+        <card number="1" name="Mountain"/>
+        <card number="2" name="Wooded Foothills"/>
+        <card number="4" name="Legion Leadership"/>
+    </zone>
+</cockatrice_deck>
