@@ -117004,12 +117004,24 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
             // built by -- ranked, and marked under drop modes 2/3. Re-deriving raw would have made
             // every marked list read as a CONTENT-DIFF, i.e. the checker reporting its own omission
             // as an engine bug. count_stats=false: the checker's work is not play.
-            if (BpEnumVerifyOn() && !t_bp_enum_verifying)
+            // An entry the hit test below REFUSES on MTG_CACHE_READ_GUARD (it read a budget predicate and the
+            // context budgets now read "cut") is never served -- the lookup recomputes -- so comparing it with a
+            // fresh, cut derivation reported a CONTENT-DIFF the game never sees (2026-11-11, item 5i: all 18
+            // remaining Extra Turns d3 diffs were stored_read=1 cut_now=1, served=338 fresh=0).
+            if (BpEnumVerifyOn() && !t_bp_enum_verifying
+                && !(it->second.cost.budget_read && cachecharge::ContextCutNow()))
             {
                 t_bp_enum_verifying = true;
                 BpChannels vch; vch.Save();   // derive exactly as the store path does (MTG_BP_DERIVE_ISOLATE)
+                // Re-derived MUTED (workctr::t_mute), exactly as play recomputes an entry the priced ledger's
+                // shadow serves but the real cache no longer holds (pledger): the work counts nothing, so the
+                // priced ceiling cannot trip inside it. Unmuted, the check's own work pushed the ceiling over
+                // (the verify run then played a different game) and a 1,089-plan re-derivation was cut to 0,
+                // a CONTENT-DIFF play never sees (2026-11-11, item 5i).
+                ++workctr::t_mute;
                 std::vector<TurnSolver::Plan> fresh =
                     BpDeriveContinuationList(state, is_pre_combat, /*count_stats=*/false);
+                --workctr::t_mute;
                 vch.Restore();
                 t_bp_enum_verifying = false;
                 const std::vector<TurnSolver::Plan> served = it->second.View().Materialised();   // M1
@@ -117101,11 +117113,15 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                     {
                         std::fprintf(stderr,
                                      "[bp-enum-verify] CONTENT-DIFF turn=%d served=%zu fresh=%zu"
-                                     " casts=%d site=%s\n",
+                                     " casts=%d site=%s loamprobe=%d apd=%d probe_depth=%d"
+                                     " stored_read=%d storable=%d cut_now=%d\n",
                                      state.turn_number, served.size(), fresh.size(),
                                      g_bp_plan_casts
                                          ? static_cast<int>(g_bp_plan_casts->size()) : -1,
-                                     g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)");
+                                     g_bp_site_def ? g_bp_site_def->card.m_name.c_str() : "(none)",
+                                     g_loam_probe_offer != nullptr ? 1 : 0, g_apd_depth, g_loam_probe_depth,
+                                     it->second.cost.budget_read ? 1 : 0, it->second.cost.storable ? 1 : 0,
+                                     cachecharge::ContextCutNow() ? 1 : 0);
                         if (pccv::On())   // MTG_PLAN_CACHE_COST_VERIFY records the store-time context
                         {
                             const std::uint64_t sc = it->second.cost.ctx, hc = PlanCacheCtxBits();
@@ -117154,7 +117170,8 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                                 // Scrying Sheets 1, 2, 3 or 4"), not the cache serving a wrong list.
                                 s += "[src=" + std::to_string(a.sac_source_id)
                                    + ",hand=" + std::to_string(a.hand_index)
-                                   + ",ord=" + std::to_string(a.equiv_ord) + "]";
+                                   + ",ord=" + std::to_string(a.equiv_ord)
+                                   + (static_cast<const std::string&>(a.tutor_target).empty() ? std::string() : ",tt=" + static_cast<const std::string&>(a.tutor_target)) + "]";
                             }
                             return s.empty() ? std::string("(empty)") : s;
                         };

@@ -54,7 +54,13 @@ inline thread_local int       t_charge_acc = 0;
 inline thread_local long long t_pr_start = 0;
 inline thread_local long long t_pr_limit = 0;   // 0 == disarmed
 inline bool PricedExceededQuiet() { return t_pr_limit > 0 && workctr::t_priced - t_pr_start >= t_pr_limit; }
-inline bool PricedExceeded() { if (t_pr_limit > 0) { ++budgetbind::t_reads; } return PricedExceededQuiet(); }
+// THE READ COUNTS WHETHER OR NOT THE CEILING IS ARMED (2026-11-11, mana-clean item 5i). The answer depends on
+// the context's ceiling, which no plan-cache key folds: a breakpoint continuation derived where the ceiling was
+// DISARMED (the executor, a d0 runner) used to record no read, so MTG_CACHE_READ_GUARD let it be served inside a
+// decision whose ceiling had tripped, where a recompute stops at its first subset and returns nothing.
+// MTG_BP_ENUM_VERIFY=3 on extraturns_regression_d3/d5_s2002: CONTENT-DIFF served=338 fresh=0, ctx dec_ovr+,
+// FP-EQUAL -- so a game's play followed whether the plan pool still held the entry (pooled-run residency).
+inline bool PricedExceeded() { ++budgetbind::t_reads; return PricedExceededQuiet(); }
 // The PRICED START GATE (FullSearchLine's ladder): decline to START a pass whose projected priced cost does not fit
 // the decision's remaining priced allowance. Per-job arm "decision_priced_gate" (ValueArm) else MTG_DECISION_PRICED_GATE
 // (default OFF since 2026-11-03: it projects the next pass as prev x prev/prev2, which overshoots when the growth ratio
