@@ -1,0 +1,44 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 15,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "_comment": "MTG_MARTYR_MAIN_SPLIT: martyr_loop_two_martyrs_serra.json's board under the split. Both Martyr casts and both sacrifices stay in main 1 while life is under Serra Ascendant's 30 (the gate is re-read at every collect, so it holds through the loop: 15 -> 24 -> 30). BINDING: win T4, life 36.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

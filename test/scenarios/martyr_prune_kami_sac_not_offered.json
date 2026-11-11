@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "_comment": "MTG_MARTYR_PRUNE_SACS (default ON; USER 2026-11-10: 'We can heuristically prune the kami and farm animals sacrifice abilities'): with Abiding Grace out the self-only gate would OFFER Kami of False Hope's sacrifice (its MV-1 return pays -- martyr_kami_grace_lethal_attacks.json), and the provider's CollectedActionAllowed refuses it for the autonomous search. Human play keeps it (martyr_kami_human_sac_prevents.json). The positive control is martyr_prune_kami_sac_offered_off.json.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Abiding Grace"
+    },
+    {
+      "name": "Kami of False Hope",
+      "sick": false
+    }
+  ],
+  "hand": [],
+  "validate_line": "sacout=Kami of False Hope",
+  "expect_verdict": "legal_not_enumerated"
+}

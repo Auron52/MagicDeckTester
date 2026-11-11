@@ -1,0 +1,34 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1"
+  },
+  "_comment": "MTG_MARTYR_MAIN_SPLIT: a Squadron Hawk is left in the library (library_top), so main 1 keeps the Hawk cast -- the 'with targets' half of the USER's Hawk split.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [
+    "Squadron Hawk"
+  ],
+  "library_top": [
+    "Squadron Hawk"
+  ],
+  "validate_line": "cast=Squadron Hawk",
+  "expect_verdict": "accept"
+}

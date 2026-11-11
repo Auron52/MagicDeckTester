@@ -57939,6 +57939,117 @@ bool MartyrLifegainProvider::OffersJitteGainMode(const GameState& s) const
     return heurarm::Flag(heurarm::MARTYR_JITTE_GAIN, on) && s.deck_reads_life_total;
 }
 
+// ---- MartyrLifegainProvider: the USER's main-phase rulings of 2026-11-10 (CollectedActionAllowed) ----------
+//
+// (1) THE KAMI / FARM ANIMALS PRUNE (MTG_MARTYR_PRUNE_SACS, heurarm MARTYR_PRUNE_SACS; DEFAULT ON). USER
+//     2026-11-10: "We can heuristically prune the kami and farm animals sacrifice abilities. Only Martyr is a
+//     bit questionable and we might want to test that once we are done." Kami of False Hope's "Sacrifice this
+//     creature: Prevent all combat damage that would be dealt this turn" (sac_outlet_prevent_combat_damage)
+//     and Curious Farm Animals' "{2}, Sacrifice this creature: Destroy up to one target artifact or
+//     enchantment" (sac_outlet_destroy_artifact_enchantment_optional) are never offered to the autonomous
+//     search, in either main. A provider prune of options (heuristic: the bodies' deaths do pay -- Grace's
+//     MV-1 return, the Farm's 3 life -- so this is a judgement the USER made, not a dominance proof).
+//     Human play keeps both (CollectActions skips this hook under HumanPlayActive()).
+//
+// (2) THE MAIN SPLIT (MTG_MARTYR_MAIN_SPLIT, heurarm MARTYR_MAIN_SPLIT; DEFAULT OFF -- an EXPERIMENT, adoption
+//     is the USER's). USER 2026-11-10: "perhaps we should move almost everything to main 2 instead. So for
+//     example, we could have only have Squadron Hawk and Ranger of Eos, (Cards that add more white in hand) in
+//     main 1. Martyr and Martyr sacrifice would go in main 1 if we need the lifegain to pump Serra and the
+//     beginning of Main 2 otherwise." and "ideally we would also split Squadron Hawk with targets which should
+//     be main 1 vs Squadron Hawk without targets which should be main 2." With the lever ON the deck plays a
+//     full searched second main (GoldFishRunner::DeckUsesSecondMain, the SAME reader) and MAIN 1 admits:
+//       * land plays;
+//       * an ETB "tutor creatures to hand" cast (Squadron Hawk, Ranger of Eos; Ranger-Captain of Eos behind
+//         MTG_MARTYR_SPLIT_CAPTAIN_M1, default ON within the split) only while a LEGAL TARGET is left in the
+//         library -- the Hawk "with targets" split. The library's CONTENTS are the decklist minus the known
+//         zones, never its order, so this reads nothing hidden;
+//       * Martyr of Sands' cast (any route: hand or Lurrus) and its sacrifice only while the gain can pump
+//         Serra Ascendant THIS combat: we control a Serra (life_threshold_pump_life) that can attack now and
+//         our life is below its threshold;
+//       * every activation other than Martyr's (equips, Jitte, Speaker's Angel, Clue) exactly as before.
+//     Every other cast (hand and graveyard) is refused in main 1 and offered in main 2, where nothing is
+//     restricted beyond (1). A RESTRICTION, never a pick: what survives is searched (CLAUDE.md NO GREEDY).
+namespace
+{
+bool MartyrPruneSacsOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_PRUNE_SACS", true);   // DEFAULT ON (USER-approved 2026-11-10); =0 restores
+    return heurarm::Flag(heurarm::MARTYR_PRUNE_SACS, on);
+}
+
+bool MartyrSplitCaptainM1On()
+{
+    static const bool on = EnvOn("MTG_MARTYR_SPLIT_CAPTAIN_M1", true);   // DEFAULT ON within the split; =0 -> main 2
+    return heurarm::Flag(heurarm::MARTYR_SPLIT_CAPTAIN_M1, on);
+}
+
+// The ETB creature tutor-to-hand shape (Squadron Hawk, Ranger of Eos, Ranger-Captain of Eos) with a legal
+// target still in the library. The filter is the resolver's own conjunct (TutorNumericFilterOk: Ranger's MV <= 1,
+// Hawk's name) on top of the creature type every one of them asks for.
+bool MartyrFetcherLive(const GameState& s, const CardDefinition& d)
+{
+    const CardParams& pp = d.params;
+    if (!d.card.IsCreature() || !pp.tutor_to_hand || pp.wish_from_sideboard) { return false; }
+    if (std::find(pp.tutor_types.begin(), pp.tutor_types.end(), "Creature") == pp.tutor_types.end()) { return false; }
+    if (pp.etb_tutor_hand_count <= 1 && !MartyrSplitCaptainM1On()) { return false; }   // Ranger-Captain's single fetch
+    for (const Card& c : s.players[static_cast<std::size_t>(s.active_player_index)].library)
+    {
+        const CardDefinition* ld = CardDatabase::Instance().LookupCached(c);
+        if (ld != nullptr && ld->card.IsCreature() && TutorNumericFilterOk(ld->card, pp)) { return true; }
+    }
+    return false;
+}
+
+// Martyr's gain pumps Serra Ascendant THIS combat: an own Serra that can attack now, with life under its threshold.
+bool MartyrGainPumpsSerra(const GameState& s)
+{
+    const int me = s.active_player_index;
+    const int life = s.players[static_cast<std::size_t>(me)].life;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.life_threshold_pump_life <= 0 || life >= d->params.life_threshold_pump_life) { continue; }
+        if (CanAttackFull(p, s.battlefield, me)) { return true; }
+    }
+    return false;
+}
+
+bool IsMartyrRevealOutlet(const CardDefinition* d)
+{
+    return d != nullptr && d->params.sac_creature_outlet && d->params.sac_outlet_lifegain > 0
+        && !d->params.sac_outlet_lifegain_per_revealed_color.empty();
+}
+}   // namespace
+
+bool MartyrMainSplitOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_MAIN_SPLIT", false);   // DEFAULT OFF (experiment; the USER decides)
+    return heurarm::Flag(heurarm::MARTYR_MAIN_SPLIT, on);
+}
+
+bool MartyrLifegainProvider::RestrictsCollectedActions() const
+{
+    return MartyrPruneSacsOn() || MartyrMainSplitOn();
+}
+
+bool MartyrLifegainProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    const bool cast = a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard;
+    const bool sac  = a.kind == Action::Kind::SacCreatureOutlet;
+    if (!cast && !sac) { return true; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+    if (d == nullptr) { return true; }
+    if (sac && MartyrPruneSacsOn()
+        && (d->params.sac_outlet_prevent_combat_damage || d->params.sac_outlet_destroy_artifact_enchantment_optional))
+    { return false; }
+    if (!is_pre_combat || !MartyrMainSplitOn()) { return true; }
+    // MAIN 1 under the split.
+    if (IsMartyrRevealOutlet(d)) { return MartyrGainPumpsSerra(s); }   // Martyr's cast AND its sacrifice
+    if (sac) { return true; }                                          // every other outlet: as before
+    return MartyrFetcherLive(s, *d);
+}
+
 // ---- Path to Exile: the opponent-target prune (OffersRemovalCast) ------------------------------
 //
 // Path to Exile: "Exile target creature. Its controller may search their library for a basic land

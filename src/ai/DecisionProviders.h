@@ -2364,7 +2364,22 @@ public:
     // OFF pending the USER, since it relaxes the 2026-08-14 "+2/+2 only" doctrine for this deck).
     // Opens the gain mode ALONE while the deck reads its life total. DecisionProviders.cpp.
     bool OffersJitteGainMode(const GameState& s) const override;
+    // THE USER'S MAIN-PHASE RULINGS OF 2026-11-10, as a provider RESTRICTION of the collected options in
+    // either main (applied at CollectActions' tail: search, rollout, d0 runner and executor alike; human
+    // play keeps the full set). Two levers, one hook. DecisionProviders.cpp has the rules and the record.
+    //   MTG_MARTYR_PRUNE_SACS (heurarm MARTYR_PRUNE_SACS; DEFAULT ON, USER-approved): never offer Kami of
+    //     False Hope's or Curious Farm Animals' self-sacrifice.
+    //   MTG_MARTYR_MAIN_SPLIT (heurarm MARTYR_MAIN_SPLIT; DEFAULT OFF, an EXPERIMENT the USER decides):
+    //     main 1 keeps only the "white cards to hand" fetchers and the Serra-pumping Martyr; every other
+    //     cast moves to the full searched second main GoldFishRunner::DeckUsesSecondMain opens for it.
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
 };
+
+// MTG_MARTYR_MAIN_SPLIT's ONE reader (env default OFF + the heurarm slot), shared by the provider's main-1
+// restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one
+// half would refuse the casts in main 1 with no second main to catch them -- DELETING them, not moving them.
+bool MartyrMainSplitOn();
 
 // The new Jumbo Cactuar and Surrak mechanics identify this deck without
 // inheriting another archetype's judgement hooks.

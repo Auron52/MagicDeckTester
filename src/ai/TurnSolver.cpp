@@ -85510,6 +85510,22 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // RIGHT AFTER MARTYR'S OWN CAST (apply_continuation_plan and the executor's continuation sites run a
     // continuation's position-0 outlets before its casts). A continuation's later positions run trailing,
     // in both worlds (only the top-level section counts watcher casts).
+    // UNPINNED, INSIDE A BREAKPOINT CONTINUATION TOO (MTG_REVEAL_CONT_PRECAST, heurarm REVEAL_CONT_PRECAST; default
+    // ON): ONE extra position per outlet there, position 0 -- before the continuation's casts. A continuation's
+    // later positions run trailing in both worlds (only the top-level section counts watcher casts; the pinned
+    // branch's note), so {trailing, 0} is the whole menu a continuation can express. It is what the Martyr LOOP
+    // needs: cast Martyr (a site-9 breakpoint) -> its continuation sacrifices it FIRST, revealing the second
+    // Martyr still in hand -> casts that one (another breakpoint) -> sacrifices it. With the trailing order alone
+    // the continuation's own white casts always left the hand before the reveal, so "cast, sacrifice, cast,
+    // sacrifice" (+15 from two Martyrs and two other white cards) lost to "cast, cast, sacrifice twice" (+12) at
+    // every budget (scenario martyr_loop_two_martyrs_serra; d8 / budget 0 found no kill before this). The
+    // pre-run is already lockstep: ApplyPlanDirect's apply_continuation_plan and the executor's
+    // exec_cont_reveal_precast run a continuation's position-0 outlets before its casts for ANY provider (they
+    // key on the action's chosen_x, not on the pin), and the trailing passes skip an outlet already spent.
+    // Adds searched lines only (the trailing plan stays); an unbranched canon continuation (cont_canon) applies
+    // its casts alone in both worlds and is never twinned.
+    static const bool s_cont_precast_env = EnvOn("MTG_REVEAL_CONT_PRECAST", true);   // DEFAULT ON; =0 -> trailing only
+    const bool cont_precast = cont_axes_only && heurarm::Flag(heurarm::REVEAL_CONT_PRECAST, s_cont_precast_env);
     if (!HumanPlayActive() && ResolveProvider(state).RevealOutletPinned())
     {
         const int me = state.active_player_index;
@@ -85605,7 +85621,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             plan_tr.clear();
         }
     }
-    else if (!HumanPlayActive() && !cont_axes_only && !t_rollout_narrow && !idle_pass)
+    else if (!HumanPlayActive() && (!cont_axes_only || cont_precast) && !t_rollout_narrow && !idle_pass)
     {
         const int me = state.active_player_index;
         bool board_has_outlet = false;
@@ -85623,6 +85639,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 const TurnSolver::Plan& p = all[i];
                 if (p.bp_choice >= 0) { continue; }   // a breakpoint rank variant: its base is twinned
+                if (cont_precast && p.cont_canon) { continue; }   // casts only, in both worlds
                 std::vector<std::size_t> outs;
                 std::vector<std::string> cols;
                 for (std::size_t j = 0; j < p.actions.size(); ++j)
@@ -85647,7 +85664,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     for (const std::string& c : cols)
                     { if (CardHasColorNamed(d->card, c)) { counted_nonwatcher = true; break; } }
                 }
-                const int last = counted_nonwatcher ? watchers : watchers - 1;
+                // In a continuation only position 0 exists (code 1), and it differs from trailing only when
+                // the continuation casts a counted card (a watcher, or a hand card of the outlet's colour).
+                const int last = cont_precast ? ((watchers > 0 || counted_nonwatcher) ? 0 : -1)
+                                              : (counted_nonwatcher ? watchers : watchers - 1);
                 if (last < 0) { continue; }
                 // Per outlet a code in 0..last+1 (0 = trailing, k+1 = position k); rank for the
                 // same-source fold puts trailing LAST (it is the latest point).

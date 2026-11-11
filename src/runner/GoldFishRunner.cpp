@@ -148,6 +148,15 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         static const bool s_m2_devour = EnvOn("MTG_FUNGUS_M2_DEVOUR", true);
         if (heurarm::Flag(heurarm::FUNGUS_M2_DEVOUR, s_m2_devour) && def->params.devour > 0)
         { return true; }
+        // MARTYR LIFEGAIN'S MAIN SPLIT (MTG_MARTYR_MAIN_SPLIT, DEFAULT OFF -- an experiment, the USER decides;
+        // USER 2026-11-10: "perhaps we should move almost everything to main 2 instead"). Keyed on Martyr of
+        // Sands' reveal-lifegain param and the deck's provider, and read through MartyrMainSplitOn() -- the SAME
+        // reader (env + heurarm slot) as MartyrLifegainProvider::CollectedActionAllowed, which refuses every
+        // other cast in main 1: the Fungus rule above, one half alone deletes the casts instead of moving them.
+        // Provider-scoped so LifegainHeliodCombo (Martyr too, no split hook) never gains an unrestricted main 2.
+        if (!def->params.sac_outlet_lifegain_per_revealed_color.empty() && MartyrMainSplitOn()
+            && dynamic_cast<const MartyrLifegainProvider*>(&SelectDecisionProvider(deck)) != nullptr)
+        { return true; }
         // MTG_AL_SINGLE_MAIN=1: measurement lever (2026-08-21, USER: "skipping main 2 is not
         // terrible as long as it doesn't cause anything to regress") -- drop the lifegain_to_loss
         // trigger so the deck plays a single main, the A/B arm against the enforced m1/m2 split

@@ -1,0 +1,38 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 21,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "_comment": "Martyr Lifegain (2026-11-11), the Martyr loop with ONE Martyr: cast Martyr of Sands and sacrifice it in the SAME main. Resumed in main 1 of T4 (drop used), 2 Plains, Serra Ascendant (not sick); hand Martyr + three Ranger of Eos (white, uncastable). Life 21, opponent 6. Cast Martyr ({W}) -- a site-9 breakpoint -- then its continuation sacrifices it ({1}) revealing the three Rangers: +9 -> 30, Serra 6/6 lifelink swings for 6. BINDING: win T4, life 36 = 30 + 6. Filler Emrakul (colourless, uncastable): a drawn card can neither be played nor revealed.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36,
+  "expect_graveyard_contains": [
+    "Martyr of Sands"
+  ]
+}

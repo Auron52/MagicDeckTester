@@ -1,0 +1,31 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_MARTYR_MAIN_SPLIT": "1"
+  },
+  "_comment": "MTG_MARTYR_MAIN_SPLIT (USER 2026-11-10: 'split Squadron Hawk with targets which should be main 1 vs Squadron Hawk without targets which should be main 2'): no Squadron Hawk left in the library (filler Emrakul), so main 1 does not enumerate the Hawk cast. The positive control (a Hawk on the library top) is martyr_split_hawk_target_main1.json.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [
+    "Squadron Hawk"
+  ],
+  "validate_line": "cast=Squadron Hawk",
+  "expect_verdict": "legal_not_enumerated"
+}

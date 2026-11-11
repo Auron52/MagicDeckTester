@@ -1,0 +1,41 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 15,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "_comment": "Martyr Lifegain (2026-11-11), the Martyr LOOP with TWO Martyrs (USER 2026-11-10: 'The martyrs would be played and activations would happen immediately after in a loop if you had multiples. (because playing them all first is ineffecient)'). Resumed in main 1 of T4 (drop used), 4 Plains, Serra Ascendant (not sick); hand two Martyr of Sands + two Ranger of Eos. Life 15, opponent 6. The only kill: cast Martyr A, sacrifice it revealing Martyr B + both Rangers (+9 -> 24), cast B, sacrifice it revealing the Rangers (+6 -> 30): Serra 6/6 lifelink. Casting both first reveals 2 + 2 (+12 -> 27), no kill. Needs the continuation's position-0 reveal (TurnSolver AppendSubdecisionAxes, MTG_REVEAL_CONT_PRECAST): before it, no kill at d8 / budget 0. BINDING: win T4, life 36, both Martyrs sacrificed.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "expect_win_turn": 4,
+  "expect_active_life": 36
+}

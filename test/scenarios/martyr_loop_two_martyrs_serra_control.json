@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Martyr Lifegain/Martyr Lifegain.cod",
+  "env": {
+    "MTG_REVEAL_CONT_PRECAST": "0"
+  },
+  "turn": 4,
+  "on_the_play": true,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "active_life": 15,
+  "opponent_life": 6,
+  "library_filler": "Emrakul, the Aeons Torn",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 200,
+  "max_turns": 4,
+  "_comment": "NEGATIVE CONTROL for martyr_loop_two_martyrs_serra.json: the same board with MTG_REVEAL_CONT_PRECAST=0 (a breakpoint continuation's reveal outlets run trailing, after its casts) has NO T4 kill -- the best is cast, cast, sacrifice twice (+12 -> 27). Pins that the continuation's position-0 twin is what finds the loop.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Serra Ascendant",
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Martyr of Sands",
+    "Martyr of Sands",
+    "Ranger of Eos",
+    "Ranger of Eos"
+  ],
+  "expect_no_win": true
+}
