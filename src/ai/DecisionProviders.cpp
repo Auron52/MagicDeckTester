@@ -8716,6 +8716,56 @@ bool MirrorwingProvider::ShouldAttackWith(const GameState& s, const Permanent& p
     return ExaltedAwareShouldAttack(s, p);
 }
 
+// ---- MorphProvider ---------------------------------------------------------
+// The exalted-aware hold (4x Ignoble Hierarch), same rule and switch as Mirrorwing / Anti-Lifegain.
+bool MorphProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
+    if (!enabled) { return true; }
+    return ExaltedAwareShouldAttack(s, p);
+}
+
+// CAST ORDER AS A SOUND DOMINANCE FOLD (USER-OWNED -- reported, not adopted silently). Tiers on top of
+// the generic rank (creatures 10, other noncreature 20, ...), applied to the trick sets too
+// (OrderOpaqueCastsByRank), each tier argued, not guessed:
+//   (a) permanents BEFORE any targeting spell: Wild Defiance only sees targetings that happen while it
+//       is on the battlefield, and a creature cast later is not there to be pumped -- casting either
+//       first never loses a trigger or a target (payability is left to the shared payable-order ladder).
+//       Generic already ranks creatures 10 and Wild Defiance 20; every trick is moved to 21+.
+//   (b) ADDITIVE pumps (21: Might, Vines, any flat/counter trick) BEFORE power doublers (22): on one
+//       target with power P >= 0 and a flat k >= 0 (a Wild Defiance trigger included), pump-then-double
+//       is 2(P+k) >= 2P + k; on different targets they commute. A doubler's OWN targeting trigger lands
+//       before it doubles in both orders.
+//   (c) doublers commute with each other (P -> 2P -> 4P either way) and with double strike, a damage-time
+//       multiplier (Temur Battle Rage is position-free, so it shares the doubler tier for determinism).
+// Additive pumps commute among themselves (a sum). Nothing in these cards has an order-dependent
+// cross-turn effect (Berserk's destroy depends on its TARGET, not its position).
+// INT-2 EXCLUSION HOOK: a Den Protector turned face up can regrow a pump cast EARLIER in the turn, so a
+// face-up flip's position must stay SEARCHED -- a flip is an activation, not a cast, and must never be
+// given a rank here; if it is ever modelled as a cast, return the generic rank for it.
+int MorphProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    const CardParams& p = def.params;
+    if (p.solo_target_trick)
+    { return (p.trick_double_power || p.grants_temp_double_strike) ? 22 : 21; }
+    const int r = GenericProvider::CastOrderRank(s, def);
+    if (p.spell_target_watch_pump_power != 0 || p.spell_target_watch_pump_tough != 0)
+    { return std::min(r, 20); }
+    return r;
+}
+
+// THE NON-ATTACKER TARGET FOLD (sound dominance, see DecisionProvider::TrickTargetsAttackersOnly). Its
+// two premises, for THIS list: (a) every trick here is until-end-of-turn combat value -- +N/+N, power
+// doubling, double strike, Berserk's destroy (which needs an attack to fire), Vines' opponent-hexproof
+// (inert) -- and (b) nothing in the 60 reads a non-attacking creature's power or toughness this turn
+// (Temur Battle Rage's ferocious only grants trample, unmodelled; Den Protector's evasion is
+// opponent-facing). So a trick on a creature that cannot attack is a no-op, dominated by not casting it.
+// A list revision that adds a ferocious / power-threshold reader must drop this (or narrow it).
+bool MorphProvider::TrickTargetsAttackersOnly(const GameState&, const CardDefinition&) const
+{
+    return true;
+}
+
 // Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,
 // MANA, PAYOFF -- keep 1 enabler and enough mana, maximize payoffs. The discard-analysis
 // stage's static name order (Idyllic, StP, ...) measured d0 -0.00525 t=-4.21 but the user's
@@ -22656,6 +22706,7 @@ namespace
     const GenericProvider        g_generic;
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
+    const MorphProvider          g_morph;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -25253,6 +25304,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // SoldiersProvider (Stage 4a, 2026-10-04: an empty derivation of VialProvider, the archetype it rode).
     bool soldiers = false;
     bool kithkin = false;    // Kithkin-only card mechanics; never key on colourless Vial/Automaton/Mimic.
+    // MORPH (R/G morph-pump aggro; MorphProvider). MUST return ABOVE `anti`: Wooded Foothills' fetch sets
+    // that signature alone. Params carried by no other deck, OR-ed across six cards (see the class note);
+    // INT-2 appends the morph params (morph_cost, megamorph_cost, ...) to the same OR.
+    bool morph = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -25408,6 +25463,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || (CardHasSubtype(def->card, "Kithkin")
                 && p.attack_pump_power_per_other_matching > 0))
         { kithkin = true; }
+        if (p.spell_target_watch_pump_power != 0 || p.trick_double_power
+            || p.grants_temp_double_strike || p.mainphase_power_bonus != 0
+            || p.kicked_power_bonus != 0 || p.redirects_spell_target_to_self)
+        { morph = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
         { gods = true; }
@@ -25950,6 +26009,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
     // Hydras: FIRST -- above `goblin` (Gargos's reduces_spell_subtype) and `fungus` (a counter-doubling
     // param); its signature is carried by no other deck (see the flag).
+    // Morph: FIRST -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
+    if (morph)       { return g_morph; }
     if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
     if (kithkin)     { return g_kithkin; }

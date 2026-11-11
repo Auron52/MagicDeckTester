@@ -177,6 +177,10 @@ MANIFEST = {
     "land_aura_can_target_opponent": ("main_phase",     truthy),
     "reveal_subtype_or_pay": ("main_phase",             truthy),
     "kicker_cost": ("main_phase",                        truthy),
+    # Spellskite (Morph INT-1): the redirect is a searched plan VARIANT of a solo-target trick cast
+    # (Action::trick_redirect, verb "redirect"), and its {U/P} mana-vs-2-life choice is the phyrexian
+    # twin -- both ride main_phase plan variants.
+    "redirects_spell_target_to_self": ("main_phase",     truthy),
     "awaken_cost": ("main_phase",                        truthy),  # normal/awaken and each legal land are separate plans
     "expropriate_vote": ("main_phase",                   truthy),  # own vote and opponent-money permanent are separate plans
     "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
@@ -1613,6 +1617,18 @@ INERT_PARAMS = {
     "pump_per_treasure_tough": "computed pump (rides solo_target_trick)",
     "creates_treasures": "automatic token creation (Treasure; sac-for-mana is a searched plan action)",
     "grants_temp_haste": "automatic until-EOT grant to the chosen target (rides solo_target_trick)",
+    # Morph INT-1 pump family (the target rides solo_target_trick; Vines' kicked/unkicked rides kicker_cost):
+    "grants_temp_double_strike": "automatic until-EOT double strike on the chosen target (rides solo_target_trick)",
+    "trick_double_power": "computed +X/+0, X = the target's power at resolution (rides solo_target_trick)",
+    "trick_destroy_at_end_if_attacked": "mandatory delayed destroy of the chosen target iff it attacked; no choice",
+    "cast_only_before_combat_damage": "cast-timing restriction (not offered in a post-combat main); no choice",
+    "mainphase_power_bonus": "computed pump, main-phase 'instead' amount (rides solo_target_trick)",
+    "mainphase_tough_bonus": "computed pump, main-phase 'instead' amount (rides solo_target_trick)",
+    "kicked_power_bonus": "kicked-face pump (the kicked/unkicked choice rides kicker_cost)",
+    "kicked_tough_bonus": "kicked-face pump (the kicked/unkicked choice rides kicker_cost)",
+    "spell_target_watch_pump_power": "Wild Defiance's mandatory untargeted trigger (+N/+N to the targeted creature); no choice",
+    "spell_target_watch_pump_tough": "Wild Defiance's mandatory untargeted trigger (+N/+N to the targeted creature); no choice",
+    "mdfc_back_enters_tapped": "the MDFC land back always enters tapped; no choice (the face choice rides mdfc_back_name)",
     "counters_on_target": "automatic counter on the chosen target (rides solo_target_trick)",
     "cast_lifegain": "automatic lifegain",
     # Weather the Storm (AccomplishedAlchemist, 2026-10-18): STORM's copy count is

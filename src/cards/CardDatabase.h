@@ -3499,6 +3499,51 @@ struct CardParams
     // Expedite: "target creature gains haste until end of turn" -> Permanent::temp_haste (read by
     // CanAttackFull / CanTapNow -- a hasted fresh dork may tap for mana; reset each cleanup).
     bool grants_temp_haste = false;
+    // ---- Morph deck pump family (INT-1, 2026-11-11). Every one is a payload term read inside the ONE
+    // shared ApplyTrickPayload (executor EffectHandler + rollout apply_one), so parity is structural.
+    // Wild Defiance: "Whenever a creature you control becomes the target of an instant or sorcery
+    // spell, that creature gets +3/+3 until end of turn." A WATCHER on the permanent carrying it: for
+    // every OWN-creature recipient of an instant/sorcery payload, +power/+tough per watcher copy we
+    // control, applied FIRST (the trigger goes on the stack above the spell and resolves before it,
+    // CR 603.3) so a later doubler (trick_double_power) doubles it. The scan is gated on the deck stamp
+    // GameState::deck_has_spell_target_watch. 0 = not a watcher.
+    int  spell_target_watch_pump_power = 0;
+    int  spell_target_watch_pump_tough = 0;
+    // Berserk ("+X/+0 where X is its power") / Legion Leadership ("double target creature's power",
+    // CR 701.10): +X/+0 with X = the target's COMBAT power (CombatPowerOf) as the instance resolves --
+    // after any watcher trigger and after this spell's own flat part. X locks at resolution, so pumps
+    // resolving later are not doubled. Negative power would give -X (CR 701.10e); clamped at 0, which
+    // is exact for every pool that has no -N/-N source.
+    bool trick_double_power = false;
+    // Temur Battle Rage: "Target creature gains double strike until end of turn" ->
+    // Permanent::temp_double_strike (read only by CreatureHasDoubleStrike, the one oracle every damage
+    // site consults; cleared at cleanup). Distinct from grants_double_strike (a static LORD grant).
+    bool grants_temp_double_strike = false;
+    // Might of Old Krosa: "+2/+2 ... If you cast this spell during your main phase, that creature gets
+    // +4/+4 until end of turn INSTEAD." REPLACES power_bonus/tough_bonus when GameState::phase is a
+    // main phase (cast and resolution share the phase in this engine). 0 = no main-phase clause.
+    int  mainphase_power_bonus = 0;
+    int  mainphase_tough_bonus = 0;
+    // Vines of Vastwood: "If this spell was kicked, that creature gets +4/+4 until end of turn." Copied
+    // onto the DB-synthesized "(Kicked)" face as its power_bonus/tough_bonus (the face is a full copy,
+    // so solo_target_trick is inherited). Kicked solo-target tricks fan PER TARGET in CollectActions.
+    int  kicked_power_bonus = 0;
+    int  kicked_tough_bonus = 0;
+    // Berserk: "At the beginning of the next end step, destroy that creature if it attacked this
+    // turn." -> Permanent::destroy_at_end_if_attacked on the target, swept at the beginning of the end
+    // step in BOTH worlds (DestroyAttackedAtEndStep): DESTROYED (indestructible survives, no sacrifice
+    // watchers) iff Permanent::AttacksThisTurn() > 0. Arms GameState::deck_tracks_attacks.
+    bool trick_destroy_at_end_if_attacked = false;
+    // Berserk: "Cast this spell only before the combat damage step." Never offered in a post-combat
+    // main (GameState::phase == PostCombatMain). Main 1 always satisfies it.
+    bool cast_only_before_combat_damage = false;
+    // Spellskite: "{U/P}: Change a target of target spell or ability to this creature." Modelled for
+    // OUR solo-target tricks only (the passive opponent casts nothing): a searched cast VARIANT of a
+    // trick aimed at another own creature A, Action::trick_redirect = this permanent's number, costing
+    // one extra {U/P} pip (the phyrexian post-pass emits the 2-life twin). At resolution A "became the
+    // target" (watchers fire for A), then Spellskite does (watchers fire again), and the payload lands
+    // on Spellskite. See ResolveSoloTargetTrick.
+    bool redirects_spell_target_to_self = false;
     // Scale the Heights: "Put a +1/+1 counter on up to one target creature."
     int  counters_on_target = 0;
     // Scale the Heights: "You gain 2 life." (per resolved copy -- faithful escalation of life.)
@@ -3927,6 +3972,9 @@ struct CardParams
     // etb_pay_life_to_untap (shock-land semantics). Also marks the FRONT (a nonland) as having
     // a playable MDFC land back -> land enumeration offers it. 0 = no life-or-tapped choice.
     int mdfc_back_pay_life = 0;
+    // Legion Leadership // Legion Stronghold: "This land enters tapped." The synthesized nonland-front
+    // back face ALWAYS enters tapped (no life alternative). false = untapped unless mdfc_back_pay_life.
+    bool mdfc_back_enters_tapped = false;
 
     // Turntimber Symbiosis front: "Look at the top N cards of your library. You may put a
     // creature card from among them onto the battlefield. If that card has mana value

@@ -684,6 +684,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     // Soulstoke's delayed sacrifice (Permanent::sac_at_end_step): a body that dies at this turn's end
     // step is not the same body as one that stays. Mixed only when set -> every other key unchanged.
     if (p.sac_at_end_step) { Mix(h, 0x5AC0E5D5ull); }
+    // Berserk's delayed destroy (Permanent::destroy_at_end_if_attacked): same reasoning. Set-gated.
+    if (p.destroy_at_end_if_attacked) { Mix(h, 0xBE55E5Cull); }
     // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
     // what decides who double-strikes, so two otherwise-identical Paladins paired to different
     // bodies are NOT fungible.
@@ -3500,6 +3502,8 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         { k += "/MT" + std::to_string(a.attach_equip_id) + ">" + std::to_string(a.enchant_target); }
         // Stroke of Genius's target player: "draw X" and "make them draw X" are a substitution.
         if (a.draw_target != 0)       { k += "/DT" + std::to_string(a.draw_target); }
+        // Spellskite's redirect of a trick: a different line from the same cast unredirected.
+        if (a.trick_redirect != 0)    { k += "/RD" + std::to_string(a.trick_redirect); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -3558,6 +3562,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.paired_with != 0) { e += "/sb" + std::to_string(p.paired_with); }   // soulbond pair
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         if (p.sac_at_end_step) { e += "/xs"; } // Soulstoke put, sacrificed at end step
+        if (p.destroy_at_end_if_attacked) { e += "/xb"; } // Berserked: destroyed at end step if it attacked
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -11397,6 +11402,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // Phyrexian ({G/P}): the life-paid pips come off this priced cost too (lockstep with
             // enumeration/apply/executor); the sim copy's life is not tracked here -- the apply
             // gates the life half itself, and this function only answers mana sequencing.
+            if (a.trick_redirect != 0) { AddSpellRedirectPip(ec); }   // Spellskite's {U/P} (lockstep)
             if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
             if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
             if (def.params.damage_divided && a.crackle_targets >= 0)
@@ -14474,6 +14480,26 @@ static int EvalCard(const CardDefinition& def, const GameState& state, int chose
         // never applied even once -- an exactly-lethal line the search could not see. The {X}-burn
         // path never had this bug because it sets a.eval = x * mult * 100 (X-scaled) directly.
         pump += tp.pump_per_x_power * (chosen_x >= 0 ? chosen_x : 2);
+        // Morph INT-1 terms (each param-gated -> every other trick scores exactly as before).
+        // Might of Old Krosa: every cast here is a main-phase cast, so the "instead" amount.
+        if (tp.mainphase_power_bonus > tp.power_bonus) { pump += tp.mainphase_power_bonus - tp.power_bonus; }
+        // A doubler (Berserk / Legion Leadership) or double strike (Temur Battle Rage) adds about the
+        // best ready attacker's current combat power to one attack.
+        if (tp.trick_double_power || tp.grants_temp_double_strike)
+        {
+            const int bi = FindBestOwnAttacker(state, state.active_player_index);
+            if (bi >= 0) { pump += std::max(0, CombatPowerOf(state.battlefield[static_cast<std::size_t>(bi)], state)); }
+        }
+        // Wild Defiance on the battlefield: the targeting itself is worth its watchers' +N.
+        if (state.deck_has_spell_target_watch)
+        {
+            for (const Permanent& w : state.battlefield)
+            {
+                if (w.controller_index != state.active_player_index) { continue; }
+                const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+                if (wd) { pump += wd->params.spell_target_watch_pump_power; }
+            }
+        }
         per += pump * DMG;
         if (tp.token_copy_of_target) { per += 2 * DMG; }             // a hasted body for a turn
         if (tp.trick_token_power > 0) { per += tp.trick_token_power * DMG; }   // a spare body
@@ -18344,7 +18370,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
-        || p.sac_at_end_step) { return false; }
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
@@ -18895,6 +18921,8 @@ static std::uint64_t ActionFoldSig(const Action& a)
     // Stroke of Genius's target player is a searched axis too; folded only when set (opponent), so
     // every other deck's signature is byte-identical.
     if (a.draw_target != 0) { FoldMix(h, 0xD7A6ull + static_cast<std::uint64_t>(a.draw_target)); }
+    // Spellskite's trick redirect (Action::trick_redirect): a searched axis, folded only when set.
+    if (a.trick_redirect != 0) { FoldMix(h, 0x5E11ull + static_cast<std::uint64_t>(a.trick_redirect)); }
     // Magnetic Theft's Equipment target is a searched axis too (the creature rides enchant_target,
     // above). Folded only when set, so every other deck's signature is byte-identical.
     if (a.attach_equip_id != 0)
@@ -27570,6 +27598,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         // Stroke of Genius's target player: a must-fold like devour_count (self vs opponent draw are
         // two plays). Folded only when set, so every other plan's fingerprint is unchanged.
         if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
+        // Spellskite's trick redirect: a must-fold (redirected vs not are two plays). Set-gated.
+        if (a.trick_redirect != 0) { fold(0x5244ull + static_cast<uint64_t>(a.trick_redirect) * 1009); }   // "RD"
         // Lurrus: a graveyard cast's permission source (gated on set -> every other fingerprint unchanged).
         if (a.gy_cast_source_id >= 0) { fold(0x4C555252ull + static_cast<uint64_t>(a.gy_cast_source_id)); }   // "LURR"
         fold(static_cast<uint64_t>(a.convoke_green) * 37
@@ -27905,6 +27935,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     { add("victim_name", x.victim_name.str(), y.victim_name.str()); }
     if (x.draw_target != y.draw_target)
     { add("draw_target", std::to_string(x.draw_target), std::to_string(y.draw_target)); }
+    if (x.trick_redirect != y.trick_redirect)
+    { add("trick_redirect", std::to_string(x.trick_redirect), std::to_string(y.trick_redirect)); }
     if (static_cast<long long>(x.replicate_count) != static_cast<long long>(y.replicate_count))
     { add("replicate_count", std::to_string(static_cast<long long>(x.replicate_count)),
            std::to_string(static_cast<long long>(y.replicate_count))); }
@@ -34065,6 +34097,7 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         // the enumeration's reduced emission -- shared ApplyConvokeReduction).
                         if (pd != nullptr && pd->params.convoke)
                         { ApplyConvokeReduction(ec, pa.convoke_green, pa.convoke_other, ConvokePipColor(*pd)); }
+                        if (pa.trick_redirect != 0) { AddSpellRedirectPip(ec); }   // Spellskite {U/P}
                         // Phyrexian: a life-paid pip is not part of the plan's MANA bill.
                         if (pa.phyrexian_life > 0)
                         { ec.StripPhyrexianForLife(pa.phyrexian_life / 2); }
@@ -34135,7 +34168,14 @@ static DecisionProvider::MainPhase ClassifyMainPhase(const GameState& state,
         || p.pt_equals_snow_permanents_you_control
         || p.pt_equals_snow_permanents_on_battlefield
         || p.static_artifact_threshold > 0   // Goblin Tomb Raider: hasty whenever an artifact is out
-        || p.attack_with_n_threshold > 0)    // Harbin: on the battlefield at declare-attackers, even sick
+        || p.attack_with_n_threshold > 0     // Harbin: on the battlefield at declare-attackers, even sick
+        // Morph INT-1 pump family: every payload is this turn's combat (Berserk, Legion Leadership,
+        // Temur Battle Rage, Might, Vines -- unkicked Vines carries no power_bonus, so its trick+kicker
+        // shape is named), and Wild Defiance must be out BEFORE the targeting spells it watches.
+        || p.trick_double_power || p.grants_temp_double_strike
+        || p.mainphase_power_bonus > 0 || p.kicked_power_bonus > 0
+        || (p.solo_target_trick && p.kicker_cost.has_value())
+        || p.spell_target_watch_pump_power > 0)
     { return MP::Main1; }
     // CARD-DEPENDENCY-MAP pull-forward (docs/design/card-dependency-map.md, USER 2026-08-15):
     // a card's phase is a consequence of the deck's dependency graph. A lifegain->loss ENABLER
@@ -38491,6 +38531,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             continue;
         }
 
+        // Berserk: "Cast this spell only before the combat damage step." -- a cast RESTRICTION (rules
+        // legality, not a prune): a post-combat main is after combat damage. Main 1 always satisfies it.
+        if (def.params.cast_only_before_combat_damage && state.phase == Phase::PostCombatMain) { continue; }
         // A spell the deck's provider proves can have no effect (Snow's Skred) is never offered.
         if (ResolveProvider(state).NeverCast(def)) { continue; }
         // A live cast cap (Irencrag Feat resolved): the provider names what may take the last slot
@@ -40156,7 +40199,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         // spending the same mana on Saproling Burst or a third Doubling Season depends on the whole
         // board. A "kick when mana is spare" test would be a heuristic pick inside the search
         // window; the search prices it instead.
-        if (def.params.kicker_cost.has_value())
+        // A SOLO-TARGET TRICK's kicker (Vines of Vastwood) is NOT emitted here: this block makes ONE
+        // kicked action with no target, which for a trick resolves as the untargeted up-to-one instance
+        // (target 0 -> no recipient) -- the kicked pump would land on nothing. The trick emitter below
+        // fans the kicked twin PER TARGET instead. No other kicker card is a solo_target_trick, so every
+        // existing kicker emits exactly what it did.
+        if (def.params.kicker_cost.has_value() && !def.params.solo_target_trick)
         {
             const CardDefinition* kdef =
                 CardDatabase::Instance().Lookup(def.card.m_name.str() + " (Kicked)");
@@ -40518,17 +40566,78 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                 }
             }
+            // KICKER on a trick (Vines of Vastwood, CR 702.33): a kicked TWIN of every variant below,
+            // sharing hand_index (mutually exclusive in a plan) -- cost, eval and mana value off the DB's
+            // "(Kicked)" face (printed + kicker, reductions applied to the total, CR 601.2f; the generic
+            // kicker block above explains why the face carries the cost). Neither mode dominates: the
+            // unkicked cast still TARGETS (a Wild Defiance trigger) for one mana less, so the SEARCH picks.
+            const CardDefinition* trick_kdef = def.params.kicker_cost.has_value()
+                ? CardDatabase::Instance().Lookup(def.card.m_name.str() + " (Kicked)") : nullptr;
+            const ManaCost trick_kcost = trick_kdef ? EffectiveCost(*trick_kdef, state) : ManaCost{};
+            // SPELLSKITE REDIRECT (Action::trick_redirect; CardParams::redirects_spell_target_to_self):
+            // for a cast aimed at another own creature A, a twin that pays {U/P} more and redirects the
+            // spell to the Spellskite S -- A's target watchers fire on the cast, S's on the redirect, and
+            // the payload lands on S. Emitted ONLY where it can differ from aiming the trick at S
+            // directly (which the target loop already offers), each condition a sound dominance:
+            //   * a target WATCHER (Wild Defiance) on our battlefield or in hand: without one the redirect
+            //     IS the direct cast on S plus {U/P} -- the same resolution for strictly more cost;
+            //   * S and A can both still attack this turn (TrickRecipientCanAttackThisTurn): the twin's
+            //     only gain over the direct cast is A's watcher bonus, and every payload here is
+            //     until-end-of-turn combat value. PRECONDITION (stated, not checked): nothing in the list
+            //     reads a non-attacker's power/toughness this turn -- true of every pool holding a
+            //     redirector today; a ferocious/power-threshold reader would need this condition lifted;
+            //   * no copy magnet on the battlefield (the fan is computed off the cast-time target; the
+            //     resolver applies the redirect before it, so a magnet target would mis-fan) and no
+            //     strive count (not a single target).
+            int redirect_num = 0;
+            if (state.deck_has_spell_target_watch)
+            {
+                bool watcher = false, magnet = false;
+                const Permanent* skite = nullptr;
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index) { continue; }
+                    const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                    if (!pd) { continue; }
+                    if (pd->params.spell_target_watch_pump_power != 0
+                        || pd->params.spell_target_watch_pump_tough != 0) { watcher = true; }
+                    if (pd->params.copies_solo_targeted_spells) { magnet = true; }
+                    if (pd->params.redirects_spell_target_to_self && skite == nullptr
+                        && TrickRecipientCanAttackThisTurn(state, p)) { skite = &p; }
+                }
+                for (std::size_t k = 0; !watcher && skite != nullptr && k < ap.hand.size(); ++k)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(ap.hand[k]);
+                    if (hd && (hd->params.spell_target_watch_pump_power != 0
+                               || hd->params.spell_target_watch_pump_tough != 0)) { watcher = true; }
+                }
+                if (watcher && !magnet && skite != nullptr) { redirect_num = skite->card.m_number; }
+            }
+            auto redirect_ok = [&](int tgt_num) -> bool
+            {
+                if (redirect_num == 0 || tgt_num <= 0 || tgt_num == redirect_num) { return false; }
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index == state.active_player_index && p.card.m_number == tgt_num)
+                    { return TrickRecipientCanAttackThisTurn(state, p); }
+                }
+                return false;   // a hand creature / sentinel target: no redirect twin
+            };
             // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
             // action for the cheap subset legality filter).
             auto emit = [&](int tgt_num, int strive_k, const std::string& hand_name = std::string())
             {
+              for (int kick = 0; kick < (trick_kdef ? 2 : 1); ++kick)
+              {
+              const CardDefinition& vdef = kick ? *trick_kdef : def;
               for (int xv : x_values)
               {
                 Action a;
                 a.kind           = Action::Kind::CastFromHand;
                 a.card_name      = ap.hand[i].m_name;
                 a.hand_index     = i;
-                a.cost           = base_cost;
+                a.cost           = kick ? trick_kcost : base_cost;
+                a.kicked         = kick != 0;
                 if (strive_k > 0 && def.params.strive_cost.has_value())
                 {
                     const ManaCost& sc = *def.params.strive_cost;
@@ -40543,9 +40652,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Score THIS variant's X, so the plan ordering can tell an X=4 cast from an X=0 one
                 // (see EvalCard's pump_per_x_power term). A non-{X} trick passes 0 into a term whose
                 // coefficient is 0, so it is byte-identical.
-                a.eval           = EvalCard(def, state, xv);
+                a.eval           = EvalCard(vdef, state, xv);
                 a.is_noncreature = true;
-                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.card_mv        = vdef.card.m_mana_cost.ManaValue();
                 a.enchant_target = tgt_num;
                 a.trick_hand_target = hand_name;
                 if (xv > 0)
@@ -40567,7 +40676,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.mint_hand_magnet = hd != nullptr && hd->params.copies_solo_targeted_spells;
                     }
                 }
-                actions.push_back(std::move(a));
+                const bool twin = strive_k == 0 && hand_name.empty() && redirect_ok(tgt_num);
+                if (twin)
+                {
+                    Action r = a;   // copy BEFORE the move
+                    r.trick_redirect = redirect_num;
+                    AddSpellRedirectPip(r.cost);
+                    actions.push_back(std::move(a));
+                    actions.push_back(std::move(r));
+                }
+                else { actions.push_back(std::move(a)); }
+              }
               }
             };
             // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
@@ -40732,17 +40851,24 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
             else
             {
+            // The provider's non-attacker fold (DecisionProvider::TrickTargetsAttackersOnly; MorphProvider
+            // states its premises). Never under human play or the tricktarget unprune gate.
+            const bool attackers_only = !HumanPlayActive()
+                && !DecisionUnpruned(UnprunedGate::TrickTarget)
+                && ResolveProvider(state).TrickTargetsAttackersOnly(state, def);
             std::unordered_set<std::string> seen_equiv;
             for (const Permanent& p : state.battlefield)
             {
                 if (p.controller_index != state.active_player_index || !p.card.IsCreature())
                 { continue; }   // tokens carry unique ids now, so they ride the target axis too
+                if (attackers_only && !TrickRecipientCanAttackThisTurn(state, p)) { continue; }
                 std::string eq = p.card.m_name.str();
                 eq += CanAttackFull(p, state.battlefield, state.active_player_index) ? "/A" : "/s";
                 eq += "/" + std::to_string(p.temp_power_bonus) + ","
                           + std::to_string(p.temp_tough_bonus)
                           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
                           + (p.temp_double_strike ? "D" : "")
+                          + (p.destroy_at_end_if_attacked ? "B" : "")   // Berserked: dies if it attacks
                           + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
@@ -40760,6 +40886,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (hc.m_number == 0 || hc.m_is_staged) { continue; }
                     const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
                     if (!hd || !hd->card.IsCreature()) { continue; }
+                    if (attackers_only && !TrickHandRecipientCanAttackThisTurn(state, *hd)) { continue; }
                     if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
                     emit(hc.m_number, 0, hc.m_name.str());
                 }
@@ -54880,7 +55007,8 @@ namespace solvememo
                 || x.seed_pay_split != y.seed_pay_split
                 || !(x.tutor_target == y.tutor_target) || x.sacrifice_land != y.sacrifice_land
                 || x.discard_lands != y.discard_lands || x.twobrid_colored != y.twobrid_colored
-                || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target)
+                || x.attach_equip_id != y.attach_equip_id || x.draw_target != y.draw_target
+                || x.trick_redirect != y.trick_redirect)
             { return false; }
         }
         return true;
@@ -61163,6 +61291,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // the same strip the enumeration emitted (the ApplyConvokeReduction idiom; the life half
         // is paid at the cast, not here). Without this the prepay overpays the {G} the variant
         // exists to free.
+        if (a.trick_redirect != 0) { AddSpellRedirectPip(ec); }   // Spellskite {U/P} (lockstep)
         if (a.phyrexian_life > 0) { ec.StripPhyrexianForLife(a.phyrexian_life / 2); }
         // Twobrid variant (Beseech): the coloured pips replace {2} each, as enumerated.
         if (a.twobrid_colored > 0) { ec.PayTwobridWithColor(a.twobrid_colored); }
@@ -66632,6 +66761,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
         // recomputed cost, the SAME strip the enumeration emitted (the convoke idiom above);
         // the life itself is deducted after the payment succeeds, below.
+        // Spellskite's {U/P} on a redirected trick (CastRiders::trick_redirect) -- the SAME pip the
+        // enumeration billed (AddSpellRedirectPip), before the life strip (lockstep with the executor).
+        if (riders.trick_redirect != 0) { AddSpellRedirectPip(ec); }
         if (phyrexian_life > 0) { ec.StripPhyrexianForLife(phyrexian_life / 2); }
         // Twobrid ({2/B} -- Beseech): the variant's coloured pips, the SAME conversion the
         // enumeration emitted (lockstep with CastSpellFromHand).
@@ -68789,7 +68921,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // own_targets is reused as Twinflame's searched strive-extras count.
             // chosen_x carries Luxurious Libation's paid {X} (every copy copies it, CR 707.10).
             ResolveSoloTargetTrick(state, state.active_player_index, def, enchant_target,
-                                   own_targets, chosen_x);
+                                   own_targets, chosen_x, riders.trick_redirect);
             // Draw breakpoint (trick class, site 5): a magnet fan-out mass-draws, so newly revealed
             // cards must be castable with the mana still available this turn. Same SHAPE as the
             // plain-cantrip DrawSpell branch: defer at the MAIN-plan level (resolved after every
@@ -73355,6 +73487,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Incandescent Soulstoke's delayed sacrifice (Permanent::sac_at_end_step) -- lockstep twin of
     // GameEngine::EndStep, same position, same shared helper. No-op without the flag.
     PerformEndStepDelayedSacrifices(state);
+    // Berserk's delayed destroy (Permanent::destroy_at_end_if_attacked) -- lockstep twin of
+    // GameEngine::EndStep, same position, same shared helper. No-op without the bit.
+    DestroyAttackedAtEndStep(state);
 
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin of GameEngine::EndStep -- same position (after the exile
@@ -75295,6 +75430,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
                 if (d && !d->params.adventure_face_name.empty()) { w.Put(act.adventure ? "#A1" : "#A0"); }
                 if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
+                if (act.trick_redirect != 0) { w.Put("#RD"); w.Int(act.trick_redirect); }   // Spellskite
                 if (d && d->params.buyback_sacrifice_islands > 0)
                 { w.Put("#BB"); w.Put(act.tutor_target); }
                 if (act.player_target != 0) { w.Put("#PT"); w.Int(act.player_target); }   // target player
@@ -80558,6 +80694,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Gated on the param -- the #S/#V/#K/#B/#A precedent -- so no deck without
                         // a kicker card moves a signature.
                         if (cd && cd->params.kicker_cost.has_value()) { k += (act.kicked ? "#KI1" : "#KI0"); }
+                        // Spellskite's redirect of a trick: the same cast redirected is another line.
+                        if (act.trick_redirect != 0) { k += "#RD"; k += std::to_string(act.trick_redirect); }
                         // TARGET PLAYER ("target player gains N life": Heroes' Reunion / Rest for the
                         // Weary). The kicker case once more -- both targets share one card name, so
                         // without a marker the dedup would keep one of them and the opponent variant
@@ -81012,6 +81150,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Stroke of Genius: the TARGET PLAYER (the X already rides this key's chosen_x token).
                 if (act.draw_target != 0)
                 { sub.push_back("dt" + act.card_name + ">" + std::to_string(act.draw_target)); }
+                // Spellskite's trick redirect.
+                if (act.trick_redirect != 0)
+                { sub.push_back("rd" + act.card_name + ">" + std::to_string(act.trick_redirect)); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
@@ -94222,6 +94363,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.sac_at_end_step) << 36)
             | (static_cast<std::uint64_t>(pm.lifegain_counters_used_this_turn) << 37)
             | (static_cast<std::uint64_t>(pm.enduring_noncreature) << 38)
+            | (static_cast<std::uint64_t>(pm.destroy_at_end_if_attacked) << 39)
             | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40));
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
@@ -96281,6 +96423,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         { Fold(tk, 0x50B0Dull); Fold(tk, static_cast<uint64_t>(perm.paired_with)); }
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         if (perm.sac_at_end_step) { Fold(tk, 0x5AC0E5D5ull); }   // Soulstoke put (nonzero-gated)
+        if (perm.destroy_at_end_if_attacked) { Fold(tk, 0xBE55E5Cull); }   // Berserk (nonzero-gated)
         // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
@@ -120047,6 +120190,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> auraSwapNames;   // Arcanum Wings' swap: ALWAYS its own verb
         std::vector<std::string> adventureNames;
         std::vector<std::string> kickedNames;
+        // Spellskite redirect (Action::trick_redirect): the LineSpec has no `redirect` key yet, so a hand
+        // line can never DECLARE one -- a redirected plan must not match an undeclared line (the
+        // adventure/kicker "same name, different play" hazard). Known gap, tools/play/DECISIONS.md.
+        bool plan_has_redirect = false;
         // One entry per Equip action: (equipment name, equipment m_number, host m_number). Matched
         // against spec.equips by EquipsMatch below, which honours the 0 wildcards.
         std::vector<LineSpec::EquipSpec> equipActs;
@@ -120144,6 +120291,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // the cast multiset, so the human declares `cast=Saproling Migration` either way and
             // `kicked=` only picks the MODE.
             if (a.kicked) { kickedNames.push_back(a.card_name); }
+            if (a.trick_redirect != 0) { plan_has_redirect = true; }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
             if (taptoken_declared && a.kind == Action::Kind::TapForTokenPay)
@@ -120359,6 +120507,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedKickeds) { continue; }      // unconditional -- see sortedKickeds
         }
+        if (plan_has_redirect) { continue; }   // never matches an undeclared line (see above)
         if (animate_declared)
         {
             std::vector<std::string> v2 = animateNames;
@@ -122721,7 +122870,8 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
                               a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
-                              a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target };
+                              a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target,
+                              a.trick_redirect };
             for (int v : f) { k += "|" + std::to_string(v); }
             if (a.seed_pay_split != 0) { k += "|ps" + std::to_string(a.seed_pay_split); }   // Q61, set only when on
             ks.push_back(std::move(k));

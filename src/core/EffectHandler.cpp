@@ -653,7 +653,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     ResolveSoloTargetTrick(state, entry.controller_index, def,
                                            entry.enchant_target,
                                            entry.soulfire_own_targets.value_or(0),
-                                           entry.chosen_x.value_or(0));
+                                           entry.chosen_x.value_or(0),
+                                           entry.trick_redirect);
                 }
                 // Magnetic Theft ("Attach target Equipment to target creature"): the searched pair
                 // (Equipment on entry.attach_equip_id, creature on entry.enchant_target) through the

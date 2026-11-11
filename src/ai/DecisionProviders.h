@@ -364,6 +364,45 @@ public:
     virtual CertStance Certificate() const = 0;
 };
 
+// =============================================================================================
+// MorphProvider -- the Morph deck (R/G morph-pump aggro; ledger docs/design/analysis-Morph.md).
+// Stage 4a (INT-1, 2026-11-11): the deck owns its provider from day one.
+//
+// DERIVES FROM DeckProvider (the Generic surface), NOT from the provider the list rode before this
+// branch existed: AntiLifegainProvider, reached only because Wooded Foothills' fetch sets the `anti`
+// signature. None of that provider's hooks is about this deck (lifegain->loss enablers, Reverent
+// Silence payloads, its tutor/discard buckets, main-phase condemnation, the fetch-hold-OFF
+// FetchCandidates) -- so they are deliberately NOT inherited, and the change of provider is a play
+// change that needs its own measurement (reported to the USER). The ONE behaviour kept is the shared
+// exalted-aware attack hold (ExaltedAwareShouldAttack, the MirrorwingProvider precedent): this list
+// runs 4x Ignoble Hierarch, and a 0-power dork swinging beside the real attacker cancels exalted.
+//
+// What it adds, every item a SOUND DOMINANCE FOLD (see each definition for the argument):
+//   * CastOrderRank + OrderOpaqueCastsByRank: permanents < additive pumps < doublers / double strike.
+//   * TrickTargetsAttackersOnly: no trick on a creature that cannot attack this turn.
+// The cast order is USER-OWNED: it is reported, never adopted silently.
+//
+// SIGNATURE (DetectDecisionProvider's `morph`): params carried by no other deck, OR-ed across SEVERAL
+// cards so one deckbuilding swap cannot lose the routing -- Wild Defiance's watcher, the power
+// doublers (Berserk, Legion Leadership), Temur Battle Rage's temp double strike, Might's main-phase
+// pump, Vines' kicked pump, Spellskite's redirect. INT-2 appends the morph params there.
+// =============================================================================================
+class MorphProvider : public DeckProvider
+{
+public:
+    bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
+    int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool OrderOpaqueCastsByRank() const override { return true; }
+    bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A sound winless-turn bound must price the whole pump stack (Wild Defiance "
+               "+3/+3 per targeting, Spellskite redirects, doublers, double strike, exalted) on every "
+               "attacker that can still swing -- including a face-down creature turned face up with "
+               "haste (Blistering Firecat) once morph lands -- before claiming no line wins." }; }
+    const char* Name() const override { return "Morph"; }
+};
+
 // Extra Turns starts with the generic decision surface. Its own provider gives the
 // deck an explicit routing and certificate stance before any pruning is measured.
 class ExtraTurnsProvider : public DeckProvider

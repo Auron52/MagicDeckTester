@@ -58,5 +58,103 @@ Rage, Might of Old Krosa, Vines, Legion Leadership MDFC, Spellskite, Fire-Lit Th
 re-verify of the 8 present cards. Drafts: `logs/morph/research/*.md` (gitignored; decisions below are
 the durable record).
 
+### Research R2: pumps + other cards (done 2026-11-11; draft logs/morph/research/pumps.md)
+- Re-verify of the 8 present cards: NO mismatch (Stomping Ground oracle text formatting only).
+- All five pumps ride the existing searched-target family (`solo_target_trick`); every new payload
+  goes into the ONE shared payload function (`ApplyTrickPayload`) that executor and rollout both call.
+- **Wild Defiance — Tier 2.** No "becomes the target" trigger exists. New watcher in the shared
+  payload, applied BEFORE the spell's own effect (so a later doubler doubles the +3/+3).
+- **Berserk — Tier 2.** +X/+0 (X = target's real combat power at resolution); new end-step DESTROY
+  flag iff it attacked; refused in a post-combat main.
+- **Temur Battle Rage — Tier 2.** Sets the existing `temp_double_strike`; both combat paths already
+  apply pumps/exalted across two damage steps.
+- **Might of Old Krosa — Tier 2.** Model the main-phase "instead" branch (always +4/+4 today since
+  no non-main cast path exists).
+- **Vines of Vastwood — Tier 2 + ENGINE GAP:** the generic kicker emits ONE kicked cast with no
+  target (TurnSolver.cpp ~40097) -> kicked Vines pumps nothing. Kicked casts must fan per target.
+  Unkicked stays offered (it targets -> Wild Defiance).
+- **Legion Leadership // Legion Stronghold — Tier 2.** Doubling as Berserk; back face needs an
+  "always enters tapped" flag; {R/W} hybrid already handled.
+- **Spellskite — Tier 1 body** (0/4 artifact creature) + the redirect (see below).
+- **Fire-Lit Thicket — Tier 1**, Cascade Bluffs model.
+- **ENGINE GAP — cast order:** solo_target_trick casts skip the rank ordering (ManaPayment.cpp ~4283)
+  unless the provider opts in (`OrderOpaqueCastsByRank`), so pump-then-double vs double-then-pump is
+  an accident of HAND ORDER today.
+- **NOT INERT (corrects the standing decisions above):**
+  1. Spellskite redirect: with Wild Defiance out, redirecting our own pump onto an attack-ready
+     Spellskite triggers Defiance again (+3/+3 per Defiance per redirect, 2 life). PLAN: implement
+     (an unapproved deferral of a non-inert clause is not allowed).
+  2. Instant-speed doublers: Berserk / Legion Leadership cast AFTER the lone attacker's exalted
+     trigger double the exalted bonus too; main-phase-only casting loses it. Needs a declare-attackers
+     cast window (Tier 3). PLAN: count how often it binds, then build after the morph core.
+- Proposals (USER-OWNED, not adopted): cast order creatures/flips -> Wild Defiance -> flat pumps ->
+  TBR -> doublers (2(P+k) >= 2P+k); targeting folds: never pump a non-attacker; all non-Berserk pumps
+  of a plan on ONE creature (exchange argument; t^n -> t); Berserk keeps its own target; unkicked
+  Vines dominated unless a Defiance is out; lone-attacker vs alpha rule (needs A/B).
+- Provisional inert deferrals: Berserk trample, TBR ferocious trample, Legion Leadership first
+  strike, Vines' opponent-targeting protection, Defiance on opponents' spells.
+
+### Research R1: morph / megamorph (done 2026-11-11; draft logs/morph/research/morph.md)
+- **Tier 3, no Tier-4 part.** (CR text not in repo; megamorph is CR 702.37b — confirm in INT-2.)
+- Data model: STAND-IN CARD, no new Permanent field. Each morph card gets a generated
+  "<name> (Face-down)" CardDefinition (colourless nameless vanilla 2/2) at load — the bestow/kicker
+  pattern. Every hash/dominance key already carries the name -> no sizeof(Permanent)/Dominance change.
+  Flip reuses Bloodline Keeper's face-swap helper (keeps pumps, counters, sickness; CR 708.8).
+- The real cost: leaving the battlefield (CR 708.9) — ~40 zone-push sites need RevealedCard(); SBA
+  backstop + test-only MTG_FACEDOWN_AUDIT aborts on a missed site. LKI stays the face-down 2/2.
+- Face-down cast: Action::face_down on CastRiders, both apply paths; flat {3}; ~14 dedup signatures get
+  a face-down marker (PlanDomKey and BpCandFingerprint don't carry evoke either — fix both).
+- Turn face up: PermAbilityMode::TurnFaceUp; megamorph counter via PutPlusCounters; Den Protector
+  regrowth reuses ResolveEtbReturnGyToHand (Timeless Witness).
+- Flip position fold (sound dominance, X-locking doublers): Firecat/Hystrodon flips offered at main
+  start or right after their own face-down cast; Den Protector at "first" AND "after all casts"
+  (complete given the regrown card opens a searched breakpoint). Combat / main-2 flips dominated.
+- END-OF-TURN FLIP WINDOW (real decision): flip at the OPPONENT'S end step via BoundaryFan (Defense of
+  the Heart pattern) — a Firecat flipped there misses its own sacrifice trigger and attacks next turn;
+  leftover mana; Den Protector regrowing the Firecat sacrificed at our end step.
+- New params: morph_cost, megamorph_cost, endstep_sacrifice_self, combat_damage_self_may_draw,
+  turned_face_up_return_gy_to_hand (+ internal face_down_real_name).
+- Second main: combat_damage_self_may_draw -> DeckUsesSecondMain (Curiosity draw hook).
+- ROUTING: today Wooded Foothills routes this deck to AntiLifegainProvider (fetch hold OFF) -> one
+  MorphProvider routed above it (INT-1 creates it; INT-2 extends the signature).
+- Viewer: face-down cast = plan-variant flag; main-phase flip = plan verb; Den Protector target reuses
+  `dig`; NEW decision type `face_up` at the opponent's end step; Hystrodon "may draw" folded.
+- Provisional (USER sign-off): Den Protector evasion inert; trample inert; Hystrodon "may" folded to
+  "draw iff library non-empty"; no combat flip; no flip in our end step / either upkeep; flat {3}.
+- Risks: missed zone-push site; face-down vs hardcast signature collisions; an early flip stranding a
+  colour; search cost (3x rule); value-leaf features blind to flip potential; copies of face-down
+  creatures (none in deck).
+
+## Stage 2 — integration plan (serial)
+- INT-1 (running): the eight non-morph cards, kicker fan, Spellskite redirect, MorphProvider, cast-order
+  dominance fold. Brief logs/morph/int1-brief.md.
+- INT-2: morph per logs/morph/research/morph.md.
+
+### INT-1 result (2026-11-11; branch morph-analysis, local)
+- cards.json: Wild Defiance, Berserk, Temur Battle Rage, Might of Old Krosa, Vines of Vastwood, Legion
+  Leadership // Legion Stronghold, Spellskite, Fire-Lit Thicket (costs verbatim from Scryfall; all "full"
+  in --coverage-only; the 3 morph cards stay missing).
+- Engine (all in the ONE shared trick payload / resolver unless noted): FireSpellTargetWatchers (Wild
+  Defiance, before the spell's payload; deck stamp deck_has_spell_target_watch); trick_double_power (+X/+0
+  off CombatPowerOf, after the watcher and the flat part); grants_temp_double_strike; mainphase_power_bonus
+  ("instead" in a main phase); kicked_power_bonus on the "(Kicked)" face + KICKED TRICKS FAN PER TARGET (the
+  generic kicker block now skips solo-target tricks -- no existing kicker card is one, so byte-identical);
+  Berserk: Permanent::destroy_at_end_if_attacked swept by DestroyAttackedAtEndStep at BOTH end-step sites
+  (deck stamp deck_tracks_attacks arms the attack count), cast_only_before_combat_damage refused in a
+  post-combat main; mdfc_back_enters_tapped; ClassifyMainPhase / DeckFeedsCombat / EvalCard terms; the
+  trick-target equivalence key carries the Berserk bit.
+- SPELLSKITE REDIRECT built: Action/CastRiders/StackEntry::trick_redirect, one extra {U/P} pip
+  (AddSpellRedirectPip at every cost recompute site; the phyrexian post-pass emits the 2-life twin), every
+  plan/dedup key. Offered only with a target watcher on the battlefield or in hand, Spellskite able to
+  attack, the original target able to attack, no magnet. Viewer: plan variant `verb: redirect`. KNOWN GAP:
+  the LineSpec has no `redirect` key (CheckLine never matches a redirected plan to a hand line).
+- MorphProvider (routed FIRST, above `anti`): derives from DeckProvider; keeps only the shared exalted-aware
+  attack hold. Cast order = sound dominance tiers (permanents < additive tricks 21 < doublers/double strike
+  22) with OrderOpaqueCastsByRank. Non-attacker trick-target fold (TrickTargetsAttackersOnly) ON, premises
+  stated in code. Certificate NotAssessed.
+- NOT built (USER-owned / lossy, listed for the USER): F2 one-target concentration, F3 unkicked-Vines
+  dominance, F4 lone-attacker attack rule; declare-attackers cast window (INT-3).
+- INT-3: declare-attackers cast window (doublers after exalted) — after measuring how often it binds.
+
 ## Approved deferrals
 (none yet)

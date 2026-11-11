@@ -9475,7 +9475,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
-        || p.sac_at_end_step
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
@@ -16655,6 +16655,55 @@ inline void PerformEndStepDelayedSacrifices(GameState& state)
                                 "battlefield this turn)");
             }
             SacrificePermanentAt(state, d.second, i);
+            break;
+        }
+    }
+}
+
+// Berserk's delayed trigger (CardParams::trick_destroy_at_end_if_attacked -> Permanent::
+// destroy_at_end_if_attacked): "At the beginning of the next end step, destroy that creature if it
+// attacked this turn." Called right after PerformEndStepDelayedSacrifices at BOTH end-step sites
+// (GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn -- lockstep, one helper). A DESTROY,
+// not a sacrifice: no sacrifice watchers, and an indestructible creature survives. "If it attacked this
+// turn" = Permanent::AttacksThisTurn() > 0, which NoteAttacksDeclared counts for a deck stamped
+// GameState::deck_tracks_attacks. A creature that did not attack keeps nothing (the trigger does
+// nothing; the bit is cleared so it cannot outlive the turn). A body that already left the battlefield
+// is simply not found (CR 603.7c -- that object only). No-op (one flag test per permanent) for every
+// deck without the param.
+inline void DestroyAttackedAtEndStep(GameState& state)
+{
+    std::vector<std::pair<int, int>> due;   // (m_number, controller)
+    for (Permanent& p : state.battlefield)
+    {
+        if (!p.destroy_at_end_if_attacked) { continue; }
+        p.destroy_at_end_if_attacked = false;   // the delayed trigger fires once, whatever it does
+        if (p.AttacksThisTurn() > 0 && !p.HasKeyword(Keyword::Indestructible))
+        { due.emplace_back(p.card.m_number, p.controller_index); }
+    }
+    for (const std::pair<int, int>& d : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != d.first || q.controller_index != d.second) { continue; }
+            const Card dead      = q.card;
+            const bool was_token = q.is_token;
+            const int  m1        = MinusCountersOn(q);
+            const int  total     = TotalCountersOn(q);
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xF0\x9F\x92\x80 " + dead.m_name.str()
+                              + " -- destroyed at the beginning of the end step (Berserk: it attacked this turn)");
+            }
+            for (Permanent& o : state.battlefield)
+            {
+                if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+                if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+            }
+            state.players[q.owner_index].graveyard.push_back(dead);
+            state.battlefield.erase(state.battlefield.begin() + i);
+            OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total);
             break;
         }
     }
@@ -24024,9 +24073,11 @@ inline void UntapOwnCreaturesForCombat(GameState& state, int controller)
 // "...for each time it has attacked this turn": one more declared attack on each DECLARED attacker (CR 508.1;
 // called before any token joins the list, CR 508.4), both worlds at declare-attackers. Only for a deck with an
 // attack-count reader (deck_has_extra_combat), so every other deck's permanents never carry a count.
+// Berserk's "if it attacked this turn" (GameState::deck_tracks_attacks) arms the same count -- a separate
+// stamp because deck_has_extra_combat also arms the rollout's phase stamps and the extra-combat queue.
 inline void NoteAttacksDeclared(GameState& state, int controller, const std::vector<int>& declared)
 {
-    if (!state.deck_has_extra_combat) { return; }
+    if (!state.deck_has_extra_combat && !state.deck_tracks_attacks) { return; }
     for (int i : declared)
     {
         if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
@@ -26602,6 +26653,77 @@ inline void CreateTrickCopyToken(GameState& state, int controller, int src_i)
     }
 }
 
+// Can this battlefield creature still deal combat damage THIS turn -- the predicate the Morph pump
+// family's folds (the Spellskite redirect gate, MorphProvider's non-attacker trick-target fold) share.
+// Today: attack-eligible now (CanAttackFull: not sick or hasty, untapped, no defender). INT-2 HOOK
+// (morph): a face-down creature whose face has haste and that can be turned face up this turn, and a
+// creature a same-plan haste grant will reach, must also answer true -- extend HERE, never at a caller.
+inline bool TrickRecipientCanAttackThisTurn(const GameState& state, const Permanent& p)
+{
+    if (!p.card.IsCreature() && !p.is_animated) { return false; }
+    return CanAttackFull(p, state.battlefield, p.controller_index);
+}
+
+// The same question for a creature still in HAND that a plan would cast before the trick: it can attack
+// this turn only with haste -- its own, or a grant from something we control or hold (conservative: any
+// haste granter at all keeps it). INT-2 HOOK: a face-down cast whose face has haste and can be turned
+// face up this turn (Blistering Firecat) must answer true.
+inline bool TrickHandRecipientCanAttackThisTurn(const GameState& state, const CardDefinition& hd)
+{
+    if (hd.card.HasKeyword(Keyword::Haste) || hd.tmpl == CardTemplate::Haste) { return true; }
+    auto grants = [](const CardParams& q)
+    { return q.grants_haste || q.equip_grants_haste || q.grants_temp_haste || q.sac_for_mana_grants_haste; };
+    const Player& pl = state.players[state.active_player_index];
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && grants(d->params)) { return true; }
+    }
+    for (const Card& c : pl.hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && grants(d->params)) { return true; }
+    }
+    return false;
+}
+
+// Wild Defiance (CardParams::spell_target_watch_pump_*): "Whenever a creature you control becomes the
+// target of an instant or sorcery spell, that creature gets +3/+3 until end of turn." Fire every such
+// watcher for ONE "becomes the target" event on the creature at battlefield index `ti` -- one +N/+N per
+// watcher permanent its controller controls (each copy is its own trigger). Called by ApplyTrickPayload
+// for every own-creature recipient BEFORE the spell's payload (the trigger is put on the stack above the
+// spell and resolves first, CR 603.3), and by ResolveSoloTargetTrick once more for a Spellskite redirect
+// (a second "becomes the target" event, CR 115.7). `def` is the SPELL: only an instant or sorcery
+// qualifies. Gated on the deck stamp GameState::deck_has_spell_target_watch -> one bool test elsewhere.
+inline void FireSpellTargetWatchers(GameState& state, const CardDefinition& def, int ti)
+{
+    if (!state.deck_has_spell_target_watch) { return; }
+    if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
+    if (!def.card.IsInstant() && !def.card.IsSorcery()) { return; }
+    Permanent& tgt = state.battlefield[static_cast<std::size_t>(ti)];
+    if (!tgt.card.IsCreature() && !tgt.is_animated) { return; }
+    int pw = 0, tf = 0;
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != tgt.controller_index || w.def_absent) { continue; }
+        const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card);
+        if (wd == nullptr) { continue; }
+        pw += wd->params.spell_target_watch_pump_power;
+        tf += wd->params.spell_target_watch_pump_tough;
+    }
+    if (pw == 0 && tf == 0) { return; }
+    tgt.temp_power_bonus += pw;
+    tgt.temp_tough_bonus += tf;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      tgt.card.m_name.str() + " became the target of " + def.card.m_name.str()
+                      + " -- gets +" + std::to_string(pw) + "/+" + std::to_string(tf)
+                      + " (target watcher)");
+    }
+}
+
 // Apply ONE resolution instance of a trick's payload to the creature at battlefield index `ti`
 // (-1 = the untargeted "up to one target, chose none" instance: only the untargeted payloads
 // resolve). Every dynamic count (cards drawn this turn, Treasures, graveyard copies) is
@@ -26620,6 +26742,10 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
 
     if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
+    // Wild Defiance: the target watcher's trigger resolves BEFORE this spell (CR 603.3), so it lands
+    // first and a doubler below doubles it. Own creatures only (an opponent-target sentinel recipient is
+    // theirs, and their Defiance never exists in a goldfish).
+    if (state.battlefield[ti].controller_index == controller) { FireSpellTargetWatchers(state, def, ti); }
     Permanent& tgt = state.battlefield[ti];
 
     if (pp.counters_on_target > 0)
@@ -26628,11 +26754,24 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
         RefreshCounterThresholdKeywords(tgt);
     }
     if (pp.grants_temp_haste) { tgt.temp_haste = true; }
+    // Temur Battle Rage: double strike until end of turn (read only by CreatureHasDoubleStrike).
+    if (pp.grants_temp_double_strike) { tgt.temp_double_strike = true; }
+    // Berserk: the delayed "destroy that creature if it attacked this turn" (DestroyAttackedAtEndStep).
+    if (pp.trick_destroy_at_end_if_attacked) { tgt.destroy_at_end_if_attacked = true; }
 
     // P/T pump: flat + graveyard-scaled (Ancestral Anger) + drawn-count (Fists of Flame, AFTER
     // its own draw above) + Treasure-count (Gold Rush, AFTER its own Treasure above).
     int pw = pp.power_bonus;
     int tf = pp.tough_bonus;
+    // Might of Old Krosa: "If you cast this spell during your main phase, that creature gets +4/+4
+    // INSTEAD" -- replaces the flat part. Cast and resolution share the phase in this engine (no
+    // combat-time cast window exists), so reading it at resolution is exact.
+    if ((pp.mainphase_power_bonus != 0 || pp.mainphase_tough_bonus != 0)
+        && (state.phase == Phase::PreCombatMain || state.phase == Phase::PostCombatMain))
+    {
+        pw = pp.mainphase_power_bonus;
+        tf = pp.mainphase_tough_bonus;
+    }
     if (pp.gy_self_power_bonus > 0)
     {
         int copies = 0;
@@ -26664,6 +26803,15 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     }
     if (pw != 0) { tgt.temp_power_bonus += pw; }
     if (tf != 0) { tgt.temp_tough_bonus += tf; }
+    // Berserk / Legion Leadership: +X/+0, X = the target's combat power NOW -- after the watcher
+    // trigger and this spell's own flat part above (CR 701.10: doubling power = +X/+0, X locked as the
+    // effect resolves). max(0, .): negative power would give -X; no pool card makes power negative.
+    if (pp.trick_double_power)
+    {
+        const int x = std::max(0, CombatPowerOf(tgt, state));
+        tgt.temp_power_bonus += x;
+        pw += x;   // the trace below reports the whole bonus
+    }
     // DIG INSTRUMENT (MTG_TRICK_TRACE, default off): real-resolution-only dump of where a trick
     // payload landed -- target, pump, treasure count -- for diffing an executed turn against the
     // committed line's projection (the mw gi43 class: same casts, pump landed differently).
@@ -26710,8 +26858,19 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
 // Returns false when the cast declared a target that is no longer on the battlefield (the spell
 // fizzles, CR 608.2b: no payloads, straight to the graveyard). The enumeration's same-plan subset
 // filter makes this unreachable in normal play; the guard keeps a stale plan safe.
+//
+// SPELLSKITE (redirect_to != 0 -- Action::trick_redirect, CardParams::redirects_spell_target_to_self):
+// "{U/P}: Change a target of target spell or ability to this creature", activated on OUR trick while it
+// is on the stack (its {U/P} was paid with the cast). The declared target A became the target when the
+// spell was cast (its target watchers fire -- Wild Defiance's +3/+3 on A), then the redirect makes the
+// Spellskite the new target (CR 115.7 -- it "becomes the target", so the watchers fire again, for the
+// Spellskite), and the spell resolves on the Spellskite. Applied AFTER the human board-click override
+// (the human picks A), before the magnet / Heroism fan (the enumeration never offers a redirect on a
+// magnet target or a strive cast). A Spellskite that left the battlefield cannot be activated: the cast
+// resolves on A unchanged.
 inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardDefinition& def,
-                                   int target_number, int strive_extras, int chosen_x)
+                                   int target_number, int strive_extras, int chosen_x,
+                                   int redirect_to = 0)
 {
     // Resolve the declared target (by stable per-copy id; deck cards AND tokens are numbered --
     // see GameState::next_token_number).
@@ -26858,6 +27017,34 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         {
             ti = own.front();
             strive_pick.assign(own.begin() + 1, own.end());
+        }
+    }
+
+    // Spellskite redirect (see the header comment).
+    if (redirect_to != 0 && ti >= 0 && strive_extras <= 0)
+    {
+        int si = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != controller || p.card.m_number != redirect_to) { continue; }
+            if (!p.card.IsCreature() && !p.is_animated) { break; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd && pd->params.redirects_spell_target_to_self) { si = i; }
+            break;
+        }
+        if (si >= 0 && si != ti)
+        {
+            FireSpellTargetWatchers(state, def, ti);   // A became the target on the cast
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              state.battlefield[static_cast<std::size_t>(si)].card.m_name.str()
+                              + " redirects " + def.card.m_name.str() + " from "
+                              + state.battlefield[static_cast<std::size_t>(ti)].card.m_name.str()
+                              + " to itself");
+            }
+            ti = si;   // ApplyTrickPayload fires the watchers for the new target, then the payload
         }
     }
 
@@ -45745,7 +45932,7 @@ inline bool SacLandTwins(const GameState& state, const Permanent& a, const Perma
         if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
             || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
             || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
-            || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
+            || p->destroy_at_end_if_attacked || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
             || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
     }
     for (const Permanent& q : state.battlefield)
@@ -49036,7 +49223,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.lifegain_counters_used_this_turn ? 2097152 : 0)
         | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
         | (p.sac_at_end_step ? 8388608 : 0)
-        | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0));   // Scythecat Cub
+        | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0)   // Scythecat Cub
+        | (p.destroy_at_end_if_attacked ? 67108864 : 0));   // Berserk's delayed destroy
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);

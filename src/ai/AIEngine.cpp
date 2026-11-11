@@ -9941,6 +9941,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // "Target player gains N life": the searched player target (0 = us). Read at resolution by
     // ApplyCastLifegain (EffectHandler) -- the rollout twin passes apply_one's rider.
     if (riders.player_target != 0) { entry.player_target = riders.player_target; }
+    if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite
     // Magnetic Theft: the searched Equipment target, read at resolution by the shared
     // ResolveAttachTargetEquipment (the creature target is entry.enchant_target). Param-gated, so no
     // other deck's stack entries move.
@@ -10228,6 +10229,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // Phyrexian ({G/P} -- Birthing Pod's cast): the variant's life-paid pips come OFF the
     // recomputed cost, the SAME strip the enumeration and rollout applied (lockstep); the life
     // itself is deducted after TapForCost succeeds, below.
+    // Spellskite's {U/P} on a redirected trick (CastRiders::trick_redirect): the SAME pip the
+    // enumeration and the rollout's apply_one bill (AddSpellRedirectPip), before the life strip.
+    if (riders.trick_redirect != 0) { AddSpellRedirectPip(effective); }
     if (phyrexian_life > 0) { effective.StripPhyrexianForLife(phyrexian_life / 2); }
     // Twobrid ({2/B} -- Beseech): the variant's coloured pips replace {2} each, the SAME conversion
     // the enumeration and the rollout's apply_one applied (lockstep).

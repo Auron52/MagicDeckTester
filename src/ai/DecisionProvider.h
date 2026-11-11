@@ -2876,6 +2876,17 @@ public:
         (void)s; (void)def; (void)out;   // default: no narrowing
     }
 
+    // TrickTargetsAttackersOnly -- a SOUND DOMINANCE FOLD a deck may claim for its solo-target tricks:
+    // a target that cannot deal combat damage this turn (TrickRecipientCanAttackThisTurn; a same-plan
+    // HAND creature only with haste) is skipped by CollectActions' unnarrowed target loops, keeping the
+    // lossless equivalence fold for the rest. Sound only for a deck where (a) every trick payload is
+    // until-end-of-turn COMBAT value and (b) nothing reads a non-attacker's power/toughness this turn
+    // (no ferocious / power-threshold reader) -- then a pump on a non-attacker is a no-op, dominated by
+    // not casting. The provider that answers true STATES both premises. Never consulted under human play
+    // or MTG_UNPRUNED / MTG_UNPRUNE=tricktarget. Default false -> byte-identical.
+    virtual bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const
+    { (void)s; (void)def; return false; }
+
     // AttachSpellPairCandidates -- narrow Magnetic Theft's ("Attach target Equipment to target
     // creature", attach_target_equipment) enumerated (Equipment m_number, creature m_number) pairs.
     // `pairs` arrives holding EVERY pair the engine folded as distinct (TurnSolver

@@ -414,6 +414,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         if (a.paired_with != b.paired_with)           { fail(i, "paired_with"); }
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
         if (a.sac_at_end_step != b.sac_at_end_step)   { fail(i, "sac_at_end_step"); }
+        if (a.destroy_at_end_if_attacked != b.destroy_at_end_if_attacked) { fail(i, "destroy_at_end_if_attacked"); }
         if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
         // Typed vs all-types animation (Gideon's +1 vs Mutavault): same is_animated bit, but a

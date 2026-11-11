@@ -702,6 +702,15 @@ struct Action
                                        // for four and competes for exactly the turn-4/5 mana that
                                        // casts Saproling Burst or a Doubling Season. Under one
                                        // Season that is 8 bodies against 4. false = unkicked.
+    int         trick_redirect   = 0;  // SPELLSKITE ("{U/P}: Change a target of target spell or ability
+                                       // to this creature"; CardParams::redirects_spell_target_to_self):
+                                       // on a solo-target trick CAST aimed at own creature A
+                                       // (enchant_target), the m_number of the Spellskite the cast is
+                                       // redirected to. The cast's cost carries one extra {U/P} pip
+                                       // (AddSpellRedirectPip; the phyrexian post-pass emits the 2-life
+                                       // twin). Threaded to ResolveSoloTargetTrick through CastRiders
+                                       // (rollout apply_one; executor StackEntry::trick_redirect).
+                                       // 0 = no redirect (every other action).
     std::shared_ptr<const ContPins> cont_pins;
                                        // Set ONLY on the first recorded action of a breakpoint
                                        // continuation whose plan carried during-cast pins (see
@@ -1051,6 +1060,21 @@ inline const Action* CycleSeedOf(const std::vector<Action>& acts)
     return nullptr;
 }
 
+// SPELLSKITE's activation cost, {U/P}, carried on the redirected trick cast (Action::trick_redirect):
+// one blue PHYREXIAN pip added to the cast's bill, in the same representation a printed {U/P} has
+// (colour baked into the flat count + one phyrexian slot), so the shared phyrexian machinery prices
+// it: the enumeration's post-pass emits the 2-life twin (Action::phyrexian_life) and every cost
+// RECOMPUTE site strips the life-paid pip after this add. Every recompute site (the two cast sites
+// and the three sequencing/prepay sites that already strip phyrexian life) calls this BEFORE its
+// strip, so enumeration, rollout and executor bill the same thing. A trick has no printed phyrexian
+// pip, so the slot is always free.
+inline void AddSpellRedirectPip(ManaCost& c)
+{
+    if (c.phyrexian_count >= 2) { return; }
+    c.blue += 1;
+    c.phyrexian_color[c.phyrexian_count++] = static_cast<std::uint8_t>(Color::Blue);
+}
+
 struct CastRiders
 {
     bool     miracle         = false;   // exact first-drawn card, offered only in its trigger window
@@ -1091,10 +1115,13 @@ struct CastRiders
     // Action::gy_cast_source_id (Lurrus): the cast leaves the GRAVEYARD under that permission. Both
     // worlds' cast paths re-check GyCastPermissionLegal before paying and spend it once paid.
     int      gy_cast_source_id = -1;
+    // Action::trick_redirect (Spellskite): the redirect target of a solo-target trick, 0 = none.
+    int      trick_redirect    = 0;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
         r.awaken = a.awaken;
         r.loyalty_ability = a.loyalty_ability;

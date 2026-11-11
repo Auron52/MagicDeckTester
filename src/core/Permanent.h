@@ -654,6 +654,13 @@ struct Permanent
                                            // is folded into BuildSimKey (and thus the mid-turn
                                            // breakpoint and dedup keys) as well as FungibilityKey /
                                            // dominance::Build / PermIsPlainForFoldImpl.
+    // Berserk's delayed trigger (CardParams::trick_destroy_at_end_if_attacked): "At the beginning of the
+    // next end step, destroy that creature if it attacked this turn." Set by the shared trick payload,
+    // swept at BOTH end-step sites (DestroyAttackedAtEndStep, lockstep): destroyed iff AttacksThisTurn()
+    // > 0 (GameState::deck_tracks_attacks arms the count), otherwise cleared. A third bit of this second
+    // byte (sizeof unchanged). FLIPS MID-TURN: folded wherever sac_at_end_step is. Never set for any
+    // other card -> byte-identical.
+    bool      destroy_at_end_if_attacked : 1 = false;
     // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
     // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
     // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel

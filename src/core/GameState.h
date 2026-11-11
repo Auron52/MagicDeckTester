@@ -215,6 +215,9 @@ struct StackEntry
                                         // the enter cascade EnterBattlefield self-sacrifices the permanent
                                         // through the shared cascade (the LTB fires as on any leave).
                                         // Stamped from Action::evoke at the cast site.
+    int                 trick_redirect = 0;         // Spellskite redirect of a solo-target trick (the
+                                        // Spellskite's m_number; Action::trick_redirect via CastRiders).
+                                        // 0 = none. Read by EffectHandler's ResolveSoloTargetTrick call.
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::
@@ -1634,6 +1637,16 @@ struct GameState
     // Gates every ripple scan (RippleInstances, the CollectActions pin pass, the upkeep pin fan). DEFAULT
     // TRUE (unstamped = scan). A deck constant: never folded.
     bool                     deck_has_ripple              = true;
+    // MORPH INT-1 (2026-11-11), in the 7-byte hole after deck_has_ripple (sizeof unchanged, measured with
+    // gdb ptype /o). DECK CONSTANTS (StampDeckTraits, MAINBOARD), never folded:
+    //   deck_has_spell_target_watch -- the list holds a spell_target_watch_pump_* card (Wild Defiance), so
+    //     ApplyTrickPayload's per-recipient watcher scan runs. DEFAULT TRUE, the safe direction (it only
+    //     skips a scan that would find nothing): an unstamped state (the scenario harness) still fires it.
+    //   deck_tracks_attacks -- the list holds a trick_destroy_at_end_if_attacked card (Berserk), so
+    //     NoteAttacksDeclared counts declared attacks (Permanent::AttacksThisTurn) as it does for
+    //     deck_has_extra_combat. DEFAULT FALSE (counting moves fold keys; a unit test sets it by hand).
+    bool                     deck_has_spell_target_watch  = true;
+    bool                     deck_tracks_attacks          = false;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

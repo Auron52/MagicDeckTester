@@ -186,16 +186,20 @@ TEST_CASE("kicker: inert for every card without a kicker")
     CHECK(CardDatabase::Instance().Lookup("Doubling Season (Kicked)") == nullptr);
     CHECK(CardDatabase::Instance().Lookup("Spore Swarm (Kicked)")     == nullptr);
 
-    // Saproling Migration, Tide Shaper, and Silvergill Adept's synthesized paid-extra-cost
-    // variant are the three cards using this structural cast-cost machinery. Keep the census
-    // explicit so a new use prompts a review of LineSpec::kickeds comparisons.
+    // Saproling Migration, Tide Shaper, Silvergill Adept's synthesized paid-extra-cost variant and
+    // Vines of Vastwood (Morph INT-1, the first kicked SOLO-TARGET TRICK: its kicked twin is emitted
+    // per target by the trick emitter, and a LineSpec `kicked=` still names only the mode -- the
+    // target rides the trick's own target key) are the four cards using this structural cast-cost
+    // machinery. Keep the census explicit so a new use prompts a review of LineSpec::kickeds
+    // comparisons.
     int with_kicker = 0;
     for (const auto& name : CardDatabase::Instance().AllNames())
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);
         if (d != nullptr && d->params.kicker_cost.has_value()) { ++with_kicker; }
     }
-    CHECK(with_kicker == 3);
+    CHECK(with_kicker == 4);
+    CHECK(Def("Vines of Vastwood").params.kicker_cost.has_value());
     CHECK(Def("Saproling Migration").params.kicker_cost.has_value());
     CHECK(Def("Tide Shaper").params.kicker_cost.has_value());
     CHECK(Def("Silvergill Adept").params.kicker_cost.has_value());

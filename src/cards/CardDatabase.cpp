@@ -249,6 +249,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 CardParams bp;
                 bp.produces             = def.params.mdfc_back_produces;
                 bp.etb_pay_life_to_untap = def.params.mdfc_back_pay_life;
+                // Legion Stronghold: "This land enters tapped." -- always, no life alternative.
+                if (def.params.mdfc_back_enters_tapped) { bp.enters_tapped = true; }
                 back.params = std::move(bp);
             }
             m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);
@@ -352,6 +354,15 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             if (def.params.kicked_creates_tokens > 0)
             { kicked.params.cast_creates_tokens = def.params.kicked_creates_tokens; }
             kicked.params.kicked_creates_tokens = 0;
+            // Vines of Vastwood: "If this spell was kicked, that creature gets +4/+4" -- the kicked
+            // face's trick payload. Unkicked Vines has no pump (its only goldfish effect is TARGETING).
+            if (def.params.kicked_power_bonus != 0 || def.params.kicked_tough_bonus != 0)
+            {
+                kicked.params.power_bonus = def.params.kicked_power_bonus;
+                kicked.params.tough_bonus = def.params.kicked_tough_bonus;
+            }
+            kicked.params.kicked_power_bonus = 0;
+            kicked.params.kicked_tough_bonus = 0;
             // 0 is the documented "no behavioural identity, fall back to the NAME" value. The
             // kicked face must never fold with its own unkicked entry: they come from one cards.json
             // entry, so they would digest identically, yet they differ in cost and in token count.
@@ -1788,6 +1799,17 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_investigate             = params.value("etb_investigate", 0);
     p.gy_cast_permanent_max_mv    = params.value("gy_cast_permanent_max_mv", 0);
     p.grants_temp_haste           = params.value("grants_temp_haste", false);
+    p.spell_target_watch_pump_power = params.value("spell_target_watch_pump_power", 0);
+    p.spell_target_watch_pump_tough = params.value("spell_target_watch_pump_tough", 0);
+    p.trick_double_power          = params.value("trick_double_power", false);
+    p.grants_temp_double_strike   = params.value("grants_temp_double_strike", false);
+    p.mainphase_power_bonus       = params.value("mainphase_power_bonus", 0);
+    p.mainphase_tough_bonus       = params.value("mainphase_tough_bonus", 0);
+    p.kicked_power_bonus          = params.value("kicked_power_bonus", 0);
+    p.kicked_tough_bonus          = params.value("kicked_tough_bonus", 0);
+    p.trick_destroy_at_end_if_attacked = params.value("trick_destroy_at_end_if_attacked", false);
+    p.cast_only_before_combat_damage   = params.value("cast_only_before_combat_damage", false);
+    p.redirects_spell_target_to_self   = params.value("redirects_spell_target_to_self", false);
     p.counters_on_target          = params.value("counters_on_target", 0);
     p.cast_lifegain               = params.value("cast_lifegain", 0);
     p.cast_lifegain_ferocious     = params.value("cast_lifegain_ferocious", 0);
@@ -1896,6 +1918,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.untap_pump_tough              = params.value("untap_pump_tough", 0);
     p.etb_destroy_own_noncreature_max = params.value("etb_destroy_own_noncreature_max", 0);
     p.mdfc_back_pay_life            = params.value("mdfc_back_pay_life", 0);
+    p.mdfc_back_enters_tapped       = params.value("mdfc_back_enters_tapped", false);
     p.look_top_put_creature_count   = params.value("look_top_put_creature_count", 0);
     p.look_put_counter_bonus        = params.value("look_put_counter_bonus", 0);
     p.look_put_counter_bonus_max_mv = params.value("look_put_counter_bonus_max_mv", 0);

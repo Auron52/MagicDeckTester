@@ -490,6 +490,10 @@ bool GoldFishRunner::DeckFeedsCombat(const Decklist& deck)
         if (p.pump_per_cards_drawn_power > 0 || p.pump_per_treasure_power > 0
             || p.pump_per_life_gained_power > 0 || p.pump_per_x_power > 0
             || p.counters_on_target > 0)                                     { return true; }
+        // Morph INT-1 pump family (Berserk / Legion Leadership / Temur Battle Rage / Might of Old
+        // Krosa / Vines -- unkicked Vines has no power_bonus) and Wild Defiance's target watcher.
+        if (p.trick_double_power || p.grants_temp_double_strike || p.mainphase_power_bonus > 0
+            || p.kicked_power_bonus > 0 || p.spell_target_watch_pump_power > 0) { return true; }
     }
     return false;
 }
@@ -1282,6 +1286,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Morph INT-1: Wild Defiance's watcher scan and Berserk's attack count. MAINBOARD ONLY (the
+    // deck_has_extra_combat reasoning: the attack count moves fold keys -- a behaviour).
+    {
+        bool watch = false, attacks = false;
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            watch   = watch   || d->params.spell_target_watch_pump_power != 0
+                              || d->params.spell_target_watch_pump_tough != 0;
+            attacks = attacks || d->params.trick_destroy_at_end_if_attacked;
+        }
+        state.deck_has_spell_target_watch = watch;
+        state.deck_tracks_attacks         = attacks;
+    }
     // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
     // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
     {

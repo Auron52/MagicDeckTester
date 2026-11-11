@@ -16084,6 +16084,147 @@
          "no_max_hand_size": true,
          "kruphix_banks_mana": true
       }
+   },
+   {
+      "name": "Wild Defiance",
+      "mana_cost": "{2}{G}",
+      "types": [
+         "Enchantment"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Whenever a creature you control becomes the target of an instant or sorcery spell, that creature gets +3/+3 until end of turn. [spell_target_watch_pump_power/_tough 3: a WATCHER read for every OWN-creature recipient of an instant/sorcery solo-target trick inside the ONE shared payload applier (ApplyTrickPayload: executor EffectHandler + rollout apply_one, lockstep), applied BEFORE that spell's own payload (the trigger goes on the stack above the spell and resolves first, CR 603.3) -- so a later doubler (Berserk, Legion Leadership) doubles the +3/+3. One +3/+3 per Wild Defiance we control per targeting (each copy is its own trigger); a spell COPY that targets the creature counts too, and a Spellskite redirect is a SECOND 'becomes the target' event (the redirected-to creature triggers again). Mandatory, untargeted, no choice -> no viewer decision. PARTIAL/PROVISIONAL: (1) spells cast by the OPPONENT are collapsed away -- inert, the passive opponent never casts; (2) only solo-target tricks fire it -- a pump_spell-template instant (Invigorate) does not; no such card shares a list with Wild Defiance.]",
+      "template": "custom",
+      "parameters": {
+         "spell_target_watch_pump_power": 3,
+         "spell_target_watch_pump_tough": 3
+      }
+   },
+   {
+      "name": "Berserk",
+      "mana_cost": "{G}",
+      "types": [
+         "Instant"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Cast this spell only before the combat damage step.\nTarget creature gains trample and gets +X/+0 until end of turn, where X is its power. At the beginning of the next end step, destroy that creature if it attacked this turn. [solo_target_trick: the target is a SEARCHED plan variant (viewer: board-click target). trick_double_power: +X/+0 with X = the target's combat power AS THE SPELL RESOLVES (CombatPowerOf: printed + temp + counters + lords + Auras + Equipment), read AFTER any Wild Defiance trigger (which resolves first) and locked there -- pumps resolving later are not doubled. trick_destroy_at_end_if_attacked: a delayed trigger (Permanent::destroy_at_end_if_attacked) swept at the beginning of the end step in both worlds -- DESTROYED (not sacrificed: indestructible survives, no sacrifice watchers) iff the creature was declared as an attacker this turn; a body that already left is not found (CR 603.7c). cast_only_before_combat_damage: never offered in a post-combat main. PARTIAL/PROVISIONAL: 'gains trample' NOT modelled -- inert, the passive opponent never blocks (no blocker path; Keyword::Trample has no reader). PARTIAL/PROVISIONAL: instant speed is collapsed to the main phase; NOT fully inert -- cast after a lone attacker's exalted trigger resolves, X would include the exalted bonus (see the Morph ledger, D7).]",
+      "template": "custom",
+      "parameters": {
+         "solo_target_trick": true,
+         "trick_double_power": true,
+         "trick_destroy_at_end_if_attacked": true,
+         "cast_only_before_combat_damage": true
+      }
+   },
+   {
+      "name": "Temur Battle Rage",
+      "mana_cost": "{1}{R}",
+      "types": [
+         "Instant"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Target creature gains double strike until end of turn.\nFerocious — That creature also gains trample until end of turn if you control a creature with power 4 or greater. [solo_target_trick (searched target; viewer board click). grants_temp_double_strike -> Permanent::temp_double_strike, read only by CreatureHasDoubleStrike, so the CR 510.4 two-step split in Combat.cpp (executor and rollout) and the search's attack projection all see it; every pump and the exalted bonus are dealt in both steps. Cleared at cleanup. PARTIAL/PROVISIONAL: the FEROCIOUS trample grant is NOT modelled -- inert, the passive opponent never blocks (no blocker path; Keyword::Trample has no reader), so the condition is not evaluated either. Instant speed collapsed to the main phase: inert for this card (double strike multiplies whatever power exists at damage).]",
+      "template": "custom",
+      "parameters": {
+         "solo_target_trick": true,
+         "grants_temp_double_strike": true
+      }
+   },
+   {
+      "name": "Might of Old Krosa",
+      "mana_cost": "{G}",
+      "types": [
+         "Instant"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Target creature gets +2/+2 until end of turn. If you cast this spell during your main phase, that creature gets +4/+4 until end of turn instead. [solo_target_trick (searched target; viewer board click). power_bonus/tough_bonus 2 = the base; mainphase_power_bonus/_tough 4 REPLACE it ('instead') when the spell resolves in a main phase (GameState::phase -- the cast and the resolution share the phase in this engine). Every cast this engine can make is a main-phase cast, so the +2/+2 branch is currently unreachable; it is modelled so a future combat-time cast window prices it correctly. Pumped after a Wild Defiance trigger; a later doubler (Berserk, Legion Leadership) doubles it.]",
+      "template": "custom",
+      "parameters": {
+         "solo_target_trick": true,
+         "power_bonus": 2,
+         "tough_bonus": 2,
+         "mainphase_power_bonus": 4,
+         "mainphase_tough_bonus": 4
+      }
+   },
+   {
+      "name": "Vines of Vastwood",
+      "mana_cost": "{G}",
+      "types": [
+         "Instant"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Kicker {G} (You may pay an additional {G} as you cast this spell.)\nTarget creature can't be the target of spells or abilities your opponents control this turn. If this spell was kicked, that creature gets +4/+4 until end of turn. [solo_target_trick (searched target; viewer board click) + KICKER: both modes are cast variants sharing one hand slot, one PER TARGET, and the SEARCH picks -- unkicked {G} (its only goldfish effect is the TARGETING, which triggers Wild Defiance) vs the DB-synthesized 'Vines of Vastwood (Kicked)' face at {G}{G} (an additional cost, CR 601.2b) carrying kicked_power_bonus/_tough 4 as its +4/+4. PARTIAL/PROVISIONAL: 'can't be the target of spells or abilities your opponents control' NOT modelled -- inert, the passive opponent never targets anything.]",
+      "template": "custom",
+      "parameters": {
+         "solo_target_trick": true,
+         "kicker_cost": "{G}",
+         "kicked_power_bonus": 4,
+         "kicked_tough_bonus": 4
+      }
+   },
+   {
+      "name": "Legion Leadership",
+      "mana_cost": "{1}{R/W}",
+      "types": [
+         "Instant"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "Until end of turn, double target creature's power and it gains first strike. // Legion Stronghold -- Land. This land enters tapped. {T}: Add {R} or {W}. [Modal double-faced SPELL//LAND (the Turntimber Symbiosis shape): the back face is DB-synthesized from mdfc_back_* and offered by land enumeration as the card's only land face; mdfc_back_enters_tapped -> it ALWAYS enters tapped; it taps for {R} or {W}. FRONT: solo_target_trick (searched target; viewer board click); trick_double_power = 'double its power' == +X/+0 where X is its combat power as the spell resolves (CR 701.10), read AFTER any Wild Defiance trigger. Hybrid {R/W} payable by either colour (the shared hybrid machinery). PARTIAL/PROVISIONAL: 'gains first strike' NOT modelled -- inert in this deck: first strike only changes WHEN damage is dealt, nothing between the two damage steps here changes an outcome, and with double strike it is redundant. PARTIAL/PROVISIONAL: instant speed collapsed to the main phase -- NOT fully inert, doubling after a lone attacker's exalted trigger resolves would include the exalted bonus (see the Morph ledger, D7).]",
+      "template": "custom",
+      "parameters": {
+         "solo_target_trick": true,
+         "trick_double_power": true,
+         "mdfc_back_name": "Legion Stronghold",
+         "mdfc_back_produces": [
+            "R",
+            "W"
+         ],
+         "mdfc_back_enters_tapped": true
+      }
+   },
+   {
+      "name": "Spellskite",
+      "mana_cost": "{2}",
+      "types": [
+         "Artifact",
+         "Creature"
+      ],
+      "subtypes": [
+         "Phyrexian",
+         "Horror"
+      ],
+      "keywords": [],
+      "power": 0,
+      "toughness": 4,
+      "oracle_text": "{U/P}: Change a target of target spell or ability to this creature. ({U/P} can be paid with either {U} or 2 life.) [0/4 artifact creature body: a legal pump target and attacker. redirects_spell_target_to_self: the redirect is modelled for OUR solo-target tricks -- a searched cast VARIANT of a trick aimed at another own creature A (Action::trick_redirect = this Spellskite), costing one extra {U/P} pip (the phyrexian post-pass emits the pay-2-life twin). At resolution A 'became the target' (Wild Defiance fires for A), then Spellskite does (CR 115.7 -- Defiance fires again for Spellskite), and the spell's payload lands on Spellskite. Offered only where it can differ from targeting Spellskite directly: a Wild Defiance on the battlefield, Spellskite able to attack this turn, and A able to attack (a pump on a non-attacker is worth nothing). PARTIAL/PROVISIONAL: redirecting an OPPONENT's spell or ability is not modelled -- inert, the passive opponent casts and activates nothing; redirecting our own non-trick targeted spells/abilities is not modelled -- no such card shares a list with Spellskite today.]",
+      "template": "custom",
+      "parameters": {
+         "redirects_spell_target_to_self": true
+      }
+   },
+   {
+      "name": "Fire-Lit Thicket",
+      "mana_cost": "",
+      "types": [
+         "Land"
+      ],
+      "subtypes": [],
+      "keywords": [],
+      "oracle_text": "{T}: Add {C}.\n{R/G}, {T}: Add {R}{R}, {R}{G}, or {G}{G}. [Filter land, the Cascade Bluffs model (is_filter): fed one {R} or {G} from another source it yields two mana of {R}/{G} in any split; without a feeder it taps for {C}. Colour fixing, not ramp.]",
+      "template": "basic_land",
+      "parameters": {
+         "produces": [
+            "R",
+            "G"
+         ],
+         "is_filter": true
+      }
    }
  ]
 }

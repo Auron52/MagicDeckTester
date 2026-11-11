@@ -3249,6 +3249,19 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 if (kd && kd->params.kicker_cost.has_value())
                 { os << ", \"kicked_cost_mv\": " << kd->params.kicker_cost->ManaValue(); }
             }
+            //  * SPELLSKITE REDIRECT of a solo-target trick (Action::trick_redirect): the same cast,
+            //    same target, plus {U/P} to redirect it onto the Spellskite (whose target watchers
+            //    fire again). A plan variant: the verb and the redirect's destination name it.
+            if (ac.trick_redirect != 0)
+            {
+                os << ", \"trick_redirect\": " << ac.trick_redirect << ", \"verb\": \"redirect\"";
+                for (const Permanent& rp : s.battlefield)
+                {
+                    if (rp.card.m_number != ac.trick_redirect) { continue; }
+                    os << ", \"redirect_to\": "; JsonStr(os, rp.card.m_name.str());
+                    break;
+                }
+            }
             FixedBurnPin burn_pin;
             if (DecodeFixedBurnPin(ac.tutor_target.str(), burn_pin))
             { os << ", \"burn_target\": "; JsonStr(os, FixedBurnPinLabel(s, s.active_player_index, burn_pin)); }

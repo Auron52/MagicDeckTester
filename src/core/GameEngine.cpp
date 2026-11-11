@@ -1318,6 +1318,9 @@ void GameEngine::EndStep(GameState& state)
     // (Permanent::sac_at_end_step). Lockstep twin at the same position in
     // TurnSolver::SimulateEndAndStartNextTurn; no-op for every deck that never sets the flag.
     PerformEndStepDelayedSacrifices(state);
+    // Berserk's "destroy that creature if it attacked this turn" (Permanent::destroy_at_end_if_attacked).
+    // Lockstep twin at the same position in TurnSolver::SimulateEndAndStartNextTurn; no-op without the bit.
+    DestroyAttackedAtEndStep(state);
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; after
     // the exile sweep above, which is the other beginning-of-end-step effect. Param-gated ->

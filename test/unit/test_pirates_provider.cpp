@@ -245,6 +245,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Unpredictable Cyclone: CycloneProvider since phase 3 (2026-10-27) -- the Cyclone / Curator entries
         // carry its signature params; it rode AntiLifegain (Scalding Tarn's fetch_land_types) before.
         {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "Cyclone"},
+        // Morph (onboarded 2026-11-11, INT-1): MorphProvider, routed at the TOP by its own signature -- it
+        // would otherwise ride AntiLifegain via Wooded Foothills' fetch.
+        {"Morph", "Morph"},
         // THE ONE CHANGE: was AntiLifegain (Forerunner of the Coalition's tutor_to_top).
         {"Pirates", "Pirates"},
         // Prevent Damage (onboarded 2026-09-27): routed at the TOP by its own signature (Tamanoa /
