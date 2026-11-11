@@ -14,6 +14,16 @@ Updated 2026-11-11 (CLOSED). Branch `phase-1-2-deck-analyzer`. The fixes were co
 - Focused unit tests were rerun on the merged `mtg-test`: Alchemist 119/119 and Cyclone 120/120 (`logs/other_user_merged_{aa,cyclone}_unit.log`).
 - All of these were accepted with `--deck` filters and attribution notes in `test/regression_gt.txt`, and `check_gt_logs.py` is consistent. The overnight tier was left for its periodic pooled run.
 
+## Follow-up fixes (2026-11-11, after the USER's re-check)
+
+A replay of every original report found 23739, 23743 and the Cyclone decline text fixed, but 23742 (both Wish
+suggestions) and Cyclone 23746 (no Remand on a free-cast Ulamog) still broken. Fixed in the follow-up commit:
+the two Living Wish amendments (`MTG_AA_WISH_COMBO_FIRST`, `MTG_AA_WISH_UNTAP_NET`; ledger
+`analysis-AccomplishedAlchemist.md`, "USER reports on seed 23742"), and human play now skips
+`CycloneProvider::AdmitRemandOnFreeCast` (a search prune), so the viewer offers Remand on the Ulamog
+(`analysis-Unpredictable Cyclone.md`, Remand rulings). Replayed on the seeds: T2 suggests Brindle Boar, T5 Galvanic
+Alchemist, and 23746 offers Remand on Ulamog, the Infinite Gyre (it returns to hand, Remand draws).
+
 ## Changes made
 
 - `src/core/SpellEffects.h`, `src/ai/AIEngine.cpp`, `src/ai/TurnSolver.cpp`: attackers now tap before in-combat Ezuri pump mana is paid, in both real combat and rollout. This fixes seed 23739's illegal use of attacking mana creatures. Default-on diagnostic `MTG_ATTACK_TAP_BEFORE_PUMP`; `=0` reproduces old behavior.

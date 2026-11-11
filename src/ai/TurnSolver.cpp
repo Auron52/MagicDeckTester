@@ -68356,8 +68356,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         WalkExileUntilSharedType(state, me, CycleWalkTypeMask(sd.card), w);
         const CardDefinition* hd = w.have ? CardDatabase::Instance().LookupCached(w.hit) : nullptr;
         const bool castable = w.have && CycleHitCastable(state, me, hd);
-        const CardDefinition* rm =
-            castable ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state)) : nullptr;
+        // Human play skips the provider's Remand prune (a search prune; the human is offered every legal one).
+        const CardDefinition* rm = castable
+            ? CycleFreeCastRemand(state, me, *hd, AvailableManaPool(state), g_play_free_cast_chooser == nullptr)
+            : nullptr;
         // Remand-on-Remand (A on the hit, B on A): computed when the pin asks for it, and in human play
         // (the chooser offers it). Same helper as the executor (CycleFreeCastRemandChain).
         const CardDefinition* rm_b = nullptr;
@@ -68408,7 +68410,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // REMAND-ON-REMAND: offered after the Remand prompt was accepted (a second Remand on that one),
             // or on its own when no single Remand is offered for this hit (a provider-refused Ulamog: A is
             // countered, so the hit resolves). Accepting = A on the hit, B on A; the hit resolves.
-            if (take && rm_a != nullptr && (fc == kCycFcTakeRemand || rm == nullptr))
+            // ("on its own" also when the single Remand WAS offered only because human play skips the
+            // provider's prune, and the human declined it: the chain stays the standalone offer it was.)
+            const bool rm_prov_admits = rm != nullptr && ResolveProvider(state).AdmitRemandOnFreeCast(state, me, *hd);
+            if (take && rm_a != nullptr && (fc == kCycFcTakeRemand || !rm_prov_admits))
             {
                 std::vector<Card> rcands;
                 for (const Card& hc : ap.hand)

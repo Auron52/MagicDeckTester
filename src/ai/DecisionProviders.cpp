@@ -49307,6 +49307,8 @@ struct AaWishCensus
     int  mana_board = 0;      // `mana` before the hand's lands: the battlefield's projected mana (the discard cap)
     int  forest_bonus = 0;    // the best land-Aura bonus on one of our Forests (what an Arbor Elf re-tap adds)
     bool ezuri = false;       // a team pump (Ezuri) held -- read ONLY by the Elvish Harbinger rule's Wincon bucket
+    int  untap_loop_min = 0;  // the cheapest held untapper's mana per Alchemist untap (Staff: {3} + its own {1}
+                              // untap = 4; Crab Umbra / Galvanic = 3); 0 = none. Read ONLY by the wish rule.
 };
 
 bool AaHasColour(const std::vector<Color>& v, Color c) { return std::find(v.begin(), v.end(), c) != v.end(); }
@@ -49317,7 +49319,19 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
     auto roles = [&](const CardParams& p)
     {
         if (AaIsAlchemist(p)) { c.alchemist = true; }
-        if (AaIsUntapper(p))  { c.untapper = true; }
+        if (AaIsUntapper(p))
+        {
+            c.untapper = true;
+            int loop = 0;
+            if (p.untap_enchanted_cost)            { loop = p.untap_enchanted_cost->ManaValue(); }
+            if (p.soulbond_grants_untap_self_cost) { loop = p.soulbond_grants_untap_self_cost->ManaValue(); }
+            if (p.untap_target_creature_cost)
+            {
+                loop = p.untap_target_creature_cost->ManaValue()
+                     + (p.self_untap_cost ? p.self_untap_cost->ManaValue() : 0);
+            }
+            if (c.untap_loop_min == 0 || loop < c.untap_loop_min) { c.untap_loop_min = loop; }
+        }
         if (AaIsWitch(p))     { c.witch = true; }
         if (AaIsWinDraw(p))   { c.wincon = true; }
         if (p.team_pump_cost) { c.ezuri = true; }
@@ -49417,24 +49431,49 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     const bool amend_blue  = heurarm::Flag(heurarm::AA_WISH_BLUE, s_blue_env);
     const bool amend_truf  = heurarm::Flag(heurarm::AA_WISH_TRUFFLE, s_truf_env);
     const bool witch_win     = AaWishWitchWinOn();
-    // With the untapper and win condition held at three mana, prefer the
-    // missing Alchemist. Still offer the mana bucket: an Elf can be the faster
-    // route to four mana (regression seed 3054), and search must retain it.
-    static const bool s_alch_first = EnvOn("MTG_AA_WISH_ALCH_FIRST", true);
-    const bool alch_first    = s_alch_first && c.mana >= 3 && c.mana < 4
+    // COMBO PIECES FIRST AT THREE MANA (USER report 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting
+    // Arbor Elf instead of a combo piece"; MTG_AA_WISH_COMBO_FIRST, DEFAULT ON, =0 -> the 2026-11-10 ALCH_FIRST
+    // reading below). One mana short of the Alchemist's four, every lacking combo bucket (Alchemist, Lifegain,
+    // Untap, Wincon) ranks AHEAD of the mana bucket; the mana bucket is still offered after them (an Elf can be
+    // the faster route to four mana, regression seed 3054, and the search keeps it).
+    static const bool s_combo_first = EnvOn("MTG_AA_WISH_COMBO_FIRST", true);
+    static const bool s_alch_first  = EnvOn("MTG_AA_WISH_ALCH_FIRST", true);
+    const bool combo_first   = s_combo_first && c.mana >= 3 && c.mana < 4;
+    const bool alch_first    = !s_combo_first && s_alch_first && c.mana >= 3 && c.mana < 4
                             && !c.alchemist && c.untapper && c.wincon;
     const bool mana_lacking  = c.mana < 4;
     // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
     // and no Wincon.
     const bool witch_untaps  = c.witch && (witch_win || c.gain_total >= 5);
-    const bool untap_lacking = !c.untapper && !witch_untaps;
+    // A MANA-NEUTRAL UNTAPPER IS NOT ONE (USER report 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of
+    // Atheros instead of Galvanic Alchemist"; MTG_AA_WISH_UNTAP_NET, DEFAULT ON, =0 -> any held untapper fills
+    // Untap). The Alchemist taps for X = the life gained; an untap loop that costs >= X makes no mana. Staff of
+    // Domination's is {3} + {1} (its own untap) = 4, so with only Brindle Boar's 4 held it is neutral and Untap is
+    // still lacking (Galvanic Alchemist's {2}{U} nets +1) -- the Witch's 2026-10-20 "4 life rule" applied to the
+    // Staff. Judged only once a lifegain card is held (before that the Lifegain bucket is what is lacking), and
+    // only when the wishable untapper's own loop DOES net at that life (Weather the Storm's 3 with a held Crab
+    // Umbra: Galvanic's {2}{U} is no better, so Untap stays filled).
+    static const bool s_untap_net = EnvOn("MTG_AA_WISH_UNTAP_NET", true);
+    int wish_untap_loop = 0;                       // the cheapest wishable Galvanic-style loop; 0 = none offered
+    for (const std::string& nm : all)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr || !d->params.soulbond_grants_untap_self_cost) { continue; }
+        const int l = d->params.soulbond_grants_untap_self_cost->ManaValue();
+        if (wish_untap_loop == 0 || l < wish_untap_loop) { wish_untap_loop = l; }
+    }
+    const bool untapper_nets = c.untapper
+                            && !(s_untap_net && c.lifegain && c.untap_loop_min >= c.gain_total
+                                 && wish_untap_loop > 0 && wish_untap_loop < c.gain_total);
+    const bool untap_lacking = !untapper_nets && !witch_untaps;
     const bool win_held      = c.wincon || (witch_win && c.witch);
     const bool need_nothing  = c.alchemist && !mana_lacking && c.lifegain && !untap_lacking && win_held;
     if (why != nullptr)
     {
         *why = std::string("mana=") + std::to_string(c.mana) + (mana_lacking ? "!" : "")
              + (c.alchemist ? "" : " ALCH") + (c.lifegain ? "" : " GAIN") + (untap_lacking ? " UNTAP" : "")
-             + (win_held ? "" : " WIN") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
+             + (win_held ? "" : " WIN") + (c.untapper && untap_lacking ? " untap-neutral" : "")
+             + (combo_first ? " combo1st" : "") + (c.elf_multi ? " elf2" : "") + (c.blue ? " blue" : "")
              + " gain=" + std::to_string(c.gain_total);
         // Where the held pieces sit (diagnostic only): hand names, then our nonland permanents.
         std::string h = " hand=[", b = "] bf=[";
@@ -49445,6 +49484,7 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     }
     // Rank = the USER's bucket order (lower first); -1 = not offered.
     enum : int { kAlchFirst = 0, kElf, kForest, kIsland, kAlch, kGain, kUntap, kWin };
+    const int mana_shift = combo_first ? 10 : 0;   // Elf / Forest / Island behind every combo bucket
     std::vector<std::pair<int, std::string>> ranked;
     bool elf_legal = false;
     for (const std::string& nm : all)
@@ -49460,15 +49500,15 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         int r = -1;
         if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = alch_first ? kAlchFirst : kAlch; } }
         else if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty())
-                                                        { if (mana_lacking) { r = kElf; } }
+                                                        { if (mana_lacking) { r = kElf + mana_shift; } }
         else if (d->card.IsLand())
         {
             const bool lands_ok = mana_lacking && !(c.elf_multi && elf_legal);   // "the elf preferred"
-            if (lands_ok && AaHasColour(p.produces, Color::Green)) { r = kForest; }
+            if (lands_ok && AaHasColour(p.produces, Color::Green)) { r = kForest + mana_shift; }
             else if (AaHasColour(p.produces, Color::Blue))
             {
-                if (amend_blue) { if (!c.blue_firm && (lands_ok || c.blue_need)) { r = kIsland; } }
-                else if (lands_ok && !c.blue) { r = kIsland; }
+                if (amend_blue) { if (!c.blue_firm && (lands_ok || c.blue_need)) { r = kIsland + mana_shift; } }
+                else if (lands_ok && !c.blue) { r = kIsland + mana_shift; }
             }
         }
         else if (p.sac_outlet_lifegain > 0)             { if (!c.lifegain) { r = kGain; } }

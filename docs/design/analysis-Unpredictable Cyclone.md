@@ -274,7 +274,11 @@ paying ONLY the Remand (TapForCostDirect); executor: PushFreeCast -> bottom -> T
 erase the hit from the stack if counterable -> the shared `CastAndResolveRemand`. A cycler hit goes back to
 hand (cycle it again); Emrakul (cant_be_countered) resolves and the Remand is a cantrip. PRUNED on a free-cast
 Ulamog by `DecisionProvider::AdmitRemandOnFreeCast` (generic hook, default admit all; CycloneProvider:
-refuse a counterable spell with a TARGETED cast trigger -- properties, not names). HAND-CAST self-Remand:
+refuse a counterable spell with a TARGETED cast trigger -- properties, not names). The prune is the SEARCH's only:
+since 2026-11-11 HUMAN PLAY skips it (`CycleFreeCastRemand(..., provider_gate=false)` under the free-cast chooser),
+after the USER's viewer report on seed 23746 ("Not able to remand cycled cards": a cycled Street Wraith walked to
+Ulamog, the Infinite Gyre with Remand in hand and no Remand prompt). With two Remands the chain prompt still stands
+on its own when the single Remand is declined on a provider-refused hit. HAND-CAST self-Remand:
 `DecisionProvider::AdmitRemandRider` (default admit all) read in CollectActions' remand post-pass;
 CycloneProvider admits only target MV <= `MTG_CYCLONE_REMAND_MAX_MV` (int, default 1, -1 = never). It is an
 INT, so the per-job arm is `valuearm::Arm::cyclone_remand_max_mv` (manifest key "cyclone_remand_max_mv"),

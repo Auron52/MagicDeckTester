@@ -1506,6 +1506,31 @@ a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f
 not in the suite, so nothing else could move. Not accepted. Unit: mtg-test 1512 / 1512 (13 new wish cases, also
 green under `MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
+### USER reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON
+
+The USER's viewer reports, verbatim: "Living Wish suggested getting Arbor Elf instead of a combo piece" (T2: two
+Forests + Wild Growth = 3 projected mana; Accomplished Alchemist and two Staffs of Domination in hand) and, later,
+"suggested getting Scholar of Atheros instead of Galvanic Alchemist" (T5: Utopia Sprawl, Brindle Boar, Living Wish
+off a board with the Alchemist in play and a Staff in hand). Asked to fix them: "Okay, let's try to fix them."
+
+* `MTG_AA_WISH_COMBO_FIRST` (default ON; supersedes the 2026-11-10 `MTG_AA_WISH_ALCH_FIRST`, which only covered a
+  missing Alchemist). At exactly 3 projected mana every lacking COMBO bucket (Alchemist, Lifegain, Untap,
+  Wincon) ranks ahead of the Mana bucket; the mana cards are still offered after them. T2 now leads with the Boar.
+* `MTG_AA_WISH_UNTAP_NET` (default ON). An untapper whose loop costs at least the held lifegain makes no mana:
+  Staff of Domination's loop is {3} + its own {1} untap = 4, so beside only the Boar's 4 it does not fill Untap,
+  and Galvanic Alchemist (whose {2}{U} nets +1 at X = 4) is offered instead of Scholar. Judged only once a
+  lifegain card is held, and only when the wishable Galvanic's loop is cheaper than the held life (Weather the
+  Storm's 3 with a Crab Umbra: Galvanic is no better, Untap stays filled). The Witch's 2026-10-20 "4 life rule",
+  applied to the Staff.
+* Measured (alchemist cells only, logs `logs/other_user_fix2_{smoke,regression,classify}.log`): searched smoke 0
+  slower / 0 faster; regression one slower game, d5 s2002 gi12 T6 -> T7, classified churn (recovers to T6 at 4x
+  and 16x budget). d0 improves: smoke 6.2950 -> 6.2780, regression 6.3310 -> 6.2830. Strict references 0 drift.
+  Both GT tiers accepted with notes. Unit cases: "COMBO FIRST at three mana -- seed 23742 T2" and "a mana-neutral
+  Staff loop leaves Untap lacking -- seed 23742 T5". `=0` on either flag restores the prior reading.
+* OPEN for the USER: these are readings of two reports, generalised -- confirm (a) combo before mana at exactly 3
+  mana in every state, not only with the Alchemist in hand, and (b) the Staff-at-4-life reading of "instead of
+  Galvanic Alchemist".
+
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 
 Commits (branch `accomplished-alchemist`): 86ba02b3 (AppendSubdecisionAxes), 22d15f95 (UntapLandHosts),

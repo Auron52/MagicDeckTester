@@ -48698,11 +48698,14 @@ inline bool CycleFreeCastTakeDominated(const GameState& s, int controller, const
 // The Remand that could answer the free cast: a counters_target_spell_to_hand card in hand whose cost the
 // available mana pays (the cycle's own cost is already paid), admitted by the provider, with a cast left
 // in a restrictor's budget for it. Null = no Remand option.
+// `provider_gate` = consult DecisionProvider::AdmitRemandOnFreeCast. It is a SEARCH prune (Cyclone: USER
+// 2026-10-27, "I would probably heuristically prune remanding either Ulamog"), so HUMAN PLAY passes false: a
+// human is offered every legal Remand (USER 2026-11-11, seed 23746: "Not able to remand cycled cards").
 inline const CardDefinition* CycleFreeCastRemand(const GameState& s, int controller, const CardDefinition& hit,
-                                                 const ManaPool& pool)
+                                                 const ManaPool& pool, bool provider_gate = true)
 {
     if (s.casts_remaining_this_turn == 0) { return nullptr; }
-    if (!ResolveProvider(s).AdmitRemandOnFreeCast(s, controller, hit)) { return nullptr; }
+    if (provider_gate && !ResolveProvider(s).AdmitRemandOnFreeCast(s, controller, hit)) { return nullptr; }
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
