@@ -25010,14 +25010,17 @@ void JumboSurrakEarlyIfPaid(const GameState& s, const std::vector<Action>& acts,
 // spend outside of the land we are stacking or from the land we are stacking then it will need to do Overgrowth
 // first. With anything else, it likely works fine. ... I think we could make a rule for this that allows this very
 // narrowly." ONE deterministic arrangement per line (no new plan, no branch): the first Overgrowth moves to just
-// before the same-host Wild Growth ranked ahead of it only when ALL of
+// before the same-host Wild Growth / Utopia Sprawl ranked ahead of it only when ALL of
 //   (1) the BREAKPOINT holds: the mana spendable before the stacked land's next untap-and-retap -- every source
 //       but the Arbor Elf / Voyaging Satyr re-taps, counted either without the stacked land (O) or with its one
 //       tap (O + S) -- is exactly Overgrowth's cost, so Wild Growth + Overgrowth cannot both enter before that
 //       re-tap while Overgrowth alone can;
 //   (2) the ranked (USER) order does NOT pay every cast (TurnSolver::OrderPaysSequentially);
 //   (3) the moved order DOES.
-// A one-mana Aura on another land, Utopia Sprawl, and every board off the breakpoint keep the ranked order.
+// Utopia Sprawl counts as Wild Growth (USER 2026-11-11, item 5p, verbatim: "Utopia Sprawl is essentially identical
+// in this deck, so you can treat anything I say about wild growth here as applying to utopia sprawl."): the move goes
+// to just before the FIRST same-host one-mana Aura (Wild Growth or Utopia Sprawl) ranked ahead of Overgrowth.
+// A one-mana Aura on another land and every board off the breakpoint keep the ranked order.
 // MTG_JUMBO_OG_BREAKPOINT=0 -> the ranked order always.
 bool JumboOvergrowthBreakpointOn()
 {
@@ -25041,7 +25044,8 @@ void JumboOvergrowthAtBreakpoint(const GameState& s, const std::vector<Action>& 
     for (int p = 0; p < og; ++p)
     {
         const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
-        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Wild Growth" && a.enchant_target == land)
+        if (a.kind == Action::Kind::CastFromHand && a.enchant_target == land
+            && (a.card_name.str() == "Wild Growth" || a.card_name.str() == "Utopia Sprawl"))
         { wg = p; break; }
     }
     if (wg < 0) { return; }

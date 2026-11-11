@@ -124,6 +124,29 @@ How they apply:
    that land's untap-and-retap (every source but the Elf/Satyr re-taps, without the land or with its one tap) is
    exactly Overgrowth's cost, the ranked order does not pay every cast and the moved order does. One arrangement per
    line. Utopia Sprawl and Auras on another land keep the ranked order. `MTG_JUMBO_OG_BREAKPOINT` (default ON).
+   Superseded for Utopia Sprawl by item 5p below.
+
+### USER Utopia Sprawl and other-land Overgrowth rulings (2026-11-11, item 5p)
+
+Utopia Sprawl, verbatim:
+
+> Utopia Sprawl is essentially identical in this deck, so you can treat anything I say about wild growth here as
+> applying to utopia sprawl.
+
+Overgrowth on a different land from the one-mana Aura, verbatim:
+
+> If you put it on a different land I think it is easier to keep the original order, but I'll let you and other
+> agents look into that.
+
+> But, it is generally a bad idea to put it on other lands.
+
+> Yes, we don't need to remove the option, but stacking is usually right in this deck because of the untaps.
+
+How they apply:
+1. (5p) The 5n breakpoint move treats Utopia Sprawl exactly as Wild Growth: the first Overgrowth moves to just before
+   the first same-land Wild Growth OR Utopia Sprawl ranked ahead of it, under the same three conditions.
+2. Overgrowth on another land keeps the ranked order, and the Aura's host land stays a searched choice (the option is
+   not removed). The diagnosis of the other-land and two-move repros is in the mana-clean checkpoint (item 5p).
 
 ### Ability activation order
 

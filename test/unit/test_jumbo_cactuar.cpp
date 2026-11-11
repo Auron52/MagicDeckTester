@@ -14,6 +14,14 @@
 
 namespace
 {
+struct JumboArm
+{
+    heurarm::Arm saved;
+    JumboArm() : saved(heurarm::t_arm) {}
+    JumboArm& Set(heurarm::Slot slot, int v) { heurarm::t_arm[static_cast<int>(slot)] = static_cast<std::int8_t>(v); return *this; }
+    ~JumboArm() { heurarm::t_arm = saved; }
+};
+
 void LoadJumboCards()
 {
     static const bool loaded = [] {
@@ -357,10 +365,25 @@ TEST_CASE("Jumbo Cactuar keeps Utopia Sprawl before Overgrowth even when only th
     { return CastOrderLess(s, acts[x], acts[y]); });
     CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, order));
     const std::vector<int> ranked = order;
-    ApplyDeckCastArrangement(s, acts, order);
-    CHECK(order == ranked);
-    CHECK(acts[static_cast<std::size_t>(order[0])].card_name.str() == "Utopia Sprawl");
+    {
+        // The generic order (no breakpoint rule): Sprawl stays first.
+        JumboArm off; off.Set(heurarm::JUMBO_OG_BREAKPOINT, 0);
+        std::vector<int> o = ranked;
+        ApplyDeckCastArrangement(s, acts, o);
+        CHECK(o == ranked);
+        CHECK(acts[static_cast<std::size_t>(o[0])].card_name.str() == "Utopia Sprawl");
+    }
     CHECK(TurnSolver::OrderPaysSequentially(s, acts, std::vector<int>{1, 3, 4, 0, 2}));
+    {
+        // Item 5p: this board IS the breakpoint (Forest#10 makes 3, nothing outside it), and Utopia Sprawl now
+        // counts as Wild Growth, so the first Overgrowth moves ahead of the Sprawl and the moved order pays.
+        JumboArm on; on.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        std::vector<int> o = ranked;
+        ApplyDeckCastArrangement(s, acts, o);
+        CHECK(acts[static_cast<std::size_t>(o[0])].card_name.str() == "Overgrowth");
+        CHECK(acts[static_cast<std::size_t>(o[1])].card_name.str() == "Utopia Sprawl");
+        CHECK(TurnSolver::OrderPaysSequentially(s, acts, o));
+    }
 }
 
 TEST_CASE("Jumbo Cactuar enumerates a newly hasted Arbor Elf funding Tooth and Nail")
@@ -650,14 +673,6 @@ TEST_CASE("Jumbo Cactuar walk keeps a land Aura on its tapped declared host")
 // stacking then it will need to do Overgrowth first. With anything else, it likely works fine."
 namespace
 {
-struct JumboArm
-{
-    heurarm::Arm saved;
-    JumboArm() : saved(heurarm::t_arm) {}
-    JumboArm& Set(heurarm::Slot slot, int v) { heurarm::t_arm[static_cast<int>(slot)] = static_cast<std::int8_t>(v); return *this; }
-    ~JumboArm() { heurarm::t_arm = saved; }
-};
-
 // Gate jumbo-userorder-20261111 s30035557 T4: one Forest carrying two Utopia Sprawls (3 mana from the stacked land,
 // nothing outside it), Arbor Elf and Voyaging Satyr ready to re-tap it.
 GameState OvergrowthBreakpointBoard(JumboCactuarProvider& provider, int extra_forests)
@@ -714,9 +729,22 @@ TEST_CASE("Jumbo Cactuar casts Overgrowth before a same-land Wild Growth only at
         CHECK(ArrangedNames(s, acts) == std::vector<std::string>{"Wild Growth", "Overgrowth"});
     }
     {
-        // Utopia Sprawl is not part of the rule.
+        // Item 5p, USER 2026-11-11: "Utopia Sprawl is essentially identical in this deck, so you can treat anything I
+        // say about wild growth here as applying to utopia sprawl." Same breakpoint, same move.
         JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
         GameState s = OvergrowthBreakpointBoard(provider, 0);
+        const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Tooth and Nail", 60),
+                                       JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Utopia Sprawl", 50, 10)};
+        CHECK(ArrangedNames(s, acts)
+              == std::vector<std::string>{"Overgrowth", "Utopia Sprawl", "Chariot of Victory", "Tooth and Nail"});
+        JumboArm off; off.Set(heurarm::JUMBO_OG_BREAKPOINT, 0);
+        CHECK(ArrangedNames(s, acts)
+              == std::vector<std::string>{"Utopia Sprawl", "Overgrowth", "Chariot of Victory", "Tooth and Nail"});
+    }
+    {
+        // Off the breakpoint, Utopia Sprawl keeps the ranked order too.
+        JumboArm arm; arm.Set(heurarm::JUMBO_OG_BREAKPOINT, 1);
+        GameState s = OvergrowthBreakpointBoard(provider, 1);
         const std::vector<Action> acts{JumboCast(s, "Overgrowth", 39, 10), JumboCast(s, "Tooth and Nail", 60),
                                        JumboCast(s, "Chariot of Victory", 5), JumboCast(s, "Utopia Sprawl", 50, 10)};
         CHECK(ArrangedNames(s, acts)
