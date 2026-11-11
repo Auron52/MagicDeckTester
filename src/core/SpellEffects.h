@@ -11680,8 +11680,8 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 if (g_play_loyalty_chooser != nullptr)
                 {
                     const int c = (*g_play_loyalty_chooser)(state, controller, def->card.m_name.str(),
-                                                            "fights it (each deals damage equal to its power "
-                                                            "to the other)", legal, 0);
+                                                            "fought by " + def->card.m_name.str() + " (each deals "
+                                                            "damage equal to its power to the other)", legal, 0);
                     if (c >= 0 && c < static_cast<int>(legal.size())) { pick = c; }
                 }
                 fight_num = state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(pick)])]
@@ -31120,8 +31120,14 @@ inline void DrainPendingZeroToughness(GameState& state)
         for (std::size_t i = state.battlefield.size(); i-- > 0; )
         {
             if (state.battlefield[i].card.m_number != num) { continue; }
+            // The queue also holds FIGHT participants (the Voracious Hydra fight queues both bodies),
+            // which die to marked lethal damage (CR 704.5g), not to 0 toughness (CR 704.5f). The
+            // reason is display text only (the viewer's play event; no digest reads it).
             if (CounterPingSbaDead(state.battlefield[i], state))
-            { CounterPingKillAt(state, i, "0 toughness"); }
+            {
+                const bool zero_t = LethalToughness(state.battlefield[i], state) <= 0;
+                CounterPingKillAt(state, i, zero_t ? "0 toughness" : "lethal damage");
+            }
             break;
         }
     }

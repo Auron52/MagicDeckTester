@@ -251,7 +251,13 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // The scaled source's live per-tap yield (claude-play sweep seed 80005: "Alchemist taps shows
         // WUBRG not X amount") -- `taps` says WHICH colours, this says HOW MANY. Additive; absent for
         // every fixed-yield source.
-        const int yield = (d && IsScaledManaDork(*d)) ? PermanentManaYield(s, p, *d) : -1;
+        int yield = (d && IsScaledManaDork(*d)) ? PermanentManaYield(s, p, *d) : -1;
+        // ...and a LAND whose tap is raised by a bonus it does not print -- a land Aura (Wild Growth) or a
+        // global land-tap bonus (Vernal Bloom, Nissa, Gauntlet of Power): `taps` still names the land's own
+        // face ("G"), so a Forest under a Bloom read as tapping for one {G} (Hydras sweep, seed 50004).
+        // The yield badge carries the whole tap. Absent for every land with no such bonus.
+        if (yield < 0 && d && p.card.IsLand() && LandAuraBonus(s, p) > 0)
+        { yield = PermanentManaYield(s, p, *d); }
         // Current P/T (sweep: "creature current power/toughness incl. temp pumps not exposed"). The
         // shared combat readers, so the number shown is the number combat deals / SBA checks.
         const bool has_pt = p.card.IsCreature() || p.is_animated;
@@ -1445,9 +1451,37 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     const Player& me  = s.ActivePlayer();
     int           opp = 1 - s.active_player_index;
     // MDFC back-face names, so the viewer can request the correct Scryfall FACE image (a back face's
-    // default image is its front -> the GUI appends face=back for these). DB-global, computed once.
+    // default image is its front -> the GUI appends face=back for these). Only the backs of cards IN THIS
+    // GAME (any zone, either player): the DB-global list named double-faced cards the deck does not hold,
+    // which read as a leak (Hydras sweep, seed 50004). The viewer accumulates the names across decisions
+    // and viewer_protocol_check only intersects them with this game's boards, so nothing reads the rest.
     {
-        static const std::vector<std::string> mdfc_backs = CardDatabase::Instance().MdfcBackFaceNames();
+        static const std::vector<std::string> all_backs = CardDatabase::Instance().MdfcBackFaceNames();
+        std::vector<std::string> mdfc_backs;
+        auto visit = [&](const Card& c)
+        {
+            const std::string nm = c.m_name.str();
+            if (std::binary_search(all_backs.begin(), all_backs.end(), nm)) { mdfc_backs.push_back(nm); }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { return; }
+            for (const std::string* b : { &d->params.mdfc_back_name, &d->params.daybound_back_name,
+                                          &d->params.transform_back_name })
+            { if (!b->empty()) { mdfc_backs.push_back(*b); } }
+        };
+        if (!all_backs.empty())
+        {
+            for (const Player& pl : s.players)
+            {
+                for (const Card& c : pl.hand)      { visit(c); }
+                for (const Card& c : pl.library)   { visit(c); }
+                for (const Card& c : pl.graveyard) { visit(c); }
+                for (const Card& c : pl.sideboard) { visit(c); }
+            }
+            for (const Permanent& p : s.battlefield) { visit(p.card); }
+            for (const Card& c : s.exile) { visit(c); }
+            std::sort(mdfc_backs.begin(), mdfc_backs.end());
+            mdfc_backs.erase(std::unique(mdfc_backs.begin(), mdfc_backs.end()), mdfc_backs.end());
+        }
         os << "  \"mdfc_backs\": [";
         for (size_t i = 0; i < mdfc_backs.size(); ++i) { if (i) { os << ", "; } JsonStr(os, mdfc_backs[i]); }
         os << "],\n";
@@ -4007,9 +4041,18 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // Soulfire Eruption: each target takes a RANDOM exiled card's mana value (not a fixed number), so
     // per_target_damage is meaningless -- the viewer shows "a random card's mana value each" instead.
     if (random_damage)        { d.Bool("random_damage", true); }
-    // These three deliberately share one output line (historic layout) -- emitted raw.
-    os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets
-       << ", \"min_targets\": " << min_targets << ",\n";
+    // These three deliberately share one output line (historic layout) -- emitted raw. A LOYALTY-style
+    // prompt (a planeswalker ability, or a Voracious Hydra fight that rides the same board-click chooser)
+    // deals no fixed per-target damage, so it carries no `per_target_damage` at all: a literal 0 there
+    // read as "this deals 0 damage" (Hydras sweep, seed 50002 T4). The viewer words those prompts from
+    // `loyalty` and never reads the number.
+    if (!loyalty_desc.empty())
+    { os << "  \"max_targets\": " << max_targets << ", \"min_targets\": " << min_targets << ",\n"; }
+    else
+    {
+        os << "  \"per_target_damage\": " << per_target << ", \"max_targets\": " << max_targets
+           << ", \"min_targets\": " << min_targets << ",\n";
+    }
     d.Board(s);
     d.Array("legal_targets", legal.size(), [&](std::size_t i)
     {
