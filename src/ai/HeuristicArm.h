@@ -849,6 +849,7 @@ enum Slot : int
     HYDRAS_MAX_X,             // MTG_HYDRAS_MAX_X         Hydras: every "enters with X" Hydra held to the most X its plan can pay (USER-requested LOSSY narrowing, 2026-11-10). DEFAULT ON (ADOPTED, USER 2026-11-11: "Max x sounds good. Honestly, almost anything that measures better and is cheaper is a good option." P1 A/B: -0.0083 turns at 0.80x ms over 2400 paired games, its one slower game recovers at d8 b0); =0 -> the full X range
     HYDRAS_SECOND_MAIN,       // MTG_HYDRAS_SECOND_MAIN   Hydras: Garruk, Primal Hunter's draw_greatest_power opens the searched post-combat main (USER 2026-11-10: "Second main -3 makes sense."). Default ON; =0 is the MEASUREMENT arm that prices the main 2 (GoldFishRunner::DeckUsesSecondMain)
     SEL_GATE_EXACT,           // MTG_SEL_GATE_EXACT       the selection-exact odometer gate, priced exactly at emission (SelGateExactRefuses, TurnSolver.cpp): a GENERIC same-turn cost reducer's discount is bounded (min(generic, the selected reducers' steps) per cast) instead of passing every selection holding one outright, and the land-tap x land-put cross term counts only the SELECTED bonus sources. SOUND (MTG_SEL_GATE_EXACT_VERIFY counts violations, must be 0); moves play only through work-priced ceilings. Default ON; =0 -> the gate as before. Hydras P2 2026-11-11
+    SB_RITUAL_AFTER_STONE,    // MTG_SB_RITUAL_AFTER_STONE  Shadowborn Apostle (USER 2026-11-11, "cast it after if mana allows and before if not"): in a line casting both Dark Ritual and Thrumming Stone, ShadowbornProvider::ArrangeCastOrder moves the Ritual(s) to just after the Stone when the exact sequential walk (TurnSolver::OrderPaysSequentially, which credits no ripple-revealed mana) pays that order; else Ritual keeps rank 1 before the Stone. ONE arrangement per line (no new plans). Default ON; =0 -> Ritual always before the Stone
     COUNT
 };
 
@@ -1642,6 +1643,7 @@ inline const char* Name(int slot)
         "MTG_HYDRAS_MAX_X",
         "MTG_HYDRAS_SECOND_MAIN",
         "MTG_SEL_GATE_EXACT",
+        "MTG_SB_RITUAL_AFTER_STONE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

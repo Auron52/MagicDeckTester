@@ -4210,6 +4210,14 @@ public:
     // drop Jetmir in Main-1."): once Jetmir has arrived THIS TURN (earlier in this main, or in main 1), neither an
     // Overlord fetch (SacNamedTimingFilter) nor an Overlord hard cast (CollectedActionAllowed) is offered; the
     // Overlord line is Overlord -> Jetmir inside one main.
+    // RITUAL AFTER THE STONE IF MANA ALLOWS (MTG_SB_RITUAL_AFTER_STONE; USER 2026-11-11: "my recommendation would
+    // be to cast it after if mana allows and before if not." / "there is no extra search for clairvoyance to
+    // abuse. It has exactly one choice."). In a line casting both Dark Ritual and Thrumming Stone, ArrangeCastOrder
+    // moves the Ritual(s) to just after the Stone -- the latest one first, one at a time -- while the exact
+    // sequential walk (TurnSolver::OrderPaysSequentially) pays the moved order; otherwise Ritual keeps its rank-1
+    // slot before the Stone. The walk resolves a ritual off its CARD (ApplyRitualFloat), never the ripple chain
+    // credit an action carries (ripple_chain_float), so no mana from ripple-revealed cards -- hidden information --
+    // enters the judgement. Deterministic: ONE arrangement per line; no plan is added or removed.
     bool CastOrderTotalByName() const override;
     // RITUAL WITHOUT A PAYOFF (MTG_SB_RITUAL_PAYOFF; USER 2026-11-05: "We might want to prune rituals with no payoff
     // like we have for other decks."): a plan subset that casts Dark Ritual / Culling the Weak and spends mana on

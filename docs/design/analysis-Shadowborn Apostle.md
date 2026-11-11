@@ -1518,3 +1518,5 @@ How it applies: NOT a searched choice between the two positions. A deterministic
 both Dark Ritual and Thrumming Stone, Ritual goes after Stone if the line pays that way (judged WITHOUT any mana from
 ripple-revealed cards, which are hidden information), otherwise it keeps its rank-1 slot before. The existing
 "Apostle sacrificed to Culling moves just before Culling" arrangement (the USER's earlier rule) is unchanged.
+USER clarification (verbatim): *"In other words, there is no extra search for clairvoyance to abuse. It has exactly
+one choice."* -- each line yields exactly ONE Ritual position; the plan count must not grow.

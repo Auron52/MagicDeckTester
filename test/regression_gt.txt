@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 997a8f071  date 2026-11-11
+# Regression ground truth -- commit 606aa62be  date 2026-11-11
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-10): Ezuri attacker mana legality: d3 gi24 and d5 gi24,75,95,137,138 lose formerly illegal combat speed; Umbra host shifts d5 gi109 later and gi110 earlier; d0 improves overall
@@ -68,10 +68,10 @@ cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9400/f6bc7069a092a949
 cyclone_smoke_d5_s1001=4.7400/54fb5b7e0a321f20
 cyclone2hg_smoke_d3_s1001=5.0000/af9bdd10df486e96
-shadowborn_smoke_d0_s1001=7.3770/33acfa973ce95b58
-shadowborn_smoke_d3_s1001=5.0400/1962b88bd526c3fe
-shadowborn_smoke_d5_s1001=4.8100/406673e3b468e1b3
-shadowborn2hg_smoke_d3_s1001=5.2800/eecf9d612134d231
+shadowborn_smoke_d0_s1001=7.3880/94b278a0e18c553b
+shadowborn_smoke_d3_s1001=5.0400/3e5631c928cea99d
+shadowborn_smoke_d5_s1001=4.8000/3e3506c73ca80aa6
+shadowborn2hg_smoke_d3_s1001=5.3000/4faab8c63a92902b
 dragonstorm_smoke_d0_s1001=4.9620/8666da55b491a4d5
 dragonstorm_smoke_d3_s1001=4.4600/745070e2adcb336d
 dragonstorm_smoke_d5_s1001=4.4400/b9f2486bd505a595
@@ -346,11 +346,11 @@ cyclone_regression_d3_s2002=4.8533/f22dcd37081f4918
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
 cyclone_regression_d5_s2002=4.7333/eb0d78511c346b04
 cyclone_regression_d5_s3003=4.7667/bdcbc678cb54ed24
-shadowborn_regression_d0_s2002=7.3570/23c1270628be5e0c
-shadowborn_regression_d3_s2002=4.8400/ff33bbde1b3cd73e
-shadowborn_regression_d3_s3003=4.9733/8e82bb1baf88f1f2
-shadowborn_regression_d5_s2002=4.8133/8dd9b3d5be541841
-shadowborn_regression_d5_s3003=4.8133/b511a89c39f47372
+shadowborn_regression_d0_s2002=7.3540/5cd7a0c86866b3c0
+shadowborn_regression_d3_s2002=4.8267/65734b232014d0a0
+shadowborn_regression_d3_s3003=4.9467/6e1ced44f33a04d9
+shadowborn_regression_d5_s2002=4.7800/5245aae66235fc04
+shadowborn_regression_d5_s3003=4.8000/cfdc37cccb0efeee
 dragonstorm_regression_d0_s2002=4.9950/134893a12929142d
 dragonstorm_regression_d3_s2002=4.2100/49841ce306256dbd
 dragonstorm_regression_d5_s2002=4.2988/b8c7e0c1fd445e38

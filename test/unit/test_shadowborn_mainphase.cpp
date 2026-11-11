@@ -534,3 +534,132 @@ TEST_CASE("SB ritual payoff: a sacrifice-six activation the six cannot reach is 
     MESSAGE("Ritual plans, one Apostle: off ", ritual_plans(0, 1), ", on ", ritual_plans(1, 1));
     CHECK(ritual_plans(1, 1) == 0);
 }
+
+// ---- Ritual after the Stone if mana allows (MTG_SB_RITUAL_AFTER_STONE; USER 2026-11-11) ---------------------------
+// "my recommendation would be to cast it after if mana allows and before if not." / "there is no extra search for
+// clairvoyance to abuse. It has exactly one choice." Judged by the exact sequential walk, which credits no mana from
+// ripple-revealed cards.
+namespace
+{
+Action SbCastA(GameState& s, const char* nm, int number)
+{
+    s.players[0].hand.push_back(CardM(nm, number));
+    const CardDefinition& d = DefM(nm);
+    Action a;
+    a.kind           = Action::Kind::CastFromHand;
+    a.card_name      = InternedName(nm);
+    a.def            = &d;
+    a.cost           = d.card.m_mana_cost;
+    a.is_noncreature = !d.card.IsCreature();
+    a.hand_index     = static_cast<int>(s.players[0].hand.size()) - 1;
+    if (d.params.ritual_floating_mana > 0) { a.ritual_float = static_cast<decltype(a.ritual_float)>(d.params.ritual_floating_mana); }
+    return a;
+}
+std::vector<std::string> SbArranged(GameState& s, const std::vector<Action>& acts)
+{
+    std::vector<int> order(acts.size());
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i) { order[static_cast<std::size_t>(i)] = i; }
+    std::stable_sort(order.begin(), order.end(), [&](int x, int y) { return CastOrderLess(s, acts[x], acts[y]); });
+    ApplyDeckCastArrangement(s, acts, order);
+    std::vector<std::string> got;
+    for (int i : order) { got.push_back(acts[static_cast<std::size_t>(i)].card_name.str()); }
+    return got;
+}
+}
+
+TEST_CASE("SB order: Ritual goes after the Stone when that order pays, else before it")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_RITUAL_AFTER_STONE, 1);
+    {
+        // Six Swamps: Stone off five, Ritual off the sixth, the Apostle off its float -> after.
+        GameState s = BaseM(6);
+        const std::vector<Action> acts = { SbCastA(s, kApM, 60), SbCastA(s, kStoneM, 61), SbCastA(s, kRitM, 62) };
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kStoneM, kRitM, kApM });
+    }
+    {
+        // Four Swamps: the Stone needs the Ritual's float -> the Ritual keeps its rank-1 slot.
+        GameState s = BaseM(4);
+        const std::vector<Action> acts = { SbCastA(s, kApM, 60), SbCastA(s, kStoneM, 61), SbCastA(s, kRitM, 62) };
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kStoneM, kApM });
+    }
+    {
+        // Two Rituals on six Swamps: both move after the Stone; on four only the second one does.
+        GameState s = BaseM(6);
+        const std::vector<Action> acts = { SbCastA(s, kRitM, 60), SbCastA(s, kStoneM, 61), SbCastA(s, kRitM, 62),
+                                           SbCastA(s, kApM, 63) };
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kStoneM, kRitM, kRitM, kApM });
+        GameState t = BaseM(4);
+        const std::vector<Action> acts2 = { SbCastA(t, kRitM, 60), SbCastA(t, kStoneM, 61), SbCastA(t, kRitM, 62),
+                                            SbCastA(t, kApM, 63) };
+        CHECK(SbArranged(t, acts2) == std::vector<std::string>{ kRitM, kStoneM, kRitM, kApM });
+    }
+    {
+        // The arm off: always before.
+        ArmM off; off.Set(heurarm::SB_RITUAL_AFTER_STONE, 0);
+        GameState s = BaseM(6);
+        const std::vector<Action> acts = { SbCastA(s, kApM, 60), SbCastA(s, kStoneM, 61), SbCastA(s, kRitM, 62) };
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kStoneM, kApM });
+    }
+}
+
+TEST_CASE("SB order: ripple-revealed mana (the chain credit) never moves the Ritual after the Stone")
+{
+    ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_RITUAL_AFTER_STONE, 1);
+    // Six Swamps, Ritual + Stone + four Apostles. After the Stone the Ritual's own BBB pays three Apostles; the fourth
+    // only with the free Rituals its ripple would reveal (the chain credit, hidden information) -> not "mana allows".
+    GameState s = BaseM(6);
+    std::vector<Action> acts = { SbCastA(s, kRitM, 60), SbCastA(s, kStoneM, 61), SbCastA(s, kApM, 62),
+                                 SbCastA(s, kApM, 63), SbCastA(s, kApM, 64), SbCastA(s, kApM, 65) };
+    acts[0].ritual_float       = static_cast<decltype(acts[0].ritual_float)>(acts[0].ritual_float + 4);
+    acts[0].ripple_chain_float = 4;
+    const std::vector<std::string> got = SbArranged(s, acts);
+    REQUIRE(!got.empty());
+    CHECK(got[0] == kRitM);
+    CHECK(got[1] == kStoneM);
+}
+
+TEST_CASE("SB order: Ritual-after-Stone is ONE arrangement per line -- the plan count does not grow")
+{
+    SearchedM sp;
+    auto census = [](int on, int swamps, int& stone_first)
+    {
+        ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_RITUAL_AFTER_STONE, on);
+        GameState s = BaseM(swamps);
+        s.phase = Phase::PostCombatMain;
+        s.players[0].lands_played_this_turn = 1;
+        s.players[0].hand.push_back(CardM(kRitM, 60));
+        s.players[0].hand.push_back(CardM(kStoneM, 61));
+        s.players[0].hand.push_back(CardM(kApM, 62));
+        s.players[0].hand.push_back(CardM(kApM, 63));
+        LibM(s, { kApM, kSwM, kSwM, kSwM, kApM, kApM, kSwM, kSwM, kSwM, kSwM });
+        int n = 0;
+        stone_first = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/false))
+        {
+            ++n;
+            std::vector<int> order(p.actions.size());
+            for (int i = 0; i < static_cast<int>(order.size()); ++i) { order[static_cast<std::size_t>(i)] = i; }
+            std::stable_sort(order.begin(), order.end(),
+                             [&](int x, int y) { return CastOrderLess(s, p.actions[x], p.actions[y]); });
+            ApplyDeckCastArrangement(s, p.actions, order);
+            int rit = -1, stone = -1;
+            for (int k = 0; k < static_cast<int>(order.size()); ++k)
+            {
+                const std::string nm = p.actions[static_cast<std::size_t>(order[static_cast<std::size_t>(k)])].card_name.str();
+                if (nm == kRitM && rit < 0) { rit = k; }
+                if (nm == kStoneM) { stone = k; }
+            }
+            if (rit >= 0 && stone >= 0 && stone < rit) { ++stone_first; }
+        }
+        return n;
+    };
+    for (int swamps : { 4, 6, 7 })
+    {
+        int sf_off = 0, sf_on = 0;
+        const int off = census(0, swamps, sf_off), on = census(1, swamps, sf_on);
+        MESSAGE(swamps, " Swamps: plans off ", off, " on ", on, "; Stone-before-Ritual lines off ", sf_off, " on ", sf_on);
+        CHECK(on == off);
+        CHECK(sf_off == 0);
+        if (swamps >= 6) { CHECK(sf_on > 0); } else { CHECK(sf_on == 0); }
+    }
+}

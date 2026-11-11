@@ -60763,7 +60763,45 @@ bool ShadowbornProvider::PrunesRitualWithoutSpend() const
     static const bool on = EnvOn("MTG_SB_RITUAL_PAYOFF", true);
     return heurarm::Flag(heurarm::SB_RITUAL_PAYOFF, on) && SbPrunesOn();
 }
-void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vector<Action>& actions,
+static bool SbRitualAfterStoneOn()
+{
+    // The USER's Ritual-after-Stone rule (2026-11-11). =1 / =0 select the arm; DEFAULT ON (a USER ruling).
+    static const bool on = EnvOn("MTG_SB_RITUAL_AFTER_STONE", true);
+    return heurarm::Flag(heurarm::SB_RITUAL_AFTER_STONE, on);
+}
+// A plain-ritual cast (rank 1: Dark Ritual -- a mana ritual with no creature-sacrifice cost) / a ripple granter cast.
+static const CardDefinition* SbCastDef(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand || a.attach_equip_id != 0) { return nullptr; }
+    return a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+}
+// "cast it after if mana allows and before if not" (see the declaration). The latest Ritual ahead of the first Stone
+// moves to just after it (ahead of any Ritual already moved, so the Rituals keep their relative order) while the walk
+// pays the result; the first refusal stops (the Rituals are interchangeable, so an earlier one cannot pay where a
+// later one did not). The walk credits no ripple-revealed mana (hidden information).
+static void SbRitualAfterStoneIfPaid(const GameState& s, const std::vector<Action>& actions, std::vector<int>& order)
+{
+    int stone = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const CardDefinition* d = SbCastDef(actions[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])]);
+        if (d != nullptr && d->params.grants_ripple > 0) { stone = p; break; }
+    }
+    if (stone <= 0) { return; }
+    for (int p = stone - 1; p >= 0; --p)
+    {
+        const CardDefinition* d = SbCastDef(actions[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])]);
+        if (d == nullptr || d->params.ritual_floating_mana <= 0 || d->params.sac_additional_creature) { continue; }
+        std::vector<int> trial = order;
+        const int moved = trial[static_cast<std::size_t>(p)];
+        trial.erase(trial.begin() + p);
+        trial.insert(trial.begin() + stone, moved);   // the Stone slid to stone - 1: this lands just after it
+        if (!TurnSolver::OrderPaysSequentially(s, actions, trial)) { return; }
+        order.swap(trial);
+        --stone;
+    }
+}
+void ShadowbornProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
                                           std::vector<int>& order) const
 {
     if (!SbCastOrderOn() || order.size() < 2) { return; }
@@ -60793,6 +60831,8 @@ void ShadowbornProvider::ArrangeCastOrder(const GameState& /*s*/, const std::vec
             break;   // the first cast of the victim's name is the one the cost eats
         }
     }
+    // After the Culling placement (it never moves a Ritual or the Stone relative to each other).
+    if (SbRitualAfterStoneOn()) { SbRitualAfterStoneIfPaid(s, actions, order); }
 }
 bool ShadowbornProvider::RestrictsCollectedActions() const { return SbCastOrderOn() || SbMain1RuleOn(); }
 bool ShadowbornProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
