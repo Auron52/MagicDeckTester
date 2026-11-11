@@ -3760,8 +3760,10 @@ public:
     bool        CastOrderTotalByName() const override;
     // MTG_HYDRAS_BUCKET_DISCARD -- the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11):
     // LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first and net of board, every hand card named
-    // (an ORDER, not a narrowing: the executor's searched cleanup still trials the whole hand). DEFAULT OFF until
-    // the USER approves it (discard buckets are the USER's call); unset / =0 -> the generic max-MV ranking.
+    // (an ORDER, not a narrowing: the executor's searched cleanup still trials the whole hand). DEFAULT ON since
+    // 2026-11-11: a clean win (-0.0004 t, 0 slower, 0.986x cost over 2400 paired games; reproduces the USER's own
+    // shed in claude_s5_gi4), adopted under the USER's "measures better and is cheaper" rule and reported to the
+    // USER, whose call discard buckets remain. =0 -> the generic max-MV ranking.
     std::vector<int> CleanupDiscardCandidates(
         const GameState& s, const std::vector<std::string>* required_pieces) const override;
 };

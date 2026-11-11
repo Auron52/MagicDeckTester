@@ -614,7 +614,8 @@ so no order A/B was owed. The ON re-run (same config, `MTG_HYDRAS_BUCKET_DISCARD
 The deck dumps its hand: 23 Forests and X sinks mean it is rarely holding eight cards at end of turn.
 
 **The policy** (`HydrasProvider::CleanupDiscardCandidates`, `MTG_HYDRAS_BUCKET_DISCARD`, heurarm slot, DEFAULT
-OFF; unset / `=0` is the generic max-MV ranking byte-for-byte, pinned by `test_hydras_discard.cpp`). Roles are read
+ON since 2026-11-11 (see "Adopted" below); `=0` is the generic max-MV ranking byte-for-byte, pinned by
+`test_hydras_discard.cpp`). Roles are read
 off each card's PARAMS, never its name:
 
 | bucket | cards | quota (net of board) |
@@ -710,7 +711,16 @@ Kalonian first. The decision is the USER's; it stays OFF until then.
 6. **Accepted deferrals**: the six above (USER 2026-11-10, *"All of the deferrals are okay."*).
 7. **Open questions for the USER** (none blocks anything):
    - `land_search_subtype` INERT: sign off?
-   - discard buckets: adopt `MTG_HYDRAS_BUCKET_DISCARD` ON (recommended; -0.0004, 0 slower, 0.986x) or keep OFF?
+   - discard buckets: ADOPTED ON 2026-11-11 by the agent under the USER's standing rule (*"almost anything that
+     measures better and is cheaper is a good option"*): -0.0004 (se 0.0004), 0 slower / 1 faster, 0.986x cost over
+     2400 paired held-out games, and it reproduces the USER's own shed in `claude_s5_gi4`. Reported to the USER, whose
+     call discard buckets remain; `=0` reverts. GT: smoke + regression accepted (only Hydras keys moved, all at the
+     same score: hydras_smoke_d0, hydras2hg_smoke_d5 gi12, hydras_regression_d0_s2002, hydras_regression_d5_s3003
+     gi15/gi116; each reproduced singly with the flag =0 -> old digest, =1 -> new digest). The same smoke run also
+     moved `extraturns_smoke_d3_s1001` (gi28, same T5) ONLY in the pooled batch: run alone it reproduces the old
+     digest at either flag value, with units 431,166 alone vs 453,614 pooled. That is the plan-cache RESIDENCY
+     dependence P4-P6 are chasing (`logs/hydras-research/P6-handoff.md`), visible here in a play digest; its GT was
+     kept at the reproducible value (both halves), not the pooled one.
    - `MTG_ENUM_CHARGE` for Hydras (P3, still open).
    - The costed-suspend realised order (F1-B, docs/design/costed-suspend-realised-order.md, still open).
    - Optional: tighten the X = 0 in-hand-Gauntlet exception (moves play).

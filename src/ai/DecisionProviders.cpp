@@ -49360,7 +49360,7 @@ const char* HydrasProvider::CastOrderTierName(int rank) const
 // earlier rung unchanged.
 static bool HydrasBucketDiscardOn()
 {
-    static const bool on = EnvOn("MTG_HYDRAS_BUCKET_DISCARD");   // DEFAULT OFF (USER approves); =1 -> buckets
+    static const bool on = EnvOn("MTG_HYDRAS_BUCKET_DISCARD", true);   // DEFAULT ON (2026-11-11 clean win); =0 -> generic
     return heurarm::Flag(heurarm::HYDRAS_BUCKET_DISCARD, on);
 }
 

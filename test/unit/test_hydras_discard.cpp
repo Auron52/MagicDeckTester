@@ -13,6 +13,7 @@
 #include "core/SpellEffects.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -96,12 +97,14 @@ const char* kSft = "Search for Tomorrow";
 const char* kGreaves = "Lightning Greaves";
 }   // namespace
 
-TEST_CASE("Hydras discard buckets: OFF (unset and =0) is the generic ranking byte-for-byte")
+TEST_CASE("Hydras discard buckets: =0 is the generic ranking byte-for-byte; unset is ON (default since 2026-11-11)")
 {
     const GameState s = MakeHyd({kF, kF, kF, kKal, kGaunt, kLore, kGar, kVor}, {kF, kF});
     const std::vector<int> gen = GenericProvider().CleanupDiscardCandidates(s, nullptr);
-    CHECK(Hyd(s, -1) == gen);
     CHECK(Hyd(s, 0) == gen);
+    // The unset arm falls through to the env default, which is ON unless MTG_HYDRAS_BUCKET_DISCARD=0.
+    const char* env = std::getenv("MTG_HYDRAS_BUCKET_DISCARD");
+    if (env == nullptr || std::string(env) != "0") { CHECK(Hyd(s, -1) == Hyd(s, 1)); }
 }
 
 TEST_CASE("Hydras discard buckets: ON names every card; a dead legend first, then the extra lands")
