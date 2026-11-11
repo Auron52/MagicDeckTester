@@ -518,6 +518,35 @@ oracle off byte-identical; record 43e700b5c):
   gi887 passes the bar. Shipped play is byte-identical by construction (only sampled copies change), so no held-out
   A/B and no Niv gate were run for 5c: a gate would re-measure unchanged play (Niv is DUE anyway: 333,811 issues on its last
   5,000-game record, next block 10000-14999; queue item 6).
+* **Item 5d (agents 2026-11-11): payer excess-release -- FIXED, three levers, all default ON** (90bd12163,
+  30e382818, GT 8806c4c67; local, owner pushes). (A) `MTG_PAY_EXCESS_RELEASE`: the whole-turn prepay give-back
+  (`BatchPrepayMainCasts`, MTG_PREPAY_SHRINK) also triggers on MANA over the bill (multi-unit taps), keeping a
+  release only as a strict subset of the solve's own taps (Jumbo s30091733/s30090040 DOMINATED-CREATURE 1->0).
+  (B) `MTG_PAY_REFINE_C_FOLD` (split off A so each half was A/B'd alone): the per-cast refine reads a floating {C}
+  as covered by other surplus of the same pool in a deck with no {C} pip (Angels s30210844 2 DOM-CREATURE + 10
+  DOM-LAND -> 0). (D) `MTG_TERA_DRAIN_DOOMED`, found root-causing B's one real loss (Stompy regression s2002 gi412,
+  T4->T5 at d8 b0, NOT clairvoyance): the refine gave a Forest back from World War Hulk's bill, Terastodon (free off
+  Hulk I) then ate it untapped, and Natural Order had to tap the Priest whose attack made the Hoof swing lethal. The
+  destroy loop now taps each untapped basic victim for its one colour first (CR 605.3a; same victims, same order);
+  d8 b0 back to T4. A release is a dominance only if the released source lives -- other self-destroy/sac sites
+  (Natural Order's sacked dork, sac outlets) are the same shape and were NOT generalised (no repro).
+  **Bar:** held-out PGO A/B, seeds 7350001+, play settings, 4 arms (off / A / B+D / all), 15 decks (stompy, angels,
+  dragons, giants, mirrorwing, selesnyav2 4000; bruna, elementals, edf, alchemist 1200; niv 4200; fivecolour, jumbo
+  400; hinata, ET 200) + post-rebase hinata 400 / martyr 2000 (off vs all): **every deck net <= 0 on every arm**
+  (all-on: niv -5, alchemist -2, stompy -1, rest 0; A alone niv -4; B+D niv -2, stompy -1). Work units within
+  +-0.5% everywhere (ET A -1.7%). Every slower game recovers at d8 b0 or is clear clairvoyance
+  (`MTG_NC_SEARCH=1` d8 b0 equal both arms): niv 94/346 and alchemist 615 clairvoyant; niv 293/1490/1556, ET 86 and
+  every tier slower (niv smoke d3 gi9; edf d5 s3003 gi68, ET d3 s2002 gi53, niv d5 s2002 gi70 / s3003 gi21,
+  hinata d3 s2002 gi52, martyr d3 s2002 gi28) recover; niv smoke d5 gi46 clairvoyant. ET pooled BD gi83 abandon
+  (wt=-1) was the parked ET pooled flake (5i): re-run alone byte-identical to off. Tables:
+  `logs/mana-clean-chain/5d/`. Units 2836/2836 (two new cases), scenarios 461/461, viewer protocol 0 drift.
+  **Gates (PGO src eb92162cd216):** `angels-5d-20261111` block 215000-219999 **CLEAN, 0 issues** (was 4), oracle-off
+  byte-identical; `jumbo-5d-20261111` block 95000-99999 **1450 issues** (was 8036: CAPPED-DECISION 6429 -> 0,
+  DOMINATED-CREATURE 284 -> 120, ENUM-GAP 457 -> 502, APPLY-DROP-ORDER 636 -> 592, ORACLE-GAP 192 -> 164),
+  oracle-off byte-identical. The CAPPED-DECISION drop is not attributed to 5d (other items landed since that record).
+  Still open from the handoff: Angels s30213528 / s30214769 (cross-cast: Giada tapped where Farm W + Sol C across
+  casts would do -- line-level, not a per-payment excess) and Jumbo s30093108 / s30094151 (own-host hold paying
+  with an Elf unit instead of a fresh Forest) -- PARKED, neither is this mechanism.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
