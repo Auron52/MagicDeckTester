@@ -1506,7 +1506,7 @@ a1937cded0ab6f58, d5 9bd0e14ec876faa9, critter d0 ccb5b47d5ef529c9, melira d0 0f
 not in the suite, so nothing else could move. Not accepted. Unit: mtg-test 1512 / 1512 (13 new wish cases, also
 green under `MTG_UNPRUNE=tutor` and `MTG_UNPRUNED=1`); scenarios 228 / 228.
 
-### Other player's reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON; UNTAP_NET USER-CONFIRMED, COMBO_FIRST AWAITING THE USER
+### Other player's reports on seed 23742 (2026-11-11) -- two wish amendments, DEFAULT ON, both USER-CONFIRMED
 
 Another player's viewer reports (NOT the USER's; relayed by the USER), verbatim: "Living Wish suggested getting Arbor Elf instead of a combo piece" (T2: two
 Forests + Wild Growth = 3 projected mana; Accomplished Alchemist and two Staffs of Domination in hand) and, later,
@@ -1540,9 +1540,11 @@ other player gave no reasons, so the readings below are inferred.
   staff in this case. But yes, I agree that staff is not an untapper when you gain 4 life. In that situation you
   would count it just as the wincon and prefer alchemist." (Galvanic Alchemist.) Implemented exactly that way: at
   a held 4 the Staff still fills Wincon/Draw, Untap is lacking, Galvanic is offered.
-* OPEN for the USER (the rule's owner) -- `MTG_AA_WISH_COMBO_FIRST` only: an inferred reading of another player's
-  T2 report, generalised -- confirm combo before mana at exactly 3 mana in every state, not only with the Alchemist in
-  hand.
+* **USER CONFIRMED `MTG_AA_WISH_COMBO_FIRST` 2026-11-11**, verbatim: "I think that's generally the case. If you are
+  missing a combo piece you are less likely to draw that than a land, so the default should lean toward a combo piece
+  unless you have all of the pieces you need." And, scoping it: "At below 3 this might be a different story. Getting
+  2 more mana is quite a bit more painful." So exactly as implemented: at 3 projected mana every lacking combo bucket
+  leads the mana bucket, in every state; below 3 the mana bucket leads (the 2026-10-20 order).
 
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 

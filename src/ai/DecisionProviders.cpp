@@ -49679,7 +49679,9 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // Arbor Elf instead of a combo piece"; MTG_AA_WISH_COMBO_FIRST, DEFAULT ON, =0 -> the 2026-11-10 ALCH_FIRST
     // reading below). One mana short of the Alchemist's four, every lacking combo bucket (Alchemist, Lifegain,
     // Untap, Wincon) ranks AHEAD of the mana bucket; the mana bucket is still offered after them (an Elf can be
-    // the faster route to four mana, regression seed 3054, and the search keeps it).
+    // the faster route to four mana, regression seed 3054, and the search keeps it). CONFIRMED by the USER
+    // 2026-11-11: "the default should lean toward a combo piece unless you have all of the pieces you need", and
+    // "At below 3 this might be a different story. Getting 2 more mana is quite a bit more painful." -- hence 3 only.
     static const bool s_combo_first = EnvOn("MTG_AA_WISH_COMBO_FIRST", true);
     static const bool s_alch_first  = EnvOn("MTG_AA_WISH_ALCH_FIRST", true);
     const bool combo_first   = s_combo_first && c.mana >= 3 && c.mana < 4;
