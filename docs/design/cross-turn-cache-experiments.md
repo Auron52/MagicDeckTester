@@ -202,8 +202,9 @@ Worktree `.claude/worktrees/xturn`, branch `xturn-cache` rebased on origin `d4bf
   digest differs): pristine origin `d4bfb2071` reproduces the new digests exactly, so it came with the Gods merge
   `f90930c9f`, not with this work.
 
-* **Final verification (x11, rebased on origin `78e623dac`; commit `0e9960186`, LOCAL -- USER 2026-11-11: hold the push
-  until the Hinata2 artifact-queue job finishes, then fetch / rebase-if-src-moved / push):** build, 2,770 unit tests,
+* **Final verification (x11 on origin `78e623dac`; after Hinata2 finished, re-run as x12 on origin `cd0368564`: 2,832
+  unit tests, smoke 3 slower / 13 faster net -11, regression 4 slower / 33 faster net -27 -- the same slower games;
+  GT accepted on x12 and pushed):** x11 detail: build, 2,770 unit tests,
   smoke 3 slower / 12 faster (net -10 game-turns), regression 4 slower / 33 faster (net -27); smoke + regression GT
   accepted, check_gt_logs clean. Two of the slower games are T8 -> loss (shadowborn2hg smoke d3 gi9, shadowborn smoke
   d5 gi85), both churn at 4x / 16x; shadowborn regression d5 s3003 gi135 4 -> 7 persists (single game; deck net -8);
