@@ -956,6 +956,42 @@ fungus 1,880, gods 4,300 (first run).
   * **USER DECISION (updated):** keep option (b) off (gods ENUM-GAP ~138/5000 stays), or accept +4 turns / 3000 at
     unwon=9 (4 games lose their win at the shipped budget, 1 gains one; both-won games unchanged). Recommendation:
     one more look at the 4 flips (if they share a mechanism it may be a fixable defect rather than budget), else accept.
+* **Round 13 (thirteenth item-6 agent, 2026-11-12).**
+  * **gods option (b): the 4 win->unwon flips share a BUDGET mechanism, not a fixable defect -> USER DECISION stands.**
+    Replayed single-game with `mtg.wip` (3246c72bc), lever 0/1, logs in build/scratch/claude1113/flips (results match the
+    batch). First divergence: gi1111 T5 (ON adds a Faithless Looting retrace), gi1905 T3 (graveyard EMPTY, so the T3 menu has
+    no dredge-anchor position at all: ON Magus of the Bazaar vs OFF Life from the Loam -- the difference comes from the
+    look-ahead turns), gi2738 T5 and gi2804 T5: ON casts Life from the Loam returning ZERO lands (OFF returns two or three, and
+    in gi2738 plays the returned Coliseum); gi2804 repeats the zero-return Loam on T6. At gi2804 T5 the mana oracle shows the
+    SAME 20-plan menu in both arms with no flags, so neither the menu nor the apply differs: the search VALUES the lines
+    differently. The axis fans the land position only on boards with a land in hand and a dredger in the graveyard, so a
+    line that returns lands to hand carries more plans in every later turn and is searched shallower inside the same budget;
+    the ON arm drifts to lines that leave fewer lands in hand (2 of 4 flips choose the zero-return Loam). The zero-return
+    Loam is not a dominated option (graveyard size feeds Cephalid Coliseum threshold), so there is no sound prune. All four
+    recover at d8 b0 (round 11). No small lossless fix; the sanctioned shape for buying the dilution back would be a
+    budget-staged admission (dredge-anchor positions in a later wave than the land-first ones), which is a larger change.
+    Recommendation unchanged: the USER chooses between completeness (accept +4 / 3000) and keeping it off; if a wave is
+    wanted, it is the next build.
+  * **fungus ENUM-GAP (mid-plan source credit): WIP on `wip/fungus-midplan-source-credit` (NOT on the shared branch, no A/B
+    yet).** Two heurarm levers, default ON, both in src/ai/TurnSolver.cpp:
+    (b) `MTG_GRANT_HASTE_CAST_CREDIT`: CollectActions' hasted-creature rock stamp gets a third branch -- a hasted creature
+    with no printed mana ability that a LIVE grant reaches (Brightcap Badger on board) carries rock_mana = one unit of the
+    grant colour. Rides the existing rock discipline everywhere. **Repro s30060029 T5: ENUM-GAP 2 -> 0.**
+    (a) `MTG_PENDING_BLANKET_HASTE`: Crossroads cast in the SAME plan, the Surrak precedent -- pending_blanket_haste_bound
+    (odometer addend, selection-exact gate bail), admission to exec_feas_rescues (+ the ef ceiling), and SeqWalkFixedOrder
+    joins the granter and the hasted mana creature. **Repro s30060073 T3: ENUM-GAP 1 -> 1 (no effect).** Likely cause, not
+    verified: the rescue walk prices only the canonical CastOrderRank order (plus the payable-order retry, whose domain needs
+    a rock_mana producer), and the oracle's payable order is Crossroads > Myconid > Thallid while the rank order puts the mv1
+    Thallid ahead of the mv3 Myconid, so the fresh Myconid's tap comes too late. Next step: run the repro with MTG_DBG_SEQ=1
+    to see whether the walk is reached and which order it walks. If the order is the cause, the fix has to reach the apply
+    order as well (site 0 and site 1 of PayableCastOrderCore), so the walk and the apply stay in lockstep.
+    (c) Badger cast in the plan, s30060047 T4 / s30060142 T5: unchanged (ENUM-GAP 2 / 1). The existing
+    MTG_GRANT_CAST_CREDIT stamp is withheld when the pre-plan pool cannot pay the Badger itself (s30060047 needs the
+    Utopia Mycon sac float first) or the line also needs a Wild Growth bonus (s30060142). These are multi-producer edge
+    cases (9 of 209 flags).
+    Owed before adoption: units, a held-out pooled A/B (manifest ready: build/scratch/claude1113/ab/m.json, fungus 4000 at
+    7390001+, both levers off vs on in ONE batch; cmp.py beside it, split the .wins by the fungoff_/funon_ prefix first),
+    smoke + regression, `./build.sh pgo`, then the gate `mana_clean.py run --games 5000 fungus`.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
