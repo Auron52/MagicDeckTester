@@ -9382,12 +9382,18 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         }
         if (idx < 0) { return DigOutcome::Failed; }
         ManaPool avail = AvailableManaPool(state);
+        const int src_num = state.battlefield[idx].card.m_number;
         state.battlefield[idx].tapped = true;  // {T}; tap before paying so it isn't its own source
         if (!TapForCost(state, sd->params.sacrifice_draw_cost.value(), avail, false))
         {
             state.battlefield[idx].tapped = false;
             return DigOutcome::Failed;
         }
+        // RE-FOUND after the payment: a payment that cracks a Treasure (or eats a body) ERASES a permanent,
+        // so an index taken before it can point past the source -- Pirates s30049175 T4 sacrificed Daring
+        // Buccaneer and left the tapped Fiery Islet in play (Treasure #34 sat ahead of the Islet).
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
         if (m_logger) { m_logger->LogDiscard(state.battlefield[idx].card.m_number, source); }
         ap.graveyard.push_back(state.battlefield[idx].card);
         state.battlefield.erase(state.battlefield.begin() + idx);
