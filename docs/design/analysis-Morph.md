@@ -743,6 +743,34 @@ OVERNIGHT not re-run (USER: occasional, not per change).
 - (c) is an engine identity fold, play-identical on the held-out set.
 - Open from INT-8/9 still: E lethal-only, R12, R11, C in continuations, the fetch-rule variance games.
 
+### INT-11 result (2026-11-12) -- rebased onto origin/phase-1-2-deck-analyzer 9ba5851a1; GT re-established
+The 27 morph-analysis commits are replayed onto `9ba5851a1`, which adds 45 origin commits: payer and mana-oracle item-6
+fixes, `MTG_PAY_DOOMED_BODY_FIRST`, and the 2026-11-12 overnight accept `fec16d7d2`. The tip before the rebase is
+`d7cfab7bb`. `range-diff` shows `=` for every commit except five, and those five changed only in conflict resolution:
+- INT-2: origin's sac-draw re-find, with our `RevealedCard` wrap kept.
+- INT-8: the HeuristicArm slot lists, as a union (origin's slots first, then ours).
+- The three GT commits: origin's non-morph keys and gt_logs, with our morph keys and notes kept.
+`suite_cost.json` keeps origin's pinned hinata entry. The morph entry is rescaled onto it with a note: 1.722x hinata, as
+measured.
+
+Gates on the rebased tree: mtg-test 2905/2905, scenarios 502/502, coverage-only 0 missing.
+
+**Smoke (FULL, THREADS=24):** 196 pass. The 3 that moved are mirrorwing d3/d5 and mirrorwing2hg 4.68 -> 4.64. Searched:
+0 slower, 2 faster. d0 is unchanged.
+
+**Regression (FULL):** 312 pass. The 4 that moved are mirrorwing d3/d5 x2 and extraturns_regression_d5_s3003 (gi36: same
+score, line tie). Searched: 0 slower, 2 faster, 24 play-changed. d0 is unchanged. Viewer protocol: 0 play-drift, and the
+REQUIRE-BEAT check passes 2/2.
+
+**Every morph/morph2hg key PASSES unchanged.** Origin's payer and oracle changes do not move Morph.
+
+**Causation.** An origin-only build (scratch worktree `int11-origin`) reproduces origin's GT on every moved key, so all of
+the moves are ours: the INT-5 `#TT` dedup fix for mirrorwing, and INT-2c `SectionForgetHandExits` for extraturns (bisected
+in INT-7). The moved digests are identical to the pre-rebase GT. The bar is met trivially because no game is slower.
+Accepted with `--deck=mirrorwing,mirrorwing2hg` (smoke) and `--deck=mirrorwing,extraturns` (regression).
+`check_gt_logs.py` reports 1146 consistent, 0 stale. Against origin, `regression_gt.txt` differs only in the morph keys,
+these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not run.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18

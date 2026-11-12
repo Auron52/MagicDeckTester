@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e0b9de5f7  date 2026-11-12
+# Regression ground truth -- commit f8c15a68b  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-11-12): INT-10 (bb6829c35): morph2hg smoke gi5 T6->T7 identical draws, recovers T6 at d8 b0; MorphProvider combat-is-over folds + Den LEAD pin identity fold
 # accepted-with-regressions (regression, 2026-11-12): INT-10 (bb6829c35): no searched slower game; MorphProvider combat-is-over folds + Den LEAD pin identity fold
@@ -7,6 +7,8 @@
 # accepted-with-regressions (smoke, 2026-11-12): morph INT-5/6/7 (aad2a29a9-rebased #TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg only; searched slower 0; d0 slower 1 (morph_smoke_d0 gi399 T6->T7, recovers T5 at d8 b0); held-out A/B seeds 60000+ net faster on every deck (morph -248, morph2hg -121, mirrorwing -8, mirrorwing2hg -5 turns)
 # accepted-with-regressions (regression, 2026-11-12): morph INT-5/6/7 (#TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg + extraturns_regression_d5_s3003 (1 game, gi36 T4 unchanged; OURS: bisected to 5d55fe9f6 INT-2c SectionForgetHandExits, the origin binary reproduces origin GT and 5d55fe9f6 with that call removed reproduces it too -- a same-score tie on the winning extra turn); searched slower 0; d0 slower 1 (morph_regression_d0 gi213 T4->T5, recovers T4 at d8 b0); held-out A/B seeds 60000+ net faster on every deck
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
+# accepted-with-regressions (smoke, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing/mirrorwing2hg move from OUR #TT plan-signature dedup fix (INT-5); the origin-only binary reproduces origin GT on these keys. Searched slower 0, faster 2, d0 unchanged; same digests as the pre-rebase INT-7..10 GT. Morph keys PASS unchanged under origin's payer/oracle changes.
+# accepted-with-regressions (regression, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing (OUR #TT dedup fix, INT-5) + extraturns_regression_d5_s3003 gi36 (same-score line tie, OURS: bisected in INT-7 to 5d55fe9f6 SectionForgetHandExits); the origin-only binary reproduces origin GT on every moved key. Searched slower 0, faster 2, d0 unchanged. Morph keys PASS unchanged.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -88,8 +90,8 @@ creature_giving_smoke_d0_s1001=5.5200/190baa428eac7f32
 creature_giving_smoke_d3_s1001=4.6400/eb80825afda62976
 creature_giving_smoke_d5_s1001=4.6533/d91fe8cdafe367e5
 mirrorwing_smoke_d0_s1001=5.7140/814f5533ebc4f190
-mirrorwing_smoke_d3_s1001=4.4000/73ed211032b76099
-mirrorwing_smoke_d5_s1001=4.2000/a45589affc8cf5f2
+mirrorwing_smoke_d3_s1001=4.4000/f488a11246e364ca
+mirrorwing_smoke_d5_s1001=4.2000/c80d55fc1180cd2e
 fivecolour_smoke_d0_s1001=5.4750/2049e32aa06b3d08
 fivecolour_smoke_d3_s1001=4.7600/883ef75d134b2f8a
 fivecolour_smoke_d5_s1001=4.7840/019c1b44733f7aad
@@ -138,7 +140,7 @@ th2hg_smoke_d5_s1001=4.6600/810d26dcdb95f739
 dragonstorm2hg_smoke_d5_s1001=4.6800/98b5986ad8a8e499
 auras2hg_smoke_d5_s1001=4.4200/e756a3364e13656a
 creature_giving2hg_smoke_d5_s1001=4.8800/8bbfa0994926f043
-mirrorwing2hg_smoke_d5_s1001=4.6800/afa2a5bd163547ae
+mirrorwing2hg_smoke_d5_s1001=4.6400/9704035457911953
 stompy2hg_smoke_d5_s1001=4.2600/9bc766972b933e60
 kittyv32hg_smoke_d5_s1001=4.3600/73c63e6d63c8ab1d
 dragons2hg_smoke_d5_s1001=6.1800/4bd3778fe6acd236
@@ -229,7 +231,7 @@ hydras_regression_d5_s30001=5.2000/d0379efd243cf008
 extraturns_regression_d0_s2002=5.6450/dc0ca41034e559c2
 extraturns_regression_d3_s2002=4.7733/cf3b51b148bc1ec5
 extraturns_regression_d5_s2002=4.6467/254115e71dd5ea00
-extraturns_regression_d5_s3003=4.6267/a491b66295d70d2f
+extraturns_regression_d5_s3003=4.6267/32c058b7655cac81
 extraturns2hg_regression_d5_s2002=4.7333/a8756d17103d6cfb
 cyclone_regression_d3_s30031=4.5000/9cae75a150715362
 cyclone_regression_d5_s30031=4.5000/0a4d7a7f24601daa
@@ -384,9 +386,9 @@ creature_giving_regression_d3_s2002=4.5500/00a3148475d0911c
 creature_giving_regression_d5_s2002=4.6118/15513bdefbbe09e7
 creature_giving_regression_d5_s3003=4.6118/e9579b930cc9c598
 mirrorwing_regression_d0_s2002=5.9020/224185acf110e39a
-mirrorwing_regression_d3_s2002=4.3067/84d5fab9a917027d
-mirrorwing_regression_d5_s2002=4.1867/08df183107b82568
-mirrorwing_regression_d5_s3003=4.0844/780d6e1ad585f727
+mirrorwing_regression_d3_s2002=4.2933/de76883f6fa3604e
+mirrorwing_regression_d5_s2002=4.1822/4b8f4bd03d14974b
+mirrorwing_regression_d5_s3003=4.0844/e528f06a1495126e
 fivecolour_regression_d0_s2002=5.5570/363854f132266842
 fivecolour_regression_d3_s2002=4.7600/d158b0b873c49a30
 fivecolour_regression_d5_s2002=4.8200/02334799fc025cd8
