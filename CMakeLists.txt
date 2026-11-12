@@ -295,6 +295,7 @@ unset(CMAKE_POLICY_VERSION_MINIMUM)
 enable_testing()
 add_executable(mtg-test
     test/unit/test_mana_payment.cpp
+    test/unit/test_odo_flat_gate_cut.cpp
     test/unit/test_shadowborn_lakeprof.cpp
     test/unit/test_mana_oracle.cpp
     test/unit/test_sac_land_class_pin.cpp

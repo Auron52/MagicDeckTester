@@ -51946,6 +51946,19 @@ struct Dump
 };
 inline Dump g_dump;
 }
+// MTG_SEL_GATE_SELF_EXCL (DEFAULT OFF pending its held-out A/B; =1 enables; per-job heurarm slot so the A/B
+// pools into one batch; hydras-runaway 2026-11-12): a reducer never discounts
+// ITSELF. A same-turn reducer's static applies only once it is on the battlefield, and it is cast first (CR 601.2f
+// reads the statics in play while the spell is being cast), so Gargos pays its own {5}{G} in full however many
+// Hydras follow -- the bound below used to take min(gen, R) off EVERY selected cast, the reducer included, so a
+// Gargos selection on a 3-mana board read as needing 2 for Gargos and passed. Sound for every soft reducer the
+// gate knows (Medallion, Warchief, Gargos, Incubator: none reduces its own cast), and still an upper bound on the
+// real discount; MTG_SEL_GATE_EXACT_VERIFY audits it with everything else this test refuses.
+static bool SelGateSelfExclOn()
+{
+    static const bool env = EnvOn("MTG_SEL_GATE_SELF_EXCL");
+    return heurarm::Flag(heurarm::SEL_GATE_SELF_EXCL, env);
+}
 static bool SelGateExactRefuses(const ManaGateIndex& gate, const std::vector<int>& sel)
 {
     int cost = 0, gain = 0, gy = 0, red = 0, picks = 0, ltb = 0;
@@ -51958,7 +51971,15 @@ static bool SelGateExactRefuses(const ManaGateIndex& gate, const std::vector<int
     const bool cross_over = picks > 0 && ltb < gate.ltb_all;
     if (red <= 0 && !cross_over) { return false; }   // exactly the gate proper's test, which passed it
     long long need = cost;
-    if (red > 0) { for (int j : sel) { need -= std::min(gate.term[static_cast<std::size_t>(j)].gen, red); } }
+    if (red > 0)
+    {
+        const bool self_excl = SelGateSelfExclOn();
+        for (int j : sel)
+        {
+            const ManaGateTerm& t = gate.term[static_cast<std::size_t>(j)];
+            need -= std::min(t.gen, self_excl ? red - t.red : red);
+        }
+    }
     // The cross term on the selection: every selected land-put x every SELECTED bonus source.
     const long long budget = static_cast<long long>(gate.pool_total) + gain
                            - static_cast<long long>(picks) * gate.ltb_all + static_cast<long long>(picks) * ltb
@@ -53266,6 +53287,240 @@ static bool DupActBruteNonCanonical(const std::vector<Action>& cands, const std:
     return false;
 }
 
+// THE FLAT-FALLBACK GATE CUT (MTG_ODO_FLAT_GATE_CUT, DEFAULT ON; =0 is the hatch; hydras-runaway 2026-11-11).
+// EnumeratePlanPositions' degenerate-width fallback (below) walks the WHOLE mixed-radix product one position at
+// a time and tests payability only per position, so a hand whose payoff side is wide walks every position even
+// when almost none of them can be paid. Hydras d4 gi 287: 13-15 groups, five of them an X Hydra's 25 X
+// variants, 2e10-1.2e11 positions per call, 0.8-5e9 visited per call even after the copy jump, ~30-300 s per
+// enumeration, uncharged. Worse, a Gargos ("Hydra spells cost {4} less") in a position sets the gate's
+// `block` term, so the walk's own test passes every Gargos position and they all go on to the emission test
+// (MTG_SEL_GATE_EXACT) one by one: 358M emissions in the first call, every one refused.
+//
+// This is SolveUncached's MTG_MANA_GATE_WALK_CUT for this walk, extended to the soft (generic) reducers the
+// emission test prices exactly. Fix the high part H (digits >= h) and bound every completion L (one option
+// or none per group below h, any subset of the independents). For a term j let
+//     v_j = cost_j - gain_j - (soft_exact ? min(gen_j, R) : 0),   R = the most generic reduction any
+//     selection can carry (SUM over groups of the largest `red` option + every independent's `red`),
+// so v_j never exceeds what the term adds to the selection's need-minus-gain under either test that can
+// refuse it (the walk's gate: need = cost, no discount; SelGateExactRefuses: need = cost minus
+// min(gen_j, red(S)) per cast with red(S) <= R, budget <= the walk gate's). If
+//     SUM_{j in H} v_j + SUM_{g < h} min(0, min_j v_j) + SUM_ind min(0, v_b)
+//         > pool_total + Tri(gy_H + SUM_{g < h} max_j gy_j + SUM_ind gy_b)
+// every position of the block is refused by the gate (no soft term selected) or by the emission test (a
+// soft term selected, and the caller says it runs that test: `soft_exact`), so none of them emits anything,
+// and the walk zeroes the digits below h and carries from h -- exactly the copy / dependency jumps' shape.
+// A term that disables the gate outright (`block` without `soft`, or any block when !soft_exact) is never
+// bounded: a cut at h needs none selected in H and none offered in any group below h, and an independent
+// one turns the cut off for the call. SOUND (skips only positions that emit nothing), ORDER-PRESERVING (the
+// walk still visits every other position in its own order), so the emitted selection sequence is unchanged;
+// the only observable difference is the work-priced stop() ceilings, which read no position counts.
+// MTG_ODO_FLAT_GATE_CUT_VERIFY=1 still walks every skipped position and counts any the real tests would
+// have emitted (must be 0; printed at exit).
+static bool OdoFlatGateCutOn() { static const bool v = EnvOn("MTG_ODO_FLAT_GATE_CUT", true); return v; }
+namespace odoflatcut
+{
+inline bool VerifyOn() { static const bool v = EnvOn("MTG_ODO_FLAT_GATE_CUT_VERIFY"); return v; }
+inline std::atomic<long long> g_cuts{0}, g_verify_skipped{0}, g_violations{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!VerifyOn()) { return; }
+        std::fprintf(stderr, "[odo-flat-cut] cuts=%lld verify_skipped=%lld VIOLATIONS=%lld\n",
+                     g_cuts.load(), g_verify_skipped.load(), g_violations.load());
+    }
+};
+inline Dump g_dump;
+}
+struct OdoFlatCut
+{
+    bool on = false;
+    // Per candidate. A term's contribution to (need - budget) is  base_j - min(gen_j, R)  with R the most
+    // generic reduction its selection can carry; `base` already carries back the cands-wide land-tap cross
+    // credit (picks_j x ltb_all) when the emission test prices that term on the selection (soft_exact).
+    std::vector<long long> base;
+    std::vector<int>       gen, red, picks, ltb, gyj;
+    std::vector<char>      hard;          // disables the gate outright (never bounded)
+    std::vector<long long> relief_below;  // [h] = SUM_{g < h} min(0, min_j (base_j - min(gen_j, R_all)))  (<= 0)
+    std::vector<int>       gy_below, red_below, picks_below, ltb_below;   // [h] = SUM_{g < h} max_j of each
+    int       lowest_hard = 0;            // lowest group offering a hard term (num_groups = none)
+    long long relief_ind  = 0;
+    int       gy_ind = 0, red_ind = 0, picks_ind = 0, ltb_ind = 0;
+    long long pool        = 0;
+    bool      exact       = false;        // soft_exact: the emission test's selection-exact pricing is live
+    bool      self_excl   = false;        // MTG_SEL_GATE_SELF_EXCL: a reducer's discount skips its own cast
+};
+static void BuildOdoFlatCut(const ManaGateIndex& gate, const std::vector<std::vector<int>>& groups,
+                            const std::vector<int>& independent, bool soft_exact, OdoFlatCut& out)
+{
+    out.on = false;
+    if (!OdoFlatGateCutOn()) { return; }
+    const int n = static_cast<int>(groups.size());
+    const int m = static_cast<int>(gate.term.size());
+    out.exact = soft_exact;
+    auto is_hard = [&](const ManaGateTerm& t) { return t.block != 0 && !(t.soft != 0 && soft_exact); };
+    out.base.assign(m, 0); out.gen.assign(m, 0); out.red.assign(m, 0); out.picks.assign(m, 0);
+    out.ltb.assign(m, 0); out.gyj.assign(m, 0); out.hard.assign(m, 0);
+    for (int j = 0; j < m; ++j)
+    {
+        const ManaGateTerm& t = gate.term[j];
+        if (t.gy < 0) { return; }
+        out.gyj[j] = t.gy;
+        out.hard[j] = is_hard(t) ? 1 : 0;
+        out.base[j] = static_cast<long long>(t.cost) - t.gain;
+        if (soft_exact)
+        {
+            out.base[j] += static_cast<long long>(t.picks) * gate.ltb_all;   // the cands-wide cross credit, taken back
+            out.gen[j] = std::max(0, t.gen);
+            out.red[j] = (t.soft != 0) ? t.red : 0;
+            out.picks[j] = t.picks;
+            out.ltb[j] = t.ltb;
+        }
+    }
+    out.relief_ind = 0; out.gy_ind = out.red_ind = out.picks_ind = out.ltb_ind = 0;
+    for (int b : independent)
+    {
+        if (out.hard[b]) { return; }
+        out.red_ind += out.red[b]; out.picks_ind += out.picks[b]; out.ltb_ind += out.ltb[b]; out.gy_ind += out.gyj[b];
+    }
+    int r_all = out.red_ind;
+    for (int g = 0; g < n; ++g) { int r = 0; for (int j : groups[g]) { r = std::max(r, out.red[j]); } r_all += r; }
+    const bool self_excl = SelGateSelfExclOn();
+    auto v_at = [&](int j, int R) { return out.base[j] - std::min(out.gen[j], self_excl ? R - out.red[j] : R); };
+    for (int b : independent) { out.relief_ind += std::min<long long>(0, v_at(b, r_all)); }
+    out.relief_below.assign(n + 1, 0);
+    out.gy_below.assign(n + 1, 0); out.red_below.assign(n + 1, 0);
+    out.picks_below.assign(n + 1, 0); out.ltb_below.assign(n + 1, 0);
+    out.lowest_hard = n;
+    long long relief = 0; int gy = 0, rd = 0, pk = 0, lt = 0;
+    for (int g = 0; g < n; ++g)
+    {
+        out.relief_below[g] = relief; out.gy_below[g] = gy; out.red_below[g] = rd;
+        out.picks_below[g] = pk; out.ltb_below[g] = lt;
+        long long r = 0; int y = 0, rr = 0, pp = 0, ll = 0;
+        for (int j : groups[g])
+        {
+            if (out.hard[j] && out.lowest_hard == n) { out.lowest_hard = g; }
+            r = std::min(r, v_at(j, r_all));
+            y = std::max(y, out.gyj[j]); rr = std::max(rr, out.red[j]);
+            pp = std::max(pp, out.picks[j]); ll = std::max(ll, out.ltb[j]);
+        }
+        relief += r; gy += y; rd += rr; pk += pp; lt += ll;
+    }
+    out.relief_below[n] = relief; out.gy_below[n] = gy; out.red_below[n] = rd;
+    out.picks_below[n] = pk; out.ltb_below[n] = lt;
+    out.pool = gate.pool_total;
+    out.self_excl = self_excl;
+    out.on = true;
+}
+// The highest digit h whose high part (digits >= h, as `choice` holds them) no completion can carry past
+// the gate / the emission test; -1 = none. Walked top-down; the R a high term is discounted with is the
+// largest reduction any block at or below its digit can carry (red of the high part so far + the most every
+// lower group and independent can add), which only falls as h falls -- so the discount taken is always at
+// least the true one for every block tested later in the same pass.
+static inline int OdoFlatCutDigit(const OdoFlatCut& c, const std::vector<std::vector<int>>& groups,
+                                  const std::vector<int>& choice)
+{
+    long long sH = 0; int gyH = 0, redH = 0, picksH = 0, ltbH = 0;
+    for (int h = static_cast<int>(groups.size()) - 1; h >= 0; --h)
+    {
+        if (choice[h] > 0)
+        {
+            const int j = groups[h][choice[h] - 1];
+            if (c.hard[j]) { return -1; }
+            redH += c.red[j]; picksH += c.picks[j]; ltbH += c.ltb[j]; gyH += c.gyj[j];
+            const int R = redH + c.red_below[h] + c.red_ind;
+            sH += c.base[j] - std::min(c.gen[j], c.self_excl ? R - c.red[j] : R);
+        }
+        if (h > c.lowest_hard) { continue; }
+        const long long cross_ub = c.exact
+            ? static_cast<long long>(picksH + c.picks_below[h] + c.picks_ind) * (ltbH + c.ltb_below[h] + c.ltb_ind)
+            : 0;
+        if (sH + c.relief_below[h] + c.relief_ind - cross_ub
+            > c.pool + ManaGateTriangular(gyH + c.gy_below[h] + c.gy_ind))
+        { return h; }
+    }
+    return -1;
+}
+// MTG_ODO_FLAT_GATE_CUT test hook (test/unit/test_odo_flat_gate_cut.cpp). Builds a gate from plain terms
+// ({cost, gain, gy, block, soft, red, gen, picks, ltb} per candidate), then walks the flat odometer twice in the
+// fallback's own order (digit 0 fastest, every independent subset per position): once whole, once with the
+// cut's skip (zero below the cut digit, carry from it). A selection EMITS when the walk's gate passes it
+// (EnumeratePlanPositions' `payable`) and, under `soft_exact`, SelGateExactRefuses does not refuse it.
+// Returns {positions, positions the cut skipped, emissions whole, emissions cut, 1 if the two emission
+// SEQUENCES are identical, cut armed}.
+std::vector<long long> OdoFlatCutAuditForTest(const std::vector<std::array<int, 9>>& terms,
+                                              const std::vector<std::vector<int>>& groups,
+                                              const std::vector<int>& independent,
+                                              int pool, int ltb_all, bool soft_exact)
+{
+    ManaGateIndex gate;
+    for (const auto& a : terms)
+    {
+        ManaGateTerm t;
+        t.cost = a[0]; t.gain = a[1]; t.gy = a[2]; t.block = a[3]; t.soft = a[4];
+        t.red = a[5]; t.gen = a[6]; t.picks = a[7]; t.ltb = a[8];
+        gate.term.push_back(t);
+    }
+    gate.pool_total = pool;
+    gate.ltb_all = ltb_all;
+    OdoFlatCut cut;
+    BuildOdoFlatCut(gate, groups, independent, soft_exact, cut);
+    const int n = static_cast<int>(groups.size());
+    const int ni = static_cast<int>(independent.size());
+    auto emit_at = [&](const std::vector<int>& choice, long long pos, std::vector<long long>& out)
+    {
+        for (unsigned imask = 0; imask < (1u << ni); ++imask)
+        {
+            std::vector<int> sel;
+            for (int g = 0; g < n; ++g) { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
+            for (int b = 0; b < ni; ++b) { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
+            if (sel.empty()) { continue; }
+            int cost = 0, gain = 0, gy = 0, block = 0;
+            for (int j : sel) { const ManaGateTerm& t = gate.term[j]; cost += t.cost; gain += t.gain; gy += t.gy; block += t.block; }
+            const bool pass = block > 0 || cost <= pool + gain + ManaGateTriangular(gy);
+            if (!pass || (soft_exact && SelGateExactRefuses(gate, sel))) { continue; }
+            out.push_back(pos * 1024 + static_cast<long long>(imask));
+        }
+    };
+    auto step = [&](std::vector<int>& choice, int from) -> bool   // false = wrapped (done)
+    {
+        for (int d = 0; d < from; ++d) { choice[d] = 0; }
+        for (int t = from; t < n; ++t)
+        {
+            if (++choice[t] <= static_cast<int>(groups[t].size())) { return true; }
+            choice[t] = 0;
+        }
+        return false;
+    };
+    auto index_of = [&](const std::vector<int>& choice)
+    {
+        long long idx = 0;
+        for (int g = n - 1; g >= 0; --g) { idx = idx * static_cast<long long>(groups[g].size() + 1) + choice[g]; }
+        return idx;
+    };
+    std::vector<long long> whole, cutseq;
+    long long positions = 0, visited = 0;
+    {
+        std::vector<int> choice(n, 0);
+        do { emit_at(choice, positions, whole); ++positions; } while (step(choice, 0));
+    }
+    {
+        std::vector<int> choice(n, 0);
+        bool more = true;
+        while (more)
+        {
+            const int ch = cut.on ? OdoFlatCutDigit(cut, groups, choice) : -1;
+            if (ch >= 0) { more = step(choice, ch); continue; }
+            ++visited;
+            emit_at(choice, index_of(choice), cutseq);
+            more = step(choice, 0);
+        }
+    }
+    return { positions, positions - visited, static_cast<long long>(whole.size()),
+             static_cast<long long>(cutseq.size()), whole == cutseq ? 1LL : 0LL, cut.on ? 1LL : 0LL };
+}
+
 // ---- Two-stage plan-position enumeration: mana side x payoff side ------------------------------
 //
 // The flat odometer walks ONE mixed-radix counter over every candidate group, so a hand holding k
@@ -53321,6 +53576,10 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                                    // The caller's verdict that its duplicate-source rule is live for
                                    // SacForMana (pre.dup_source && kDupSacMana); arms SacDupFold.
                                    bool sac_dup_live,
+                                   // The caller refuses a soft-reducer selection at emission with
+                                   // SelGateExactRefuses (EnumeratePlans' red_gate); arms the flat-fallback
+                                   // cut's soft-reducer bound (see OdoFlatCut).
+                                   bool soft_exact,
                                    // By const reference, NOT by value: Solve's `consider` closure
                                    // captures a dozen locals, and this is called once per rollout
                                    // node -- copying it per call is measurable.
@@ -53491,9 +53750,43 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
             // rebuilt per position -- see EquipPieceDepViolated's fast overload.
             std::uint64_t sel_mask = 0;
             DepSkipAudit dep_audit(2);
+            // MTG_ODO_FLAT_GATE_CUT (see OdoFlatCut): built once per call.
+            OdoFlatCut fcut;
+            if (gate_on) { BuildOdoFlatCut(*gate, groups, independent, soft_exact, fcut); }
+            const bool fcut_verify = fcut.on && odoflatcut::VerifyOn();
+            long long fcut_n = 0, fcut_vskip = 0, fcut_viol = 0;
             bool done = false;
             while (!done && !stop())
             {
+                // THE GATE CUT: a block of positions none of which can be paid is skipped whole, before
+                // any predicate runs on it (none of them emits, so no predicate's verdict matters).
+                bool fcut_flag = false;
+                if (fcut.on)
+                {
+                    const int ch = OdoFlatCutDigit(fcut, groups, choice);
+                    if (ch >= 0)
+                    {
+                        if (!fcut_verify)
+                        {
+                            ++fcut_n;
+                            for (int d = 0; d < ch; ++d) { choice[d] = 0; }
+                            sel_mask &= (ch >= 64) ? 0ull : ~((1ull << ch) - 1);
+                            int t = ch;
+                            for (; t < num_groups; ++t)
+                            {
+                                ++choice[t];
+                                if (choice[t] <= static_cast<int>(groups[t].size()))
+                                { if (choice[t] == 1 && t < 64) { sel_mask |= 1ull << t; } break; }
+                                choice[t] = 0;
+                                if (t < 64) { sel_mask &= ~(1ull << t); }
+                            }
+                            if (t == num_groups) { done = true; }
+                            continue;
+                        }
+                        fcut_flag = true;
+                        ++fcut_vskip;
+                    }
+                }
                 // MTG_EQUIP_COPY_SKIP: the same verdict, plus WHERE to jump to (see
                 // FungibleEquipCopyAdvance). Evaluated first now, which changes only which predicate
                 // gets to short-circuit, never the verdict.
@@ -53543,6 +53836,16 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                         { if (choice[g] > 0) { sel.push_back(groups[g][choice[g] - 1]); } }
                         for (int b = 0; b < num_ind; ++b)
                         { if (imask & (1u << b)) { sel.push_back(independent[b]); } }
+                        if (fcut_flag && !sel.empty() && !(soft_exact && SelGateExactRefuses(*gate, sel)))
+                        {
+                            ++fcut_viol;
+                            if (fcut_viol <= 4)
+                            {
+                                std::string nm;
+                                for (int j : sel) { nm += cands[static_cast<std::size_t>(j)].card_name.str() + ","; }
+                                std::fprintf(stderr, "[odo-flat-cut] VIOLATION [%s]\n", nm.c_str());
+                            }
+                        }
                         if (!sel.empty() && extra_ok(sel))
                         {
                             foldsel::g_from_odometer = true;
@@ -53581,6 +53884,12 @@ static void EnumeratePlanPositions(const std::vector<Action>& cands,
                     if (t < 64) { sel_mask &= ~(1ull << t); }
                 }
                 if (t == num_groups) { done = true; }
+            }
+            if (fcut_n) { odoflatcut::g_cuts.fetch_add(fcut_n, std::memory_order_relaxed); }
+            if (fcut_verify)
+            {
+                odoflatcut::g_verify_skipped.fetch_add(fcut_vskip, std::memory_order_relaxed);
+                odoflatcut::g_violations.fetch_add(fcut_viol, std::memory_order_relaxed);
             }
             return;
         }
@@ -55917,6 +56226,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     int    best_fill_j = -1;
     Action best_fill_action;
     bool   walk_exhausted = false;   // greedy-walk budget spent -> remaining subsets are no-ops
+    static const bool s_solve_walk_poll = EnvOn("MTG_ENUM_WALK_POLL", true);   // see EnumeratePlans' enum_void_poll
     auto materialize_best = [&]() -> Plan& {
         best.actions.clear();
         for (int j : best_sel)
@@ -58462,6 +58772,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         while (!done)
         {
+            // MTG_ENUM_WALK_POLL: the per-position backstop (see EnumeratePlans) -- consider() polls only the
+            // positions it is handed.
+            if (s_solve_walk_poll && ++g_walk_abandon_acc >= kWalkAbandonStride)
+            {
+                g_walk_abandon_acc = 0;
+                if (gamework::Poll()) { walk_exhausted = true; break; }
+            }
             // MTG_MANA_WALK_CUT_VERIFY: is this a position a mana jump would have passed over?
             const bool mana_in_claim = mana_audit_on && mana_audit.Inside(choice);
             if (mana_in_claim && !mana_claim_holds(choice))
@@ -58659,7 +58976,17 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
-                               vial_ok, consider, [] { return false; });
+                               /*soft_exact=*/false,
+                               vial_ok, consider, [&]
+                               {
+                                   // MTG_ENUM_WALK_POLL: the per-position backstop (see EnumeratePlans).
+                                   // A void game's best-so-far is never memoized (SolveMemoized).
+                                   if (walk_exhausted) { return gamework::Abandoned(); }
+                                   if (!s_solve_walk_poll || ++g_walk_abandon_acc < kWalkAbandonStride) { return false; }
+                                   g_walk_abandon_acc = 0;
+                                   if (gamework::Poll()) { walk_exhausted = true; return true; }
+                                   return false;
+                               });
     }
 
     // THE HOLD LINE (HoldLineEnabled -- see that helper for the measurement that chose ONE plan over
@@ -76581,6 +76908,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // Strided with the greedy walk's counter; inert (t_abandoned stays false, Poll reads no clock) unless a
     // unit ceiling or a wall cap is armed.
     const bool bp_abandon_watch = g_bp_enum_depth > 0 || AlchemistComboRouteInProgress();
+    // THE PER-POSITION BACKSTOP (MTG_ENUM_WALK_POLL, DEFAULT ON; =0 is the hatch; hydras-runaway 2026-11-11). The
+    // poll above runs once per EMITTED selection and only inside a derivation, so a top-level walk -- and every
+    // position a walk rejects before emitting -- never read the wall cap: Hydras d4 gi 287 / gi 15 sat 4.5 h in
+    // one EnumeratePlans' flat odometer (6e12 positions, see OdoFlatCut). This polls on the same stride once per
+    // odometer POSITION, at every enumeration depth, and on a VOID game stops the walk through the priced-stop
+    // exit (`enum_priced_stop`: the partial list is returned at once). That list is never stored: the m1/m2
+    // plan-cache and enum-memo stores refuse a void game (gamework::Abandoned), and inside a derivation it is
+    // reported interrupted (g_bp_derive_interrupted), so BpEnumEntryFor / BpCanonFront store nothing either.
+    // Inert (Poll reads no clock and returns false) unless a unit ceiling or a wall cap is armed, and it acts
+    // only on a game whose result is discarded.
+    static const bool s_enum_walk_poll = EnvOn("MTG_ENUM_WALK_POLL", true);
+    auto enum_void_poll = [&]() -> bool
+    {
+        if (!s_enum_walk_poll || ++g_walk_abandon_acc < kWalkAbandonStride) { return false; }
+        g_walk_abandon_acc = 0;
+        if (!gamework::Poll()) { return false; }
+        enum_priced_stop = true;
+        if (g_bp_enum_depth > 0) { g_bp_derive_interrupted = true; }
+        return true;
+    };
     // (The PUTS-LAST retry that lived here is gone: a Vial put is sequenced like a cast of its card,
     // USER 2026-10-06, so a Pirate put that ranks after Daring Buccaneer is still in hand for the
     // reveal under the ordinary pricing -- SameSubsetRevealSurcharge prices the put at its position.)
@@ -79373,7 +79720,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                  if (fso) { foldsel::g_from_odometer = true; }
                                  if (daf_twin) { dupactfold::t_twin = true; }
                                  eval_and_push(s);
-                                 return enum_priced_stop;
+                                 // MTG_ENUM_WALK_POLL: this walk prunes unpayable branches whole, so its
+                                 // visits are its emissions -- poll here.
+                                 return enum_priced_stop || enum_void_poll();
                              },
                              // MTG_DUP_ACTION_FOLD: refuse (or, verifying, flag) a non-prefix class arrangement.
                              [&](int imask) -> bool
@@ -79385,7 +79734,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                              });
             done = true;
         }
-        while (!done && !enum_priced_stop)
+        while (!done && !enum_priced_stop && !enum_void_poll())
         {
             // Fungible identical-Equipment copies: only the canonical (non-increasing) position of a
             // class emits. Tested before the mana fold -- a skipped position's aggregate is dead work.
@@ -79633,6 +79982,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                any_splice, splice_collapse_on, accel_prefix_on && any_accel,
                                has_ind_accel, copy_class, equip_deps,
                                /*sac_dup_live=*/pre.dup_source && (pre.dup_clause & kDupSacMana) != 0,
+                               /*soft_exact=*/red_gate,
                                [](const std::vector<int>&) { return true; },
                                eval_and_push_gated, [&]   // MTG_SEL_GATE_EXACT
                                {
@@ -79640,6 +79990,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                                    {
                                        enum_priced_stop = true;
                                    }
+                                   if (!enum_priced_stop) { (void)enum_void_poll(); }
                                    return enum_priced_stop;
                                });
     }
@@ -123068,6 +123419,55 @@ void TurnSolver::TraceAuraHostProof(const GameState& state, bool is_pre_combat, 
           static_cast<unsigned long long>(state.game_seed), state.turn_number, is_pre_combat ? 1 : 0,
           worse ? "worse" : (ties > 0 ? "tie" : "heur"), took.c_str(), inc.lethal ? 1 : 0, inc.dmg,
           top.c_str(), best.lethal ? 1 : 0, best.dmg, combos);
+}
+
+// MTG_ENUM_WALK_POLL test hook (test/unit/test_odo_flat_gate_cut.cpp): a game that turns VOID during an
+// enumeration (a wall cap already passed, read by the first poll -- an enumeration charges no units) stores
+// nothing in any per-game plan cache, and a later live lookup returns the same list as a cold computation.
+// Runs the board through BpEnumEntryFor (a derivation) and through the m1 enum memo (twice, so a second visit
+// would promote), void, then live. Returns {cache entries before the void calls, after them, the void
+// derivation's list size, the void m1 list size, the live m1 list size, the cold m1 list size, 1 if the live
+// and cold lists are the same plans}.
+std::vector<long long> VoidGameEnumStoreForTest(const GameState& state)
+{
+    TurnSolver::ClearPerGameCaches();
+    struct Restore
+    {
+        int fsl = g_fsline_nest;
+        ~Restore() { g_fsline_nest = fsl; gamework::End(); TurnSolver::ClearPerGameCaches(); }
+    } restore;
+    g_fsline_nest = 1;   // the m1 enum memo serves search frames only (memo_ok)
+    ++g_decision_epoch;
+    auto entries = [] {
+        return static_cast<long long>(bpcache::t_plans.size() + enummemo::t_cache.size() + m1memo::t_cache.size()
+                                      + solvememo::t_cache.size() + solvememo::t_m2cache.size()
+                                      + bpcanon::t_fronts.size());
+    };
+    auto m1 = [&] { return EnumeratePlansWithLand(state, /*pre=*/true, nullptr); };
+    // The walk polls once per kWalkAbandonStride positions; prime the stride so the FIRST position of each
+    // void walk polls (a small test board folds to fewer positions than one stride).
+    auto prime = [] { g_walk_abandon_acc = kWalkAbandonStride - 1; };
+    gamework::Begin(0);
+    gamework::ArmDeadline(0.0, 1e-9);
+    while (gamework::Elapsed() <= 1e-6) { }
+    const long long before = entries();
+    prime();
+    const long long void_bp = static_cast<long long>(
+        BpEnumEntryFor(state, /*pre=*/true, nullptr)->View().Materialised().size());
+    prime();
+    const long long void_m1 = static_cast<long long>(m1().size());
+    prime();
+    (void)m1();
+    const bool was_void = gamework::Abandoned();
+    const long long after = entries();
+    gamework::End();
+    gamework::Begin(0);
+    const std::vector<TurnSolver::Plan> live = m1();
+    TurnSolver::ClearPerGameCaches();
+    ++g_decision_epoch;
+    const std::vector<TurnSolver::Plan> cold = m1();
+    return { before, after, void_bp, void_m1, static_cast<long long>(live.size()),
+             static_cast<long long>(cold.size()), enummemo::SamePlans(live, cold) ? 1LL : 0LL, was_void ? 1LL : 0LL };
 }
 
 // Production cache/billing regression hook. The caller supplies a cheap real board; every
