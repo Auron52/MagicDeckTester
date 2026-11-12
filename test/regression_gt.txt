@@ -1,4 +1,4 @@
-# Regression ground truth -- commit ecab0614d  date 2026-11-12
+# Regression ground truth -- commit d0921c46b  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -41,7 +41,7 @@ burn_smoke_d3_s1001=4.4600/02975c38be47043a
 burn_smoke_d5_s1001=4.2889/0cc77517230d3ddd
 th_smoke_d0_s1001=5.6010/fa121f44e2d6fec2
 th_smoke_d3_s1001=4.0200/e54dad7c69ec9fae
-th_smoke_d5_s1001=4.1086/4c4a0d45228cb2e4
+th_smoke_d5_s1001=4.1029/73103308fb438b9c
 knights_smoke_d0_s1001=4.5400/ab04bf59077abf86
 knights_smoke_d3_s1001=4.4933/c3a3a913facbf65b
 knights_smoke_d5_s1001=4.3846/9584e5d50e468582
@@ -313,9 +313,9 @@ burn_regression_d3_s2002=4.3371/75be3a6e1f8abeb1
 burn_regression_d5_s2002=4.2956/afb5bb6355e1e518
 burn_regression_d5_s3003=4.2544/01b776226c307bfc
 th_regression_d0_s2002=5.5420/e24d3ceb60f57a76
-th_regression_d3_s2002=4.0229/0988bdef8b048519
-th_regression_d5_s2002=4.1267/51b2caec1a1788b8
-th_regression_d5_s3003=3.9767/b1736898c14b5f1b
+th_regression_d3_s2002=4.0229/6a52ade9ed732ee8
+th_regression_d5_s2002=4.1267/caf85deb7b176ce9
+th_regression_d5_s3003=3.9750/d371e091eaae2388
 knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08
 knights_regression_d5_s2002=4.3180/1cadf9100c46c412
@@ -366,7 +366,7 @@ creature_giving_regression_d0_s2002=5.5800/11ce70f7d2e1011f
 creature_giving_regression_d3_s2002=4.5500/00a3148475d0911c
 creature_giving_regression_d5_s2002=4.6118/15513bdefbbe09e7
 creature_giving_regression_d5_s3003=4.6118/e9579b930cc9c598
-mirrorwing_regression_d0_s2002=5.9030/97c771e55041534a
+mirrorwing_regression_d0_s2002=5.9020/224185acf110e39a
 mirrorwing_regression_d3_s2002=4.3067/84d5fab9a917027d
 mirrorwing_regression_d5_s2002=4.1867/08df183107b82568
 mirrorwing_regression_d5_s3003=4.0844/780d6e1ad585f727
@@ -472,9 +472,9 @@ galadriel_regression_d5_s3003=4.9600/34de41de690c60d6
 galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
 niv_regression_d0_s2002=6.0510/8488f3e81b883671
 niv_regression_d3_s2002=4.4400/3a272f4d45e8352a
-niv_regression_d5_s2002=4.4800/6078fefc00996b68
+niv_regression_d5_s2002=4.4800/551951e026969b55
 niv_regression_d5_s3003=4.4867/b9c4d0771c2a31c5
-niv2hg_regression_d5_s2002=4.4400/4597ea6478c523e9
+niv2hg_regression_d5_s2002=4.4400/110bd5509bda3827
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d
