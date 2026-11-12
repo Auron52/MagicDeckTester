@@ -7000,6 +7000,49 @@
      "seed": 30040000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 12,
+      "APPLY-DROP-ORDER": 14,
+      "CONTINUATION-DIFFERS": 123,
+      "DOMINATED-LAND": 11045,
+      "DROP-COVERED": 827,
+      "ENUM-GAP": 7,
+      "HIDDEN-INFO": 4,
+      "PHANTOM": 17867
+     },
+     "commit": "30bf98ef4f210f3163a9703ff84c4ea1a7233dd7",
+     "date": "2026-11-12T10:08:16Z",
+     "decisions": 42421,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 45000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 33,
+     "life_breakpoints": [],
+     "ms_off": 3787941,
+     "ms_on": 4315494,
+     "report": "logs/mana_clean/th-sb-6r5-20261112/report.md",
+     "run": "th-sb-6r5-20261112",
+     "seed": 30045000,
+     "src": "b28d972b542283f2d9e28ce07bbb094d577623b3",
+     "verdict": "issues"
     }
    ]
   },
@@ -7844,6 +7887,51 @@
      "run": "due6-20261112",
      "seed": 30060000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 341,
+      "APPLY-DROP-ORDER": 25,
+      "CONTINUATION-DIFFERS": 188,
+      "DOMINATED-LAND": 18063,
+      "DOMINATED-LIFE": 364,
+      "DROP-COVERED": 31622,
+      "ENUM-GAP": 30,
+      "HIDDEN-INFO": 1,
+      "ORACLE-GAP": 123,
+      "PHANTOM": 3167
+     },
+     "commit": "30bf98ef4f210f3163a9703ff84c4ea1a7233dd7",
+     "date": "2026-11-12T10:08:16Z",
+     "decisions": 35512,
+     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 65000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 519,
+     "life_breakpoints": [],
+     "ms_off": 836263,
+     "ms_on": 1294698,
+     "report": "logs/mana_clean/th-sb-6r5-20261112/report.md",
+     "run": "th-sb-6r5-20261112",
+     "seed": 30065000,
+     "src": "b28d972b542283f2d9e28ce07bbb094d577623b3",
      "verdict": "issues"
     }
    ]
