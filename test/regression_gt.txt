@@ -1,11 +1,5 @@
-# Regression ground truth -- commit fe05bfbc1  date 2026-11-12
+# Regression ground truth -- commit c6a9afe3e  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
-# accepted-with-regressions (smoke, 2026-11-12): INT-10 (bb6829c35): morph2hg smoke gi5 T6->T7 identical draws, recovers T6 at d8 b0; MorphProvider combat-is-over folds + Den LEAD pin identity fold
-# accepted-with-regressions (regression, 2026-11-12): INT-10 (bb6829c35): no searched slower game; MorphProvider combat-is-over folds + Den LEAD pin identity fold
-# accepted-with-regressions (smoke, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
-# accepted-with-regressions (regression, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
-# accepted-with-regressions (smoke, 2026-11-12): morph INT-5/6/7 (aad2a29a9-rebased #TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg only; searched slower 0; d0 slower 1 (morph_smoke_d0 gi399 T6->T7, recovers T5 at d8 b0); held-out A/B seeds 60000+ net faster on every deck (morph -248, morph2hg -121, mirrorwing -8, mirrorwing2hg -5 turns)
-# accepted-with-regressions (regression, 2026-11-12): morph INT-5/6/7 (#TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg + extraturns_regression_d5_s3003 (1 game, gi36 T4 unchanged; OURS: bisected to 5d55fe9f6 INT-2c SectionForgetHandExits, the origin binary reproduces origin GT and 5d55fe9f6 with that call removed reproduces it too -- a same-score tie on the winning extra turn); searched slower 0; d0 slower 1 (morph_regression_d0 gi213 T4->T5, recovers T4 at d8 b0); held-out A/B seeds 60000+ net faster on every deck
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing/mirrorwing2hg move from OUR #TT plan-signature dedup fix (INT-5); the origin-only binary reproduces origin GT on these keys. Searched slower 0, faster 2, d0 unchanged; same digests as the pre-rebase INT-7..10 GT. Morph keys PASS unchanged under origin's payer/oracle changes.
 # accepted-with-regressions (regression, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing (OUR #TT dedup fix, INT-5) + extraturns_regression_d5_s3003 gi36 (same-score line tie, OURS: bisected in INT-7 to 5d55fe9f6 SectionForgetHandExits); the origin-only binary reproduces origin GT on every moved key. Searched slower 0, faster 2, d0 unchanged. Morph keys PASS unchanged.
@@ -42,7 +36,7 @@ modernrwburn_smoke_d0_s1001=4.0680/b6dd74249faea8cc
 modernrwburn_smoke_d3_s1001=3.7400/4331f3cd6c80a7f7
 modernrwburn_smoke_d5_s1001=3.7500/2e0c494102513e39
 modernrwburn2hg_smoke_d5_s1001=5.0000/384c3870df8465d9
-fungusv3_smoke_d0_s1001=5.2450/35f7d08d8c4f3efc
+fungusv3_smoke_d0_s1001=5.2450/c4d11f690e295e87
 fungusv3_smoke_d3_s1001=4.4600/7c3b478beb7cebd5
 fungusv3_smoke_d5_s1001=4.5314/9439236508fb9c5b
 fungusv32hg_smoke_d5_s1001=4.8000/c82be545c530218b
@@ -320,7 +314,7 @@ vampires_regression_d3_s30001=4.3000/092417a29e2ce8ce
 vampires_regression_d5_s30001=4.3000/092417a29e2ce8ce
 whiteknights_regression_d3_s30001=4.1500/7a077a89bdfc6a0d
 whiteknights_regression_d5_s30001=4.1500/93afeefa560c7137
-fungusv3_regression_d0_s2002=5.3110/10bf810a54bcae4f
+fungusv3_regression_d0_s2002=5.3110/d5f36188fa35c09f
 fungusv3_regression_d3_s2002=4.5333/3ff31eef51ace5a4
 fungusv3_regression_d5_s2002=4.5480/fc728fb61a74116f
 fungusv3_regression_d5_s3003=4.5520/98e1594afa7f2f0b
