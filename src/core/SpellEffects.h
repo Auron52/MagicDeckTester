@@ -2762,6 +2762,19 @@ inline bool TeraDrainDoomedOn()
     static const bool on = EnvOn("MTG_TERA_DRAIN_DOOMED", true);
     return heurarm::Flag(heurarm::TERA_DRAIN_DOOMED, on);
 }
+// Saproling Burst's doomed-body pre-float (MTG_FADE_PREFLOAT_DOOMED, item 6, Fungus s30065330 lead 1): taps own
+// untapped token #num for mana into the float, when it has exactly one free face (a Brightcap Badger {G} grant), just
+// before the fade activation whose counter removal kills it. Installed by the AI layer (ManaPayment.cpp,
+// ApplyEnginePreTap); null -> no pre-float (the old behaviour). See the FadeSaproling case of ApplyPermAbility.
+inline void (*g_fade_prefloat_hook)(GameState& state, int controller, int num) = nullptr;
+inline bool FadePrefloatDoomedOn()
+{
+    static const bool on = EnvOn("MTG_FADE_PREFLOAT_DOOMED", true);
+    return heurarm::Flag(heurarm::FADE_PREFLOAT_DOOMED, on);
+}
+// >0 while MakeSameLineSacFodder fires a Burst for a sacrifice outlet's fodder: that activation can run INSIDE a mana
+// payment (ApplySacForMana), and a float appearing mid-payment is outside the payer's books, so it stays off there.
+inline thread_local int t_fade_prefloat_suppress = 0;
 // Set by BoundaryFan::Cross while it fans the fetch, so an ordinal exhausted at rank 0 (the front, which the fan
 // DID branch on) is not counted as an uncovered pick by the census.
 inline thread_local bool t_stut_fan_crossing = false;
@@ -16674,7 +16687,12 @@ inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::s
         case SameLineFodderKind::Spore:
             ApplyPermAbility(state, controller, maker, PermAbilityMode::SporeSaproling); break;
         case SameLineFodderKind::Fade:
-            ApplyPermAbility(state, controller, maker, PermAbilityMode::FadeSaproling);  break;
+        {
+            ++t_fade_prefloat_suppress;   // may run inside a payment (ApplySacForMana): no float there
+            ApplyPermAbility(state, controller, maker, PermAbilityMode::FadeSaproling);
+            --t_fade_prefloat_suppress;
+            break;
+        }
         case SameLineFodderKind::TapForTokens:
             ApplyTapForTokens(state, controller, maker);                                 break;
         default: return false;
@@ -34029,9 +34047,42 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             //
             // ORDER MATTERS AND IS THE RULES ORDER: pay first, then create. So an activation at
             // seven counters leaves six and mints a 6/6, not a 7/7.
-            Permanent& self = state.battlefield[idx];
             const int cost_ctrs = d->params.fade_saproling_cost;
-            if (cost_ctrs <= 0 || self.fade_counters < cost_ctrs) { break; }
+            if (cost_ctrs <= 0 || state.battlefield[idx].fade_counters < cost_ctrs) { break; }
+            // DOOMED-BODY PRE-FLOAT (MTG_FADE_PREFLOAT_DOOMED, item 6 of the mana-clean chain; default ON). A token of
+            // THIS Burst that the counter removal is about to kill (the sweep's own toughness test, below, evaluated
+            // at the post-cost count) and that is untapped and can tap for mana (Brightcap Badger's {G} grant) is
+            // tapped into the float first: its controller may activate a mana ability while paying a cost
+            // (CR 602.2b / 605.3a), the mana floats until the phase ends and simply empties unused (no mana burn),
+            // and the body dies untapped otherwise -- it has no other use left once this activation is chosen. So
+            // the float only ADDS mana, decides no colour (one free face), and changes nothing else. Shared by every
+            // apply site (the executor, the rollout, SpendFadeActivations' repeats), so the two worlds stay in
+            // lockstep. Fungus s30065330 T4 {Undercellar Myconid + Utopia Mycon + Burst x1}: the fifth doomed
+            // token died untapped and the continuation's Badger tapped the lasting 1/1 instead. Human play taps by
+            // hand (no auto-float there); a fodder activation inside a payment is suppressed (see the flag).
+            if (g_fade_prefloat_hook != nullptr && t_fade_prefloat_suppress == 0
+                && !(g_play_loyalty_chooser != nullptr && !g_tap_speculating) && FadePrefloatDoomedOn())
+            {
+                const int src_num0 = state.battlefield[idx].card.m_number;
+                const int left0    = state.battlefield[idx].fade_counters - cost_ctrs;
+                std::vector<int> doomed;
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.created_by_number != src_num0 || q.tapped || q.controller_index != controller) { continue; }
+                    // After RefreshFadeTokens the printed toughness reads `left0`; everything else is unchanged.
+                    const int t_after = q.EffectiveToughness() - q.card.m_toughness.value_or(0) + left0
+                        + ComputeLordBonus(q.card, state, q.controller_index, q.AnimatedAllTypes(), &q).second
+                        + AuraBonusFor(q, state).second + EquipBonusFor(q, state).second;
+                    if (t_after <= 0) { doomed.push_back(q.card.m_number); }
+                }
+                for (int num : doomed) { g_fade_prefloat_hook(state, controller, num); }
+                // A mana tap adds no permanent, but re-locate the source rather than trust the index.
+                idx = -1;
+                for (std::size_t j = 0; j < state.battlefield.size(); ++j)
+                { if (state.battlefield[j].card.m_number == src_num0) { idx = static_cast<int>(j); break; } }
+                if (idx < 0) { break; }
+            }
+            Permanent& self = state.battlefield[idx];
             self.fade_counters -= cost_ctrs;
             const int left    = self.fade_counters;
             const int src_num = self.card.m_number;

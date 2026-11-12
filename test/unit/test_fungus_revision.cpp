@@ -2160,3 +2160,42 @@ TEST_CASE("Granted-token cap skips RESERVED tokens (MTG_GRANT_CAP_SKIP_RESERVED)
     CHECK(!ByNumber(s, 1000).tapped);
     CHECK(!ByNumber(s, 70).tapped);
 }
+
+TEST_CASE("Saproling Burst pre-floats its doomed tokens (MTG_FADE_PREFLOAT_DOOMED): the last counter's bodies tap first")
+{
+    // mana-clean item 6, Fungus s30065330 T4 lead 1 (DOMINATED-CREATURE): the activation that takes a Burst to zero
+    // kills every token it made; a doomed token that could still tap for Brightcap Badger's {G} died untapped while
+    // the continuation tapped a lasting body. Board: Badger, a Burst on ONE fade counter, a lasting 1/1 #1000, two
+    // untapped doomed tokens, one TAPPED doomed token and one SUMMONING-SICK doomed token. Only the two untapped,
+    // non-sick doomed tokens float; the lasting body stays untapped. A Sporecrown Thallid (+1/+1 to Saprolings) keeps
+    // them alive at zero counters, so nothing is doomed and nothing floats.
+    EnsureCardsLoaded();
+    for (bool lord : { false, true })
+    for (int arm : { 0, 1 })
+    {
+        CAPTURE(lord);
+        CAPTURE(arm);
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 50);
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+        if (lord) { Put(s, "Sporecrown Thallid", 0, 70); }
+        PutSaprolingToken(s, 1000);
+        for (int n : { 1001, 1002, 1003, 1004 })
+        {
+            const int ti = PutSaprolingToken(s, n, /*sick=*/n == 1004);
+            s.battlefield[static_cast<std::size_t>(ti)].created_by_number = 60;
+            if (n == 1003) { s.battlefield[static_cast<std::size_t>(ti)].tapped = true; }
+        }
+        heurarm::t_arm[heurarm::FADE_PREFLOAT_DOOMED] = static_cast<std::int8_t>(arm);
+        ApplyPermAbility(s, 0, 60, PermAbilityMode::FadeSaproling);
+        heurarm::t_arm[heurarm::FADE_PREFLOAT_DOOMED] = -1;
+        CHECK(FadeOn(s, 60) == 0);
+        CHECK(OnBoard(s, 1000));
+        CHECK(!ByNumber(s, 1000).tapped);
+        CHECK(OnBoard(s, 1001) == lord);
+        const int want = (arm == 1 && !lord) ? 2 : 0;
+        CHECK(s.floating_mana.green == want);
+        CHECK(s.floating_mana.Total() == want);
+    }
+}

@@ -11236,6 +11236,36 @@ struct TeraDrainInstaller
 } s_tera_drain_installer;
 }
 
+// Saproling Burst's doomed-body pre-float (SpellEffects.h g_fade_prefloat_hook, MTG_FADE_PREFLOAT_DOOMED): a token the
+// activation is about to kill taps for mana through the payer's own pre-tap route, but only when its ONE free face
+// leaves no colour to decide (a Brightcap Badger {G} grant). Summoning sickness, the grant being live, and every other
+// legality question are HumanPreTapOfferFor's (the one legality function); a refusal taps nothing.
+namespace {
+struct FadePrefloatInstaller
+{
+    static void Float(GameState& state, int controller, int num)
+    {
+        if (controller != state.active_player_index) { return; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != num || p.controller_index != controller) { continue; }
+            if (p.tapped) { return; }
+            const HumanPreTapOffer offer = HumanPreTapOfferFor(state, p);
+            if (offer.free_faces.size() != 1) { return; }
+            const std::size_t pos = std::string(kPreTapColorLetters).find(offer.free_faces[0]);
+            if (pos == std::string::npos || pos >= 6) { return; }
+            TurnSolver::PreTap t;
+            t.name  = p.card.m_name.str();
+            t.num   = num;
+            t.color = static_cast<int>(pos);
+            (void)ApplyEnginePreTap(state, t);
+            return;
+        }
+    }
+    FadePrefloatInstaller() { g_fade_prefloat_hook = &Float; }
+} s_fade_prefloat_installer;
+}
+
 bool ApplyKruphixBankTap(GameState& state, int source_id, char face)
 {
     bool kruphix = false;

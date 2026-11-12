@@ -897,6 +897,7 @@ enum Slot : int
     PAY_DOOMED_AHEAD_OF_LANDS,// MTG_PAY_DOOMED_AHEAD_OF_LANDS  item 6 (mana-clean, Fungus s30055537 T4 DOMINATED-CREATURE): a doomed body (IsDoomedPlanBody) pays ahead of the LANDS too -- the per-pip payer's plain tier on needs first, and the whole-turn prepay's doomed-first hold rungs (every other source held, released one at a time). Default ON; =0 -> creature band only
     GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one unit of the grant colour (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
     GRANT_CAP_SKIP_RESERVED,  // MTG_GRANT_CAP_SKIP_RESERVED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE): the backtrack's granted-Saproling cap skips tokens in the caller's reserved (hold) mask before counting, so a held body never takes the slot of a tappable one. Default ON; =0 -> the old count
+    FADE_PREFLOAT_DOOMED,     // MTG_FADE_PREFLOAT_DOOMED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE lead 1): a Saproling Burst activation whose counter removal kills this Burst's tokens first taps each UNTAPPED token that will die and can tap for mana (Brightcap Badger's grant) into the float (CR 605.3a; the body dies either way, mana empties without burn, so it only adds mana and decides no colour). SpellEffects.h, g_fade_prefloat_hook. Default ON; =0 -> the token dies untapped as before
     COUNT
 };
 
@@ -1738,6 +1739,7 @@ inline const char* Name(int slot)
         "MTG_PAY_DOOMED_AHEAD_OF_LANDS",
         "MTG_GRANT_HASTE_CAST_CREDIT",
         "MTG_GRANT_CAP_SKIP_RESERVED",
+        "MTG_FADE_PREFLOAT_DOOMED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
