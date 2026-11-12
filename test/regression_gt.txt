@@ -1,7 +1,6 @@
-# Regression ground truth -- commit e55b07bd6  date 2026-11-11
+# Regression ground truth -- commit 12889b119  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-11): E3 rollout game cache ON (USER 2026-11-11), rebased on origin cd0368564: smoke 3 slower/13 faster net -11 game-turns; slower games gods d3 gi19 churn (recovers at 4x/16x), shadowborn2hg d3 gi9 T8->loss churn (recovers to 8), shadowborn d5 gi85 T8->loss churn and better at 4x (7)
 # accepted-with-regressions (regression, 2026-11-11): E3 rollout game cache ON (USER 2026-11-11), rebased on origin cd0368564: regression 4 slower/33 faster net -27 game-turns; slower games gods d3 gi14 churn, gods d3 gi29 churn and better at 4x, hinata d5 s3003 gi143 churn, shadowborn d5 s3003 gi135 4->7 persists at 4x/16x (single game; deck net -4); martyr regression keys NEW
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
@@ -198,10 +197,10 @@ alchemist2hg_smoke_d5_s1001=5.1600/6211554d6914a8b9
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.1050/3cf47e6e09477d39
-martyr_smoke_d3_s1001=5.2000/2a27881b3a3a3564
-martyr_smoke_d5_s1001=5.2700/30b16278c9bc5ee4
-martyr2hg_smoke_d5_s1001=5.4800/63c4da13cb73bea0
+martyr_smoke_d0_s1001=6.0680/e28de619033d4cd1
+martyr_smoke_d3_s1001=5.1800/f52e2a549a880fcd
+martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
+martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
 hydras_regression_d0_s2002=6.0320/773d5978c83fd6c9

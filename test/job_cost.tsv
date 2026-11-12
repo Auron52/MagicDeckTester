@@ -808,7 +808,7 @@ lhc_smoke_d0_s1001	1
 lhc_smoke_d3_s1001	3422
 lhc_smoke_d5_s1001	2051
 martyr2hg_regression_d5_s2002	216146
-martyr2hg_smoke_d5_s1001	199912
+martyr2hg_smoke_d5_s1001	153919
 martyr_regression_d0_s2002	1
 martyr_regression_d3_s2002	71425
 martyr_regression_d3_s30201	57363
@@ -816,8 +816,8 @@ martyr_regression_d5_s2002	134623
 martyr_regression_d5_s3003	95608
 martyr_regression_d5_s30201	74916
 martyr_smoke_d0_s1001	1
-martyr_smoke_d3_s1001	73313
-martyr_smoke_d5_s1001	110821
+martyr_smoke_d3_s1001	64973
+martyr_smoke_d5_s1001	88808
 melira2hg_smoke_d3_s1001	30735
 melira2hg_smoke_d5_s1001	138764
 melira_overnight_d0_s10010	1
