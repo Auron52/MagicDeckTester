@@ -738,7 +738,7 @@ fungus 1,880, gods 4,300 (first run).
     tapped fed faces in battlefield order, so a chain (Reliquary Tower {C} -> Ferrous Lake {U}{R} -> its {U} feeds
     Cascade Bluffs {R}{R}) was never verified in the order that works; when the default order fails and >= 2 taps are
     fed, every other fed order is paid for real. Issue games (112): ORACLE-GAP 123 -> 0, every other class unchanged,
-    digests identical on/off. Not yet re-gated (next block 70000-74999). **APPLY-DROP 341 still PARKED**: top
+    digests identical on/off. Re-gated `th-6r5b-20261112` (70000-74999): **375 issues**, ORACLE-GAP 0 (ENUM-GAP 23, APPLY-DROP 299, ORDER 53). **APPLY-DROP 341 still PARKED**: top
     signature {Cascade Bluffs + Land's Edge + Hunt} x24 -- the per-cast payer pays Land's Edge without leaving a
     filter feed / the Tower {C} for Hunt (depth-1 rollback pays; needs a filter-feed-aware line hold in the engine payer,
     full validation; not attempted this round).
