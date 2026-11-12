@@ -184,6 +184,9 @@ the durable record).
 - NOT BUILT (owed, in order, see the handoff): the OPPONENT-END-STEP flip window (BoundaryFan axis + executor
   crossing node + face_up decision type + MTG_FACEUP_AXIS_STATS), the faceup= composer token / CheckLine verb,
   the TRAIL-regrowth breakpoint check (MTG_BP_PROBE), PlanHasDeadFaceUpPin, step 8 eval for flip potential.
+- Gates (6e304038e): unit 2855/2855; scenarios 493/493; smoke play-changed=0 (searched + d0); audit_card_costs
+  608/608; coverage 19/19 full. Pooled batch with MTG_FACEDOWN_AUDIT=1 (no abort): d0 6.68 (100 g), d3 b10
+  4.40 (100 g), d5 b20 4.45 (60 g), audit d3 b10 4.395 (200 g). d0 is slow -- the greedy rarely flips (step 8).
 
 ## Approved deferrals
 (none yet)
