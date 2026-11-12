@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <climits>   // INT_MIN -- the refloat need model's argmax seed (demand can go negative)
 #include <array>
+#include <bit>     // std::popcount -- MSVC has no __builtin_popcount (Windows CI, 2026-11-12)
 #include <cstdint>
 #include <cstring>   // LandAuraMemo: UntapLandHosts stored by memcpy
 #include <type_traits>
@@ -25753,7 +25754,7 @@ inline std::vector<EotFaceUpOption> EotFaceUpMenu(const GameState& s)
     for (int m = 0; m < (1 << k); ++m)
     { if (m != front && payable[static_cast<std::size_t>(m)] && !dominated(m)) { rest.push_back(m); } }
     std::stable_sort(rest.begin(), rest.end(), [](int a, int b)
-                     { return __builtin_popcount(static_cast<unsigned>(a)) > __builtin_popcount(static_cast<unsigned>(b)); });
+                     { return std::popcount(static_cast<unsigned>(a)) > std::popcount(static_cast<unsigned>(b)); });
     masks.insert(masks.end(), rest.begin(), rest.end());
     // Den Protector's target menu (the graveyard at the end step; a pin whose card has left by the flip falls back
     // to the provider's pick at resolution -- a duplicate, never a lost line).
