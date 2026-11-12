@@ -374,6 +374,234 @@ overnight run (the morph / mirrorwing / extraturns overnight keys will move ther
 - (Ruling 5 implementation detail) the twin is also kept when Wild Defiance is only IN HAND (the plan may cast it first).
   The alternative is battlefield-only, which would miss a Defiance cast earlier in the same plan.
 
+### INT-8 result (2026-11-12) -- USER rulings R7-R14: Vines kicked-only, the R8 cast order, Den Protector's inline flip, grouped Spellskite redirects, Berserk first, watcher-in-plan, second TBR elsewhere, non-mana tie-break
+Commit `264360a7c` (code + unit tests), then GT accept + this section.
+
+**USER rulings (verbatim, 2026-11-12).**
+- R7: "Vines should only be cast with Kicker heuristically."
+- R7b: "Sorry, except for with Wild Defiance."
+- R8: "We should also work on the order. Wild Defiance goes early, firecat and most other morphs can go next doublers near the end and den protectors morph goes last targeting doublers like Berserk or Legion Leadership preferably, otherwise another pump like Might of Old Krosa or Vines. Berserk is clearly the best option, Legion Leadership or Might of old Krosa might depend on remaining mana. Arguably Den Protector megamorph might want to go before Temur Battle Rage so that other spells can get the benefit from it. If we are protectoring for Might of Old Krosa it probably wants to go before Legion Leadership as well. Please attempt to fill in the rest of the gaps and present it to me."
+- R8b: "So the idea is fixed pumps go earlier and doubling pumps go late."
+- R8c: "Whether we get them from hand or from Den protector's megamorph."
+- R9: "Spellskite Redirects unfortunately need to be considered after each redirectable spell or perhaps as just a group like \"Redirect all Pump Spells\", keeping in mind that doublers are fair targets as well. True, we probably should take Den Protector's megamorph counter into account for doublers if we can afford to do so. Sometimes we need the spell first so we can return it. The berserk vs not is an easy question to answer. If we can find lethal we don't need to search it, I guess it's true we could just rank and test it first, though. Berserk very easily finds lethal lines in my experience, but it does it a little other help. But yes, it is rare to cast Berserk without lethal."
+- R10: "Double Berserk is almost always lethal. Hence Den Protector for Berserk is pretty much always the best play."
+- "Never pump a creature that can't attack this turn." (USER-APPROVED.)
+- R11-R13: "It should be disallowed heuristically if no Wild Defiance ends up in the plan. Yes, Temur Battle Rage 2 should target another non-zero power creature. (after pumps) Ties can go to the oldest if the creatures do not differ in ability to tap for mana. We should prefer non-mana-producing targets."
+- R14: "Keeping in mind that the sizing is done relative to the morphed body if morph is used."
+
+**As built** (all MorphProvider, generic/param-driven; each lever an EnvOn + HeuristicArm slot, DEFAULT ON; off under human play
+and MTG_UNPRUNED / tricktarget):
+- A `MTG_MORPH_VINES_KICKED_ONLY` -- TrickKickModes: a kicker solo-target trick emits only its kicked variant unless a
+  target watcher is on the battlefield or in hand (the ruling-5 test); R11 then requires the watcher on board or CAST IN
+  THE SUBSET for the unkicked variant. No affordable kicker + no Defiance = no cast.
+- B `MTG_MORPH_CAST_ORDER_R8` -- CastOrderRank: watcher 4 < every other permanent (generic 10/20; LEAD flips already run
+  before every cast) < fixed pumps 21 (Might, Vines kicked or not) < Temur Battle Rage 22 < doublers 23 (Berserk, LL).
+  A Den Protector regrowth recast takes its card's slot (the breakpoint continuation re-sorts by rank).
+- C `MTG_MORPH_DEN_FLIP_INLINE` -- a NAMED trail flip (TurnFaceUpLate + tutor_target) runs right after the cast that puts its
+  target in the graveyard: TurnSolver::FaceUpInlineTrailDue, dispatched through each world's own trailing body from the
+  top-level cast-section hook (ApplyPlanDirect slot_hook / AIEngine exec_slot_hook, lockstep), and SectionForgetRegrown
+  keeps the regrown card "new" for the section's hand-entry breakpoint (the recast). A battlefield Den's trail flip naming
+  a card ALREADY in the graveyard is no longer emitted (its LEAD twin flips before every pump). Whether to flip and what to
+  return stay searched. The look-ahead (PlanTrailFlipsFor) still sizes Den's face-up body for every pick before the flip;
+  after it the body is face up and the entry goes inert. LIMIT: a flip inside a breakpoint CONTINUATION's own plan keeps
+  the trailing position (top-level section only).
+- D `MTG_MORPH_REDIRECT_GROUP` -- SubsetHasMissingTrickTarget: a subset holding any redirect twin must redirect EVERY
+  cast-time-target trick it casts (doublers included); mixed subsets are pruned. LIFE RULE: each redirect pays 2 life
+  ({U/P}, no blue); a group whose life sum would leave us at 0 or below is not offered -- the section falls back to "no
+  redirect" (never a partial group). Per-section, so a continuation is its own group. Not harder than per-spell twins:
+  the twins already exist per trick, so the group is one subset filter.
+- E `MTG_MORPH_BERSERK_FIRST` -- an ORDER only: Plan::move_front (PlanMoveOrderFront: casts a Berserk-shape doubler =
+  trick_double_power + trick_destroy_at_end_if_attacked, or flips Den Protector naming one) is a MoveOrderLess tier under
+  wins_this_turn / pump_waste / atk_forfeit and above value; and FaceUpRegrowOrder orders Den's named variants: Berserk,
+  then Legion Leadership vs Might by mana (LL first when >= 2 mana remain after the {1}{G} flip and the largest attacker's
+  power > 4, else Might), kicked Vines, Temur Battle Rage (after the creatures if the largest already has double strike),
+  Firecat, land. Nothing is removed. Plan::move_front sits in a padding hole (sizeof(Plan) unchanged, 656).
+- R11 `MTG_MORPH_WATCHER_IN_PLAN` -- a subset with a redirect twin or an unkicked kicker trick needs the watcher on the
+  battlefield or cast in that subset (it ranks 4, before every trick); a Defiance left in hand voids both.
+- R12 `MTG_MORPH_TBR_OTHER` -- FindBestOwnAttackerForTrick: a double-strike grant goes on the best-ranked attacker WITHOUT
+  double strike at combat and with combat power > 0 (after pumps and the plan's flips). With none it falls back to the
+  plain pick, a no-op the search's not-cast sibling dominates -- so in effect no cast. Same rule in the playout / d0
+  credit (GreedyTrickStackCredit).
+- R13 `MTG_MORPH_TIE_NONMANA` + R14 -- the ranking key is (combat-time size, produces-mana-at-combat, battlefield order):
+  ties prefer a non-mana body, then the oldest. "Produces mana" = the ManaDork template on the COMBAT-TIME face
+  (CombatTimeDef: the real face when a trail flip is pending, else the permanent as it stands -- a face-down creature has
+  no abilities, so no mana). Applied in the cast-time resolver, the redirect original target (exclude_redirector), R12,
+  and the playout credit.
+- ENGINE FIX found by the D unit test: SubsetPhyrexianDominated did not restore the redirect's {U/P} pip when it rebuilt a
+  life-paid variant's full cost, so EVERY life-paid redirect twin read as "payable in mana instead" and was pruned as
+  dominated -- in a deck with no blue only a Birds-paid redirect ever survived. Fixed (the pip is restored for
+  trick_redirect). This is in every arm below, including alloff.
+
+**Gates.** ./build.sh OK; mtg-test 2883/2883 (11 new INT-8 cases: A, B rank, C inline +14 vs trailing 13, C no GY trail
+variant, D group + life, E front + regrow order, R11, R12, R13/R14 with one flipped and one unflipped face-down body; the
+INT-6 "kicked + not" Vines expectation is now "kicked only" by R7); scenarios 502/502 -- the four morph_trick_target_* are
+unchanged (T3 / T7 / T4 / T4, and identical opponent/active life to the 3f147d491 binary).
+
+**Held-out A/B** (seeds 60000+ / 62000+, morph 1000 + morph2hg 300 at play settings d5 b20, 24 threads). ONE pooled batch
+per binary: base = 3f147d491 (`build/scratch/int8/mtg.base`), new = 264360a7c with 10 arms (all on, each lever off alone,
+all off) via manifest `flags`. f/s = faster/slower vs base; sum = summed turn delta (unwon = 9); units vs base.
+
+| arm | morph avg | f/s | sum | units | morph2hg avg | f/s | sum | units |
+|---|---|---|---|---|---|---|---|---|
+| base 3f147d491 | 4.2550 | | | 1 | 4.9033 | | | 1 |
+| **all on** | 4.2490 | 7/2 | -6 | 1.039 | 4.9000 | 3/2 | -1 | 0.987 |
+| A off (Vines) | 4.2490 | 7/2 | -6 | 1.040 | 4.9000 | 3/2 | -1 | 0.988 |
+| B off (R8 order) | 4.2500 | 6/2 | -5 | 1.042 | 4.9067 | 1/2 | +1 | 0.994 |
+| C off (inline flip) | 4.2490 | 7/2 | -6 | 1.039 | 4.9000 | 3/2 | -1 | 0.986 |
+| D off (group) | 4.2490 | 7/2 | -6 | 1.039 | 4.9000 | 3/2 | -1 | 0.989 |
+| E off (Berserk first) | 4.2470 | 7/0 | -8 | 0.959 | 4.8967 | 3/1 | -2 | 0.918 |
+| R11 off | 4.2490 | 7/2 | -6 | 1.059 | 4.9000 | 3/2 | -1 | 1.010 |
+| R12 off | 4.2490 | 7/2 | -6 | 1.039 | 4.9000 | 3/2 | -1 | 0.987 |
+| R13 off | 4.2490 | 7/2 | -6 | 1.038 | 4.9000 | 3/2 | -1 | 0.987 |
+| all off | 4.2520 | 2/0 | -3 | 1.001 | 4.9033 | 0/0 | 0 | 1.001 |
+
+Reading: every deck net faster (morph -6, morph2hg -1). "All off" is the base plus the Phyrexian-pip fix (2 morph games
+faster, 2HG identical score): the isolation holds. Lever A's games are byte-identical to "on" (an unkicked Vines was
+never the chosen line); C, D, R12, R13 each move play in a handful of games at the same score; R11 saves ~2% units; B is
+worth 1 game on morph and 2 on 2HG. **E is the only lever that costs**: every slower game of the "on" arm (morph gi245,
+gi289; 2HG gi174, gi258) disappears with E off, and E adds ~8% units on morph / ~7% on 2HG.
+
+**d8 b0 recovery** (one pooled batch, new binary): morph gi245 T5 -> T4 (base T4), gi289 T5 -> T4 (base T4), 2HG gi174
+T7 -> T5 (base T6), gi258 T7 -> T5 (base T6). All recover. Smoke and regression (below) had 0 slower games.
+
+**Root cause of E's slower games (gi245, single-game repro at play settings, MTG_MORPH_BERSERK_FIRST=1 vs 0).** The games
+diverge at T2: with E on, the plan casts Berserk on T2 (two Ignoble Hierarchs + Berserk, on a board of mana dorks:
+nothing is lethal and the Berserk doubles a 0-1 power body that then dies to its own end-step destroy); with E off it
+plays Gruul Turf and keeps the Berserk, winning T4 instead of T5. Mechanism: the front tier sits ABOVE `value` in
+MoveOrderLess, and among horizon-TIED plans the first-verified plan commits -- so "try Berserk first" also acts as a
+TIE-BREAK in favour of casting Berserk whenever the leaf cannot tell the lines apart, which on a non-lethal turn is
+exactly the waste R9 warns about ("it is rare to cast Berserk without lethal"). The extra units come from the same place:
+the fronted Berserk plans are rarely the best, so the B&B cutoff arrives later.
+**Proposed amendment (not built; the USER's call):** front a Berserk plan only when it is projected lethal
+(`plan.move_front = wins && PlanMoveOrderFront(...)`) -- "If we can find lethal we don't need to search it ... we could
+just rank and test it first" -- i.e. Berserk first WITHIN the lethal tier, and no preference otherwise. The Den
+regrowth ORDER (FaceUpRegrowOrder) is unaffected by this (it orders value-tied variants of one flip).
+
+**Smoke (full tier, 264360a7c):** only Morph moved -- morph d0 5.0530 -> 5.0470, d3 4.3600 -> 4.3400, d5 4.2400 =
+(play-changed), morph2hg d5 4.8000 = (play-changed); searched 0 slower / 1 faster, d0 0 slower / 4 faster.
+**Regression (--deck=morph,morph2hg):** morph d0 5.0050 -> 4.9930, d3 4.1733 -> 4.1867, d5 s2002 4.1867 -> 4.1933, d5 s3003
+4.4533 -> 4.4200, 2HG 4.6267 = (play-changed); searched 3 slower (d3 gi18 T4->T5, d5 s2002 gi18 T4->T5, d5 s3003 gi6
+T7->T8) / 4 faster; d0 0 slower / 7 faster; references clean. **GT:** not accepted on its own -- INT-9 re-ran both
+tiers on top of it (see INT-9 result).
+
+**Open USER questions (unanswered; the rules stand as built):**
+- E (Berserk first) is the only INT-8 lever that measures worse (2 slower morph games, 2 slower 2HG games at b20, +8%
+  units; all recover at d8 b0). Root cause above: the front tier doubles as a tie-break for a non-lethal Berserk.
+  Amend to "Berserk first within the projected-lethal plans only"?
+- R12 with no eligible second target: the DS grant falls back to the plain pick (a no-op), so the not-cast sibling
+  dominates -- in effect "no cast", but the cast is not removed from the menu. OK, or remove it at enumeration?
+- R11 for unkicked Vines: the variant is emitted while Defiance is in hand and pruned per subset unless the subset casts
+  Defiance. OK?
+- C limit: Den Protector's flip inside a breakpoint CONTINUATION plan keeps the trailing position (top-level section
+  only). Extend?
+- Lever A changed no game in 1300 (an unkicked Vines was never the chosen line): it is effectively a pure prune.
+- Previous (now answered by R12/R13): the second-TBR target and the tie-break.
+
+### INT-9 result (2026-11-12) -- INT-8 recovery, the E lethal-only amendment (measured, NOT adopted), the USER's Wooded Foothills prune
+Commit `000e53516` (code + unit tests). Scratch: build/scratch/int9/.
+
+**USER ruling (verbatim, 2026-11-12):** "Let's look for other prunes as needed, including for the fetchland Wooded
+Foothills. That should be relatively straightforward as goldfish can just always get stomping ground."
+
+**1. Recovery of INT-8's three slower regression games (d8 b0, INT-8 binary 264360a7c, one pooled batch).**
+d3 s2002 gi18 T5 -> **T4** (base T4); d5 s2002 gi18 T5 -> **T4** (base T4); d5 s3003 gi6 T8 -> **T7** (base T7; 61 min,
+58.5M units). All recover. Lever-by-lever single-game repro at play settings (each INT-8 flag off alone, all off): on
+all three games **only `MTG_MORPH_BERSERK_FIRST=0` (and all-off) restores the base turn**; every other lever alone is
+byte-identical to "on".
+
+**Root cause of gi18 (the missed T4 triple Berserk) = lever E.** Hand and draws are identical. With E on, T3 casts the
+second Birds of Paradise beside Den Protector + Gruul Turf (E off keeps it and plays the Forest on T4). At T3 a Berserk is in hand
+and nothing is lethal (opp 20). E's front tier puts every Berserk plan ahead of the value order, so the b10 budget goes
+on non-lethal Berserk plans and a different, value-tied plan commits. At T4 the lethal line is Forest, Berserk, flip
+Den Protector to regrow Berserk, Berserk, Berserk. It is lethal only through Den's regrowth CONTINUATION, so it is not
+in the projected-lethal (`wins_this_turn`) tier, and a second Birds adds Berserk targets that widen the fronted non-lethal tier. The b10
+search commits Hystrodon's flip + Gruul Turf and wins T5. Budget confirms it: E on wins T5 at d3 b10/b20 and T4 at
+b40/b100 (at b40 the T3 choice already reverts). This is the INT-8 gi245 mechanism (the front tier acting as a
+tie-break / budget sink on a non-lethal turn). gi6 is the same: with E on, T3 casts a non-lethal Berserk (opp 20 -> 14),
+and the T6 double Berserk is then one short. **E-lethal-only fixes gi18** (T4 at d3 b10).
+
+**2. The E amendment arm (`MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY`, DEFAULT OFF -- E stays as ruled).**
+`PlanMoveOrderFront` now receives the plan's `wins_this_turn` projection; with the arm on, the Berserk front tier applies
+only to plans projected lethal ("If we can find lethal we don't need to search it, I guess it's true we could just rank
+and test it first"). FaceUpRegrowOrder (Den's regrowth order) is unchanged in every arm.
+
+**3. The Wooded Foothills prune (`MTG_MORPH_FETCH_RULE`, DEFAULT ON).** MorphProvider: `ConsiderFetchHold` false (the
+fetch resolves on play); `FetchCandidates` puts the pick producing the most colours first (Stomping Ground; read from
+`params.produces`), else the generic library order; `FetchSearchCandidates` stays the one-option default. Human play,
+MTG_UNPRUNED (UnprunedGate::Fetch) and life <= 3 keep the hold and the full fan; that is engine-side and unchanged
+(FetchResolvesOnPlay, the TurnSolver fetch fan).
+Hold review (verify_deck's fetch_hold_review disclosure). Checked against the list and cards.json: no landfall, no
+fetch, sacrifice or graveyard-count payoff, and no library manipulation. Den Protector's regrowth can only gain from a cracked
+fetch in the graveyard. The goldfish value of the hold is therefore none, apart from one shape the A/B surfaced (gi496,
+below): a HELD Foothills puts a land on the battlefield WITHOUT shuffling. The search reads the real library, so this
+lets it keep a known good deal, and Gruul Turf can bounce the held fetch back to hand. That is deal-selection
+(clairvoyance), not goldfish quality: a shuffle does not change the expected draws.
+Life: fetch 1 + shock 2. The shock's pay-life rule (life > 2) and the INT-8 redirect-group life rule (never a group that
+would leave us at 0 or below) both read the current life, so neither can be overdrawn. In practice the most one game pays is a
+few points. A redirect costs 2 per pip, and at 17 life after one fetch+shock a group still needs 8 redirects to hit 0.
+
+**Held-out A/B** (seeds 60000+ morph 1000 / 62000+ morph2hg 300, play settings d5 b20, ONE pooled batch, 23 threads;
+base = INT-8's 3f147d491 arm, reused). f/s and sum vs base (unwon = 9); units vs base. "vs on" = vs the all-on arm.
+
+| arm | morph avg | f/s | sum | units | vs on f/s, units | morph2hg avg | f/s | sum | units | vs on f/s, units |
+|---|---|---|---|---|---|---|---|---|---|---|
+| base 3f147d491 | 4.2550 | | | 1 | | 4.9033 | | | 1 | |
+| **all on** (E as ruled + fetch rule) | 4.2260 | 35/7 | -29 | 0.838 | -- | 4.8567 | 16/3 | -14 | 0.852 | -- |
+| E-lethal-only | 4.2240 | 35/5 | -31 | 0.794 | 2/0, 0.947 | 4.8600 | 16/4 | -13 | 0.796 | 0/1, 0.934 |
+| E off | 4.2240 | 35/5 | -31 | 0.792 | 2/0, 0.946 | 4.8600 | 16/4 | -13 | 0.801 | 1/2, 0.940 |
+| fetch off (= INT-8 "on", digest-identical) | 4.2490 | 7/2 | -6 | 1.039 | 5/28, 1.240 | 4.9000 | 3/2 | -1 | 0.987 | 3/14, 1.158 |
+
+Reading:
+- The **fetch rule** is the big win: morph -23 games-turns (28 faster / 5 slower vs fetch-off), 2HG -13 (14/3), and
+  **0.81x / 0.86x units**. The fetch-off arm reproduces INT-8's "on" digests exactly (11eb55a7 / e0afd0af), so the
+  isolation holds and the PlanMoveOrderFront signature change is neutral.
+- **E-lethal-only and E off score the same**: morph -31 vs ruled -29, 2HG -13 vs -14, so -44 vs -43 combined. E-lethal-only
+  costs about 5-7% fewer units than the ruled E. It removes the gi245 / gi289 slower games (as E off does) and gi18. Its
+  one 2HG game slower than ruled (gi72 T5 -> T6) recovers at d8 b0 (T5 = base). The lethal-only front tier almost never
+  fires: it changes 126 games vs on, E off changes 130. A Berserk lethal is already in the wins tier, or it is lethal only
+  through a regrowth continuation that the projection does not see.
+
+**d8 b0 recovery of the A/B's slower-vs-base games** (one pooled batch, new binary, all-on unless noted):
+morph gi245 T4, gi289 T4, gi951 T4 (base 4) -- recover; 2HG gi25 T5, gi222 T5 (base 5), gi72 (lethal-only) T5,
+gi185 (E off) T5 -- recover. **NOT recovered: morph gi186 T5, gi193 T5, gi532 T5 (base 4), gi496 T6 (base 5); 2HG gi146
+T6 (base 5).** Every one is a fetch-rule game; with the rule off each is at its base turn at b20.
+- gi186, gi193, gi532: **draws diverge** right after the fetch, because the shuffle runs on a different library (Stomping
+  Ground fetched vs a basic, or a fetch cracked on a different turn). These are different physical games: fetch-shuffle variance, not a lost line.
+- gi496: draws are identical through T5, a genuine line difference. Fetch off: T1 Foothills HELD (no mana), T2 Gruul
+  Turf bounces it, T4 Foothills cracked, win T5. Rule on: the search plays NO land on T1 or T2 rather than crack the fetch
+  (a crack shuffles away the known good draws), T3 Legion Stronghold, T4 Foothills, win T6 -- also T6 at d8 b0.
+  The lost option is "a land on the battlefield without a shuffle". Its only value to a deal-reading search is keeping the
+  known draws (see the hold review above).
+- 2HG gi146: not inspected for draws (the 2HG CLI repro flags differ); same shape expected.
+
+**Smoke (FULL tier, 000e53516; THREADS=23):** only Morph moved (4 configs): morph d0 5.0530 -> 5.0080, d3 4.3600 -> 4.3400,
+d5 4.2400 = (play-changed), morph2hg d5 4.8000 -> 4.7200. Searched slower 0 / faster 3; d0 slower 7 / faster 45.
+**Regression (FULL tier):** only Morph moved (7 configs): morph d0 5.0050 -> 4.9590, d3 4.1733 -> 4.1467, d5 s2002
+4.1867 -> 4.1800, d5 s3003 4.4533 -> 4.4133, morph2hg 4.6267 -> 4.6000, and both 30001 unlimited backstops 4.0000 =
+(play-changed). Searched slower 4 / faster 13; d0 slower 10 / faster 48. Slower: d3 + d5 s2002 gi18 T4->T5 and d5 s3003 gi6
+T7->T8 (the E games above, line changes with identical draws); 2HG gi2 T4->T5 (draws diverge at T3 -- fetch variance).
+References: 336 ok / 490 repaired / 1 beaten / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap /
+0 mull-drift / 0 contract-fail (827); REQUIRE-BEAT 2/2. Every deck's tier aggregate is net faster.
+**d8 b0 on the regression slowers (new binary 000e53516, one pooled batch):** gi18 T4 (base 4), gi6 T7 (base 7; 29 min,
+58.5M units, digest identical to the INT-8 binary's) -- recover. E-lethal-only at play settings also restores both (gi18
+T4 at d3 b10 and d5 b20, gi6 T7). **2HG gi2 T5 (base T4) does NOT recover**: draws diverge after the fetch shuffle.
+The fetch-OFF twins of every unrecovered A/B game reach their base turn at d8 b0 (gi186 4, gi193 4, gi532 4, gi496 5,
+2HG gi146 5). The gap is the rule's different deal (or, for gi496, the held fetch), not search truncation.
+
+**GT: NOT accepted.** The bar ("every slower game must recover at d8 b0") is not met: six fetch-rule games do not
+recover. Five are fetch-shuffle variance (draws diverge) and one (gi496) is the no-shuffle hold. Everything else is
+clean: only Morph moved, every aggregate is net faster, and references are clean. The smoke and regression results envs from these
+runs (test/logs/smoke, test/logs/regression in the worktree) are intact. If the USER / parent accepts the variance reading:
+`bash test/regression.sh --smoke --accept --deck=morph,morph2hg`, `bash test/regression.sh --accept --deck=morph,morph2hg`,
+`python3 test/check_gt_logs.py`, then diff test/regression_gt.txt (morph / morph2hg keys only).
+
+**Open USER questions (INT-9; the rules stand as built):**
+- E: adopt the lethal-only amendment? Recommended. It scores the same as E off (-44 vs ruled -43 games-turns over 1300
+  held-out games), costs 5-7% fewer units, and fixes all five E-caused slower games (A/B gi245/289, regression gi18 x2, gi6). The USER's "rank and
+  test it first" survives for projected-lethal plans. The honest caveat: it almost never fires, so in effect it is E off.
+- Fetch rule: accept the six unrecovered games as fetch variance + the no-shuffle hold (gi496)? The rule is -36
+  games-turns and ~0.83x units on the held-out set.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18
