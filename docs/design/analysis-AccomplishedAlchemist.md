@@ -1641,6 +1641,21 @@ the search already branches over both, so only the order moves; the d0 runner ga
 regression -36, overnight -18 / -53 / -26 / -40 (4 seeds x 2000). Smoke + regression GT accepted.
 
 Accepted smoke (alchemist, alchemist2hg) + regression (alchemist) GT 2026-11-12; overnight left to the periodic run.
+
+**Periodic overnight 2026-11-12 (accepted, `gt: accept the periodic overnight tier`).** The Alchemist searched
+overnight cells moved +87 turns vs the 2026-11-10 GT (131 slower / 48 faster, n=2535). Paired attribution: the four
+sources (11-10 GT, `1ab127b24^`, `1ab127b24`, this run) were each played through its own tree's harness on the
+Alchemist overnight cells (`build/scratch/ovn1112/tapfix_ab.sh`, `cmp4.py`; loss = 9):
+
+| step | searched net (slower / faster) |
+|---|---|
+| 11-10 GT -> `1ab127b24^` | +8 (8 / 0) |
+| `1ab127b24` (attacker-tap legality fix) | **+126 (125 / 11)** |
+| every later commit, the Living Wish rules included | **-47 (6 / 44)** |
+
+The fix's slower games are old wins that paid Ezuri pumps with mana from tapped attackers (e.g. s5005 gi409: T7 win
+for 13 on three Forests; s6006 gi79: a T3 kill off two Forests + two Sprawls), so they were never legal. d0 net faster
+on every seed (-63 / -111 / -65 / -116).
 Units: the three Wish cases the rules move were updated (one land; `hl3` now opens the land drop, since `FreshAa`
 spends it), and `ExpectWishAa` logs the list it got on a failure.
 
