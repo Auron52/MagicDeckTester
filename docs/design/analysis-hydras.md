@@ -1484,7 +1484,7 @@ skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incremental
   digest only (same score) in the pooled run; solo it reproduces GT 254115e71dd5ea00, so its GT was kept (pool
   residency, the P6/P7 cache work).
 
-## P4: the BP re-derivations are a read-guard refusal, not a key split (2026-11-11; residency fixed 2026-11-12, NOT pushed: one Hinata play change)
+## P4: the BP re-derivations are a read-guard refusal, not a key split (2026-11-11; residency fixed 2026-11-12; Hinata GT accepted)
 
 **Root cause (measured).** P3's premise ("whole re-enumerations of the same board under DIFFERENT BP keys") does
 not hold on this tree. `MTG_BP_REENUM_CENSUS` (new, diagnostic) fingerprints each BP-derivation enumeration by the BP
@@ -1529,8 +1529,7 @@ Wall time is indicative only (shared box). Uncontended, 1782 took 40 -> 7 s, 25 
 slower, 0 faster). Units moved in 7 chunks (-0.012% in total). ms per game: 6060 -> 4711 (0.777x; the box was shared).
 There is no slower game, so no d8 b0 recovery is owed. Outputs: logs/hydras-p4/ab_summary.txt and ab_digests.txt.
 
-**Residency defect: FIXED (P5-P7, branch hydras-enum-collapse 427d90271, 61475b265, 3af86daba; NOT pushed, see
-below).** 656d04eb6 replayed only while the REAL entry was resident; on a miss it recomputed and counted the warm
+**Residency defect: FIXED (P5-P7).** 656d04eb6 replayed only while the REAL entry was resident; on a miss it recomputed and counted the warm
 recompute, so counts (and, through the priced ceiling, units) depended on the byte pool.
 - 427d90271 (P5): the replay is decided and counted from the SHADOW alone; on a real miss the lookup recomputes
   MUTED and replays the shadow's work.
@@ -1543,28 +1542,40 @@ recompute, so counts (and, through the priced ceiling, units) depended on the by
   regression gi 4, seed 1005, T5: dredge cursor 2/4 -> 6/4, next derivation 5 -> 4 continuations). Mute now saves
   and restores every cursor. `MTG_PLAN_LEDGER_STATS` reports `pins=`.
 
-**Measurements (P7b, rebased onto fe0152699; base = fe0152699, src 0c08ac180).**
-- Unit tests 2853/2853.
+**Measurements (P7b; first on fe0152699, base = fe0152699 src 0c08ac180; tiers re-run after rebases onto 6bcf0f1c8,
+9ba5851a1 and finally 7a2aac806).**
+- Unit tests 2853/2853 (2912/2912 on the final tree).
 - Determinism, `det.json` (15 jobs, 239 games: the outliers plus a Hydras sample): t32 vs t8 vs t1 = 0 digest,
   0 unit, 0 work-count diffs.
-- Smoke (`MTG_PGO=0`, not accepted): 195/195 PASS, 0 play changes (the Extra Turns keys included).
-- Regression (`MTG_PGO=0`, not accepted): 308/309. One real play change: `hinata_regression_d5_s2002` gi 21 won
-  T6 -> T5 (5.4133/94774e75d5454d3c -> 5.4067/7032c4ea9d31d793, units 9,330,430 -> 9,324,629). It reproduces SOLO
-  (the job alone at 32 threads: this branch 7032c4ea, base 94774e75 == GT) and as a single game at 1 thread
-  (units 217,276 -> 211,486), so it is not pool drift. Mechanism: on this branch the priced derivation ceiling
-  trips in that game (`[bp-derive-priced-stop] subset visits refused=14`; base: none), because the replayed work
-  re-prices the priced meter; the shorter continuation list moves a budget-bound decision. Same game, 1 thread:
-  wall 77.7 s -> 6.1 s (indicative). References: 0 play-drift. Extra Turns d5 s2002 matched GT pooled.
+- Smoke (`MTG_PGO=0`): 195/195 PASS, 0 play changes, on fe0152699 and 9ba5851a1. Final tree 198/199: only
+  `extraturns2hg_smoke_d5_s1001` differed, pooled 4e100ae20f3f0465; solo cc399f1a95984da0 == GT (known pooled drift).
+- Regression (`MTG_PGO=0`): one real play change on every tree, `hinata_regression_d5_s2002` gi 21 won T6 -> T5
+  (5.4133/94774e75d5454d3c -> 5.4067/7032c4ea9d31d793, units 9,330,430 -> 9,324,629). It reproduces SOLO (the job
+  alone at 32 threads: this branch 7032c4ea, base 94774e75 == GT) and as a single game at 1 thread (units
+  217,276 -> 211,486), so it is not pool drift. Mechanism: on this branch the priced derivation ceiling trips in
+  that game (`[bp-derive-priced-stop] subset visits refused=14`; base: none), because the replayed work re-prices
+  the priced meter; the shorter continuation list moves a budget-bound decision. Same game, 1 thread: wall 77.7 s
+  -> 6.1 s (indicative). References: 0 play-drift. `extraturns_regression_d5_s2002` also differed pooled on
+  6bcf0f1c8 and on the final tree (e97be7a575b479c4); solo it gives 254115e71dd5ea00 == GT (the known pre-existing
+  pooled drift, not accepted). Final tree: 314/316. Accepted: Hinata only (`--deck=hinata`; `git diff` showed only
+  that key; `check_gt_logs.py` 1146 consistent / 0 stale).
 - Held-out A/B (`build/scratch/hydras-p7/ab.json`, 48 x 50 Hydras d5 b20 from seed 7007, one batch per binary):
   48/48 digests identical, avg 5.4058 both, 0 slower / 0 faster, units identical (29,265,411). Work actually done
   (counted - replayed): odometer 0.649x, payment walks 0.779x, plans 0.833x, plan_emit 0.734x. Wall was not
   measurable (another agent's batch shared the box, load 64).
 
 **Ruling 1 (P5 brief, recorded):** *"Units moving by a few per job, with every play digest identical and 0 slower or
-faster games, is ACCEPTABLE. Ship the charged replay once it is deterministic."* The replay is now deterministic,
-but the Hinata game is a faster-game play change, which is outside ruling 1, so the branch was NOT pushed (the
-push bar: 0 play changes outside known pooled-drift keys). Whether to accept it (one game a turn faster, units
--0.06% on the key) is the USER's call.
+faster games, is ACCEPTABLE. Ship the charged replay once it is deterministic."* The Hinata game is a faster-game
+play change, outside ruling 1, so the parent required a held-out A/B on Hinata before landing it, under the USER's
+standing rule (*"almost anything that measures better and is cheaper is a good option"*).
+
+**Held-out Hinata A/B (P7b).** One pooled batch, arms innermost: 48 x 50 games, seed 50007+off (disjoint from every
+tier; Hinata's overnight uses 7007), shipped play settings (profile play depth, b30). Arm base is per-job
+`read_guard_kind` false, which on this binary reproduces origin fe0152699 exactly (`hinata_regression_d5_s2002`:
+94774e75d5454d3c / 9,330,430 units on both). Result: 48/48 chunk digests identical, avg 5.4612 in both arms
+(42 unwon in each), 0 slower / 0 faster. Units 171,766,090 -> 171,755,941 (0.99994x; 7 games moved). ms/game
+6455 -> 5471 (0.848x, pooled so both arms shared the same contention). Passes the bar (net <= 0, units not higher,
+no slower game). Smoke and regression GT accepted for the moved Hinata key.
 
 **Open (information).** At `MTG_PLAN_CACHE_KB=64` (not the default pool) Accomplished Alchemist gi 3 still moves
 odometer/payment counts (units and digest equal); not chased. A COUNTED breakpoint derivation still consumes the

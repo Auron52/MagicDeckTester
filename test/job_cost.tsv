@@ -615,7 +615,7 @@ hinata2hg_overnight_d5_s5005	47430
 hinata2hg_overnight_d5_s6006	97106
 hinata2hg_overnight_d5_s7007	47538
 hinata2hg_regression_d3_s2002	39219
-hinata2hg_regression_d5_s2002	65125
+hinata2hg_regression_d5_s2002	65118
 hinata2hg_smoke_d3_s1001	32648
 hinata2hg_smoke_d5_s1001	55208
 hinata_overnight_d0_s10010	1
@@ -633,10 +633,10 @@ hinata_overnight_d5_s5005	55506
 hinata_overnight_d5_s6006	68018
 hinata_overnight_d5_s7007	62479
 hinata_regression_d0_s2002	1
-hinata_regression_d3_s2002	45170
+hinata_regression_d3_s2002	45169
 hinata_regression_d3_s30001	54330
 hinata_regression_d3_s3003	49612
-hinata_regression_d5_s2002	62202
+hinata_regression_d5_s2002	62163
 hinata_regression_d5_s30001	58492
 hinata_regression_d5_s3003	78862
 hinata_smoke_d0_s1001	1
