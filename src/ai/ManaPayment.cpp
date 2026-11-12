@@ -2757,6 +2757,63 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         if (mine & cco_short_mask & state.deck_creature_pip_colors) { cco_hold = 1; }
                     }
                 }
+                // PAY-SAC LINE RESERVE (MTG_PAY_SAC_LINE_RESERVE, default ON). The CCO line reserve's twin for a
+                // one-shot pay-sac source (Treasure, rank 26): the pain band (MTG_PAY_PAIN_LAST) ranks every painful
+                // coloured tap behind it, so a Treasure that is the line's ONLY source of a colour the rest of the
+                // line owes paid a pip a pain land could have paid. Pirates s30054695 T4 (gate pirates-6r-20261112,
+                // 15 APPLY-DROPs, one decision), {Spirebluff Canal (enters tapped) + Staunch Crewmate {1}{U} + Dire
+                // Fleet Captain {B}{R}} off Mountain x2 + Fiery Islet + the Corsair Treasure: Crewmate's {U} took the
+                // Treasure, the Islet stayed up and the Captain's {B} was gone -- in the executor, the rollout and
+                // the walks alike. So while the rest of the line (LineOwedAfterOwnPips) owes a colour this source
+                // makes beyond what EVERY OTHER untapped unrestricted source (lands, rocks, ready dorks, the other
+                // one-shots; each counted toward every colour it makes, the over-count) plus the float could make,
+                // and the general float's wild does not cover the gap, the one-shot taps after every other LAND
+                // (key[2] += 2 x kPainBand, the cco band). ORDERING ONLY: when nothing else can pay the pip it still
+                // pays, and the backtracker runs on any greedy failure. Outside a line the owed set is empty and the
+                // key is the historical one.
+                int ps_hold = 0;
+                if (kind == 1 && rank >= 0 && rank < 60 && PaySacLineReserveOn() && PaySacSpendableNow(state, p, *def))
+                {
+                    int later[5];
+                    LineOwedAfterOwnPips(later);
+                    if (later[0] + later[1] + later[2] + later[3] + later[4] > 0)
+                    {
+                        const ManaPool& fl = state.floating_mana;
+                        int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+                        for (int q = 0; q < bn; ++q)
+                        {
+                            if (q == i) { continue; }
+                            const Permanent& o = state.battlefield[q];
+                            if (o.controller_index != active || o.tapped || o.def_absent) { continue; }
+                            const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                            if (od == nullptr || od->params.colored_creature_only || od->params.creature_mana_only
+                                || BigSpellOnlySource(od->params)) { continue; }
+                            const bool dork = od->tmpl == CardTemplate::ManaDork && CanTapNow(o, state.battlefield);
+                            const bool one_shot = PaySacSpendableNow(state, o, *od);
+                            if (!dork && !one_shot && !o.card.IsLand() && !od->params.mana_rock) { continue; }
+                            const int amt = std::max(1, ManaProducedPerTap(*od));
+                            int seen = 0;
+                            for (Color c : EffectiveProduces(state, active, *od))
+                            {
+                                const int ci = static_cast<int>(c);
+                                if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+                                seen |= 1 << ci;
+                                sup[ci] += amt;
+                            }
+                        }
+                        int mine = 0;
+                        for (Color c : EffectiveProduces(state, active, *def))
+                        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
+                        int deficit = 0;
+                        bool mine_short = false;
+                        for (int ci = 0; ci < 5; ++ci)
+                        {
+                            if (later[ci] > sup[ci])
+                            { deficit += later[ci] - sup[ci]; if (mine & (1 << ci)) { mine_short = true; } }
+                        }
+                        if (mine_short && deficit > static_cast<int>(fl.wild)) { ps_hold = 1; }
+                    }
+                }
                 // DEPLETION WASTE (MTG_PAY_DEPLETION_WASTE / _ANY, default OFF): a depletion land whose
                 // tap makes more mana than this payment and the rest of the line can still use is banded
                 // with pain. Niv seed 1 (2026-10-22): {2}{U} took Skerry's {U}{U} and the Needle's LAST
@@ -2802,7 +2859,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
                 { key[0] = 0;    key[1] = harm / kNdScale;
-                  key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + (cco_hold ? 2 * kPainBand : 0);
+                  key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + ((cco_hold || ps_hold) ? 2 * kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
                 else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
                 int cmp = 0;
@@ -10742,7 +10799,12 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     }
     // ---- PLAIN sources (the original feature; unchanged) -----------------------------------------
     o.route = HumanPreTapOffer::Route::Plain;
-    for (Color c : EffectiveProduces(state, active, *def)) { add_free(c); }
+    // Per PERMANENT (EffectiveProducesFor), as the payer taps it: a charge-counter land with no counter left
+    // (Tendo Ice Bridge, a Vivid land) makes only its plain colour, a locked Coldsteel Heart only its colour.
+    // The definition-level read offered Tendo's any-colour face with the counter already spent -- the mana
+    // oracle then "paid" Faithless Looting's {R} off a counterless Tendo (Gods ENUM-GAP 1,756 / 5,000, gate
+    // due6-20261112, s30004862 T2), and Kruphix's bank menu carried a phantom colour per such land.
+    for (Color c : EffectiveProducesFor(state, active, *def, &p)) { add_free(c); }
     // A scaled mana LAND (Three Tree City): its "{T}: Add {C}" is the plain face above, and its
     // "{2},{T}: Add N mana of one colour" (N = creatures you control -- the backtracker's model,
     // ScaledManaCreatureCount) is a fed face per colour, through the same feed-from-float path as a

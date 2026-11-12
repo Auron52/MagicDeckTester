@@ -9524,6 +9524,67 @@ static RevealSurcharge SameSubsetRevealSurcharge(const GameState& state,
     return rank_worse ? rank_order : plan_order;
 }
 
+// THE ASKED ORDER'S OWN REVEAL SURCHARGE (MTG_OPS_FIXED_REVEAL, default ON). SameSubsetRevealSurcharge prices
+// a SUBSET for the enumeration: it realises the selection (ApplyPayableCastOrderAt) and debits the order the
+// apply worlds will actually play. TurnSolver::OrderPaysSequentially answers a different question -- "does THIS
+// order, as given, pay?" -- and every caller asks it to choose the order it then plays (the payable-order
+// fallback's Vial walk, the providers' arrangement trials). Priced through the subset rule, the asked order was
+// charged the surcharge of some OTHER order: Pirates s30054672 T4 (gate pirates-6r-20261112), {Malcolm, Daring
+// Buccaneer, vial Corsair Captain} off Secluded Courtyard + Mountain: the realised orders reveal, so nothing was
+// charged, and "Corsair, Malcolm, Buccaneer" -- where no Pirate is left to reveal and the Buccaneer costs {2}{R}
+// -- read as payable, was taken, and the Buccaneer was dropped; "Corsair, Buccaneer (revealing Malcolm), Malcolm"
+// pays all three. So the walk charges exactly the casts of the asked order that find no other card of the
+// subtype left in hand at their position (suspend / channel exits leave first; a Vial put leaves at its slot).
+static bool OpsFixedRevealOn()
+{
+    static const bool env_on = EnvOn("MTG_OPS_FIXED_REVEAL", true);
+    return heurarm::Flag(heurarm::OPS_FIXED_REVEAL, env_on);
+}
+static void FixedOrderRevealCharged(const GameState& state, const std::vector<Action>& cands,
+                                    const std::vector<int>& order, std::vector<int>& charged)
+{
+    charged.clear();
+    bool any = false;
+    for (int j : order)
+    { if (IsRevealCostCast(cands[j]) && CanRevealForAdditionalCost(state, *cands[j].def)) { any = true; break; } }
+    if (!any) { return; }
+    struct HandCard { InternedName name; const CardDefinition* def; };
+    thread_local std::vector<HandCard> hand;
+    hand.clear();
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_is_staged) { continue; }
+        hand.push_back({ c.m_name, CardDatabase::Instance().LookupCached(c) });
+    }
+    auto remove_one = [](std::vector<HandCard>& h, const InternedName& n)
+    {
+        for (std::size_t i = 0; i < h.size(); ++i)
+        { if (h[i].name == n) { h.erase(h.begin() + static_cast<long>(i)); return; } }
+    };
+    for (int j : order)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::Suspend || a.kind == Action::Kind::Channel) { remove_one(hand, a.card_name); }
+    }
+    for (int j : order)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { continue; }
+        if (IsRevealCostCast(a) && CanRevealForAdditionalCost(state, *a.def))
+        {
+            const std::string& want = a.def->params.reveal_or_pay_subtype;
+            bool self_skipped = false, found = false;
+            for (const HandCard& h : hand)
+            {
+                if (!self_skipped && h.name == a.def->card.m_name) { self_skipped = true; continue; }
+                if (h.def && CardHasSubtype(h.def->card, want)) { found = true; break; }
+            }
+            if (!found) { charged.push_back(j); }
+        }
+        remove_one(hand, a.card_name);
+    }
+}
+
 // The real-payment walks' half of the LAND-PUT CREDIT (core/LandSearch.h LandSearchCreditGroups): once a
 // credited land-put cast (Search for Tomorrow hard-cast) has paid, the basic its credit names -- the
 // front of the credit-restricted pick list on THIS scratch board, the pick the base plan's resolution
@@ -11997,7 +12058,8 @@ static bool OrderPaysSequentiallyImpl(const GameState& state, const std::vector<
     }
     if (ord.empty()) { return true; }
     std::vector<int> charged;
-    SameSubsetRevealSurcharge(state, *use, order, &charged);
+    if (OpsFixedRevealOn()) { FixedOrderRevealCharged(state, *use, order, charged); }
+    else { SameSubsetRevealSurcharge(state, *use, order, &charged); }
     int walk_fail = -1;
     const bool ok = SeqWalkFixedOrder(state, *use, order, ord, charged, &walk_fail,
                                        /*vial_in_order=*/true);

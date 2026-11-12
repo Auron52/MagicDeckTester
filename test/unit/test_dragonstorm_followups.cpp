@@ -1229,3 +1229,32 @@ TEST_CASE("d0 runner: the gi855 hand on two lands does not commit the unpayable 
         else    { CHECK(PlanHasSpliceFu(plan)); CHECK_FALSE(pays); }   // the old commit: the waste
     }
 }
+
+TEST_CASE("Pay-sac line reserve: Staunch Crewmate's {U} takes Fiery Islet, the Treasure stays for Dire Fleet Captain's {B} (MTG_PAY_SAC_LINE_RESERVE)")
+{
+    // mana-clean item 6, Pirates s30054695 T4: Mountain x2 + Fiery Islet + a Treasure, line {Staunch Crewmate {1}{U},
+    // Dire Fleet Captain {B}{R}}. The pain band ranked the Islet's {U} behind the Treasure, so the Crewmate spent the
+    // only {B} source and the Captain was unpayable. With the reserve the Treasure taps after every other land.
+    GameState s0 = BoardFu({ "Mountain", "Fiery Islet", "Mountain", "Treasure Token" },
+                           { "Staunch Crewmate", "Dire Fleet Captain" }, 4);
+    ManaCost crew;
+    crew.generic = 1;
+    crew.blue = 1;
+    ManaCost cap;
+    cap.black = 1;
+    cap.red = 1;
+    ManaCost total = crew;
+    AddManaCost(total, cap);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::PAY_SAC_LINE_RESERVE, on);
+        GameState s = s0;
+        LineCostFu lc(total);
+        REQUIRE(TapForCostDirect(s, crew, /*for_creature=*/true));
+        int treasures = 0;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == "Treasure Token") { ++treasures; } }
+        CHECK(treasures == (on ? 1 : 0));
+        CHECK(TapForCostDirect(s, cap, /*for_creature=*/true) == on);
+    }
+}

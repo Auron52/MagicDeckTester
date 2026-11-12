@@ -297,3 +297,31 @@ TEST_CASE("Payable order ON, five lands: the executor's own cast path pays the r
     CHECK(CountNamedPo(s, "Treasure Token") == 0);
     CHECK(s.players[0].hand.empty());
 }
+
+TEST_CASE("OrderPaysSequentially prices the reveal surcharge on the ASKED order (MTG_OPS_FIXED_REVEAL)")
+{
+    // mana-clean item 6, Pirates s30054672 T4: the payable-order fallback's Vial walk asked "does Corsair, Malcolm,
+    // Buccaneer pay?" and the walk charged the surcharge of the subset's REALISED order (which reveals), so the
+    // Buccaneer -- with no Pirate left in hand at its slot, {2}{R} -- read as {R} and the order was taken.
+    PoArms arms(true, true);
+    const GameState s = MalcolmTurn(5);
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* all3 = FindAllThree(plans);
+    REQUIRE(all3 != nullptr);
+    int mal = -1, cor = -1, buc = -1;
+    for (int i = 0; i < static_cast<int>(all3->actions.size()); ++i)
+    {
+        const std::string& n = all3->actions[static_cast<std::size_t>(i)].card_name.str();
+        if (n == "Malcolm, the Eyes") { mal = i; } else if (n == "Corsair Captain") { cor = i; }
+        else if (n == "Daring Buccaneer") { buc = i; }
+    }
+    REQUIRE((mal >= 0 && cor >= 0 && buc >= 0));
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        heurarm::t_arm[heurarm::OPS_FIXED_REVEAL] = on ? 1 : 0;
+        CHECK(TurnSolver::OrderPaysSequentially(s, all3->actions, { cor, buc, mal }));   // reveals Malcolm: pays
+        if (on) { CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, all3->actions, { cor, mal, buc })); }   // {2}{R}
+        heurarm::t_arm[heurarm::OPS_FIXED_REVEAL] = -1;
+    }
+}

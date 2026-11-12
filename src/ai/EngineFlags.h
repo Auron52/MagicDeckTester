@@ -658,6 +658,18 @@ inline bool PayCcoLineReserveOn()
     return env_on;
 }
 
+// MTG_PAY_SAC_LINE_RESERVE -- DEFAULT ON; =0 restores the historical rank. The pay-sac twin of the CCO line
+// reserve: while the rest of the line owes a colour that, without this one-shot source (Treasure), no other
+// untapped source (or the float) could make, the one-shot taps after every other land -- the pain lands
+// included (MTG_PAY_PAIN_LAST would otherwise spend the Treasure first). Ordering only. mana-clean item 6,
+// Pirates s30054695 T4: Staunch Crewmate's {U} took the Treasure over Fiery Islet and Dire Fleet Captain's {B}
+// (the Treasure was the only {B}) was unpayable. See the key block in TapForCostSharedOnce's scarcity loop.
+inline bool PaySacLineReserveOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_SAC_LINE_RESERVE", true);
+    return heurarm::Flag(heurarm::PAY_SAC_LINE_RESERVE, env_on);
+}
+
 // MTG_PAY_BURST_LEAD (2026-11-04; DEFAULT ON, =0 -> the greedy's WUBRG pip order): a creature payment that will tap a
 // creature-only ONE-COLOUR burst source first (Somberwald Sage, the restricted-first rank) pays the colour that burst
 // should make first, so the burst lands on the colour the UNRESTRICTED sources are shortest of for this payment and the

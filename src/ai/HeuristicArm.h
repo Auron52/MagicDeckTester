@@ -878,6 +878,8 @@ enum Slot : int
     PREPAY_LINE_AFFINITY,     // MTG_PREPAY_LINE_AFFINITY  item 6 (mana-clean, Slivers s30214131): the whole-turn prepay credits an affinity card (Thrumming Hivepool) with the line's matching creatures ranked before it (CastOrderRank) and their pinned copies, as SameTurnAffinityDiscountFor does. Default ON; =0 -> the board-only price
     LINE_SPARE_DEPLETION,     // MTG_LINE_SPARE_DEPLETION  item 6 (mana-clean, treasure_hunt {Treasure Hunt x2} off Saprazzan Skerry + Sandstone Needle): a SHORT line's generic pip with no tappable plain spare taps an otherwise-spare DEPLETION land before eating a floating unit the line owes (LineSpareSourceMask depletion tier). Default ON; =0 -> plain spares only
     LINE_SPARE_FILTER_FEED,   // MTG_LINE_SPARE_FILTER_FEED  item 6 (mana-clean, treasure_hunt {Cascade Bluffs + Land's Edge + Treasure Hunt}): the line-spare SHORT test reads the supply left after a generic pip eats a one-unit float that is an untapped filter land's only feed (LineSpareSourceMask). Default ON; =0 -> the plain over-count
+    PAY_SAC_LINE_RESERVE,     // MTG_PAY_SAC_LINE_RESERVE  item 6 (mana-clean, Pirates s30054695 T4 {Staunch Crewmate + Dire Fleet Captain}): a pay-sac one-shot (Treasure) that is the line's last source of a colour the rest of the line owes taps after every other land, pain lands included (the CCO line reserve's band). Default ON; =0 -> the historical rank
+    OPS_FIXED_REVEAL,         // MTG_OPS_FIXED_REVEAL  item 6 (mana-clean, Pirates s30054672 {Malcolm + Daring Buccaneer + vial Corsair Captain}): TurnSolver::OrderPaysSequentially charges the reveal-or-pay surcharge on the ASKED order (the casts that find no other subtype card left in hand), not on the subset's realised orders. Default ON; =0 -> SameSubsetRevealSurcharge
     COUNT
 };
 
@@ -1700,6 +1702,8 @@ inline const char* Name(int slot)
         "MTG_PREPAY_LINE_AFFINITY",
         "MTG_LINE_SPARE_DEPLETION",
         "MTG_LINE_SPARE_FILTER_FEED",
+        "MTG_PAY_SAC_LINE_RESERVE",
+        "MTG_OPS_FIXED_REVEAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
