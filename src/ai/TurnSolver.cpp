@@ -51946,8 +51946,11 @@ struct Dump
 };
 inline Dump g_dump;
 }
-// MTG_SEL_GATE_SELF_EXCL (DEFAULT OFF pending its held-out A/B; =1 enables; per-job heurarm slot so the A/B
-// pools into one batch; hydras-runaway 2026-11-12): a reducer never discounts
+// MTG_SEL_GATE_SELF_EXCL (DEFAULT ON since 2026-11-12; =0 is the hatch; per-job heurarm slot; hydras-runaway P8/P9).
+// ADOPTED on a held-out A/B (seed base 70707, 12,000 paired games: the six decks holding a soft reducer --
+// Dragons, Dragonstorm, Giants, Goblins, Hydras, KittyEquipment -- at d3 b10 and their d5 play rows): play
+// digests byte-identical in all 480 chunks, net 0, units equal or lower on every deck (Goblins -0.3..-0.4%).
+// A reducer never discounts
 // ITSELF. A same-turn reducer's static applies only once it is on the battlefield, and it is cast first (CR 601.2f
 // reads the statics in play while the spell is being cast), so Gargos pays its own {5}{G} in full however many
 // Hydras follow -- the bound below used to take min(gen, R) off EVERY selected cast, the reducer included, so a
@@ -51956,7 +51959,7 @@ inline Dump g_dump;
 // real discount; MTG_SEL_GATE_EXACT_VERIFY audits it with everything else this test refuses.
 static bool SelGateSelfExclOn()
 {
-    static const bool env = EnvOn("MTG_SEL_GATE_SELF_EXCL");
+    static const bool env = EnvOn("MTG_SEL_GATE_SELF_EXCL", true);   // DEFAULT ON; =0 disables
     return heurarm::Flag(heurarm::SEL_GATE_SELF_EXCL, env);
 }
 static bool SelGateExactRefuses(const ManaGateIndex& gate, const std::vector<int>& sel)

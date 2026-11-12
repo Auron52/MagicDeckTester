@@ -1,6 +1,7 @@
 # The per-game wall backstop cannot reach a top-level plan enumeration (found 2026-11-11, Hydras)
 
-Status: OPEN, deferred. Found while the Hydras value leaf (frozen at 387b4b646) was in its phase C matrix.
+Status: REMEDIES 2 AND 3 LANDED 2026-11-12 (see "Landed" at the end); the per-game result persistence fix and
+two USER questions remain open. Found while the Hydras value leaf (frozen at 387b4b646) was in its phase C matrix.
 
 ## What happened
 
@@ -64,3 +65,40 @@ results, deterministic). USER: "we should make sure that this doesn't lose more 
 still running ... If it does I would like to fix that as well." Owed fix (after the leaf; it is a src change and
 the generation is frozen): persist each game's result as it completes (per-game append to the job's `.wins`, or a
 per-job partial file the driver merges on resume), so a killed or abandoned job loses only its in-flight games.
+
+## 2026-11-12: Landed (P8 investigation, P9 landing)
+
+Mechanism (P8, `logs/hydras-research/P8-runaway-enum.md`): a horizon rollout at turn 5 main 2 with a 32-card hand
+(mass draw) re-enumerates once per GROUP-WAVE tranche (budget 0 walks every tranche); each enumeration's two-stage
+split exceeds `MTG_ODO_FLAT_FALLBACK` and takes the ungated FLAT walk (1e10-6e14 positions), and Gargos sets the
+gate's `block` term so every Gargos position passed the walk and was refused one at a time at emission.
+
+Landed on `phase-1-2-deck-analyzer`, three levers (each with a `=0` hatch):
+
+* **`MTG_ODO_FLAT_GATE_CUT` (ON)** -- remedy 3: a sound, order-preserving radix cut in the flat fallback (skip a
+  block when a lower bound on need-minus-budget over every completion exceeds the pool). `_VERIFY` on the gi 287 /
+  gi 391 repros (900 s each, self-exclusion on): 3.5e9 + 3.4e9 skipped positions, **0 violations**. Unit tests
+  check the cut against the whole walk (identical emission sequences) on a Hydras board and 3000 random gates.
+* **`MTG_ENUM_WALK_POLL` (ON)** -- remedy 2: `gamework::Poll` once per odometer position on the
+  `kWalkAbandonStride` stride, at every depth (flat / two-stage `stop()`, the inline walk, the plain DFS walk,
+  Solve's walks); a void game's truncated list is never stored (unit test). gi 287 / gi 391 now end at the wall
+  cap to the tenth of a second (900.0 s). Inert unless a ceiling or cap is armed.
+* **`MTG_SEL_GATE_SELF_EXCL` (ON)** -- a generic same-turn reducer never discounts its own cast. Held-out A/B
+  (seed base 70707, 12,000 paired games over Dragons / Dragonstorm / Giants / Goblins / Hydras / KittyEquipment at
+  d3 b10 and the d5 play rows): play digests byte-identical in all 480 chunks, net 0, units equal or lower on
+  every deck. `MTG_SEL_GATE_EXACT_VERIFY`: 0 violations over 2.5e9 refusals on the two repros.
+
+Smoke (195) and regression (309) tiers: 0 play changes with the cut + poll (self-exclusion off); with it on,
+regression 0 again and smoke 0 except `extraturns2hg_smoke_d5_s1001` gi 19 (play digest only, score unchanged),
+which reproduces GT solo (`cc399f1a95984da0`, identical units in both arms; Extra Turns holds no soft reducer):
+the known pooled-run residency drift on the Extra Turns rows, not this change. No GT was accepted.
+
+Still open:
+* **gi 287 at d4 b0 is still not tractable** (P8: unfinished after 28 min under the cut). The residual is per
+  EMISSION: half the admitted selections die at `ef-scalar` (coloured pips over the credited ceiling). Next sound
+  lever: a coloured-pip term priced in the cut. It needs a per-selection upper bound on the ef ceiling (credited
+  `eff` pool + aura bonus + the optional ETB-untap refund), so it was NOT built in this change.
+* USER questions (not built): (a) should a budget-0 generation cell walk every group-wave tranche to the full hand
+  (completeness) or is that a settings change; (b) should the walk CHARGE units per N positions so the unit
+  ceiling bounds these games deterministically (changes every game's units and the matrix calibration).
+* The per-game result persistence fix above (a killed job loses only its in-flight games) is still owed.
