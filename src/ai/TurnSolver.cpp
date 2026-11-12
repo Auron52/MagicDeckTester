@@ -60605,6 +60605,43 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (match) { ApplyColoredPipReduction(ec, rd->params.reduces_subtype_colored_cost.value()); }
             }
         }
+        // SAME-LINE AFFINITY (MTG_PREPAY_LINE_AFFINITY, DEFAULT ON; =0 -> the board-only price). The
+        // affinity twin of the reducer above: EffectiveCost credits only the matching permanents ALREADY
+        // out, but the line's matching creatures ranked before the affinity card (CastOrderRank -- the
+        // order the executor casts them) and their pinned replicate copies are out when it is cast, which
+        // is exactly what the enumeration credits (SameTurnAffinityDiscountFor). The bill carried the
+        // uncredited generic, read combined-UNPAYABLE, and the per-cast greedy stranded the line (Slivers
+        // mana-clean s30214131 T4: Muscle + Cloudshredder + Thrumming Hivepool on four Slivers, off
+        // Mutavault + Cavern + Unclaimed Territory + Secluded Courtyard -- Hivepool read {2}, the greedy
+        // paid Muscle's {1} with a Territory colour and Cloudshredder's {R}{W} found one source; Mutavault
+        // {C} -> Muscle's {1} pays all three, Hivepool at {0}). Only entries still in hand count (a
+        // resolved one is on the board, and EffectiveCost has it). Payment only: every cast reprices live.
+        static const bool s_line_affinity = EnvOn("MTG_PREPAY_LINE_AFFINITY", true);
+        if (s_line_affinity && !a.evoke && d->params.affinity_for_subtype && !d->params.subtypes_affected.empty()
+            && ec.generic > 0)
+        {
+            const int a_rank = ResolveProvider(state).CastOrderRank(state, *d);
+            int credit = 0;
+            for (const Action& r : acts)
+            {
+                if (&r == &a) { continue; }
+                if (r.kind != Action::Kind::ActivateVial && r.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* rd = r.def != nullptr ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
+                if (rd == nullptr || !rd->card.IsCreature()) { continue; }
+                if (ResolveProvider(state).CastOrderRank(state, *rd) >= a_rank) { continue; }
+                bool in_hand = false;
+                for (const Card& hc : state.players[active].hand) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
+                if (!in_hand) { continue; }
+                bool match = false;
+                for (const std::string& sub : d->params.subtypes_affected)
+                {
+                    for (const std::string& cs : rd->card.m_subtypes) { if (cs == sub) { match = true; break; } }
+                    if (match) { break; }
+                }
+                if (match) { credit += 1 + (r.kind == Action::Kind::CastFromHand ? std::max(0, r.replicate_count) : 0); }
+            }
+            ec.generic -= std::min(credit, static_cast<int>(ec.generic));
+        }
         // Evoke variant (Reveillark): the alternate cost IS the bill (lockstep with a.cost).
         if (a.evoke && d->params.evoke_cost.has_value()) { ec = *d->params.evoke_cost; }
         // Phyrexian variant ({G/P} -- Birthing Pod): the life-paid pips come OFF the joint bill,
@@ -60627,6 +60664,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // Remand rider: the Remand joins X's bill, as enumerated (AddRemandRiderCost).
         AddRemandRiderCost(ec, state, a.remand_by.str());
         AddRemandRiderCost(ec, state, a.remand_chain_by.str());
+        // PINNED REPLICATE COUNT (MTG_PREPAY_REPLICATE, DEFAULT ON; =0 -> the effective cost only). A
+        // pinned k is part of this cast's bill (Action::cost = effective + k x printed; the cast site
+        // pays the copies right after the cast, from the pre-loaded pool), but the joint bill took
+        // only EffectiveCost, so the solve booked the copies' pips nowhere and the copies spent the
+        // mana it had booked for a LATER cast. Slivers s30214758 T3 {Galerider Sliver x2 (Hatchery
+        // replicate) + Aether Vial} off Cavern, Cavern, Ancient Ziggurat: the bill read {U}{1}, the
+        // creature stage booked Ziggurat's creature-only mana as {W}, the copy's {U} took the Cavern
+        // {C}-side unit meant for Vial, and Vial was dropped (mana-clean APPLY-DROP; Ziggurat {U} +
+        // Cavern {U} + Cavern {C} pays all three). Pricing the copies here makes the joint bill the
+        // line's real bill, as the enumeration already prices it. Both apply worlds call this.
+        static const bool s_prepay_replicate = EnvOn("MTG_PREPAY_REPLICATE", true);
+        if (s_prepay_replicate && a.replicate_count > 0)
+        { for (int c = 0; c < a.replicate_count; ++c) { AddManaCost(ec, d->card.m_mana_cost); } }
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;
         combined.colorless += ec.colorless;
