@@ -588,7 +588,7 @@ T4 at d3 b10 and d5 b20, gi6 T7). **2HG gi2 T5 (base T4) does NOT recover**: dra
 The fetch-OFF twins of every unrecovered A/B game reach their base turn at d8 b0 (gi186 4, gi193 4, gi532 4, gi496 5,
 2HG gi146 5). The gap is the rule's different deal (or, for gi496, the held fetch), not search truncation.
 
-**GT: NOT accepted.** The bar ("every slower game must recover at d8 b0") is not met: six fetch-rule games do not
+**GT: ACCEPTED by the parent in bd9a665b8 (see the update below).** INT-9 left it unaccepted because the bar ("every slower game must recover at d8 b0") is not met: six fetch-rule games do not
 recover. Five are fetch-shuffle variance (draws diverge) and one (gi496) is the no-shuffle hold. Everything else is
 clean: only Morph moved, every aggregate is net faster, and references are clean. The smoke and regression results envs from these
 runs (test/logs/smoke, test/logs/regression in the worktree) are intact. If the USER / parent accepts the variance reading:
@@ -621,3 +621,11 @@ runs (test/logs/smoke, test/logs/regression in the worktree) are intact. If the 
     optimistic proposal the player chose; the shipped search does not pick it.
 - win turns: Claude = search on 12 games; Claude faster on 4 (g0 4 vs 5, g3 3 vs 4, g5 7 vs 8, g15 4 vs 5) -> 5c
   budget-starvation check; Claude slower on 2 (g11, g12).
+
+**INT-9 GT update (parent, 2026-11-12).** Smoke + regression accepted for morph/morph2hg in `bd9a665b8`, with
+an `accepted-with-regressions` note. The six unrecovered fetch-rule games were classified under the USER's
+prune-adoption bar (better overall, faster, every lost line recognizable): A/B morph gi186/193/532 and
+regression 2HG gi2 diverge in library order after the crack; 2HG gi146 (checked by the parent: identical T1-T2,
+T3 lands Stomping Ground from hand so Foothills cracks a turn later, and the T4 draw differs: Forest vs Den
+Protector) is the same; gi496 is the search holding an uncracked fetch so it does not shuffle away a library top
+it can see, i.e. clairvoyance. Berserk-first stays AS RULED pending the USER's answer on the lethal-only amendment.
