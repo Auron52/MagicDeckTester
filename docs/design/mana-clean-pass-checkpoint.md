@@ -564,6 +564,35 @@ oracle off byte-identical; record 43e700b5c):
   byte-identical. Gate **`jumbo-5f-20261112`** (PGO, src 124d7bb6f34b, block 100000-104999, 5,000 games): **1,386
   issues**, CAPPED-DECISION 0, play byte-identical oracle off. Per 5k: ENUM-GAP 428, APPLY-DROP 22, APPLY-DROP-ORDER
   631, DOMINATED-CREATURE 118, ORACLE-GAP 185, UNMODELED 2. Next fresh block 105000. LOCAL ONLY, not pushed.
+* **Item 5g (agent 2026-11-12): Mirrorwing g662 NC T3 land hold -- DIAGNOSED, PARKED (not a shipped-play defect;
+  the instrument cannot answer the question).** Repro on HEAD 01a3adbc1 (seed 73000662 gi662, b20): plain T4 digest
+  30bd27827a1bab5e, `MTG_NC_SEARCH=1` T6 digest 4b2558f70c91284e (both = the 11-07 replays; play unchanged since).
+  Shipped (clairvoyant) play plays Needle#2 on T3 and wins T4. Mechanism of the NC hold, traced with the new
+  `MTG_NC_TRACE=3` (per (plan, sample) win turn, instrument only): T3 `Needle+Zada` avg 5.000 vs `defer+Zada` 4.750
+  over K=8; 7 of 8 samples TIE, ONE sample (k=0) gives T6 played vs T4 held. In k=0 the played arm (6 mana on T4)
+  has its honest continuation plan `Gold Rush+Anger+Draught` against an IMAGINED library (Anger "draws" Gold Rush);
+  against the sample's true order Anger draws Forest + Elvish Mystic, and the turn's payment taps Ignoble Hierarch (an
+  attacker that would receive Zada's copies) while a Gold Rush Treasure and an untapped Needle stay unused (the open
+  DOMINATED-CREATURE class, 227/5k in the 5b gate) -> 13 damage instead of lethal. The held arm (4 mana) cannot fund
+  Draught, keeps Hierarch attacking, kills T4. So the hold is K=8 sampling noise on a one-sample imagined-future
+  continuation: `MTG_NC_K=32` and `=64` both play the Needle on T3 (the averaged objective is not structurally
+  wrong; the NC tempo bonus is 0 at >= 2 lands).
+  **But the NC replay still ends T6 at K=32/64**, and that exposes the real limit: under `MTG_NC_SEARCH` the executor
+  makes ONE main-1 plan and never re-decides after a mid-main draw (no breakpoint re-solve fires: checked with an
+  entry probe on `resolve_draw_breakpoint`, 0 calls). T4 at K=32: Anger draws Oracle's Restoration + Forest, and
+  then nothing -- Gold Rush, Restoration and the Forest drop sit unused with 5 mana up (opp 20 -> 15). The base T4
+  kill is exactly such a chain (Anger -> play the drawn Forest -> Restoration -> cast the drawn Heroism/Mystic -> Gold
+  Rush), each step a natural choice AFTER seeing the draw. So for a cantrip-chain deck the NC instrument
+  under-plays every turn whose kill uses drawn cards, and g662's NC T6 is not evidence of clairvoyance either way.
+  Verdict for Q25a stands as "NOT clear clairvoyance" (11-09); the old wip/mc-mirrorwing early-mint arm's T1 land
+  change is the separate, draw-independent loss named there. No play change: smoke/regression not run; units n/a
+  (trace-only src change, both digests byte-identical). No gate (play unchanged).
+  **USER DECISION (raised, not settled):** the slower-game clairvoyance bar uses `MTG_NC_SEARCH=1`; should the NC
+  policy get an HONEST mid-main re-decision after each draw (re-run the reshuffle-averaged choice on the post-draw
+  state, never the clairvoyant `SolveWithLookahead` the executor's breakpoint re-solve uses), before it is used to
+  call Mirrorwing/cantrip games "clear clairvoyance"? Recommendation: yes (instrument-only, default-off path).
+  The in-continuation DOMINATED-CREATURE (tap the attacker before a same-turn Treasure) belongs with the open
+  Mirrorwing DOMINATED-CREATURE class, not here.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",

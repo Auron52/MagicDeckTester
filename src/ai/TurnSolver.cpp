@@ -111125,6 +111125,13 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 }
             }
             sum[i] += wt;
+            // MTG_NC_TRACE=3: every (plan, sample) win turn, so a ranking gap can be traced to the samples
+            // that make it.
+            if (s_nc_trace && EnvInt("MTG_NC_TRACE", 0) >= 3)
+            {
+                std::fprintf(stderr, "[nc]   T%d %s k=%d plan %zu wt=%d\n", turn, is_pre_combat ? "pre" : "post",
+                             k, i, wt);
+            }
             if (s_nc_trace)
             {
                 const double es = std::chrono::duration<double>(std::chrono::steady_clock::now() - nc_e0).count();
