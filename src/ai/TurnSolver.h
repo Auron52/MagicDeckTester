@@ -2405,11 +2405,15 @@ public:
     // without a dredge card counts exactly the watchers it counted before.
     static bool LandSlotCounts(const GameState& state, const Action& a);
     // Is the land-POSITION axis live on this board? LandOrderMatters (landfall / scry watchers), or the
-    // dredge-draw anchor above with a dredge card where this turn's casts can dredge it: in the graveyard,
-    // or in hand (a discard ahead of the draw -- Faithless Looting -- puts it there). A dredge card
-    // reaches the graveyard mid-section in no other way: a dredge mill needs one there already, and the
-    // plan's activations (Phenax, Cephalid Coliseum, Magus) trail its casts. (Disclosed boundary: a
-    // future self-MILL cast ahead of a draw -- Thought Scour -- would need adding.)
+    // dredge-draw anchor above with a dredge card ALREADY IN THE GRAVEYARD on this board, i.e. a draw this
+    // section casts can actually be replaced by dredge (the owner's "a draw that can dredge or mill").
+    // A dredger only in HAND does not count (2026-11-12 narrowing): a discard ahead of a draw puts it there
+    // mid-section only through a draw spell's own discard (Faithless Looting draws first), so the
+    // positions it opened differed only in what the discard kept -- budget dilution (held-out Gods 3000:
+    // +7 turns). Disclosed boundary: "Looting discards the dredger, a SECOND draw in the same section
+    // dredges it, then the land" is not offered at this base; only the post-Looting breakpoint's own
+    // continuations (which see the dredger in the graveyard) can reach it.
+    // (A future self-MILL cast ahead of a draw -- Thought Scour -- would need adding too.)
     static bool LandPositionAxisLive(const GameState& state);
     // ---- THE REVEAL OUTLET'S POSITION (Martyr of Sands, 2026-10-27) --------------------------------
     // "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life."

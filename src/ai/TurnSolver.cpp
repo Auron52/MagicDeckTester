@@ -33741,7 +33741,7 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
 static bool LandAfterDredgeDrawOn()
 {
     static const bool on = EnvOn("MTG_LAND_AFTER_DREDGE_DRAW", true);
-    return on;
+    return heurarm::Flag(heurarm::LAND_AFTER_DREDGE_DRAW, on);
 }
 
 bool TurnSolver::LandSlotCounts(const GameState& state, const Action& a)
@@ -33764,8 +33764,10 @@ bool TurnSolver::LandPositionAxisLive(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         return d != nullptr && d->params.dredge > 0;
     };
-    return std::any_of(ap.graveyard.begin(), ap.graveyard.end(), dredger)
-        || std::any_of(ap.hand.begin(), ap.hand.end(), dredger);
+    // Only a dredge card ALREADY in the graveyard: a draw can be replaced by dredge only then. (A dredger in
+    // hand alone -- Faithless Looting draws BEFORE it discards -- made every draw a position that differed only
+    // in the discard; held-out Gods 3000 lost +7 turns to that dilution. Disclosed boundary in TurnSolver.h.)
+    return std::any_of(ap.graveyard.begin(), ap.graveyard.end(), dredger);
 }
 
 // ---- The reveal outlet's position (Martyr of Sands; see TurnSolver.h) ------------------------------

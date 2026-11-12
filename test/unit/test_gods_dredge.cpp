@@ -5,6 +5,7 @@
 #include "ai/TurnSolver.h"
 #include "ai/DecisionProviders.h"
 #include "core/HeuristicDefaults.h"
+#include <algorithm>
 #include <cstdio>
 #include <string>
 
@@ -884,6 +885,20 @@ TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot a
     CHECK(loam_in_gy);   // cast, after the land paid for it
 
     // Same dredge answer either way (no Gods in the graveyard): the position is folded into land-first.
+    // The dredger only in HAND (Loam and the Grave-Troll both in hand, none in the graveyard): no draw this
+    // section casts can dredge, so the dredge anchor is off (2026-11-12 narrowing).
+    GameState hand_only = s;
+    {
+        auto& gy = hand_only.players[0].graveyard;
+        const auto it = std::find_if(gy.begin(), gy.end(),
+                                     [](const Card& c) { return c.m_name == "Golgari Grave-Troll"; });
+        REQUIRE(it != gy.end());
+        hand_only.players[0].hand.push_back(*it);
+        gy.erase(it);
+    }
+    CHECK_FALSE(TurnSolver::LandPositionAxisLive(hand_only));
+    CHECK(positioned(TurnSolver::EnumerateMainPlans(hand_only, true)) == nullptr);
+
     GameState same = build(true, false);
     CHECK(TurnSolver::LandPositionAxisLive(same));
     CHECK(positioned(TurnSolver::EnumerateMainPlans(same, true)) == nullptr);
