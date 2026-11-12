@@ -898,9 +898,22 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
 // historical one. Spending a spare unit on a generic pip never costs the line a coloured pip (it could pay
 // none) nor a mana (any source pays a later generic), which is why the walk can model it unconditionally.
 // Returns the spare mask over battlefield indices (< 64); `short_line` reports the shortage.
+//
+// DEPLETION TIER (`depletion_tier`, MTG_LINE_SPARE_DEPLETION, default ON): the mask of the DEPLETION lands
+// (Saprazzan Skerry {U}{U}, Sandstone Needle {R}{R}, ...) that are otherwise spare -- every colour they make
+// here is one no later pip owes. The plain mask excludes them because a tap spends a counter; but the caller
+// tries this tier ONLY when the line is SHORT and no plain spare could be tapped, i.e. exactly when the
+// alternative (the generic pip eats a floating unit of an owed colour) leaves the rest of the line short of
+// that colour on every count of the supply. treasure_hunt s30060139 T3, {Treasure Hunt x2} off Skerry + Needle:
+// Hunt 1's {U} tapped the Skerry, its {1} ate the second {U}, and Hunt 2 ({1}{U}) was unpayable off the Needle's
+// {R}{R} -- in the executor, the rollout and the walks alike, so the line was unfindable at any budget. With the
+// tier the {1} taps the Needle ({U}+{R} float) and both Hunts pay. The tier can only change a payment the plain
+// rule left on the stranding path; the counter it spends is the line's price, which the search weighs against
+// every other line.
 static std::uint64_t LineSpareSourceMask(const GameState& state, int active, bool for_creature,
                                          const int later[5], const ManaPool& local_float,
-                                         std::uint64_t reserved_mask, bool& short_line)
+                                         std::uint64_t reserved_mask, bool& short_line,
+                                         bool depletion_tier = false)
 {
     short_line = false;
     const int n = static_cast<int>(state.battlefield.size());
@@ -921,12 +934,13 @@ static std::uint64_t LineSpareSourceMask(const GameState& state, int active, boo
     auto plain_src = [&](const Permanent& p, const CardDefinition& d) -> bool
     {
         if (d.tmpl != CardTemplate::BasicLand && !d.params.mana_rock) { return false; }
-        if (d.tmpl == CardTemplate::ManaDork || d.params.storage_land || d.params.enters_tapped_with_depletion != 0
+        if (d.tmpl == CardTemplate::ManaDork || d.params.storage_land
             || d.params.creature_mana_only || BigSpellOnlySource(d.params) || d.params.is_filter
             || d.params.ramp_filter || d.params.any_color_filter || PaySacSpendableNow(state, p, d))
         { return false; }
-        for (const Counter& k : p.counters) { if (k.type == Counter::Type::Depletion) { return false; } }
-        return true;
+        bool depletion = d.params.enters_tapped_with_depletion != 0;
+        for (const Counter& k : p.counters) { if (k.type == Counter::Type::Depletion) { depletion = true; } }
+        return depletion == depletion_tier;   // the plain mask: no depletion land; the tier: depletion lands only
     };
     // An unrestricted untapped source other than `self` (or the float) that makes colour `ci` for a creature.
     auto other_makes = [&](int self, int ci) -> bool
@@ -1944,9 +1958,20 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 bool no_surplus = (later[0] + later[1] + later[2] + later[3] + later[4]) > 0;
                 for (int c = 0; c < 5 && no_surplus; ++c) { if (fl[c] > later[c]) { no_surplus = false; } }
                 bool short_line = false;
-                const std::uint64_t spare = no_surplus
+                std::uint64_t spare = no_surplus
                     ? LineSpareSourceMask(state, active, for_creature, later, floating, reserved_mask, short_line)
                     : 0;
+                // DEPLETION TIER (MTG_LINE_SPARE_DEPLETION): a SHORT line whose plain spares cannot be tapped
+                // (none, or none usable) tries the otherwise-spare depletion lands next -- see LineSpareSourceMask.
+                const bool dep_tier = short_line && LineSpareDepletionOn();
+                for (int tier = 0; tier < (dep_tier ? 2 : 1); ++tier)
+                {
+                if (tier == 1)
+                {
+                    bool short2 = false;
+                    spare = LineSpareSourceMask(state, active, for_creature, later, floating, reserved_mask, short2,
+                                                /*depletion_tier=*/true);
+                }
                 if (spare != 0 && short_line)
                 {
                     const std::uint64_t all = n == 64 ? ~0ull : ((1ull << n) - 1);
@@ -1968,6 +1993,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         else if (floating.green > before.green)    { spare_take = static_cast<int>(Color::Green); }
                         return true;
                     }
+                }
                 }
             }
         }

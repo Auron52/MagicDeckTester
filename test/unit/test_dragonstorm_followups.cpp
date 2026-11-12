@@ -977,6 +977,39 @@ TEST_CASE("Line-spare generic: a colour-short line pays a generic pip with the s
     }
 }
 
+TEST_CASE("Line-spare generic, depletion tier: {Treasure Hunt x2} off Saprazzan Skerry + Sandstone Needle pays both (MTG_LINE_SPARE_DEPLETION)")
+{
+    // mana-clean item 6, treasure_hunt s30060139 T3: Hunt 1's {U} taps the Skerry ({U}{U}); its {1} must tap the
+    // Needle ({R}{R}) rather than eat the second {U}, or Hunt 2's {U} is unpayable. The Needle is a depletion land,
+    // which the plain spare set excludes; the depletion tier admits it only on a SHORT line.
+    GameState s0 = BoardFu({ "Saprazzan Skerry", "Sandstone Needle" }, { "Treasure Hunt", "Treasure Hunt" }, 3);
+    for (Permanent& p : s0.battlefield) { PutDepletionCounters(s0, p, 2); }
+    ManaCost hunt;
+    hunt.generic = 1;
+    hunt.blue = 1;
+    ManaCost total = hunt;
+    AddManaCost(total, hunt);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LINE_SPARE_DEPLETION, on);
+        GameState s = s0;
+        LineCostFu lc(total);
+        REQUIRE(TapForCostDirect(s, hunt, /*for_creature=*/false));
+        CHECK(PermFu(s, "Saprazzan Skerry").tapped);
+        CHECK(PermFu(s, "Sandstone Needle").tapped == on);
+        CHECK(s.floating_mana.blue == (on ? 1 : 0));
+        CHECK(TapForCostDirect(s, hunt, /*for_creature=*/false) == on);
+    }
+    {
+        // No live line: the historical tap on both arms (the Skerry pays both pips, the Needle stays up).
+        ArmFu arm(heurarm::LINE_SPARE_DEPLETION, true);
+        GameState s = s0;
+        REQUIRE(TapForCostDirect(s, hunt, /*for_creature=*/false));
+        CHECK_FALSE(PermFu(s, "Sandstone Needle").tapped);
+    }
+}
+
 TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle + Territory casts Dragonstorm (MTG_LINE_SPARE_GENERIC_FIRST)")
 {
     // The rollout apply (ApplyPlanDirect) pays through the same shared payer as the executor: the whole
