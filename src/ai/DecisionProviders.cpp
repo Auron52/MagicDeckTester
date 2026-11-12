@@ -58577,6 +58577,32 @@ bool MartyrTutorPruneOn()
     return heurarm::Flag(heurarm::MARTYR_TUTOR_PRUNE, on);
 }
 
+// MTG_MARTYR_TUTOR_FARM (heurarm MARTYR_TUTOR_FARM; DEFAULT ON since 2026-11-12, with its DRY narrowing below --
+// USER 2026-11-12: "Maybe we should prune it in more cases?"): Curious Farm Animals is admitted too, under
+// Martyr's "need the lifegain" condition (life below the top own threshold), ranked after Martyr. Root cause (regression martyr d3/d5 s2002 gi0, T5 -> T6 at d8 b0): with a hand of lands Martyr's
+// reveal gains nothing, while Farm's {W} cast + {2} sacrifice gains an unconditional 3 (its dies trigger), which
+// put life over Speaker of the Heavens' gate a turn earlier.
+bool MartyrTutorFarmOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_TUTOR_FARM", true);   // DEFAULT ON (2026-11-12); =0 -> never admitted
+    return heurarm::Flag(heurarm::MARTYR_TUTOR_FARM, on);
+}
+
+// MTG_MARTYR_TUTOR_FARM_DRY (heurarm MARTYR_TUTOR_FARM_DRY; DEFAULT ON, consulted only under TUTOR_FARM). USER
+// 2026-11-12, on the broad amendment's held-out loss: "Maybe we should prune it in more cases?". Farm is admitted
+// only while the hand holds no card of Martyr's reveal colour: then no Martyr (on board, or the one this tutor
+// could fetch) can gain anything, and Farm's 3 is the only gain on offer (gi0: a hand of two Plains). With a white
+// card in hand Martyr is the better engine and Farm is just one more cast-axis variant diluting a budgeted search
+// (held-out gi233, d5 b20: Farm admitted at T3 with Captain/Lurrus/Jitte in hand, never fetched, T5 -> T6).
+// MEASURED 2026-11-12 (build/scratch/martyr/ab7, d5 b20, std 79001 x600 + 2HG 80001 x200) vs the literal rule
+// (Farm never admitted): 0 slower / 0 faster in both formats, units +0.04%; the broad amendment (DRY=0) was
+// +1 (gi233) and +4.8% units. Regression martyr s2002 gi0 recovers T6 -> T5 at d3 b10 and d5 b20.
+bool MartyrTutorFarmDryOn()
+{
+    static const bool on = EnvOn("MTG_MARTYR_TUTOR_FARM_DRY", true);
+    return heurarm::Flag(heurarm::MARTYR_TUTOR_FARM_DRY, on);
+}
+
 // 0 = Serra Ascendant, 1 = Martyr of Sands, 2 = Speaker of the Heavens, -1 = not one of the three. By parameters,
 // not names (the deck's three MV<=1 payoffs).
 int MartyrTutorRole(const CardDefinition* d)
@@ -58586,6 +58612,7 @@ int MartyrTutorRole(const CardDefinition* d)
     if (pp.life_threshold_pump_life > 0) { return 0; }
     if (!pp.sac_outlet_lifegain_per_revealed_color.empty()) { return 1; }
     if (IsLifeGatedTapTokenSource(d)) { return 2; }
+    if (pp.dies_watch_includes_self && pp.dies_trigger_self_gain > 0) { return 3; }   // Curious Farm Animals
     return -1;
 }
 
@@ -58593,12 +58620,13 @@ int MartyrTutorRole(const CardDefinition* d)
 std::vector<std::string> MartyrTutorAdmitted(const GameState& s, int controller, const std::vector<std::string>& legal)
 {
     const Player& pl = s.players[static_cast<std::size_t>(controller)];
-    std::array<std::vector<std::string>, 3> by_role;
+    std::array<std::vector<std::string>, 4> by_role;
     int top_threshold = 0;
     for (const std::string& n : legal)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(n);
         const int role = MartyrTutorRole(d);
+        if (role == 3 && !MartyrTutorFarmOn()) { continue; }
         if (role >= 0) { by_role[static_cast<std::size_t>(role)].push_back(n); }
         top_threshold = std::max(top_threshold, MartyrLifeThresholdOf(d));
     }
@@ -58608,6 +58636,30 @@ std::vector<std::string> MartyrTutorAdmitted(const GameState& s, int controller,
     for (const Card& c : pl.graveyard) { widen(CardDatabase::Instance().LookupCached(c)); }
     for (const Permanent& p : s.battlefield)
     { if (p.controller_index == controller) { widen(CardDatabase::Instance().LookupCached(p.card)); } }
+    if (!by_role[3].empty() && pl.life >= top_threshold) { by_role[3].clear(); }   // Farm: only while gain is needed
+    if (!by_role[3].empty() && MartyrTutorFarmDryOn())
+    {
+        // ...and only while Martyr's reveal is dry: no card of its colour in hand (the colour read off the deck's
+        // own Martyr definition; a hand card of that colour means Martyr out-gains Farm).
+        std::string col;
+        for (const std::string& n : by_role[1].empty() ? legal : by_role[1])
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(n);
+            if (d && !d->params.sac_outlet_lifegain_per_revealed_color.empty())
+            { col = d->params.sac_outlet_lifegain_per_revealed_color; break; }
+        }
+        auto scan = [&](const Card& c)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (col.empty() && d && !d->params.sac_outlet_lifegain_per_revealed_color.empty())
+            { col = d->params.sac_outlet_lifegain_per_revealed_color; }
+        };
+        for (const Card& c : pl.hand) { scan(c); }
+        for (const Permanent& p : s.battlefield) { if (p.controller_index == controller) { scan(p.card); } }
+        if (col.empty()) { col = "W"; }
+        // Martyr's own counter (reads the colour off the card DEFINITION: a hand Card carries no mask).
+        if (CountHandCardsOfColor(s, controller, col) > 0) { by_role[3].clear(); }
+    }
     if (!by_role[1].empty())
     {
         bool have_martyr = false;
@@ -58623,7 +58675,7 @@ std::vector<std::string> MartyrTutorAdmitted(const GameState& s, int controller,
         if (have_martyr || !need_gain) { by_role[1].clear(); }
     }
     std::vector<std::string> out;
-    for (const auto& v : by_role) { out.insert(out.end(), v.begin(), v.end()); }
+    for (const int r : {0, 1, 3, 2}) { out.insert(out.end(), by_role[r].begin(), by_role[r].end()); }   // Serra, Martyr, Farm, Speaker
     return out;
 }
 }   // namespace
