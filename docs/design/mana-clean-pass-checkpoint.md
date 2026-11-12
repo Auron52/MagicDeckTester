@@ -548,6 +548,23 @@ oracle off byte-identical; record 43e700b5c):
   casts would do -- line-level, not a per-payment excess) and Jumbo s30093108 / s30094151 (own-host hold paying
   with an Elf unit instead of a fresh Forest) -- PARKED, neither is this mechanism.
 
+* **Item 5f (agent 2026-11-12): Jumbo capped decision -- FIXED (analyzer only, lossless).** Moot check first:
+  s30025605 (the sprawlgreen capped seed) no longer caps on HEAD eb92162 (one APPLY-DROP-ORDER, 10 s); the 5p gate's
+  seed s30094355 T4 still did (1,099 plans, CAPPED-DECISION 6,429; uncapped it is CLEAN, PHANTOM 199, 10.0M applies,
+  9.65M of them in the PHANTOM other-orders loop). Cause: OtherOrders(with_acts) permuted the two equips among the
+  casts, but outside the human sequence the explicit route runs every trailing activation after the casts, so the
+  5,039 orders of a 7-action plan are 240 applies. Commit 25619b05a: (1) the TRAILING-ACTIVATION ORDER FOLD
+  (`MTG_ORACLE_ORDER_FOLD`, default ON; one order per class of cast order x activation order, the first the walk
+  meets, so the first hit and its APPLY-DROP-ORDER text are unchanged; `MTG_ORACLE_ORDER_FOLD_CHECK=1` realises every
+  folded order and aborts on a difference); (2) the orders loop uses Realize's hit_only (it reads only hits); (3)
+  hit-only frontiers below an already-dropped action are not built. s30094355: CAPPED-DECISION 6,429 -> 0, game
+  oracle 103 s -> 18 s, verdicts equal the uncapped run. Fold check: 0 mismatches (566k folded orders on the repro;
+  50 decks x 6 games). A/B vs HEAD: Jumbo 300 games (95000-95299) identical class for class; 50 decks x 6 differ only
+  in 3 budget-spent decisions (EDF, ET: more plans audited, CAPPED-DECISION -80). Units 2836/2836, smoke 195/195
+  byte-identical. Gate **`jumbo-5f-20261112`** (PGO, src 124d7bb6f34b, block 100000-104999, 5,000 games): **1,386
+  issues**, CAPPED-DECISION 0, play byte-identical oracle off. Per 5k: ENUM-GAP 428, APPLY-DROP 22, APPLY-DROP-ORDER
+  631, DOMINATED-CREATURE 118, ORACLE-GAP 185, UNMODELED 2. Next fresh block 105000. LOCAL ONLY, not pushed.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
