@@ -7,6 +7,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -749,9 +750,15 @@ TEST_CASE("morph INT-8 (E): Berserk plans are fronted; Den Protector's regrowth 
     cands[2].kind = Action::Kind::ActivatePermAbility;
     cands[2].ability_mode = Action::AbilityMode::TurnFaceUpLate;
     cands[2].tutor_target = std::string("Berserk");
-    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }));
-    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }));
-    CHECK(mp.PlanMoveOrderFront(s, cands, { 1, 2 }));     // Den Protector regrowing Berserk
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }, false));
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }, false));
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 1, 2 }, false));     // Den Protector regrowing Berserk
+    // INT-9 arm MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY (DEFAULT OFF): the tier only for a plan projected lethal.
+    heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = 1;
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 0 }, false));
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }, true));
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }, true));
+    heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = -1;
     std::vector<std::string> names = { "Forest", "Blistering Firecat", "Temur Battle Rage", "Vines of Vastwood",
                                        "Legion Leadership", "Might of Old Krosa", "Berserk" };
     mp.FaceUpRegrowOrder(s, names);                       // no attacker, no mana: Might before Leadership
@@ -854,4 +861,46 @@ TEST_CASE("morph INT-8 (R13/R14): ties prefer a non-mana body; sizing and mana r
     Cast(m, "Might of Old Krosa", kTrickBestOwnTarget);    // ...so the cast-time pick pumps it
     CHECK(Power(m, den) == 6);
     CHECK(Power(m, hyst) == 2);
+}
+
+// INT-9 fetch rule (USER 2026-11-12, verbatim: "Let's look for other prunes as needed, including for the fetchland Wooded
+// Foothills. That should be relatively straightforward as goldfish can just always get stomping ground."): Wooded
+// Foothills resolves on play and fetches Stomping Ground first; without one, the generic library order.
+// MTG_MORPH_FETCH_RULE=0 restores the generic hold choice and order. (The human-play / MTG_UNPRUNED bypass is the
+// engine's -- FetchResolvesOnPlay and the fetch fan -- and is process-static, so not toggled here.)
+TEST_CASE("morph INT-9: Wooded Foothills cracks on play and fetches Stomping Ground first")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.players[0].library.push_back(CardM("Forest", 200));
+    s.players[0].library.push_back(CardM("Mountain", 201));
+    s.players[0].library.push_back(CardM("Stomping Ground", 202));
+    s.players[0].library.push_back(CardM("Gruul Turf", 203));          // not a Mountain / Forest: never a target
+    const CardDefinition& foothills = DefM("Wooded Foothills");
+    std::vector<std::string> c = mp.FetchCandidates(s, 0, foothills.params);
+    REQUIRE(c.size() == 3);
+    CHECK(c[0] == "Stomping Ground");
+    CHECK(c[1] == "Forest");
+    CHECK(c[2] == "Mountain");
+    CHECK(mp.FetchSearchCandidates(s, 0, foothills.params, c) == std::vector<std::string>{ "Stomping Ground" });
+    CHECK_FALSE(mp.ConsiderFetchHold(s, foothills));
+    CHECK(FetchResolvesOnPlay(s, foothills));
+    s.players[0].life = 3;                                             // the engine keeps the hold at 3 life or less
+    CHECK_FALSE(FetchResolvesOnPlay(s, foothills));
+    s.players[0].life = 20;
+    // No Stomping Ground left: the generic (library) order.
+    s.players[0].library.erase(s.players[0].library.begin() + 2);
+    c = mp.FetchCandidates(s, 0, foothills.params);
+    REQUIRE(c.size() == 2);
+    CHECK(c[0] == "Forest");
+    // The lever off: library order, and the hold stays a searched choice.
+    s.players[0].library.push_back(CardM("Stomping Ground", 202));
+    heurarm::t_arm[heurarm::MORPH_FETCH_RULE] = 0;
+    c = mp.FetchCandidates(s, 0, foothills.params);
+    CHECK(c[0] == "Forest");
+    CHECK(mp.ConsiderFetchHold(s, foothills));
+    CHECK_FALSE(FetchResolvesOnPlay(s, foothills));
+    heurarm::t_arm[heurarm::MORPH_FETCH_RULE] = -1;
 }

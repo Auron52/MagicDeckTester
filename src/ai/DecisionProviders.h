@@ -408,7 +408,12 @@ public:
     int  TrickKickModes(const GameState& s, const CardDefinition& def) const override;
     bool RedirectTargetedPumpsAsGroup() const override;
     bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
-                            const std::vector<int>& sel) const override;
+                            const std::vector<int>& sel, bool projected_lethal) const override;
+    // INT-9 (USER 2026-11-12, Wooded Foothills: "goldfish can just always get stomping ground"):
+    // MTG_MORPH_FETCH_RULE, DEFAULT ON -- crack on play, the dual first.
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller,
+                                             const CardParams& fetch_pp) const override;
     void FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const override;
     bool FaceUpTrailFlipAfterTargetCast() const override;
     // R11-R13: MTG_MORPH_WATCHER_IN_PLAN, MTG_MORPH_TBR_OTHER, MTG_MORPH_TIE_NONMANA (each DEFAULT ON).

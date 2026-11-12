@@ -8940,11 +8940,23 @@ bool MorphProvider::RedirectTargetedPumpsAsGroup() const
 static bool MorphBerserkFirstOn()
 { static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST", true); return heurarm::Flag(heurarm::MORPH_BERSERK_FIRST, on); }
 
+// INT-9, the PROPOSED amendment to E (NOT a USER ruling; DEFAULT OFF until the USER answers): front a Berserk plan
+// only when it is projected lethal -- R9 "If we can find lethal we don't need to search it, I guess it's true we could
+// just rank and test it first". INT-8 found the unconditional tier also acts as a TIE-BREAK among horizon-tied plans,
+// so on a non-lethal turn it commits a wasted Berserk (gi245) or spends the budget on fronted non-lethal Berserk plans
+// (regression gi18). MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY=1 -> lethal plans only. The regrowth ORDER is unaffected.
+static bool MorphBerserkFirstLethalOnly()
+{
+    static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY");   // DEFAULT OFF; =1 -> the amendment
+    return heurarm::Flag(heurarm::MORPH_BERSERK_FIRST_LETHAL, on);
+}
+
 bool MorphProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
-                                       const std::vector<int>& sel) const
+                                       const std::vector<int>& sel, bool projected_lethal) const
 {
     (void)s;
     if (!MorphBerserkFirstOn() || MorphInt8Open()) { return false; }
+    if (!projected_lethal && MorphBerserkFirstLethalOnly()) { return false; }
     for (int j : sel)
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
@@ -9031,6 +9043,52 @@ static bool MorphTieNonManaOn()
 bool MorphProvider::TrickTargetTieAvoidsManaProducers() const
 {
     return MorphTieNonManaOn() && MorphLargestTrickTargetOn() && !MorphInt8Open();
+}
+
+// INT-9 fetch rule (USER 2026-11-12, verbatim: "Let's look for other prunes as needed, including for the fetchland
+// Wooded Foothills. That should be relatively straightforward as goldfish can just always get stomping ground.").
+// (1) No hold: the zero-mana, one-life fetch resolves on play. Holding it buys nothing in this list -- no landfall, no
+//     fetch/sacrifice/graveyard-count payoff, no library manipulation a later shuffle could undo; the only graveyard
+//     reader is Den Protector's regrowth, which a CRACKED fetch only adds to. FetchResolvesOnPlay keeps the hold under
+//     human play, MTG_UNPRUNED (UnprunedGate::Fetch) and at 3 life or less.
+// (2) Order: the pick producing the most colours first (Stomping Ground: both the deck's colours), then the generic
+//     library order (Forest / Mountain). FetchSearchCandidates keeps the base default, the top pick only; the engine
+//     fans every target under human play / MTG_UNPRUNED. Read off params.produces, never a card name.
+// Life: fetch 1 + shock 2. The shock's own pay-life rule (life > 2) and the redirect group's life rule (D: never a
+// group that would leave us at 0 or below) read the current life, so a fetch paid earlier cannot overdraw either.
+// MTG_MORPH_FETCH_RULE=0 -> the generic hold choice and library order.
+static bool MorphFetchRuleOn()
+{ static const bool on = EnvOn("MTG_MORPH_FETCH_RULE", true); return heurarm::Flag(heurarm::MORPH_FETCH_RULE, on); }
+
+bool MorphProvider::ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
+{
+    if (!MorphFetchRuleOn()) { return DeckProvider::ConsiderFetchHold(s, fetch); }
+    return false;
+}
+
+std::vector<std::string> MorphProvider::FetchCandidates(const GameState& s, int controller,
+                                                        const CardParams& fetch_pp) const
+{
+    std::vector<std::string> all = DeckProvider::FetchCandidates(s, controller, fetch_pp);
+    if (all.size() <= 1 || !MorphFetchRuleOn()) { return all; }
+    auto colours = [](const std::string& nm) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return 0; }
+        std::vector<Color> seen;   // distinct colours (no popcount builtin: MSVC)
+        for (Color c : d->params.produces)
+        { if (std::find(seen.begin(), seen.end(), c) == seen.end()) { seen.push_back(c); } }
+        return static_cast<int>(seen.size());
+    };
+    std::vector<int> n(all.size());
+    for (std::size_t i = 0; i < all.size(); ++i) { n[i] = colours(all[i]); }
+    std::vector<std::size_t> o(all.size());
+    for (std::size_t i = 0; i < o.size(); ++i) { o[i] = i; }
+    std::stable_sort(o.begin(), o.end(), [&](std::size_t a, std::size_t b) { return n[a] > n[b]; });
+    std::vector<std::string> out;
+    out.reserve(all.size());
+    for (std::size_t i : o) { out.push_back(std::move(all[i])); }
+    return out;
 }
 
 // Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,

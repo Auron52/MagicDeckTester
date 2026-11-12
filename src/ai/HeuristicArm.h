@@ -889,6 +889,8 @@ enum Slot : int
     MORPH_WATCHER_IN_PLAN,    // MTG_MORPH_WATCHER_IN_PLAN  Morph INT-8 (USER R11): redirect / unkicked Vines need Defiance on board or cast in the plan. Default ON; =0 -> off
     MORPH_TBR_OTHER,          // MTG_MORPH_TBR_OTHER  Morph INT-8 (USER R12): a double-strike grant skips a double striker / a 0-power body. Default ON; =0 -> off
     MORPH_TIE_NONMANA,        // MTG_MORPH_TIE_NONMANA  Morph INT-8 (USER R13): largest-attacker ties prefer a non-mana body. Default ON; =0 -> off
+    MORPH_BERSERK_FIRST_LETHAL, // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY  Morph INT-9: the PROPOSED amendment to E (not a USER ruling) -- the Berserk front tier applies only to plans projected lethal (wins_this_turn), so it no longer tie-breaks a non-lethal turn toward casting Berserk. Measurement arm, DEFAULT OFF (E stays as ruled until the USER answers)
+    MORPH_FETCH_RULE,         // MTG_MORPH_FETCH_RULE  Morph INT-9 (USER 2026-11-12, "goldfish can just always get stomping ground"): Wooded Foothills is cracked on play (no hold) and fetches the dual (a pick producing more colours, i.e. Stomping Ground) first, else the generic order. Default ON; =0 -> the generic hold choice + library order
     COUNT
 };
 
@@ -1722,6 +1724,8 @@ inline const char* Name(int slot)
         "MTG_MORPH_WATCHER_IN_PLAN",
         "MTG_MORPH_TBR_OTHER",
         "MTG_MORPH_TIE_NONMANA",
+        "MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY",
+        "MTG_MORPH_FETCH_RULE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -2902,10 +2902,12 @@ public:
     virtual bool RedirectTargetedPumpsAsGroup() const { return false; }
     // PlanMoveOrderFront -- a MOVE-ORDER tier (MoveOrderLess, below wins_this_turn / pump_waste / atk_forfeit,
     // above value): a plan this answers true for is TRIED FIRST among its peers. ORDER only -- nothing is
-    // removed, and a strictly better plan still wins its pass. Default false.
+    // removed, and a strictly better plan still wins its pass. Default false. `projected_lethal` is the plan's
+    // wins_this_turn projection, so a provider may confine the tier to the lethal plans (Morph INT-9's
+    // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY arm).
     virtual bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
-                                    const std::vector<int>& sel) const
-    { (void)s; (void)cands; (void)sel; return false; }
+                                    const std::vector<int>& sel, bool projected_lethal) const
+    { (void)s; (void)cands; (void)sel; (void)projected_lethal; return false; }
     // FaceUpRegrowOrder -- the ORDER of a "when turned face up, return a card from your graveyard" flip's
     // named regrowth variants (EmitFaceUpActions; emission order = trial order among value-tied plans).
     // Reorder `names` in place; never add or drop one. Default: emission order (graveyard, then hand).
