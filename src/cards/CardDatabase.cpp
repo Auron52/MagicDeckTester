@@ -183,6 +183,67 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             def.upkeep_fold_audited = audited;
             def.upkeep_fold_keeper  = audited && !drawback && benign_kw && def.card.IsCreature();
         }
+        // THE SEQUENTIAL-WALK SUPPLY BOUND's premises (CardDefinition::walk_bound_audited; the bound and its
+        // proof are at TurnSolver.cpp SeqWalkProvablyShort). A WHITELIST of raw keys, like the upkeep fold's:
+        // a param invented tomorrow is NOT audited, and an unaudited card anywhere the bound looks (a walk
+        // member, any permanent, a land in the library a member can fetch) sends the subset to the real walk.
+        // Audited 2026-11-12 card by card against cards.json for the Hydras list; every key below was
+        // grep-checked to have no reader in the payer (ManaPayment.cpp), the live-cost recompute
+        // (EffectiveSpellCostImpl) or the walk (SeqWalkFixedOrder) other than the three MECHANISMS the bound
+        // prices explicitly.
+        {
+            // The mechanisms the bound PRICES: a land's own tap, a global land-tap bonus (Vernal Bloom / Nissa /
+            // Gauntlet of Power), a Warchief-style subtype reducer (Gargos), a land search that puts a land.
+            static const char* const kWalkMechanismParams[] = {
+                "produces",
+                "land_tap_bonus", "land_tap_bonus_subtype", "land_tap_bonus_produces", "land_tap_bonus_you_only",
+                "land_tap_bonus_basic", "land_tap_bonus_same_color", "etb_choose_color",
+                "reduces_spell_subtype", "reduces_spell_subtype_amount", "reduces_spell_subtype_creature_only",
+                "land_search_on_resolve", "land_search_count", "land_search_basic_only", "land_search_subtype",
+            };
+            // INERT for mana sequencing: counters, combat, ETB/attack/upkeep riders, non-mana activations
+            // (the walk never activates; a loyalty ability is never a mana source to the payer), Equipment
+            // (only an Equip ACTION reaches the walk, and an unlocking one is refused before the bound),
+            // suspend (a different action kind; the hard cast pays the printed cost).
+            static const char* const kWalkInertParams[] = {
+                "enters_with_plus_counters", "attack_double_team_counters", "enters_with_x_plus_counters",
+                "enters_with_x_dice_sides", "upkeep_double_self_counters", "remove_counter_destroy_art_ench_cost",
+                "etb_modal_double_self_counters", "etb_modal_fight_opp_creature",
+                "chosen_color_pump_power", "chosen_color_pump_tough",
+                "loyalty_start", "loyalty_abilities",
+                "suspend_time_counters", "suspend_cost",
+                "is_equipment", "equip_cost_generic", "equip_grants_haste", "equip_grants_shroud",
+            };
+            static const char* const kWalkTemplates[] = { "custom", "vanilla_creature", "basic_land" };
+            static const char* const kWalkKeywords[] = {
+                "Flying", "Trample", "Vigilance", "Double strike", "First strike", "Haste", "Menace", "Reach",
+                "Lifelink", "Deathtouch", "Ward", "Shroud", "Hexproof", "Indestructible", "Suspend", "Equip",
+            };
+            auto in = [](const auto& arr, const std::string& k)
+            { for (const char* a : arr) { if (k == a) { return true; } } return false; };
+            const std::string tmpl = entry.value("template", std::string("custom"));
+            bool ok = in(kWalkTemplates, tmpl);
+            // A land is a source only through AvailableManaPool's BasicLand-template test, so every audited land
+            // must carry that template (a custom-template land could be tapped by a path the bound never saw).
+            if (ok && def.card.IsLand() && tmpl != "basic_land") { ok = false; }
+            if (ok && entry.contains("parameters") && entry["parameters"].is_object())
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                {
+                    if (!in(kWalkMechanismParams, it.key()) && !in(kWalkInertParams, it.key())) { ok = false; break; }
+                    // `produces` is priced only as a LAND's own tap.
+                    if (it.key() == "produces" && !def.card.IsLand()) { ok = false; break; }
+                }
+            }
+            if (ok && entry.contains("keywords") && entry["keywords"].is_array())
+            {
+                for (const json& kw : entry["keywords"])
+                {
+                    if (!kw.is_string() || !in(kWalkKeywords, kw.get<std::string>())) { ok = false; break; }
+                }
+            }
+            def.walk_bound_audited = ok;
+        }
         // Pre-intern the subtype names used to build TOKEN subtypes at runtime, so the worker
         // threads only ever do read-only id lookups (SubtypeSet::operator=) and never insert into
         // the shared SubtypeRegistry mid-search -- an insert there reallocates the registry's name

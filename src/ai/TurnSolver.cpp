@@ -11763,9 +11763,199 @@ static bool SubsetPayableSequentialImpl(const GameState& state, const std::vecto
                                         const std::vector<int>& sel);
 static bool SubsetPayableSequentialTail(const GameState& state, const std::vector<Action>& cands,
                                         const std::vector<int>& sel, std::vector<int>& order);
+// THE SEQUENTIAL-WALK SUPPLY BOUND (MTG_WALK_PRETEST, DEFAULT ON; =0 -> every subset is walked, as before).
+//
+// SubsetPayableSequential copies the board (PayScratch) and pays each cast in order. On Hydras that walk
+// runs ~12,000 times a game and fails ~99.5% of the time (P13b census, 30 games: 1,657 ok / 364,904 fail),
+// and ~60% of the failures are short by 4 or more mana -- far beyond anything sequencing can rescue. This
+// proves the "no" without the copy when every input is a mechanism it prices exactly:
+//
+//   TOTAL MANA SPENT by any walk order  >=  LB = sum over casts of  pips_i + max(0, generic_i - R_i)
+//   TOTAL MANA AVAILABLE to any order  <=  UB = S0 + B * (L + P) + P * (1 + Bb + B)
+//
+//   generic_i / pips_i -- the cast's live cost on THIS board, computed exactly as the walk computes it
+//     (EffectiveCost + the {X} term + XCastGenericDiscount). The walk recomputes it on its scratch board,
+//     which differs from this one only by (a) tapped lands and float, which no audited cost reads, (b) the
+//     permanents earlier members JOIN (a reducer, a land-tap-bonus source) and (c) fetched lands. Of those
+//     only a joined subtype reducer lowers an audited cost, by at most R_i = sum of max(1, amount) over the
+//     OTHER members whose reduces_spell_subtype the cast carries -- generic only, and for an {X} cast the
+//     floored base + unabsorbed-X split still nets to max(0, g + X*p - red) (see EffectiveSpellCostImpl),
+//     so the generic falls by at most R_i. A free / alternative-cost cast pays nothing in the walk: 0.
+//   S0 -- AvailableManaPool (each untapped land at PermanentManaYield, board land-tap bonuses included)
+//     plus the floating pools. With every permanent audited the only sources are basic-template lands.
+//   B  -- sum of land_tap_bonus over member casts (Vernal Bloom / Nissa / Gauntlet): at most B more per
+//     land tapped after they resolve; L = untapped own lands now, P = lands members can put
+//     (max(1, land_search_count) per land-search member), each fetched land worth its 1 (every audited
+//     land is a 1-mana basic-template land) plus every bonus on the board (Bb) or joining (B).
+//
+// LB > UB -> no order pays, so the walk (every order it tries: the rank order, the payable-order retry,
+// the human hoist) returns false. SOUND ONLY UNDER THE WHITELIST, so anything outside it falls through to
+// the real walk: a member that is not a hand cast or a skipped free attach (a Vial put, an unlocking
+// Equip), a member / permanent / fetchable library land whose definition is not walk_bound_audited (the
+// raw-key audit in CardDatabase.cpp), a cost with phyrexian / twobrid metadata, a convoke / evoke / awaken
+// / splice / phyrexian-life / twobrid / Soulfire variant, a def-less land, and human play.
+// Pure: it decides only whether the walk runs, never what the walk would have said -> output-identical.
+// MTG_WALK_PRETEST_VERIFY=1 runs the walk anyway whenever the bound fires and counts any subset the walk
+// PAID (a violation; the first few are printed); the summary prints at exit.
+static bool WalkPretestOn()
+{
+    static const bool on = EnvOn("MTG_WALK_PRETEST", true);
+    return on;
+}
+static bool WalkPretestVerifyOn()
+{
+    static const bool on = EnvOn("MTG_WALK_PRETEST_VERIFY");
+    return on;
+}
+namespace walkpre
+{
+inline std::atomic<long long> g_calls{0}, g_short{0}, g_viol{0}, g_ft_member{0}, g_ft_board{0}, g_ft_lib{0};
+struct Dump
+{
+    ~Dump()
+    {
+        if (!WalkPretestVerifyOn()) { return; }
+        std::fprintf(stderr, "[walk-pretest] calls=%lld proved_short=%lld violations=%lld fallthrough member=%lld board=%lld library=%lld\n",
+                     g_calls.load(), g_short.load(), g_viol.load(), g_ft_member.load(), g_ft_board.load(), g_ft_lib.load());
+    }
+};
+inline Dump g_dump;
+}   // namespace walkpre
+static bool SeqWalkProvablyShort(const GameState& state, const std::vector<Action>& cands,
+                                 const std::vector<int>& sel, int* out_lb = nullptr, int* out_ub = nullptr)
+{
+    if (HumanPlayActive()) { return false; }
+    const bool census = WalkPretestVerifyOn();
+    if (census) { walkpre::g_calls.fetch_add(1, std::memory_order_relaxed); }
+    const CardDatabase& db = CardDatabase::Instance();
+    // Members.
+    int bonus_members = 0, puts = 0;
+    bool any_cast = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::ActivateVial || SeqWalkUnlockEquip(state, a))
+        { if (census) { walkpre::g_ft_member.fetch_add(1, std::memory_order_relaxed); } return false; }
+        if (SeqWalkSkipsFreeAttach(state, a)) { continue; }
+        const CardDefinition* d = a.def;
+        if (a.kind != Action::Kind::CastFromHand || d == nullptr || !d->walk_bound_audited
+            || a.evoke || a.awaken || a.splice_count != 0 || a.phyrexian_life != 0 || a.twobrid_colored != 0
+            || a.convoke_green != 0 || a.convoke_other != 0 || a.soulfire_own_targets != 0)
+        { if (census) { walkpre::g_ft_member.fetch_add(1, std::memory_order_relaxed); } return false; }
+        any_cast = true;
+        bonus_members += std::max(0, d->params.land_tap_bonus);
+        if (d->params.land_search_on_resolve) { puts += std::max(1, d->params.land_search_count); }
+    }
+    if (!any_cast) { return false; }
+    // Every permanent (either side: Vernal Bloom's bonus is symmetric) audited; def-less bodies are tokens with
+    // no mana ability (no audited permanent grants one).
+    const int me = state.active_player_index;
+    int board_bonus = 0, untapped_lands = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        const CardDefinition* d = p.def_absent ? nullptr : db.LookupCached(p.card);
+        if (d == nullptr)
+        {
+            // A def-less OPPONENT permanent carries no bonus and no reducer (see inert_opp_land below); a def-less
+            // land of OURS is a source the bound cannot price.
+            if (p.card.IsLand() && p.controller_index == me)
+            {
+                if (census && walkpre::g_ft_board.fetch_add(1, std::memory_order_relaxed) < 10)
+                { std::fprintf(stderr, "[walk-pretest] board-defless-land %s\n", p.card.m_name.str().c_str()); }
+                return false;
+            }
+            continue;
+        }
+        // An OPPONENT'S LAND reaches none of the walk's inputs: the payer taps only the active player's sources,
+        // the cost reducers and grants read only the caster's permanents, and a land Aura's bonus counts only
+        // under its own controller -- the one cross-player channel is a GLOBAL land-tap bonus, which this land
+        // must not carry. (The goldfish opponent's Register-built "Opponent Basic Land" has no JSON to audit.)
+        const bool inert_opp_land = p.controller_index != me && p.card.IsLand() && d->params.land_tap_bonus <= 0
+                                 && !d->params.is_land_aura && !d->params.hinata_cost_reducer;
+        if (!d->walk_bound_audited && !inert_opp_land)
+        {
+            if (census && walkpre::g_ft_board.fetch_add(1, std::memory_order_relaxed) < 10)
+            { std::fprintf(stderr, "[walk-pretest] board-unaudited %s ctrl=%d\n", d->card.m_name.str().c_str(), p.controller_index); }
+            return false;
+        }
+        board_bonus += std::max(0, d->params.land_tap_bonus);
+        if (p.controller_index == me && !p.tapped && p.card.IsLand()) { ++untapped_lands; }
+    }
+    // A fetched land must be audited too (it is then a 1-mana basic-template land).
+    if (puts > 0)
+    {
+        for (const Card& c : state.players[static_cast<std::size_t>(me)].library)
+        {
+            if (!c.IsLand()) { continue; }
+            const CardDefinition* d = db.LookupCached(c);
+            if (d == nullptr || !d->walk_bound_audited)
+            { if (census) { walkpre::g_ft_lib.fetch_add(1, std::memory_order_relaxed); } return false; }
+        }
+    }
+    // Lower bound on what any order spends.
+    long long lb = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }   // a skipped free attach
+        if (a.free_cast || a.alt_cost) { continue; }
+        const CardDefinition& def = *a.def;
+        ManaCost ec = EffectiveCost(def, state, 1);
+        if (def.card.m_mana_cost.has_x && a.chosen_x > 0)
+        {
+            int xp = def.card.m_mana_cost.x_pips; if (xp < 1) { xp = 1; }
+            ec.generic += a.chosen_x * xp;
+            ec.generic  = std::max(0, ec.generic - XCastGenericDiscount(def, state, a.chosen_x, -1));
+        }
+        if (ec.phyrexian_count != 0 || ec.twobrid_count != 0)
+        { if (census) { walkpre::g_ft_member.fetch_add(1, std::memory_order_relaxed); } return false; }
+        int red = 0;
+        for (int k : sel)
+        {
+            if (k == j) { continue; }
+            const Action& o = cands[static_cast<std::size_t>(k)];
+            if (o.kind != Action::Kind::CastFromHand || o.def == nullptr) { continue; }
+            const CardParams& op = o.def->params;
+            if (!op.reduces_spell_subtype.empty() && CardHasSubtype(def.card, op.reduces_spell_subtype))
+            { red += std::max(1, op.reduces_spell_subtype_amount); }
+        }
+        lb += (ec.ManaValue() - ec.generic) + std::max(0, ec.generic - red);
+    }
+    // Upper bound on what any order can draw.
+    long long ub = AvailableManaPool(state).Total();
+    if (!FloatLeftoverManaEnabled())
+    { ub += state.floating_mana.Total() + state.floating_creature_mana.Total() + state.floating_bigspell_mana.Total(); }
+    ub += static_cast<long long>(bonus_members) * (untapped_lands + puts)
+        + static_cast<long long>(puts) * (1 + board_bonus + bonus_members);
+    if (out_lb != nullptr) { *out_lb = static_cast<int>(lb); }
+    if (out_ub != nullptr) { *out_ub = static_cast<int>(ub); }
+    return lb > ub;
+}
 static bool SubsetPayableSequential(const GameState& state, const std::vector<Action>& cands,
                                     const std::vector<int>& sel)
 {
+    if (WalkPretestOn())
+    {
+        int lb = 0, ub = 0;
+        if (SeqWalkProvablyShort(state, cands, sel, &lb, &ub))
+        {
+            if (!WalkPretestVerifyOn()) { return false; }
+            walkpre::g_short.fetch_add(1, std::memory_order_relaxed);
+            const bool walked = SubsetPayableSequentialImpl(state, cands, sel);
+            if (walked)
+            {
+                const long long n = walkpre::g_viol.fetch_add(1, std::memory_order_relaxed);
+                if (n < 20)
+                {
+                    std::string s;
+                    for (int j : sel) { s += ' '; s += cands[static_cast<std::size_t>(j)].card_name.str();
+                                        s += "{x" + std::to_string(cands[static_cast<std::size_t>(j)].chosen_x) + "}"; }
+                    std::fprintf(stderr, "[walk-pretest] VIOLATION t=%d lb=%d ub=%d |%s\n", state.turn_number, lb, ub, s.c_str());
+                }
+            }
+            return walked;
+        }
+    }
     const unsigned long long _pc_t0 = paycensus::On() ? __rdtsc() : 0;
     const bool r = SubsetPayableSequentialImpl(state, cands, sel);
     if (paycensus::On()) { paycensus::Record(paycensus::SPS, state, cands, sel, r, _pc_t0); }
