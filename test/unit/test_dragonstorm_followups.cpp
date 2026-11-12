@@ -1010,6 +1010,42 @@ TEST_CASE("Line-spare generic, depletion tier: {Treasure Hunt x2} off Saprazzan 
     }
 }
 
+TEST_CASE("Line-spare generic, filter feed: {Land's Edge + Treasure Hunt} off Skerry + two Cascade Bluffs + Reliquary Tower pays both (MTG_LINE_SPARE_FILTER_FEED)")
+{
+    // mana-clean item 6, treasure_hunt s30070121 T4: Land's Edge's {R}{R} taps the Skerry ({U}{U}) and feeds one {U}
+    // to a Bluffs; its {1} must tap the Tower ({C}) rather than eat the second {U}, which is the other Bluffs' only
+    // feed and Hunt's {U}. The plain over-count credits the unfed Bluffs with two {U}, so the line read as not short.
+    GameState s0 = BoardFu({ "Saprazzan Skerry", "Cascade Bluffs", "Cascade Bluffs", "Reliquary Tower" },
+                           { "Land's Edge", "Treasure Hunt" }, 4);
+    for (Permanent& p : s0.battlefield) { if (&p == &PermFu(s0, "Saprazzan Skerry")) { PutDepletionCounters(s0, p, 1); } }
+    ManaCost edge;
+    edge.generic = 1;
+    edge.red = 2;
+    ManaCost hunt;
+    hunt.generic = 1;
+    hunt.blue = 1;
+    ManaCost total = edge;
+    AddManaCost(total, hunt);
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LINE_SPARE_FILTER_FEED, on);
+        GameState s = s0;
+        LineCostFu lc(total);
+        REQUIRE(TapForCostDirect(s, edge, /*for_creature=*/false));
+        CHECK(PermFu(s, "Reliquary Tower").tapped == on);
+        CHECK(s.floating_mana.blue == (on ? 1 : 0));
+        CHECK(TapForCostDirect(s, hunt, /*for_creature=*/false) == on);
+    }
+    {
+        // No live line: the historical tap on both arms (the Tower stays up).
+        ArmFu arm(heurarm::LINE_SPARE_FILTER_FEED, true);
+        GameState s = s0;
+        REQUIRE(TapForCostDirect(s, edge, /*for_creature=*/false));
+        CHECK_FALSE(PermFu(s, "Reliquary Tower").tapped);
+    }
+}
+
 TEST_CASE("Line-spare generic, apply level: the USER order's T2 line on Needle + Territory casts Dragonstorm (MTG_LINE_SPARE_GENERIC_FIRST)")
 {
     // The rollout apply (ApplyPlanDirect) pays through the same shared payer as the executor: the whole

@@ -1034,6 +1034,77 @@ static std::uint64_t LineSpareSourceMask(const GameState& state, int active, boo
         if (later[c] > supply[c] || (tight && later[c] > 0 && later[c] == supply[c]))
         { short_line = true; break; }
     }
+    // FILTER-FEED (MTG_LINE_SPARE_FILTER_FEED, default ON). The over-count above credits an untapped filter land
+    // (Cascade Bluffs: {U/R},{T}: two of {U}/{R}) with its full yield, but that yield exists only while the filter
+    // has a FEED. When the whole float (this payment's and the turn's) is ONE unit, that unit is a feed colour of
+    // a filter, and no other untapped non-conversion source makes any of that filter's colours, then the generic
+    // pip eating the unit also starves the filter: the rest of the line loses the unit AND the filter's credit.
+    // treasure_hunt s30070121 T4 (gate th-6r5b-20261112), {Cascade Bluffs + Land's Edge + Treasure Hunt} off
+    // Saprazzan Skerry + Cascade Bluffs (old) + Reliquary Tower: Land's Edge's {R}{R} tapped the Skerry ({U}{U})
+    // and fed one {U} to the old Bluffs; its {1} ate the second {U} while the Tower ({C}, spare) stayed up, so the
+    // new Bluffs had no feed and Treasure Hunt's {U} was unpayable -- in the executor, the rollout and the walks,
+    // at every budget. Read against the supply that is left after the eat, the line is SHORT and the spare pays the
+    // {1}; the {U} floats for Hunt, whose {1} is the new Bluffs' {C}. This only ever turns more payments SHORT on a
+    // filter board with a one-unit float, and SHORT only routes the generic pip to a spare first (the argument at
+    // the head of LineSpareSourceMask: a spare unit can never cost the line a pip).
+    if (!short_line && LineSpareFilterFeedOn())
+    {
+        const int fl[5] = { local_float.white + tf.white, local_float.blue + tf.blue, local_float.black + tf.black,
+                            local_float.red + tf.red, local_float.green + tf.green };
+        int ftot = local_float.colorless + tf.colorless + wild;
+        for (int c = 0; c < 5; ++c) { ftot += fl[c]; }
+        int fc = -1;
+        for (int c = 0; c < 5; ++c) { if (fl[c] == 1) { fc = c; } }
+        if (ftot == 1 && fc >= 0)
+        {
+            int starve[5] = { 0, 0, 0, 0, 0 };
+            bool any_starved = false;
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& f = state.battlefield[static_cast<std::size_t>(i)];
+                if (f.controller_index != active || f.tapped || f.def_absent || !f.card.IsLand()) { continue; }
+                const CardDefinition* fd = CardDatabase::Instance().LookupCached(f.card);
+                if (fd == nullptr || !fd->params.is_filter || LandTypeChangedToIsland(state, f)) { continue; }
+                bool feeds_on_unit = false;
+                for (Color c : fd->params.produces) { if (colour_idx(c) == fc) { feeds_on_unit = true; } }
+                if (!feeds_on_unit) { continue; }
+                bool fed_outside = false;
+                for (int q = 0; q < n && !fed_outside; ++q)
+                {
+                    if (q == i) { continue; }
+                    const Permanent& o = state.battlefield[static_cast<std::size_t>(q)];
+                    if (o.controller_index != active || o.tapped || o.def_absent) { continue; }
+                    const CardDefinition* od = CardDatabase::Instance().LookupCached(o.card);
+                    if (od == nullptr || IsManaConversionSource(od->params)) { continue; }
+                    if (od->params.creature_mana_only || BigSpellOnlySource(od->params)) { continue; }
+                    if (!o.card.IsLand() && od->tmpl != CardTemplate::ManaDork && !od->params.mana_rock) { continue; }
+                    for (Color c : EffectiveProducesFor(state, active, *od, &o))
+                    {
+                        for (Color fcol : fd->params.produces) { if (c == fcol) { fed_outside = true; } }
+                    }
+                }
+                if (fed_outside) { continue; }
+                const int y = std::max(1, SourceMaxNetLive(state, f, *fd));
+                int seen = 0;
+                for (Color c : EffectiveProducesFor(state, active, *fd, &f))
+                {
+                    const int ci = colour_idx(c);
+                    if (ci < 0 || (seen & (1 << ci))) { continue; }
+                    seen |= (1 << ci);
+                    starve[ci] += y;
+                    any_starved = true;
+                }
+            }
+            if (any_starved)
+            {
+                for (int c = 0; c < 5; ++c)
+                {
+                    const int after = supply[c] - starve[c] - (c == fc ? 1 : 0);
+                    if (later[c] > 0 && later[c] > after) { short_line = true; break; }
+                }
+            }
+        }
+    }
     return spare;
 }
 

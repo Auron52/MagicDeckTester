@@ -354,6 +354,16 @@ inline bool LineSpareDepletionOn()
     return heurarm::Flag(heurarm::LINE_SPARE_DEPLETION, env_on);
 }
 
+// MTG_LINE_SPARE_FILTER_FEED (DEFAULT ON; =0 restores the plain over-count) -- LineSpareSourceMask's SHORT test
+// also reads the supply LEFT AFTER the generic pip eats a one-unit float that is the only feed of an untapped
+// filter land (the filter's credit goes with it). mana-clean item 6, treasure_hunt {Cascade Bluffs + Land's Edge +
+// Treasure Hunt} (APPLY-DROP, gate th-6r5b-20261112). Same shared payer -> executor, rollout and walks in lockstep.
+inline bool LineSpareFilterFeedOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_FILTER_FEED", true);
+    return heurarm::Flag(heurarm::LINE_SPARE_FILTER_FEED, env_on);
+}
+
 // MTG_PAY_PAIN_LAST (Vampires sweep F, 2026-10-18; DEFAULT ON, =0 restores the historical order) --
 // COLOURED MANA THAT COSTS LIFE IS THE PAYER'S LAST RESORT. The scarcity greedy (TapForCostSharedOnce,
 // ManaPayment.cpp) ranks a source whose tap for the pip being paid is a damaging COLOURED mode behind
