@@ -148,6 +148,7 @@ add_library(mtg-core STATIC
     src/ai/KeepModel.cpp
     src/runner/GoldFishRunner.cpp
     src/runner/BatchRunner.cpp
+    src/runner/BatchPartial.cpp
     src/cards/CardDatabase.cpp
     src/core/NameRegistry.cpp
     src/core/PoolAllocator.cpp
@@ -300,6 +301,7 @@ add_executable(mtg-test
     test/unit/test_mana_oracle.cpp
     test/unit/test_sac_land_class_pin.cpp
     test/unit/test_counter_list.cpp
+    test/unit/test_batch_partial.cpp
     test/unit/test_dup_action_fold.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp

@@ -10692,6 +10692,7 @@ int main(int argc, char* argv[])
         std::filesystem::path game_log_dir;
         std::filesystem::path game_trace_dir;
         bool                  gate_probe = false;
+        bool                  resume     = false;
         int                   num_threads = 0;
         for (int i = 2; i < argc; ++i)
         {
@@ -10701,6 +10702,7 @@ int main(int argc, char* argv[])
             else if (flag == "--game-log-dir" && i + 1 < argc) { game_log_dir = argv[++i]; }
             else if (flag == "--game-trace-dir" && i + 1 < argc) { game_trace_dir = argv[++i]; }
             else if (flag == "--gate-probe")            { gate_probe = true; }
+            else if (flag == "--resume")                { resume = true; }
             else if (manifest.empty())                  { manifest = flag; }
         }
         if (gate_probe) { SetGateProbe(true); }
@@ -10708,7 +10710,15 @@ int main(int argc, char* argv[])
         {
             std::cerr << "Usage: " << argv[0]
                       << " --batch <manifest.json> [--threads N] [--cards-json P]"
-                         " [--game-log-dir D] [--game-trace-dir D]\n";
+                         " [--game-log-dir D [--resume]] [--game-trace-dir D]\n";
+            return 1;
+        }
+        // --resume makes the run RESUMABLE: it persists every finished game to
+        // <game-log-dir>/<job>.partial and reuses the ones a killed run left there
+        // (runner/BatchPartial.h). Pass it on the first run too; without it nothing is persisted.
+        if (resume && game_log_dir.empty())
+        {
+            std::cerr << "--resume needs --game-log-dir (the partial results live there)\n";
             return 1;
         }
         try
@@ -10789,8 +10799,20 @@ int main(int argc, char* argv[])
                           << " ms=" << r.elapsed_ms
                           << " units=" << r.units_total << "\n" << std::flush;
             };
+            // Per-game partial results go beside the .wins (BatchRunner::PersistOptions). The binary
+            // and cards.json are part of every job's identity, so a rebuilt engine or an edited card
+            // can never resume from games the old one played.
+            BatchRunner::PersistOptions persist;
+            persist.dir    = game_log_dir;
+            persist.resume = resume;
+            {
+                const std::filesystem::path exe = ExecutablePath();
+                // An unknown executable path is pushed as an unreadable one, which disables resume.
+                persist.identity_files.push_back(exe.empty() ? std::filesystem::path("<unknown executable>") : exe);
+                persist.identity_files.push_back(cards_json);
+            }
             std::vector<BatchJobResult> results =
-                BatchRunner::RunManifest(manifest, num_threads, on_job_done, game_trace_dir);
+                BatchRunner::RunManifest(manifest, num_threads, on_job_done, game_trace_dir, persist);
             int total_games = 0;
             for (const BatchJobResult& r : results) { total_games += r.games_played; }
             std::cout << "=== BATCH done (" << results.size() << " jobs, "

@@ -62,9 +62,18 @@ underestimate: H1-H3 and V1-V8 had not yet run seed 9009 at all.
 **What WAS lost: compute, not results.** `mtg --batch` reports a job only when the whole job finishes, so the
 finished games of each killed chunk (up to 24 each; fewer if a job plays its games in order) existed only in the dying process and are being replayed (identical
 results, deterministic). USER: "we should make sure that this doesn't lose more games than the ones that were
-still running ... If it does I would like to fix that as well." Owed fix (after the leaf; it is a src change and
-the generation is frozen): persist each game's result as it completes (per-game append to the job's `.wins`, or a
-per-job partial file the driver merges on resume), so a killed or abandoned job loses only its in-flight games.
+still running ... If it does I would like to fix that as well." **LANDED 2026-11-12 (P10, branch
+`phase-1-2-deck-analyzer`; see `src/runner/BatchPartial.h`).** Every finished game is appended, flushed, to
+`<game-log-dir>/<job>.partial` (one self-checksummed line: gi, seed, win turn or abandoned, digest, units, ms,
+the per-game ceiling it ran under) before it counts as finished; a torn last line is dropped. `mtg --batch
+--resume` prefills every matching game (same job identity = play-relevant manifest entry + binary + cards.json
++ MTG_* env + deck/profile-dir stats; same global gi and seed; same ceiling) and plays only the rest, so a
+resumed job's `.wins`, avg, digest, units and played are byte-identical to an uninterrupted run (ms: each
+reused game contributes its recorded ms). Records are keyed by game, not chunk name, so the matrix driver's
+re-split chunks find them. Calibration games of a relative-ceiling cell are never persisted (always replayed).
+Partials are removed when the whole batch finishes cleanly. Persistence is OPT-IN by `--resume` (a resumable driver passes it on its first run too): a caller without it -- the regression harness, deck_compare, mullgen -- writes nothing, so it adds no per-game write traffic to the 9p host mount (`docs/design/repo-mount-failures.md`). `valueleaf_depth_matrix.py` (pool and leafcal) and
+`valueleaf.sh` phase E pass `--resume`. Not applied to the queue running at the time (it is frozen on its own
+src tree); it takes effect for any queue started, or resumed, on a tree that has it.
 
 ## 2026-11-12: Landed (P8 investigation, P9 landing)
 
@@ -101,4 +110,4 @@ Still open:
 * USER questions (not built): (a) should a budget-0 generation cell walk every group-wave tranche to the full hand
   (completeness) or is that a settings change; (b) should the walk CHARGE units per N positions so the unit
   ceiling bounds these games deterministically (changes every game's units and the matrix calibration).
-* The per-game result persistence fix above (a killed job loses only its in-flight games) is still owed.
+* The per-game result persistence fix above (a killed job loses only its in-flight games): LANDED 2026-11-12 (P10).

@@ -157,7 +157,8 @@ def run_leafcal(args):
         sys.exit("REFUSING: MTG_FD_LEAF_DEPTH is exported; it would override both arms' leaf.")
     env["MTG_DUMP_UNITS"]="1"
     env.setdefault("MTG_BATCH_HEARTBEAT", os.path.join(outdir, "heartbeat.txt"))
-    cmd=[MTG,"--batch",man,"--game-log-dir",winsdir]+(["--threads",str(args.workers)] if args.workers>0 else [])
+    # --resume: a re-run after a failed pool reuses every game the failed one finished (see run_pool).
+    cmd=[MTG,"--batch",man,"--game-log-dir",winsdir,"--resume"]+(["--threads",str(args.workers)] if args.workers>0 else [])
     print("LEAF CALIBRATION: %d decks x H%s x {1-ply, greedy} x %d games (seed %d, ceiling %dM units) "
           "-- ONE pool" % (len(args.decks), depths, LEAFCAL_GAMES, LEAFCAL_SEED, LEAFCAL_CEIL//1000000),
           flush=True)
@@ -1345,7 +1346,11 @@ def run_incremental(args):
         # question the state file cannot answer can still be answered off disk afterwards.
         winsdir=os.path.join(os.path.dirname(args.out) or ".", "wins")
         os.makedirs(winsdir, exist_ok=True)
-        cmd=[MTG,"--batch",man,"--game-log-dir",winsdir]+(["--threads",str(args.workers)] if args.workers>0 else [])
+        # --resume: the pool reuses every game a killed earlier pool FINISHED (<winsdir>/<chunk>.partial,
+        # one line per game; src/runner/BatchPartial.h), so a stop or a crash costs only the games that
+        # were in flight. Records are matched by (job identity, global offset, seed), not by chunk name,
+        # so a re-split chunk still finds them; a reused chunk's .wins and result line are byte-identical.
+        cmd=[MTG,"--batch",man,"--game-log-dir",winsdir,"--resume"]+(["--threads",str(args.workers)] if args.workers>0 else [])
         # DIAGNOSTIC ONLY, not a matrix knob: VL_POOL_WRAP="strace -f ... -o <file>" (any argv prefix)
         # runs the pool under a tracer. The pool's arguments, games and results are untouched. It exists
         # because a pool that vanishes leaves no record of WHICH signal or exit took it: Snow 2026-09-22,

@@ -1,6 +1,8 @@
 #include "../core/Tier1Ledger.h"
 #include "../core/WorkCounters.h"
 #include "BatchRunner.h"
+#include "BatchPartial.h"
+#include "../core/OutputHealth.h"
 #include "GoldFishRunner.h"
 #include "../core/GameEngine.h"
 #include "../ai/GameWorkMeter.h"
@@ -37,10 +39,20 @@
 #include <optional>
 #include <stdexcept>
 #include <thread>
+#include <map>
+#include <set>
+#include <tuple>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+
+#if defined(_WIN32)
+#define MTG_ENVIRON _environ
+#else
+extern char** environ;
+#define MTG_ENVIRON environ
+#endif
 
 namespace
 {
@@ -89,6 +101,11 @@ struct Job
     // -- so dropping games does not slide the window. An absent key enqueues everything, so every
     // pre-existing manifest is untouched.
     std::vector<int> skip_games;
+    // Hash of the job's manifest entry MINUS the keys that do not decide a game's play: the partial
+    // file's job identity (see PersistJobIdentity). A record also carries its own global index and
+    // shuffle seed, so the chunk geometry (name, games, game_index, seed) is not part of it, and the
+    // per-game ceiling is checked per record instead (Record::limit/rel).
+    uint64_t spec_hash = 0;
     // FORCED-MULLIGAN replay ("force_mulligan": "<count>:<n1,n2,...>"), the reference-bench shape:
     // keep at exactly <count> mulligans bottoming exactly those card numbers, reconstructing a
     // hand-played game's recorded opening hand so the replay measures PLAY, not mulligan policy.
@@ -932,13 +949,346 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         j.second_main = GoldFishRunner::DeckUsesSecondMain(j.deck);
         heurarm::t_arm = saved;
     }
+    {
+        // Keys that do not change how any single game plays: the chunk geometry (a record carries
+        // its own gi and seed), scheduling, condemnation grouping, and the per-game ceiling (checked
+        // per record). Everything else -- depth, budget, profile, flags, arms -- stays in. nlohmann's
+        // default object is key-sorted, so dump() is canonical.
+        static const char* const kNonPlay[] = {
+            "name", "games", "game_index", "seed", "skip_games", "weight", "cell", "row",
+            "same_seed_inflight", "abandon_units", "abandon_k", "abandon_calib", "abandon_floor_units"};
+        json spec = jspec;
+        if (spec.is_object()) { for (const char* k : kNonPlay) { spec.erase(k); } }
+        uint64_t h = batchpartial::Fnv1a(spec.dump());
+        // Every FILE the entry names (deck, profile, value_profile, ...) by size + mtime as well as by
+        // path, so a model regenerated in place between a kill and its resume cannot lend the old
+        // games to the new one. Conservative by design: a touched file only costs a replay.
+        std::vector<std::string> paths;
+        std::function<void(const json&)> walk = [&](const json& v)
+        {
+            if (v.is_string())
+            {
+                const std::string& sv = v.get_ref<const std::string&>();
+                std::error_code fec;
+                if (!sv.empty() && sv.size() < 4096 && std::filesystem::is_regular_file(sv, fec)) { paths.push_back(sv); }
+            }
+            else if (v.is_structured()) { for (const json& c : v) { walk(c); } }
+        };
+        walk(spec);
+        for (const std::string& fp : paths)
+        {
+            std::error_code e1, e2;
+            const auto sz = std::filesystem::file_size(fp, e1);
+            const auto mt = std::filesystem::last_write_time(fp, e2).time_since_epoch().count();
+            h = batchpartial::Fnv1a(fp + "|" + std::to_string(e1 ? 0 : sz) + "|"
+                                    + std::to_string(e2 ? 0LL : static_cast<long long>(mt)) + "\n", h);
+        }
+        j.spec_hash = h;
+    }
     return j;
 }
+
+// ------------------------------------------------------------------ PER-GAME PARTIAL RESULTS
+// See runner/BatchPartial.h for the why and the file format. This is the BatchRunner half: the job
+// identity, the per-game append, and the resume-time read / re-persist / cleanup.
+
+// MTG_* variables that cannot change how a game plays: reporting, memory guards, build plumbing and
+// this feature's own switch. Every OTHER MTG_* variable is part of the identity, so an A/B arm that
+// differs only by environment can never resume from the other arm's games. Deliberately short: an
+// entry missing here costs a replay, a wrong entry here would cost a wrong result.
+bool PartialEnvIgnored(const std::string& name)
+{
+    static const char* const kIgnore[] = {
+        "MTG_BATCH_HEARTBEAT", "MTG_SLOW_GAME_MS", "MTG_SLOW_GAME_LOG", "MTG_RSS_CAP_GB",
+        "MTG_DUMP_UNITS", "MTG_BATCH_PARTIAL", "MTG_PGO", "MTG_BUILD_JOBS", "MTG_JOURNAL_BACKUP_S"};
+    for (const char* k : kIgnore) { if (name == k) { return true; } }
+    return false;
+}
+
+uint64_t HashFileContent(const std::filesystem::path& p, uint64_t h, bool& ok)
+{
+    std::ifstream in(p, std::ios::binary);
+    if (!in) { ok = false; return batchpartial::Fnv1a("unreadable:" + p.string(), h); }
+    std::vector<char> buf(1 << 20);
+    while (in)
+    {
+        in.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+        const std::streamsize n = in.gcount();
+        if (n > 0) { h = batchpartial::Fnv1a(buf.data(), static_cast<std::size_t>(n), h); }
+    }
+    return h;
+}
+
+// size + mtime of a file, or of every regular file directly inside a directory. A deck's profile
+// directory holds every sibling model the engine resolves off the profile (value sidecar, keep table),
+// and their PRESENCE alone changes play, so an adoption between the kill and the resume must not let
+// the old games through. mtime makes this conservative (a checkout that rewrites identical bytes
+// forces a replay), which is the safe direction.
+uint64_t HashStat(const std::filesystem::path& p, uint64_t h)
+{
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    auto one = [](const fs::path& f, uint64_t hh)
+    {
+        std::error_code e2, e3;
+        const auto sz = fs::file_size(f, e2);
+        const auto mt = fs::last_write_time(f, e3).time_since_epoch().count();
+        const std::string s = f.filename().string() + "|" + std::to_string(e2 ? 0 : sz) + "|"
+                            + std::to_string(e3 ? 0LL : static_cast<long long>(mt)) + "\n";
+        return batchpartial::Fnv1a(s, hh);
+    };
+    if (fs::is_directory(p, ec))
+    {
+        std::vector<fs::path> files;
+        for (fs::directory_iterator it(p, ec), end; !ec && it != end; it.increment(ec))
+        {
+            std::error_code e4;
+            if (it->is_regular_file(e4)) { files.push_back(it->path()); }
+        }
+        std::sort(files.begin(), files.end());
+        for (const fs::path& f : files) { h = one(f, h); }
+        return h;
+    }
+    return one(p, h);
+}
+
+// (job identity, global gi, game seed, ceiling limit, ceiling rel): one recorded game under one ceiling.
+using PartialKey = std::tuple<uint64_t, int, uint64_t, long long, std::string>;
+
+class PartialStore
+{
+public:
+    PartialStore(const BatchRunner::PersistOptions& opt, const std::vector<Job>& jobs, bool streaming)
+        : dir_(opt.dir), jobs_(jobs)
+    {
+        // OPT-IN by --resume: only a caller that declares itself RESUMABLE (it passes --resume on
+        // every run, the first included) reads and writes partials. Every other caller -- the
+        // regression harness, deck_compare, mullgen, an ad-hoc batch -- is left exactly as before:
+        // no per-game write, no stale-file sweep. Their game-log dirs often sit on the 9p host mount,
+        // where a flush per game is new steady write traffic (docs/design/repo-mount-failures.md) for
+        // a run that can never be resumed anyway. MTG_BATCH_PARTIAL=0 disables the WRITING of a
+        // resumable run too (DEFAULT ON); its --resume still reads what is there.
+        static const bool s_write = EnvOn("MTG_BATCH_PARTIAL", true);
+        active_ = !dir_.empty() && streaming && opt.resume;
+        write_  = active_ && s_write;
+        resume_ = active_;
+        if (!active_) { return; }
+        std::error_code ec;
+        std::filesystem::create_directories(dir_, ec);
+        // BASE IDENTITY: the identity files' content (the binary, cards.json) and the environment.
+        uint64_t base = batchpartial::Fnv1a("mtg-batch-partial-id v1");
+        bool identity_ok = true;
+        for (const std::filesystem::path& f : opt.identity_files) { base = HashFileContent(f, base, identity_ok); }
+        if (resume_ && !identity_ok)
+        {
+            // Without the binary's (or cards.json's) bytes the identity cannot tell two engines apart,
+            // so nothing may be reused. The run still writes its own partials.
+            std::fprintf(stderr, "[batch-partial] WARNING: an identity file is unreadable -- --resume reuses "
+                                 "NOTHING this run (every game is played)\n");
+            resume_ = false;
+        }
+        std::vector<std::string> env;
+        for (char** e = MTG_ENVIRON; e != nullptr && *e != nullptr; ++e)
+        {
+            const std::string kv(*e);
+            if (kv.rfind("MTG_", 0) != 0) { continue; }
+            if (PartialEnvIgnored(kv.substr(0, kv.find('=')))) { continue; }
+            env.push_back(kv);
+        }
+        std::sort(env.begin(), env.end());
+        for (const std::string& kv : env) { base = batchpartial::Fnv1a(kv + "\n", base); }
+        // PER JOB: the play-relevant manifest entry, the deck file and the profile's directory.
+        std::unordered_map<std::string, uint64_t> stat_cache;
+        auto stat_of = [&](const std::filesystem::path& p)
+        {
+            const std::string key = p.lexically_normal().string();
+            auto it = stat_cache.find(key);
+            if (it != stat_cache.end()) { return it->second; }
+            const uint64_t v = HashStat(p, batchpartial::kFnvBasis);
+            stat_cache.emplace(key, v);
+            return v;
+        };
+        id_.resize(jobs.size());
+        rel_.resize(jobs.size());
+        header_.assign(jobs.size(), 0);
+        warned_.assign(jobs.size(), 0);
+        for (std::size_t j = 0; j < jobs.size(); ++j)
+        {
+            const Job& jb = jobs[j];
+            uint64_t h = batchpartial::Fnv1a(&jb.spec_hash, sizeof(jb.spec_hash), base);
+            const uint64_t ds = stat_of(jb.deck_path);
+            h = batchpartial::Fnv1a(&ds, sizeof(ds), h);
+            if (!jb.profile_path.empty())
+            {
+                std::filesystem::path pd = std::filesystem::path(jb.profile_path).parent_path();
+                if (pd.empty()) { pd = "."; }
+                const uint64_t ps = stat_of(pd);
+                h = batchpartial::Fnv1a(&ps, sizeof(ps), h);
+            }
+            id_[j]  = h;
+            rel_[j] = batchpartial::RelSignature(jb.abandon_k, jb.abandon_calib, jb.abandon_floor_units);
+            by_name_.emplace(jb.name, j);
+        }
+        Load();
+    }
+
+    bool Writing() const { return write_; }
+    const std::string& Rel(std::size_t j) const { return rel_[j]; }
+    template <typename Pred>
+    const batchpartial::Record* Find(std::size_t j, int gi, uint64_t seed, Pred accept) const
+    { return resume_ ? index_.Find(id_[j], gi, seed, accept) : nullptr; }
+    void Claim(std::size_t j, const batchpartial::Record& r)
+    {
+        claimed_.insert(PartialKey(id_[j], r.gi, r.seed, r.limit, r.rel));
+        reused_[j].push_back(r);
+    }
+
+    // After the prefill: put every reused game into its NEW job's file (temp + rename, so the file is
+    // either the old one or the complete new one), and only then remove the old files whose games all
+    // found a home. A file named after a job of this manifest that reused nothing is stale (its games
+    // failed this job's identity or ceiling) and goes too.
+    void Repersist()
+    {
+        if (!resume_ || !write_) { return; }
+        std::error_code ec;
+        std::set<std::string> rewritten;
+        for (auto& [j, recs] : reused_)
+        {
+            std::sort(recs.begin(), recs.end(),
+                      [](const batchpartial::Record& a, const batchpartial::Record& b) { return a.gi < b.gi; });
+            std::string bytes = batchpartial::FormatHeader(id_[j], jobs_[j].name);
+            for (const batchpartial::Record& r : recs) { bytes += batchpartial::FormatRecord(r); }
+            const std::filesystem::path p   = PathOf(jobs_[j].name);
+            const std::filesystem::path tmp = p.string() + ".tmp";
+            bool ok = false;
+            {
+                std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+                out.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+                out.flush();
+                ok = static_cast<bool>(out);
+            }
+            if (ok) { std::filesystem::rename(tmp, p, ec); ok = !ec; }
+            if (!ok)
+            {
+                // Keep every old file: the reused games are in memory for this run, and the old files
+                // still hold them for the next one.
+                std::fprintf(stderr, "[batch-partial] WARNING: could not re-persist %s (%s); old partial "
+                                     "files are kept\n", p.string().c_str(), ec.message().c_str());
+                return;
+            }
+            header_[j] = 1;
+            rewritten.insert(p.lexically_normal().string());
+        }
+        for (const auto& [path, keys] : loaded_)
+        {
+            if (rewritten.count(path.lexically_normal().string()) != 0) { continue; }
+            const std::string job = JobNameOf(path);
+            const bool own_job = by_name_.count(job) != 0;
+            // A job that is not in this manifest and whose .wins exists COMPLETED in the killed run:
+            // the driver has its result and will not ask for it again (the matrix driver re-queues
+            // only chunks it has no .wins for).
+            const bool completed = !own_job && std::filesystem::exists(dir_ / (job + ".wins"), ec);
+            bool all_claimed = true;
+            for (const PartialKey& k : keys) { if (claimed_.count(k) == 0) { all_claimed = false; break; } }
+            if (own_job || completed || all_claimed) { std::filesystem::remove(path, ec); }
+        }
+    }
+
+    // One finished game. Written, flushed and closed before the caller counts the game as finished.
+    void Append(std::size_t j, const batchpartial::Record& r)
+    {
+        if (!write_) { return; }
+        const std::string line = batchpartial::FormatRecord(r);
+        std::lock_guard<std::mutex> lk(m_);
+        const std::filesystem::path p = PathOf(jobs_[j].name);
+        std::ofstream out(p, std::ios::binary | (header_[j] ? std::ios::app : std::ios::trunc));
+        if (!header_[j])
+        {
+            const std::string h = batchpartial::FormatHeader(id_[j], jobs_[j].name);
+            out.write(h.data(), static_cast<std::streamsize>(h.size()));
+        }
+        out.write(line.data(), static_cast<std::streamsize>(line.size()));
+        out.flush();
+        if (out) { header_[j] = 1; return; }
+        if (!warned_[j])
+        {
+            warned_[j] = 1;
+            std::fprintf(stderr, "[batch-partial] WARNING: could not append to %s -- a kill now loses "
+                                 "this job's finished games\n", p.string().c_str());
+        }
+    }
+
+    // The whole batch finished and every output write succeeded: the partials have served, and the
+    // directory is left exactly as a run without them would leave it. NOT done per job as each one
+    // completes, because a driver that re-runs a WHOLE manifest after a kill (valueleaf.sh phase E)
+    // needs the games of the jobs that had already completed too -- they are reported at startup.
+    void FinishRun()
+    {
+        if (!write_) { return; }
+        std::lock_guard<std::mutex> lk(m_);
+        std::error_code ec;
+        for (const Job& jb : jobs_) { std::filesystem::remove(PathOf(jb.name), ec); }
+    }
+
+private:
+    std::filesystem::path PathOf(const std::string& name) const { return dir_ / (name + ".partial"); }
+    static std::string JobNameOf(const std::filesystem::path& p)
+    {
+        const std::string f = p.filename().string();
+        return f.substr(0, f.size() - std::string(".partial").size());
+    }
+
+    void Load()
+    {
+        std::error_code ec;
+        std::vector<std::filesystem::path> files;
+        for (std::filesystem::directory_iterator it(dir_, ec), end; !ec && it != end; it.increment(ec))
+        {
+            const std::string f = it->path().filename().string();
+            if (f.size() > 8 && f.compare(f.size() - 8, 8, ".partial") == 0) { files.push_back(it->path()); }
+        }
+        std::sort(files.begin(), files.end());
+        int n_rec = 0, n_drop = 0, n_bad = 0;
+        for (std::size_t fi = 0; fi < files.size(); ++fi)
+        {
+            std::ifstream in(files[fi], std::ios::binary);
+            const std::string bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            const std::optional<batchpartial::FileContents> fc = batchpartial::ParseFile(bytes);
+            std::vector<PartialKey> keys;
+            if (!fc) { ++n_bad; loaded_.emplace_back(files[fi], std::move(keys)); continue; }
+            for (const batchpartial::Record& r : fc->records)
+            {
+                index_.Add(fc->id, r, static_cast<int>(fi));
+                keys.emplace_back(fc->id, r.gi, r.seed, r.limit, r.rel);
+            }
+            n_rec  += static_cast<int>(fc->records.size());
+            n_drop += fc->dropped;
+            loaded_.emplace_back(files[fi], std::move(keys));
+        }
+        std::fprintf(stderr, "[batch-partial] resume: %zu partial file(s), %d game record(s), %d torn/invalid "
+                             "line(s) dropped, %d unreadable file(s), %d conflicting game(s) (replayed)\n",
+                     files.size(), n_rec, n_drop, n_bad, index_.Conflicts());
+    }
+
+    std::filesystem::path                                          dir_;
+    const std::vector<Job>&                                        jobs_;
+    bool                                                           active_ = false, write_ = false, resume_ = false;
+    std::vector<uint64_t>                                          id_;
+    std::vector<std::string>                                       rel_;
+    std::vector<char>                                              header_, warned_;
+    std::unordered_map<std::string, std::size_t>                   by_name_;
+    batchpartial::Index                                            index_;
+    std::vector<std::pair<std::filesystem::path, std::vector<PartialKey>>> loaded_;
+    std::set<PartialKey>                                           claimed_;
+    std::map<std::size_t, std::vector<batchpartial::Record>>       reused_;
+    std::mutex                                                     m_;
+};
 } // namespace
 
 std::vector<BatchJobResult> BatchRunner::RunManifest(
     const std::filesystem::path& manifest_path, int num_threads,
-    const JobDoneCallback& on_job_done, const std::filesystem::path& trace_dir)
+    const JobDoneCallback& on_job_done, const std::filesystem::path& trace_dir,
+    const PersistOptions& persist)
 {
     if (!trace_dir.empty()) { std::filesystem::create_directories(trace_dir); }
     std::ifstream in(manifest_path);
@@ -1105,6 +1455,81 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         units[j].assign(jobs[j].games, 0);
     }
 
+    // PER-GAME PARTIAL RESULTS (runner/BatchPartial.h). On --resume, every game a partial file already
+    // holds is PREFILLED into exactly the slots a played game writes, and left out of the work list
+    // below. Nothing downstream can tell the difference: reduce_job folds the same per-game values in
+    // the same gi order, so the job's .wins, avg, case digest, units and played are byte-identical to
+    // an uninterrupted run.
+    //
+    // THE CEILING RULE. A record is reused only if this run would play the game under the same per-game
+    // work ceiling, because an abandoned verdict means nothing under another one:
+    //   * a cell with a RELATIVE ceiling in this manifest (its calibration games are present): its
+    //     calibration games are never reused (they ARE the sample the ceiling is frozen from, and are
+    //     never recorded), and its other games only when recorded under a ceiling frozen from the same
+    //     (k, calib, floor) -- which the replayed sample reproduces exactly;
+    //   * any other job: only when recorded under the same absolute limit. This covers the matrix
+    //     driver's hand-back, where a cell calibrated in the killed run comes back with that run's
+    //     frozen ceiling as its `abandon_units`.
+    PartialStore partials(persist, jobs, static_cast<bool>(on_job_done));
+    std::vector<std::vector<char>> prefilled(jobs.size());
+    std::vector<int>               n_prefilled(jobs.size(), 0);
+    {
+        std::vector<char> cell_relative(static_cast<std::size_t>(std::max(1, n_cells)), 0);
+        for (const Job& j : jobs)
+        {
+            if (j.abandon_k <= 0.0 || j.abandon_calib <= 0) { continue; }
+            std::size_t s = 0;
+            for (int g = 0; g < j.games && j.game_index + g < j.abandon_calib; ++g)
+            {
+                while (s < j.skip_games.size() && j.skip_games[s] < g) { ++s; }
+                if (s < j.skip_games.size() && j.skip_games[s] == g) { continue; }
+                cell_relative[static_cast<std::size_t>(j.cell_id)] = 1;
+                break;
+            }
+        }
+        const bool feed_rows = condemn.median_sec_per_game > 0.0 && condemn.reference_games > 0;
+        int total_reused = 0, jobs_reused = 0;
+        for (std::size_t j = 0; j < jobs.size(); ++j)
+        {
+            const Job& jb = jobs[j];
+            prefilled[j].assign(static_cast<std::size_t>(std::max(0, jb.games)), 0);
+            const bool rel = cell_relative[static_cast<std::size_t>(jb.cell_id)] != 0;
+            std::size_t s = 0;
+            for (int g = 0; g < jb.games; ++g)
+            {
+                while (s < jb.skip_games.size() && jb.skip_games[s] < g) { ++s; }
+                if (s < jb.skip_games.size() && jb.skip_games[s] == g) { continue; }
+                const int gi = jb.game_index + g;
+                if (rel && gi < jb.abandon_calib) { continue; }   // the calibration sample: always replayed
+                const batchpartial::Record* r = partials.Find(j, gi, jb.seed + static_cast<uint64_t>(g),
+                    [&](const batchpartial::Record& c)
+                    { return rel ? c.rel == partials.Rel(j) : c.limit == jb.abandon_units; });
+                if (r == nullptr) { continue; }
+                win_turns[j][g]    = r->abandoned ? kSkipped : r->win_turn;
+                abandoned_at[j][g] = r->abandoned ? 1 : 0;
+                digests[j][g]      = r->digest;
+                units[j][g]        = r->units;
+                job_ms[j].fetch_add(r->ms, std::memory_order_relaxed);
+                prefilled[j][g]    = 1;
+                ++n_prefilled[j];
+                partials.Claim(j, *r);
+                // The median rule counts every finished game of a row, so a resumed row is judged on
+                // the same games it would have been without the kill.
+                if (feed_rows && jb.depth > condemn.never_condemn_depth)
+                {
+                    row_games[jb.row_id].fetch_add(1, std::memory_order_relaxed);
+                    row_sample[static_cast<std::size_t>(jb.row_id)].push_back(r->ms);
+                }
+            }
+            if (n_prefilled[j] > 0) { total_reused += n_prefilled[j]; ++jobs_reused; }
+        }
+        if (persist.resume && !persist.dir.empty())
+        {
+            std::fprintf(stderr, "[batch-partial] resume: REUSED %d finished game(s) across %d job(s); only "
+                                 "the rest are played\n", total_reused, jobs_reused);
+        }
+    }
+
     // Flatten every game of every job into one work list, minus each job's index-carry skip list
     // (see Job::skip_games). A skipped slot is stamped kSkipped here, which reuses the EXISTING
     // condemned-cell path in reduce_job verbatim: `win_turns == kSkipped` with `abandoned_at == 0`
@@ -1116,6 +1541,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         std::size_t total = 0;
         for (const Job& j : jobs)
         { total += static_cast<std::size_t>(std::max(0, j.games)) - j.skip_games.size(); }
+        for (int n : n_prefilled) { total -= static_cast<std::size_t>(n); }
         items.reserve(total);
         for (int j = 0; j < static_cast<int>(jobs.size()); ++j)
         {
@@ -1125,6 +1551,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
             {
                 // sk is sorted and deduped (ParseJob), so one forward cursor matches it in O(games).
                 if (s < sk.size() && sk[s] == gi) { ++s; win_turns[j][gi] = kSkipped; continue; }
+                if (prefilled[j][gi]) { continue; }   // reused from a partial file (see above)
                 items.push_back({j, gi});
             }
         }
@@ -1556,12 +1983,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // Case digest: FNV-1a fold of the per-game digests in game (gi) order -- a single
         // fingerprint of the whole case's play. Games in gi order (the vector index), so it is
         // deterministic and order-stable regardless of the pool's execution interleave.
-        uint64_t cd = 1469598103934665603ULL;
-        for (uint64_t d : dg_played)
-        {
-            for (int b = 0; b < 8; ++b) { cd ^= static_cast<uint8_t>((d >> (b * 8)) & 0xff); cd *= 1099511628211ULL; }
-        }
-        r.case_digest = cd;
+        r.case_digest = batchpartial::FoldCaseDigest(dg_played);
         r.elapsed_ms  = job_ms[j].load(std::memory_order_relaxed);
         return r;
     };
@@ -1579,10 +2001,23 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // zero, on_job_done never fired, and the job's `played=/ms=/units=` summary line was simply
         // ABSENT from the streamed output. That is how the first carried run presented -- correct
         // per-game results, correct deltas, and a `nan` in the ms/game column with no error anywhere.
-        remaining[j].store(jobs[j].games - static_cast<int>(jobs[j].skip_games.size()),
+        remaining[j].store(jobs[j].games - static_cast<int>(jobs[j].skip_games.size()) - n_prefilled[j],
                            std::memory_order_relaxed);
     }
     std::mutex cb_mtx;
+
+    // Re-home the reused games in their new jobs' files BEFORE any game runs, then report every job a
+    // resume found already complete: no worker will ever finish a game of it, so nothing else would.
+    partials.Repersist();
+    if (on_job_done)
+    {
+        for (std::size_t j = 0; j < jobs.size(); ++j)
+        {
+            if (n_prefilled[j] == 0 || remaining[j].load(std::memory_order_relaxed) != 0) { continue; }
+            BatchJobResult r = reduce_job(j);
+            on_job_done(r);
+        }
+    }
 
     // Slowest-game heartbeat (see Heartbeat). One running-slot per worker; inert unless
     // MTG_BATCH_HEARTBEAT names a file.
@@ -2381,6 +2816,23 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 }
                 engine->SetLogger(nullptr);
                 digests[wi.job][wi.game] = dlog.Digest();
+                // PERSIST THE FINISHED GAME before anything counts it as finished (runner/
+                // BatchPartial.h): from here on a kill, crash or abandoned process cannot cost it. A
+                // calibration game is not recorded -- a resume always replays a relative cell's sample.
+                if (partials.Writing() && !is_calib)
+                {
+                    batchpartial::Record pr;
+                    pr.gi        = global_gi;
+                    pr.seed      = job.seed + static_cast<uint64_t>(wi.game);
+                    pr.abandoned = abandoned_at[wi.job][wi.game] != 0;
+                    pr.win_turn  = pr.abandoned ? 0 : win_turns[wi.job][wi.game];
+                    pr.digest    = digests[wi.job][wi.game];
+                    pr.units     = units[wi.job][wi.game];
+                    pr.ms        = g_ms;
+                    pr.limit     = ceiling;
+                    pr.rel       = (frozen > 0) ? partials.Rel(wi.job) : std::string("-");
+                    partials.Append(wi.job, pr);
+                }
                 // Per-game play digest + work (escalation-skip prototype; see ai/EscStats.h), so a paired
                 // A/B can count the games whose play actually moved, not just the aggregate.
                 static const bool s_esk_game = EnvOn("MTG_ESC_SKIP_LOG");
@@ -2435,6 +2887,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     }
     for (std::thread& th : threads) { th.join(); }
     hb.Stop();
+    if (outhealth::Failures().load() == 0) { partials.FinishRun(); }
 
     // Final per-job aggregate, in manifest order (regardless of streaming).
     std::vector<BatchJobResult> results(jobs.size());

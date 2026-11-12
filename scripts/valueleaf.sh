@@ -1420,7 +1420,11 @@ PY
     log "PHASE E: $(grep -c '"name"' "$VLQ/measure.manifest.json") jobs (A/B + shape + trust arms, every deck) in ONE queue"
     # Exit status gates the phase, same as phase A (2026-09-05 OOM lesson): a killed batch must not
     # let truncated measurements read as an A/B verdict.
-    "$(harness_bin)" --batch "$VLQ/measure.manifest.json" > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
+    # --game-log-dir + --resume: a re-run after a killed phase E reuses every game the killed batch
+    # FINISHED (measure_wins/<job>.partial, src/runner/BatchPartial.h) and plays only the rest; the
+    # result lines in measure.log are byte-identical to an uninterrupted run's.
+    "$(harness_bin)" --batch "$VLQ/measure.manifest.json" --game-log-dir "$VLQ/measure_wins" --resume \
+        > "$VLQ/measure.log" 2> "$VLQ/measure.err" \
         || { local rc=$?
              log "PHASE E: batch FAILED (exit $rc -- 137=SIGKILL, think OOM); NOT interpreting the"
              log "  partial measure.log. Re-run to redo the phase."

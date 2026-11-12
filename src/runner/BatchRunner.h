@@ -81,6 +81,15 @@ struct BatchJobResult
 // globally game (game_index + i) for the spawn schedule and the log, while its
 // shuffle seed stays `seed + i` -- so a chunk reproduces the single-run
 // `--seed (base+off) --game-index off` form exactly. Default 0 = a whole run.
+// See BatchRunner::RunManifest (persist).
+struct BatchPersistOptions
+{
+    std::filesystem::path              dir;
+    bool                               resume = false;
+    // Files whose CONTENT is part of every job's identity (cards.json).
+    std::vector<std::filesystem::path> identity_files;
+};
+
 class BatchRunner
 {
 public:
@@ -101,8 +110,19 @@ public:
     //   The play digest is folded identically in both logger modes, so enabling traces does
     //   NOT change win turns or digests (comparisons vs a digest-only baseline stay valid).
     // Throws std::runtime_error on a malformed manifest or unreadable deck/profile.
+    // persist (optional): PER-GAME PARTIAL RESULTS (runner/BatchPartial.h), OPT-IN by `resume`.
+    //   With `resume`, a non-empty `dir` and a streaming callback, the partials already in `dir` are
+    //   read first and every game they hold (same job identity, same global index, same seed, same
+    //   per-game ceiling) is PREFILLED instead of replayed (a job whose games are all prefilled
+    //   reports at once), and every newly finished game is appended to <dir>/<jobname>.partial
+    //   before it counts as finished; the files are removed when the whole batch has finished with
+    //   every output written -- so an uninterrupted run leaves `dir` exactly as before. A resumable
+    //   driver therefore passes `resume` on its FIRST run too. Without `resume` nothing is read or
+    //   written. MTG_BATCH_PARTIAL=0 switches the writing off (DEFAULT ON).
+    using PersistOptions = BatchPersistOptions;
     static std::vector<BatchJobResult> RunManifest(
         const std::filesystem::path& manifest_path, int num_threads = 0,
         const JobDoneCallback& on_job_done = {},
-        const std::filesystem::path& trace_dir = {});
+        const std::filesystem::path& trace_dir = {},
+        const PersistOptions& persist = {});
 };

@@ -236,6 +236,11 @@ Restarting is the normal case, not an error path:
 - **`run` is idempotent** — finished phases are skipped via marker files in `<queue-dir>/done`.
 - **Rows are durable per row** and dedupe on `(seed, turn)`, so an interrupted dump loses only
   in-flight games; re-running picks up where it stopped.
+- **Matrix and phase-E games are durable per game too** (2026-11-12): `mtg --batch` appends each
+  finished game to `<game-log-dir>/<job>.partial`, and the matrix (pool, leafcal) and phase E pass
+  `--resume` (opt-in: without it nothing is persisted), so a kill loses only the games still running; the resumed results are byte-identical.
+  A partial is reused only under the same binary, cards.json, `MTG_*` env and ceiling, so changing any
+  of those replays the games instead (never a wrong reuse).
 - **To redo one phase**, delete its marker and re-run.
 - **If the clock ran out inside phase A**, use `finish` instead of `run`: it accepts the rows on disk
   as final and runs B..E on them. Phase A is all-or-nothing otherwise.
