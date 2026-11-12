@@ -4337,7 +4337,14 @@ inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int, 
 // ORIGINAL target of a Spellskite-redirected cast-time trick (USER ruling 6, 2026-11-12: "Spellskite should
 // not be the target even if it is the largest creature. The reason being that we cannot get the benefit of
 // redirecting.").
+inline std::vector<int> RankedOwnAttackers(const GameState& state, int controller_index, bool exclude_redirector = false);
 inline int FindBestOwnAttacker(const GameState& state, int controller_index, bool exclude_redirector = false)
+{
+    const std::vector<int> ranked = RankedOwnAttackers(state, controller_index, exclude_redirector);
+    return ranked.empty() ? -1 : ranked.front();
+}
+// The provider-ranked list behind FindBestOwnAttacker (best first; empty = no attacker).
+inline std::vector<int> RankedOwnAttackers(const GameState& state, int controller_index, bool exclude_redirector)
 {
     // WHICH of your creatures a self-targeting pump picks is provider-owned
     // (OwnPumpTargetCandidates); the base rule is the historical highest-power pick.
@@ -4357,10 +4364,8 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index, boo
         }
         mine.push_back(i);
     }
-    if (mine.empty()) { return -1; }
-    const std::vector<int> ranked =
-        ResolveProvider(state).OwnPumpTargetCandidates(state, controller_index, mine);
-    return ranked.empty() ? -1 : ranked.front();
+    if (mine.empty()) { return {}; }
+    return ResolveProvider(state).OwnPumpTargetCandidates(state, controller_index, mine);
 }
 
 // Battlefield index of the controller's best own creature REGARDLESS of attack eligibility (tapped
@@ -26694,6 +26699,56 @@ inline int LargestAttackerScore(const Permanent& p, const GameState& s)
     return std::max(0, pw) * (ds ? 2 : 1);
 }
 
+// THE COMBAT-TIME BODY (USER R14, 2026-11-12, verbatim: "Keeping in mind that the sizing is done relative to the
+// morphed body if morph is used."): the face a creature will have at combat in THIS plan -- its real face if the plan
+// turns it face up in the trailing pass (the look-ahead above), else the permanent as it stands (a face-down 2/2 that
+// stays face down has NO abilities; a LEAD flip has already happened when any cast runs). nullptr for a def-less body.
+inline const CardDefinition* CombatTimeDef(const Permanent& p, const GameState& s)
+{
+    if (g_plan_trail_flips.n > 0 && g_plan_trail_flips.Pending(s, p.card.m_number))
+    { if (const CardDefinition* real = FaceDownRealDef(p)) { return real; } }
+    return p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+}
+// ...its double strike at combat (the same reading as LargestAttackerScore's x2).
+inline bool LargestAttackerHasDoubleStrike(const Permanent& p, const GameState& s)
+{
+    if (CreatureHasDoubleStrike(p, s)) { return true; }
+    if (g_plan_trail_flips.n > 0 && g_plan_trail_flips.Pending(s, p.card.m_number))
+    {
+        const CardDefinition* real = FaceDownRealDef(p);
+        return real != nullptr && real->card.HasKeyword(Keyword::DoubleStrike);
+    }
+    return false;
+}
+// ...and whether it produces mana at combat (USER R13: "We should prefer non-mana-producing targets"): the mana-dork
+// template on the combat-time face. A face-down creature produces none (R14: no abilities).
+inline bool LargestAttackerProducesMana(const Permanent& p, const GameState& s)
+{
+    const CardDefinition* d = CombatTimeDef(p, s);
+    return d != nullptr && d->tmpl == CardTemplate::ManaDork;
+}
+// USER R12 (2026-11-12, verbatim: "Yes, Temur Battle Rage 2 should target another non-zero power creature. (after
+// pumps)"): under DecisionProvider::DoubleStrikeGrantAvoidsDoubleStrikers, a cast-time double-strike grant (Temur
+// Battle Rage) goes on the best-ranked attacker WITHOUT double strike at combat and with combat power > 0 (sized after
+// the pumps already resolved and the plan's flips, LargestAttackerScore). With no such creature it falls back to the
+// plain pick -- a no-op the search's not-cast sibling dominates (so in effect: no cast). Every other trick: the plain
+// pick. -1 = no attacker.
+inline int FindBestOwnAttackerForTrick(const GameState& state, int controller_index, bool exclude_redirector,
+                                       const CardDefinition& trick)
+{
+    const std::vector<int> ranked = RankedOwnAttackers(state, controller_index, exclude_redirector);
+    if (ranked.empty()) { return -1; }
+    if (trick.params.grants_temp_double_strike && ResolveProvider(state).DoubleStrikeGrantAvoidsDoubleStrikers())
+    {
+        for (int i : ranked)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (!LargestAttackerHasDoubleStrike(p, state) && LargestAttackerScore(p, state) > 0) { return i; }
+        }
+    }
+    return ranked.front();
+}
+
 // A real CR-121 DRAW of n cards for `controller`: counts Player::cards_drawn_this_turn (the Fists
 // of Flame pump reads it), feeds the viewer draw sink, and flags deck-out (CR 104.3c) exactly as
 // ResolveDrawSpell does.
@@ -27476,8 +27531,8 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         // attacker OTHER than a redirector -- its Wild Defiance trigger is the twin's whole point, and aiming
         // at the Spellskite itself would forfeit it. With no such attacker the twin degrades to the plain pick
         // (the redirect below then has si == ti and does nothing: the plain variant at {U/P} more, dominated).
-        if (redirect_to != 0) { ti = FindBestOwnAttacker(state, controller, /*exclude_redirector=*/true); }
-        if (ti < 0) { ti = FindBestOwnAttacker(state, controller); }
+        if (redirect_to != 0) { ti = FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/true, def); }
+        if (ti < 0) { ti = FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/false, def); }
         if (ti < 0) { ti = FindBestOwnCreature(state, controller); }
         if (ti < 0) { return false; }
         // The plan named no creature, so the viewer learns the one picked HERE (Morph INT-6: the USER's

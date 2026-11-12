@@ -8743,14 +8743,38 @@ bool MorphProvider::ShouldAttackWith(const GameState& s, const Permanent& p) con
 // INT-2 EXCLUSION HOOK: a Den Protector turned face up can regrow a pump cast EARLIER in the turn, so a
 // face-up flip's position must stay SEARCHED -- a flip is an activation, not a cast, and must never be
 // given a rank here; if it is ever modelled as a cast, return the generic rank for it.
+// INT-8 (B): THE USER'S ORDER (R8, verbatim 2026-11-12: "Wild Defiance goes early, firecat and most other morphs can
+// go next doublers near the end and den protectors morph goes last targeting doublers like Berserk or Legion Leadership
+// preferably ... Arguably Den Protector megamorph might want to go before Temur Battle Rage so that other spells can get
+// the benefit from it." / R8b: "So the idea is fixed pumps go earlier and doubling pumps go late." / R8c: "Whether we get
+// them from hand or from Den protector's megamorph."). MTG_MORPH_CAST_ORDER_R8 (DEFAULT ON; =0 -> the INT-1 tiers):
+//    4  a target-watcher permanent (Wild Defiance) -- BEFORE every other permanent (dorks, Spellskite, face-down casts,
+//       creatures): cosmetic for payability (the payable-order ladder still decides), but the USER's order;
+//   10 / 20  the generic permanent tiers (creatures, face-down casts, Spellskite; LEAD flips run before every cast);
+//   21  FIXED pumps (Might, Vines kicked or not, any flat / counter trick);
+//   22  Temur Battle Rage (grants_temp_double_strike) FIRST among the doubling tier: under an active Wild Defiance its
+//       own +3/+3 trigger then lands before the doublers double it (a damage-time multiplier is otherwise
+//       position-free);
+//   23  power DOUBLERS (Berserk, Legion Leadership; they commute: P -> 2P -> 4P either way).
+// A Den Protector regrowth recast takes its card's slot (the continuation re-sorts by this rank), and the flip itself
+// runs right after the cast of the card it returns (C: FaceUpTrailFlipAfterTargetCast).
+static bool MorphCastOrderR8On()
+{ static const bool on = EnvOn("MTG_MORPH_CAST_ORDER_R8", true); return heurarm::Flag(heurarm::MORPH_CAST_ORDER_R8, on); }
+
 int MorphProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
 {
     const CardParams& p = def.params;
+    const bool r8 = MorphCastOrderR8On();
     if (p.solo_target_trick)
-    { return (p.trick_double_power || p.grants_temp_double_strike) ? 22 : 21; }
+    {
+        if (!r8) { return (p.trick_double_power || p.grants_temp_double_strike) ? 22 : 21; }
+        if (p.trick_double_power)        { return 23; }
+        if (p.grants_temp_double_strike) { return 22; }
+        return 21;
+    }
     const int r = GenericProvider::CastOrderRank(s, def);
     if (p.spell_target_watch_pump_power != 0 || p.spell_target_watch_pump_tough != 0)
-    { return std::min(r, 20); }
+    { return std::min(r, r8 ? 4 : 20); }
     return r;
 }
 
@@ -8825,20 +8849,188 @@ void MorphProvider::TrickTargetCandidates(const GameState& s, const CardDefiniti
 }
 
 // The resolver-side ranking (the cast-time pick and every other FindBestOwnAttacker reader): largest first.
+static bool MorphInt8Open();        // INT-8, defined below
+static bool MorphTieNonManaOn();    // INT-8 R13, defined below
 std::vector<int> MorphProvider::OwnPumpTargetCandidates(const GameState& s, int controller,
                                                         const std::vector<int>& own_attackers) const
 {
     if (!MorphLargestTrickTargetOn()) { return DeckProvider::OwnPumpTargetCandidates(s, controller, own_attackers); }
-    std::vector<std::pair<int, int>> ranked;   // (score, battlefield index)
+    // (score, mana-producer at combat [R13; 0 when the tie-break is off], battlefield index): largest first, then a
+    // non-mana-producing body, then battlefield order (stable sort). All read the combat-time body (R14).
+    const bool tie_nonmana = MorphTieNonManaOn() && !MorphInt8Open();
+    std::vector<std::tuple<int, int, int>> ranked;
     ranked.reserve(own_attackers.size());
     for (int i : own_attackers)
-    { ranked.push_back({ LargestAttackerScore(s.battlefield[static_cast<std::size_t>(i)], s), i }); }
-    std::stable_sort(ranked.begin(), ranked.end(),
-                     [](const std::pair<int, int>& a, const std::pair<int, int>& b) { return a.first > b.first; });
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        ranked.emplace_back(LargestAttackerScore(p, s), tie_nonmana && LargestAttackerProducesMana(p, s) ? 1 : 0, i);
+    }
+    std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b)
+    {
+        if (std::get<0>(a) != std::get<0>(b)) { return std::get<0>(a) > std::get<0>(b); }
+        return std::get<1>(a) < std::get<1>(b);
+    });
     std::vector<int> out;
     out.reserve(ranked.size());
-    for (const auto& r : ranked) { out.push_back(r.second); }
+    for (const auto& r : ranked) { out.push_back(std::get<2>(r)); }
     return out;
+}
+
+// ---- INT-8: USER rulings R7-R10 (verbatim, 2026-11-12) -------------------------------------------------------------
+// R7: "Vines should only be cast with Kicker heuristically." / R7b: "Sorry, except for with Wild Defiance."
+// R9: "Spellskite Redirects unfortunately need to be considered after each redirectable spell or perhaps as just a group
+//     like "Redirect all Pump Spells", keeping in mind that doublers are fair targets as well. True, we probably should
+//     take Den Protector's megamorph counter into account for doublers if we can afford to do so. Sometimes we need the
+//     spell first so we can return it. The berserk vs not is an easy question to answer. If we can find lethal we don't
+//     need to search it, I guess it's true we could just rank and test it first, though. Berserk very easily finds lethal
+//     lines in my experience, but it does it a little other help. But yes, it is rare to cast Berserk without lethal."
+// R10: "Double Berserk is almost always lethal. Hence Den Protector for Berserk is pretty much always the best play."
+// All four hooks stand down under human play and MTG_UNPRUNED / MTG_UNPRUNE=tricktarget.
+static bool MorphInt8Open() { return HumanPlayActive() || DecisionUnpruned(UnprunedGate::TrickTarget); }
+
+// "Wild Defiance is active": a target watcher (spell_target_watch_pump_*) on our battlefield OR in hand -- the same test
+// as the ruling-5 Spellskite twin (TurnSolver's redirect_num), because a hand watcher the plan casts resolves before any
+// trick (it ranks 4, every trick 21+). One the plan never casts leaves the extra unkicked variant a duplicate-at-best.
+static bool MorphTargetWatcherAround(const GameState& s)
+{
+    const int me = s.active_player_index;
+    auto is_watcher = [](const CardDefinition* d)
+    { return d != nullptr && (d->params.spell_target_watch_pump_power != 0 || d->params.spell_target_watch_pump_tough != 0); };
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        if (is_watcher(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    for (const Card& hc : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+        if (is_watcher(CardDatabase::Instance().LookupCached(hc))) { return true; }
+    }
+    return false;
+}
+
+// "The Berserk shape": a power doubler that also destroys its target at end of turn (trick_double_power +
+// trick_destroy_at_end_if_attacked) -- the cheapest, front-loaded doubler of this list.
+static bool MorphBerserkShape(const CardDefinition* d)
+{ return d != nullptr && d->params.trick_double_power && d->params.trick_destroy_at_end_if_attacked; }
+
+// (A) R7 / R7b. A kicker solo-target trick (Vines of Vastwood) emits ONLY its kicked variant, unless a target watcher is
+// around, when both stay searched. No affordable kicker and no watcher = no cast. MTG_MORPH_VINES_KICKED_ONLY=0 -> both.
+int MorphProvider::TrickKickModes(const GameState& s, const CardDefinition& def) const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_VINES_KICKED_ONLY", true);
+    const bool on = heurarm::Flag(heurarm::MORPH_VINES_KICKED_ONLY, on_env);
+    if (!on || MorphInt8Open() || !def.params.solo_target_trick || !def.params.kicker_cost.has_value()) { return 3; }
+    return MorphTargetWatcherAround(s) ? 3 : 2;
+}
+
+// (D) R9: "Redirect all Pump Spells" -- the redirect twins are all-or-none per plan section (doublers included; the
+// twin exists only while Wild Defiance is around and Spellskite can attack -- TurnSolver's redirect_num). The life
+// rule lives at the filter: a group whose 2-life Phyrexian pips would take us to 0 or below is not offered, so the
+// section falls back to "no redirect". MTG_MORPH_REDIRECT_GROUP=0 -> per-spell twins (any subset).
+bool MorphProvider::RedirectTargetedPumpsAsGroup() const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_REDIRECT_GROUP", true);
+    return heurarm::Flag(heurarm::MORPH_REDIRECT_GROUP, on_env) && !MorphInt8Open();
+}
+
+// (E) R9 / R10: plans that cast a Berserk-shape doubler, or flip Den Protector to regrow one, are TRIED FIRST (move
+// order only -- MoveOrderLess's tier under wins_this_turn; a strictly better plan still wins its pass, nothing is
+// removed). MTG_MORPH_BERSERK_FIRST=0 -> no tier.
+static bool MorphBerserkFirstOn()
+{ static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST", true); return heurarm::Flag(heurarm::MORPH_BERSERK_FIRST, on); }
+
+bool MorphProvider::PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                                       const std::vector<int>& sel) const
+{
+    (void)s;
+    if (!MorphBerserkFirstOn() || MorphInt8Open()) { return false; }
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind == Action::Kind::CastFromHand)
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (MorphBerserkShape(d)) { return true; }
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode) && !a.tutor_target.empty())
+        {
+            if (MorphBerserkShape(CardDatabase::Instance().Lookup(a.tutor_target.str()))) { return true; }
+        }
+    }
+    return false;
+}
+
+// (E) Den Protector's regrowth target ORDER (R10 + R9): the Berserk shape first; then Legion Leadership vs Might of Old
+// Krosa by the mana left -- the doubler first when at least 2 mana remain after the {1}{G} flip AND doubling the largest
+// attacker beats Might's main-phase +4/+4 (its power > 4), else the fixed pump first; then kicked Vines (a kicker trick);
+// then Temur Battle Rage (only while the largest attacker lacks double strike -- otherwise after the creatures); then a
+// creature (Blistering Firecat); then a land. Every name stays a searched variant: this is the order they are tried in.
+void MorphProvider::FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const
+{
+    if (!MorphBerserkFirstOn() || MorphInt8Open() || names.size() < 2) { return; }
+    const int me = s.active_player_index;
+    const int best = FindBestOwnAttacker(s, me);
+    const Permanent* bp = best >= 0 ? &s.battlefield[static_cast<std::size_t>(best)] : nullptr;
+    const int power = bp != nullptr ? CombatPowerOf(*bp, s) : 0;
+    const bool ds = bp != nullptr && CreatureHasDoubleStrike(*bp, s);
+    const int mana_left = AvailableManaPool(s).Total() - 2;
+    const bool doubler_first = mana_left >= 2 && power > 4;
+    auto rank = [&](const std::string& nm) -> int
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { return 90; }
+        const CardParams& p = d->params;
+        if (MorphBerserkShape(d)) { return 0; }
+        if (p.solo_target_trick && p.trick_double_power) { return doubler_first ? 10 : 20; }
+        if (p.solo_target_trick && p.kicker_cost.has_value()) { return 30; }
+        if (p.solo_target_trick && p.grants_temp_double_strike) { return ds ? 55 : 40; }
+        if (p.solo_target_trick) { return doubler_first ? 20 : 10; }   // a fixed pump (Might)
+        if (d->card.IsCreature()) { return 50; }
+        if (d->card.IsLand()) { return 70; }
+        return 60;
+    };
+    std::vector<std::pair<int, std::string>> r;
+    r.reserve(names.size());
+    for (const std::string& nm : names) { r.push_back({ rank(nm), nm }); }
+    std::stable_sort(r.begin(), r.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (std::size_t i = 0; i < r.size(); ++i) { names[i] = std::move(r[i].second); }
+}
+
+// (C) R8 / R9 ("Sometimes we need the spell first so we can return it"): Den Protector's flip runs right after the
+// first cast of the card it returns, so every later doubler doubles the megamorph counter; a card already in the
+// graveyard means the LEAD flip (before every pump). Whether to flip, and what to return, stay searched.
+// MTG_MORPH_DEN_FLIP_INLINE=0 -> the INT-2 trailing position.
+bool MorphProvider::FaceUpTrailFlipAfterTargetCast() const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_DEN_FLIP_INLINE", true);
+    return heurarm::Flag(heurarm::MORPH_DEN_FLIP_INLINE, on_env) && !HumanPlayActive();
+}
+
+// R11 (verbatim 2026-11-12: "It should be disallowed heuristically if no Wild Defiance ends up in the plan."): the
+// redirect twin and the unkicked Vines are offered at emission while a watcher is on the battlefield or in hand
+// (MorphTargetWatcherAround), and a SUBSET keeps them only if the watcher is on the battlefield or cast in that subset.
+bool MorphProvider::TrickWatcherVariantsNeedWatcherInPlan() const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_WATCHER_IN_PLAN", true);
+    return heurarm::Flag(heurarm::MORPH_WATCHER_IN_PLAN, on_env) && !MorphInt8Open();
+}
+
+// R12 (verbatim: "Yes, Temur Battle Rage 2 should target another non-zero power creature. (after pumps)").
+bool MorphProvider::DoubleStrikeGrantAvoidsDoubleStrikers() const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_TBR_OTHER", true);
+    return heurarm::Flag(heurarm::MORPH_TBR_OTHER, on_env) && MorphLargestTrickTargetOn() && !MorphInt8Open();
+}
+
+// R13 (verbatim: "Ties can go to the oldest if the creatures do not differ in ability to tap for mana. We should
+// prefer non-mana-producing targets.") + R14 ("Keeping in mind that the sizing is done relative to the morphed body if
+// morph is used."): the tie-break reads the COMBAT-TIME body (LargestAttackerProducesMana).
+static bool MorphTieNonManaOn()
+{ static const bool on = EnvOn("MTG_MORPH_TIE_NONMANA", true); return heurarm::Flag(heurarm::MORPH_TIE_NONMANA, on); }
+bool MorphProvider::TrickTargetTieAvoidsManaProducers() const
+{
+    return MorphTieNonManaOn() && MorphLargestTrickTargetOn() && !MorphInt8Open();
 }
 
 // Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,

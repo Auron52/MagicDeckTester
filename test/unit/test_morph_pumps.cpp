@@ -330,10 +330,11 @@ TEST_CASE("morph pumps: the Morph list routes to MorphProvider, whose rank order
     const int skite    = p.CastOrderRank(s, DefM("Spellskite"));
     CHECK(skite < might);
     CHECK(defiance < might);
+    CHECK(defiance < skite);     // INT-8 (B, USER R8): Wild Defiance before every other permanent
     CHECK(might == vines);
-    CHECK(might < berserk);
-    CHECK(berserk == legion);
-    CHECK(berserk == tbr);
+    CHECK(might < tbr);          // ...fixed pumps before the doubling tier,
+    CHECK(tbr < berserk);        // ...Temur Battle Rage first in it (its Defiance trigger is then doubled),
+    CHECK(berserk == legion);    // ...the doublers last (they commute)
 }
 
 // INT-5 (2026-11-12; logs/morph/diag1-report.md): the plan-signature dedup keyed a solo-target trick by NAME
@@ -409,7 +410,7 @@ TEST_CASE("morph pumps: largest-attacker rule -- one cast-time variant per trick
     s.players[0].hand.push_back(CardM("Berserk", 101));
     s.players[0].hand.push_back(CardM("Vines of Vastwood", 102));
     CHECK(variants(s, "Berserk") == std::vector<int>{ kTrickBestOwnTarget });
-    CHECK(variants(s, "Vines of Vastwood") == std::vector<int>{ kTrickBestOwnTarget, kTrickBestOwnTarget });   // kicked + not
+    CHECK(variants(s, "Vines of Vastwood") == std::vector<int>{ kTrickBestOwnTarget });   // INT-8 R7: kicked only (no Defiance)
 
     // No creature can attack this turn and no hasty creature in hand: no variant (the old non-attacker fold's answer).
     GameState sick = BaseM();
@@ -571,4 +572,286 @@ TEST_CASE("morph pumps: largest-attacker rule -- Spellskite as the LARGEST is ne
     CHECK(Power(s, mid) == 6);                                         // the next-largest was the original target
     CHECK(Power(s, small) == 2);
     CHECK(Power(s, sk) == 12);                                         // 5 + 3 (redirect trigger) + 4 (Might)
+}
+
+// ---- INT-8 (USER rulings R7-R10, 2026-11-12) ----------------------------------------------------------------------
+// R7: "Vines should only be cast with Kicker heuristically." / R7b: "Sorry, except for with Wild Defiance."
+TEST_CASE("morph INT-8 (A): Vines is offered KICKED only, unless Wild Defiance is around")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto count = [](const GameState& s, int& kicked, int& unkicked)
+    {
+        kicked = unkicked = 0;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Vines of Vastwood") { continue; }
+            (a.kicked ? kicked : unkicked) += 1;
+        }
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
+    PutBear(s, 10);
+    s.players[0].hand.push_back(CardM("Vines of Vastwood", 101));
+    int kicked = 0, unkicked = 0;
+    count(s, kicked, unkicked);
+    CHECK(kicked >= 1);
+    CHECK(unkicked == 0);                                  // no Defiance: kicked only
+    GameState in_hand = s;
+    in_hand.players[0].hand.push_back(CardM("Wild Defiance", 102));
+    count(in_hand, kicked, unkicked);
+    CHECK(kicked >= 1);
+    CHECK(unkicked >= 1);                                  // Defiance in hand: both searched
+    PutM(s, "Wild Defiance", 20);
+    count(s, kicked, unkicked);
+    CHECK(kicked >= 1);
+    CHECK(unkicked >= 1);                                  // Defiance active: both searched
+}
+
+// R8 / R9 (C): Den Protector's named TRAIL flip runs right after the cast of the card it returns, so a later doubler
+// doubles its megamorph counter: Might (+4) on the face-down 2/2 = 6, flip -> 2/1 +4 +1 counter = 7, Berserk -> 14.
+// The trailing position (the generic provider) doubles 6 -> 12, then flips -> 13.
+TEST_CASE("morph INT-8 (C): the named trail flip runs right after its target's cast, before the doubler")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto run = [](const DecisionProvider* prov)
+    {
+        GameState s = BaseM();
+        s.m_provider = prov;
+        s.deck_has_morph = true;
+        PutM(s, "Den Protector (Face-down)", 31);
+        for (int k = 0; k < 4; ++k) { PutM(s, "Forest", 40 + k); }
+        s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+        s.players[0].hand.push_back(CardM("Berserk", 102));
+        auto trick = [](const std::string& n)
+        {
+            Action a;
+            a.kind = Action::Kind::CastFromHand;
+            a.card_name = n;
+            a.def = &DefM(n);
+            a.hand_index = -1;
+            a.cost = DefM(n).card.m_mana_cost;
+            a.enchant_target = 31;
+            a.is_noncreature = true;
+            return a;
+        };
+        Action flip;
+        flip.kind = Action::Kind::ActivatePermAbility;
+        flip.card_name = "Den Protector (Face-down)";
+        flip.def = &DefM("Den Protector (Face-down)");
+        flip.hand_index = -1;
+        flip.sac_source_id = 31;
+        flip.ability_mode = Action::AbilityMode::TurnFaceUpLate;
+        flip.chosen_x = 1;
+        flip.cost = *DefM("Den Protector").params.megamorph_cost;
+        flip.tutor_target = std::string("Might of Old Krosa");
+        flip.is_noncreature = true;
+        TurnSolver::Plan p;
+        p.actions = { trick("Might of Old Krosa"), trick("Berserk"), flip };
+        // Due-ness: nothing before the cast (the Might is in hand, not the graveyard).
+        std::vector<Action> due;
+        TurnSolver::FaceUpInlineTrailDue(s, p.actions, due);
+        CHECK(due.empty());
+        TurnSolver::ApplyPlan(s, p, /*is_pre_combat=*/true);
+        int power = -1;
+        for (const Permanent& q : s.battlefield) { if (q.card.m_number == 31) { power = CombatPowerOf(q, s); } }
+        bool might_in_hand = false;
+        for (const Card& c : s.players[0].hand) { might_in_hand |= c.m_name.str() == "Might of Old Krosa"; }
+        CHECK(might_in_hand);                              // regrown either way
+        return power;
+    };
+    CHECK(run(&mp) == 14);
+    CHECK(run(nullptr) == 13);
+}
+
+TEST_CASE("morph INT-8 (C): a battlefield Den's TRAIL flip naming a GRAVEYARD card is not emitted (LEAD covers it)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    PutM(s, "Den Protector (Face-down)", 31);
+    for (int k = 0; k < 4; ++k) { PutM(s, "Forest", 40 + k); }
+    s.players[0].graveyard.push_back(CardM("Berserk", 90));
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    int lead_berserk = 0, trail_berserk = 0, trail_might = 0;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id != 31) { continue; }
+        const bool trail = a.ability_mode == Action::AbilityMode::TurnFaceUpLate;
+        if (a.tutor_target.str() == "Berserk") { (trail ? trail_berserk : lead_berserk) += 1; }
+        if (trail && a.tutor_target.str() == "Might of Old Krosa") { ++trail_might; }
+    }
+    CHECK(lead_berserk == 1);
+    CHECK(trail_berserk == 0);
+    CHECK(trail_might == 1);
+}
+
+// R9 (D): "Redirect all Pump Spells" -- all-or-none per plan, doublers included; the 2-life pips must leave us above 0.
+TEST_CASE("morph INT-8 (D): Spellskite redirects are all-or-none per plan, and must be payable in life")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto scan = [](const GameState& s, int& mixed, int& both, int& single)
+    {
+        mixed = both = single = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int rd = 0, plain = 0;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (a.trick_redirect != 0) { ++rd; }
+                else if (a.enchant_target == kTrickBestOwnTarget) { ++plain; }
+            }
+            if (rd > 0 && plain > 0) { ++mixed; }
+            if (rd == 2) { ++both; }
+            if (rd == 1 && plain == 0) { ++single; }
+        }
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 4; ++k) { PutM(s, "Forest", 40 + k); }
+    PutBear(s, 10);
+    PutM(s, "Spellskite", 11);
+    PutM(s, "Wild Defiance", 20);
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    s.players[0].hand.push_back(CardM("Berserk", 102));
+    int mixed = 0, both = 0, single = 0;
+    scan(s, mixed, both, single);
+    CHECK(mixed == 0);
+    CHECK(both >= 1);                                      // the group form (4 life of 20)
+    CHECK(single >= 1);                                    // one trick alone, redirected
+    s.players[0].life = 4;                                 // two redirects would take us to 0
+    scan(s, mixed, both, single);
+    CHECK(mixed == 0);
+    CHECK(both == 0);
+    CHECK(single >= 1);
+}
+
+// R9 / R10 (E): Berserk first -- an ORDER (the move-order tier and the regrowth variants' order), never a restriction.
+TEST_CASE("morph INT-8 (E): Berserk plans are fronted; Den Protector's regrowth names are ordered Berserk first")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    std::vector<Action> cands(3);
+    cands[0].kind = Action::Kind::CastFromHand;
+    cands[0].card_name = "Berserk";
+    cands[0].def = &DefM("Berserk");
+    cands[1] = cands[0];
+    cands[1].card_name = "Might of Old Krosa";
+    cands[1].def = &DefM("Might of Old Krosa");
+    cands[2].kind = Action::Kind::ActivatePermAbility;
+    cands[2].ability_mode = Action::AbilityMode::TurnFaceUpLate;
+    cands[2].tutor_target = std::string("Berserk");
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }));
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }));
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 1, 2 }));     // Den Protector regrowing Berserk
+    std::vector<std::string> names = { "Forest", "Blistering Firecat", "Temur Battle Rage", "Vines of Vastwood",
+                                       "Legion Leadership", "Might of Old Krosa", "Berserk" };
+    mp.FaceUpRegrowOrder(s, names);                       // no attacker, no mana: Might before Leadership
+    const std::vector<std::string> want = { "Berserk", "Might of Old Krosa", "Legion Leadership", "Vines of Vastwood",
+                                            "Temur Battle Rage", "Blistering Firecat", "Forest" };
+    CHECK(names == want);
+    // A 5-power attacker and 4+ mana left after the {1}{G} flip: Leadership (doubling +5) before Might (+4).
+    PutM(s, "Blistering Firecat", 7);
+    for (int k = 0; k < 4; ++k) { PutM(s, "Mountain", 50 + k); }
+    std::vector<std::string> two = { "Might of Old Krosa", "Legion Leadership" };
+    mp.FaceUpRegrowOrder(s, two);
+    CHECK(two.front() == "Legion Leadership");
+}
+
+// R11 (verbatim 2026-11-12: "It should be disallowed heuristically if no Wild Defiance ends up in the plan."): a redirect
+// twin or an unkicked Vines needs the watcher on the battlefield or CAST IN THE SAME PLAN; one left in hand voids it.
+TEST_CASE("morph INT-8 (R11): redirect twins and unkicked Vines need Wild Defiance on board or cast in the plan")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 6; ++k) { PutM(s, "Forest", 40 + k); }
+    PutBear(s, 10);
+    PutM(s, "Spellskite", 11);
+    s.players[0].hand.push_back(CardM("Wild Defiance", 100));
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    s.players[0].hand.push_back(CardM("Vines of Vastwood", 102));
+    int with_defiance = 0, voided = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        bool defiance = false, needs = false;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Wild Defiance") { defiance = true; }
+            if (a.trick_redirect != 0 || (a.card_name.str() == "Vines of Vastwood" && !a.kicked)) { needs = true; }
+        }
+        if (needs && defiance) { ++with_defiance; }
+        if (needs && !defiance) { ++voided; }
+    }
+    CHECK(voided == 0);
+    CHECK(with_defiance >= 1);
+}
+
+// R12 (verbatim: "Yes, Temur Battle Rage 2 should target another non-zero power creature. (after pumps)").
+TEST_CASE("morph INT-8 (R12): a second Temur Battle Rage goes on the largest creature WITHOUT double strike")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    const int cat  = PutM(s, "Blistering Firecat", 7);    // 7/1 haste
+    const int bear = PutBear(s, 10);                       // 2/2
+    Cast(s, "Temur Battle Rage", kTrickBestOwnTarget);
+    CHECK(CreatureHasDoubleStrike(s.battlefield[static_cast<std::size_t>(cat)], s));
+    CHECK_FALSE(CreatureHasDoubleStrike(s.battlefield[static_cast<std::size_t>(bear)], s));
+    Cast(s, "Temur Battle Rage", kTrickBestOwnTarget);     // the cat already strikes twice: the bear
+    CHECK(CreatureHasDoubleStrike(s.battlefield[static_cast<std::size_t>(bear)], s));
+    // Only a 0-power other creature: no eligible recipient, the plain pick (a no-op the not-cast sibling dominates).
+    GameState z = BaseM();
+    z.m_provider = &mp;
+    const int cat2  = PutM(z, "Blistering Firecat", 7);
+    const int birds = PutM(z, "Birds of Paradise", 12);    // 0/1
+    Cast(z, "Temur Battle Rage", kTrickBestOwnTarget);
+    Cast(z, "Temur Battle Rage", kTrickBestOwnTarget);
+    CHECK(CreatureHasDoubleStrike(z.battlefield[static_cast<std::size_t>(cat2)], z));
+    CHECK_FALSE(CreatureHasDoubleStrike(z.battlefield[static_cast<std::size_t>(birds)], z));
+}
+
+// R13 (verbatim: "Ties can go to the oldest if the creatures do not differ in ability to tap for mana. We should prefer
+// non-mana-producing targets.") + R14 ("Keeping in mind that the sizing is done relative to the morphed body if morph is
+// used."): a tie prefers the non-mana body; a face-down body has no abilities, so it never produces mana.
+TEST_CASE("morph INT-8 (R13/R14): ties prefer a non-mana body; sizing and mana read the combat-time (morphed) body")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    const int birds = PutM(s, "Birds of Paradise", 12);   // 0/1, a mana dork, OLDEST
+    const int skite = PutM(s, "Spellskite", 11);          // 0/4, no mana
+    CHECK(LargestAttackerProducesMana(s.battlefield[static_cast<std::size_t>(birds)], s));
+    CHECK_FALSE(LargestAttackerProducesMana(s.battlefield[static_cast<std::size_t>(skite)], s));
+    CHECK(FindBestOwnAttacker(s, 0) == skite);             // tie at 0: the non-mana body, not the oldest
+    // R14: one face-down creature the plan flips later (Den Protector: 2/1 + a megamorph counter = 3 at combat) and
+    // one that stays face down (Hystrodon: a 2/2 with no abilities).
+    GameState m = BaseM();
+    m.m_provider = &mp;
+    m.deck_has_morph = true;
+    const int hyst = PutM(m, "Hystrodon (Face-down)", 30);
+    const int den  = PutM(m, "Den Protector (Face-down)", 31);
+    CHECK_FALSE(LargestAttackerProducesMana(m.battlefield[static_cast<std::size_t>(hyst)], m));
+    CHECK(FindBestOwnAttacker(m, 0) == hyst);              // as the board stands: a 2/2 tie, the oldest
+    PlanTrailFlips t;
+    t.state = &m;
+    t.nums[0] = 31;
+    t.n = 1;
+    const PlanTrailFlipsScope scope(t);
+    CHECK(FindBestOwnAttacker(m, 0) == den);               // the plan flips Den Protector: 3 at combat beats 2
+    Cast(m, "Might of Old Krosa", kTrickBestOwnTarget);    // ...so the cast-time pick pumps it
+    CHECK(Power(m, den) == 6);
+    CHECK(Power(m, hyst) == 2);
 }

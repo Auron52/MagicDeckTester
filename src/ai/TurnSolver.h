@@ -1890,6 +1890,11 @@ public:
         // live payable source/target menu. The boundary fan chooses it before draw.
         std::int16_t upkeep_tutor_choice = -1;
         std::int8_t miracle_choice = -1; // first-draw optional cast: 0 decline, 1 cast
+        // Provider MOVE-ORDER front tier (DecisionProvider::PlanMoveOrderFront; Morph INT-8 (E): plans that
+        // cast or regrow a Berserk-shape doubler are tried first). ORDERING ONLY, sorted below atk_forfeit and
+        // above value in MoveOrderLess; derived deterministically from (state, actions) at enumeration.
+        // In the 1-byte hole after miracle_choice (layout probe: sizeof(Plan) unchanged at 656).
+        bool move_front     = false;
         // Profane Tutor's off-suspend fetch at the NEXT upkeep (MTG_PROFANE_RESOLVE_FAN), packed per tutor-search
         // ordinal: chosen by the BOUNDARY FAN where the search crosses into that upkeep and recorded on the plan of
         // the turn that crossed (never a main-phase axis variant); written to GameState::scripted_suspend_tutor.
@@ -3370,6 +3375,17 @@ public:
     // look-ahead (PlanTrailFlips, SpellEffects.h). ONE builder for both worlds' PlanTrailFlipsScope; empty
     // (n == 0) for a plan without one and for every deck without a morph card.
     static PlanTrailFlips PlanTrailFlipsFor(const GameState& state, const std::vector<Action>& acts);
+    // ...and Morph INT-8 (C, USER R8/R9): under DecisionProvider::FaceUpTrailFlipAfterTargetCast, the plan's NAMED
+    // trail flips (TurnFaceUpLate + tutor_target) that are DUE now -- source still face down and live, the named
+    // card in our graveyard -- for each world's top-level cast-section hook (ApplyPlanDirect's slot_hook,
+    // AIEngine::TakeTurn's exec_slot_hook) to dispatch through its own trailing-pass body right after the cast.
+    // The trailing pass then skips them (the source is face up). Empty for every deck without a morph card.
+    static void FaceUpInlineTrailDue(const GameState& state, const std::vector<Action>& acts, std::vector<Action>& due);
+    // ...and the section window forgets a card such a flip just returned (in hand now, not in `hand_before`), so the
+    // regrown card opens the section's hand-entry breakpoint exactly as it does from the trailing pass
+    // (SectionForgetHandExits' reading: a cast card back in hand is new material).
+    static void SectionForgetRegrown(std::vector<int>& snapshot, const std::vector<int>& hand_before,
+                                     const GameState& state);
     // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
     // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the
     // pre-cast pass, every other one in the trailing pass -- "crack Myriad Landscape BEFORE the Vial-put

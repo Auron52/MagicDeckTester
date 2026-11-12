@@ -881,6 +881,14 @@ enum Slot : int
     PAY_SAC_LINE_RESERVE,     // MTG_PAY_SAC_LINE_RESERVE  item 6 (mana-clean, Pirates s30054695 T4 {Staunch Crewmate + Dire Fleet Captain}): a pay-sac one-shot (Treasure) that is the line's last source of a colour the rest of the line owes taps after every other land, pain lands included (the CCO line reserve's band). Default ON; =0 -> the historical rank
     OPS_FIXED_REVEAL,         // MTG_OPS_FIXED_REVEAL  item 6 (mana-clean, Pirates s30054672 {Malcolm + Daring Buccaneer + vial Corsair Captain}): TurnSolver::OrderPaysSequentially charges the reveal-or-pay surcharge on the ASKED order (the casts that find no other subtype card left in hand), not on the subset's realised orders. Default ON; =0 -> SameSubsetRevealSurcharge
     PAY_DOOMED_BODY_FIRST,    // MTG_PAY_DOOMED_BODY_FIRST  item 6 (mana-clean, Fungus s30050019 DOMINATED-CREATURE): a token whose fading maker the plan's own activations empty (0/0 by combat, no toughness lord) taps before any other creature. Default ON; =0 -> the historical creature-band order
+    MORPH_VINES_KICKED_ONLY,  // MTG_MORPH_VINES_KICKED_ONLY  Morph INT-8 (A, USER R7/R7b): Vines kicked only unless Wild Defiance is around. Default ON; =0 -> off
+    MORPH_CAST_ORDER_R8,      // MTG_MORPH_CAST_ORDER_R8  Morph INT-8 (B, USER R8): Defiance 4, fixed 21, TBR 22, doublers 23. Default ON; =0 -> off
+    MORPH_DEN_FLIP_INLINE,    // MTG_MORPH_DEN_FLIP_INLINE  Morph INT-8 (C, USER R8/R9): Den Protector's named flip right after its target's cast. Default ON; =0 -> off
+    MORPH_REDIRECT_GROUP,     // MTG_MORPH_REDIRECT_GROUP  Morph INT-8 (D, USER R9): Spellskite redirects all-or-none per plan + the life rule. Default ON; =0 -> off
+    MORPH_BERSERK_FIRST,      // MTG_MORPH_BERSERK_FIRST  Morph INT-8 (E, USER R9/R10): Berserk plans + Den-for-Berserk tried first. Default ON; =0 -> off
+    MORPH_WATCHER_IN_PLAN,    // MTG_MORPH_WATCHER_IN_PLAN  Morph INT-8 (USER R11): redirect / unkicked Vines need Defiance on board or cast in the plan. Default ON; =0 -> off
+    MORPH_TBR_OTHER,          // MTG_MORPH_TBR_OTHER  Morph INT-8 (USER R12): a double-strike grant skips a double striker / a 0-power body. Default ON; =0 -> off
+    MORPH_TIE_NONMANA,        // MTG_MORPH_TIE_NONMANA  Morph INT-8 (USER R13): largest-attacker ties prefer a non-mana body. Default ON; =0 -> off
     COUNT
 };
 
@@ -1706,6 +1714,14 @@ inline const char* Name(int slot)
         "MTG_PAY_SAC_LINE_RESERVE",
         "MTG_OPS_FIXED_REVEAL",
         "MTG_PAY_DOOMED_BODY_FIRST",
+        "MTG_MORPH_VINES_KICKED_ONLY",
+        "MTG_MORPH_CAST_ORDER_R8",
+        "MTG_MORPH_DEN_FLIP_INLINE",
+        "MTG_MORPH_REDIRECT_GROUP",
+        "MTG_MORPH_BERSERK_FIRST",
+        "MTG_MORPH_WATCHER_IN_PLAN",
+        "MTG_MORPH_TBR_OTHER",
+        "MTG_MORPH_TIE_NONMANA",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -3422,6 +3422,8 @@ static bool MoveOrderLess(const TurnSolver::Plan& a, const TurnSolver::Plan& b)
     // OFF): same shape one tier down -- a plan whose payment must tap the best own
     // attacker sorts after siblings that keep the attack live.
     if (a.atk_forfeit != b.atk_forfeit) { return b.atk_forfeit; }
+    // Provider front tier (PlanMoveOrderFront; Morph INT-8 E: Berserk first). Ordering only.
+    if (a.move_front != b.move_front) { return a.move_front; }
     if (a.value != b.value) { return a.value > b.value; }
     return a.bp_sched > b.bp_sched;   // MTG_BP_VARIANT_FIRST: exact tie -> the variant first
 }
@@ -12472,6 +12474,42 @@ void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>
     }
 }
 
+void TurnSolver::FaceUpInlineTrailDue(const GameState& state, const std::vector<Action>& acts, std::vector<Action>& due)
+{
+    due.clear();
+    if (!state.deck_has_morph) { return; }
+    bool any = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TurnFaceUpLate
+            && !a.tutor_target.empty()) { any = true; break; }
+    }
+    if (!any || HumanPlayActive() || !ResolveProvider(state).FaceUpTrailFlipAfterTargetCast()) { return; }
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUpLate
+            || a.tutor_target.empty()) { continue; }
+        bool in_gy = false;
+        for (const Card& gc : ap.graveyard) { if (gc.m_name.str() == a.tutor_target.str()) { in_gy = true; break; } }
+        if (!in_gy) { continue; }
+        const int src_id = ResolveHandSourceActivation(state, a);
+        if (!PermAbilitySourceLive(state, me, src_id, a.ability_mode)) { continue; }
+        due.push_back(a);
+    }
+}
+
+void TurnSolver::SectionForgetRegrown(std::vector<int>& snapshot, const std::vector<int>& hand_before,
+                                      const GameState& state)
+{
+    for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].hand)
+    {
+        if (std::find(hand_before.begin(), hand_before.end(), c.m_number) != hand_before.end()) { continue; }
+        snapshot.erase(std::remove(snapshot.begin(), snapshot.end(), c.m_number), snapshot.end());
+    }
+}
+
 // Battlefield sources only (needs_cast_mask == 0): a hand-source trail flip turns up a creature this plan casts
 // face down, summoning-sick and without haste in every pool today, so it can never be the attacker ranked.
 PlanTrailFlips TurnSolver::PlanTrailFlipsFor(const GameState& state, const std::vector<Action>& acts)
@@ -21156,9 +21194,13 @@ static bool SubsetPhyrexianDominated(const GameState& state,
         {
             // Restore the life-paid pips from the printed cost's metadata (the strip removed
             // them highest-slot-first; the colours are what matter, not the slots).
-            const ManaCost& mc =
+            ManaCost mc =
                 (a.kind == Action::Kind::ActivatePod && a.def->params.pod_activation_cost)
                     ? *a.def->params.pod_activation_cost : a.def->card.m_mana_cost;
+            // Spellskite's redirect pip ({U/P}, AddSpellRedirectPip) is not in the printed cost: restore it too,
+            // or a life-paid redirect twin reads as payable in mana (it is not without blue) and was pruned as
+            // dominated -- every life-paid redirect, i.e. every redirect in a deck with no blue (Morph INT-8).
+            if (a.trick_redirect != 0) { AddSpellRedirectPip(mc); }
             int k = a.phyrexian_life / 2;
             for (int pi = mc.phyrexian_count; pi-- > 0 && k > 0; --k)
             {
@@ -21249,6 +21291,54 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
                                         const std::vector<int>& sel,
                                         int best_needs_body = -1)
 {
+    // Morph INT-8 (D), USER R9 ("Redirect all Pump Spells"): under a provider that groups the Spellskite redirect
+    // twins (RedirectTargetedPumpsAsGroup), a subset holding ANY redirected trick must redirect EVERY cast-time-target
+    // trick it casts (the twin exists for each of them: redirect_num is a board fact, the same for every trick), and
+    // the group's Phyrexian life (2 per life-paid pip) must leave us above 0 -- otherwise the subset is not offered
+    // and the section's "no redirect" sibling stands. Inert (one field test per selected action) without a twin.
+    // ...and (USER R11: "It should be disallowed heuristically if no Wild Defiance ends up in the plan.") under
+    // TrickWatcherVariantsNeedWatcherInPlan, a subset holding a watcher-only variant -- a redirect twin, or a kicker
+    // trick cast UNKICKED (Vines: R7b) -- needs the watcher on the battlefield or cast in this subset.
+    {
+        int  life_paid = 0;
+        bool redirected = false, plain = false, unkicked = false;
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.trick_redirect != 0) { redirected = true; life_paid += a.phyrexian_life; }
+            else if (a.enchant_target == kTrickBestOwnTarget) { plain = true; }
+            if (!a.kicked && a.enchant_target == kTrickBestOwnTarget)
+            {
+                const CardDefinition* kd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (kd != nullptr && kd->params.kicker_cost.has_value()) { unkicked = true; }
+            }
+        }
+        if ((redirected || unkicked) && ResolveProvider(state).TrickWatcherVariantsNeedWatcherInPlan())
+        {
+            auto watcher = [](const CardDefinition* d)
+            { return d != nullptr && (d->params.spell_target_watch_pump_power != 0 || d->params.spell_target_watch_pump_tough != 0); };
+            bool have = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+                if (watcher(CardDatabase::Instance().LookupCached(p.card))) { have = true; break; }
+            }
+            for (int j : sel)
+            {
+                if (have) { break; }
+                const Action& a = cands[j];
+                if (a.kind != Action::Kind::CastFromHand) { continue; }
+                if (watcher(a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name))) { have = true; }
+            }
+            if (!have) { return true; }
+        }
+        if (redirected && ResolveProvider(state).RedirectTargetedPumpsAsGroup())
+        {
+            if (plain) { return true; }
+            if (life_paid >= state.players[static_cast<std::size_t>(state.active_player_index)].life) { return true; }
+        }
+    }
     // Battlefield-target tricks are always legal (the target exists at this node); only a trick
     // whose target is a SAME-PLAN HAND creature (trick_hand_target, stamped at emission) needs the
     // subset to also cast that creature. A pure name compare -- no zone scans (profiled at 3.7%).
@@ -37222,27 +37312,43 @@ static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actio
     const int me = state.active_player_index;
     const Player& ap = state.players[static_cast<std::size_t>(me)];
     const bool decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0) && !HumanPlayActive();
-    auto regrow_names = [&](bool trail)
+    // Morph INT-8 (C): under FaceUpTrailFlipAfterTargetCast a TRAIL flip runs right after the cast of the card it
+    // names (ApplyFaceUpInlineTrailActs), so a BATTLEFIELD-source trail flip naming a card already in the graveyard
+    // would flip after the plan's first cast -- its LEAD twin (before every cast, the same regrowth) is the USER's
+    // position ("a card already in the graveyard means flipping before every pump"), so that variant is not emitted.
+    // A hand-source trail flip keeps it (it flips right after its own face-down cast). The provider then ORDERS the
+    // names (FaceUpRegrowOrder: emission order = trial order among value-tied plans); nothing else is dropped.
+    const bool trail_inline = decision_space && ResolveProvider(state).FaceUpTrailFlipAfterTargetCast();
+    auto regrow_names = [&](bool trail, bool hand_src)
     {
         std::vector<std::string> names;
         auto add = [&names](const std::string& nm)
         { if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); } };
-        for (const Card& gc : ap.graveyard) { add(gc.m_name.str()); }
+        if (!(trail && trail_inline && !hand_src)) { for (const Card& gc : ap.graveyard) { add(gc.m_name.str()); } }
         if (trail)
         {
             for (const Card& hc : ap.hand)
             {
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd != nullptr && (hd->card.IsInstant() || hd->card.IsSorcery())) { add(hc.m_name.str()); }
+                if (hd == nullptr || !(hd->card.IsInstant() || hd->card.IsSorcery())) { continue; }
+                if (trail_inline && !hand_src)
+                {
+                    bool in_gy = false;
+                    for (const Card& gc : ap.graveyard) { if (gc.m_name == hc.m_name) { in_gy = true; break; } }
+                    if (in_gy) { continue; }
+                }
+                add(hc.m_name.str());
             }
         }
+        ResolveProvider(state).FaceUpRegrowOrder(state, names);
         return names;
     };
     auto push = [&](Action a, const CardDefinition& real)
     {
         if (decision_space && real.params.turned_face_up_return_gy_to_hand)
         {
-            for (const std::string& nm : regrow_names(a.ability_mode == Action::AbilityMode::TurnFaceUpLate))
+            for (const std::string& nm : regrow_names(a.ability_mode == Action::AbilityMode::TurnFaceUpLate,
+                                                      a.needs_cast_mask != 0))
             {
                 Action v = a;
                 v.tutor_target = nm;
@@ -40911,10 +41017,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             };
             // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
             // action for the cheap subset legality filter).
+            // Morph INT-8 (A): the provider may drop a kicker MODE (TrickKickModes: bit0 unkicked, bit1 kicked) --
+            // a restriction, never a pick; consulted only when the trick has a kicked face.
+            const int trick_kick_modes = trick_kdef ? ResolveProvider(state).TrickKickModes(state, def) : 1;
             auto emit = [&](int tgt_num, int strive_k, const std::string& hand_name = std::string())
             {
               for (int kick = 0; kick < (trick_kdef ? 2 : 1); ++kick)
               {
+              if ((trick_kick_modes & (1 << kick)) == 0) { continue; }
               const CardDefinition& vdef = kick ? *trick_kdef : def;
               for (int xv : x_values)
               {
@@ -56587,6 +56697,21 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
     });
     auto is_redirector = [](const CardDefinition* cd)
     { return cd != nullptr && cd->params.redirects_spell_target_to_self; };
+    const bool avoid_ds    = !best_tricks.empty() && ResolveProvider(state).DoubleStrikeGrantAvoidsDoubleStrikers();
+    const bool tie_nonmana = !best_tricks.empty() && ResolveProvider(state).TrickTargetTieAvoidsManaProducers();
+    // R13 / R14: mana at combat -- a battlefield body through its combat-time face, a same-plan hand creature its card.
+    auto mana_of = [&](int num) -> bool
+    {
+        for (const Permanent& p : state.battlefield)
+        { if (p.card.m_number == num && p.controller_index == me) { return LargestAttackerProducesMana(p, state); } }
+        for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+        {
+            if (hc.m_number != num) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            return hd != nullptr && hd->tmpl == CardTemplate::ManaDork;
+        }
+        return false;
+    };
     for (const auto& [d, redirect] : best_tricks)
     {
       // The twin first picks among non-redirectors; with none it degrades to the plain pick (the resolver's floor).
@@ -56594,6 +56719,11 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
       {
         const bool exclude = pass == 0;
         int pick = 0, pick_score = -1;
+        bool pick_mana = false;
+        // USER R12 (the resolver's FindBestOwnAttackerForTrick): a double-strike grant skips a recipient that already
+        // has double strike at combat or has combat power 0 -- with none left it falls back to the plain pick (skip_ds
+        // off on the retry below). USER R13: an equal score prefers a body that does not produce mana at combat.
+        bool skip_ds = d->params.grants_temp_double_strike && avoid_ds;
         auto consider = [&](int num)
         {
             bool had_ds = false;
@@ -56602,7 +56732,10 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             Rec probe{num};
             for (const Rec& r : recs) { if (r.num == num) { probe = r; break; } }
             const int sc = after_of(probe, base, had_ds);
-            if (sc > pick_score) { pick_score = sc; pick = num; }
+            if (skip_ds && (had_ds || probe.ds || sc <= 0)) { return; }
+            const bool mana = tie_nonmana && mana_of(num);
+            if (sc > pick_score || (sc == pick_score && pick_mana && !mana))
+            { pick_score = sc; pick = num; pick_mana = mana; }
         };
         for (const Permanent& p : state.battlefield)
         {
@@ -56621,6 +56754,28 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             if (exclude && is_redirector(cd)) { continue; }
             for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
             { if (hc.m_name == c.card_name && hc.m_number != 0) { consider(hc.m_number); break; } }
+        }
+        if (pick == 0 && skip_ds)
+        {
+            skip_ds = false;
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == me && p.card.m_number != 0 && (p.card.IsCreature() || p.is_animated))
+                {
+                    if (exclude && !p.def_absent && is_redirector(CardDatabase::Instance().LookupCached(p.card))) { continue; }
+                    consider(p.card.m_number);
+                }
+            }
+            for (int j : sel)
+            {
+                const Action& c = cands[static_cast<std::size_t>(j)];
+                if (c.kind != Action::Kind::CastFromHand) { continue; }
+                const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+                if (cd == nullptr || !cd->card.IsCreature()) { continue; }
+                if (exclude && is_redirector(cd)) { continue; }
+                for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+                { if (hc.m_name == c.card_name && hc.m_number != 0) { consider(hc.m_number); break; } }
+            }
         }
         if (pick == 0) { continue; }
         if (exclude && pick != redirect) { add_trick(*d, redirect, pick); }   // A's watcher, then the payload on S
@@ -70462,6 +70617,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // counters below only ever move while their own position is pending, so this is the same hook).
         auto slot_hook = [&](const Action& a, bool truncated_before)
         {
+            // Morph INT-8 (C): the plan's named trail flips due right after THIS cast (FaceUpInlineTrailDue),
+            // TOP-LEVEL section only, through the trailing-pass body. Executor twin: exec_slot_hook.
+            if (slot_top && !truncated_before && state.deck_has_morph)
+            {
+                std::vector<Action> fu_due;
+                TurnSolver::FaceUpInlineTrailDue(state, plan.actions, fu_due);
+                for (const Action& fa : fu_due)
+                {
+                    const std::vector<int> before = TurnSolver::HandCardNumbers(state);
+                    apply_trailing_activations(std::vector<Action>{ fa });
+                    if (BpHandEntryEnabled()) { TurnSolver::SectionForgetRegrown(hand_at_section, before, state); }
+                }
+            }
             if (!(slot_top || slot_cont) || truncated_before) { return; }
             // The plan's reveal outlets positioned right after THIS gain-watcher cast (Martyr of Sands;
             // see rv_plan). Before the land hook, in both worlds.
@@ -79819,6 +79987,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         plan.freshmode_choice = fresh_tag ? 1 : 0;   // fresh-spend priced at the base (MTG_MINT_CREDIT_EXACT)
         plan.pump_waste     = SubsetPumpWasted(state, cands, sel);   // ordering-only tie-break flag
         plan.atk_forfeit    = SubsetAttackForfeit(state, cands, sel);   // ordering-only (gated OFF)
+        plan.move_front     = ResolveProvider(state).PlanMoveOrderFront(state, cands, sel);   // ordering-only
         // MTG_ENUM_PLAN_RESERVE (DEFAULT ON; =0 restores the grow-as-you-push loop): size the action vector
         // once. Capacity is not observable by anything downstream (copies allocate their own size), so
         // the plan is unchanged; perf put the 1->2->4->8 regrowth (each a copy of every Action so far) at
@@ -92834,6 +93003,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combo_off_rule == b.combo_off_rule)) { d += " combo_off_rule"; }
     if (!(a.pump_waste == b.pump_waste)) { d += " pump_waste"; }
     if (!(a.atk_forfeit == b.atk_forfeit)) { d += " atk_forfeit"; }
+    if (!(a.move_front == b.move_front)) { d += " move_front"; }
     if (!(a.atk_dork_release == b.atk_dork_release)) { d += " atk_dork_release"; }
     if (!(a.searched_order == b.searched_order)) { d += " searched_order"; }
     if (!(a.soulbond_decline == b.soulbond_decline)) { d += " soulbond_decline"; }

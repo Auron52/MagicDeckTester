@@ -402,6 +402,19 @@ public:
                                std::vector<int>& out) const override;
     std::vector<int> OwnPumpTargetCandidates(const GameState& s, int controller,
                                              const std::vector<int>& own_attackers) const override;
+    // INT-8 (USER rulings R7-R10, 2026-11-12; see each definition). Every one is an EnvOn lever, DEFAULT ON:
+    // MTG_MORPH_VINES_KICKED_ONLY (A), MTG_MORPH_CAST_ORDER_R8 (B) + MTG_MORPH_DEN_FLIP_INLINE (C),
+    // MTG_MORPH_REDIRECT_GROUP (D), MTG_MORPH_BERSERK_FIRST (E).
+    int  TrickKickModes(const GameState& s, const CardDefinition& def) const override;
+    bool RedirectTargetedPumpsAsGroup() const override;
+    bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                            const std::vector<int>& sel) const override;
+    void FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const override;
+    bool FaceUpTrailFlipAfterTargetCast() const override;
+    // R11-R13: MTG_MORPH_WATCHER_IN_PLAN, MTG_MORPH_TBR_OTHER, MTG_MORPH_TIE_NONMANA (each DEFAULT ON).
+    bool TrickWatcherVariantsNeedWatcherInPlan() const override;
+    bool DoubleStrikeGrantAvoidsDoubleStrikers() const override;
+    bool TrickTargetTieAvoidsManaProducers() const override;
     // Morph INT-2d: the playout / d0 pump policy (beyond the horizon only; see the base declaration).
     // MTG_MORPH_GREEDY_TRICK_HOLD=0 restores the cast-every-trick greedy for an A/B.
     bool GreedyHoldsCombatTricksForLethal() const override

@@ -2887,6 +2887,49 @@ public:
     virtual bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const
     { (void)s; (void)def; return false; }
 
+    // ---- Morph INT-8 (USER rulings R7-R10, 2026-11-12): four provider RESTRICT / ORDER hooks. Each default is
+    // "no opinion", so every deck that does not override them is byte-identical. Never consulted under human
+    // play or MTG_UNPRUNED (the engine call sites check), so the viewer and the unpruned arm see everything.
+    //
+    // TrickKickModes -- which KICKER modes of a solo-target trick to emit: bit0 = unkicked, bit1 = kicked.
+    // Default 3 (both; the search picks). A restriction: the provider may drop a mode, never add one.
+    virtual int TrickKickModes(const GameState& s, const CardDefinition& def) const
+    { (void)s; (void)def; return 3; }
+    // RedirectTargetedPumpsAsGroup -- a plan's Spellskite-type redirect twins (Action::trick_redirect) are
+    // ALL-OR-NONE: a subset that redirects some of its redirect-eligible tricks and not others is rejected
+    // (SubsetHasMissingTrickTarget), and so is one whose redirects' life cost (2 per Phyrexian pip the deck
+    // cannot pay in colour) would not leave the player above 0. Default false.
+    virtual bool RedirectTargetedPumpsAsGroup() const { return false; }
+    // PlanMoveOrderFront -- a MOVE-ORDER tier (MoveOrderLess, below wins_this_turn / pump_waste / atk_forfeit,
+    // above value): a plan this answers true for is TRIED FIRST among its peers. ORDER only -- nothing is
+    // removed, and a strictly better plan still wins its pass. Default false.
+    virtual bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
+                                    const std::vector<int>& sel) const
+    { (void)s; (void)cands; (void)sel; return false; }
+    // FaceUpRegrowOrder -- the ORDER of a "when turned face up, return a card from your graveyard" flip's
+    // named regrowth variants (EmitFaceUpActions; emission order = trial order among value-tied plans).
+    // Reorder `names` in place; never add or drop one. Default: emission order (graveyard, then hand).
+    virtual void FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const
+    { (void)s; (void)names; }
+    // FaceUpTrailFlipAfterTargetCast -- a TRAIL turn-face-up flip that names its regrowth target
+    // (TurnFaceUpLate + tutor_target) runs IMMEDIATELY after the cast that puts that card in the graveyard
+    // (TurnSolver::ApplyFaceUpInlineTrailActs, both worlds' top-level cast section) instead of in the trailing
+    // pass; a battlefield-source trail flip naming a card ALREADY in the graveyard is not emitted (its LEAD
+    // twin flips before every cast). Default false -> the trailing position.
+    virtual bool FaceUpTrailFlipAfterTargetCast() const { return false; }
+    // ---- Morph INT-8 continued (USER rulings R11-R14, 2026-11-12). Defaults: no opinion (byte-identical).
+    // TrickWatcherVariantsNeedWatcherInPlan (R11) -- a subset holding a target-WATCHER-only variant (a Spellskite
+    // redirect twin, or a kicker trick cast UNKICKED) must have the watcher (spell_target_watch_pump_*) on the
+    // battlefield or cast in the same subset (it ranks before every trick); one left in hand voids the variant
+    // (SubsetHasMissingTrickTarget).
+    virtual bool TrickWatcherVariantsNeedWatcherInPlan() const { return false; }
+    // DoubleStrikeGrantAvoidsDoubleStrikers (R12) -- a cast-time double-strike grant skips a recipient that already
+    // has double strike at combat, and one with combat power 0 (FindBestOwnAttackerForTrick; the playout credit).
+    virtual bool DoubleStrikeGrantAvoidsDoubleStrikers() const { return false; }
+    // TrickTargetTieAvoidsManaProducers (R13) -- among equally large recipients, prefer one that does not produce
+    // mana at combat, then the oldest (the playout credit; a provider's own OwnPumpTargetCandidates applies it too).
+    virtual bool TrickTargetTieAvoidsManaProducers() const { return false; }
+
     // AttachSpellPairCandidates -- narrow Magnetic Theft's ("Attach target Equipment to target
     // creature", attach_target_equipment) enumerated (Equipment m_number, creature m_number) pairs.
     // `pairs` arrives holding EVERY pair the engine folded as distinct (TurnSolver

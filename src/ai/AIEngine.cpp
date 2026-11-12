@@ -8064,6 +8064,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ONE shared body. The cast window's library-top verdict is frozen across them (rdb_top_verdict).
     auto exec_slot_hook = [&](const Action& a)
     {
+        // Morph INT-8 (C): the plan's named trail flips due right after THIS cast (lockstep twin of slot_hook's),
+        // through the executor's own trailing-pass body.
+        if (state.deck_has_morph)
+        {
+            std::vector<Action> fu_due;
+            TurnSolver::FaceUpInlineTrailDue(state, plan.actions, fu_due);
+            for (const Action& fa : fu_due)
+            {
+                const std::vector<int> before = TurnSolver::HandCardNumbers(state);
+                exec_trailing_activations(std::vector<Action>{ fa });
+                if (BpHandEntryEnabled()) { TurnSolver::SectionForgetRegrown(exec_hand_at_section, before, state); }
+            }
+        }
         // The plan's reveal outlets positioned right after THIS gain-watcher cast (twin of slot_hook's;
         // before the land hook in both worlds), through the executor's own trailing-pass body.
         if (exec_rv_plan && TurnSolver::RevealSlotCounts(a))
