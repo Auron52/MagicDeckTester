@@ -891,6 +891,9 @@ enum Slot : int
     MORPH_TIE_NONMANA,        // MTG_MORPH_TIE_NONMANA  Morph INT-8 (USER R13): largest-attacker ties prefer a non-mana body. Default ON; =0 -> off
     MORPH_BERSERK_FIRST_LETHAL, // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY  Morph INT-9: the PROPOSED amendment to E (not a USER ruling) -- the Berserk front tier applies only to plans projected lethal (wins_this_turn), so it no longer tie-breaks a non-lethal turn toward casting Berserk. Measurement arm, DEFAULT OFF (E stays as ruled until the USER answers)
     MORPH_FETCH_RULE,         // MTG_MORPH_FETCH_RULE  Morph INT-9 (USER 2026-11-12, "goldfish can just always get stomping ground"): Wooded Foothills is cracked on play (no hold) and fetches the dual (a pick producing more colours, i.e. Stomping Ground) first, else the generic order. Default ON; =0 -> the generic hold choice + library order
+    MORPH_NO_POSTCOMBAT_TRICK, // MTG_MORPH_NO_POSTCOMBAT_TRICK  Morph INT-10 (a; USER-approved "Never pump a creature that can't attack this turn"): no solo-target trick variant once this turn's combat is over (sound dominance: the payload is until-EOT combat value). Default ON; =0 -> tricks offered after combat
+    MORPH_NO_POSTCOMBAT_SACUP, // MTG_MORPH_NO_POSTCOMBAT_SACUP  Morph INT-10 (b): no face-up entry (hard cast, face-down-and-up cast, turn face up) of an end-step-sacrifice creature (Blistering Firecat) once this turn's combat is over (sound dominance). Default ON; =0 -> offered after combat
+    FACEUP_LEAD_PIN_FOLD,     // MTG_FACEUP_LEAD_PIN_FOLD  Morph INT-10 (engine identity fold): a regrowth LEAD flip (Den Protector) emits no UNPINNED base once its named variants are emitted (the base resolves to one of them). Default ON; =0 -> the base is kept
     COUNT
 };
 
@@ -1726,6 +1729,9 @@ inline const char* Name(int slot)
         "MTG_MORPH_TIE_NONMANA",
         "MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY",
         "MTG_MORPH_FETCH_RULE",
+        "MTG_MORPH_NO_POSTCOMBAT_TRICK",
+        "MTG_MORPH_NO_POSTCOMBAT_SACUP",
+        "MTG_FACEUP_LEAD_PIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

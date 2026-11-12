@@ -37343,8 +37343,17 @@ static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actio
         ResolveProvider(state).FaceUpRegrowOrder(state, names);
         return names;
     };
+    // INT-10 IDENTITY FOLD (MTG_FACEUP_LEAD_PIN_FOLD, DEFAULT ON; =0 keeps the base): a LEAD flip runs before every cast,
+    // so its graveyard is the pre-plan graveyard (less what an earlier LEAD regrew), every distinct name of which has its
+    // own named variant -- the UNPINNED base resolves to the provider's pick among exactly those names, i.e. it IS one of
+    // the named variants (a named pin whose card has left also falls back to that pick). So once the named variants are
+    // emitted the base is a duplicate and is not. A TRAIL base is kept (it flips at the trailing position, which no named
+    // variant does). Measured before the fold: 2.3% of the plans the d5 b20 search returned (Morph census, INT-10).
+    static const bool s_lead_pin_fold_env = EnvOn("MTG_FACEUP_LEAD_PIN_FOLD", true);
+    const bool lead_pin_fold = heurarm::Flag(heurarm::FACEUP_LEAD_PIN_FOLD, s_lead_pin_fold_env);
     auto push = [&](Action a, const CardDefinition& real)
     {
+        bool named = false;
         if (decision_space && real.params.turned_face_up_return_gy_to_hand)
         {
             for (const std::string& nm : regrow_names(a.ability_mode == Action::AbilityMode::TurnFaceUpLate,
@@ -37353,8 +37362,10 @@ static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actio
                 Action v = a;
                 v.tutor_target = nm;
                 actions.push_back(std::move(v));
+                named = true;
             }
         }
+        if (named && lead_pin_fold && a.ability_mode == Action::AbilityMode::TurnFaceUp && a.needs_cast_mask == 0) { return; }
         actions.push_back(std::move(a));
     };
     for (const Permanent& p : state.battlefield)
@@ -50298,6 +50309,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
     actions.swap(burn_targets);
+    // MORPH INT-10 (b): after combat, a face-up entry of an end-step-sacrifice creature is dominated by not making it
+    // (DecisionProvider::EndStepSacFaceUpDeadAfterCombat states the proof). BEFORE the fold tags, so a hand slot left
+    // with only its face-down cast can join the interchangeable-copy fold. No-op without a face-down-capable deck.
+    if (state.deck_has_morph && !HumanPlayActive() && StealCombatOver(state) && !state.deck_has_extra_combat
+        && state.pending_extra_combats == 0)
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        auto dead = [&](const Action& a) -> bool
+        {
+            const CardDefinition* real = nullptr;
+            if (a.kind == Action::Kind::CastFromHand && a.face_down != 1)
+            { real = a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name); }
+            else if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode))
+            {
+                for (const Permanent& p : state.battlefield)
+                { if (p.card.m_number == a.sac_source_id) { real = FaceDownRealDef(p); break; } }
+                if (real == nullptr && a.needs_cast_mask != 0) { real = CardDatabase::Instance().LookupInterned(a.card_name); }
+            }
+            return real != nullptr && real->params.endstep_sacrifice_self && prov.EndStepSacFaceUpDeadAfterCombat(state, *real);
+        };
+        actions.erase(std::remove_if(actions.begin(), actions.end(), dead), actions.end());
+    }
     FinalizeFoldTags(state, actions);
     return actions;
 }
@@ -75426,6 +75459,20 @@ namespace branchstats
     inline std::map<std::string, Bucket>       g_by_situ;     // keyed by coarse situation label
     inline std::map<std::string, Bucket>       g_by_axis;     // post-dedup axis variants (see below)
     inline Bucket                              g_total;
+    // PLAN-TAG table (MTG_BRANCH_STATS, print-only): per action TAG (kind + face-down mode + flip position +
+    // regrowth pin + kicker + redirect, by card name), how many RETURNED plans carry it (`sum_final`) and the
+    // plan count of the calls it appeared in (`sum_odo`). Answers "which option inflates the plan set".
+    inline std::map<std::string, Bucket>       g_by_tag;
+    inline void RecordTags(const std::map<std::string, std::uint64_t>& tags, std::uint64_t n_plans)
+    {
+        std::lock_guard<std::mutex> lk(g_mtx);
+        for (const auto& [k, c] : tags)
+        {
+            Bucket& b = g_by_tag[k];
+            ++b.calls; b.final_plans += static_cast<double>(c); b.odo += static_cast<double>(n_plans);
+            if (n_plans > b.max_odo) { b.max_odo = n_plans; }
+        }
+    }
 
     // The POST-DEDUP AXES (tutor / scry / etb-dig / ponder / lackey / cleanup-discard) append
     // full Plan variants in EnumeratePlansWithLand AFTER the odometer above has been recorded,
@@ -75463,7 +75510,7 @@ namespace branchstats
                 std::fprintf(stderr, "\n=== BRANCH STATS: %s (sorted by total odometer) ===\n", title);
                 std::fprintf(stderr, "%-34s %10s %14s %12s %12s %10s\n",
                              "key", "calls", "sum_odo", "sum_final", "avg_odo", "max_odo");
-                for (size_t i = 0; i < v.size() && i < 20; ++i) {
+                for (size_t i = 0; i < v.size() && i < (std::string(title).rfind("by plan TAG", 0) == 0 ? 60u : 20u); ++i) {
                     const Bucket& b = v[i].second;
                     std::fprintf(stderr, "%-34s %10llu %14.0f %12.0f %12.1f %10llu\n",
                         v[i].first.c_str(), (unsigned long long)b.calls, b.odo, b.final_plans,
@@ -75475,6 +75522,7 @@ namespace branchstats
             dump("by driver card (biggest option-group)", g_by_driver);
             dump("by situation", g_by_situ);
             dump("by post-dedup axis (columns = plans returned for scoring)", g_by_axis);
+            dump("by plan TAG (sum_final = plans carrying the tag; sum_odo = plans in those calls)", g_by_tag);
         }
     };
     inline Dumper g_dumper;
@@ -82657,6 +82705,94 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             HinataInPlay(state) ? 1 : 0);
         branchstats::Record(driver, situ, odo,
                             static_cast<uint64_t>(plans.size()), static_cast<uint64_t>(deduped.size()));
+        std::map<std::string, std::uint64_t> tags;
+        for (const TurnSolver::Plan& pl : deduped)
+        {
+            std::set<std::string> seen_in_plan;
+            for (const Action& a : pl.actions)
+            {
+                std::string t;
+                if (a.kind == Action::Kind::CastFromHand)
+                {
+                    t = a.face_down == 1 ? "FD " : a.face_down == 2 ? "FD+up " : a.enchant_target == kTrickBestOwnTarget ? "trick " : "cast ";
+                    t += a.card_name.str();
+                    if (a.kicked) { t += " [kicked]"; }
+                    if (a.trick_redirect != 0) { t += " [redirect]"; }
+                }
+                else if (a.kind == Action::Kind::ActivatePermAbility)
+                {
+                    t = a.ability_mode == Action::AbilityMode::TurnFaceUp ? "flipLEAD "
+                      : a.ability_mode == Action::AbilityMode::TurnFaceUpLate ? (a.needs_cast_mask ? "flipTRAIL(hand) " : "flipTRAIL ")
+                      : "act" + std::to_string(static_cast<int>(a.ability_mode)) + " ";
+                    t += a.card_name.str();
+                    if (a.ability_mode == Action::AbilityMode::TurnFaceUp || a.ability_mode == Action::AbilityMode::TurnFaceUpLate)
+                    { t += a.tutor_target.empty() ? " >(pin)" : " >name"; }
+                }
+                else { t = "kind" + std::to_string(static_cast<int>(a.kind)) + " " + a.card_name.str(); }
+                seen_in_plan.insert(t);
+            }
+            if (pl.actions.empty()) { seen_in_plan.insert("(no action)"); }
+            // COPY-TWIN probe: two hand copies of one card cast with DIFFERENT variants (face_down / kicked /
+            // redirect) -- the multi-variant slots the hand-cast fold (CONDITION 2) leaves unfolded, so the swapped
+            // twin plan is enumerated too. And two flips of one face-down card NAME (the activation fold's CONDITION 2).
+            {
+                std::map<std::string, std::set<int>> var_by_name; std::map<std::string, int> casts_by_name, flips_by_name;
+                for (const Action& a : pl.actions)
+                {
+                    if (a.kind == Action::Kind::CastFromHand)
+                    {
+                        const std::string nm = a.card_name.str();
+                        ++casts_by_name[nm];
+                        var_by_name[nm].insert(a.face_down * 100 + (a.kicked ? 10 : 0) + (a.trick_redirect != 0 ? 1 : 0));
+                    }
+                    else if (a.kind == Action::Kind::ActivatePermAbility
+                             && (a.ability_mode == Action::AbilityMode::TurnFaceUp || a.ability_mode == Action::AbilityMode::TurnFaceUpLate)
+                             && a.needs_cast_mask == 0)
+                    { ++flips_by_name[a.card_name.str()]; }
+                }
+                for (const auto& [nm, n] : casts_by_name)
+                { if (n >= 2 && var_by_name[nm].size() >= 2) { seen_in_plan.insert("(copy-twin mixed variants) " + nm); } }
+                for (const auto& [nm, n] : flips_by_name)
+                { if (n >= 2) { seen_in_plan.insert("(two flips same face) " + nm); } }
+                for (const Action& a : pl.actions)
+                {
+                    if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUpLate
+                        || a.needs_cast_mask == 0) { continue; }
+                    int fd1 = 0, fd2 = 0, hard = 0;
+                    for (const Action& c : pl.actions)
+                    {
+                        if (c.kind != Action::Kind::CastFromHand || c.card_name != a.card_name) { continue; }
+                        if (c.face_down == 1) { ++fd1; } else if (c.face_down == 2) { ++fd2; } else { ++hard; }
+                    }
+                    seen_in_plan.insert("(hand-trail with casts fd1=" + std::to_string(fd1) + " fd2=" + std::to_string(fd2)
+                                        + " hard=" + std::to_string(hard) + ")");
+                }
+                if (StealCombatOver(state))
+                {
+                    bool trick = false, firecat_up = false;
+                    for (const Action& a : pl.actions)
+                    {
+                        if (a.kind == Action::Kind::CastFromHand && a.def != nullptr && a.def->params.solo_target_trick) { trick = true; }
+                        if (a.kind == Action::Kind::CastFromHand && a.face_down != 1 && a.def != nullptr && a.def->params.endstep_sacrifice_self) { firecat_up = true; }
+                        if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode))
+                        {
+                            for (const Permanent& p : state.battlefield)
+                            {
+                                if (p.card.m_number != a.sac_source_id) { continue; }
+                                const CardDefinition* r = FaceDownRealDef(p);
+                                if (r != nullptr && r->params.endstep_sacrifice_self) { firecat_up = true; }
+                                break;
+                            }
+                        }
+                    }
+                    seen_in_plan.insert("(M2 plan)");
+                    if (trick) { seen_in_plan.insert("(M2 plan with a solo trick)"); }
+                    if (firecat_up) { seen_in_plan.insert("(M2 plan turning up / hard-casting an end-step-sac creature)"); }
+                }
+            }
+            for (const std::string& t : seen_in_plan) { ++tags[t]; }
+        }
+        branchstats::RecordTags(tags, static_cast<std::uint64_t>(deduped.size()));
     }
 
     // BRANCH SHAPE (independent of MTG_BRANCH_STATS -- it answers different questions; see the

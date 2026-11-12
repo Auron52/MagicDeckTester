@@ -8827,11 +8827,49 @@ bool MorphProvider::TrickTargetsAttackersOnly(const GameState&, const CardDefini
 static bool MorphLargestTrickTargetOn()
 { static const bool on = EnvOn("MTG_MORPH_LARGEST_TRICK_TARGET", true); return on; }
 
+// INT-10: NO TRICK AFTER COMBAT (USER, approved 2026-11-12: "Never pump a creature that can't attack this turn."). Once
+// this turn's combat is over (StealCombatOver: the post-combat main, or the end step) and the deck queues no additional
+// combat, no creature can attack this turn, so every solo-target trick's payload is dead: +N/+N, power doubling, double
+// strike, first strike and Wild Defiance's +3/+3 are all until-end-of-turn COMBAT value that nothing in this list reads
+// after combat (goldfish: no blocks, no damage to our creatures; Berserk is not castable then anyway -- its own cast
+// restriction). Casting one only spends mana and moves the card from hand to graveyard, which Den Protector's regrowth
+// can at best undo -- so the cast is DOMINATED by not casting it (a sound dominance fold, not a judgement). The trick
+// gets the "no recipient" sentinel, i.e. no variant. Same premises as TrickTargetsAttackersOnly (a list revision that adds
+// a post-combat reader of power, a spell-count payoff or a graveyard payoff must drop this). Off under human play and
+// MTG_UNPRUNED / MTG_UNPRUNE=tricktarget (the early return below); MTG_MORPH_NO_POSTCOMBAT_TRICK=0 restores the cast.
+static bool MorphNoPostCombatTrickOn()
+{
+    static const bool on = EnvOn("MTG_MORPH_NO_POSTCOMBAT_TRICK", true);   // DEFAULT ON; =0 -> tricks offered after combat
+    return heurarm::Flag(heurarm::MORPH_NO_POSTCOMBAT_TRICK, on);
+}
+
+// INT-10 (b): the same "combat is over" premise for a face-up Blistering Firecat (endstep_sacrifice_self, no turned-face-up
+// trigger). Cast face up (hard, or face down and up at once) or turned face up after combat, it cannot attack, is
+// sacrificed at this turn's end step and goes to the graveyard; not doing it keeps the card in hand (or the face-down 2/2
+// on the battlefield, still flippable at the opponent's end step or next turn) and the mana. Nothing in this list reads a
+// creature entering, turning face up, dying or being in the graveyard except Den Protector's regrowth, which can at best
+// return it to the hand it never left. So the entry is dominated (sound). Off under human play and MTG_UNPRUNED /
+// tricktarget; MTG_MORPH_NO_POSTCOMBAT_SACUP=0 restores it.
+static bool MorphInt8Open();        // INT-8, defined below
+static bool MorphNoPostCombatSacUpOn()
+{
+    static const bool on = EnvOn("MTG_MORPH_NO_POSTCOMBAT_SACUP", true);   // DEFAULT ON; =0 -> offered after combat
+    return heurarm::Flag(heurarm::MORPH_NO_POSTCOMBAT_SACUP, on);
+}
+bool MorphProvider::EndStepSacFaceUpDeadAfterCombat(const GameState& s, const CardDefinition& real) const
+{
+    (void)s;
+    return MorphNoPostCombatSacUpOn() && !MorphInt8Open() && real.params.endstep_sacrifice_self
+        && !real.params.turned_face_up_return_gy_to_hand;
+}
+
 void MorphProvider::TrickTargetCandidates(const GameState& s, const CardDefinition& def,
                                           std::vector<int>& out) const
 {
     (void)def;
     if (!MorphLargestTrickTargetOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::TrickTarget)) { return; }
+    if (MorphNoPostCombatTrickOn() && StealCombatOver(s) && !s.deck_has_extra_combat && s.pending_extra_combats == 0)
+    { out.push_back(0); return; }
     const int me = s.active_player_index;
     bool recipient = false;
     for (const Permanent& p : s.battlefield)

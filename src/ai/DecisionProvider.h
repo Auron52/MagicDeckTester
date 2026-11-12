@@ -2887,6 +2887,18 @@ public:
     virtual bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const
     { (void)s; (void)def; return false; }
 
+    // EndStepSacFaceUpDeadAfterCombat -- MORPH INT-10 (b). Once this turn's combat is over (StealCombatOver, no
+    // additional combat queued), is a FACE-UP entry of `real` -- its hard cast, its face-down-and-up cast (face_down 2),
+    // or turning a face-down copy of it face up -- dominated by not doing it? True only for a card that sacrifices
+    // itself at the beginning of the end step (Blistering Firecat) when nothing in the deck reads it before then: it
+    // cannot attack (combat is over), dies at this turn's end step, and lands in the graveyard, where it is worth at
+    // most what the hand (or the face-down body) already held. The face-down cast (face_down 1) is never dropped, and
+    // the opponent-end-step flip window is a separate axis (not an enumerated action). The provider that answers true
+    // STATES the premises. Asked once per post-combat CollectActions (TurnSolver), never under human play or
+    // MTG_UNPRUNED. Default false -> byte-identical for every other deck.
+    virtual bool EndStepSacFaceUpDeadAfterCombat(const GameState& s, const CardDefinition& real) const
+    { (void)s; (void)real; return false; }
+
     // ---- Morph INT-8 (USER rulings R7-R10, 2026-11-12): four provider RESTRICT / ORDER hooks. Each default is
     // "no opinion", so every deck that does not override them is byte-identical. Never consulted under human
     // play or MTG_UNPRUNED (the engine call sites check), so the viewer and the unpruned arm see everything.

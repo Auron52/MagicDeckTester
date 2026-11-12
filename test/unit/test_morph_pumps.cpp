@@ -904,3 +904,119 @@ TEST_CASE("morph INT-9: Wooded Foothills cracks on play and fetches Stomping Gro
     CHECK_FALSE(FetchResolvesOnPlay(s, foothills));
     heurarm::t_arm[heurarm::MORPH_FETCH_RULE] = -1;
 }
+
+// INT-10 (USER, approved 2026-11-12: "Never pump a creature that can't attack this turn."): after combat no creature can
+// attack this turn, so a solo-target trick is dominated by not casting it -- the post-combat main offers no trick variant.
+// MTG_MORPH_NO_POSTCOMBAT_TRICK=0 restores it; the pre-combat main is unchanged. (Human play / MTG_UNPRUNED take the
+// provider's early return, tested above with m_provider = nullptr.)
+TEST_CASE("morph INT-10: no solo-target trick is offered after combat")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto variants = [](const GameState& s, const char* name)
+    {
+        std::vector<int> t;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/s.phase != Phase::PostCombatMain))
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { t.push_back(a.enchant_target); }
+        }
+        return t;
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
+    PutM(s, "Mountain", 43);
+    PutBear(s, 11);                                    // untapped, not sick: it CAN attack before combat
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    s.players[0].hand.push_back(CardM("Temur Battle Rage", 102));
+    CHECK(variants(s, "Might of Old Krosa") == std::vector<int>{ kTrickBestOwnTarget });
+    CHECK(variants(s, "Temur Battle Rage") == std::vector<int>{ kTrickBestOwnTarget });
+    s.phase = Phase::PostCombatMain;                   // combat is over: the same untapped body can no longer attack
+    CHECK(variants(s, "Might of Old Krosa").empty());
+    CHECK(variants(s, "Temur Battle Rage").empty());
+    heurarm::t_arm[heurarm::MORPH_NO_POSTCOMBAT_TRICK] = 0;
+    CHECK(variants(s, "Might of Old Krosa") == std::vector<int>{ kTrickBestOwnTarget });
+    heurarm::t_arm[heurarm::MORPH_NO_POSTCOMBAT_TRICK] = -1;
+    // A deck that queues an additional combat keeps its post-combat tricks.
+    s.deck_has_extra_combat = true;
+    CHECK(variants(s, "Might of Old Krosa") == std::vector<int>{ kTrickBestOwnTarget });
+}
+
+// INT-10 (b): after combat a FACE-UP entry of Blistering Firecat (hard cast, face-down-and-up cast, or turning a face-down
+// copy face up) is dominated -- it cannot attack, and is sacrificed at this turn's end step. The face-down cast stays.
+// MTG_MORPH_NO_POSTCOMBAT_SACUP=0 restores the entries; the pre-combat main is unchanged.
+TEST_CASE("morph INT-10: no face-up Blistering Firecat entry after combat (the face-down cast stays)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    struct Seen { int fd0 = 0, fd1 = 0, fd2 = 0, flip = 0; };
+    auto seen = [](const GameState& s)
+    {
+        Seen r;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/s.phase != Phase::PostCombatMain))
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Blistering Firecat")
+            { (a.face_down == 0 ? r.fd0 : a.face_down == 1 ? r.fd1 : r.fd2) += 1; }
+            if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode) && a.sac_source_id == 12) { ++r.flip; }
+        }
+        return r;
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    for (int k = 0; k < 6; ++k) { PutM(s, "Mountain", 40 + k); }
+    PutM(s, "Blistering Firecat (Face-down)", 12);
+    s.players[0].hand.push_back(CardM("Blistering Firecat", 101));
+    Seen pre = seen(s);
+    CHECK(pre.fd0 == 1);
+    CHECK(pre.fd1 == 1);
+    CHECK(pre.fd2 == 1);
+    CHECK(pre.flip >= 1);
+    s.phase = Phase::PostCombatMain;
+    Seen post = seen(s);
+    CHECK(post.fd0 == 0);
+    CHECK(post.fd1 == 1);                               // the face-down cast is a real setup line: kept
+    CHECK(post.fd2 == 0);
+    CHECK(post.flip == 0);
+    heurarm::t_arm[heurarm::MORPH_NO_POSTCOMBAT_SACUP] = 0;
+    Seen off = seen(s);
+    CHECK(off.fd0 == 1);
+    CHECK(off.fd2 == 1);
+    CHECK(off.flip >= 1);
+    heurarm::t_arm[heurarm::MORPH_NO_POSTCOMBAT_SACUP] = -1;
+}
+
+// INT-10 identity fold (MTG_FACEUP_LEAD_PIN_FOLD): a LEAD flip's unpinned base resolves to the provider's pick among the
+// pre-plan graveyard, every name of which has its own named LEAD variant -- so with names emitted the base is not. With an
+// empty graveyard (no names) the base is the only LEAD and stays; the TRAIL base always stays (a different position).
+TEST_CASE("morph INT-10: Den Protector's unpinned LEAD flip is folded into its named variants")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    PutM(s, "Den Protector (Face-down)", 31);
+    for (int k = 0; k < 4; ++k) { PutM(s, "Forest", 40 + k); }
+    auto count = [&](bool trail, bool pinned)
+    {
+        int n = 0;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+        {
+            if (a.kind != Action::Kind::ActivatePermAbility || a.sac_source_id != 31) { continue; }
+            if ((a.ability_mode == Action::AbilityMode::TurnFaceUpLate) != trail) { continue; }
+            if (a.tutor_target.empty() != !pinned) { continue; }
+            ++n;
+        }
+        return n;
+    };
+    CHECK(count(false, false) == 1);                    // empty graveyard: the base LEAD is the only LEAD
+    s.players[0].graveyard.push_back(CardM("Berserk", 90));
+    s.players[0].graveyard.push_back(CardM("Forest", 91));
+    CHECK(count(false, true) == 2);                     // one named LEAD per distinct graveyard name
+    CHECK(count(false, false) == 0);                    // ...and no unpinned base beside them
+    CHECK(count(true, false) == 1);                     // the TRAIL base stays
+    heurarm::t_arm[heurarm::FACEUP_LEAD_PIN_FOLD] = 0;
+    CHECK(count(false, false) == 1);
+    heurarm::t_arm[heurarm::FACEUP_LEAD_PIN_FOLD] = -1;
+}

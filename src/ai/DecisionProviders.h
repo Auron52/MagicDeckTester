@@ -395,6 +395,7 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override { return true; }
     bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
+    bool EndStepSacFaceUpDeadAfterCombat(const GameState& s, const CardDefinition& real) const override;
     // INT-6 USER RULE (2026-11-12): every solo-target trick goes on the LARGEST ATTACKING CREATURE, picked at
     // CAST time (one kTrickBestOwnTarget variant; see the definition). MTG_MORPH_LARGEST_TRICK_TARGET=0 -> the
     // per-creature variants again (A/B arm).
