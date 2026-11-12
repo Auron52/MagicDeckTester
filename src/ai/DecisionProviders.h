@@ -3457,6 +3457,11 @@ public:
     // =0 -> every legal sideboard name in sideboard order, exactly as before. Human play / MTG_UNPRUNED
     // (the Tutor gate) keeps the full list. See the .cpp for the reading of each bucket.
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
+    // HUMAN PLAY: mark the Living Wish / Elvish Harbinger rule's narrowed set as "searched" in the viewer, the AI pick
+    // as "recommended" (USER 2026-11-11: "show which options are searched and the top one as the recommendation. That
+    // way the user knows that, even if their preferred option is not "recommended", that it is picked up by the
+    // search."). A badge only: the offered list and its order are untouched.
+    bool TutorMarksSuggested(const CardParams& pp) const override;
     // THE COMBO OFF RULE TABLE (2026-10-20; USER: "We should use the combo off logic for this deck. It is
     // very much the type of deck that needs it."). Named conjunctions over board + hand inventory (+ the
     // sideboard Living Wish reaches), in the USER's three stages LIFE -> LOOP -> FINISH; exact (mana) via

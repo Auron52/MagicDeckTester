@@ -63,8 +63,17 @@ wins `build/scratch/aa_land/<mode>_<arm>/`; DONE marker `logs/aa_alch2/LAND_DONE
 every 2 h. NOTE: smoke_A/regression_A were run BEFORE the rebase? No -- after it (binary rebuilt at 05:1x UTC on
 `01a3adbc1` + AT2 ON + marks); the AT2 smoke reproduces the 11-11 A/B arm 10 digests exactly.
 
-Next: `python3 logs/aa_alch2/compare_land.py` (A = AT2 only, B = + land rules; paired, loss = 9; weigh overnight).
-Fix any unit expectation the run flags. Accept alchemist smoke (`--deck=alchemist,alchemist2hg`) + regression
+Progress 05:50 UTC: units4 flagged 3 Wish cases, all fixture/expectation (fixed, 122/122 pass, uncommitted):
+nothing-held and Elf-fetched now expect ONE land; `hl3` needed `lands_played_this_turn = 0` (FreshAa spends the
+drop, so it was the `used` case twice). `ExpectWishAa` now logs the list it got. Smoke B vs A, paired: searched
+n=300, 0 slower / 5 faster (-0.0167/game); d0 -2 turns.
+
+DONE 06:20 UTC: overnight held-out searched n=2535 net -26 (2 slower / 24 faster); both slower games recover at
+b100/b400. Smoke + regression GT accepted, full units 2842/2842, ledger entry in `analysis-AccomplishedAlchemist.md`
+("The Living Wish land rules (2026-11-12)"). Committed locally; shared-branch push held to >= 09:26 UTC (4-hour
+rule), backup branch pushed meanwhile. Remaining: push + CI watch; open USER question below.
+
+(Old) Next: `python3 logs/aa_alch2/compare_land.py` (A = AT2 only, B = + land rules; paired, loss = 9; weigh overnight). Accept alchemist smoke (`--deck=alchemist,alchemist2hg`) + regression
 (`--deck=alchemist`) GT with a note naming AT2 + the three land rules; `python3 test/check_gt_logs.py`; ledger entry
 in `analysis-AccomplishedAlchemist.md`; commit, `git pull --rebase`, push, watch CI in the background. Report the
 numbers to the USER. Open USER question: should LAND_FIRST apply at 2 mana too (now 3 only)?

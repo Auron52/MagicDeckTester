@@ -1582,6 +1582,59 @@ fast Ezuri lines and moved smoke/regression the same way). The periodic overnigh
 Recommendation to the USER: adopt ALCH_FIRST_AT2; leave SPARE_MANA_FIRST off (no measurable effect). Both stay
 DEFAULT OFF until the USER decides.
 
+**USER decision 2026-11-11: "Let's enable 1, either way."** ALCH_FIRST_AT2 is DEFAULT ON. SPARE_MANA_FIRST stays
+off (recommended off: neutral; the USER did not ask for it).
+
+### The Living Wish land rules (2026-11-12) -- USER rules, DEFAULT ON, held-out A/B passes
+
+The USER, on which land a Wish offers and when it beats Arbor Elf (verbatim, in order): "I think we should choose
+only one of Forest or Island, but why would you want to drop both? That seems dicey unless we know we will play the
+elf this turn." / "Frankly when at 3 mana the land seems often like it would be better." / "Okay, I guess it really
+depends on whether you are on turn 2 or turn 3. If you have a land in hand the elf is probably better." / "If you
+are out of lands the land is almost certainly better." / "Because you need to have 4 mana as soon as possible for the
+Alchemist." / "A wished land beats the elf handily when it can be dropped for free this turn or next turn. The elf
+needs to drop this turn to match." "(to match the land played next turn)" / "The only time the elf wins is when the
+land cannot be played for 2 turns. Then the elf is pretty clearly better." / "Then again, I wonder if this is fully
+safe in all situations. If you have the enchanted land and can play the critter this turn that may be better." /
+"Okay, yes, we need that fix, because an elf stranded in hand is pretty bad. I would rather a land if that can get
+us to 4 mana next turn." / "We should only recommend one land, also?" / "We need at least 2 forests the way I see it.
+After that you can freely pick the Island if you want."
+
+Three levers in `AaWishBucketSet` (census in `AaTakeWishCensus`), all DEFAULT ON, `=0` restores the old rule:
+
+* `MTG_AA_WISH_LAND_FIRST_AT3` -- at exactly 3 projected mana the land ranks ahead of the Elf when the lands already
+  in hand leave it a drop this turn or next (`hand_lands < land_drops_left + 1`); otherwise the Elf leads. An ORDER:
+  both stay offered. (The tie, a land next turn vs an Elf this turn, goes to the land, per "the only time the elf
+  wins".) At 2 mana the Elf still leads -- an open USER question.
+* `MTG_AA_WISH_ONE_LAND` -- when both Forest and Island would be offered, only one is: the Forest until two Forests are
+  held (play + hand), then the Island.
+* `MTG_AA_WISH_STRANDED_ELF` -- the 2026-10-20 "the elf preferred" rule (Elf re-tapping an Aura'd Forest -> no land
+  offered) applies only when the Elf can be cast THIS turn (an untapped green source after the Wish, or a green land
+  in hand with a drop left); otherwise the land comes back, ordered by LAND_FIRST_AT3.
+
+Also in this change, play-neutral: the viewer marks the rule's narrowed set as **searched** and the AI pick as
+**recommended** on Living Wish / Elvish Harbinger tutor decisions (`TutorMarksSuggested`; badge only, the list order
+is unchanged). The USER: "show which options are searched and the top one as the recommendation. That way the user
+knows that, even if their preferred option is not "recommended", that it is picked up by the search."
+
+A/B, paired per game (loss = 9), A = AT2 only (`LAND_FIRST_AT3=0 ONE_LAND=0 STRANDED_ELF=0`), B = source defaults:
+
+| tier | searched n | net (slower / faster) | d0 net |
+|---|---|---|---|
+| smoke (alchemist + 2HG) | 300 | -5 (0 / 5) | -2 |
+| regression | 410 | -6 (0 / 4) | -5 |
+| **overnight (held-out)** | **2535** | **-26 (2 / 24)** | -16 |
+
+The two slower held-out games, both d5 b20, both recover at b100 and b400 (B = A):
+* s4004 gi384 (A 6, B 7): T2 at 2 mana, Utopia Sprawl on a Forest, the Wish spent the last {G}. STRANDED_ELF brings
+  the Forest back (as the USER asked); with one candidate more, the b20 search took Arbor Elf instead of A's Brindle
+  Boar. A budget-width effect, not a ranking error.
+* s7007 gi212 (A 5, B 6): the T3 line diverges (B does not cast the Wish on T3); same budget-width shape.
+
+Accepted smoke (alchemist, alchemist2hg) + regression (alchemist) GT 2026-11-12; overnight left to the periodic run.
+Units: the three Wish cases the rules move were updated (one land; `hl3` now opens the land drop, since `FreshAa`
+spends it), and `ExpectWishAa` logs the list it got on a failure.
+
 ## Chunk P3 (2026-10-19) -- landed: three byte-identical per-node cuts; the deck is still over the line
 
 Commits (branch `accomplished-alchemist`): 86ba02b3 (AppendSubdecisionAxes), 22d15f95 (UntapLandHosts),

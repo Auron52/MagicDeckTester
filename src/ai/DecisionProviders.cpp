@@ -49595,6 +49595,10 @@ struct AaWishCensus
     bool blue_need = false;   // a held card needs {U}: a {U} pip in hand, or a Crab Umbra-style {U} untap in play
     int  mana = 0;
     int  gain_total = 0;      // read only by the wish rule's =0 path (MTG_AA_WISH_WITCH_WIN=0) and its trace
+    int  hand_lands = 0;      // lands in hand (MTG_AA_WISH_LAND_FIRST_AT3)
+    int  land_drops_left = 0; // land drops still unused this turn (MTG_AA_WISH_LAND_FIRST_AT3)
+    bool elf_castable_now = false;   // a {G} this turn for Arbor Elf (MTG_AA_WISH_STRANDED_ELF)
+    int  forests = 0;                // Forests in play + in hand (MTG_AA_WISH_ONE_LAND: the Island after two)
     int  gain_storm = 0;      // a held storm lifegain's ONE extra copy (Weather the Storm: +3) -- read only by
                               // the wish rule's UNTAP_NET test (the USER 2026-11-11, below)
     int  mana_board = 0;      // `mana` before the hand's lands: the battlefield's projected mana (the discard cap)
@@ -49609,6 +49613,25 @@ bool AaHasColour(const std::vector<Color>& v, Color c) { return std::find(v.begi
 AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
 {
     AaWishCensus c;
+    {
+        const Player& pl = s.players[controller];
+        c.land_drops_left = std::max(0, pl.LandDropsAvailable() - pl.lands_played_this_turn);
+        const auto is_forest = [](const Card& k)
+        { for (const std::string& st : k.m_subtypes) { if (st == "Forest") { return true; } } return false; };
+        for (const Permanent& q : s.battlefield) { if (q.controller_index == controller && is_forest(q.card)) { ++c.forests; } }
+        for (const Card& h : pl.hand) { if (is_forest(h)) { ++c.forests; } }
+        const ManaPool ap = AvailableManaPool(s);
+        c.elf_castable_now = ap.green + ap.wild > 0;     // an untapped green source (the Wish already paid)
+        if (!c.elf_castable_now && c.land_drops_left > 0)  // ... or a green land in hand still to drop
+        {
+            for (const Card& h : pl.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+                if (d != nullptr && d->card.IsLand() && AaHasColour(d->params.produces, Color::Green))
+                { c.elf_castable_now = true; break; }
+            }
+        }
+    }
     auto roles = [&](const CardParams& p)
     {
         if (AaIsAlchemist(p)) { c.alchemist = true; }
@@ -49683,7 +49706,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
         const int gain = pp.cast_lifegain + pp.sac_outlet_lifegain + pp.etb_modal_lifegain;
         if (gain > 0) { c.lifegain = true; c.gain_total += gain; }
         if (pp.storm && pp.cast_lifegain > 0) { c.gain_storm += pp.cast_lifegain; }
-        if (d->card.IsLand()) { ++c.mana; }
+        if (d->card.IsLand()) { ++c.mana; ++c.hand_lands; }
         if ((AaHasColour(pp.produces, Color::Blue) && !pp.mana_per_life_gained)
             || (pp.is_land_aura && AaHasColour(pp.land_aura_produces, Color::Blue))) { c.blue = true; }
         if ((d->card.IsLand() && AaHasColour(pp.produces, Color::Blue))
@@ -49757,10 +49780,12 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     const bool combo_first   = s_combo_first && !spare_wish && c.mana >= 3 && c.mana < 4;
     const bool alch_first    = !s_combo_first && s_alch_first && c.mana >= 3 && c.mana < 4
                             && !c.alchemist && c.untapper && c.wincon;
-    // PROPOSED (default OFF; the USER's open question 2026-11-11): "The less common and crucial combo piece like
-    // alchemist is the only question. Is that more crucial than a mana source at 2 mana? It might be." At exactly 2
-    // projected mana a lacking Alchemist alone ranks ahead of the mana bucket; the other combo buckets stay behind it.
-    static const bool s_alch_at2 = EnvOn("MTG_AA_WISH_ALCH_FIRST_AT2", false);
+    // ADOPTED by the USER 2026-11-11 (DEFAULT ON; =0 -> the mana bucket leads at 2 mana). The USER's question: "The
+    // less common and crucial combo piece like alchemist is the only question. Is that more crucial than a mana
+    // source at 2 mana? It might be." At exactly 2 projected mana a lacking Alchemist alone ranks ahead of the mana
+    // bucket; the other combo buckets stay behind it. Measured (ledger, "Two follow-up Wish levers"): held-out
+    // searched 0 slower / 5 faster, d0 faster on every seed. The USER: "Let's enable 1, either way."
+    static const bool s_alch_at2 = EnvOn("MTG_AA_WISH_ALCH_FIRST_AT2", true);
     const bool alch_at2      = s_alch_at2 && !spare_wish && c.mana >= 2 && c.mana < 3 && !c.alchemist;
     const bool mana_lacking  = c.mana < 4;
     // A held Witch fills Untap and Wincon/Draw (2026-10-21). =0 only: the 4 life rule (Untap at a held gain >= 5)
@@ -49809,6 +49834,29 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // Rank = the USER's bucket order (lower first); -1 = not offered.
     enum : int { kAlchFirst = 0, kElf, kForest, kIsland, kAlch, kGain, kUntap, kWin };
     const int mana_shift = combo_first ? 10 : 0;   // Elf / Forest / Island behind every combo bucket
+    // THE LAND AHEAD OF THE ELF AT THREE MANA WHEN IT IS DROPPED BY NEXT TURN (USER 2026-11-12,
+    // MTG_AA_WISH_LAND_FIRST_AT3, DEFAULT ON; =0 -> Elf, Forest, Island). The USER: "Frankly when at 3 mana the land
+    // seems often like it would be better." / "If you have a land in hand the elf is probably better." / "If you are
+    // out of lands the land is almost certainly better." -- "Because you need to have 4 mana as soon as possible for
+    // the Alchemist." -- "A wished land beats the elf handily when it can be dropped for free this turn or next turn.
+    // The elf needs to drop this turn to match (to match the land played next turn)." So at 3 projected mana the land
+    // leads the Elf when the lands already in hand leave it a drop this turn or next (hand lands < drops left this
+    // turn + 1); otherwise the Elf leads -- "The only time the elf wins is when the land cannot be played for 2
+    // turns. Then the elf is pretty clearly better." (So the tie, a land dropped NEXT turn vs an Elf cast THIS turn,
+    // goes to the land.) An ORDER only: both
+    // stay offered, the search plays both lines. (The 2026-10-20 "the elf preferred" rule -- an Elf re-tapping an
+    // Aura'd Forest, lands not offered -- is unchanged.)
+    static const bool s_land_first3 = EnvOn("MTG_AA_WISH_LAND_FIRST_AT3", true);
+    const bool land_drops_soon = c.hand_lands < c.land_drops_left + 1;
+    const int elf_rank = (s_land_first3 && c.mana >= 3 && c.mana < 4 && land_drops_soon) ? kIsland + 1 : kElf;
+    // ONE LAND (USER 2026-11-12, MTG_AA_WISH_ONE_LAND, DEFAULT ON; =0 -> Forest and Island both offered when no blue
+    // source is held). The USER: "I think we should choose only one of Forest or Island, but why would you want to
+    // drop both? That seems dicey unless we know we will play the elf this turn." WHICH one, the USER again: "We need
+    // at least 2 forests the way I see it. After that you can freely pick the Island if you want." So the Forest
+    // until two Forests are held (in play + in hand); after that the Island (offered only with no blue source held).
+    static const bool s_one_land = EnvOn("MTG_AA_WISH_ONE_LAND", true);
+    static const bool s_stranded_elf = EnvOn("MTG_AA_WISH_STRANDED_ELF", true);
+    const bool island_not_forest = c.forests >= 2;
     std::vector<std::pair<int, std::string>> ranked;
     bool elf_legal = false;
     for (const std::string& nm : all)
@@ -49824,10 +49872,16 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         int r = -1;
         if (p.mana_per_life_gained)                     { if (!c.alchemist) { r = (alch_first || alch_at2) ? kAlchFirst : kAlch; } }
         else if (d->card.IsCreature() && !p.mana_requires_land_subtype.empty())
-                                                        { if (mana_lacking) { r = kElf + mana_shift; } }
+                                                        { if (mana_lacking) { r = elf_rank + mana_shift; } }
         else if (d->card.IsLand())
         {
-            const bool lands_ok = mana_lacking && !(c.elf_multi && elf_legal);   // "the elf preferred"
+            // "the elf preferred" (2026-10-20): an Elf re-tapping an Aura'd Forest -> no land. NOT when the Elf cannot
+            // be cast this turn (USER 2026-11-12, MTG_AA_WISH_STRANDED_ELF, DEFAULT ON; =0 -> lands never offered
+            // there): "we need that fix, because an elf stranded in hand is pretty bad. I would rather a land if that
+            // can get us to 4 mana next turn." The lands come back and LAND_FIRST_AT3 orders them (the land leads at
+            // 3 mana when it drops by next turn; else the Elf leads, the land behind it).
+            const bool elf_pref = c.elf_multi && elf_legal && (!s_stranded_elf || c.elf_castable_now);
+            const bool lands_ok = mana_lacking && !elf_pref;
             if (lands_ok && AaHasColour(p.produces, Color::Green)) { r = kForest + mana_shift; }
             else if (AaHasColour(p.produces, Color::Blue))
             {
@@ -49842,6 +49896,16 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
         // Trufflesnout (etb_modal_lifegain): never offered (MTG_AA_WISH_TRUFFLE, a PROPOSED amendment, admits it
         // beside the Boar). Eternal Witness (etb_return_gy_to_hand): never offered.
         if (r >= 0) { ranked.emplace_back(r, nm); }
+    }
+    if (s_one_land)
+    {
+        const auto has = [&](int base) { for (const auto& e : ranked) { if (e.first == base + mana_shift) { return true; } } return false; };
+        if (has(kForest) && has(kIsland))
+        {
+            const int drop = (island_not_forest ? kForest : kIsland) + mana_shift;
+            ranked.erase(std::remove_if(ranked.begin(), ranked.end(), [&](const auto& e) { return e.first == drop; }),
+                         ranked.end());
+        }
     }
     std::stable_sort(ranked.begin(), ranked.end(),
                      [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -49945,6 +50009,11 @@ static std::vector<std::string> AaHarbingerSet(const GameState& s, int controlle
     const int* fb = s_fb_first ? kOrdUntap : ord;
     for (int k = 0; k < 3; ++k) { if (!by_role[fb[k]].empty()) { out.push_back(by_role[fb[k]]); } }
     return out;
+}
+
+bool AccomplishedAlchemistProvider::TutorMarksSuggested(const CardParams& pp) const
+{
+    return (pp.wish_from_sideboard && AaWishBucketsOn()) || (AaIsHarbingerTutor(pp) && AaHarbingerBucketsOn());
 }
 
 std::vector<std::string> AccomplishedAlchemistProvider::TutorCandidates(const GameState& s, int controller,

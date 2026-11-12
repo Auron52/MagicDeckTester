@@ -4949,16 +4949,21 @@ function tutorPanelHtml(d){
     : d.upkeep_cast
     ? `<div class="sub">Cast during upkeep and pay mana now. Choose a card to put on top of your library before this turn's draw, or hold the tutor.</div>`
     : `<div class="sub"><b>${esc(d.source||'Tutor')}</b> searches your library. Choose a card, or decline when the search is optional.</div>`;
+  const anySearched=cands.some(c=>c.suggested);
+  if(anySearched) h+=`<div class="sub">Green <b>searched</b> cards are the ones the engine's search plays out; <b>recommended</b> is its pick among them.</div>`;
   h+=`<div class="tutgrid">`;
   if(!cands.length) h+=`<span class="hint">${d.from_graveyard?'No legal graveyard target.':'No legal card to search up.'}</span>`;
-  // `suggested` = the engine's narrowed candidate set (Bruna's Glittering Wish rule, USER 2026-10-06):
-  // a green badge + ring like the Aura host mark -- the tiles keep their order (replays index into it).
+  // `suggested` = the deck's candidate rule's narrowed set, i.e. the cards the engine's SEARCH tries (Bruna's
+  // Glittering Wish rule, USER 2026-10-06; Accomplished Alchemist's Living Wish / Elvish Harbinger rules, USER
+  // 2026-11-11: "show which options are searched and the top one as the recommendation. That way the user knows
+  // that, even if their preferred option is not "recommended", that it is picked up by the search."). A green
+  // "searched" badge + ring; the AI pick is the recommendation. The tiles keep their order (replays index into it).
   cands.forEach(c=>{
     const def=c.index===d.heuristic_default;
-    h+=`<span class="cardmini tdig${def?' def':''}${c.suggested?' suggested':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}${c.suggested?' (suggested by the Glittering Wish candidate rule)':''}">`+
+    h+=`<span class="cardmini tdig${def?' def':''}${c.suggested?' suggested':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}${c.suggested?' (searched by the deck\'s candidate rule)':''}">`+
        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
-       (def?`<span class="deftag">AI pick</span>`:'')+
-       (c.suggested?`<span class="suggbadge" title="the engine's candidate rule searches this card">suggested</span>`:'')+`</span>`;
+       (def?`<span class="deftag">${anySearched?'recommended':'AI pick'}</span>`:'')+
+       (c.suggested?`<span class="suggbadge" title="the engine's search tries this card">searched</span>`:'')+`</span>`;
   });
   h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
      `<button class="${d.heuristic_default===-1?'primary':'ghost'}" data-opt="-1">${d.from_graveyard?'Use AI target':d.upkeep_cast?'Hold tutor':'Decline — search for nothing'}${d.heuristic_default===-1?'  ·  AI':''}</button></div>`;

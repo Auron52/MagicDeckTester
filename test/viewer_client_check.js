@@ -229,6 +229,26 @@ async function testMagusUpkeepPanel() {
   return fails;
 }
 
+async function testTutorSearchedMarks() {
+  // USER 2026-11-11: show which tutor options the search plays out ("searched") and its pick ("recommended").
+  const win = buildDom(), fails = [];
+  const marked = { type: 'tutor_etb', source: 'Living Wish', heuristic_default: 1,
+    candidates: [{ index: 0, name: 'Arbor Elf', suggested: true }, { index: 1, name: 'Accomplished Alchemist', suggested: true },
+                 { index: 2, name: 'Eternal Witness' }] };
+  const h = win.tutorPanelHtml(marked);
+  if ((h.match(/class="suggbadge"[^>]*>searched</g) || []).length !== 2) fails.push('both searched cards carry a searched badge');
+  if (!h.includes('>recommended<')) fails.push('the AI pick reads recommended when a searched set is marked');
+  if (!h.includes('plays out')) fails.push('the panel explains the searched marks');
+  const plain = { type: 'tutor_etb', source: 'Goblin Matron', heuristic_default: 0,
+    candidates: [{ index: 0, name: 'Goblin Chieftain' }, { index: 1, name: 'Mogg War Marshal' }] };
+  const p = win.tutorPanelHtml(plain);
+  if (!p.includes('>AI pick<') || p.includes('>searched<') || p.includes('plays out'))
+    fails.push('an unmarked tutor keeps the plain AI pick');
+  await settle(win);
+  win.close();
+  return fails;
+}
+
 async function testMysticRetrievalPanel() {
   const win = buildDom(), fails = [];
   const d = { type: 'tutor_etb', source: 'Mystic Retrieval', from_graveyard: true,
@@ -2299,6 +2319,11 @@ async function testColorlessFirstTapOrder() {
     const fails = await testMysticRetrievalPanel();
     if (fails.length) { anyFail = true; console.log(`✗ Mystic Retrieval target choice: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ Mystic Retrieval graveyard target choice'); }
+  }
+  {
+    const fails = await testTutorSearchedMarks();
+    if (fails.length) { anyFail = true; console.log(`✗ tutor searched/recommended marks: ${fails.length} fail`); fails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ tutor searched/recommended marks'); }
   }
   {
     const fails = testGodsSeed5NoPreviewDredge();

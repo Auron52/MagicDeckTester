@@ -2207,7 +2207,10 @@ std::vector<std::string> WishCandsAa(const GameState& s)
 void ExpectWishAa(const GameState& s, const std::vector<std::string>& want)
 {
     const std::vector<std::string> full = AaProv().GenericProvider::TutorCandidates(s, 0, DefAa("Living Wish").params);
-    CHECK(WishCandsAa(s) == (DecisionUnpruned(UnprunedGate::Tutor) ? full : want));
+    const std::vector<std::string> got = WishCandsAa(s);
+    std::string shown;
+    for (const std::string& n : got) { shown += (shown.empty() ? "" : ", ") + n; }
+    CHECK_MESSAGE(got == (DecisionUnpruned(UnprunedGate::Tutor) ? full : want), "got {", shown, "}");
 }
 struct WishArmAa
 {
@@ -2229,7 +2232,8 @@ struct WishWitchArmAa
 TEST_CASE("Wish buckets: nothing held -> every bucket, in the USER's order; never Trufflesnout / Eternal Witness")
 {
     const GameState s = WishAa();
-    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island", "Accomplished Alchemist", "Brindle Boar",
+    // ONE land (MTG_AA_WISH_ONE_LAND, USER 2026-11-12): no Forest held yet -> the Forest, not the Island.
+    ExpectWishAa(s, { "Arbor Elf", "Forest", "Accomplished Alchemist", "Brindle Boar",
                       "Galvanic Alchemist", "Scholar of Athreos" });
     CHECK(AaProv().TutorSearchWidth() >= 7);   // every admitted name is searched (coverage)
 }
@@ -2252,10 +2256,21 @@ TEST_CASE("Wish buckets: held Staff makes missing Alchemist urgent at three mana
     GameState s = WishAa();
     HandAa(s, "Staff of Domination");
     PutAa(s, "Forest"); PutAa(s, "Forest");
-    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island", "Accomplished Alchemist", "Brindle Boar" });
+    // Two mana (MTG_AA_WISH_ALCH_FIRST_AT2, USER-ADOPTED 2026-11-11): the lacking Alchemist alone leads the mana
+    // bucket; Lifegain stays behind it. (Alchemist held at two mana -> the mana bucket leads: the COMBO FIRST case.)
+    ExpectWishAa(s, { "Accomplished Alchemist", "Arbor Elf", "Island", "Brindle Boar" });   // one land: two Forests held
     PutAa(s, "Forest");
     // Three mana: every lacking combo bucket (Alchemist, then Lifegain) ahead of the mana bucket.
-    ExpectWishAa(s, { "Accomplished Alchemist", "Brindle Boar", "Arbor Elf", "Forest", "Island" });
+    // At three mana the land leads the Elf (MTG_AA_WISH_LAND_FIRST_AT3), and only one land is offered.
+    ExpectWishAa(s, { "Accomplished Alchemist", "Brindle Boar", "Island", "Arbor Elf" });
+}
+
+// USER 2026-11-11: the viewer marks the rule's narrowed set as "searched" -- Living Wish and Elvish Harbinger opt in.
+TEST_CASE("Wish buckets: the viewer marks the searched set for Living Wish and Elvish Harbinger only")
+{
+    CHECK(AaProv().TutorMarksSuggested(DefAa("Living Wish").params));
+    CHECK(AaProv().TutorMarksSuggested(DefAa("Elvish Harbinger").params));
+    CHECK_FALSE(AaProv().TutorMarksSuggested(DefAa("Nourish").params));
 }
 
 // another player's viewer report relayed 2026-11-11, AA seed 23742 T2: "Living Wish suggested getting Arbor Elf instead of a combo piece".
@@ -2268,10 +2283,16 @@ TEST_CASE("Wish buckets: COMBO FIRST at three mana -- seed 23742 T2, the Boar ah
     PutAa(s, "Forest");
     AttachAa(s, "Wild Growth", f);
     ExpectWishAa(s, { "Brindle Boar", "Arbor Elf" });
+    // Every land TAPPED (the Wish took the last {G}): the Elf would be stranded in hand, so the land comes back and
+    // leads at 3 mana (MTG_AA_WISH_STRANDED_ELF, USER 2026-11-12: "an elf stranded in hand is pretty bad. I would
+    // rather a land if that can get us to 4 mana next turn.").
+    GameState tapped = s;
+    for (Permanent& p : tapped.battlefield) { if (p.card.IsLand()) { p.tapped = true; } }
+    ExpectWishAa(tapped, { "Brindle Boar", "Island", "Arbor Elf" });
     GameState two = WishAa();                            // two mana: the mana bucket still leads
     HandAa(two, "Accomplished Alchemist"); HandAa(two, "Staff of Domination");
     PutAa(two, "Forest"); PutAa(two, "Forest");
-    ExpectWishAa(two, { "Arbor Elf", "Forest", "Island", "Brindle Boar" });
+    ExpectWishAa(two, { "Arbor Elf", "Island", "Brindle Boar" });
 }
 
 // another player's viewer report relayed 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of Atheros instead of Galvanic Alchemist".
@@ -2302,12 +2323,32 @@ TEST_CASE("Wish buckets: MANA -- < 4 projected mana; hand lands count; Island on
     GameState s = WishAa();
     HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
     for (int k = 0; k < 3; ++k) { PutAa(s, "Forest"); }
-    // 3 mana (Utopia Sprawl in hand is not counted as mana; it IS a blue source) -> Elf + Forest, no Island.
+    // 3 mana (Utopia Sprawl in hand is not counted as mana; it IS a blue source) -> Forest + Elf, no Island. At 3
+    // mana the land leads the Elf (MTG_AA_WISH_LAND_FIRST_AT3, USER 2026-11-12).
     GameState sprawl = s;
     HandAa(sprawl, "Utopia Sprawl");
-    ExpectWishAa(sprawl, { "Arbor Elf", "Forest" });
-    // 3 mana and no blue source -> Elf + Forest + Island.
-    ExpectWishAa(s, { "Arbor Elf", "Forest", "Island" });
+    ExpectWishAa(sprawl, { "Forest", "Arbor Elf" });
+    // 3 mana, no blue source -> ONE land (MTG_AA_WISH_ONE_LAND); with two Forests already held it is the Island
+    // (USER 2026-11-12: "We need at least 2 forests the way I see it. After that you can freely pick the Island").
+    ExpectWishAa(s, { "Island", "Arbor Elf" });
+    // One Forest held -> the one land is the Forest.
+    GameState nb = WishAa();
+    HandAa(nb, "Accomplished Alchemist"); HandAa(nb, "Nourish"); HandAa(nb, "Staff of Domination");
+    PutAa(nb, "Forest");
+    ExpectWishAa(nb, { "Arbor Elf", "Forest" });
+    // Two Forests in play + a Forest in HAND (3 projected mana), drop unused: the held land drops now, the wished
+    // one next turn -> the land still leads (USER 2026-11-12: "A wished land beats the elf handily when it can be
+    // dropped for free this turn or next turn.").
+    GameState hl3 = WishAa();
+    HandAa(hl3, "Accomplished Alchemist"); HandAa(hl3, "Nourish"); HandAa(hl3, "Staff of Domination");
+    HandAa(hl3, "Forest");
+    PutAa(hl3, "Forest"); PutAa(hl3, "Forest");
+    hl3.players[0].lands_played_this_turn = 0;           // FreshAa spends the drop; this case needs it open
+    ExpectWishAa(hl3, { "Island", "Arbor Elf" });
+    // ... drop already used this turn: the held land takes next turn's drop, the wished one would wait -> the Elf.
+    GameState used = hl3;
+    used.players[0].lands_played_this_turn = 1;
+    ExpectWishAa(used, { "Arbor Elf", "Island" });
     // An Island in play is a blue source (and the 4th mana) -> not lacking.
     GameState isl = s;
     PutAa(isl, "Island");
@@ -2330,11 +2371,12 @@ TEST_CASE("Wish buckets: MANA -- Arbor Elf ALONE when it re-taps a land-Aura For
     PutAa(s, "Forest");
     AttachAa(s, "Wild Growth", f);                       // 3 mana, and the Elf would make 2
     ExpectWishAa(s, { "Arbor Elf" });
-    // The Elf already fetched: the lands come back (Wild Growth is green, so Island too).
+    // The Elf already fetched: a land comes back -- ONE land (MTG_AA_WISH_ONE_LAND), and with two Forests held it is
+    // the Island (USER 2026-11-12: "We need at least 2 forests ... After that you can freely pick the Island").
     GameState gone = s;
     auto& sb = gone.players[0].sideboard;
     sb.erase(std::remove_if(sb.begin(), sb.end(), [](const Card& c) { return c.m_name.str() == "Arbor Elf"; }), sb.end());
-    ExpectWishAa(gone, { "Forest", "Island" });
+    ExpectWishAa(gone, { "Island" });
 }
 
 TEST_CASE("Wish buckets: LIFEGAIN -- Brindle Boar only with no lifegain held; the Staff's gain-1 is not lifegain")
