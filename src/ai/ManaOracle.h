@@ -92,6 +92,9 @@ namespace manaoracle
         // The creature the paid-for cast sacrifices as an additional cost (g_pay_sac_victim; 0 = none), so the table
         // can tap a scaled dork that counts it AHEAD of the sacrifice (ManaOracle.cpp, ExtendScaledAhead).
         int                    f_sac_victim = 0;
+        // The bodies a payment may NOT eat (g_pay_sac_spare at the frontier: an activation's source and baked victim),
+        // so the table's sac-pay fodder faces honour the payer's own rule (ManaPayment.cpp fodder_ok).
+        int                    f_sac_spare[2] = { 0, 0 };
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.

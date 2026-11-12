@@ -580,6 +580,7 @@ std::string TapsText(const PayOption& o)
         if (!t.combo.empty()) { for (int c : t.combo) { s.push_back(kLetters[c]); } }
         else if (t.color >= 0 && t.color < 6) { s.push_back(kLetters[t.color]); }
         if (t.sac_crack) { s += "(crack)"; }
+        if (t.sac_fodder) { s += "(eat)"; }
         for (int ac : t.aura_colors) { s += "+"; s.push_back(kLetters[ac]); }
         if (i < o.creature_route.size() && o.creature_route[i])
         {
@@ -1224,6 +1225,24 @@ struct NoSacActionScope
     NoSacActionScope& operator=(const NoSacActionScope&) = delete;
 };
 
+// THE PAYER'S SAC-PAY FODDER (§2b, MTG_SAC_OUTLET_PAY): with a live sac-for-mana outlet (Skirk Prospector,
+// Utopia Mycon) the engine's payer EATS bodies mid-payment (ManaPayment best_kind 5, fodder_ok), so a payment
+// table without them said "no payment exists" for the engine's own Siege-Gang shot paid off Goblin tokens
+// (Goblins gate due6-20261112: 608 ORACLE-GAP). Armed only for a frontier's payment table (MinimalPayments, via
+// the frontier loop) -- the masked boards of the refine/tap-ahead tables keep their own source sets -- carrying the
+// bodies the payer may not eat there: the cast's sac victim and the activation's source / baked victim.
+struct FodderFaces { bool on = false; int spare[3] = { 0, 0, 0 }; };
+thread_local FodderFaces t_fodder;
+struct FodderFacesScope
+{
+    FodderFaces saved;
+    FodderFacesScope(int victim, const int spare[2]) : saved(t_fodder)
+    { t_fodder.on = true; t_fodder.spare[0] = victim; t_fodder.spare[1] = spare[0]; t_fodder.spare[2] = spare[1]; }
+    ~FodderFacesScope() { t_fodder = saved; }
+    FodderFacesScope(const FodderFacesScope&)            = delete;
+    FodderFacesScope& operator=(const FodderFacesScope&) = delete;
+};
+
 // Do the first two Aura colour picks on `land` commute? They do when the first two Auras LandAuraAddToPoolOfLand
 // credits a pick to (attached, controlled alike, adding one mana of any colour on this board) add the same amount.
 bool AuraPicksSymmetric(const GameState& s, const Permanent& land)
@@ -1417,6 +1436,53 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         if (sc.faces.empty()) { continue; }
         by_key[key] = out.size();
         out.push_back(sc);
+    }
+    if (t_fodder.on && state.deck_has_sac_mana_outlet)
+    {
+        // Fodder classes come AFTER every tap source (a Goblin dork taps, then may be eaten: the payer's own order),
+        // and the outlet's own copies last of all, so a script never eats the outlet before the bodies it eats.
+        const SacPayOutlet so = LiveSacPayOutlet(state, a);
+        if (so.valid())
+        {
+            const std::vector<Color>& prod = SacPayOutletColors(so.def->params);
+            std::vector<SrcClass> fod[2];
+            std::map<std::string, std::size_t> fkey[2];
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != a || p.card.m_number == 0) { continue; }
+                if (p.card.m_number == t_fodder.spare[0] || p.card.m_number == t_fodder.spare[1]
+                    || p.card.m_number == t_fodder.spare[2]) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (!IsSacPayFodder(p, d, so)) { continue; }
+                if (d != nullptr && d->params.creature_mana_only && !for_creature) { continue; }   // fodder_ok
+                const int side = (d != nullptr && IsSacManaOutlet(d->params)) ? 1 : 0;
+                std::string key = ClassKey(p) + (p.tapped ? "|T" : "|U") + (p.temp_haste ? "|h" : "")
+                                + "|" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus);
+                for (const Permanent& q : state.battlefield)
+                { if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number) { key += "+" + q.card.m_name.str(); } }
+                if (KeyedApart(state, p) || p.paired_with != 0) { key += "|plan#" + std::to_string(p.card.m_number); }
+                auto it = fkey[side].find(key);
+                if (it != fkey[side].end()) { fod[side][it->second].nums.push_back(p.card.m_number); continue; }
+                SrcClass sc;
+                sc.land = false;
+                sc.name = p.card.m_name.str();
+                sc.nums.push_back(p.card.m_number);
+                bool rep = false;
+                for (Color c : prod)
+                {
+                    const int ci = static_cast<int>(c);
+                    if (!(ci == 5 || ((useful >> ci) & 1))) { if (rep) { continue; } rep = true; }
+                    Face f;
+                    f.pt.name = sc.name; f.pt.num = p.card.m_number; f.pt.color = ci; f.pt.sac_fodder = true;
+                    if (MeasureFace(state, f)) { sc.max_net = std::max(sc.max_net, f.net); sc.faces.push_back(f); }
+                }
+                if (sc.faces.empty()) { continue; }
+                fkey[side][key] = fod[side].size();
+                fod[side].push_back(sc);
+            }
+            for (int side = 0; side < 2; ++side)
+            { for (SrcClass& sc : fod[side]) { out.push_back(std::move(sc)); } }
+        }
     }
     return out;
 }
@@ -2551,6 +2617,7 @@ struct FrontierRec
     bool                   has_ability_src = false;   // the ability's source (Hook::f_ability_src)
     Card                   ability_src;
     int                    sac_victim = 0;      // Hook::f_sac_victim
+    int                    sac_spare[2] = { 0, 0 };   // Hook::f_sac_spare
 };
 
 // Where a realisation's next layer was first cut by the apply ceiling, and what the capped pass had there, so a
@@ -2747,6 +2814,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.has_ability_src = h.f_has_ability_src;
                     if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
                     fr.sac_victim   = h.f_sac_victim;
+                    fr.sac_spare[0] = h.f_sac_spare[0];
+                    fr.sac_spare[1] = h.f_sac_spare[1];
                     fronts.push_back(std::move(fr));
                     continue;
                 }
@@ -2815,7 +2884,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                                                    + (fronts[i].creature_ability ? "a" : "s")
                                                    + "t" + std::to_string(fronts[i].tapahead)
                                                    + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
-                                                   + "v" + std::to_string(fronts[i].sac_victim));
+                                                   + "v" + std::to_string(fronts[i].sac_victim)
+                                                   + "s" + std::to_string(fronts[i].sac_spare[0])
+                                                   + "," + std::to_string(fronts[i].sac_spare[1]));
                 // A failed payment can leave the same board as a successful but
                 // effect-free activation. It still drops an action from the line,
                 // and a later payment cannot repair that drop. Keep frontiers with
@@ -2860,6 +2931,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             if (next.size() >= room) { note_cut(); break; }
             const std::size_t want = room - next.size() + 1;
             FrontierRec& f = fronts[i];
+            const FodderFacesScope _ff(f.sac_victim, f.sac_spare);
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,

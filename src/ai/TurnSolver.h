@@ -1231,6 +1231,7 @@ public:
         std::vector<int> aura_colors;   // one Color-as-int per ANY-COLOUR land Aura on the host
         std::vector<int> combo;         // a multi-letter face (>= 2 Color-as-int); empty otherwise
         bool sac_crack = false;         // oracle-only: an on-demand land's crack, distinct from its plain tap
+        bool sac_fodder = false;        // oracle-only: EAT this body through the live sac-pay outlet (Skirk Prospector)
         bool operator==(const PreTap&) const = default;
     };
 

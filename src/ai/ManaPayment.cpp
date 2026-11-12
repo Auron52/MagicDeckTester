@@ -9414,6 +9414,8 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.f_has_ability_src = PayingAbilitySource() != nullptr;
         if (h.f_has_ability_src) { h.f_ability_src = *PayingAbilitySource(); }
         h.f_sac_victim = g_pay_sac_victim;
+        h.f_sac_spare[0] = g_pay_sac_spare[0];
+        h.f_sac_spare[1] = g_pay_sac_spare[1];
         return false;
     }
     const PayOption& opt = h.script[h.next++];
@@ -10728,6 +10730,28 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
     }
     else { face.assign(1, letter); }
     const int  active = state.active_player_index;
+    if (t.sac_fodder)
+    {
+        // The oracle's face for the payer's §2b route (best_kind 5 in TapForCostShared): EAT one body -- tapped or
+        // not, the outlet asks no {T} -- through the live sac-for-mana outlet (Skirk Prospector: "Sacrifice a
+        // Goblin: Add {R}"), then CommitPaySacSacrifices, the payer's only eraser (graveyard, death triggers).
+        // No human route: a human clicks the outlet's own action.
+        if (trace) { return reject("a sac-pay outlet's fodder is not a manual tap face"); }
+        const SacPayOutlet so = LiveSacPayOutlet(state, active);
+        Permanent* body = nullptr;
+        for (Permanent& p : state.battlefield)
+        { if (p.controller_index == active && p.card.m_number == t.num) { body = &p; break; } }
+        if (body == nullptr || !so.valid()
+            || !IsSacPayFodder(*body, CardDatabase::Instance().LookupCached(body->card), so))
+        { return reject("'" + t.name + "' is not fodder for a live sac-pay outlet"); }
+        const std::vector<Color>& prod = SacPayOutletColors(so.def->params);
+        if (std::find(prod.begin(), prod.end(), static_cast<Color>(t.color)) == prod.end())
+        { return reject("the sac-pay outlet cannot make that colour"); }
+        body->pay_sac_eaten = true;
+        state.floating_mana.Add(static_cast<Color>(t.color), std::max(1, so.def->params.sac_outlet_add_mana_amount));
+        CommitPaySacSacrifices(state, active);
+        return std::string();
+    }
     Permanent* found = nullptr;
     bool name_seen = false, id_seen = false, tapped_seen = false;
     for (Permanent& p : state.battlefield)
