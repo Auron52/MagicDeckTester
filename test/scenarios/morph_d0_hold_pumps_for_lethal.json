@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "MORPH: THE BEYOND-HORIZON PUMP POLICY (Morph INT-2d, 2026-11-12; morph.md step 8). DEPTH 0 -- the d0 runner,",
+    "i.e. the same greedy (TurnSolver::SolveUncached) the playout runs past the search horizon.",
+    "",
+    "Turn 3: a face-down Blistering Firecat (a 2/2 that can attack) and a Spellskite (0/4, FIRST on the",
+    "battlefield), three untapped lands (Forest, Forest, Mountain), Might of Old Krosa + Berserk + Temur Battle Rage",
+    "in hand, Mountains on top. Turn 3's best pump line is Might (main phase: +4) + Berserk on the Firecat = 12 < 20,",
+    "so the greedy HOLDS the tricks and swings for 2 (18). Turn 4 draws a Mountain: Might (6) -> Berserk (12) ->",
+    "Temur Battle Rage (double strike: 24) on the FIRECAT = lethal.",
+    "",
+    "DISCRIMINATING, both halves of GreedyTrickStackCredit / GreedyHeldTrick:",
+    "  * the old greedy cast every affordable trick on turn 3 (12 damage, Berserk then destroys the Firecat at end",
+    "    step) and has no attacker left -- unwon;",
+    "  * the old greedy aimed every trick at the FIRST creature (equal evals, smallest-mask tie): Spellskite, whose",
+    "    0 power doubles to 0. Only a recipient-aware projection picks the Firecat for the turn-4 kill."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Spellskite", "controller": 0 },
+    { "name": "Blistering Firecat (Face-down)", "controller": 0 },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Might of Old Krosa",
+    "Berserk",
+    "Temur Battle Rage"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 4
+}

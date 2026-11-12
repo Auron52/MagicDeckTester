@@ -56349,6 +56349,167 @@ static int CollapseGreedyCreatureAuraHosts(const GameState& state, const std::ve
     return dropped;
 }
 
+// ---- MORPH INT-2d: THE GREEDY'S COMBAT-TRICK STACK (beyond-horizon policy ONLY) -----------------------------
+// SolveUncached (the d0 runner + the playout past the horizon -- the permitted greedy sites; never a searched
+// frame) priced a solo-target pump only through EvalCard's target-blind estimate, and its this-turn win
+// projection counted no pump at all. So it cast every affordable trick on every turn (d0 Morph s910000:
+// 237 of 306 pumps on a non-lethal turn, 53 with no attack at all, vs 57 of 246 for the d3 search) and aimed
+// every target variant at the FIRST creature on the battlefield (equal evals, smallest-mask tie: Legion
+// Leadership + Berserk on a 0-power Spellskite beside a face-down Firecat). Two pieces, both gated on the
+// provider's GreedyHoldsCombatTricksForLethal (MorphProvider), both param-driven:
+//   * GreedyTrickStackCredit -- the extra attack damage this subset's tricks and turn-face-up flips put on
+//     each recipient, folded in the deck's canonical cast order (CastOrderRank: additive pumps, then
+//     doublers / double strike; a LEAD flip first, a TRAIL flip after the casts), each targeting adding the
+//     on-board (or same-plan) spell-target watchers' +N (Wild Defiance) when it happens. Added to the win
+//     projection, so the greedy SEES a pump kill.
+//   * GreedyHeldTrick -- a cast whose whole payload is this turn's combat (no draw / Treasure / life / land /
+//     token rider) and a flip of a face that sacrifices itself at end step (Blistering Firecat) are HELD
+//     unless the subset projects lethal (the HoldCastUnlessLethal shape, greedy walk only).
+// The projection is optimistic in the usual way (every credited recipient is assumed to attack and connect);
+// execution stays the arbiter. A MANA DORK recipient gets no credit in a subset whose cost exceeds what the
+// board makes without its dorks (the payment must tap one; AttackTapLoss is 0 for a 0-power tap, so nothing
+// else sees it). KNOWN GAP: the payer may still tap a pumped dork when the lands alone could pay (d0 s910020
+// T4: Might x2 + Berserk x2 on a Birds that then tapped for {G}); denying dork recipients outright measured
+// WORSE (100 g d0 5.04 -> 5.63: a lone Birds is often the only attacker), so the credit stays.
+static bool GreedyHeldTrick(const GameState& state, const Action& a)
+{
+    if (a.kind == Action::Kind::CastFromHand)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !d->params.solo_target_trick) { return false; }
+        const CardParams& p = d->params;
+        return p.cast_draw == 0 && p.creates_treasures == 0 && p.cast_lifegain == 0 && p.grants_extra_land_drop == 0
+            && p.trick_token_power == 0 && !p.token_copy_of_target;
+    }
+    if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode) && a.needs_cast_mask == 0)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != a.sac_source_id) { continue; }
+            const CardDefinition* real = FaceDownRealDef(p);
+            return real != nullptr && real->params.endstep_sacrifice_self;
+        }
+    }
+    return false;
+}
+
+static int GreedyTrickStackCredit(const GameState& state, const std::vector<Action>& cands,
+                                  const std::vector<int>& sel, int cost_mv, int supply_total)
+{
+    const int me = state.active_player_index;
+    // Does the payment have to tap a creature mana source? (cost beyond what the non-creature sources make)
+    int dork_yield = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.tapped || p.def_absent || !p.card.IsCreature()) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd != nullptr && pd->tmpl == CardTemplate::ManaDork && CanTapNow(p, state.battlefield))
+        { dork_yield += std::max(1, pd->params.produces_amount); }
+    }
+    const bool taps_creature_mana = dork_yield > 0 && cost_mv > supply_total - dork_yield;
+    int watch = 0;   // +N power per targeting (spell_target_watch_pump_power), on board or cast by this plan
+    for (const Permanent& w : state.battlefield)
+    {
+        if (w.controller_index != me || w.def_absent) { continue; }
+        if (const CardDefinition* wd = CardDatabase::Instance().LookupCached(w.card))
+        { watch += wd->params.spell_target_watch_pump_power; }
+    }
+    struct Rec { int num; int lead = 0; int trail = 0; int add = 0; int ndbl = 0; bool ds = false; };
+    std::vector<Rec> recs;
+    auto rec = [&recs](int num) -> Rec&
+    {
+        for (Rec& r : recs) { if (r.num == num) { return r; } }
+        recs.push_back(Rec{num});
+        return recs.back();
+    };
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.kind == Action::Kind::CastFromHand)
+        {
+            const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+            if (d != nullptr && d->params.spell_target_watch_pump_power != 0 && !d->params.solo_target_trick)
+            { watch += d->params.spell_target_watch_pump_power; }
+        }
+    }
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(c.ability_mode) && c.needs_cast_mask == 0)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.card.m_number != c.sac_source_id) { continue; }
+                const CardDefinition* real = FaceDownRealDef(p);
+                const CardDefinition* face = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+                if (real == nullptr || face == nullptr || !real->card.m_power || !face->card.m_power) { break; }
+                const int delta = *real->card.m_power - *face->card.m_power + (real->params.megamorph_cost ? 1 : 0);
+                Rec& r = rec(p.card.m_number);
+                (c.ability_mode == Action::AbilityMode::TurnFaceUpLate ? r.trail : r.lead) += delta;
+                break;
+            }
+            continue;
+        }
+        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+        if (d == nullptr || !d->params.solo_target_trick) { continue; }
+        if (c.kicked)
+        {
+            if (const CardDefinition* kd = CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Kicked)")) { d = kd; }
+        }
+        const CardParams& tp = d->params;
+        const int payload_to = c.trick_redirect != 0 ? c.trick_redirect : c.enchant_target;
+        if (c.trick_redirect != 0) { rec(c.enchant_target).add += watch; }   // the original target's watchers fire
+        Rec& r = rec(payload_to);
+        const int add = std::max(tp.power_bonus, tp.mainphase_power_bonus);   // every greedy cast here is main phase
+        if (tp.trick_double_power) { ++r.ndbl; r.add += add; }
+        else                       { r.add += watch + add; }
+        if (tp.grants_temp_double_strike) { r.ds = true; }
+    }
+    int credit = 0;
+    for (const Rec& r : recs)
+    {
+        int base = 0;
+        bool had_ds = false;
+        bool found = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != r.num || p.controller_index != me) { continue; }
+            found = true;
+            if (!TrickRecipientCanAttackThisTurn(state, p)) { base = -1; break; }
+            if (taps_creature_mana && !p.def_absent)
+            {
+                const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                if (pd != nullptr && pd->tmpl == CardTemplate::ManaDork) { base = -1; break; }
+            }
+            base = std::max(0, CombatPowerOf(p, state));
+            had_ds = CreatureHasDoubleStrike(p, state);
+            break;
+        }
+        if (!found)
+        {
+            // A same-plan hand creature (trick_hand_target): only a hasty one attacks this turn.
+            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+            {
+                if (hc.m_number != r.num) { continue; }
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd != nullptr && hd->card.IsCreature() && TrickHandRecipientCanAttackThisTurn(state, *hd)
+                    && hd->card.m_power) { base = std::max(0, *hd->card.m_power); found = true; }
+                break;
+            }
+        }
+        if (!found || base < 0) { continue; }
+        int pw = base + r.lead + r.add;
+        // Doublers after the additive tier; each one's own watcher trigger resolves before it doubles.
+        for (int k = 0; k < r.ndbl; ++k) { pw = 2 * (pw + watch); }
+        pw = std::max(0, pw + r.trail);
+        const int before = base * (had_ds ? 2 : 1);
+        const int after  = pw * ((had_ds || r.ds) ? 2 : 1);
+        credit += std::max(0, after - before);
+    }
+    return credit;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
@@ -56779,6 +56940,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     std::vector<unsigned char> cand_held(cands.size(), 0);
     bool any_held = false;
     const DecisionProvider& held_provider = ResolveProvider(state);
+    // Morph INT-2d (see GreedyTrickStackCredit): the combat-trick hold + stack projection, greedy walk only.
+    const bool greedy_trick_hold = held_provider.GreedyHoldsCombatTricksForLethal();
     std::vector<unsigned char> fill_face_ok(cands.size(), 0), fill_x_ok(cands.size(), 0),
                                cand_draws(cands.size(), 0);
     for (int j = 0; j < m; ++j)
@@ -56799,6 +56962,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         { cand_draws[j] = 1; }
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
         { cand_held[j] = 1; any_held = true; }
+        if (greedy_trick_hold && GreedyHeldTrick(state, fa)) { cand_held[j] = 1; any_held = true; }
     }
 
     bool have_colors[5];    // untapped-source colors -- state-only, computed once for all subsets
@@ -57971,7 +58135,13 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         const int ping_reach = CounterPingReach(state, cands, sel);
         const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
                                                       atk_mana_srcs, noncreature_count);
-        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        // Morph INT-2d: this subset's trick stack + flips on its recipients (0 unless the provider opts in).
+        const int trick_stack = (greedy_trick_hold && is_pre_combat)
+                              ? GreedyTrickStackCredit(state, cands, sel,
+                                                       combined.ManaValue(), (credited ? eff : pool).Total())
+                              : 0;
+        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach
+                     + trick_stack)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
         // has_extra_lethal gate, so a deck with no such model never calls it and stays
@@ -58157,7 +58327,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                           << " pending=" << pending_atk << " tap_lost=" << atk_tap_lost
                           << " proj_atk=" << projected_atk << " direct=" << direct_dmg
                           << " extra=" << extra_lethal << " cannons=" << cannons_dmg
-                          << " freecast=" << freecast_dmg
+                          << " freecast=" << freecast_dmg << " trick=" << trick_stack
                           << " opp=" << state.Opponent().life << " wins=" << wins
                           << " eval=" << total_eval << " rank=" << rank_value << "\n";
             }
@@ -101798,7 +101968,16 @@ static void Note(const GameState& s, int width)
 {
     g_unpinned_calls.fetch_add(1, std::memory_order_relaxed);
     if (width <= 1) { return; }
-    if (g_real_resolution) { g_real.fetch_add(1, std::memory_order_relaxed); return; }
+    if (g_real_resolution)
+    {
+        g_real.fetch_add(1, std::memory_order_relaxed);
+        if (EnvInt("MTG_FACEUP_AXIS_STATS", 0) >= 2)
+        {
+            std::fprintf(stderr, "[faceup-axis] REAL-END-STEP unpinned flip: seed=%llu T%d width=%d\n",
+                         static_cast<unsigned long long>(s.game_seed), s.turn_number, width);
+        }
+        return;
+    }
     if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
     if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
     { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }

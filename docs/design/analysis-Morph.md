@@ -219,3 +219,31 @@ the durable record).
   manifest as INT-2b) d0 6.68, d3 b10 4.41, d5 b20 4.4833, audit 4.395 no abort -- every digest IDENTICAL to INT-2b
   (fan crossings 333,815 -> 334,135, units +0.1%); SMOKE 195/195, play-changed=0 searched and d0.
 - Still open: (C) PlanHasDeadFaceUpPin, (D) d0 flip knowledge (step 8).
+
+### INT-2d result (2026-11-12) -- morph.md step 8: the beyond-horizon pump / flip policy
+- DIAGNOSIS: the d0 gap (6.68 vs d3 4.41) was NOT mainly flip knowledge. The greedy (SolveUncached: the d0 runner
+  and the playout past the horizon) (1) counted no trick in its this-turn win projection, so it never saw a pump
+  kill, and cast every affordable trick for its EvalCard estimate (d0 s910000: 237 of 306 pumps on a non-lethal
+  turn, 53 with no attack at all; the d3 search: 57 of 246); (2) aimed every target variant at the FIRST creature
+  (equal evals, smallest-mask tie -- Legion Leadership + Berserk on a 0-power Spellskite beside a face-down
+  Firecat). Face-down creatures DO attack and ARE legal pump targets at d0; the flip was already offered.
+- BUILT (greedy walk only; never EnumeratePlans, so no searched frame moves; MorphProvider opts in through
+  `DecisionProvider::GreedyHoldsCombatTricksForLethal`, MTG_MORPH_GREEDY_TRICK_HOLD=0 = the old greedy):
+  * `GreedyTrickStackCredit` -- per recipient, the subset's LEAD flips (face-up power - 2, +1 megamorph), additive
+    pumps (Might's main-phase +4, kicked Vines +4) each with the spell-target watchers' +N (Wild Defiance, on board
+    or cast by the plan), then doublers, then double strike, then TRAIL flips; credited into the win projection.
+    A mana-dork recipient gets no credit when the cost needs the dorks' mana.
+  * `GreedyHeldTrick` -- a trick whose whole payload is this turn's combat, and a flip of a face that sacrifices
+    itself at end step (Firecat), is HELD unless the subset projects lethal (the HoldCastUnlessLethal shape).
+  * PLAYOUT HEURISTIC FOR THE USER (permitted greedy zone, named here because it is a cast policy): beyond the
+    horizon the deck now holds its pumps and the Firecat flip for a projected kill turn.
+- MEASURED AND DELETED: an end-step FRONT that leaves a Firecat face down (the menu still fanned it): d0 300 g
+  5.0433 vs 5.0600 and 5.1000 vs 5.0967 on a second seed block -- noise, so no lever was kept.
+- Known gap (not fixed, payment-side): the payer may tap a pumped 0-power dork that the lands could have spared
+  (d0 s910020 T4). Denying dork recipients outright measured WORSE (100 g 5.04 -> 5.63).
+- Clock (ONE pooled batch, same manifest/seeds as INT-2c, FACEDOWN_AUDIT on, 24 thr): d0 6.68 -> 5.04,
+  d3 b10 4.41 -> 4.37, d5 b20 4.4833 -> 4.4333, audit d3 b10 200 g 4.395 -> 4.38, no abort. Census: searched-frame=0,
+  real-end-step=2 -- both in the d0 job (depth 0: ChooseRealCrossingFaceUp returns at depth <= 0, the D0Runner
+  greedy; a searched-only rerun reads 0). MTG_FACEUP_AXIS_STATS=2 now also prints each real-end-step window.
+- Scenario test/scenarios/morph_d0_hold_pumps_for_lethal.json (d0; fails with MTG_MORPH_GREEDY_TRICK_HOLD=0).
+- Value-leaf note (R9) stands: ExtractMidGameFeatures sees a face-down creature as a plain 2/2.

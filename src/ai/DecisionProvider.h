@@ -3637,6 +3637,15 @@ public:
     virtual bool HoldCastUnlessLethal(const GameState& /*s*/, const CardDefinition& /*def*/) const
     { return false; }
 
+    // GreedyHoldsCombatTricksForLethal -- BEYOND-HORIZON POLICY ONLY (TurnSolver::SolveUncached, the d0 runner
+    // and the playout past the horizon; never EnumeratePlans, so no searched frame is touched). True: the
+    // greedy walk credits each subset's solo-target trick stack and turn-face-up flips on their recipients
+    // into its this-turn win projection (GreedyTrickStackCredit), and HOLDS a trick whose whole payload is
+    // this turn's combat -- and a flip of a face that sacrifices itself at end step -- unless the subset
+    // projects lethal (GreedyHeldTrick). For a deck whose pumps multiply (doublers, double strike, a
+    // per-targeting watcher) on ONE kill turn. Base false -> every deck is byte-identical. MorphProvider.
+    virtual bool GreedyHoldsCombatTricksForLethal() const { return false; }
+
 
     // ScaledCastVariants -- SCALED-CAST variants: for a spell whose cost depends on how much output it
     // commits, the candidate (opponent-face damage, cost) levels to branch on. This is the DIVIDED-damage

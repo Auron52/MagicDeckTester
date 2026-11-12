@@ -395,6 +395,10 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override { return true; }
     bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
+    // Morph INT-2d: the playout / d0 pump policy (beyond the horizon only; see the base declaration).
+    // MTG_MORPH_GREEDY_TRICK_HOLD=0 restores the cast-every-trick greedy for an A/B.
+    bool GreedyHoldsCombatTricksForLethal() const override
+    { static const bool on = EnvOn("MTG_MORPH_GREEDY_TRICK_HOLD", true); return on; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price the whole pump stack (Wild Defiance "
