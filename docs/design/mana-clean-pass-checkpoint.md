@@ -1015,6 +1015,40 @@ fungus 1,880, gods 4,300 (first run).
     creature) ahead of the other casts when that is what pays -- a cast-order change. Recommendation: allow a
     payability-driven reorder (only when the canonical order fails and the granter-first order pays), lockstep in
     SeqWalkFixedOrder and PayableCastOrderCore sites 0+1; it adds lines, it does not reorder lines that already pay.
+* **Round 15 (fifteenth item-6 agent, 2026-11-12).**
+  * **fungus DOMINATED-CREATURE s30065330 T4: FIXED (bc7ab839d, `MTG_GRANT_CAP_SKIP_RESERVED`, heurarm, default ON).**
+    Mechanism: TapForCostBacktrackWorker admits at most cost.ManaValue() Badger-granted Saproling tokens in battlefield
+    order (the 3d payment-blowup guard). It counted RESERVED (held) tokens too, so the whole-turn prepay's doomed-first
+    rung for {Utopia Mycon + Brightcap Badger + the Burst's last fade activation} (cost 5) admitted the held lasting
+    1/1 #1000 plus only four of the five doomed Burst tokens, read the doomed-only hold as unpayable, and the next rung
+    paid with a Forest -- the fifth doomed token died untapped and the line's later cast tapped #1000. Reserved tokens
+    are now skipped before the count (the DFS's own reserved test), which restores the cap's losslessness under any
+    hold. Found with MTG_TAPDBG (now also traces the oracle's EngineApply) + MTG_PREPAY_HOLD_TRACE. Units 2908/2908 (new
+    test fails with the lever off). Held-out fungus 2000 paired games @7400001+ (one pooled batch): 0 digest diffs,
+    net 0. Smoke 199/199 and regression 316/316 unchanged (nothing to accept), check_gt_logs clean.
+    Fungus re-gate on block 70000-74999 (PGO) NOT yet run -- owed by the next agent.
+  * **fungus DOMINATED-CREATURE remaining (LEADS, not fixed).** (1) PRE-FLOAT DOOMED BODIES: on the same seed the flag
+    moves to {Undercellar Myconid + Utopia Mycon + Burst x1} with Badger in the continuation: the prepay now pays the
+    plan's 4 from four doomed tokens, the fifth dies untapped at the activation, and the continuation's Badger taps the
+    lasting 1/1. The oracle taps every doomed body before the activation and floats the surplus into the continuation
+    ("keep-floating"). Engine shape: tap each untapped, tappable doomed body for mana right before the fade activation
+    that kills it (SpendFadeActivations, shared by AIEngine 7300 and TurnSolver 72159, so both worlds stay lockstep).
+    A body that dies inside the action has no other use, so this is a dominance; it needs a core->ai tap hook
+    (TapSourceIntoFloat lives in ManaPayment.cpp) and a held-out A/B. (2) Non-Burst shapes (68 of 112): e.g.
+    s30065633 T3 {Utopia Mycon} + continuation Badger, Wild Growth: the oracle casts Wild Growth before Badger so the
+    enchanted Forest pays twice; the engine casts Badger first and taps Shroofus -- continuation cast order (likely the
+    USER-owned order class; check before touching). Others: s30066047, s30066258, s30067494 (1/1 kept, no Burst, no
+    Tomb), s30065691/s30066892 (Undercellar Myconid kept, Tomb).
+  * **fungus CAPPED 250: analyzer budget, PARKED.** All 250 are "payment search hit 20000 applies (MTG_MANA_ORACLE_NODES,
+    then _RETRY)" -- the ORACLE's own payment DFS, not an engine cap -- on boards of 4-13 Badger-granted Saproling
+    tokens (65 flags one decision, s30067835 T4; 42 s30065922 T5). Lead: fold interchangeable granted tokens in the
+    oracle's script search (the engine's backtrack already caps them at cost MV).
+  * **gods ORACLE-GAP 63: triaged, PARKED.** All 63 (20+ games) are {[land] + Faithless Looting + Magus of the Bazaar};
+    DiffText now also compares graveyard contents and library order and they are EQUAL (s30014741 T4), as are
+    battlefield, hand, life and float, yet CoreKey differs -- the differing field is outside DiffText's list (a
+    per-player/turn scalar). Next step: dump the two states' MidTurnStateKeyOfPayment inputs field by field. Repro:
+    `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg decks/Gods/Gods.cod --profile decks/Gods/Gods.profile.json
+    --games 1 --seed 30014741 --game-index 14741`.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
