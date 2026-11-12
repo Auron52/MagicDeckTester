@@ -1518,7 +1518,61 @@ the body's flat credit does not); small, not built.
 
 | lever | commit | work removed (30 games) | play | wall | status |
 |---|---|---|---|---|---|
-| no CardDefinition copy per planned cast + `deck_has_islandize` | e26da83b8 | 2.2% + 2.3% self time | identical (digests, per-game units, every work count) | 0.74x (single-thread concurrent arms, contended; paired 32-thread run owed) | committed locally, not pushed |
-| MTG_GATE_SUBRED: subtype reducers build the gate | f40e33e0b | body entries -9.5%, odometer -5.5%, greedy -3.6%, pay -0.9% | 30 games identical; can move units elsewhere (priced ceiling) | not measurable yet | committed locally; A/B on the subtype-reducer decks owed |
-| X-waste early drop | - | up to 36% of body entries | exact only with a sound per-call no-win bound | <= ~4% | not built |
-| walk failure pre-test | - | up to 99% of 147k walks | exact by construction + VERIFY | <= ~4.6% | not built |
+| no CardDefinition copy per planned cast + `deck_has_islandize` | e26da83b8 (pushed as 9caf3af8c) | 2.2% + 2.3% self time | identical (digests, per-game units, every work count) | 0.74x (single-thread concurrent arms, contended; paired 32-thread run owed) | committed locally, not pushed |
+| MTG_GATE_SUBRED: subtype reducers build the gate | f40e33e0b (rebased fd39ce908) | body entries -9.5%, odometer -5.5%, greedy -3.6%, pay -0.9% | 30 games identical; can move units elsewhere (priced ceiling) | not measurable yet | committed locally; A/B on the subtype-reducer decks owed |
+| X-waste early drop (MTG_XWASTE_EARLY) | be42f1846 | 398k early drops / 30 games; mana-section entries -34% | 10,000 held-out games: every digest and per-game unit identical; VERIFY 0 violations | 0.958x all five decks, hydras2hg 0.77x | see P13b |
+| walk failure pre-test | - | up to ~60% of 365k failing walks | needs a mechanism whitelist | <= ~4.6% | measured, not built (P13b) |
+
+### P13b (2026-11-12): landing, the A/B, the yardstick
+
+Worktrees `.claude/worktrees/hydras-perf2` (branch `hydras-perf-land`: origin + e26 cherry-picked; P7b's
+`hydras-enum-collapse` was still unpushed, and e26 does not depend on it) and `.claude/worktrees/hydras-perf`
+(rebased onto it: SUBRED fd39ce908, X-waste be42f1846). Scratch: `build/scratch/p13b/`.
+
+**Yardstick (P13's `yv2`: base a0fc37372 vs e26+SUBRED, the Hydras + Hinata searched regression shapes, both arms
+concurrently at 16 threads).** Every digest identical in both arms (Hydras units moved on 10 of 450 games, SUBRED).
+suite_gate metric (pooled seeds, worst depth/budget cell): base Hydras 1,099 ms/game (`hydras2hg_d5`) vs Hinata
+5,513 (`hinata2hg_d5`) = **0.20x Hinata**; v2 1,404 vs 5,113 = 0.27x. `test/suite_cost.json`'s 4,054 vs 6,424
+(0.63x, 2026-11-11) predates the keep table and P2-P4. Total ms 0.936x (Hinata, where only e26 acts, 0.907x).
+The Hydras rows of a concurrent pair are noisy (+-30% per row), see the A/B for SUBRED's wall.
+
+**X-waste early drop (957154ee6, MTG_XWASTE_EARLY, default ON).** XCastBelowMax depends only on (state, cands,
+sel, pool); the late drop needs `!wins`. `xw_nowin` proves no selection of the call can win: it is armed only
+when every non-sum term of the body's projection is inert for the call (no Cannons, free-caster, counter pinger,
+extra-lethal model, creature mana source or attack-tap candidate so atk_tap_lost == 0, no DirectDamage cast, no
+Boros Charm, no fill face) and bounds the sum terms (pending_atk, direct_damage, vial/haste/conditional-haste
+power, noncreature x prowess) by their sum over every candidate. Only Hydras' and LHC's providers implement
+XCastBelowMax, and LHC carries a pinger (never armed), so only Hydras can move. 30 games single-thread: digests
+and per-game units identical, 398,119 early drops, mana-section entries 1,157,924 -> 759,805;
+`MTG_XWASTE_EARLY_VERIFY=1`: 0 kept past the projection, 0 emitted.
+
+- **Walk-failure pre-test: measured, NOT built (P13b).** `MTG_GEF_WALKLOG=1` (new, diagnostic) logs every body
+  sequential walk. 30 games (perf1, SUBRED on): 1,657 ok / 364,904 fail (SUBRED off: 1,657 / 370,529; the X-waste
+  early drop removes only ~30 of them, so the failing walks are NOT X-waste selections). Shortfall
+  `comb - supply - aura` (supply = the credited pool): every OK walk has shortfall 1-3 (1,260 / 304 / 93); the
+  failures spread 1-20 (52k / 45k / 44k at 1 / 2 / 3, ~220k at >= 4). The failing shapes are Gargos + Gauntlet +
+  Nature's Lore + one or two X Primordial Hydras (+ Greaves / Kalonian / Visits): the rescue a walk can give is
+  Gauntlet's / Vernal Bloom's land-tap bonus after it resolves, a fetched untapped Forest, and Gargos' {4} off each
+  later Hydra. An exact pre-test therefore needs a per-selection upper bound on that rescue, i.e. a WHITELIST of the
+  mana mechanisms the walk can realise (subtype reducers, land_tap_bonus x lands, land_search count, rock/ritual
+  fields) with a fall-through to the walk for any member outside it. That is a card-mechanism audit, not a one-line
+  bound, so it is left for a fresh agent: <= ~60% of the failing walks (shortfall >= 4) are the reachable prize,
+  and the walk was 4.6% of wall inclusive in P13's profile.
+
+**e26 landed (9caf3af8c).** Unit tests 2855/2855; smoke (`MTG_PGO=0`) 195 passed, 0 play changes; regression 309
+passed, 0 play changes; pushed on top of origin 7723fa1b3 (no src change upstream since the tested base).
+
+**Held-out A/B: SUBRED and X-waste (one box-lock hold, three arms concurrently, 11/11/10 threads, binary
+`bin/mtg.xw1` = 9caf3af8c + SUBRED + X-waste, arms by env).** The five suite decks holding a subtype cost reducer
+(`reduces_spell_subtype` or `chooses_creature_type`): Dragons (Dragonspeaker, Incubator), Giants (Stinkdrinker),
+Goblins (Warchief), Hydras (Gargos), KittyEquipment (Cid). d5 play rows (profile-owned depth, the suite budget:
+b20 / b20 / b60 / b20 / b14), seed 70707, 1,500 standard + 500 2HG games per deck = 10,000 games per arm.
+
+| arms | win turns | slower | digests | units | ms (sum of per-game wall) |
+|---|---|---|---|---|---|
+| off (SUBRED=0, XWASTE=0) vs SUBRED | net 0 on every key | 0 | goblins_d5 differs (same win turns), the other 9 identical | 0.9972x (dragons 0.984/0.988, goblins 0.997/0.996, hydras 0.998/0.998, giants and kitty 1.000) | 0.979x |
+| SUBRED vs SUBRED + X-waste | net 0 | 0 | all 10 identical | 1.0000x on every key | 0.958x (hydras2hg 1,646 -> 1,265 ms/game, hydras std 556 -> 556) |
+
+Both clear the bar (aggregate net <= 0 and no slower game, so no d8 b0 recovery is owed). X-waste removes
+UNCOUNTED work (no budget unit moves), so it is also byte-identical in play; SUBRED removes counted work and moved
+one Goblins digest without moving a win turn.
