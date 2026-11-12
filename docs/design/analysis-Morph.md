@@ -156,5 +156,34 @@ the durable record).
   dominance, F4 lone-attacker attack rule; declare-attackers cast window (INT-3).
 - INT-3: declare-attackers cast window (doublers after exalted) — after measuring how often it binds.
 
+### INT-2 result (2026-11-11; branch morph-analysis, local) -- PARTIAL, handoff logs/morph/int2-handoff.md
+- cards.json: Blistering Firecat, Hystrodon, Den Protector (costs verbatim from Scryfall; all 19 cards "full" in
+  --coverage-only). Params morph_cost / megamorph_cost (flat, one per card, THROWN otherwise),
+  endstep_sacrifice_self, combat_damage_self_may_draw, turned_face_up_return_gy_to_hand; internal
+  face_down_real_name. Keywords Morph/Megamorph stripped in audit_card_fields (kicker precedent, G8 default).
+- FACE-DOWN FORM = a DB-synthesized "<name> (Face-down)" vanilla colourless 2/2 (built from nothing, so no
+  real param leaks). No Permanent field; every name-keyed hash/dominance key tells it apart.
+- CAST: Action/CastRiders::face_down (int8: 1 = face down for {3}; 2 = face down AND turned face up at once,
+  {3} + the morph cost in ONE bill, flipped as its enter cascade completes -- the hand-source LEAD flip, so the
+  batch prepay sees the whole cost). Def swap at both cast sites (apply_one, CastSpellFromHand); FaceDownCastCost
+  is the one cost expression at every recompute site; every plan/dedup key (incl. PlanDomKey and
+  BpCandFingerprint) carries it (#FD0/1/2 in both plan signatures -- lockstep check clean bar the old #BB).
+  face_down 2 is FOLDED AWAY (sound) when the printed cost is pip-wise inside {3}+morph (Hystrodon).
+- TURN FACE UP: PermAbilityMode::TurnFaceUp (LEAD: TurnSolver::ApplyFaceUpLeadActs before every cast, both
+  worlds) and TurnFaceUpLate (TRAIL: the trailing pass). Position fold FaceUpLeadDominates (no turned-up
+  trigger, face-up power >= 2 -> LEAD only; argued in SpellEffects.h). Den Protector: both positions, a
+  hand-source TRAIL, and its regrowth SEARCHED (one variant per distinct graveyard name, + hand
+  instants/sorceries for TRAIL; Witness shape; human = dig chooser). Megamorph counter via PutPlusCounters.
+  Shared body TurnFaceDownPermanentUp (CR 708.8: same permanent, no ETB).
+- Firecat: PerformEndStepSelfSacrifices at both of our end-step sites (face-up only). Hystrodon: DamageDrawsOwedBy
+  clause (kMayDraw fold, PROVISIONAL) + draw_ping stamp + DeckUsesSecondMain (G4: main 2 ON for this deck).
+- CR 708.9: RevealedCard at ~70 battlefield->zone sites; NormalizeFaceDownZoneCards backstop (executor SBA +
+  rollout turn boundary) with the test-only MTG_FACEDOWN_AUDIT abort. deck_has_morph / deck_has_endstep_self_sac.
+- Viewer: plan flags face_down 1/2, verb face_up + face_up_pos; board rows show the REAL name + face_down /
+  megamorph / face_up_cost; composer +facedown / +facedownup. MorphProvider signature carries the morph params.
+- NOT BUILT (owed, in order, see the handoff): the OPPONENT-END-STEP flip window (BoundaryFan axis + executor
+  crossing node + face_up decision type + MTG_FACEUP_AXIS_STATS), the faceup= composer token / CheckLine verb,
+  the TRAIL-regrowth breakpoint check (MTG_BP_PROBE), PlanHasDeadFaceUpPin, step 8 eval for flip potential.
+
 ## Approved deferrals
 (none yet)

@@ -16209,6 +16209,70 @@
       }
    },
    {
+      "name": "Blistering Firecat",
+      "mana_cost": "{1}{R}{R}{R}",
+      "types": [
+         "Creature"
+      ],
+      "subtypes": [
+         "Elemental",
+         "Cat"
+      ],
+      "keywords": [
+         "Trample",
+         "Haste"
+      ],
+      "power": 7,
+      "toughness": 1,
+      "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nMorph {R}{R} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.) [MORPH (CR 702.37): morph_cost -- a face-down cast variant for {3} (a colourless nameless 2/2 with no abilities: the DB-synthesized \"Blistering Firecat (Face-down)\" face) beside the hard cast; the search decides. Turning face up is a special action (CR 116.2b) offered in the main phase BEFORE the plan's casts (a sound dominance fold: power-locking pumps such as Berserk / Legion Leadership want the 7 base first) (or, cast from hand, at its own face-down cast's resolution). OWED, NOT YET MODELLED: the flip at the OPPONENT'S end step (a searched turn-boundary axis, where a Firecat turned up after the end step began survives into our turn) -- a known gap in this build, listed in the Morph ledger. Same permanent after the flip (CR 708.8): pumps, counters and summoning-sick status persist; a Firecat that entered face down last turn attacks at once, and one cast face down and turned up this turn has haste. endstep_sacrifice_self: at the beginning of each end step, ONLY while face up (a face-down Firecat has no abilities). Trample is inert vs the never-blocking goldfish opponent. PROVISIONAL (USER sign-off owed): no flip during combat or in an upkeep / our own end step -- dominated by the main-phase and opponent-end-step windows.]",
+      "template": "vanilla_creature",
+      "parameters": {
+         "morph_cost": "{R}{R}",
+         "endstep_sacrifice_self": true
+      }
+   },
+   {
+      "name": "Hystrodon",
+      "mana_cost": "{4}{G}",
+      "types": [
+         "Creature"
+      ],
+      "subtypes": [
+         "Beast"
+      ],
+      "keywords": [
+         "Trample"
+      ],
+      "power": 3,
+      "toughness": 4,
+      "oracle_text": "Trample\nWhenever this creature deals combat damage to a player, you may draw a card.\nMorph {1}{G}{G} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.) [MORPH: morph_cost, as Blistering Firecat. combat_damage_self_may_draw 1: one draw per combat-damage event to the opponent (two with double strike), through the shared Curiosity/Lookout combat-damage draw hook; a face-down Hystrodon has no ability and does not draw. 'You may' is folded to 'draw iff the library is non-empty' (PROVISIONAL dominance fold, the Curiosity precedent; USER sign-off owed). Turns the deck's searched second main on (DeckUsesSecondMain): a card drawn in combat can be cast after it. Trample is inert vs the never-blocking goldfish opponent.]",
+      "template": "vanilla_creature",
+      "parameters": {
+         "morph_cost": "{1}{G}{G}",
+         "combat_damage_self_may_draw": 1
+      }
+   },
+   {
+      "name": "Den Protector",
+      "mana_cost": "{1}{G}",
+      "types": [
+         "Creature"
+      ],
+      "subtypes": [
+         "Human",
+         "Warrior"
+      ],
+      "keywords": [],
+      "power": 2,
+      "toughness": 1,
+      "oracle_text": "Creatures with power less than this creature's power can't block it.\nMegamorph {1}{G} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its megamorph cost and put a +1/+1 counter on it.)\nWhen this creature is turned face up, return target card from your graveyard to your hand. [MEGAMORPH (CR 702.37b): megamorph_cost -- face-down cast for {3} as Blistering Firecat; turned face up for {1}{G}, putting a +1/+1 counter on it as it turns (PutPlusCounters, doubler-aware). Its flip is offered both BEFORE and AFTER the plan's casts (the graveyard at the flip decides what returns). OWED, NOT YET MODELLED: the flip at the opponent's end step. turned_face_up_return_gy_to_hand: WHICH card is SEARCHED -- one variant per distinct graveyard name (plus instants/sorceries the same plan casts first), surfaced to a human as the dig chooser at resolution (the Timeless Witness path); an empty graveyard removes the trigger (CR 603.3d). PROVISIONAL deferral (USER sign-off owed): 'Creatures with power less than this creature's power can't block it' is not modelled -- an evasion clause, inert vs the goldfish opponent, which controls no blockers and never blocks.]",
+      "template": "vanilla_creature",
+      "parameters": {
+         "megamorph_cost": "{1}{G}",
+         "turned_face_up_return_gy_to_hand": true
+      }
+   },
+   {
       "name": "Fire-Lit Thicket",
       "mana_cost": "",
       "types": [

@@ -181,6 +181,15 @@ MANIFEST = {
     # (Action::trick_redirect, verb "redirect"), and its {U/P} mana-vs-2-life choice is the phyrexian
     # twin -- both ride main_phase plan variants.
     "redirects_spell_target_to_self": ("main_phase",     truthy),
+    # Morph INT-2: the face-down cast (Action::face_down 1, and 2 = turned face up at once) is a main_phase
+    # plan VARIANT of the hand cast, and the main-phase turn-face-up is a plan verb ("face_up", position
+    # "first" / "after casts"). The END-OF-TURN face_up decision (opponent's end step) is NOT built yet --
+    # owed with the BoundaryFan axis (INT-2 handoff); add ("face_up", truthy) here when it lands.
+    "morph_cost": ("main_phase",                         truthy),
+    "megamorph_cost": ("main_phase",                     truthy),
+    # Den Protector's "return target card from your graveyard to your hand": the searched pin in the
+    # autonomous search; a human gets the dig chooser at resolution (ResolveEtbReturnGyToHand).
+    "turned_face_up_return_gy_to_hand": ("dig",          truthy),
     "awaken_cost": ("main_phase",                        truthy),  # normal/awaken and each legal land are separate plans
     "expropriate_vote": ("main_phase",                   truthy),  # own vote and opponent-money permanent are separate plans
     "has_replicate":              ("replicate",       truthy),   # Hatchery Sliver's own replicate
@@ -1629,6 +1638,9 @@ INERT_PARAMS = {
     "spell_target_watch_pump_power": "Wild Defiance's mandatory untargeted trigger (+N/+N to the targeted creature); no choice",
     "spell_target_watch_pump_tough": "Wild Defiance's mandatory untargeted trigger (+N/+N to the targeted creature); no choice",
     "mdfc_back_enters_tapped": "the MDFC land back always enters tapped; no choice (the face choice rides mdfc_back_name)",
+    # Morph INT-2:
+    "endstep_sacrifice_self": "Blistering Firecat's mandatory end-step self-sacrifice (face up only); no choice",
+    "combat_damage_self_may_draw": "Hystrodon's 'may draw' FOLDED to draw iff the library is non-empty (the Curiosity fold, PROVISIONAL); no surfaced choice",
     "counters_on_target": "automatic counter on the chosen target (rides solo_target_trick)",
     "cast_lifegain": "automatic lifegain",
     # Weather the Storm (AccomplishedAlchemist, 2026-10-18): STORM's copy count is

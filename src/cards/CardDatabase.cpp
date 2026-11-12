@@ -372,6 +372,46 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             m_def_hash[kname] = CardDefHash(entry) ^ std::hash<std::string>{}(kname);
             m_cards[kname] = std::move(kicked);
         }
+        // MORPH / MEGAMORPH (CR 702.37): synthesize the FACE-DOWN FORM "<name> (Face-down)" -- the
+        // kicker/bestow trick above, for the same reason: every downstream reader resolves a permanent
+        // through its name, so a face-down permanent whose Card IS this entry reads as exactly what CR
+        // 708.2 says it is -- a 2/2 creature with no name, text, subtypes, colour or mana cost (MV 0) --
+        // with ZERO morph awareness in SpellEffects, combat, triggers, lords or exalted. Unlike the
+        // kicked face this is NOT a copy of the real entry: it is built from nothing, so no param of the
+        // real card (a trigger, an end-step sacrifice, haste) can leak onto the face. The ONE param it
+        // carries is the internal back-pointer face_down_real_name (RevealedCard / turn face up).
+        if (def.params.morph_cost.has_value() || def.params.megamorph_cost.has_value())
+        {
+            if (def.params.morph_cost.has_value() && def.params.megamorph_cost.has_value())
+            {
+                throw std::runtime_error("a card carries at most one of morph_cost / megamorph_cost: "
+                                         + def.card.m_name.str());
+            }
+            const ManaCost& mc = def.params.morph_cost ? *def.params.morph_cost : *def.params.megamorph_cost;
+            if (!mc.IsFlat())
+            {
+                throw std::runtime_error(
+                    "morph_cost / megamorph_cost must be a flat generic/coloured cost (no hybrid, "
+                    "phyrexian, twobrid, snow or {X} pip): " + def.card.m_name.str());
+            }
+            const std::string fname = def.card.m_name.str() + " (Face-down)";
+            CardDefinition fd;
+            Card c;
+            c.m_name = fname;
+            c.RehashName();
+            c.AddType(CardType::Creature);
+            c.m_power = 2;
+            c.m_toughness = 2;
+            fd.card = c;
+            fd.tier = def.tier;
+            fd.tmpl = CardTemplate::VanillaCreature;
+            fd.params.face_down_real_name = def.card.m_name.str();
+            // Never folds with any other entry (the kicker reason): a face-down Firecat and a face-down
+            // Hystrodon are both vanilla 2/2s, but they turn face up into different cards.
+            fd.behaviour_identity = 0;
+            m_def_hash[fname] = CardDefHash(entry) ^ std::hash<std::string>{}(fname);
+            m_cards[fname] = std::move(fd);
+        }
         // Alternate-printing names (Rick, Steadfast Leader = Greymond, Avacyn's Stalwart): the entry
         // is keyed on the deck's PRINTED name; `scryfall_name` is the oracle name Scryfall knows, and
         // `scryfall_image` ("<set>/<collector number>") pins the printing whose art the viewer shows.
@@ -1698,6 +1738,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_creates_tokens       = params.value("cast_creates_tokens", 0);
     if (params.contains("kicker_cost"))
         p.kicker_cost = ManaCostFromString(params["kicker_cost"].get<std::string>());
+    if (params.contains("morph_cost"))
+        p.morph_cost = ManaCostFromString(params["morph_cost"].get<std::string>());
+    if (params.contains("megamorph_cost"))
+        p.megamorph_cost = ManaCostFromString(params["megamorph_cost"].get<std::string>());
+    p.endstep_sacrifice_self      = params.value("endstep_sacrifice_self", false);
+    p.combat_damage_self_may_draw = params.value("combat_damage_self_may_draw", 0);
+    p.turned_face_up_return_gy_to_hand = params.value("turned_face_up_return_gy_to_hand", false);
     p.kicked_etb_target_land_island = params.value("kicked_etb_target_land_island", false);
     p.kicked_creates_tokens     = params.value("kicked_creates_tokens", 0);
     p.cast_created_token_power  = params.value("cast_created_token_power", 0);

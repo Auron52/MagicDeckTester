@@ -1740,7 +1740,7 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
             const int dead_num = t.card.m_number;
             const bool is_token = t.is_token;
             if (!is_token)
-            { state.players[t.owner_index].graveyard.push_back(t.card); }
+            { state.players[t.owner_index].graveyard.push_back(RevealedCard(t.card)); }
             state.battlefield.erase(state.battlefield.begin() + ti);
             for (Permanent& e : state.battlefield)
             {
@@ -2363,7 +2363,7 @@ bool ApplyAuraSwap(GameState& state, int controller, int wings_number, int hand_
     // permanent leaves the battlefield and returns to hand as a NEW object (same per-copy number).
     const int in_number = hand[static_cast<std::size_t>(hand_index)].m_number;
     hand.erase(hand.begin() + hand_index);
-    Card back = state.battlefield[static_cast<std::size_t>(wi)].card;
+    Card back = RevealedCard(state.battlefield[static_cast<std::size_t>(wi)].card);
     back.m_is_staged = false;
     back.m_def = nullptr;
     state.battlefield.erase(state.battlefield.begin() + wi);
@@ -2951,7 +2951,7 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     // 106.4) -- see KarooBounceFloatable. On the FINAL pick, so the human's choice gets it too. Before
     // the attachment sweep below, so a land Aura's extra mana rides the tap. Off -> no-op.
     FloatKarooBouncedLand(state, controller, pick);
-    Card c = state.battlefield[pick].card;
+    Card c = RevealedCard(state.battlefield[pick].card);
     // ATTACHMENTS FALL OFF THE BOUNCED LAND (CR 704.5m / 301.5c) -- the same loop every other
     // "permanent leaves the battlefield" site runs (combat death, the legend-rule sweep, the
     // sacrifice paths). This one was MISSING, and it was not merely untidy: per-copy m_number is

@@ -152,6 +152,11 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # picks between them. Not a keyword tag; not a combat/evasion keyword, so stripping it cannot
     # mask a missing one.
     "kicker",
+    # Morph / Megamorph (CR 702.37; Blistering Firecat, Hystrodon, Den Protector): modeled
+    # structurally via the `morph_cost` / `megamorph_cost` params -- a face-down cast variant for
+    # {3} (the DB-synthesized "<name> (Face-down)" vanilla 2/2) beside the hard cast, and a
+    # turn-face-up special action. Not a combat/evasion keyword, so stripping it cannot mask one.
+    "morph", "megamorph",
     # Storied (Kili the Resourceful): modeled structurally via the `storied_permanents` param ->
     # Player::has_enduring_story, a per-player one-way designation raised by RefreshStoriedLatch,
     # the same shape as ascend above. Not a keyword tag; grants no evasion and changes no combat

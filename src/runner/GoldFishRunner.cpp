@@ -298,6 +298,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         static const bool s_niv_m2 = EnvOn("MTG_NIV_SECOND_MAIN", true);   // DEFAULT ON; =0 disables
         if (s_niv_m2 && (def->params.aura_damage_trigger_draw || def->params.soulbond_damage_trigger_draw))
         { return true; }
+        //   * HYSTRODON (Morph INT-2, 2026-11-11): its own combat-damage "may draw" is the same resource
+        //     GENERATED DURING COMBAT -- a pump or creature drawn in combat is castable only in main 2.
+        //     Same completeness reasoning, so on by detection (no flag: the 2c-bis rule says a missing
+        //     detection is a gap). Its search cost is reported to the USER (G4).
+        if (def->params.combat_damage_self_may_draw > 0) { return true; }
 
         //   * MAELSTROM ARCHANGEL (combat-damage free cast): connecting banks a free cast
         //     (free_casts_available) that is only spendable in the post-combat main -- without the
@@ -1301,6 +1306,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_spell_target_watch = watch;
         state.deck_tracks_attacks         = attacks;
     }
+    // Morph INT-2: a face-down permanent can exist (morph / megamorph) and an end-step self-sacrifice
+    // (Blistering Firecat). MAINBOARD ONLY: a face-down permanent needs a morph card CAST from hand, and a
+    // sideboard card never reaches the hand in a goldfish.
+    {
+        bool morph = false, selfsac = false;
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (!d) { continue; }
+            morph   = morph   || d->params.morph_cost.has_value() || d->params.megamorph_cost.has_value();
+            selfsac = selfsac || d->params.endstep_sacrifice_self;
+        }
+        state.deck_has_morph            = morph;
+        state.deck_has_endstep_self_sac = selfsac;
+    }
     // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
     // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
     {
@@ -1693,7 +1713,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 { demon_triggers = true; }
                 if (d->params.upkeep_sac_tutor_creatures > 0)  { sac_tutor = true; }
                 if (d->params.draw_trigger_damage > 0 || d->params.cast_trigger_instant_sorcery_draw > 0
-                    || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw)
+                    || d->params.aura_damage_trigger_draw || d->params.soulbond_damage_trigger_draw
+                    || d->params.combat_damage_self_may_draw > 0)   // Hystrodon (Morph INT-2)
                 { draw_ping = true; }
                 if (d->params.storied_permanents > 0)      { storied = true; }
                 // HasEndStepTokenTrigger, not `endstep_lifegain_tokens > 0`: The Mycotyrant's count

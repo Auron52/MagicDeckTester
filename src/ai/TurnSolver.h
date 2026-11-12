@@ -702,6 +702,18 @@ struct Action
                                        // for four and competes for exactly the turn-4/5 mana that
                                        // casts Saproling Burst or a Doubling Season. Under one
                                        // Season that is 8 bodies against 4. false = unkicked.
+    std::int8_t face_down        = 0;
+                                       // 1 = face-down cast; 2 = face-down cast TURNED FACE UP AT ONCE --
+                                       // the hand-source LEAD flip, realized at resolution (right after its
+                                       // own enter cascade, before any later cast), its morph cost added to
+                                       // the cast's bill so the batch prepay sees the whole of it.
+                                       // MORPH (CR 702.37a): this CastFromHand is the FACE-DOWN cast --
+                                       // pay {3} (an alternative cost) and resolve the DB-synthesized
+                                       // "<name> (Face-down)" vanilla 2/2 face. Offered beside the hard
+                                       // cast for every morph / megamorph card (the search decides);
+                                       // a def swap at both cast sites (rollout apply_one, executor
+                                       // CastSpellFromHand) via CastRiders. Every cast signature that
+                                       // distinguishes kicked distinguishes this. false = ordinary cast.
     int         trick_redirect   = 0;  // SPELLSKITE ("{U/P}: Change a target of target spell or ability
                                        // to this creature"; CardParams::redirects_spell_target_to_self):
                                        // on a solo-target trick CAST aimed at own creature A
@@ -1068,6 +1080,23 @@ inline const Action* CycleSeedOf(const std::vector<Action>& acts)
 // and the three sequencing/prepay sites that already strip phyrexian life) calls this BEFORE its
 // strip, so enumeration, rollout and executor bill the same thing. A trick has no printed phyrexian
 // pip, so the slot is always free.
+// MORPH: the bill of a face-down cast (Action::face_down) of the card whose def is `d` (the real card, or
+// its synthesized face): {3} (CR 702.37a, an alternative cost -- no cost modifier applies to it; none exists
+// in a morph pool, disclosed G7), plus the morph / megamorph cost when the same cast is turned face up at
+// once (face_down == 2). The ONE expression every cost site uses (enumeration, the recompute sites, both
+// cast sites) -- lockstep by construction.
+inline ManaCost FaceDownCastCost(const CardDefinition& d, int face_down)
+{
+    ManaCost c;
+    c.generic = 3;
+    if (face_down < 2) { return c; }
+    const CardDefinition* r = d.params.face_down_real_name.empty()
+        ? &d : CardDatabase::Instance().Lookup(d.params.face_down_real_name);
+    if (r == nullptr) { return c; }
+    const std::optional<ManaCost>& m = r->params.morph_cost ? r->params.morph_cost : r->params.megamorph_cost;
+    return m ? c.PlusAdditionalCost(*m) : c;
+}
+
 inline void AddSpellRedirectPip(ManaCost& c)
 {
     if (c.phyrexian_count >= 2) { return; }
@@ -1117,10 +1146,13 @@ struct CastRiders
     int      gy_cast_source_id = -1;
     // Action::trick_redirect (Spellskite): the redirect target of a solo-target trick, 0 = none.
     int      trick_redirect    = 0;
+    // Action::face_down (morph): the FACE-DOWN cast -- {3} and the "<name> (Face-down)" face.
+    std::int8_t face_down      = 0;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
         r.awaken = a.awaken;
@@ -3292,6 +3324,11 @@ public:
     static void ApplyLandSearchActs(GameState& state, const std::vector<Action>& acts,
                                     GameLogger* log = nullptr);
     static std::vector<Action> WithoutLandSearchActs(const std::vector<Action>& acts);
+    // MORPH: the plan's LEAD turn-face-up actions (PermAbilityMode::TurnFaceUp, a battlefield face-down
+    // source), applied before every cast through ONE body shared by ApplyPlanDirect and AIEngine::TakeTurn
+    // (liveness, then the plain payer -- a special action, no creature-ability scope -- then the shared
+    // TurnFaceDownPermanentUp). No-op for a plan without one.
+    static void ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log = nullptr);
     // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
     // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the
     // pre-cast pass, every other one in the trailing pass -- "crack Myriad Landscape BEFORE the Vial-put

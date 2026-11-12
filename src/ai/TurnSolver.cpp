@@ -3504,6 +3504,8 @@ static std::vector<std::string> PlanActionKeys(const TurnSolver::Plan& p)
         if (a.draw_target != 0)       { k += "/DT" + std::to_string(a.draw_target); }
         // Spellskite's redirect of a trick: a different line from the same cast unredirected.
         if (a.trick_redirect != 0)    { k += "/RD" + std::to_string(a.trick_redirect); }
+        // Morph: the face-down cast is a different line from the hard cast of the same card.
+        if (a.face_down != 0)         { k += "/FD" + std::to_string(a.face_down); }
         if (a.discard_lands)          { k += "/d" + std::to_string(a.discard_lands); }
         if (a.alt_cost)               { k += "/alt"; }
         if (!a.tutor_target.empty())  { k += "/t" + a.tutor_target; }
@@ -10053,7 +10055,8 @@ inline std::uint64_t ActSig(const Action& a)
     MixA(h, static_cast<std::uint64_t>(a.sac_source_id) * 17 + static_cast<std::uint64_t>(a.ability_mode));
     MixA(h, static_cast<std::uint64_t>(a.free_cast) | (static_cast<std::uint64_t>(a.alt_cost) << 1)
             | (static_cast<std::uint64_t>(a.evoke) << 2) | (static_cast<std::uint64_t>(a.kicked) << 3)
-            | (static_cast<std::uint64_t>(a.sacrifice_land) << 4));
+            | (static_cast<std::uint64_t>(a.sacrifice_land) << 4)
+            | (static_cast<std::uint64_t>(a.face_down) << 5));   // morph face-down cast (0 elsewhere)
     MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
     if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
     return h;
@@ -11018,6 +11021,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         // (fungus-v2-fd-diverge-7021.md).
         if (a.adventure) { s += "[adv]"; }
         if (a.kicked)    { s += "[kick]"; }
+        if (a.face_down != 0) { s += a.face_down == 2 ? "[facedown+up]" : "[facedown]"; }
         if (a.awaken)    { s += "[awaken]"; }
         if (a.bestow)    { s += "[bestow]"; }
         if (a.evoke)     { s += "[evoke]"; }
@@ -11360,6 +11364,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             // Evoke (Reveillark): the alternate cost replaces the printed one (lockstep).
             if (a.evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
             if (a.awaken && def.params.awaken_cost.has_value()) { ec = *def.params.awaken_cost; }
+            if (a.face_down != 0 && (def.params.morph_cost || def.params.megamorph_cost)) { ec = FaceDownCastCost(def, a.face_down); }
             ec.generic  = std::max(0, ec.generic
                             - SoulfireOwnTargetDiscount(def, cp, cp.active_player_index,
                                                         a.soulfire_own_targets));
@@ -11580,7 +11585,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             if (imprint >= 0)
             {
                 lens.lens_imprinted_land = cp.battlefield[static_cast<std::size_t>(imprint)].card.m_name;
-                cp.exile.push_back(cp.battlefield[static_cast<std::size_t>(imprint)].card);
+                cp.exile.push_back(RevealedCard(cp.battlefield[static_cast<std::size_t>(imprint)].card));
                 cp.battlefield.erase(cp.battlefield.begin() + imprint);
             }
             cp.battlefield.push_back(std::move(lens));
@@ -12442,6 +12447,23 @@ void TurnSolver::ApplyLandSearchActs(GameState& state, const std::vector<Action>
         }
         ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
         if (log != nullptr)   // same entry as the trailing pass's crack, minus the digest fold
+        { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
+    }
+}
+
+void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log)
+{
+    if (!state.deck_has_morph) { return; }
+    const int me = state.active_player_index;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUp)
+        { continue; }
+        if (!PermAbilitySourceLive(state, me, a.sac_source_id, a.ability_mode)) { continue; }
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        const FaceUpRegrowPinScope _fu_pin(a.tutor_target.empty() ? nullptr : &a.tutor_target.str());
+        ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
+        if (log != nullptr)
         { log->LogAbility(a.sac_source_id, a.card_name.str(), PermAbilityLabelFor(a.ability_mode, a.def), false); }
     }
 }
@@ -18895,6 +18917,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.bestow ? 1u : 0u);
     FoldMix(h, a.adventure ? 1u : 0u);
     FoldMix(h, a.kicked ? 1u : 0u);
+    if (a.face_down != 0) { FoldMix(h, 0xFD0Dull + static_cast<std::uint64_t>(a.face_down)); }   // morph face-down cast: set-gated (else unchanged)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -27600,6 +27623,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         if (a.draw_target != 0) { fold(0x4454ull + static_cast<uint64_t>(a.draw_target) * 977); }   // "DT"
         // Spellskite's trick redirect: a must-fold (redirected vs not are two plays). Set-gated.
         if (a.trick_redirect != 0) { fold(0x5244ull + static_cast<uint64_t>(a.trick_redirect) * 1009); }   // "RD"
+        // Morph's face-down cast vs the hard cast of the same name (they collided here). Set-gated.
+        if (a.face_down != 0) { fold(0x4644ull + static_cast<uint64_t>(a.face_down)); }   // "FD"
         // Lurrus: a graveyard cast's permission source (gated on set -> every other fingerprint unchanged).
         if (a.gy_cast_source_id >= 0) { fold(0x4C555252ull + static_cast<uint64_t>(a.gy_cast_source_id)); }   // "LURR"
         fold(static_cast<uint64_t>(a.convoke_green) * 37
@@ -27913,6 +27938,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.kicked) != static_cast<long long>(y.kicked))
     { add("kicked", std::to_string(static_cast<long long>(x.kicked)),
            std::to_string(static_cast<long long>(y.kicked))); }
+    if (x.face_down != y.face_down)
+    { add("face_down", std::to_string(static_cast<int>(x.face_down)), std::to_string(static_cast<int>(y.face_down))); }
     if (static_cast<long long>(x.ponder_keep) != static_cast<long long>(y.ponder_keep))
     { add("ponder_keep", std::to_string(static_cast<long long>(x.ponder_keep)),
            std::to_string(static_cast<long long>(y.ponder_keep))); }
@@ -34082,6 +34109,9 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         { ec = *pd->params.evoke_cost; }
                         if (pa.awaken && pd != nullptr && pd->params.awaken_cost.has_value())
                         { ec = *pd->params.awaken_cost; }
+                        if (pa.face_down != 0 && pd != nullptr
+                            && (pd->params.morph_cost || pd->params.megamorph_cost))
+                        { ec = FaceDownCastCost(*pd, pa.face_down); }   // morph face-down {3} (lockstep)
                         if (ec.has_x && pa.chosen_x > 0)
                         {
                             ec.generic += pa.chosen_x * std::max(1, static_cast<int>(ec.x_pips));
@@ -37110,6 +37140,106 @@ static void EmitTransformAction(const GameState& state, const Card& src_card, co
     actions.push_back(std::move(a));
 }
 
+// ---- MORPH / MEGAMORPH: TURN FACE UP (CR 702.37e special action) -- the main-phase plan's flips ----------
+// Per face-down permanent we control: a LEAD flip (PermAbilityMode::TurnFaceUp, applied before the plan's
+// casts -- ApplyFaceUpLeadActs) and, where the position fold does NOT hold (FaceUpLeadDominates false: Den
+// Protector), a TRAIL flip (TurnFaceUpLate, the trailing pass, after the casts). Per DISTINCT morph card in
+// hand with a turned-face-up trigger: a hand-source TRAIL flip (needs_cast_mask bit0 -- the plan casts it
+// face down, then flips it after its other casts; a hand-source LEAD is the face_down == 2 cast variant).
+// The cost is the REAL card's morph / megamorph cost (FaceUpCost). eval = the face-up card's value over the
+// face's (ordering only). DEN PROTECTOR'S REGROWTH TARGET is SEARCHED in the decision space (the Timeless
+// Witness shape): one variant per DISTINCT name the flip could return -- the pre-plan graveyard, plus for a
+// TRAIL flip every instant / sorcery in hand (it reaches the graveyard when the plan casts it before the
+// trailing pass: "Berserk, flip, regrow the Berserk"). The base keeps an EMPTY pin (the provider's pick on
+// the live graveyard). Human play: no named variants (the dig chooser asks at resolution). A stale pin (a
+// hand card the plan did not cast) falls back to the provider's pick -- a duplicate, never a lost line.
+static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actions)
+{
+    if (!state.deck_has_morph) { return; }
+    const int me = state.active_player_index;
+    const Player& ap = state.players[static_cast<std::size_t>(me)];
+    const bool decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0) && !HumanPlayActive();
+    auto regrow_names = [&](bool trail)
+    {
+        std::vector<std::string> names;
+        auto add = [&names](const std::string& nm)
+        { if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); } };
+        for (const Card& gc : ap.graveyard) { add(gc.m_name.str()); }
+        if (trail)
+        {
+            for (const Card& hc : ap.hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                if (hd != nullptr && (hd->card.IsInstant() || hd->card.IsSorcery())) { add(hc.m_name.str()); }
+            }
+        }
+        return names;
+    };
+    auto push = [&](Action a, const CardDefinition& real)
+    {
+        if (decision_space && real.params.turned_face_up_return_gy_to_hand)
+        {
+            for (const std::string& nm : regrow_names(a.ability_mode == Action::AbilityMode::TurnFaceUpLate))
+            {
+                Action v = a;
+                v.tutor_target = nm;
+                actions.push_back(std::move(v));
+            }
+        }
+        actions.push_back(std::move(a));
+    };
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* real = FaceDownRealDef(p);
+        if (real == nullptr) { continue; }
+        const CardDefinition* face = CardDatabase::Instance().LookupCached(p.card);
+        Action a;
+        a.kind           = Action::Kind::ActivatePermAbility;
+        a.card_name      = p.card.m_name;
+        a.def            = face;
+        a.hand_index     = -1;
+        a.sac_source_id  = p.card.m_number;
+        a.ability_mode   = Action::AbilityMode::TurnFaceUp;
+        a.chosen_x       = 1;
+        a.cost           = *FaceUpCost(p);
+        a.eval           = EvalCard(*real, state) - (face != nullptr ? EvalCard(*face, state) : 0);
+        a.is_noncreature = true;
+        if (!FaceUpLeadDominates(*real))
+        {
+            Action t = a;
+            t.ability_mode = Action::AbilityMode::TurnFaceUpLate;
+            push(std::move(t), *real);
+        }
+        push(std::move(a), *real);
+    }
+    std::vector<InternedName> seen;
+    for (const Card& hc : ap.hand)
+    {
+        if (hc.m_is_staged) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || !(hd->params.morph_cost || hd->params.megamorph_cost) || FaceUpLeadDominates(*hd))
+        { continue; }
+        if (std::find(seen.begin(), seen.end(), hc.m_name) != seen.end()) { continue; }
+        seen.push_back(hc.m_name);
+        const CardDefinition* face = CardDatabase::Instance().Lookup(hc.m_name.str() + " (Face-down)");
+        if (face == nullptr) { continue; }
+        Action t;
+        t.kind            = Action::Kind::ActivatePermAbility;
+        t.card_name       = hc.m_name;     // rule 6a reads the source NAME the plan must cast
+        t.def             = face;
+        t.hand_index      = -1;
+        t.sac_source_id   = hc.m_number;
+        t.ability_mode    = Action::AbilityMode::TurnFaceUpLate;
+        t.chosen_x        = 1;
+        t.cost            = hd->params.morph_cost ? *hd->params.morph_cost : *hd->params.megamorph_cost;
+        t.needs_cast_mask = 1;
+        t.eval            = EvalCard(*hd, state) - EvalCard(*face, state);
+        t.is_noncreature  = true;
+        push(std::move(t), *hd);
+    }
+}
+
 // ---- VAMPIRES A1: THE MADNESS FAN of one pinned discard (design_A1 §3.2) ---------------------------
 // A discard-cost activation whose pinned card would have MADNESS at the discard is crossed with the
 // madness answer: DECLINE (madness_choice 0) and one CAST variant per (distinct madness cost x convoke
@@ -37908,6 +38038,7 @@ static std::string SerializeChandraNestedCast(const Action& a)
     out << ' ' << a.evoke;
     out << ' ' << a.adventure;
     out << ' ' << a.kicked;
+    out << ' ' << static_cast<int>(a.face_down);
     out << ' ' << a.twobrid_colored;
     out << ' ' << a.devour_count;
     out << ' ' << a.cost.generic;
@@ -37945,6 +38076,7 @@ Action TurnSolver::ChandraNestedCastOption(const std::string& option)
     in >> a.evoke;
     in >> a.adventure;
     in >> a.kicked;
+    { int fd = 0; in >> fd; a.face_down = static_cast<std::int8_t>(fd); }
     in >> a.twobrid_colored;
     in >> a.devour_count;
     in >> a.cost.generic;
@@ -38499,6 +38631,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             && def.params.alt_cost_requires_subtype.empty()
             && !def.params.spectacle_cost.has_value()
             && !(def.params.convoke && def.card.IsCreature())
+            // MORPH: the face-down cast's {3} is an alternative cost (CR 702.37a) -- gated on its own
+            // {3} below, so a 4-mana Firecat on three mana keeps its face-down cast.
+            && !def.params.morph_cost.has_value() && !def.params.megamorph_cost.has_value()
             && EffectiveCost(def, state).ManaValue() > mana_ceiling
             && !free_charge_live)
         { continue; }
@@ -40395,6 +40530,58 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.evoke          = true;
                 a.pitch_name     = pc.m_name;
                 a.pitch_slot     = j;
+                actions.push_back(std::move(a));
+            }
+        }
+
+        // MORPH / MEGAMORPH (CR 702.37a): the FACE-DOWN cast, an EXTRA variant sharing hand_index (the
+        // evoke/bestow idiom -- mutually exclusive with the hard cast below). Pays a flat {3} and enters
+        // the DB-synthesized "<name> (Face-down)" vanilla 2/2 (the def swap is at the two cast sites).
+        // Offered UNCONDITIONALLY for a morph card: face down vs hard cast is a real decision (colour --
+        // Firecat's {R}{R}{R} vs {3} then {R}{R}; a body now and a flip later; Den Protector's flip
+        // trigger), so the search decides and a provider may only ORDER it. The emission prune above
+        // exempts the card; its own {3} is the bound here (an optimistic ceiling: only unpayable under
+        // every line is dropped).
+        if ((def.params.morph_cost.has_value() || def.params.megamorph_cost.has_value())
+            && !ap.hand[i].m_is_staged
+            && !(g_emit_prune && 3 > mana_ceiling && !free_charge_live))
+        {
+            const CardDefinition* fdef =
+                CardDatabase::Instance().Lookup(def.card.m_name.str() + " (Face-down)");
+            if (fdef != nullptr)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = ManaCost{};
+                a.cost.generic   = 3;
+                a.eval           = EvalCard(*fdef, state);
+                a.is_noncreature = false;
+                a.card_mv        = 0;          // CR 708.4: a face-down spell has no mana cost (MV 0)
+                a.face_down      = 1;
+                a.def            = &def;
+                // ...and the SAME cast turned face up AT ONCE (face_down 2: the hand-source LEAD flip,
+                // realized as its enter cascade completes, the morph cost in the cast's bill so the batch
+                // prepay sees all of it). FOLDED AWAY (sound dominance) for a card with no turned-face-up
+                // trigger whose PRINTED cost is pip-wise inside {3} + its morph cost (each colour count <=,
+                // total <=): the hard cast then makes the very same face-up permanent from every mana pool
+                // that pays the combined bill (Hystrodon {4}{G} vs {3}+{1}{G}{G}). Kept for Firecat
+                // ({1}{R}{R}{R} needs a third red the combined bill does not) and every trigger card.
+                const ManaCost both = FaceDownCastCost(def, 2);
+                const ManaCost& pc  = def.card.m_mana_cost;
+                const bool hard_dominates = !def.params.turned_face_up_return_gy_to_hand && pc.IsFlat()
+                    && pc.white <= both.white && pc.blue <= both.blue && pc.black <= both.black
+                    && pc.red <= both.red && pc.green <= both.green && pc.colorless <= both.colorless
+                    && pc.ManaValue() <= both.ManaValue();
+                if (!hard_dominates && !(g_emit_prune && both.ManaValue() > mana_ceiling && !free_charge_live))
+                {
+                    Action b = a;
+                    b.face_down = 2;
+                    b.cost      = both;
+                    b.eval      = EvalCard(def, state);
+                    actions.push_back(std::move(b));
+                }
                 actions.push_back(std::move(a));
             }
         }
@@ -44951,6 +45138,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (!hd->params.transform_back_name.empty()) { EmitTransformAction(state, hc, hd, /*hand_src=*/true, actions); }
             }
         }
+        // ---- MORPH: the plan's turn-face-up actions (EmitFaceUpActions; no-op without deck_has_morph).
+        EmitFaceUpActions(state, actions);
         // ---- ACTIVATED UNTAPPERS (Action::Kind::ActivateUntap; AccomplishedAlchemist chunk C2a) -----
         // Crab Umbra / Galvanic Alchemist's soulbond grant / Staff of Domination / Seedcradle Witch.
         // Driven from the TARGET side through the one oracle (CollectCreatureUntapAbilities), so each
@@ -49566,6 +49755,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                      + "|" + std::to_string(b.soulfire_own_targets)
                      + "|" + std::to_string(b.crackle_targets)
                      + (b.evoke ? "|e" : "") + (b.kicked ? "|k" : "") + (b.bestow ? "|b" : "")
+                     + (b.face_down != 0 ? "|fd" + std::to_string(b.face_down) : std::string())
                      + (b.adventure ? "|a" : "")
                      + (b.pitch_name.empty() ? std::string() : "|p" + b.pitch_name.str());
             };
@@ -61287,6 +61477,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
         // Evoke variant (Reveillark): the alternate cost IS the bill (lockstep with a.cost).
         if (a.evoke && d->params.evoke_cost.has_value()) { ec = *d->params.evoke_cost; }
+        if (a.face_down != 0 && (d->params.morph_cost || d->params.megamorph_cost)) { ec = FaceDownCastCost(*d, a.face_down); }   // morph
         // Phyrexian variant ({G/P} -- Birthing Pod): the life-paid pips come OFF the joint bill,
         // the same strip the enumeration emitted (the ApplyConvokeReduction idiom; the life half
         // is paid at the cast, not here). Without this the prepay overpays the {G} the variant
@@ -63685,6 +63876,7 @@ struct HumanStepToken
     std::string verb, name;
     int  src = 0, target = 0, count = 0;   // 0 = not stated
     bool kicked = false, adventure = false;
+    std::int8_t face_down = 0;   // `+facedown` (1) / `+facedownup` (2): the morph face-down cast
 };
 static HumanStepToken ParseHumanStepToken(const std::string& tok)
 {
@@ -63704,6 +63896,8 @@ static HumanStepToken ParseHumanStepToken(const std::string& tok)
         more = false;
         if (strip("+kicked"))    { t.kicked = true;    more = true; }
         if (strip("+adventure")) { t.adventure = true; more = true; }
+        if (strip("+facedownup")) { t.face_down = 2; more = true; }
+        if (strip("+facedown"))  { t.face_down = 1; more = true; }
     }
     auto take_int = [&v](char mark, int& out)
     {
@@ -63830,7 +64024,8 @@ static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const Ga
             && a.tutor_target.str() == st.name;
     }
     if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
-    if (a.kind == Action::Kind::CastFromHand && (a.kicked != st.kicked || a.adventure != st.adventure))
+    if (a.kind == Action::Kind::CastFromHand
+        && (a.kicked != st.kicked || a.adventure != st.adventure || a.face_down != st.face_down))
     { return false; }
     auto same = [&](int stated, int have) { return have == stated || (twins && HumanTwinPermanents(state, stated, have)); };
     if (st.src > 0 && !same(st.src, a.sac_source_id)) { return false; }
@@ -66533,6 +66728,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Kicked)");
             if (kopt != nullptr) { opt = kopt; }
         }
+        // MORPH (CR 702.37a): the FACE-DOWN cast -- the same one-place def swap, onto the synthesized
+        // "<name> (Face-down)" vanilla 2/2. Everything downstream (the permanent that enters, its
+        // abilities -- none -- its MV 0) reads the face. An alternative cost: never combined with the
+        // swaps above (the enumeration emits face_down only on a plain cast). Executor twin: AIEngine's
+        // CastSpellFromHand.
+        if (riders.face_down != 0 && (opt->params.morph_cost.has_value() || opt->params.megamorph_cost.has_value()))
+        {
+            const CardDefinition* fopt =
+                CardDatabase::Instance().Lookup(opt->card.m_name.str() + " (Face-down)");
+            if (fopt != nullptr) { opt = fopt; }
+        }
         const CardDefinition& def = *opt;
         if (it != ap.hand.end() && !CanRevealAdditionalCost(state, state.active_player_index,
                 it->m_number, def.params.reveal_subtype_or_pay)) { return; }
@@ -66690,6 +66896,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // lockstep with the enumeration's a.cost and the executor's CastSpellFromHand).
         if (evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
         if (riders.awaken && def.params.awaken_cost.has_value()) { ec = *def.params.awaken_cost; }
+        // MORPH: the face-down cast's alternative cost is a flat {3} (CR 702.37a). Cost modifiers are not
+        // applied to it (none in any pool that carries a morph card -- disclosed, G7). Lockstep with the
+        // enumeration's a.cost and the executor's CastSpellFromHand.
+        if (riders.face_down != 0 && !def.params.face_down_real_name.empty()) { ec = FaceDownCastCost(def, riders.face_down); }
         // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors
         // the enumeration cost and the executor's CastSpellFromHand -> lockstep).
         ec.generic = std::max(0, ec.generic
@@ -67369,6 +67579,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.evoke              = evoke;
             rec.adventure          = adventure;
             rec.kicked             = kicked;
+            rec.face_down          = riders.face_down;
             rec.devour_count       = cast_devour;
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
             // ...and the RIPPLE chain pins (Shadowborn INT-3): the replayed cast must stamp the same script.
@@ -67844,7 +68055,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         if (p.card.IsCreature() && p.damage > 0
                             && p.damage >= LethalToughness(p, state))
                         {
-                            state.players[p.owner_index].graveyard.push_back(p.card);
+                            state.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));
                             state.battlefield.erase(state.battlefield.begin() + bi);
                         }
                     }
@@ -68165,6 +68376,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     if (state.battlefield[bi].card.m_number == cast_number
                         && state.battlefield[bi].controller_index == state.active_player_index)
                     { SacrificePermanentAt(state, state.active_player_index, bi); break; }
+                }
+            }
+            // MORPH (Action::face_down == 2): the face-down cast is turned face up as its enter cascade
+            // completes -- the hand-source LEAD flip (its morph cost was in the cast's bill). Den
+            // Protector's regrowth rides the cast's tutor_target. Lockstep twin: EnterBattlefield's.
+            if (riders.face_down == 2)
+            {
+                for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
+                {
+                    if (state.battlefield[bi].card.m_number == cast_number
+                        && state.battlefield[bi].controller_index == state.active_player_index)
+                    {
+                        const FaceUpRegrowPinScope _fu_pin(tutor_target.empty() ? nullptr : &tutor_target);
+                        TurnFaceDownPermanentUp(state, state.active_player_index, bi);
+                        break;
+                    }
                 }
             }
 
@@ -68519,7 +68746,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 const Permanent& tgt = state.battlefield[ci];
                 const int  dead_num  = tgt.card.m_number;
                 const bool is_tok    = tgt.is_token;
-                const Card tucked    = tgt.card;
+                const Card tucked    = RevealedCard(tgt.card);
                 const int  owner     = tgt.owner_index;
                 state.battlefield.erase(state.battlefield.begin() + ci);
                 RefreshDevotionCreatures(state);   // lockstep with EffectHandler's tuck branch
@@ -70712,7 +70939,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Buccaneer and left the tapped Fiery Islet in play (Treasure #34 sat ahead of the Islet).
                 for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                 { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
-                ap.graveyard.push_back(state.battlefield[idx].card);
+                ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
                 state.battlefield.erase(state.battlefield.begin() + idx);
             }
             else
@@ -71118,6 +71345,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
                                                   sac_named ? &a.tutor_target.str() : nullptr);
+            // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
+            // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
+            const FaceUpRegrowPinScope _fu_pin(
+                IsTurnFaceUpMode(a.ability_mode) && !a.tutor_target.empty() ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched TARGET + X (TapTargetPump), read by the liveness check, the
             // payment (TapTargetPumpPay) and the resolver. {0, 0} for every other mode (never read).
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
@@ -72000,6 +72231,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // A human sequence places its land-search cracks itself (each one is a queued step, or an implicit
     // one after the last step), so the plan's searched slot is not consulted and every slot-driven
     // site (here, slot_hook, the trailing list) stands down.
+    // MORPH -- the plan's LEAD turn-face-up actions (PermAbilityMode::TurnFaceUp) run HERE, before the batch
+    // prepay and every cast, so a power-locking pump (Berserk, Legion Leadership) reads the face-up power.
+    // Executor twin: the same TurnSolver::ApplyFaceUpLeadActs at AIEngine::TakeTurn's pre-cast pass. A
+    // flip already done is face up by the trailing pass, whose liveness check then skips it. No-op for a
+    // plan without one (every deck without a morph card). A human sequence orders its own steps.
+    if (!human_v2) { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions); }
     if (human_v2) { ls_act_done = true; }
     else if (plan.land_search_act_slot == 0)
     {
@@ -72688,7 +72925,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 // Buccaneer and left the tapped Fiery Islet in play (Treasure #34 sat ahead of the Islet).
                 for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                 { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
-                ap.graveyard.push_back(state.battlefield[idx].card);
+                ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
                 state.battlefield.erase(state.battlefield.begin() + idx);
             }
             else
@@ -73457,6 +73694,9 @@ static thread_local int* t_upkeep_tutor_width_probe = nullptr;
 static bool SimulateUpkeepAfterArrivals(GameState& state);   // its second half (below)
 static bool SimulateEndAndStartNextTurn(GameState& state)
 {
+    // Morph CR 708.9 backstop / MTG_FACEDOWN_AUDIT tripwire, once per simulated turn boundary (the rollout's
+    // twin of the executor's SBA call). No-op without deck_has_morph.
+    NormalizeFaceDownZoneCards(state);
     CrossManaBoundary(state, state.active_player_index);
     Player& ap = state.ActivePlayer();
     // Moraug: the end step and the next turn's beginning phase are not main phases (a land entering there --
@@ -73479,7 +73719,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (state.battlefield[i].exile_at_end)
         {
             const Permanent leaving = state.battlefield[i];
-            state.exile.push_back(leaving.card);
+            state.exile.push_back(RevealedCard(leaving.card));
             state.battlefield.erase(state.battlefield.begin() + i);
             ResolveAthreosExile(state, leaving);
         }
@@ -73490,6 +73730,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Berserk's delayed destroy (Permanent::destroy_at_end_if_attacked) -- lockstep twin of
     // GameEngine::EndStep, same position, same shared helper. No-op without the bit.
     DestroyAttackedAtEndStep(state);
+    // Blistering Firecat's "at the beginning of the end step, sacrifice this creature" (face-up only;
+    // lockstep twin at the same position in the other world). No-op without deck_has_endstep_self_sac.
+    PerformEndStepSelfSacrifices(state);
 
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin of GameEngine::EndStep -- same position (after the exile
@@ -74014,7 +74257,7 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
         const int total_counters = TotalCountersOn(p);
-        state.players[ctrl].graveyard.push_back(dead);
+        state.players[ctrl].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);   // may append a token at the end -> safe (no echo_cost)
         // Do not advance i: the erased slot now holds the next permanent.
@@ -75430,6 +75673,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
                 if (d && !d->params.adventure_face_name.empty()) { w.Put(act.adventure ? "#A1" : "#A0"); }
                 if (d && d->params.kicker_cost.has_value()) { w.Put(act.kicked ? "#KI1" : "#KI0"); }
+                if (d && (d->params.morph_cost || d->params.megamorph_cost)) { w.Put(act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                 if (act.trick_redirect != 0) { w.Put("#RD"); w.Int(act.trick_redirect); }   // Spellskite
                 if (d && d->params.buyback_sacrifice_islands > 0)
                 { w.Put("#BB"); w.Put(act.tutor_target); }
@@ -80694,6 +80938,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Gated on the param -- the #S/#V/#K/#B/#A precedent -- so no deck without
                         // a kicker card moves a signature.
                         if (cd && cd->params.kicker_cost.has_value()) { k += (act.kicked ? "#KI1" : "#KI0"); }
+                        // Morph: face-down vs hard cast of a morph card (lockstep with PlanSignatureFast).
+                        if (cd && (cd->params.morph_cost || cd->params.megamorph_cost)) { k += (act.face_down == 2 ? "#FD2" : act.face_down == 1 ? "#FD1" : "#FD0"); }
                         // Spellskite's redirect of a trick: the same cast redirected is another line.
                         if (act.trick_redirect != 0) { k += "#RD"; k += std::to_string(act.trick_redirect); }
                         // TARGET PLAYER ("target player gains N life": Heroes' Reunion / Rest for the
@@ -81153,6 +81399,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 // Spellskite's trick redirect.
                 if (act.trick_redirect != 0)
                 { sub.push_back("rd" + act.card_name + ">" + std::to_string(act.trick_redirect)); }
+                // Morph: a face-down cast is its own human choice.
+                if (act.face_down != 0) { sub.push_back("fd" + std::to_string(act.face_down) + act.card_name); }
             }
             std::sort(sub.begin(), sub.end());
             for (const std::string& x : sub) { sig += '#'; sig += x; }
@@ -91881,6 +92129,7 @@ static std::string PlanDomKey(const Action& a)
     std::string k(1, cls);
     k += std::to_string(static_cast<int>(a.kind));
     k += '|'; k += a.card_name.str();
+    if (a.face_down != 0) { k += "#FD"; k += std::to_string(a.face_down); }   // morph: face-down vs hard cast of one name (they collided)
     k += '|'; k += std::to_string(a.sac_source_id);
     k += '|'; k += a.tutor_target.str();
     k += '|'; k += std::to_string(a.chosen_x);
@@ -121999,7 +122248,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 if (best >= 0)
                 {
                     lens.lens_imprinted_land = cp.battlefield[static_cast<std::size_t>(best)].card.m_name;
-                    cp.exile.push_back(cp.battlefield[static_cast<std::size_t>(best)].card);
+                    cp.exile.push_back(RevealedCard(cp.battlefield[static_cast<std::size_t>(best)].card));
                     cp.battlefield.erase(cp.battlefield.begin() + best);
                 }
                 cp.battlefield.push_back(std::move(lens));
@@ -122871,7 +123120,7 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
                               a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
                               a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target,
-                              a.trick_redirect };
+                              a.trick_redirect, static_cast<int>(a.face_down) };
             for (int v : f) { k += "|" + std::to_string(v); }
             if (a.seed_pay_split != 0) { k += "|ps" + std::to_string(a.seed_pay_split); }   // Q61, set only when on
             ks.push_back(std::move(k));

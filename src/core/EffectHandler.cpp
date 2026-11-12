@@ -199,6 +199,22 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // has fired -- through the SHARED cascade, so the LTB (return two power<=2 creatures) fires
     // exactly as on any other leave. Re-find by m_number: the cascade above may have moved the
     // vector. Lockstep twin: apply_one's creature-enter branch. Inert (flag false) elsewhere.
+    // MORPH (StackEntry::face_up_on_resolve, Action::face_down == 2): the face-down cast is turned face
+    // up as its enter cascade completes (cost paid in the cast's bill); entry.tutor_target pins Den
+    // Protector's regrowth. Lockstep twin: apply_one's creature-enter branch.
+    if (entry.face_up_on_resolve)
+    {
+        for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
+        {
+            if (state.battlefield[bi].card.m_number == entry.source.m_number
+                && state.battlefield[bi].controller_index == entry.controller_index)
+            {
+                const FaceUpRegrowPinScope _fu_pin(entry.tutor_target.empty() ? nullptr : &entry.tutor_target);
+                TurnFaceDownPermanentUp(state, entry.controller_index, bi);
+                break;
+            }
+        }
+    }
     if (entry.evoke)
     {
         for (int bi = static_cast<int>(state.battlefield.size()) - 1; bi >= 0; --bi)
@@ -998,7 +1014,7 @@ void EffectHandler::ResolveRemoval(GameState& state, const StackEntry& entry,
             {
                 const int  dead_num = target.card.m_number;
                 const bool is_tok   = target.is_token;
-                const Card tucked   = target.card;
+                const Card tucked   = RevealedCard(target.card);
                 const int  owner    = target.owner_index;
                 state.battlefield.erase(state.battlefield.begin() + t.permanent_index);
             RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)

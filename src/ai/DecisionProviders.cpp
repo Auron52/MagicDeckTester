@@ -25465,7 +25465,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         { kithkin = true; }
         if (p.spell_target_watch_pump_power != 0 || p.trick_double_power
             || p.grants_temp_double_strike || p.mainphase_power_bonus != 0
-            || p.kicked_power_bonus != 0 || p.redirects_spell_target_to_self)
+            || p.kicked_power_bonus != 0 || p.redirects_spell_target_to_self
+            || p.morph_cost.has_value() || p.megamorph_cost.has_value()        // Morph INT-2
+            || p.endstep_sacrifice_self || p.combat_damage_self_may_draw > 0
+            || p.turned_face_up_return_gy_to_hand)
         { morph = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())

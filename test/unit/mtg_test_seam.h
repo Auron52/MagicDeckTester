@@ -25,6 +25,17 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, false, false, false, riders);
     }
 
+    // The executor's hand cast in MORPH FACE-DOWN mode (CastRiders::face_down: 1 = face down, 2 = face down
+    // and turned face up at once) -- exactly what cast_by_name passes for a face-down Action. Pushes the
+    // StackEntry; the caller resolves it.
+    static void CastFaceDownFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int mode)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.face_down = static_cast<std::int8_t>(mode);
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, 0, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
     // The executor's hand cast in EVOKE mode carrying a PITCH rider (Fury's "Evoke--Exile a red card
     // from your hand"): exactly what cast_by_name passes for an evoke Action with pitch_name set (the
     // rider rides CastRiders, evoke rides the positional flag). Pushes the StackEntry; the caller

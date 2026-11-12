@@ -1782,7 +1782,7 @@ void AIEngine::ResolveEchoUpkeep(GameState& state)
         const bool tok  = p.is_token;
         const int  m1   = MinusCountersOn(p);
         const int  total_counters = TotalCountersOn(p);
-        state.players[ctrl].graveyard.push_back(dead);
+        state.players[ctrl].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         OnCreatureDies(state, ctrl, dead, tok, m1, nullptr, total_counters);
         // Do not advance i: the erased slot now holds the next permanent.
@@ -7179,6 +7179,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
                                                   sac_named ? &a.tutor_target.str() : nullptr);
+            // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
+            // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
+            const FaceUpRegrowPinScope _fu_pin(
+                IsTurnFaceUpMode(a.ability_mode) && !a.tutor_target.empty() ? &a.tutor_target.str() : nullptr);
             // Kessig Wolf Run's searched target + X (TapTargetPump) -- lockstep twin of the rollout's.
             const bool tpump = a.ability_mode == Action::AbilityMode::TapTargetPump;
             const bool target_pump = a.ability_mode == Action::AbilityMode::TargetPump
@@ -8120,6 +8124,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
     // after in both); the trailing pass skips them.
+    // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
+    if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
+    { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
     if (plan.land_search_act_slot == 0)
     {
         TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
@@ -9395,7 +9402,7 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         { if (state.battlefield[i].card.m_number == src_num) { idx = i; break; } }
         if (m_logger) { m_logger->LogDiscard(state.battlefield[idx].card.m_number, source); }
-        ap.graveyard.push_back(state.battlefield[idx].card);
+        ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
     else
@@ -9831,6 +9838,15 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Kicked)");
         if (kdef != nullptr) { def = kdef; }
     }
+    // MORPH (CR 702.37a): the FACE-DOWN cast -- swap in the synthesized "<name> (Face-down)" vanilla 2/2
+    // for the whole cast; entry.source is then the face, so EffectHandler::EnterBattlefield enters the
+    // face-down permanent under the hand card's number. Exact twin of the rollout's apply_one swap.
+    if (riders.face_down != 0 && (def->params.morph_cost.has_value() || def->params.megamorph_cost.has_value()))
+    {
+        const CardDefinition* fdef =
+            CardDatabase::Instance().Lookup(def->card.m_name.str() + " (Face-down)");
+        if (fdef != nullptr) { def = fdef; }
+    }
     if (!CanRevealAdditionalCost(state, state.active_player_index,
                                  hand_card_number, def->params.reveal_subtype_or_pay)) { return; }
 
@@ -10181,6 +10197,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // lockstep with the enumeration's a.cost and the rollout's apply_one).
     if (evoke && def->params.evoke_cost.has_value()) { effective = *def->params.evoke_cost; }
     if (riders.awaken && def->params.awaken_cost.has_value()) { effective = *def->params.awaken_cost; }
+    // MORPH: the face-down cast pays a flat {3} (lockstep twin of the rollout's apply_one).
+    if (riders.face_down != 0 && !def->params.face_down_real_name.empty())
+    { effective = FaceDownCastCost(*def, riders.face_down); }
+    entry.face_up_on_resolve = riders.face_down == 2 && !def->params.face_down_real_name.empty();
     // Soulfire Eruption: extra Hinata discount from the searched own-creature targets (mirrors the
     // enumeration cost and the rollout's apply_one -> lockstep).
     effective.generic = std::max(0, effective.generic

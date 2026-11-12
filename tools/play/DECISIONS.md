@@ -55,6 +55,8 @@ bottom prompt (`promptPanelHtml`). Line numbers are hints — anchor on the symb
 | `dredge` | `g_dredge_chooser` | `AttemptDrawIntoHand` before each eligible draw | `WriteDredgeDecisionJson` | `dredgePanelHtml` | modal |
 | `main_phase` (Boros Charm modes) | — (`chosen_x` encodes 4 damage, indestructible, or double strike; `enchant_target` names a player, planeswalker, or creature as appropriate) | `TurnSolver::CheckLine` offers a `modal` sub for every legal mode and target; `ApplyBorosCharm` resolves the selected variant | `WriteValidation` variants | `renderChooseDialog` | modal |
 | `main_phase` (Tooth and Nail cast mode) | — (`chosen_x` encodes search, put, or entwine; it is not an X cost) | `TurnSolver::CheckLine` emits one `modal` sub per variant; `ApplyPlan` pays `{2}` extra only for entwine | `WriteValidation` variants | `renderChooseDialog`: “Tooth and Nail entwine?” with yes/search only/put only choices; creature picks follow at resolution | modal |
+| `main_phase` (reuse: **Morph / megamorph** -- Blistering Firecat, Hystrodon, Den Protector; INT-2 2026-11-11: the FACE-DOWN cast variant `face_down: 1` ({3}) and `face_down: 2` (face down and turned face up at once, {3} + the morph cost); the turn-face-up plan verb `face_up` with `face_up_pos` "first" (before the casts) / "after casts" (Den Protector only)) | -- (plans; composer tokens `cast=X+facedown` / `cast=X+facedownup`) | CollectActions / ApplyPlanDirect / AIEngine::TakeTurn | -- | plan picker | board (a face-down row shows the REAL card with `face_down`, `megamorph`, `face_up_cost`, CR 708.5) |
+| `dig` (reuse: **Den Protector** "when turned face up, return target card from your graveyard to your hand"; INT-2) | `g_play_dig_chooser` | `ResolveEtbReturnGyToHand` via `TurnFaceDownPermanentUp` | the provider's `GyReturnToHandPick` | card pick | modal |
 | `target` (reuse: **Morph pump family** -- Berserk, Temur Battle Rage, Might of Old Krosa, Vines of Vastwood, Legion Leadership; INT-1 2026-11-11) | `g_play_target_chooser` (the existing solo-target-trick board click) | `ResolveSoloTargetTrick` (shared executor/rollout) | -- (the searched target is the preselected default) | board click | board |
 | `main_phase` (reuse: **Vines of Vastwood** kicked vs unkicked, one kicked twin PER TARGET; **Spellskite** redirect of a solo-target trick, `Action::trick_redirect`, with its {U/P} mana-vs-2-life twin) | -- (plans, no chooser) | `CollectActions` trick emitter emits each variant | `WriteDecisionJson`: `kicked`/`verb: kick`; `trick_redirect`/`verb: redirect`/`redirect_to` | plan picker | modal |
 | -- (no decision: **Wild Defiance**'s +3/+3 trigger, Berserk's end-step destroy, Legion Stronghold entering tapped, Fire-Lit Thicket's filter) | -- | mandatory / mana payment | play events (`trigger`) | -- | -- |
@@ -755,6 +757,10 @@ fully wired (all four sites) regardless of the menu default.
 
 ## Known gaps (not yet a type — see analyze-deck Stage 6a)
 
+- **Morph: no END-OF-TURN `face_up` decision yet** (Morph INT-2, 2026-11-11) — turning a face-down permanent face up at
+  the OPPONENT'S end step (a Firecat flipped there survives into our turn) is not modelled yet in either the search or the
+  viewer; owed with the BoundaryFan axis (logs/morph/int2-handoff.md). The `faceup=<name>` composer token and CheckLine
+  verb wiring for a main-phase flip are also owed (the plan picker offers the flip; a hand-built line cannot declare it).
 - **Spellskite redirect in a recorded LINE** (Morph INT-1, 2026-11-11) — the plan picker offers the
   redirect variant (`verb: redirect`), but the human-sequence / `--choices` LineSpec has no `redirect`
   key yet, so `CheckLine` cannot match a hand-built line that uses it (it would read as an ENUM-GAP).

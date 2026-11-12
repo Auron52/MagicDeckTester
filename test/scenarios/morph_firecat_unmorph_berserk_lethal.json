@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "MORPH: THE LEAD FLIP BEFORE A POWER-LOCKING PUMP (Morph INT-2, 2026-11-11).",
+    "",
+    "Turn 3: a face-down Blistering Firecat that entered on turn 2 (not summoning sick), three Mountains and",
+    "two Forests untapped, Berserk + Temur Battle Rage in hand. Turn it face up ({R}{R}: 7/1 haste trample),",
+    "Berserk it ({G}: +7/+0 = 14), Temur Battle Rage ({1}{R}: double strike) -> 28 to an opponent at 20.",
+    "",
+    "DISCRIMINATING: Berserk locks X at resolution, so flipping AFTER Berserk gives 2 -> 4 -> 9 power,",
+    "18 double-strike damage, not lethal. Only the LEAD position (the flip before the plan's casts) wins."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Blistering Firecat (Face-down)", "controller": 0, "sick": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false },
+    { "name": "Forest", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Berserk",
+    "Temur Battle Rage"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "expect_win_turn": 3
+}

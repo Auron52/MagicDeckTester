@@ -355,7 +355,25 @@ enum class PermAbilityMode
     // enchantment." No {T}; the counter is part of the cost. Target carried on Action::sac_victim_id
     // (installed as the TapTargetPumpPin at both apply sites).
     CounterDestroyArtEnch,
+    // MORPH / MEGAMORPH -- TURN THIS FACE-DOWN PERMANENT FACE UP (CR 702.37e). NOT an activated ability:
+    // a SPECIAL ACTION (CR 116.2b) -- no stack, no response -- modelled on this enum because the plan,
+    // payment and liveness machinery for "pay a cost, change one of our permanents" is the activation
+    // route. Nothing in any pool reads activated abilities (Pithing Needle, "abilities cost more"), so
+    // the reuse is inert (disclosed, R7). The cost is the REAL card's morph_cost / megamorph_cost
+    // (Action::cost), NO {T} -- legal while tapped or summoning-sick -- so in PermAbilityTaps' exclusion
+    // list. The face swap keeps the PERMANENT (CR 708.8: pumps, counters, damage, sickness persist; no
+    // ETB). Megamorph adds a +1/+1 counter (CR 702.37b); "when turned face up" triggers fire after.
+    // TWO MODES = the flip's POSITION in a main-phase plan (the searched / dominance-folded axis):
+    //   TurnFaceUp     -- LEAD: before every cast of the plan (TurnSolver::ApplyFaceUpLeadActs, both worlds);
+    //   TurnFaceUpLate -- TRAIL: in the trailing activation pass, after the casts (a "when turned face up"
+    //                     card only -- Den Protector regrows a pump the plan cast first).
+    // Being two modes, every activation signature that keys ability_mode tells them apart. Appended LAST.
+    TurnFaceUp,
+    TurnFaceUpLate,
 };
+// Is `m` one of the two morph turn-face-up modes?
+inline bool IsTurnFaceUpMode(PermAbilityMode m)
+{ return m == PermAbilityMode::TurnFaceUp || m == PermAbilityMode::TurnFaceUpLate; }
 
 // Does this mode's cost include {T}? THE single source of truth, because three separate sites used
 // to open-code `mode != SacDraw` -- and every one of them would have silently tapped Essence
@@ -386,7 +404,9 @@ inline bool PermAbilityTaps(PermAbilityMode m)
         && m != PermAbilityMode::SacNamedTutorPut
         && m != PermAbilityMode::FigureTwo
         && m != PermAbilityMode::FigureFour
-        && m != PermAbilityMode::FigureEight;
+        && m != PermAbilityMode::FigureEight
+        && m != PermAbilityMode::TurnFaceUp           // morph: a special action, no {T} (CR 702.37e)
+        && m != PermAbilityMode::TurnFaceUpLate;
     // SacLandSearch (Evolving Wilds / Myriad Landscape) is deliberately ABSENT: its cost has {T}.
     // SacLifePerCreature (Blighted Steppe) and TapLifegain (Wellwisher) are deliberately ABSENT --
     // this is an EXCLUSION list, so anything not named here taps, which is what both want. Adding

@@ -151,7 +151,10 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
                  bool has_pt; int power; int toughness;
                  // SUMMONING SICK (USER 2026-11-04: "it would be nice to see which are summoning sick on the field"):
                  // a creature that entered this turn and cannot attack (no haste from any source). Emitted only when true.
-                 bool sick; };
+                 bool sick;
+                 // MORPH (CR 708.5: we may look at our own face-down permanents): a face-down row shows the
+                 // REAL card (name = the image key) with a face-down marker and its turn-face-up cost.
+                 bool face_down = false; bool megamorph = false; std::string face_up_cost; };
     std::vector<Row> rows;
     for (int pi = 0; pi < static_cast<int>(s.battlefield.size()); ++pi)
     {
@@ -275,6 +278,15 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
                          p.copy_printed_name.str(),
                          std::move(taps), std::move(tap_fed), std::move(tap_feed), tap_sac,
                          std::move(tap_note), std::move(tap_auras), tap_energy, yield, has_pt, pw, tf, sick });
+        if (const CardDefinition* real = FaceDownRealDef(p))
+        {
+            Row& r = rows.back();
+            r.face_down = true;
+            r.name      = real->card.m_name;
+            r.megamorph = real->params.megamorph_cost.has_value();
+            const ManaCost& fc = real->params.morph_cost ? *real->params.morph_cost : *real->params.megamorph_cost;
+            r.face_up_cost = fc.ToString();
+        }
     }
     std::sort(rows.begin(), rows.end(),
               [](const Row& a, const Row& b){ return a.name < b.name; });
@@ -287,6 +299,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         os << ", \"num\": " << rows[i].num;
         if (rows[i].tapped) { os << ", \"tapped\": true"; }
         if (rows[i].sick)   { os << ", \"sick\": true"; }
+        if (rows[i].face_down)
+        {
+            os << ", \"face_down\": true, \"megamorph\": " << (rows[i].megamorph ? "true" : "false")
+               << ", \"face_up_cost\": "; JsonStr(os, rows[i].face_up_cost);
+        }
         if (rows[i].is_aura)  { os << ", \"is_aura\": true"; }
         if (rows[i].is_equip) { os << ", \"is_equip\": true"; }
         if (rows[i].attached_to > 0)
@@ -3075,6 +3092,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 else if (ac.kind == Action::Kind::ActivatePermAbility
                          && ac.ability_mode == Action::AbilityMode::TransformSelf)
                 { os << ", \"verb\": \"transform\""; }
+                // MORPH: turn a face-down permanent face up (a special action) -- before the plan's casts
+                // ("first") or after them ("after casts", Den Protector); tutor_target (already
+                // serialised) is the searched regrowth.
+                else if (ac.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(ac.ability_mode))
+                {
+                    os << ", \"verb\": \"face_up\", \"face_up_pos\": \""
+                       << (ac.ability_mode == Action::AbilityMode::TurnFaceUp ? "first" : "after casts") << "\"";
+                }
                 // Shadowborn Apostle's "{B}, Sacrifice six creatures named ~: put a Demon" (INT-2): the
                 // list runs eighteen copies, so `cast=Shadowborn Apostle` is a hand cast. The line value is
                 // the DEMON (tutor_target, already serialised; "(no fetch)" = fail to find) -- the pod= /
@@ -3198,6 +3223,10 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            // MORPH: the face-down cast (1) / face-down cast turned face up at once (2) -- the hard cast
+            // shares the name, so the flag tells them apart (human composer: cast=X+facedown / +facedownup).
+            if (ac.face_down != 0)
+            { os << ", \"face_down\": " << static_cast<int>(ac.face_down); }
             // PITCH EVOKE (Fury): the hand card the evoke exiles (its cost), so the choose dialog can
             // tell "evoke, exile Brushfire Elemental" from "evoke, exile Fury".
             if (!ac.pitch_name.empty())

@@ -385,7 +385,8 @@ public:
 // SIGNATURE (DetectDecisionProvider's `morph`): params carried by no other deck, OR-ed across SEVERAL
 // cards so one deckbuilding swap cannot lose the routing -- Wild Defiance's watcher, the power
 // doublers (Berserk, Legion Leadership), Temur Battle Rage's temp double strike, Might's main-phase
-// pump, Vines' kicked pump, Spellskite's redirect. INT-2 appends the morph params there.
+// pump, Vines' kicked pump, Spellskite's redirect -- and (INT-2) the morph params: morph_cost /
+// megamorph_cost, endstep_sacrifice_self, combat_damage_self_may_draw, turned_face_up_return_gy_to_hand.
 // =============================================================================================
 class MorphProvider : public DeckProvider
 {

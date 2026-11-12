@@ -3628,6 +3628,114 @@ inline Card UnkickedSpellCard(const CardDefinition& def, const Card& resolved)
     return c;
 }
 
+// MORPH (CR 708.9): a face-down permanent that leaves the battlefield is REVEALED and arrives in its
+// new zone as the real card. A face-down permanent's Card IS the DB-synthesized "<name> (Face-down)"
+// face, and zone cards are name-only (resolved through LookupCached by name), so pushing that Card
+// into a graveyard / hand / exile / library would leave a face-down MV-0 vanilla there -- Den
+// Protector would regrow "Blistering Firecat (Face-down)". Every battlefield -> zone push wraps its
+// card in this. The copy's m_number rides along (the same physical card). IDENTITY for every card that
+// is not a face-down face (one memoized-pointer read and an empty-string test), so it is inert -- and
+// byte-identical -- for every deck without a morph card. LKI is NOT this: a dies trigger sees the
+// face-down 2/2 (CR 603.10), so callers keep the unrevealed card for OnCreatureDies.
+inline Card RevealedCard(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr || d->params.face_down_real_name.empty()) { return c; }
+    const CardDefinition* r = CardDatabase::Instance().Lookup(d->params.face_down_real_name);
+    if (r == nullptr) { return c; }
+    Card out     = r->card;
+    out.m_number = c.m_number;
+    return out;
+}
+
+// MORPH: the REAL card behind a face-down permanent (its def is a synthesized "<name> (Face-down)" face
+// whose real card carries a morph / megamorph cost), or nullptr for every other permanent.
+inline const CardDefinition* FaceDownRealDef(const Permanent& p)
+{
+    if (p.def_absent) { return nullptr; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || d->params.face_down_real_name.empty()) { return nullptr; }
+    const CardDefinition* r = CardDatabase::Instance().Lookup(d->params.face_down_real_name);
+    if (r == nullptr || !(r->params.morph_cost.has_value() || r->params.megamorph_cost.has_value()))
+    { return nullptr; }
+    return r;
+}
+// THE FLIP-POSITION DOMINANCE FOLD's predicate (shared by the enumeration and the tests). In a main-phase
+// plan a turn-face-up of a card with NO "when turned face up" trigger and a fixed face-up power >= 2 (the
+// face-down 2/2's power) is offered only at LEAD -- before the plan's casts (or, from hand, at its own
+// face-down cast's resolution). The argument (goldfish): fix the plan's multiset of actions; moving such a
+// flip earlier changes nothing but the creature's BASE power during the casts in between (no card or
+// engine-modelled effect reads "face down"; the mana is the same multiset). Every pump cast on it in
+// between either ADDS a fixed amount (Might, Vines, Wild Defiance's +3/+3, exalted) -- final power equal up
+// to the base difference -- or adds X = its CURRENT power (Berserk, Legion Leadership) -- higher with a higher
+// base. So final power is monotone in base power, and with face-up power >= 2 LEAD is >= every later
+// position; toughness is irrelevant (the goldfish never damages, blocks or shrinks our creatures). Payment
+// ORDER is the one caveat (a standing payment exemption, R4). Unsound -- so BOTH positions are offered --
+// for a card with a turned-face-up trigger (Den Protector: the graveyard at the flip decides what returns;
+// the regrown card opens a searched breakpoint, which makes {LEAD, TRAIL} complete), a face-up power below
+// 2, or a dynamic (*) power.
+inline bool FaceUpLeadDominates(const CardDefinition& real)
+{
+    return !real.params.turned_face_up_return_gy_to_hand
+        && real.card.m_power.has_value() && *real.card.m_power >= 2;
+}
+// ...and its turn-face-up cost (morph or megamorph), nullopt for a permanent that is not face down.
+inline std::optional<ManaCost> FaceUpCost(const Permanent& p)
+{
+    const CardDefinition* r = FaceDownRealDef(p);
+    if (r == nullptr) { return std::nullopt; }
+    return r->params.morph_cost ? r->params.morph_cost : r->params.megamorph_cost;
+}
+// Den Protector's regrowth PIN (Action::tutor_target on a turn-face-up action): the graveyard card NAME the
+// searched plan chose, installed by both worlds' activation sites around ApplyPermAbility. Empty / null =
+// unpinned (the provider's GyReturnToHandPick on the live graveyard -- beyond the horizon the permitted
+// playout policy; a human gets the dig chooser at resolution).
+inline thread_local const std::string* g_face_up_regrow_pin = nullptr;
+struct FaceUpRegrowPinScope
+{
+    const std::string* saved;
+    explicit FaceUpRegrowPinScope(const std::string* pin) : saved(g_face_up_regrow_pin) { g_face_up_regrow_pin = pin; }
+    ~FaceUpRegrowPinScope() { g_face_up_regrow_pin = saved; }
+    FaceUpRegrowPinScope(const FaceUpRegrowPinScope&) = delete;
+    FaceUpRegrowPinScope& operator=(const FaceUpRegrowPinScope&) = delete;
+};
+
+// MORPH -- THE CR 708.9 BACKSTOP (and its tripwire). Every battlefield -> zone push reveals a face-down card
+// (RevealedCard); this rewrites any synthesized "<name> (Face-down)" card still found OFF the battlefield --
+// a hand, graveyard or exile -- into the real card (keeping its m_number), so a missed push site can
+// never leave a face-down vanilla in a zone (Den Protector regrowing an MV-0 2/2). Called by the executor's
+// SBA check and at the rollout's turn boundary. Under MTG_FACEDOWN_AUDIT=1 (TEST-ONLY) it ABORTS instead,
+// naming the zone and card, so the unit / batch runs PROVE no push site was missed. Gated on the deck
+// constant deck_has_morph: free for every other deck.
+inline void NormalizeFaceDownZoneCards(GameState& state)
+{
+    if (!state.deck_has_morph) { return; }
+    static const bool s_audit = EnvOn("MTG_FACEDOWN_AUDIT");
+    auto fix = [&](std::vector<Card>& zone, const char* zname)
+    {
+        for (Card& c : zone)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || d->params.face_down_real_name.empty()) { continue; }
+            if (s_audit)
+            {
+                std::fprintf(stderr, "MTG_FACEDOWN_AUDIT: face-down card '%s' (#%d) found in %s (turn %d)\n",
+                             c.m_name.str().c_str(), c.m_number, zname, state.turn_number);
+                std::abort();
+            }
+            c = RevealedCard(c);
+        }
+    };
+    for (Player& pl : state.players)
+    {
+        fix(pl.hand, "hand");
+        fix(pl.graveyard, "graveyard");
+        // (The library is not scanned: its only battlefield -> library push, the tuck, reveals at the site,
+        // and a whole-library walk is an index-carry read with its own bookkeeping.)
+    }
+    fix(state.exile, "exile");
+}
+
 inline void PutFadeCounters(GameState& state, Permanent& p, int n)
 {
     if (n <= 0) { return; }
@@ -9136,7 +9244,7 @@ inline void PerformEndStepNoCreatureSacrifice(GameState& state)
             if (r.aura_attached_to == num) { r.aura_attached_to = 0; }
         }
         state.battlefield.erase(state.battlefield.begin() + i);
-        state.players[owner].graveyard.push_back(dead);
+        state.players[owner].graveyard.push_back(RevealedCard(dead));
         if (g_play_event_sink != nullptr)
         {
             EmitPlayEvent(state.turn_number, "ability",
@@ -10929,7 +11037,7 @@ inline void AskHumanEtbDestroyVictims(GameState& state, int controller, const Ca
                               + (ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                               + q.card.m_name.str() + (q.tapped ? " (tapped)" : ""));
             }
-            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
             elephant_for.push_back(ctrl);
             break;
@@ -11193,7 +11301,7 @@ inline void DrainPendingSelfBounces(GameState& state)
                               "\xF0\x9F\x94\x99 " + q.card.m_name.str()
                               + ": returned to hand (a Dragon entered)");
             }
-            EnterHand(state, q.owner_index, q.card, HandEntryReason::Bounce);
+            EnterHand(state, q.owner_index, RevealedCard(q.card), HandEntryReason::Bounce);
             state.battlefield.erase(state.battlefield.begin()
                                     + static_cast<std::ptrdiff_t>(i));
             break;   // one bounce per record; a duplicate record finds nothing next pass
@@ -11228,7 +11336,7 @@ inline void PerformMvCastDamageOppCreatures(GameState& state, int controller,
         {
             ++killed;
             const int dead_controller = q.controller_index;
-            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin()
                                     + static_cast<std::ptrdiff_t>(i));
             FireOppCreatureDies(state, dead_controller);
@@ -12068,7 +12176,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                     Permanent& q = state.battlefield[i];
                     if (q.tapped != want_tapped) { continue; }
                     if (EtbDestroyVictimClass(state, controller, q) != cls) { continue; }
-                    state.players[q.owner_index].graveyard.push_back(q.card);
+                    state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
                     state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
                     --k; ++made;
                 }
@@ -12212,7 +12320,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
             q.temp_tough_bonus -= p.etb_opp_creatures_debuff;
             if (q.EffectiveToughness() - q.damage > 0) { continue; }
             const int dead_controller = q.controller_index;
-            state.players[q.owner_index].graveyard.push_back(q.card);
+            state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
             FireOppCreatureDies(state, dead_controller);
         }
@@ -12298,7 +12406,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 && !q.HasKeyword(Keyword::Indestructible))
             {
                 const int dead_controller = q.controller_index;
-                state.players[q.owner_index].graveyard.push_back(q.card);
+                state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
                 state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
                 // Opponent-death watchers (Massacre Wurm clause 2). Param-gated scan ->
                 // byte-identical for every deck without a watcher (incl. all Goblins GT).
@@ -12599,7 +12707,7 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 if (q.card.m_number != target || q.controller_index != controller || !q.card.IsLand())
                 { continue; }
                 const Card exiled = q.card;
-                state.exile.push_back(exiled);
+                state.exile.push_back(RevealedCard(exiled));
                 state.battlefield.erase(state.battlefield.begin() + bi);
                 for (Permanent& src : state.battlefield)
                 {
@@ -13584,7 +13692,7 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         {
             const Permanent dead = state.battlefield[pick];
             if (!dead.is_token)
-            { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+            { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
             state.battlefield.erase(state.battlefield.begin() + pick);
         }
     }
@@ -13826,7 +13934,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 if (!theirs && !ajani) { continue; }
                 const Permanent leaving = q;
                 const int dead_num = q.card.m_number;
-                if (!q.is_token) { state.exile.push_back(q.card); }
+                if (!q.is_token) { state.exile.push_back(RevealedCard(q.card)); }
                 for (Permanent& e : state.battlefield)
                 {
                     if (e.equipped_to     == dead_num) { e.equipped_to = 0; }
@@ -14205,7 +14313,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
             for (Permanent& q : state.battlefield)
             { if (q.equipped_to == dead.card.m_number) { q.equipped_to = 0; } }
             if (!dead.is_token)
-            { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+            { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
             state.battlefield.erase(state.battlefield.begin() + pick);
         }
     }
@@ -14341,7 +14449,7 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
         if (q.controller_index != controller || q.card.m_number != walker_id) { continue; }
         if (q.loyalty > 0) { break; }
         const Card dead_card = q.card;
-        state.players[q.owner_index].graveyard.push_back(dead_card);
+        state.players[q.owner_index].graveyard.push_back(RevealedCard(dead_card));
         state.battlefield.erase(state.battlefield.begin() + i);
         RefreshDevotionCreatures(state);   // a dead walker's pips leave devotion (Ajani {2}{W}{W})
         RefreshReconfigureCreatures(state);   // reconfigure (Lizard Blades): a departed host frees its piece -- RefreshReconfigureCreatures
@@ -15393,7 +15501,7 @@ inline bool DealPermanentAbilityDamage(GameState& s, int controller, const CardD
             { if (c.type == Counter::Type::Loyalty) { c.count = p.loyalty; } }
             if (p.loyalty <= 0)
             {
-                s.players[p.owner_index].graveyard.push_back(p.card);
+                s.players[p.owner_index].graveyard.push_back(RevealedCard(p.card));
                 s.battlefield.erase(s.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
             }
             return true;
@@ -15901,7 +16009,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
                 if (o.equipped_to      == sacrificed.m_number) { o.equipped_to      = 0; }
                 if (o.aura_attached_to == sacrificed.m_number) { o.aura_attached_to = 0; }
             }
-            state.players[controller].graveyard.push_back(sacrificed);
+            state.players[controller].graveyard.push_back(RevealedCard(sacrificed));
             FireSacrificeWatchers(state, controller);
         }
         else
@@ -15955,7 +16063,7 @@ inline void ApplyGraveyardReturnAbility(GameState& state, int controller, int so
         const Card sacrificed = state.battlefield[src].card;
         src_label = sacrificed.m_name.str();
         state.battlefield.erase(state.battlefield.begin() + src);
-        state.players[controller].graveyard.push_back(sacrificed);
+        state.players[controller].graveyard.push_back(RevealedCard(sacrificed));
     }
     else
     {
@@ -16572,7 +16680,7 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     // and sacrificed to Falkenrath Pit Fighter goes to the opponent's graveyard, not ours. Identical for
     // every permanent we own -- i.e. every deck until a control change exists (Bolas's -2 victims are
     // never sacrificed by any suite deck: no outlet shares a list with Bolas).
-    state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
+    state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
@@ -16701,9 +16809,45 @@ inline void DestroyAttackedAtEndStep(GameState& state)
                 if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
                 if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
             }
-            state.players[q.owner_index].graveyard.push_back(dead);
+            state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
             state.battlefield.erase(state.battlefield.begin() + i);
             OnCreatureDies(state, d.second, dead, was_token, m1, nullptr, total);
+            break;
+        }
+    }
+}
+
+// Blistering Firecat (CardParams::endstep_sacrifice_self): "At the beginning of the end step, sacrifice
+// this creature." EVERY end step, ours and the opponent's -- called at both of our end-step sites
+// (GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn, lockstep, one helper) and at the
+// opponent's notional end step in both opponent_turn lambdas. Read off the permanent's CURRENT def, so a
+// FACE-DOWN Firecat (the vanilla face, CR 708.2) is not sacrificed: the ability does not exist when the
+// end step begins (CR 603.2) -- which is what makes a flip at the opponent's end step (after it began)
+// survive into our turn. Gated on the deck constant GameState::deck_has_endstep_self_sac.
+inline void PerformEndStepSelfSacrifices(GameState& state)
+{
+    if (!state.deck_has_endstep_self_sac) { return; }
+    std::vector<std::pair<int, int>> due;   // (m_number, controller)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.endstep_sacrifice_self)
+        { due.emplace_back(p.card.m_number, p.controller_index); }
+    }
+    for (const std::pair<int, int>& d : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != d.first || q.controller_index != d.second) { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xE2\x8F\xB3 " + q.card.m_name.str()
+                              + " -- sacrificed at the beginning of the end step (its own trigger)");
+            }
+            SacrificePermanentAt(state, d.second, i);
             break;
         }
     }
@@ -16758,7 +16902,7 @@ inline void PerformDamageAllCreatures(GameState& state, int controller,
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), TotalCountersOn(q) });
-        state.players[q.owner_index].graveyard.push_back(q.card);
+        state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card));
         state.battlefield.erase(state.battlefield.begin()
                                 + static_cast<std::ptrdiff_t>(i));
     }
@@ -16962,7 +17106,7 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    state.players[q.owner_index].graveyard.push_back(dead);
+    state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
     {
@@ -17224,8 +17368,8 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
                           + dead.m_name.str());
         }
         const Permanent leaving = state.battlefield[bi];
-        if (destroy) { state.players[dead_owner].graveyard.push_back(dead); }
-        else if (!was_token) { state.exile.push_back(dead); }   // a token ceases to exist (CR 111.7)
+        if (destroy) { state.players[dead_owner].graveyard.push_back(RevealedCard(dead)); }
+        else if (!was_token) { state.exile.push_back(RevealedCard(dead)); }   // a token ceases to exist (CR 111.7)
         state.battlefield.erase(state.battlefield.begin() + bi);
         if (!destroy) { ResolveAthreosExile(state, leaving); }
         for (Permanent& o : state.battlefield)
@@ -17354,7 +17498,7 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    if (!was_token) { state.players[q.owner_index].graveyard.push_back(dead); }
+    if (!was_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
     {
@@ -17478,7 +17622,7 @@ inline void ResolveEtbDividedCreatureDamage(GameState& state, int controller, co
         if (q.HasKeyword(Keyword::Indestructible)) { continue; }
         died.push_back({ q.card, q.controller_index, q.is_token,
                          MinusCountersOn(q), TotalCountersOn(q) });
-        if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(q.card); }
+        if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(q.card)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     }
     for (const DividedDeath& d : died)
@@ -17980,7 +18124,7 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
         eaten.push_back(v.card.m_name.str());
         deferred.push_back(DevourDeath{ v.card, v.is_token,
                                         MinusCountersOn(v), TotalCountersOn(v) });
-        state.players[controller].graveyard.push_back(v.card);
+        state.players[controller].graveyard.push_back(RevealedCard(v.card));
         state.battlefield.erase(state.battlefield.begin() + idx);
     }
     // HISTORY VISIBILITY (USER 2026-09-18: "There was a phantom saproling hanging around after I
@@ -19026,7 +19170,7 @@ inline void SweepDeadFadeTokens(GameState& state, int source_number)
         const bool tok    = q.is_token;
         const int  minus  = MinusCountersOn(q);
         const int  total  = TotalCountersOn(q);
-        if (!tok) { state.players[q.owner_index].graveyard.push_back(dead); }
+        if (!tok) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
         state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
         // Maintain the prefilters across the removal, then across whatever OnCreatureDies did.
         // The erase alone predicts exactly one fewer permanent; ANY other delta means a death
@@ -19360,7 +19504,7 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
     const bool dead_token  = t.is_token;
     const int  dead_minus  = MinusCountersOn(t);
     const int  dead_total  = TotalCountersOn(t);
-    if (!dead_token) { state.players[dead_owner].graveyard.push_back(dead_card); }
+    if (!dead_token) { state.players[dead_owner].graveyard.push_back(RevealedCard(dead_card)); }
     state.battlefield.erase(state.battlefield.begin() + ti);
     for (Permanent& e : state.battlefield)
     {
@@ -19420,7 +19564,7 @@ inline void ResolveDestroyTargetNonbasicLand(GameState& state, int controller, c
                       src_name + ": destroys " + (own ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    state.players[static_cast<std::size_t>(owner)].graveyard.push_back(dead);
+    state.players[static_cast<std::size_t>(owner)].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + bi);
 }
 
@@ -19527,7 +19671,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
         victim_tok = state.battlefield[hidx].is_token;
         victim_m1  = MinusCountersOn(state.battlefield[hidx]);
         victim_total_counters = TotalCountersOn(state.battlefield[hidx]);
-        state.players[controller].graveyard.push_back(victim);
+        state.players[controller].graveyard.push_back(RevealedCard(victim));
         state.battlefield.erase(state.battlefield.begin() + hidx);
     }
     // The baked victim id may be STALE: two outlets (or two activations) enumerated against the
@@ -19564,7 +19708,7 @@ inline void ApplySacCreatureOutlet(GameState& state, int controller, int source_
             victim = q.card; found = true; victim_tok = q.is_token;
             victim_m1 = MinusCountersOn(q);
             victim_total_counters = TotalCountersOn(q);
-            state.players[controller].graveyard.push_back(q.card);
+            state.players[controller].graveyard.push_back(RevealedCard(q.card));
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
         }
@@ -20876,7 +21020,7 @@ inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& 
                               pend.card.m_name.str() + " -- not cast (madness declined): put into the graveyard");
             }
             if (!MaybeReplaceGraveyardWithLibraryShuffle(state, pend.owner, pend.card))
-            { state.players[static_cast<std::size_t>(pend.owner)].graveyard.push_back(pend.card); }
+            { state.players[static_cast<std::size_t>(pend.owner)].graveyard.push_back(RevealedCard(pend.card)); }
         }
         TRACE("madness", "g%llu T%d %s via %s w=%d pin=%d/%d opts=%zu -> %s",
               static_cast<unsigned long long>(state.game_seed), state.turn_number,
@@ -23277,7 +23421,7 @@ inline bool PayFireblastAlternative(GameState& state, int controller, const std:
     if (a < b) { std::swap(a, b); }
     for (int i : {a, b})
     {
-        state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+        state.players[state.battlefield[i].owner_index].graveyard.push_back(RevealedCard(state.battlefield[i].card));
         state.battlefield.erase(state.battlefield.begin() + i);
         FireSacrificeWatchers(state, controller);
     }
@@ -23771,7 +23915,7 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // creature source (the Spawn is a pay-sac source by default and no suite deck runs Nest
         // Invader), so the artifact / land path below is the only one taken there -> byte-identical.
         if (p.card.IsCreature()) { SacrificePermanentAt(state, controller, i); return; }
-        state.players[controller].graveyard.push_back(p.card);   // Lotus: sacrifice the source
+        state.players[controller].graveyard.push_back(RevealedCard(p.card));   // Lotus: sacrifice the source
         state.battlefield.erase(state.battlefield.begin() + i);
         return;
     }
@@ -24534,7 +24678,7 @@ inline void PerformUpkeepFading(GameState& state)
                           "\xE2\x8C\x9B " + dead.m_name.str()
                           + ": no fade counter left -- sacrificed");
         }
-        state.players[active].graveyard.push_back(dead);
+        state.players[active].graveyard.push_back(RevealedCard(dead));
         if (dd && dd->params.fade_ltb_destroys_created_tokens)
         { DestroyTokensCreatedBy(state, num); }
     }
@@ -24929,7 +25073,7 @@ inline void PerformUpkeepSacTutor(GameState& state, DothSearchNote search_note =
         Player&           ap       = state.players[active];
 
         // Sacrifice the enchantment (the cost of the resolution) BEFORE the search.
-        ap.graveyard.push_back(state.battlefield[src_index].card);
+        ap.graveyard.push_back(RevealedCard(state.battlefield[src_index].card));
         state.battlefield.erase(state.battlefield.begin() + src_index);
 
         // The put-list: the searched rank into the provider's menu (the provider's pick when the pin does
@@ -25383,7 +25527,7 @@ inline void DestroyLargestOppCreature(GameState& state, int controller)
     {
         const Permanent dead = state.battlefield[pick];
         if (!dead.is_token)
-        { state.players[dead.owner_index].graveyard.push_back(dead.card); }
+        { state.players[dead.owner_index].graveyard.push_back(RevealedCard(dead.card)); }
         state.battlefield.erase(state.battlefield.begin() + pick);
     }
 }
@@ -25414,6 +25558,35 @@ inline void SwapDayboundFace(Permanent& p, const CardDefinition& to)
     c.m_number = p.card.m_number;
     p.card = c;
     p.def_absent = false;
+}
+
+// MORPH / MEGAMORPH -- TURN FACE UP (CR 702.37e special action; the cost was paid by the caller). The ONE
+// body both worlds run (ApplyPermAbility's TurnFaceUp / TurnFaceUpLate case, and the opponent-end-step
+// window). The face swap keeps the PERMANENT (CR 708.8): m_number, pumps (temp_power_bonus -- Berserk, Wild
+// Defiance, Might), counters, damage, tapped and summoning-sick status persist, and it does NOT enter (no
+// ETB, no enter watcher). Megamorph (CR 702.37b): a +1/+1 counter as it turns (a PUT -- doubler-aware).
+// Then the "when this is turned face up" triggers (CR 708.8): Den Protector's regrowth, pinned by
+// g_face_up_regrow_pin (the searched variant) or else the provider's pick / the human's dig chooser
+// (ResolveEtbReturnGyToHand; an empty graveyard removes the trigger, CR 603.3d).
+inline void TurnFaceDownPermanentUp(GameState& state, int controller, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    const CardDefinition* real = FaceDownRealDef(state.battlefield[static_cast<std::size_t>(idx)]);
+    if (real == nullptr) { return; }
+    Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+    SwapDayboundFace(p, *real);
+    const std::string real_name = real->card.m_name.str();
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability", "\xF0\x9F\x94\x84 " + real_name + " is turned face up"
+                      + (real->params.megamorph_cost ? " (megamorph: +1/+1 counter)" : ""));
+    }
+    if (real->params.megamorph_cost.has_value()) { PutPlusCounters(state, p, 1); }
+    if (real->params.turned_face_up_return_gy_to_hand)
+    {
+        const std::string pin = g_face_up_regrow_pin != nullptr ? *g_face_up_regrow_pin : std::string();
+        ResolveEtbReturnGyToHand(state, controller, pin, real_name + " (turned face up)");
+    }
 }
 
 // The trigger body. Default target = the largest opponent creature by effective power (the shared
@@ -25459,7 +25632,7 @@ inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int so
     state.battlefield.erase(state.battlefield.begin() + bi);
     if (!gone.is_token)
     {
-        Card c = gone.card;
+        Card c = RevealedCard(gone.card);
         c.m_is_staged     = false;
         c.m_staged_expiry = kLinkedExileBase - source_number;
         state.exile.push_back(c);
@@ -25870,7 +26043,7 @@ inline int SweepOrphanedAuras(GameState& state)
                           dead.m_name.str() + " is not attached to anything -- put into the graveyard");
         }
         state.battlefield.erase(state.battlefield.begin() + i);
-        if (!token) { state.players[owner].graveyard.push_back(dead); }
+        if (!token) { state.players[owner].graveyard.push_back(RevealedCard(dead)); }
         ++moved;
     }
     return moved;
@@ -26000,7 +26173,7 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
                              : dp.copy_printed_name.str() + " (as a copy of "
                                + dp.card.m_name.str() + ")")
                       + " dies -- you already control a " + dp.card.m_name.str());
-        state.players[dp.owner_index].graveyard.push_back(dp.card);
+        state.players[dp.owner_index].graveyard.push_back(RevealedCard(dp.card));
     }
     for (auto it = doomed.rbegin(); it != doomed.rend(); ++it)   // descending -> indices stay valid
     { state.battlefield.erase(state.battlefield.begin() + *it); }
@@ -26276,6 +26449,16 @@ inline DamageDrawsOwed DamageDrawsOwedBy(const GameState& state, int src)
     const Permanent& host = state.battlefield[static_cast<std::size_t>(src)];
     out.may_ctrl = out.must_ctrl = host.controller_index;
     const int host_num = host.card.m_number;
+    // Hystrodon: "Whenever this creature deals combat damage to a player, you may draw a card" -- the
+    // creature's OWN trigger (combat_damage_self_may_draw = cards per event). Read off the permanent's
+    // current def, so a FACE-DOWN Hystrodon (the vanilla face, CR 708.2) owes nothing. "May" rides the
+    // kMayDraw fold (draw iff the library is non-empty -- PROVISIONAL, the Curiosity precedent).
+    if (!host.def_absent)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(host.card);
+        if (hd != nullptr && hd->params.combat_damage_self_may_draw > 0)
+        { out.may += hd->params.combat_damage_self_may_draw; }
+    }
     // Curiosity: every Aura with the grant attached to THIS creature (aura_attached_to is the host's
     // per-copy m_number; the orphan sweep removes an Aura whose host left, so a match is live).
     if (host_num != 0)
@@ -28685,7 +28868,7 @@ inline SoulfireResult SoulfireDig(GameState& state, int controller, int own_targ
     for (int bi : dead)
     {
         Permanent& cre = state.battlefield[bi];
-        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
 
@@ -31358,7 +31541,7 @@ inline void CounterPingKillAt(GameState& state, std::size_t i, const char* why)
     // EXACTLY GameEngine::CheckStateBasedActions' death: the card -- a token too, the graveyard vector
     // receives tokens there -- goes to its CONTROLLER's graveyard, and Equipment falls off (CR 301.5c).
     // An Aura's link is left as that SBA leaves it.
-    state.players[q.controller_index].graveyard.push_back(q.card);
+    state.players[q.controller_index].graveyard.push_back(RevealedCard(q.card));
     state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
     for (Permanent& e : state.battlefield)
     {
@@ -31885,7 +32068,7 @@ inline void ResolveCounterDestroyArtEnch(GameState& state, int controller, int s
                       + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
                       + dead.m_name.str());
     }
-    if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(dead); }
+    if (!q.is_token) { state.players[q.owner_index].graveyard.push_back(RevealedCard(dead)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     for (Permanent& o : state.battlefield)
     {
@@ -32467,6 +32650,9 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         // Walking Ballista: the ping's cost is a +1/+1 counter (no counter, no activation), and the Heliod
         // loop's premise must still hold before its grant / top-up is paid (a stale plan is a no-op).
         if (mode == PermAbilityMode::CounterPing && PlusCountersOn(p) <= 0) { return false; }
+        // MORPH: turning face up needs a FACE-DOWN permanent (its def is a synthesized face) whose real
+        // card has a morph / megamorph cost. A stale plan (already face up, or gone) is a clean no-op.
+        if (IsTurnFaceUpMode(mode) && FaceDownRealDef(p) == nullptr) { return false; }
         // Steelbane Hydra: the counter is part of the cost, and the target is chosen on activation -- a
         // pinned target that left (or stopped being legal) makes the stale plan a clean no-op.
         if (mode == PermAbilityMode::CounterDestroyArtEnch)
@@ -32719,6 +32905,8 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
 {
     switch (mode)
     {
+        case PermAbilityMode::TurnFaceUp:     return "turn it face up";
+        case PermAbilityMode::TurnFaceUpLate: return "turn it face up (after the casts)";
         case PermAbilityMode::TapDamage:      return "deals damage to each opponent";
         case PermAbilityMode::TapInvestigate: return "investigate";
         case PermAbilityMode::TapDraw:        return "draw a card";
@@ -32936,6 +33124,12 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
 
     switch (mode)
     {
+        case PermAbilityMode::TurnFaceUp:
+        case PermAbilityMode::TurnFaceUpLate:
+        {
+            TurnFaceDownPermanentUp(state, controller, idx);
+            break;
+        }
         case PermAbilityMode::TapDamage:
         {
             // "Each opponent" -- once per head (2HG = x2, shared pool).
@@ -33322,7 +33516,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // paying {U}; remove it before either player's first draw.
             const Card raw = state.battlefield[static_cast<std::size_t>(idx)].card;
             state.battlefield.erase(state.battlefield.begin() + idx);
-            state.players[static_cast<std::size_t>(controller)].graveyard.push_back(raw);
+            state.players[static_cast<std::size_t>(controller)].graveyard.push_back(RevealedCard(raw));
             FireSacrificeWatchers(state, controller);
             if (g_threshold_loot_target == 0)
             {
@@ -33437,7 +33631,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 Permanent& bq = state.battlefield[static_cast<std::size_t>(idx)];
                 const Permanent leaving = bq;
                 const int bnum = bq.card.m_number;
-                if (!bq.is_token) { state.exile.push_back(bq.card); }
+                if (!bq.is_token) { state.exile.push_back(RevealedCard(bq.card)); }
                 state.battlefield.erase(state.battlefield.begin() + idx);
                 ResolveAthreosExile(state, leaving);
                 for (Permanent& o : state.battlefield)
@@ -33578,7 +33772,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 // a token today; the guard is parity with the sibling case, not speculation about it.
                 // PUSHED BEFORE the watchers fire, so a "whenever you sacrifice" trigger that reads
                 // the graveyard sees the card there (CR 701.17b).
-                if (!tok) { state.players[controller].graveyard.push_back(dead); }
+                if (!tok) { state.players[controller].graveyard.push_back(RevealedCard(dead)); }
             }
             FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
             // ONE life-gain EVENT of per*N (CR 119.10), never N events of `per`. This is the
@@ -37882,7 +38076,7 @@ inline void CrackleHitExtraTargets(GameState& state, int controller, int per_tar
     for (int bi : dead)
     {
         Permanent& cre = state.battlefield[bi];
-        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
 }
@@ -37930,7 +38124,7 @@ inline bool CrackleApplyTargets(GameState& state, int controller, int per_target
     for (int bi : dead)
     {
         Permanent& cre = state.battlefield[bi];
-        state.players[cre.owner_index].graveyard.push_back(cre.card);
+        state.players[cre.owner_index].graveyard.push_back(RevealedCard(cre.card));
         state.battlefield.erase(state.battlefield.begin() + bi);
     }
     return hit_opp;
@@ -45503,7 +45697,7 @@ inline void DrainPendingSagaEnters(GameState& state)
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             if (state.battlefield[i].card.m_number != e.perm_number) { continue; }
-            state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+            state.players[state.battlefield[i].owner_index].graveyard.push_back(RevealedCard(state.battlefield[i].card));
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
         }
@@ -45546,7 +45740,7 @@ inline void AdvanceSagas(GameState& state)
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             if (state.battlefield[i].card.m_number != num) { continue; }
-            state.players[state.battlefield[i].owner_index].graveyard.push_back(state.battlefield[i].card);
+            state.players[state.battlefield[i].owner_index].graveyard.push_back(RevealedCard(state.battlefield[i].card));
             state.battlefield.erase(state.battlefield.begin() + i);
             break;
         }
@@ -46024,7 +46218,7 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
     }
     if (idx >= 0)
     {
-        ap.graveyard.push_back(state.battlefield[idx].card);
+        ap.graveyard.push_back(RevealedCard(state.battlefield[idx].card));
         state.battlefield.erase(state.battlefield.begin() + idx);
         FireSacrificeWatchers(state, state.active_player_index);   // Slaughter-Priest
     }
@@ -46045,7 +46239,7 @@ inline void SacrificeLandAt(GameState& state, int controller, int idx)
         if (dead_num != 0 && q.equipped_to      == dead_num) { q.equipped_to      = 0; }
         if (dead_num != 0 && q.aura_attached_to == dead_num) { q.aura_attached_to = 0; }
     }
-    state.players[state.battlefield[static_cast<std::size_t>(idx)].owner_index].graveyard.push_back(dead);
+    state.players[state.battlefield[static_cast<std::size_t>(idx)].owner_index].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever you sacrifice ...")
 }
@@ -46523,7 +46717,7 @@ inline void PerformSacrificeCreatureCost(GameState& state, const std::string& sp
     const bool was_tok = state.battlefield[idx].is_token;
     const int  dead_m1 = MinusCountersOn(state.battlefield[idx]);
     const int  dead_total = TotalCountersOn(state.battlefield[idx]);
-    state.players[state.battlefield[idx].owner_index].graveyard.push_back(dead);
+    state.players[state.battlefield[idx].owner_index].graveyard.push_back(RevealedCard(dead));
     state.battlefield.erase(state.battlefield.begin() + idx);
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -46829,7 +47023,7 @@ inline void PerformEndStepMorbidDestroy(GameState& state, int n_triggers)
                           + (dead_ctrl == me ? std::string("your ") : std::string("the opponent's "))
                           + dead.m_name.str());
         }
-        state.players[q.owner_index].graveyard.push_back(dead);
+        state.players[q.owner_index].graveyard.push_back(RevealedCard(dead));
         state.battlefield.erase(state.battlefield.begin() + bi);
         for (Permanent& o : state.battlefield)
         {
@@ -48766,7 +48960,7 @@ inline void BounceOpponentNonlandAt(GameState& state, int index)
     state.battlefield.erase(state.battlefield.begin() + index);
     if (!p.is_token)
     {
-        Card returned = p.card;
+        Card returned = RevealedCard(p.card);
         if (!p.copy_printed_name.empty())
         {
             const CardDefinition* printed = CardDatabase::Instance().Lookup(p.copy_printed_name.str());
@@ -49270,8 +49464,8 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
     const int tgt_controller = target.controller_index;
     const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
     const int dead_num       = target.card.m_number;
-    if (def.params.damage > 0) { state.exile.push_back(target.card); }   // exile
-    else { state.players[static_cast<std::size_t>(tgt_controller)].graveyard.push_back(target.card); }
+    if (def.params.damage > 0) { state.exile.push_back(RevealedCard(target.card)); }   // exile
+    else { state.players[static_cast<std::size_t>(tgt_controller)].graveyard.push_back(RevealedCard(target.card)); }
     state.battlefield.erase(state.battlefield.begin() + bi);
     if (def.params.damage > 0) { ResolveAthreosExile(state, leaving); }
     RefreshDevotionCreatures(state);   // an own white permanent leaving lowers devotion (Heliod)

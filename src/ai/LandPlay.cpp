@@ -88,7 +88,7 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
             const Card gone = card;
             leave_zone();
             ++ap.lands_played_this_turn;
-            ap.graveyard.push_back(gone);
+            ap.graveyard.push_back(RevealedCard(gone));
             if (g_play_event_sink)
             {
                 EmitPlayEvent(state.turn_number, "land",

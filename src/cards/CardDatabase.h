@@ -4253,6 +4253,32 @@ struct CardParams
     // Empty on every printed card, which is what makes it the "am I a kicked face?" test.
     std::string             kicked_base_name;
 
+    // ---- Morph / megamorph (CR 702.37; Blistering Firecat, Hystrodon, Den Protector) ----
+    //   morph_cost / megamorph_cost -- "Morph {R}{R}" / "Megamorph {1}{G}": the card may be CAST FACE
+    //     DOWN for {3} (an ALTERNATIVE cost, CR 702.37a / 118.9) as a 2/2 creature with no name, text,
+    //     subtypes or mana cost, and turned face up any time we have priority by paying this cost (a
+    //     SPECIAL ACTION, CR 702.37e / 116.2b -- no stack, no response). Megamorph (CR 702.37b) also puts
+    //     a +1/+1 counter on it as it turns face up. A card carries at most one (THROWN at load); must be
+    //     FLAT (no {X}/hybrid/non-mana morph cost is modelled). The FACE-DOWN FORM is the DB-synthesized
+    //     "<name> (Face-down)" entry (a vanilla colourless 2/2 -- the kicker/bestow face trick), so every
+    //     downstream reader sees a plain 2/2 with no abilities, with no morph awareness.
+    std::optional<ManaCost> morph_cost;
+    std::optional<ManaCost> megamorph_cost;
+    // INTERNAL -- set ONLY on a synthesized "<name> (Face-down)" face (never read from JSON), naming the
+    // real card. Empty on every printed card, which makes it the "am I face down?" test. RevealedCard
+    // maps the face back to the real card wherever a face-down permanent leaves the battlefield (CR 708.9).
+    std::string             face_down_real_name;
+    // Blistering Firecat: "At the beginning of the end step, sacrifice this creature." Every end step
+    // (ours and the opponent's), only while the ability EXISTS -- a face-down Firecat has none (CR 603.2).
+    bool endstep_sacrifice_self = false;
+    // Hystrodon: "Whenever this creature deals combat damage to a player, you may draw a card." N cards
+    // per combat-damage event (two events under double strike). "May" is folded to "draw iff the library
+    // is non-empty" (the Curiosity fold -- PROVISIONAL, USER sign-off owed).
+    int  combat_damage_self_may_draw = 0;
+    // Den Protector: "When this creature is turned face up, return target card from your graveyard to your
+    // hand." The target is SEARCHED (named variants; a human gets the dig chooser).
+    bool turned_face_up_return_gy_to_hand = false;
+
     // ---- Flicker combo (EldraziDisplacerFlicker; see docs/design/flicker-combo.md) ----
 
     // Peregrine Drake: "When this creature enters, untap up to five lands." Cloud of Faeries: "up

@@ -215,6 +215,10 @@ struct StackEntry
                                         // the enter cascade EnterBattlefield self-sacrifices the permanent
                                         // through the shared cascade (the LTB fires as on any leave).
                                         // Stamped from Action::evoke at the cast site.
+    bool                face_up_on_resolve = false;  // MORPH: Action::face_down == 2 -- the face-down cast is turned
+                                        // face up as its enter cascade completes (the morph cost was paid in
+                                        // the cast's bill); tutor_target pins Den Protector's regrowth. The
+                                        // evoke spot of EnterBattlefield, lockstep with apply_one's.
     int                 trick_redirect = 0;         // Spellskite redirect of a solo-target trick (the
                                         // Spellskite's m_number; Action::trick_redirect via CastRiders).
                                         // 0 = none. Read by EffectHandler's ResolveSoloTargetTrick call.
@@ -1647,6 +1651,16 @@ struct GameState
     //     deck_has_extra_combat. DEFAULT FALSE (counting moves fold keys; a unit test sets it by hand).
     bool                     deck_has_spell_target_watch  = true;
     bool                     deck_tracks_attacks          = false;
+    // MORPH INT-2 (2026-11-11), the same hole (sizeof unchanged). DECK CONSTANTS, never folded:
+    //   deck_has_morph -- the list holds a morph_cost / megamorph_cost card, so a face-down permanent can
+    //     exist: gates the face-down zone backstop (NormalizeFaceDownZoneCards), the face-up emission walk
+    //     and the end-of-turn face-up window. DEFAULT FALSE -- exact for an unstamped state too, which can
+    //     hold no face-down permanent unless a test builds one (and then sets this by hand).
+    //   deck_has_endstep_self_sac -- the list holds an endstep_sacrifice_self card (Blistering Firecat):
+    //     gates PerformEndStepSelfSacrifices' walk. DEFAULT TRUE, the safe direction (it only skips a walk
+    //     that would find nothing).
+    bool                     deck_has_morph               = false;
+    bool                     deck_has_endstep_self_sac    = true;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

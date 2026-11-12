@@ -1309,7 +1309,7 @@ void GameEngine::EndStep(GameState& state)
         if (state.battlefield[i].exile_at_end)
         {
             const Permanent leaving = state.battlefield[i];
-            state.exile.push_back(leaving.card);
+            state.exile.push_back(RevealedCard(leaving.card));
             state.battlefield.erase(state.battlefield.begin() + i);
             ResolveAthreosExile(state, leaving);
         }
@@ -1321,6 +1321,9 @@ void GameEngine::EndStep(GameState& state)
     // Berserk's "destroy that creature if it attacked this turn" (Permanent::destroy_at_end_if_attacked).
     // Lockstep twin at the same position in TurnSolver::SimulateEndAndStartNextTurn; no-op without the bit.
     DestroyAttackedAtEndStep(state);
+    // Blistering Firecat's "at the beginning of the end step, sacrifice this creature" (face-up only;
+    // lockstep twin at the same position in the other world). No-op without deck_has_endstep_self_sac.
+    PerformEndStepSelfSacrifices(state);
     // "At the beginning of your end step, if you gained life this turn, create a 1/1 white Cat"
     // (Ocelot Pride). Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; after
     // the exile sweep above, which is the other beginning-of-end-step effect. Param-gated ->
@@ -1507,6 +1510,8 @@ void GameEngine::CheckStateBasedActions(GameState& state)
 {
     // Sacrifice depletion lands (e.g. Saprazzan Skerry) whose counters have run out.
     SacrificeDepletedLands(state);
+    // Morph CR 708.9 backstop / MTG_FACEDOWN_AUDIT tripwire (no-op without deck_has_morph).
+    NormalizeFaceDownZoneCards(state);
 
     bool changed = true;
     while (changed)
@@ -1557,7 +1562,7 @@ void GameEngine::CheckStateBasedActions(GameState& state)
                 if (is_creature)
                 { died.push_back(DeadCreature{p.card, p.controller_index, p.is_token,
                                                MinusCountersOn(p), TotalCountersOn(p)}); }
-                state.players[p.controller_index].graveyard.push_back(p.card);
+                state.players[p.controller_index].graveyard.push_back(RevealedCard(p.card));
                 it = state.battlefield.erase(it);
                 changed = true;
             }
