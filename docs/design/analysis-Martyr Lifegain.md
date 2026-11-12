@@ -225,6 +225,30 @@ verify_deck.py --write-ledger -> Stage 6 report (USER: amended split, Ranger-Cap
 (start 30, Speaker gate 37), Jitte one-gain-per-plan gap, Innocence order, discard buckets, deferrals) -> THEN the
 mulligan profile (mullgen.sh run, alone on the box). Cron 7869914f (session-only) stays until the end.
 
+## Stage 5b -- multi-depth sanity (2026-11-12)
+
+Paired games (same seeds, d3 vs d5): smoke s1001 50 games d3 5.18 = d5 5.18 (0 slower / 0 faster); regression
+s2002 50 games d3 5.56 vs d5 5.52 (d5 faster on gi4, gi28; never slower). Monotone. Overnight: d0 ~6.09, d3 5.38,
+d5 5.34-5.42 (std); 2HG d5 5.43-5.61. Plausible for a T5 aggro-lifegain clock (10/10 references: human 5.2 = search 5.2).
+
+## Stage 5i -- discard BUCKET proposal (AGENT'S BEST SHOT; USER-owned, NOT implemented)
+
+The deck currently uses the generic max-MV fallback. Proposed buckets (cleanup discard to 7; return ONE index):
+1. MANA -- lands, net of board: keep lands while board lands + kept lands < 4 (curve top: Ranger of Eos {3}{W},
+   Unexpectedly Absent X); at most 1 beyond that while board lands < 6. Orzhov Basilica counts as a land drop but sheds
+   before a Plains once board lands >= 3 (enters tapped, bounces). Lands are COLOURLESS: they never feed Martyr's reveal.
+2. LIFE ENGINE -- Martyr of Sands: keep 1 net of board (in hand or on battlefield); a second copy is overflow.
+3. THREATS (catch-all, value order, highest kept first): Serra Ascendant > Speaker of the Heavens > Ranger of Eos >
+   Ranger-Captain of Eos > Lurrus > Enduring Innocence > Umezawa's Jitte > Abiding Grace > Squadron Hawk >
+   Thraben Inspector > Mother of Runes > Curious Farm Animals > Kami of False Hope.
+4. DEAD vs the goldfish: Unexpectedly Absent, then Swords to Plowshares (Swords on an own creature is a life gain,
+   so it sheds after Absent).
+Shed order = overflow first, then lowest priority: extra lands beyond quota -> Unexpectedly Absent -> Swords ->
+Kami -> Farm -> Mother -> Inspector -> extra Hawks -> ... STATE PROMOTION (doubt flagged): while a Martyr is on the
+battlefield or kept, every white nonland card is reveal fuel (3 life each), so overflow LANDS shed before any white
+spell, including Absent/Swords. Not measured: discard to 7 is rare in this curve (Hawk / Ranger / Clue / Innocence
+draws are the sources); measure frequency + an A/B once the USER approves the shape.
+
 ## USER rulings (2026-11-10, verbatim)
 
 1. *"The Narrow speaker version is fine for the most part. We can heuristically prune the kami and farm animals
