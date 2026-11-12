@@ -288,6 +288,92 @@ the durable record).
 4. **play_invariants advisories**: a "<X> (Face-down)" / "(Kicked)" / "(Bestowed)" cast is a cast variant of hand
    card X (`SYNTH_FACE_SUFFIXES`, scripts/play_invariants.py).
 
+### INT-5/6/7 result (2026-11-12) -- the #TT dedup fix, the USER's largest-attacker rule, the Spellskite twin; rebased + GT accepted
+Commits (after the rebase onto origin/phase-1-2-deck-analyzer cc24d1362): `8128e0dd4` INT-5 (engine dedup fix: the
+solo-target trick variant keyed `#TT` in both plan-signature builders), `240c33075` INT-6 (the USER's largest-attacker
+rule, cast-time sentinel, trail-flip look-ahead), `dbe31df40` INT-7 (USER rulings 5 + 6, below). Pre-rebase hashes
+aad2a29a9 / ee5ada3e0.
+
+**USER rulings (verbatim, 2026-11-12).**
+1. "The largest attacking creature should be the pump target always. We should have a heuristic for this."
+2. "I think we should plan which we are going to flip in the plan."
+3. "Even though technically it doesn't use the stack, we may as well." / 3b. "That way our heuristic can use this information."
+4. "Or the heuristic can look at whether it is flipped in the plan if that occurs later, but yes, you have the option of doing the flips earlier if you need to."
+5. "Yes, let's drop spellskites ability heuristically unless Wild Defiance is active. If it is active we should keep it for the potential double pump."
+6. "The important thing if we are pumping this way is that Spellskite should not be the target even if it is the largest creature. The reason being that we cannot get the benefit of redirecting."
+
+**Rulings 5 + 6 as built (INT-7).** The sentinel carries the {U/P} redirect twin only while a target watcher
+(spell_target_watch_pump_*, generic) is on our battlefield OR IN HAND (a hand Wild Defiance the plan casts first resolves
+before the trick, because permanents go first; one the plan never casts leaves the twin as the plain cast at {U/P} more,
+which is dominated), and only when a non-redirector recipient exists. The twin's ORIGINAL target is the largest attacker
+EXCLUDING every redirector (`FindBestOwnAttacker(..., exclude_redirector)`, `redirects_spell_target_to_self`): its
+Defiance trigger fires on the cast, then the payload goes to Spellskite with Spellskite's own trigger. The plain variant
+is unchanged (largest, Spellskite counted). The beyond-horizon credit (GreedyTrickStackCredit) does the same. Human play
+and MTG_UNPRUNED / tricktarget are unchanged. Unit tests: no Defiance gives no twin; Defiance in hand or active gives the
+twin; with Spellskite the only creature there is none; the twin resolves with both triggers; with Spellskite LARGEST the
+twin's original target is the next-largest.
+
+**Held-out A/B** (seeds 60000+, play settings d5 b20 for Morph and value_play d6 for Mirrorwing, one pooled batch per
+binary, 24 threads). A = committed tree f64f2eae7, B = dedup fix only, C = dedup + largest rule (ee5ada3e0),
+C' = C + rulings 5/6 on the rebased tree (dbe31df40). "f/s" = faster/slower games vs A, sum = summed turn delta vs A
+(an unwon game counts as 9).
+
+| job (games) | A avg | B avg (f/s, sum) | C avg (f/s, sum) | C' avg (f/s, sum) | units B / C / C' vs A |
+|---|---|---|---|---|---|
+| morph (1000) | 4.5030 | 4.2570 (229/1, -246) | 4.2550 (233/3, -248) | 4.2550 (233/3, -248) | 0.712 / 0.623 / 0.623 |
+| morph2hg (300) | 5.3067 | 4.9067 (100/2, -120) | 4.9067 (100/1, -120) | 4.9033 (101/1, -121) | 0.740 / 0.627 / 0.631 |
+| mirrorwing (600) | 4.1683 | 4.1550 (8/0, -8) | = B (byte-identical) | not run (no Spellskite) | 1.096 / 1.096 |
+| mirrorwing2hg (200) | 4.6050 | 4.5800 (5/0, -5) | = B (byte-identical) | not run | 1.121 / 1.121 |
+
+Whole-batch wall (all four jobs, uncontended): A 287 s, B 185 s, C 157 s. The C' (215 s) and C_rb (368 s) Morph-only
+walls ran on a host loaded by another container, so units are the cost figure for those two. Two separations:
+C_rb (C's code on the rebased tree) vs C is byte-identical on all 1300 Morph games, so the rebase does not move the A/B.
+C' vs C_rb (rulings 5/6 alone): morph 2 games play-changed at the same score; morph2hg 5 play-changed, 1 faster,
+0 slower; units +0.0% / +0.6%. Mirrorwing C == B confirms the rule binary equals the dedup binary there (no Morph
+provider). Mirrorwing's +10-12% units come from the dedup fix (targets are now distinct plans). Mirrorwing is 0.024x
+Hinata, so this is immaterial to the cost gate.
+
+**d8 b0 recovery** (ONE pooled batch, final binary dbe31df40; play-setting controls reproduced arm C's digests exactly).
+Every slower game reaches its old turn or better: A/B morph gi116 (C vs B) T4, gi154 T5, gi259 T4, gi852 T5;
+morph2hg gi183 T5, gi242 T5, gi254 (B vs A) T4, gi258 T5; smoke morph d0 gi399 (T6 -> T7) T5; regression morph d0
+gi213 (T4 -> T5) T4, gi828 / gi932 (T6 -> T7 pre-rebase) T4. The same 12 games give the same turns on the
+pre-ruling-5 binary.
+
+**Cost gate:** not triggered. Morph per-game units FELL to 0.62x the parent (suite_cost was 1.72x Hinata).
+
+**Rebase** onto origin/phase-1-2-deck-analyzer (17 commits ahead of merge base 6b3dea976). There was one conflict,
+test/regression_gt.txt in 6c572d7b2 (the Morph suite entry): origin's side was taken for every row and the header, and
+our Morph rows were kept as rows (they exist only on our side). Code merged cleanly, and the diff-of-diffs (merge base ->
+old HEAD vs origin -> new HEAD, excluding GT) is identical, at 17,343 lines. check_gt_logs consistent. Post-rebase build:
+mtg-test 2872/2872, scenarios 502/502.
+
+**Smoke + regression (full tiers, dbe31df40).** Smoke 192 pass / 7 fail, regression 307 / 9; searched slower 0 in both;
+d0 slower 1 each (gi399 / gi213, recovered above). Movers vs origin's GT:
+- morph smoke d0 5.110 -> 5.053, d3 4.58 -> 4.36, d5 4.49 -> 4.24, 2HG 5.28 -> 4.80; regression d0 5.056 -> 5.005,
+  d3 4.5867 -> 4.1733, d5 s2002 4.5467 -> 4.1867, d5 s3003 4.58 -> 4.4533, 2HG 5.20 -> 4.6267 (all searched keys 0 slower).
+- mirrorwing smoke d3 / d5 unchanged score (1 / 2 games play-changed), 2HG 4.68 -> 4.64; regression d3 4.3067 -> 4.2933,
+  d5 s2002 4.1867 -> 4.1822, d5 s3003 = (8 play-changed): the dedup fix.
+- extraturns_regression_d5_s3003: 1 game (gi36), score T4 unchanged. OURS, not drift: origin's binary reproduces origin's
+  GT on every extraturns regression key. Bisected (rebased commits) to `5d55fe9f6` INT-2c, and 5d55fe9f6 with only its two
+  `SectionForgetHandExits` calls removed reproduces origin's digest. So it is part B, the generic "section window
+  forgets cast cards" fix, not the morph-gated hold pass. The effect is a same-score tie on the winning extra turn:
+  our line casts Extraplanar Lens + Expropriate + Nexus of Fate and sacrifices Myriad Landscape before the Ulamog
+  attack, and origin's plays the land and attacks. Both win the same turn.
+- Martyr: no longer moves. The stale keys INT-6 saw were upstream drift (origin re-accepted Martyr in 0425e34e4 /
+  01a3adbc1), and the rebase took origin's GT.
+
+**GT ACCEPTED** (bar met: 0 searched slower unrecovered at d8 b0; every engine-moved deck net faster on the held-out
+A/B): smoke `--deck=morph,morph2hg,mirrorwing,mirrorwing2hg`, regression the same plus `extraturns`. check_gt_logs
+consistent 1131; the GT diff holds only those keys plus the header and the two notes. OVERNIGHT is left for the periodic
+overnight run (the morph / mirrorwing / extraturns overnight keys will move there).
+
+**Open USER questions (unanswered; the rule stands as built):**
+- Temur Battle Rage onto a creature that already has double strike: "largest" (x2 DS score) picks it again, so a second
+  TBR in one turn adds nothing. Amend to "largest creature without double strike" for a DS-granting trick?
+- Tie-break is battlefield order (oldest first). OK?
+- (Ruling 5 implementation detail) the twin is also kept when Wild Defiance is only IN HAND (the plan may cast it first).
+  The alternative is battlefield-only, which would miss a Defiance cast earlier in the same plan.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18
