@@ -594,6 +594,38 @@ oracle off byte-identical; record 43e700b5c):
   The in-continuation DOMINATED-CREATURE (tap the attacker before a same-turn Treasure) belongs with the open
   Mirrorwing DOMINATED-CREATURE class, not here.
 
+## 2026-11-12: item 6, remaining DUE decks (smallest issue count first)
+Pooled gate `due6-20261112` (PGO src fb2903808, 5,000 games each on the next fresh block, play identity with the
+oracle off byte-identical; record af059782a). Fresh counts: vampires 0, martyr_lifegain 10 (first run), slivers_vial 32,
+creature_giving 242, hydras 249 (first run), shadowborn_apostle 320, pirates 504, treasure_hunt 505, goblins 725,
+fungus 1,880, gods 4,300 (first run).
+* **vampires CLEAN** (215000-219999, 0 issues; the parked ORACLE-GAP x2 did not recur) -- leaves beta.
+* **slivers_vial FIXED (a748c3a16 + c1ed1a922) and CLEAN** on re-gate `slivers-6-20261112` (PGO 51f0ad572,
+  215000-219999, 0 issues) -- leaves beta. Two whole-turn prepay bill defects (BatchPrepayMainCasts priced each cast
+  with EffectiveCost only): (1) a PINNED Hatchery replicate count's k x printed share was in Action::cost but not in
+  the joint bill, so the copy spent the Cavern {C} booked for Aether Vial (s30214758 T3, Galerider x2 + Vial);
+  (2) Thrumming Hivepool's affinity credited only Slivers already out, not the line's Slivers ranked before it, so the
+  batch read UNPAYABLE and the per-cast greedy stranded Cloudshredder's {R}{W} (s30214131 T4). Levers
+  MTG_PREPAY_REPLICATE / MTG_PREPAY_LINE_AFFINITY (heurarm slots, default ON). Units 2841/2841; tiers: only slivers rows
+  (slower 0; regression d0 s2002 4.6880->4.6870, d5 s2002 4.2138->4.2123); held-out 6,000 games (7350001+) net 0,
+  fast 0 slow 0. Only Hatchery Sliver / Thrumming Hivepool carry the params.
+* **martyr_lifegain 10 APPLY-DROP (3 games), PARKED.** s30001947 T3 {Orzhov Basilica + sac Martyr of Sands}: Basilica
+  taps {W}{B}, the {1} sac cost spends the {W} (PayFromPool / float generic order W before B) and {B} floats, so the
+  breakpoint continuation cannot cast a second Speaker of the Heavens; the menu's {Speaker + sac} plan casts Speaker
+  BEFORE the sac and reveals one fewer white card (life 26 vs 29). Both shapes are choices the engine makes without a
+  sound dominance (which unit floats; cast-vs-sac order is a cast-order question = USER-owned), so no fix. Repro:
+  `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=3 build/Release/mtg 'decks/Martyr Lifegain/Martyr Lifegain.cod' --profile
+  'decks/Martyr Lifegain/Martyr Lifegain.profile.json' --games 1 --seed 30001947 --game-index 1947`; also s30000359
+  (T4, two Martyr casts + sac), s30003252.
+* **Triage leads for the rest (not yet worked):** creature_giving ENUM-GAP 232 = double Crop Rotation lines (sac a
+  tapped Orchard/land as the extra cost) kept off the menu by a mana gate; hydras 223 APPLY-DROP-ORDER (Search for
+  Tomorrow / Nature's Lore vs Nissa / Gauntlet order = cast order, USER-owned); pirates 276 APPLY-DROP mostly "engine
+  dropped [cast Lightning Bolt]" after a Staunch Crewmate cast/vial (undeclared later action); treasure_hunt 385
+  APPLY-DROP = {Treasure Hunt x2} / {Land's Edge + Treasure Hunt} drops the second Hunt; goblins 608 ORACLE-GAP =
+  `sacoutlet:Siege-Gang Commander` paid by Skirk Prospector sac-for-mana, which the oracle does not enumerate ("no
+  payment exists") -> ANALYZER-side; shadowborn 260 UNMODELED (long Apostle/Ritual/Culling lines, "too many actions to
+  try every order"). Full flag lines: build/scratch/mana_clean/due6-20261112/on.0.err.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
