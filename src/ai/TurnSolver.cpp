@@ -11143,6 +11143,31 @@ static const CardDefinition* KickedFaceOr(const CardDefinition* d, bool kicked)
     return k != nullptr ? k : d;
 }
 
+// THE FACE A CAST ACTION REALLY CASTS, for the whole-turn prepay's bill (BatchPrepayMainCasts). An adventure
+// or bestow action carries only the card's NAME (the enumerator never sets `def`), so a lookup by name returns
+// the printed creature: Fungus s30055300 T3 {Forest + Sporecrown Thallid + Fungus Frolic} billed the Frolic at
+// Brightcap Badger's {3}{G} instead of its own {2}{G}, the joint solve tapped six mana for a five-mana line --
+// the 1/1 Saproling AND Ancient Tomb's second {C}, floated away -- and the line counted the adventure as a
+// creature spell (the creature-only-mana and two-stage splits). The cast itself swaps the def in apply_one /
+// CastSpellFromHand (adventure, bestow, kicker); this is the same swap for the bill that pays it. A bestowed
+// cast is an Aura spell (CR 702.103b), priced at its bestow face. Inert for every action without the flags.
+static const CardDefinition* PrepayCastFace(const Action& a)
+{
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr) { return d; }
+    if (a.adventure && !d->params.adventure_face_name.empty())
+    {
+        const CardDefinition* f = CardDatabase::Instance().Lookup(d->params.adventure_face_name);
+        if (f != nullptr) { d = f; }
+    }
+    else if (a.bestow && d->params.bestow_cost.has_value())
+    {
+        const CardDefinition* f = CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Bestowed)");
+        if (f != nullptr) { d = f; }
+    }
+    return KickedFaceOr(d, a.kicked);
+}
+
 // MANA-UNLOCK EQUIPS IN THE SEQUENTIAL WALK (MTG_SEQ_UNLOCK_EQUIP, default ON; =0 refuses them as before).
 // A haste Equipment moved onto a mana source that cannot tap yet is the one equip both apply worlds do
 // NOT leave to the trailing pass: TurnSolver::ApplyManaUnlockEquips fires it before the first cast and
@@ -60840,7 +60865,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            const CardDefinition* d = PrepayCastFace(a);
             if (d != nullptr && (d->params.cast_lifegain > 0 || (d->params.etb_modal_lifegain > 0 && a.chosen_x == 2)))
             { gains = true; break; }
         }
@@ -60903,7 +60928,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind == Action::Kind::DigDraw) { return Pp(PP_DIG); }
             if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
             { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            const CardDefinition* d = PrepayCastFace(a);
             if (d && d->tmpl == CardTemplate::DrawUntilNonland) { return Pp(PP_FLOOD); }
         }
     }
@@ -61049,18 +61074,18 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // jointly payable three-cast plan applied as two casts in the user's Snow order, so it was
         // inexpressible at any budget). Producers that add mana (rituals, rocks, Treasure makers)
         // are untouched.
-        const CardDefinition* pd = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        const CardDefinition* pd = PrepayCastFace(a);
         const bool conversion_only = a.ritual_float == 0 && pd != nullptr
                                   && pd->params.any_color_filter && pd->params.filter_no_free_colorless;
         if ((a.ritual_float > 0 || a.rock_mana.Total() > 0) && !etb_treasure_only && !conversion_only)
         {
             if (!g_prepay_producer_on) { return Pp(PP_PRODUCER); }   // producer breaks fungibility
         }
-        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         // KICKER: a kicked cast's bill is its "(Kicked)" face's cost, not the printed one. Swapped
         // here, before every test below reads `d`, so the prepay's affordability checks and its
-        // combined bill agree with what enumeration charged.
-        d = KickedFaceOr(d, a.kicked);
+        // combined bill agree with what enumeration charged. The ADVENTURE and BESTOW faces the same
+        // way (PrepayCastFace).
+        const CardDefinition* d = PrepayCastFace(a);
         if (!d) { return Pp(PP_NO_DEF); }
         if (a.awaken) { return Pp(PP_XSPELL); } // alternative bill: sequential payer prices it.
         // A fixed upfront combined is only valid when no cast's cost can shrink/grow dynamically:
@@ -61310,7 +61335,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         for (const Action& a : acts)
         {
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            const CardDefinition* d = PrepayCastFace(a);
             if (d != nullptr && _pd_pending.n < 8) { _pd_pending.d[_pd_pending.n++] = d; }
         }
     }
@@ -61335,7 +61360,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate)
             { ++no; small_all_creatures = false; continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost) { continue; }
-            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            const CardDefinition* d = PrepayCastFace(a);
             if (d == nullptr) { continue; }
             const bool q = SpellQualifiesForBigMana(d->card, *big_only_p);
             (q ? yes : no) += 1;
@@ -61610,6 +61635,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // holding it protects no attack -- leave it payable (the sac-fodder pin taps it first).
             if (hold_yield_on && _sac_victim != 0 && p.card.m_number == _sac_victim) { continue; }
             if (is_victim(i)) { continue; }   // MTG_HOLD_PRODUCER_FIRST (f): every victim of the turn
+            // MTG_PAY_DOOMED_AHEAD_OF_LANDS: a body the line kills protects no attack (the victim rule's twin).
+            if (DoomedBodyAheadOfLandsOn() && IsDoomedPlanBody(state, active, p)) { continue; }
             reserved_crea |= (1ull << i);
         }
     }
@@ -61876,6 +61903,60 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
         return paid;
     };
+    // DOOMED-FIRST RUNGS (MTG_PAY_DOOMED_AHEAD_OF_LANDS). A doomed body (IsDoomedPlanBody: a fading maker's token
+    // the line's own activations kill) has no use after this line but its mana, so the turn should spend it before
+    // ANY other source -- lands included. The joint solve is a DFS that keeps its first solution in battlefield
+    // order, so ordering alone cannot express that: hold every other source the ladder below would touch, then
+    // release them one at a time -- plain lands first, pain lands and bodies last (ManaSourceRank order) -- and take
+    // the first rung that pays. Fungus s30055537 T4: {Beastmaster Ascension, Wild Growth, the Burst's last fade
+    // activation} was prepaid with Ancient Tomb, a Forest and Utopia Mycon while five doomed Burst tokens stood
+    // untapped; the doomed-only rung pays it. Every rung is a hold over the SAME colour-exact solve and the ladder
+    // below runs unchanged when none pays, so nothing payable is lost. Inert without a doomed body on the board.
+    if (DoomedBodyAheadOfLandsOn() && n <= 64 && pt != nullptr && pt->fade_exhaust_count > 0)
+    {
+        std::uint64_t doomed_m = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index == active && !p.tapped && IsDoomedPlanBody(state, active, p)
+                && CanTapNow(p, state.battlefield))
+            { doomed_m |= (1ull << i); }
+        }
+        if (doomed_m != 0)
+        {
+            const std::uint64_t base = (reserved | reserved_c | reserved_a) & ~doomed_m;
+            const DecisionProvider& prov = ResolveProvider(state);
+            int rel[64];
+            int key0[64], key1[64];
+            int n_rel = 0;
+            for (int i = 0; i < n; ++i)
+            {
+                const Permanent& p = state.battlefield[i];
+                if (p.controller_index != active || p.tapped || (doomed_m & (1ull << i)) || (base & (1ull << i))) { continue; }
+                const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+                const bool body = p.card.IsCreature();
+                if (!body && !p.card.IsLand() && !(d != nullptr && (d->params.mana_rock || !d->params.produces.empty())))
+                { continue; }
+                rel[n_rel] = i;
+                key0[n_rel] = (body ? 2 : 0) + ((d != nullptr && d->params.tap_self_damage > 0) ? 1 : 0);
+                key1[n_rel] = d != nullptr ? prov.ManaSourceRank(state, *d) : 1000;
+                ++n_rel;
+            }
+            int ord[64];
+            for (int k = 0; k < n_rel; ++k) { ord[k] = k; }
+            std::stable_sort(ord, ord + n_rel, [&](int x, int y)
+            { return key0[x] != key0[y] ? key0[x] < key0[y] : key1[x] < key1[y]; });
+            std::uint64_t hold = base;
+            for (int k = 0; k < n_rel; ++k) { hold |= (1ull << rel[k]); }
+            // Release down to ONE held source: the next rung (`base`) is the ladder's own first rung.
+            for (int k = 0; k <= n_rel - 1 && !ok; ++k)
+            {
+                for (int dj = 0; dj < hp_n && !ok; ++dj) { ok = held_attempt(hold | hp_dem[dj], -1); }
+                if (!ok) { ok = held_attempt(hold, -1); }
+                hold &= ~(1ull << rel[ord[k]]);
+            }
+        }
+    }
     for (int r = 0; r < n_rungs && !ok; ++r)
     {
         // The human-play reserve rides ON TOP of each rung and is released one pick at a time before

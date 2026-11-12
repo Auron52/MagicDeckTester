@@ -435,6 +435,31 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
 // of the real board. Those probe taps are not taps of the game, so the diagnostic skips them; the refined
 // payment it then makes on the real board is printed as before. Diagnostics only -- nothing reads this to play.
 static thread_local int t_refine_probe = 0;
+// A DOOMED BODY (MTG_PAY_DOOMED_BODY_FIRST): a token whose fading maker the current plan's own activations
+// empty (PlanTraits::fade_exhaust_src) -- its P/T IS the maker's counter total -- and that no toughness lord keeps
+// alive at zero counters. Its body dies to the SBA inside this line, so tapping it for mana costs nothing. Shared by
+// the per-pip payer's creature band and the whole-turn prepay's hold ladder (TurnSolver::BatchPrepayMainCasts).
+// Outside a plan apply (no traits) nothing is doomed.
+bool IsDoomedPlanBody(const GameState& state, int active, const Permanent& p)
+{
+    if (p.created_by_number == 0 || !PayDoomedBodyFirstOn()) { return false; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (pt == nullptr || pt->fade_exhaust_count <= 0) { return false; }
+    for (int k = 0; k < pt->fade_exhaust_count; ++k)
+    {
+        if (pt->fade_exhaust_src[k] != p.created_by_number) { continue; }
+        for (const Permanent& m : state.battlefield)
+        {
+            if (m.card.m_number != p.created_by_number) { continue; }
+            const int rest = p.EffectiveToughness() - m.fade_counters;
+            const int lord_t = ComputeLordBonus(p.card, state, active, false, &p).second;
+            return rest + lord_t <= 0;
+        }
+        return false;
+    }
+    return false;
+}
+
 static bool TapDbgReal() { return g_real_resolution && t_refine_probe == 0; }
 
 // Tap one non-filter source, producing `amt` of colour `col`, applying depletion
@@ -2864,31 +2889,21 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // Beastmaster Ascension, the Burst's last fade activation} paid with Shroofus Sproutsire and a 1/1
                 // Saproling (battlefield order) while five Burst tokens the activation kills stood untapped.
                 // Ordering only; outside a plan apply (no traits) nothing is doomed.
-                int doomed = 0;
-                if (kind == 1 && p.created_by_number != 0 && PayDoomedBodyFirstOn())
-                {
-                    const PlanTraits* pt = CurrentPlanTraits();
-                    if (pt != nullptr && pt->fade_exhaust_count > 0)
-                    {
-                        for (int k = 0; k < pt->fade_exhaust_count && !doomed; ++k)
-                        {
-                            if (pt->fade_exhaust_src[k] != p.created_by_number) { continue; }
-                            for (const Permanent& m : state.battlefield)
-                            {
-                                if (m.card.m_number != p.created_by_number) { continue; }
-                                const int rest = p.EffectiveToughness() - m.fade_counters;
-                                const int lord_t = ComputeLordBonus(p.card, state, active, false, &p).second;
-                                if (rest + lord_t <= 0) { doomed = 1; }
-                                break;
-                            }
-                        }
-                    }
-                }
+                const int doomed = (kind == 1 && IsDoomedPlanBody(state, active, p)) ? 1 : 0;
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
                 { key[0] = 0;    key[1] = harm / kNdScale;
                   key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + ((cco_hold || ps_hold) ? 2 * kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
+                else if (doomed && rank >= 0 && DoomedBodyAheadOfLandsOn())
+                {
+                    // AHEAD OF THE LANDS TOO (MTG_PAY_DOOMED_AHEAD_OF_LANDS): the body is worth nothing after this
+                    // line, so it competes in the plain tier on NEEDS first -- a tap that would leave a colour the
+                    // line still owes short (harm) loses to a land that does not -- and ahead of every land rank at
+                    // equal needs. Fungus s30055537 T4: Ancient Tomb, a Forest and Utopia Mycon paid while five
+                    // Burst tokens the line's own fade activation kills stood untapped.
+                    key[0] = 0; key[1] = harm / kNdScale; key[2] = -1; key[3] = (harm % kNdScale) * 2;
+                }
                 else                                     { key[0] = rank; key[1] = doomed ? -1 : hold; key[2] = harm; key[3] = 0; }
                 int cmp = 0;
                 for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (key[k] < best_key[k]) ? -1 : (key[k] > best_key[k] ? 1 : 0); }
