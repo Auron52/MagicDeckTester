@@ -115,7 +115,38 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-12 ~03:10 UTC) -- RESUME HERE
+## Checkpoint (2026-11-12 ~11:00 UTC) -- RESUME HERE
+
+REBASED onto origin cc24d1362 (upstream mana 5d/5f cuts + hydras), unpushed. Release rebuilt; post-rebase smoke
+ALL PASS, 195/195 unchanged, 0 play changes (logs/martyr-lifegain/postrebase-smoke.log). The pre-rebase martyr
+overnight keys were DROPPED in the rebase (upstream src moved play); re-running overnight --deck=martyr,martyr2hg
+on the rebased binary (logs/martyr-lifegain/postrebase-overnight.log) to re-accept.
+5c2 TIE-BREAK (blocks 1..12, s1000000.., PGO of the pre-rebase tree): NO SIGN, 18 changed of 12000 paired, net -12
+(3 worse / 15 better; half A -3, half B -9 -- both say it HELPS). Script asks for ~24 blocks: extension with 12 FRESH
+blocks (`--seed-base 2200000 --blocks 12 --tag martyr-b2`) pooled with the first run, AFTER the overnight accept.
+Generators wait on it (an OPT OUT would change play).
+USER 2026-11-12 (verbatim): "Yes, the 1-drop tutor thing seems fine." (APPROVES: Martyr ranked second, "need the
+lifegain" = life < max(30, start+7), Ranger of Eos pair = distinct names first then library order.) "That's
+unfortunate about Farm animals. Maybe we should prune it in more cases?" "Doing the overnight once makes sense, but
+you shouldn't frequently run it." (-> NO further overnight runs for martyr.) "That's fine. As long as it is in the
+plan. Let's proceed until actual planned changes have been exhausted first." (-> run the 5c2 extension before
+mullgen.) "I want you to continue on these overnight."
+FARM NARROWING (agent's reading of "prune it in more cases"): gi233's broad-amendment loss is search DILUTION -- Farm
+admitted at T3 (life 20, Martyr on board, hand Captain/Lurrus/Jitte) is never fetched, but the extra cast-axis
+candidate makes d5 b20 pick Jitte over Captain (T5 -> T6). New sub-flag MTG_MARTYR_TUTOR_FARM_DRY (heurarm
+MARTYR_TUTOR_FARM_DRY, default ON, only under TUTOR_FARM): Farm admitted only while the hand holds NO white card
+(Martyr's reveal colour) -- gi0's fetch hand is two Plains (admitted), gi233's is not. In worktree
+.claude/worktrees/martyr-split, UNCOMMITTED (DecisionProviders.cpp, HeuristicArm.h, test_martyr_tutor_prune.cpp +1
+case); building -> build/scratch/martyr-split/build3.log. A/B READY: build/scratch/martyr/ab7/run.sh (3 arms lit /
+broad / dry on ab6's held-out seeds std 79001x600 + 2HG 80001x200, gi0 d8 b0, gi233 d5 b20 + d8 b0); launch it
+ALONE after the overnight accept: `nohup bash build/scratch/martyr/ab7/run.sh &`, DONE marker ab7/ab.DONE.
+Status timer: cron 0280a824 (session-only, :17 every 2 h; old 7869914f deleted).
+NEXT: overnight accept (`regression.sh --overnight --deck=martyr,martyr2hg --accept`) + commit ledger -> push ->
+ab7 A/B -> report to USER (adoption theirs) -> 5c2 extension (`--seed-base 2200000 --blocks 12 --tag martyr-b2`)
+with 5h audit_viewer_decisions + verify_deck --write-ledger alongside -> Stage 6 report -> mullgen.sh run (alone)
+-> valueleaf.sh run.
+
+### Checkpoint (2026-11-12 ~03:10 UTC, history)
 
 PUSHED 0425e34e4 (01:38 UTC; next shared-branch push no earlier than ~05:38 UTC). CI green (windows, ubuntu,
 determinism parity). Contents: the 1-drop tutor prune (7d2bb4f37) + smoke GT (5be4bb944: 191 unchanged, martyr
