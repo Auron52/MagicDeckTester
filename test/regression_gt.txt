@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 15077b031  date 2026-11-12
+# Regression ground truth -- commit 88401100b  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -39,7 +39,7 @@ slivers_smoke_d5_s1001=4.2400/308ed2a1679df0d8
 burn_smoke_d0_s1001=4.4480/bcb8ebccd0c2af38
 burn_smoke_d3_s1001=4.4600/02975c38be47043a
 burn_smoke_d5_s1001=4.2889/0cc77517230d3ddd
-th_smoke_d0_s1001=5.6010/fa121f44e2d6fec2
+th_smoke_d0_s1001=5.5980/7736de5a86f19b10
 th_smoke_d3_s1001=4.0200/e54dad7c69ec9fae
 th_smoke_d5_s1001=4.1029/73103308fb438b9c
 knights_smoke_d0_s1001=4.5400/ab04bf59077abf86
@@ -178,7 +178,7 @@ galadriel_smoke_d0_s1001=6.9400/9894f279fe8c85d9
 galadriel_smoke_d3_s1001=4.8200/27c8079c8746ce2a
 galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
 galadriel2hg_smoke_d5_s1001=4.8933/c5dceba1c36445b0
-niv_smoke_d0_s1001=6.0760/c1363254f7019a0e
+niv_smoke_d0_s1001=6.0760/5bd2bccf65b42618
 niv_smoke_d3_s1001=4.5200/15071e9523de702d
 niv_smoke_d5_s1001=4.6500/5620a73ca66fdfc1
 niv2hg_smoke_d5_s1001=4.4800/c148692d2f9b1b99
@@ -312,9 +312,9 @@ burn_regression_d0_s2002=4.4150/1a44151cf87f1c3e
 burn_regression_d3_s2002=4.3371/75be3a6e1f8abeb1
 burn_regression_d5_s2002=4.2956/afb5bb6355e1e518
 burn_regression_d5_s3003=4.2544/01b776226c307bfc
-th_regression_d0_s2002=5.5420/e24d3ceb60f57a76
+th_regression_d0_s2002=5.5410/cd9b07ae656f1338
 th_regression_d3_s2002=4.0229/6a52ade9ed732ee8
-th_regression_d5_s2002=4.1267/caf85deb7b176ce9
+th_regression_d5_s2002=4.1267/bc567c6776b6cdb9
 th_regression_d5_s3003=3.9750/d371e091eaae2388
 knights_regression_d0_s2002=4.5610/d71421c58495ca0a
 knights_regression_d3_s2002=4.2800/2d0134810fce8b08

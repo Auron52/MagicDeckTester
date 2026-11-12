@@ -1012,9 +1012,9 @@ niv_overnight_d5_s5005	28531
 niv_overnight_d5_s6006	28110
 niv_overnight_d5_s7007	26600
 niv_regression_d0_s2002	1
-niv_regression_d3_s2002	14027
+niv_regression_d3_s2002	14025
 niv_regression_d3_s3003	12857
-niv_regression_d5_s2002	29937
+niv_regression_d5_s2002	29936
 niv_regression_d5_s3003	24248
 niv_smoke_d0_s1001	1
 niv_smoke_d3_s1001	14644
@@ -1256,7 +1256,7 @@ th_regression_d3_s30001	15809
 th_regression_d3_s3003	4913
 th_regression_d5_s2002	9210
 th_regression_d5_s30001	13479
-th_regression_d5_s3003	7096
+th_regression_d5_s3003	7097
 th_smoke_d0_s1001	1
 th_smoke_d3_s1001	6579
 th_smoke_d5_s1001	8856
