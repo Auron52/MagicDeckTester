@@ -75942,6 +75942,11 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 { w.Put("#DX"); w.Int(act.chosen_x); w.Put('/'); w.Int(act.draw_target); }
                 if (rep_sig && act.replicate_count >= 0) { w.Put("#R"); w.Int(act.replicate_count); }   // human play is legacy-only
                 if (act.enchant_target == kTrickBestOwnTarget) { w.Put("#B"); }
+                if (d && d->params.solo_target_trick)   // the trick variant (Morph INT-5; lockstep with legacy)
+                {
+                    w.Put("#TT"); w.Int(act.enchant_target); w.Put('/'); w.Put(act.trick_hand_target);
+                    w.Put('/'); w.Int(act.soulfire_own_targets); w.Put('/'); w.Int(act.chosen_x);
+                }
                 if (d && RemovalSearchesForController(*d)) { w.Put("#PX"); w.Int(act.enchant_target); }
                 if (d && d->params.loyalty_start > 0 && act.loyalty_ability >= 0) { w.Put("#L"); w.Int(act.loyalty_ability); }
                 if (act.phyrexian_life > 0) { w.Put("#P"); w.Int(act.phyrexian_life); }
@@ -81087,6 +81092,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // simply wrong -- the human IS the decision-maker -- so we keep every variant. Gated on
     // MTG_HUMAN_PLAY: the autonomous search and the MTG_UNPRUNED A/B stay byte-identical (the
     // shortcut, warts and all, is unchanged there -- widening the search is a separate question).
+    // By the NO-GREEDY rule that shortcut is a defect wherever it reaches a searched axis, and each
+    // such axis has since been keyed in the autonomous builders too (#S, #TN, #PX, #R, #D, ... and the
+    // solo-target trick's target / strive count / X as #TT, Morph INT-5).
     // LOCKSTEP with PlanSignatureFast (MTG_PLAN_SIG_FAST, the default autonomous builder): every token
     // this legacy builder emits is mirrored there field for field. Edit both, then run
     // MTG_PLAN_SIG_FAST_VERIFY=1 (see PlanSigFastOn).
@@ -81275,6 +81283,23 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // and the variant never reached a rollout. Gated on the sentinel, which only
                         // exists under the lever -> every other deck's signature is byte-identical.
                         if (act.enchant_target == kTrickBestOwnTarget) { k += "#B"; }
+                        // SOLO-TARGET TRICK VARIANT (Morph INT-5, 2026-11-12): the trick's TARGET (a
+                        // battlefield creature's number, a same-plan HAND creature's number + name, the
+                        // opponent / cast-time sentinels, or 0 = untargeted for an up-to-one trick), its
+                        // strive count (Twinflame, soulfire_own_targets) and its X (Luxurious Libation)
+                        // are each fanned by CollectActions' solo_target_trick emitter and are DISTINCT
+                        // plans. Without the key the name-only dedup kept the FIRST enumerated variant --
+                        // the first creature in battlefield order, since EvalCard does not read the target
+                        // -- so "Berserk the face-down Firecat" was unfindable at every budget and depth
+                        // whenever a mana dork came first (Morph claude-play sweep g0/g3/g5/g15,
+                        // logs/morph/diag1-report.md): a greedy pick inside the search window. Sound: the
+                        // emitter already folds interchangeable bodies (seen_equiv / seen_hand), so every
+                        // emitted target is a distinct class -- this adds lines and removes none.
+                        if (cd && cd->params.solo_target_trick)
+                        {
+                            k += "#TT"; k += std::to_string(act.enchant_target); k += '/'; k += act.trick_hand_target;
+                            k += '/'; k += std::to_string(act.soulfire_own_targets); k += '/'; k += std::to_string(act.chosen_x);
+                        }
                         // PATH TO EXILE's searched TARGET (land_search_for_removal_controller): one
                         // variant per own-creature identity class plus the opponent target (0) --
                         // DISTINCT plans (the #F / #L precedent). Without it the name-keyed dedup kept
@@ -92373,6 +92398,9 @@ static std::string PlanDomKey(const Action& a)
     k += std::to_string(static_cast<int>(a.kind));
     k += '|'; k += a.card_name.str();
     if (a.face_down != 0) { k += "#FD"; k += std::to_string(a.face_down); }   // morph: face-down vs hard cast of one name (they collided)
+    if (a.def != nullptr && a.def->params.solo_target_trick)   // the trick's target / strive count (INT-5)
+    { k += "|TT"; k += std::to_string(a.enchant_target); k += '/'; k += a.trick_hand_target;
+      k += '/'; k += std::to_string(a.soulfire_own_targets); }
     k += '|'; k += std::to_string(a.sac_source_id);
     k += '|'; k += a.tutor_target.str();
     k += '|'; k += std::to_string(a.chosen_x);

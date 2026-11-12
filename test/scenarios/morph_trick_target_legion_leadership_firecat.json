@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "TRICK TARGET: LEGION LEADERSHIP ON THE UNMORPHED FIRECAT, turn 4 (Claude-play sweep g0, seed 50000).",
+    "Unmorph Firecat {R}{R}, Legion Leadership {1}{R/W} on it (Gruul Turf RG + Stronghold R + Hierarch = 4 mana):",
+    "14 + 1 exalted = 15 = the opponent's life. Pre-fix the pump landed on the Hierarch: win turn 7.",
+    "",
+    "DISCRIMINATING (Morph INT-5, logs/morph/diag1-report.md): before the fix the plan-signature dedup keyed a",
+    "solo-target trick by NAME only, so every plan differing only in the trick's TARGET merged into the first one",
+    "enumerated -- the first creature in battlefield order (the Ignoble Hierarch here). The search never pumped the",
+    "real attacker; it now keys the target (#TT, both signature builders) and finds the Claude-play kill."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 15,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Ignoble Hierarch",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Legion Stronghold",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Forest",
+    "Gruul Turf",
+    "Legion Leadership",
+    "Temur Battle Rage"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 4
+}

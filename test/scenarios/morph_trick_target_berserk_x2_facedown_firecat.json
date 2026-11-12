@@ -1,0 +1,55 @@
+{
+  "_comment": [
+    "TRICK TARGET: BERSERK x2 ON THE FACE-DOWN FIRECAT, turn 3 (Claude-play sweep g3, seed 50003).",
+    "Stomping Ground untapped (16 -> 14 life), unmorph Firecat for {R}{R} (7/1 haste), Berserk it twice off 3 SG + the",
+    "Hierarch: 7 -> 14 -> 28, +1 exalted = 29 >= 20. Pre-fix every Berserk went to the Hierarch: win turn 4.",
+    "",
+    "DISCRIMINATING (Morph INT-5, logs/morph/diag1-report.md): before the fix the plan-signature dedup keyed a",
+    "solo-target trick by NAME only, so every plan differing only in the trick's TARGET merged into the first one",
+    "enumerated -- the first creature in battlefield order (the Ignoble Hierarch here). The search never pumped the",
+    "real attacker; it now keys the target (#TT, both signature builders) and finds the Claude-play kill."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": false,
+  "active_life": 16,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Ignoble Hierarch",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Wild Defiance",
+    "Berserk",
+    "Den Protector",
+    "Gruul Turf",
+    "Stomping Ground",
+    "Berserk"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 5,
+  "expect_win_turn": 3
+}

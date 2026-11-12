@@ -14,6 +14,7 @@
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
 
+#include <set>
 #include <string>
 
 namespace
@@ -331,4 +332,51 @@ TEST_CASE("morph pumps: the Morph list routes to MorphProvider, whose rank order
     CHECK(might < berserk);
     CHECK(berserk == legion);
     CHECK(berserk == tbr);
+}
+
+// INT-5 (2026-11-12; logs/morph/diag1-report.md): the plan-signature dedup keyed a solo-target trick by NAME
+// only, so plans differing only in the trick's TARGET merged into the first enumerated -- the first creature
+// in battlefield order (a 0-power dork), since EvalCard does not read the target. The search could never
+// Berserk the real attacker: a greedy pick inside the search window. Both signature builders now key the
+// trick variant (#TT: target / same-plan hand target / strive count / X), so each target is its own plan.
+TEST_CASE("morph pumps: plans differing only in a trick's TARGET are distinct plans (no first-target fold)")
+{
+    EnsureCardsMorph();
+    GameState s = BaseM();
+    for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
+    PutM(s, "Birds of Paradise", 10);   // FIRST on the battlefield: the old dedup's survivor
+    PutBear(s, 11);                     // a distinct, non-interchangeable body
+    s.players[0].hand.push_back(CardM("Berserk", 101));
+    std::set<int> bf_targets;
+    int hand_targeted = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Berserk") { continue; }
+            bf_targets.insert(a.enchant_target);
+        }
+    }
+    CHECK(bf_targets.count(10) == 1);
+    CHECK(bf_targets.count(11) == 1);   // pre-fix: folded into the Birds plan, unfindable at any budget
+
+    // A same-plan HAND creature target ("cast it, then Berserk it") is a distinct plan too.
+    s.players[0].hand.push_back(CardM("Birds of Paradise", 102));
+    bool on_hand_birds = false, on_bf_birds = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        bool casts_birds = false;
+        int  tgt = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.card_name.str() == "Birds of Paradise") { casts_birds = true; }
+            if (a.card_name.str() == "Berserk") { tgt = a.enchant_target; if (!a.trick_hand_target.empty()) { ++hand_targeted; } }
+        }
+        if (casts_birds && tgt == 102) { on_hand_birds = true; }
+        if (casts_birds && tgt == 10)  { on_bf_birds = true; }
+    }
+    CHECK(hand_targeted >= 1);
+    CHECK(on_hand_birds);
+    CHECK(on_bf_birds);                 // same cast-name multiset {Birds, Berserk}: both survive the dedup
 }

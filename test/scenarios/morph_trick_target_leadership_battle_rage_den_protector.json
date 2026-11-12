@@ -1,0 +1,67 @@
+{
+  "_comment": [
+    "TRICK TARGET: LEGION LEADERSHIP + TEMUR BATTLE RAGE ON DEN PROTECTOR, turn 6 (Claude-play sweep g5, seed 50005).",
+    "Megamorphed Den Protector (3/2). Stomping Ground + Leadership + Battle Rage on it: (6 + 1) x 2 = 14 (16 -> 2);",
+    "turn 7 finishes. Pre-fix the pumps went to the Hierarch: win turn 9.",
+    "",
+    "DISCRIMINATING (Morph INT-5, logs/morph/diag1-report.md): before the fix the plan-signature dedup keyed a",
+    "solo-target trick by NAME only, so every plan differing only in the trick's TARGET merged into the first one",
+    "enumerated -- the first creature in battlefield order (the Ignoble Hierarch here). The search never pumped the",
+    "real attacker; it now keys the target (#TT, both signature builders) and finds the Claude-play kill."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 6,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 16,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Ignoble Hierarch",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Den Protector",
+      "controller": 0,
+      "sick": false,
+      "plus_counters": 1
+    }
+  ],
+  "hand": [
+    "Gruul Turf",
+    "Legion Leadership",
+    "Stomping Ground",
+    "Stomping Ground",
+    "Temur Battle Rage",
+    "Temur Battle Rage",
+    "Temur Battle Rage"
+  ],
+  "library": [
+    "Wooded Foothills"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 10,
+  "expect_win_turn": 7
+}
