@@ -1110,8 +1110,7 @@ public:
         };
         id_.resize(jobs.size());
         rel_.resize(jobs.size());
-        header_.assign(jobs.size(), 0);
-        warned_.assign(jobs.size(), 0);
+        files_ = std::vector<JobFile>(jobs.size());
         for (std::size_t j = 0; j < jobs.size(); ++j)
         {
             const Job& jb = jobs[j];
@@ -1176,7 +1175,7 @@ public:
                                      "files are kept\n", p.string().c_str(), ec.message().c_str());
                 return;
             }
-            header_[j] = 1;
+            files_[j].header = 1;
             rewritten.insert(p.lexically_normal().string());
         }
         for (const auto& [path, keys] : loaded_)
@@ -1194,28 +1193,60 @@ public:
         }
     }
 
-    // One finished game. Written, flushed and closed before the caller counts the game as finished.
+    // One finished game. Written and flushed (to the OS, so a process kill cannot lose it) before the
+    // caller counts the game as finished. Serialized PER JOB, never globally: on the 9p host mount one
+    // append costs ~4.6 ms, and a global lock made every worker queue behind it (+25% wall on smoke-sized
+    // games). The job's file stays open for the job's life (one write per game instead of an
+    // open/write/close round trip); CloseJob() closes it when the job's last game lands. A failed open
+    // (e.g. out of descriptors) falls back to open-append-close for that one record.
     void Append(std::size_t j, const batchpartial::Record& r)
     {
         if (!write_) { return; }
         const std::string line = batchpartial::FormatRecord(r);
-        std::lock_guard<std::mutex> lk(m_);
+        JobFile& jf = files_[j];
+        std::lock_guard<std::mutex> lk(jf.m);
         const std::filesystem::path p = PathOf(jobs_[j].name);
-        std::ofstream out(p, std::ios::binary | (header_[j] ? std::ios::app : std::ios::trunc));
-        if (!header_[j])
+        std::string bytes;
+        if (!jf.header) { bytes = batchpartial::FormatHeader(id_[j], jobs_[j].name); }
+        bytes += line;
+        bool ok = false;
+        if (jf.fp == nullptr && !jf.closed) { jf.fp = OpenFile(p, jf.header ? "ab" : "wb"); }
+        if (jf.fp != nullptr)
         {
-            const std::string h = batchpartial::FormatHeader(id_[j], jobs_[j].name);
-            out.write(h.data(), static_cast<std::streamsize>(h.size()));
+            ok = std::fwrite(bytes.data(), 1, bytes.size(), jf.fp) == bytes.size() && std::fflush(jf.fp) == 0;
         }
-        out.write(line.data(), static_cast<std::streamsize>(line.size()));
-        out.flush();
-        if (out) { header_[j] = 1; return; }
-        if (!warned_[j])
+        else
         {
-            warned_[j] = 1;
+            // No handle to keep: one open-append-close for this record.
+            if (std::FILE* f = OpenFile(p, jf.header ? "ab" : "wb"))
+            {
+                ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size() && std::fflush(f) == 0;
+                ok = (std::fclose(f) == 0) && ok;
+            }
+        }
+        if (ok) { jf.header = 1; return; }
+        if (!jf.warned)
+        {
+            jf.warned = 1;
             std::fprintf(stderr, "[batch-partial] WARNING: could not append to %s -- a kill now loses "
                                  "this job's finished games\n", p.string().c_str());
         }
+    }
+
+    // The job's last game has landed: release its handle (a pooled manifest can hold thousands of jobs).
+    // A later Append for this job (none is expected) uses open-append-close.
+    void CloseJob(std::size_t j)
+    {
+        if (!write_) { return; }
+        JobFile& jf = files_[j];
+        std::lock_guard<std::mutex> lk(jf.m);
+        if (jf.fp != nullptr) { std::fclose(jf.fp); jf.fp = nullptr; }
+        jf.closed = 1;
+    }
+
+    ~PartialStore()
+    {
+        for (JobFile& jf : files_) { if (jf.fp != nullptr) { std::fclose(jf.fp); jf.fp = nullptr; } }
     }
 
     // The whole batch finished and every output write succeeded: the partials have served, and the
@@ -1225,12 +1256,36 @@ public:
     void FinishRun()
     {
         if (!write_) { return; }
-        std::lock_guard<std::mutex> lk(m_);
         std::error_code ec;
-        for (const Job& jb : jobs_) { std::filesystem::remove(PathOf(jb.name), ec); }
+        for (std::size_t j = 0; j < jobs_.size(); ++j)
+        {
+            JobFile& jf = files_[j];
+            std::lock_guard<std::mutex> lk(jf.m);
+            if (jf.fp != nullptr) { std::fclose(jf.fp); jf.fp = nullptr; }   // close before remove (Windows)
+            jf.closed = 1;
+            std::filesystem::remove(PathOf(jobs_[j].name), ec);
+        }
     }
 
 private:
+    // One job's partial file: its own lock, and its handle kept open while the job runs.
+    struct JobFile
+    {
+        std::mutex m;
+        std::FILE* fp     = nullptr;
+        char       header = 0;   // the header is on disk (written by an Append or by Repersist)
+        char       warned = 0;
+        char       closed = 0;   // the job finished: no handle is kept any more
+    };
+    static std::FILE* OpenFile(const std::filesystem::path& p, const char* mode)
+    {
+#ifdef _WIN32
+        const std::wstring wm(mode, mode + std::char_traits<char>::length(mode));
+        return ::_wfopen(p.c_str(), wm.c_str());
+#else
+        return std::fopen(p.c_str(), mode);
+#endif
+    }
     std::filesystem::path PathOf(const std::string& name) const { return dir_ / (name + ".partial"); }
     static std::string JobNameOf(const std::filesystem::path& p)
     {
@@ -1275,13 +1330,12 @@ private:
     bool                                                           active_ = false, write_ = false, resume_ = false;
     std::vector<uint64_t>                                          id_;
     std::vector<std::string>                                       rel_;
-    std::vector<char>                                              header_, warned_;
+    std::vector<JobFile>                                           files_;
     std::unordered_map<std::string, std::size_t>                   by_name_;
     batchpartial::Index                                            index_;
     std::vector<std::pair<std::filesystem::path, std::vector<PartialKey>>> loaded_;
     std::set<PartialKey>                                           claimed_;
     std::map<std::size_t, std::vector<batchpartial::Record>>       reused_;
-    std::mutex                                                     m_;
 };
 } // namespace
 
@@ -2863,6 +2917,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 if (on_job_done
                     && remaining[wi.job].fetch_sub(1, std::memory_order_acq_rel) == 1)
                 {
+                    partials.CloseJob(wi.job);
                     BatchJobResult r = reduce_job(wi.job);
                     std::lock_guard<std::mutex> lk(cb_mtx);
                     if (s_esc_job_stats)
