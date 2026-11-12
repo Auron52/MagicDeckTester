@@ -354,7 +354,8 @@ std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies
 // Realize's HIT-ONLY cut: fail-option scripts a hit-only search did not build (each a whole subtree).
 std::atomic<long long> g_hit_only_cut{0};
 std::atomic<long long> g_order_fold{0};
-std::atomic<long long> g_order_fold_class_walk{0};   // plans past the order bound searched by their fold classes   // order variants not realised: an earlier order is the same apply
+std::atomic<long long> g_order_fold_class_walk{0};
+std::atomic<long long> g_fed_order_tries{0}, g_fed_order_pays{0};   // chained-feed reorders tried / that paid   // plans past the order bound searched by their fold classes   // order variants not realised: an earlier order is the same apply
 std::atomic<long long> g_hit_only_drop_cut{0};   // hit-only frontiers below an already-dropped action
 // MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
 // payments; the other orders of a drop).
@@ -424,6 +425,8 @@ struct Reporter
         { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld unpayable-payment subtrees not built ===\n", g_hit_only_cut.load()); }
         if (g_order_fold.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld order variants are an earlier order's apply (trailing activations) ===\n", g_order_fold.load()); }
+        if (g_fed_order_pays.load() != 0 || g_fed_order_tries.load() != 0)
+        { std::fprintf(stderr, "=== MANA ORACLE chained feeds: %lld fed-tap reorders tried, %lld paid ===\n", g_fed_order_tries.load(), g_fed_order_pays.load()); }
         if (g_order_fold_class_walk.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld plans past the order bound searched by fold class ===\n", g_order_fold_class_walk.load()); }
         if (g_hit_only_drop_cut.load() != 0)
@@ -1529,9 +1532,41 @@ struct PayEnum
     {
         ++t_trc_v[t_trc_site];
         if (++probes > cap) { capped = true; return false; }
-        const PayOption o = Build(picks);
+        PayOption o = Build(picks);
         ManaPool offered, left;
-        if (!PayAndRecord(o, &offered, &left)) { return false; }
+        if (!PayAndRecord(o, &offered, &left))
+        {
+            // CHAINED FEEDS (item 6, Treasure Hunt seed 30060179 T4: Land's Edge {1}{R}{R} off Reliquary Tower ->
+            // Ferrous Lake ({1},{T}: {U}{R}) -> Cascade Bluffs ({U/R},{T}: {R}{R}), Temple of Epiphany left untapped).
+            // Build taps the fed faces in battlefield order, and a feed is paid from what is already floating, so a
+            // converter whose feed only an EARLIER-tapped converter's output can pay (Bluffs fed by the Lake's {U})
+            // was never verified in the order that works. Try every other order of the fed taps; each is paid for
+            // real, so only a payment that exists is recorded (the option keeps the order that paid, which is the
+            // order the scripted apply taps in). Adds options, never removes one. MTG_ORACLE_FED_ORDER=0 -> off.
+            static const bool s_fed_order = EnvOn("MTG_ORACLE_FED_ORDER", true);
+            std::size_t nf = 0;
+            for (const Pick& pk : picks)
+            {
+                const SrcClass& sc = srcs[static_cast<std::size_t>(pk.cls)];
+                if (sc.faces[static_cast<std::size_t>(pk.face)].fed) { ++nf; }
+            }
+            if (!s_fed_order || nf < 2) { return false; }
+            const std::size_t at = o.taps.size() - nf;   // Build puts the fed taps last
+            const PayOption base = o;
+            std::vector<std::size_t> perm(nf);
+            for (std::size_t i = 0; i < nf; ++i) { perm[i] = i; }
+            bool paid = false;
+            while (!paid && std::next_permutation(perm.begin(), perm.end()))
+            {
+                if (++probes > cap) { capped = true; return false; }
+                o = base;
+                for (std::size_t i = 0; i < nf; ++i) { o.taps[at + i] = base.taps[at + perm[i]]; }
+                g_fed_order_tries.fetch_add(1, std::memory_order_relaxed);
+                paid = PayAndRecord(o, &offered, &left);
+            }
+            if (!paid) { return false; }
+            g_fed_order_pays.fetch_add(1, std::memory_order_relaxed);
+        }
         // Only a multi-unit tap makes a leftover of its own: a set of one-unit taps pays exactly, and
         // the floating pool it was offered is already split by the outer set-aside enumeration.
         if (whole_float || !HasMultiUnit(picks)) { return true; }
