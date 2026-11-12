@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 30e382818  date 2026-11-11
+# Regression ground truth -- commit 6e9260afc  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -196,10 +196,10 @@ alchemist2hg_smoke_d5_s1001=5.1600/6211554d6914a8b9
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.1050/3cf47e6e09477d39
-martyr_smoke_d3_s1001=5.2000/2a27881b3a3a3564
-martyr_smoke_d5_s1001=5.2700/30b16278c9bc5ee4
-martyr2hg_smoke_d5_s1001=5.4800/63c4da13cb73bea0
+martyr_smoke_d0_s1001=6.0680/e28de619033d4cd1
+martyr_smoke_d3_s1001=5.1800/f52e2a549a880fcd
+martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
+martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
 hydras_regression_d0_s2002=6.0320/773d5978c83fd6c9
@@ -272,8 +272,8 @@ landfall_regression_d3_s30311=6.1000/dba49930fdcd0e92
 landfall_regression_d5_s30311=6.0000/130f612b6019652b
 elementals_regression_d3_s30001=4.2000/adccc6917e55e488
 elementals_regression_d5_s30001=4.2000/adccc6917e55e488
-martyr_regression_d3_s30201=5.4000/217623929d59e6d8
-martyr_regression_d5_s30201=5.2000/5e47a3cee55ab8b9
+martyr_regression_d3_s30201=5.4000/2ba439220df34f98
+martyr_regression_d5_s30201=5.2000/932815aca32b2dc5
 melira_regression_d3_s30001=4.5500/14a6ea695ade4937
 melira_regression_d5_s30001=4.5263/9ca9bdcb3e74d921
 minotaur_regression_d3_s30001=4.9000/f335d9b5734cc03b
@@ -506,11 +506,11 @@ merfolk_regression_d0_s2002=4.4450/dc0269a9f23bc850
 merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
-martyr_regression_d0_s2002=6.1170/c7b50d94d760e661
-martyr_regression_d3_s2002=5.5200/27b23a11587865ee
-martyr_regression_d5_s2002=5.5600/f51d2b563817ede0
-martyr_regression_d5_s3003=5.4133/fe8d6192f23f3f2e
-martyr2hg_regression_d5_s2002=5.7600/53f22079833743d3
+martyr_regression_d0_s2002=6.0840/70ffec9c403563a6
+martyr_regression_d3_s2002=5.5600/0ee008fe005eb94d
+martyr_regression_d5_s2002=5.5467/caa68c0e088448e1
+martyr_regression_d5_s3003=5.4000/69759b43382fbc5f
+martyr2hg_regression_d5_s2002=5.7333/23b754057d0306da
 
 # --- overnight ---
 hydras_overnight_d0_s4004=6.0710/db5cebcbf4ba5e02
