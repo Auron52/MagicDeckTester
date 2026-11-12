@@ -1,14 +1,16 @@
-# Regression ground truth -- commit 6e9260afc  date 2026-11-12
+# Regression ground truth -- commit 382418fe8  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
+# accepted-with-regressions (smoke, 2026-11-12): hydras: rebased onto origin; discard buckets ON + K=14 keep table re-accepted; every changed game explained (flag toggle reproduces GT, keep attribution 0 unexplained); extraturns_regression_d5_s2002 GT kept at its solo digest (pool residency)
+# accepted-with-regressions (regression, 2026-11-12): hydras: rebased onto origin; discard buckets ON + K=14 keep table re-accepted; every changed game explained (flag toggle reproduces GT, keep attribution 0 unexplained); extraturns_regression_d5_s2002 GT kept at its solo digest (pool residency)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-hydras_smoke_d0_s1001=6.0600/1aa956175fc911f0
-hydras_smoke_d3_s1001=5.5800/446522a93c352e14
-hydras_smoke_d5_s1001=5.5500/7ed00cdce192db69
-hydras2hg_smoke_d5_s1001=5.9200/534eef4a7c41f9de
+hydras_smoke_d0_s1001=5.8480/4401470db4ecbd6f
+hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
+hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
+hydras2hg_smoke_d5_s1001=5.7600/1ce793e3f20afacf
 extraturns_smoke_d0_s1001=5.7010/9e9ef02893ea694c
 extraturns_smoke_d3_s1001=4.7200/76322f02352e42d8
 extraturns_smoke_d5_s1001=4.7300/4d9437f84cea6f3d
@@ -202,13 +204,13 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-hydras_regression_d0_s2002=6.0320/773d5978c83fd6c9
-hydras_regression_d3_s2002=5.4133/573ab3e3c893088e
-hydras_regression_d5_s2002=5.4000/b31a854820c7cd7e
-hydras_regression_d5_s3003=5.5267/fbf36e1dd2466ac1
-hydras2hg_regression_d5_s2002=5.7467/a2e9c9103a49f31a
-hydras_regression_d3_s30001=5.4000/da3a26feaece2293
-hydras_regression_d5_s30001=5.4000/da3a26feaece2293
+hydras_regression_d0_s2002=5.7910/2f302f5e6f2a2826
+hydras_regression_d3_s2002=5.3867/8dc8d0544f203e7e
+hydras_regression_d5_s2002=5.3800/9c23aae1d8781467
+hydras_regression_d5_s3003=5.4467/457316720689f81a
+hydras2hg_regression_d5_s2002=5.7200/207967a401162c3c
+hydras_regression_d3_s30001=5.2000/d0379efd243cf008
+hydras_regression_d5_s30001=5.2000/d0379efd243cf008
 extraturns_regression_d0_s2002=5.6450/dc0ca41034e559c2
 extraturns_regression_d3_s2002=4.7733/cf3b51b148bc1ec5
 extraturns_regression_d5_s2002=4.6467/254115e71dd5ea00

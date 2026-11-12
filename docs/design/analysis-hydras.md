@@ -1469,3 +1469,17 @@ skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incremental
   if the USER adopts the staged model.
 - **Shipped as `decks/Hydras/Hydras.value.DISABLED.json`** (inert in play; the engine reads only `.value.json`), so
   play and GT are unchanged and nothing needed accepting.
+- **The live arm IS the heuristic ladder** (no sidecar). `per-deck-search-shape.md`: "No sidecar is no longer a
+  state a deck should be in: a new deck ships `{ladder: escalation, leaf: none}` from day one" -- Hydras never got
+  that file. USER 2026-11-12: *"The heuristic ladder would not be okay. We would want to dig into it if that is the
+  choice."* Open: units understate wall for every escalation shape here (staged 1.22x units / 2.07x core-s; nlesc
+  1.02x / 2.33x; nlfit 0.76x / 0.60x), consistent with the uncharged plan enumeration
+  (`uncharged-enumeration-backstop-hole.md`) costing wall that units never see; and the staged leaf is UNTRUSTED
+  (phase D trust=UNSET), the known always-escalate trap. Re-measure the shapes after the enumeration fix.
+- **2026-11-12 push: rebased onto origin (49 commits, engine changes) and GT re-accepted** under the rebased binary
+  (src 2dfcca4c3c): only the 11 hydras/hydras2hg keys moved, all faster (smoke -0.10..-0.21 t, regression
+  -0.02..-0.24 t). Attribution: with `MTG_HYDRAS_BUCKET_DISCARD=0` and no table every key reproduces the committed GT
+  game for game; with the flag on, `keep_adoption_attribution.py` gives 0 unexplained games (every change is a
+  different mulligan count, a different bottom, or bottom order only). `extraturns_regression_d5_s2002` differed by
+  digest only (same score) in the pooled run; solo it reproduces GT 254115e71dd5ea00, so its GT was kept (pool
+  residency, the P6/P7 cache work).
