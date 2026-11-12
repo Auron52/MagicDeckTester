@@ -2464,6 +2464,52 @@
      "seed": 30050000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP-ORDER": 1,
+      "CAPPED": 267,
+      "CONTINUATION-DIFFERS": 9087,
+      "DOMINATED-CREATURE": 643,
+      "DOMINATED-LAND": 2274,
+      "DOMINATED-LIFE": 659,
+      "DROP-COVERED": 178,
+      "ENUM-GAP": 179,
+      "ORACLE-GAP": 69,
+      "PHANTOM": 1646,
+      "UNMODELED": 10
+     },
+     "commit": "9ba5851a1e828cd55dc140ac8dd620634e652dbc",
+     "date": "2026-11-12T16:09:52Z",
+     "decisions": 40482,
+     "deck": "decks/Fungus/Fungus.cod",
+     "deck_sha": "d7f17aa4ca81bdb5a5dc4cb721e9613eb68ea126",
+     "game_index": 55000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1169,
+     "life_breakpoints": [],
+     "ms_off": 544786,
+     "ms_on": 3803929,
+     "report": "logs/mana_clean/pgf-8-20261112/report.md",
+     "run": "pgf-8-20261112",
+     "seed": 30055000,
+     "src": "26198d9001d70986cae967647bbade4531f9285d",
+     "verdict": "issues"
     }
    ]
   },
@@ -3006,6 +3052,52 @@
      "run": "due6-20261112",
      "seed": 30000000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 14,
+      "CAPPED": 65,
+      "CAPPED-DECISION": 10163,
+      "CONTINUATION-DIFFERS": 325,
+      "DECISION-COST": 2,
+      "DOMINATED-LAND": 1113,
+      "DOMINATED-LIFE": 860,
+      "DROP-COVERED": 399,
+      "ENUM-GAP": 86,
+      "ORACLE-GAP": 22,
+      "PHANTOM": 186
+     },
+     "commit": "9ba5851a1e828cd55dc140ac8dd620634e652dbc",
+     "date": "2026-11-12T16:09:52Z",
+     "decisions": 48613,
+     "deck": "decks/Gods/Gods.cod",
+     "deck_sha": "41dacd51f7cde5d6a34f8b264d5753295eab84d8",
+     "game_index": 5000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 10350,
+     "life_breakpoints": [],
+     "ms_off": 15195734,
+     "ms_on": 20514675,
+     "report": "logs/mana_clean/pgf-8-20261112/report.md",
+     "run": "pgf-8-20261112",
+     "seed": 30005000,
+     "src": "26198d9001d70986cae967647bbade4531f9285d",
      "verdict": "issues"
     }
    ]
@@ -6409,6 +6501,47 @@
      "run": "pirates-6r-20261112",
      "seed": 30054000,
      "src": "8fe7c47af190d59e49a595fa2c015e211243a5a0",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 246,
+      "CONTINUATION-DIFFERS": 5,
+      "DOMINATED-LAND": 355,
+      "DOMINATED-LIFE": 4,
+      "DROP-COVERED": 78,
+      "PHANTOM": 2093
+     },
+     "commit": "9ba5851a1e828cd55dc140ac8dd620634e652dbc",
+     "date": "2026-11-12T16:09:52Z",
+     "decisions": 38660,
+     "deck": "decks/Pirates/Pirates.cod",
+     "deck_sha": "4d66d796f128d3ca93b1547e0aa096f0c62dc17b",
+     "game_index": 59000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 246,
+     "life_breakpoints": [],
+     "ms_off": 621956,
+     "ms_on": 1102710,
+     "report": "logs/mana_clean/pgf-8-20261112/report.md",
+     "run": "pgf-8-20261112",
+     "seed": 30059000,
+     "src": "26198d9001d70986cae967647bbade4531f9285d",
      "verdict": "issues"
     }
    ]

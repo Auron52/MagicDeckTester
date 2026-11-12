@@ -796,6 +796,19 @@ fungus 1,880, gods 4,300 (first run).
     and the payer (creature band, battlefield-order tie; autonomous hold value is 0) tapped Shroofus + a lasting 1/1
     instead of them. PlanTraits::fade_exhaust_src + creature-band key[1] = -1 for a doomed token. 548 of 1089 flags carry
     a Burst activation; the rest (e.g. s30050039 T3 Ancient Tomb + Hickory Woodlot float) are other shapes, untriaged.
+* **Round 8 (eighth item-6 agent, 2026-11-12).** Rebased onto origin (7723fa1b3, then 9caf3af8c): smoke 195/195 x2 and
+  regression 309/309 with 0 configs changed (covers 72c31a8cc's owed regression; the Extra Turns pooled flake did NOT
+  recur), check_gt_logs consistent, nothing to accept. Pushed **9ba5851a1** 15:36:43 UTC; CI 43249679575 green.
+  Gate **pgf-8-20261112** (PGO 26198d90, one pooled run):
+  * **pirates 246** (59000-63999; was 263): APPLY-DROP 243 `cast Lightning Bolt` (the USER-held Territory-vs-Canal
+    payment policy, unchanged) + 3 Siren Stormtamer (rescued by MTG_PAY_ROLLBACK). The Dire Fleet Captain 15 and Buccaneer
+    4 are gone (e0b9de5f7 confirmed). Nothing else.
+  * **gods 10350** (5000-9999; was 4300): ENUM-GAP 1756 -> **86** (the per-permanent pre-tap fix), APPLY-DROP 14, ORACLE-GAP
+    22, CAPPED 65, and **CAPPED-DECISION 10163 from only TWO decisions** (s30007073 gi3 T6 3974 lines, s30009146 gi6 T4 1026
+    lines): Tendo Ice Bridge + Looting/Loam/retrace/Careful Study menus -- the same analyzer decision-budget shape as
+    s30002725 last gate. Analyzer perf, not an engine miss.
+  * **fungus 1169** (55000-59999; was 1880): DOMINATED-CREATURE 1089 -> **643**, ENUM-GAP 179, CAPPED 267, ORACLE-GAP 69,
+    UNMODELED 10, APPLY-DROP-ORDER 1.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
