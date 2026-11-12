@@ -1484,7 +1484,7 @@ skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incremental
   digest only (same score) in the pooled run; solo it reproduces GT 254115e71dd5ea00, so its GT was kept (pool
   residency, the P6/P7 cache work).
 
-## P4: the BP re-derivations are a read-guard refusal, not a key split (2026-11-11, IN PROGRESS, not pushed)
+## P4: the BP re-derivations are a read-guard refusal, not a key split (2026-11-11; residency fixed 2026-11-12, NOT pushed: one Hinata play change)
 
 **Root cause (measured).** P3's premise ("whole re-enumerations of the same board under DIFFERENT BP keys") does
 not hold on this tree. `MTG_BP_REENUM_CENSUS` (new, diagnostic) fingerprints each BP-derivation enumeration by the BP
@@ -1529,15 +1529,45 @@ Wall time is indicative only (shared box). Uncontended, 1782 took 40 -> 7 s, 25 
 slower, 0 faster). Units moved in 7 chunks (-0.012% in total). ms per game: 6060 -> 4711 (0.777x; the box was shared).
 There is no slower game, so no d8 b0 recovery is owed. Outputs: logs/hydras-p4/ab_summary.txt and ab_digests.txt.
 
-**OPEN DEFECT (blocks adoption).** 656d04eb6 is residency-dependent. A replay happens only while the REAL entry is
-resident. When it is not, the lookup recomputes, and the recompute's counted work (warm tier-1 caches) differs from
-the stored work. So the counts, and through the priced ceiling the units, depend on the byte pool. Evidence: the same
-4-game batch gave gi 1979 333,224 and then 333,176 units.
+**Residency defect: FIXED (P5-P7, branch hydras-enum-collapse 427d90271, 61475b265, 3af86daba; NOT pushed, see
+below).** 656d04eb6 replayed only while the REAL entry was resident; on a miss it recomputed and counted the warm
+recompute, so counts (and, through the priced ceiling, units) depended on the byte pool.
+- 427d90271 (P5): the replay is decided and counted from the SHADOW alone; on a real miss the lookup recomputes
+  MUTED and replays the shadow's work.
+- 61475b265 (P5): a muted recompute's mana-cache stores go to a mute overlay; the pay-refine memo stores nothing.
+- 3af86daba (P6+P7): `pledger::ReadsFrom` takes a led lookup's budget-read propagation from the shadow, Mute restores
+  `budgetbind`, and `pledger::PinScripts` is the last root cause. A breakpoint derivation runs inside the apply of
+  the plan that reached the breakpoint; its candidate applies read and ADVANCE the caller's cursor scripts (dredge
+  chain, Keranos targets, sac / land-search / look-top / Incinerator cursors), while a cache hit advances nothing.
+  A muted recompute stands in for a hit the virtual cache served, so it consumed pins the hit would have left (Gods
+  regression gi 4, seed 1005, T5: dredge cursor 2/4 -> 6/4, next derivation 5 -> 4 continuations). Mute now saves
+  and restores every cursor. `MTG_PLAN_LEDGER_STATS` reports `pins=`.
 
-The fix is to store the replay work in the SHADOW and decide from the shadow alone. On a real miss, recompute MUTED
-and replay the shadow's work. Then check that two runs of the same batch, and a small `MTG_PLAN_CACHE_KB`, give
-identical units. Handoff: logs/hydras-research/P4-handoff.md.
+**Measurements (P7b, rebased onto fe0152699; base = fe0152699, src 0c08ac180).**
+- Unit tests 2853/2853.
+- Determinism, `det.json` (15 jobs, 239 games: the outliers plus a Hydras sample): t32 vs t8 vs t1 = 0 digest,
+  0 unit, 0 work-count diffs.
+- Smoke (`MTG_PGO=0`, not accepted): 195/195 PASS, 0 play changes (the Extra Turns keys included).
+- Regression (`MTG_PGO=0`, not accepted): 308/309. One real play change: `hinata_regression_d5_s2002` gi 21 won
+  T6 -> T5 (5.4133/94774e75d5454d3c -> 5.4067/7032c4ea9d31d793, units 9,330,430 -> 9,324,629). It reproduces SOLO
+  (the job alone at 32 threads: this branch 7032c4ea, base 94774e75 == GT) and as a single game at 1 thread
+  (units 217,276 -> 211,486), so it is not pool drift. Mechanism: on this branch the priced derivation ceiling
+  trips in that game (`[bp-derive-priced-stop] subset visits refused=14`; base: none), because the replayed work
+  re-prices the priced meter; the shorter continuation list moves a budget-bound decision. Same game, 1 thread:
+  wall 77.7 s -> 6.1 s (indicative). References: 0 play-drift. Extra Turns d5 s2002 matched GT pooled.
+- Held-out A/B (`build/scratch/hydras-p7/ab.json`, 48 x 50 Hydras d5 b20 from seed 7007, one batch per binary):
+  48/48 digests identical, avg 5.4058 both, 0 slower / 0 faster, units identical (29,265,411). Work actually done
+  (counted - replayed): odometer 0.649x, payment walks 0.779x, plans 0.833x, plan_emit 0.734x. Wall was not
+  measurable (another agent's batch shared the box, load 64).
 
-**Open for the USER.** Even when deterministic, the replay counts the FIRST computation's work, which can be a little
-more than a recompute's. So it keeps every digest but moves units by a few per job. That is a re-price of the priced
-meter. Is that acceptable as "byte-identical play"?
+**Ruling 1 (P5 brief, recorded):** *"Units moving by a few per job, with every play digest identical and 0 slower or
+faster games, is ACCEPTABLE. Ship the charged replay once it is deterministic."* The replay is now deterministic,
+but the Hinata game is a faster-game play change, which is outside ruling 1, so the branch was NOT pushed (the
+push bar: 0 play changes outside known pooled-drift keys). Whether to accept it (one game a turn faster, units
+-0.06% on the key) is the USER's call.
+
+**Open (information).** At `MTG_PLAN_CACHE_KB=64` (not the default pool) Accomplished Alchemist gi 3 still moves
+odometer/payment counts (units and digest equal); not chased. A COUNTED breakpoint derivation still consumes the
+enclosing plan's scripted pins while a cache hit does not (base behaviour); making every derivation pin-pure is a
+play change, proposed as a follow-up with its own A/B. The intermittent pooled-vs-solo drift on the Extra Turns
+keys predates this work (it reproduces on base) and is being hunted separately.
