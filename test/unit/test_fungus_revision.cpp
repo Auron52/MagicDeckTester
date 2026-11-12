@@ -43,6 +43,7 @@
 #include "ai/ManaPayment.h"
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/PlanContext.h"
 
 #include <string>
 #include <vector>
@@ -1972,5 +1973,43 @@ TEST_CASE("Everything that is NOT a devour card stays pinned Main1")
         const auto ov = prov.MainPhaseOverride(s, Def(name));
         REQUIRE_MESSAGE(ov.has_value(), name);
         CHECK_MESSAGE(*ov == DecisionProvider::MainPhase::Main1, name);
+    }
+}
+
+TEST_CASE("Doomed body first: the plan's last fade activation kills the Burst tokens, so they pay before a lasting Saproling (MTG_PAY_DOOMED_BODY_FIRST)")
+{
+    // mana-clean item 6, Fungus s30050019 T4 (DOMINATED-CREATURE): with the Badger's grant live, the plan's payment
+    // tapped the attackers it keeps (battlefield order) while Burst tokens the plan's own fade activation empties
+    // stood untapped. Board: Badger, a Burst on ONE fade counter, a lasting 1/1 Saproling first in battlefield
+    // order, then two Burst tokens (1/1 off that counter).
+    EnsureCardsLoaded();
+    GameState s0 = Fresh();
+    Put(s0, "Brightcap Badger", 0, 50);
+    const int bi = Put(s0, "Saproling Burst", 0, 60);
+    s0.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+    PutSaprolingToken(s0, 1000);
+    for (int n : { 1001, 1002 })
+    {
+        const int ti = PutSaprolingToken(s0, n);
+        s0.battlefield[static_cast<std::size_t>(ti)].created_by_number = 60;
+    }
+    ManaCost gg;
+    gg.green = 2;
+    PlanTraits t_plan;
+    t_plan.fade_exhaust_src[0] = 60;
+    t_plan.fade_exhaust_count  = 1;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        heurarm::t_arm[heurarm::PAY_DOOMED_BODY_FIRST] = on ? 1 : 0;
+        GameState s = s0;
+        {
+            const PlanTraitsScope _pts(&t_plan);
+            REQUIRE(TapForCostShared(s, gg, /*for_creature=*/false, nullptr, false));
+        }
+        CHECK(ByNumber(s, 1000).tapped == !on);
+        CHECK(ByNumber(s, 1001).tapped);
+        CHECK(ByNumber(s, 1002).tapped == on);
+        heurarm::t_arm[heurarm::PAY_DOOMED_BODY_FIRST] = -1;
     }
 }

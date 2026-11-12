@@ -60394,6 +60394,31 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             }
         }
     }
+    // DOOMED-BODY TAP ORDER (MTG_PAY_DOOMED_BODY_FIRST; PlanTraits::fade_exhaust_src): a fading token maker whose
+    // remaining fade counters the plan's own activations spend to zero.
+    if (PayDoomedBodyFirstOn())
+    {
+        int src[8], used[8], n = 0;
+        for (const Action& a : acts)
+        {
+            if (a.ability_mode != Action::AbilityMode::FadeSaproling || a.sac_source_id <= 0) { continue; }
+            const int k = std::max(1, a.chosen_x);
+            int j = 0;
+            while (j < n && src[j] != a.sac_source_id) { ++j; }
+            if (j == n) { if (n == 8) { continue; } src[n] = a.sac_source_id; used[n] = 0; ++n; }
+            used[j] += k;
+        }
+        for (int j = 0; j < n && t.fade_exhaust_count < PlanTraits::kMaxFadeExhaust; ++j)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.card.m_number != src[j]) { continue; }
+                if (p.fade_counters > 0 && used[j] >= p.fade_counters)
+                { t.fade_exhaust_src[t.fade_exhaust_count++] = src[j]; }
+                break;
+            }
+        }
+    }
     return t;
 }
 

@@ -55,6 +55,8 @@ std::uint64_t PlanTraitsContentHash(const PlanTraits& t)
         mix(static_cast<std::uint64_t>(t.cycle_seed_pips[c]));
     }
     mix(static_cast<std::uint64_t>(t.act_c_pips));
+    mix(static_cast<std::uint64_t>(t.fade_exhaust_count));
+    for (int i = 0; i < PlanTraits::kMaxFadeExhaust; ++i) { mix(static_cast<std::uint64_t>(t.fade_exhaust_src[i])); }
     mix(static_cast<std::uint64_t>(t.act_src_count));
     for (int i = 0; i < PlanTraits::kMaxActSrcs; ++i) { mix(static_cast<std::uint64_t>(t.act_src_nums[i])); }
     mix(static_cast<std::uint64_t>(t.act_mana_total));

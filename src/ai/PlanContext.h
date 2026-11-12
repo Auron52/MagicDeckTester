@@ -122,6 +122,14 @@ struct PlanTraits
     // stranding Mirrorwing's {R}{R}. ScarceColorHoldMask (ManaPayment.cpp) uses these totals to
     // hold scarce providers of colours the plan's OTHER casts still need.
     int  cast_pips[5]          = {};
+    // --- DOOMED-BODY TAP ORDER input (MTG_PAY_DOOMED_BODY_FIRST; mana-clean item 6, Fungus) ---
+    // The fading token makers (Saproling Burst) whose remaining fade counters the plan's own activations
+    // spend to zero: every token such a maker created is 0/0 once they are gone (its P/T IS the counter
+    // total), so -- barring a toughness lord -- it dies before combat and its body is worth nothing this
+    // turn. The payer taps such a body before any other creature (ManaPayment.cpp, the creature band).
+    static constexpr int kMaxFadeExhaust = 4;
+    int  fade_exhaust_src[kMaxFadeExhaust] = {};
+    int  fade_exhaust_count    = 0;
     // --- LINE {C} HOLD input (MTG_LINE_C_HOLD; EDF claude_s8_gi7 T3) ---
     // Colourless pips of ONE activation the plan itself carries (a hand go-off's ActivateBlink:
     // {2}{C}, the loop's first crank -- the loop funds the later ones). The casts' payer is

@@ -2856,12 +2856,40 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 const int dhold = (dh_on && dh_ready && kind == 1 && rank >= 0 && rank < 60
                                    && def->params.enters_tapped_with_depletion > 0
                                    && DepletionCountersOn(p) > 0 && dep_held(i)) ? kDepletionHoldBand : 0;
+                // DOOMED BODY FIRST (MTG_PAY_DOOMED_BODY_FIRST, default ON). A token whose fading maker the plan's own
+                // activations empty (PlanTraits::fade_exhaust_src) is 0/0 once the counters are gone -- its P/T IS the
+                // maker's counter total -- and dies to the SBA unless a toughness lord lifts it: its body is worth
+                // nothing at this turn's combat, so inside the creature band it taps before every other body (its hold
+                // value reads -1). Fungus s30050019 T4 (gate due6-20261112, DOMINATED-CREATURE): {Brightcap Badger,
+                // Beastmaster Ascension, the Burst's last fade activation} paid with Shroofus Sproutsire and a 1/1
+                // Saproling (battlefield order) while five Burst tokens the activation kills stood untapped.
+                // Ordering only; outside a plan apply (no traits) nothing is doomed.
+                int doomed = 0;
+                if (kind == 1 && p.created_by_number != 0 && PayDoomedBodyFirstOn())
+                {
+                    const PlanTraits* pt = CurrentPlanTraits();
+                    if (pt != nullptr && pt->fade_exhaust_count > 0)
+                    {
+                        for (int k = 0; k < pt->fade_exhaust_count && !doomed; ++k)
+                        {
+                            if (pt->fade_exhaust_src[k] != p.created_by_number) { continue; }
+                            for (const Permanent& m : state.battlefield)
+                            {
+                                if (m.card.m_number != p.created_by_number) { continue; }
+                                const int rest = p.EffectiveToughness() - m.fade_counters;
+                                const int lord_t = ComputeLordBonus(p.card, state, active, false, &p).second;
+                                if (rest + lord_t <= 0) { doomed = 1; }
+                                break;
+                            }
+                        }
+                    }
+                }
                 int key[4];
                 if (kind != 5 && rank >= 0 && rank < 60)
                 { key[0] = 0;    key[1] = harm / kNdScale;
                   key[2] = rank + ((pain || waste) ? kPainBand : 0) + dhold + ((cco_hold || ps_hold) ? 2 * kPainBand : 0);
                   key[3] = (harm % kNdScale) * 2 + broad; }
-                else                                     { key[0] = rank; key[1] = hold; key[2] = harm; key[3] = 0;    }
+                else                                     { key[0] = rank; key[1] = doomed ? -1 : hold; key[2] = harm; key[3] = 0; }
                 int cmp = 0;
                 for (int k = 0; k < 4 && cmp == 0; ++k) { cmp = (key[k] < best_key[k]) ? -1 : (key[k] > best_key[k] ? 1 : 0); }
                 const bool better = cmp < 0

@@ -664,6 +664,19 @@ inline bool PayCcoLineReserveOn()
 // included (MTG_PAY_PAIN_LAST would otherwise spend the Treasure first). Ordering only. mana-clean item 6,
 // Pirates s30054695 T4: Staunch Crewmate's {U} took the Treasure over Fiery Islet and Dire Fleet Captain's {B}
 // (the Treasure was the only {B}) was unpayable. See the key block in TapForCostSharedOnce's scarcity loop.
+// MTG_PAY_DOOMED_BODY_FIRST -- DEFAULT ON; =0 restores the historical creature-band order. A token whose fading
+// maker (Saproling Burst) the plan's own activations empty is 0/0 by combat (its P/T is the counter total) and,
+// with no toughness lord to lift it, dies to the SBA: its body is worth nothing this turn, so the payer taps it
+// before any other creature. mana-clean item 6, Fungus s30050019 T4 (DOMINATED-CREATURE): the plan paid with
+// Shroofus Sproutsire and a 1/1 Saproling (attackers) while five Burst tokens that the plan's last fade
+// activation kills stood untapped. Ordering only. See PlanTraits::fade_exhaust_src and the creature band key in
+// TapForCostSharedOnce's scarcity loop.
+inline bool PayDoomedBodyFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DOOMED_BODY_FIRST", true);
+    return heurarm::Flag(heurarm::PAY_DOOMED_BODY_FIRST, env_on);
+}
+
 inline bool PaySacLineReserveOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_SAC_LINE_RESERVE", true);

@@ -880,6 +880,7 @@ enum Slot : int
     LINE_SPARE_FILTER_FEED,   // MTG_LINE_SPARE_FILTER_FEED  item 6 (mana-clean, treasure_hunt {Cascade Bluffs + Land's Edge + Treasure Hunt}): the line-spare SHORT test reads the supply left after a generic pip eats a one-unit float that is an untapped filter land's only feed (LineSpareSourceMask). Default ON; =0 -> the plain over-count
     PAY_SAC_LINE_RESERVE,     // MTG_PAY_SAC_LINE_RESERVE  item 6 (mana-clean, Pirates s30054695 T4 {Staunch Crewmate + Dire Fleet Captain}): a pay-sac one-shot (Treasure) that is the line's last source of a colour the rest of the line owes taps after every other land, pain lands included (the CCO line reserve's band). Default ON; =0 -> the historical rank
     OPS_FIXED_REVEAL,         // MTG_OPS_FIXED_REVEAL  item 6 (mana-clean, Pirates s30054672 {Malcolm + Daring Buccaneer + vial Corsair Captain}): TurnSolver::OrderPaysSequentially charges the reveal-or-pay surcharge on the ASKED order (the casts that find no other subtype card left in hand), not on the subset's realised orders. Default ON; =0 -> SameSubsetRevealSurcharge
+    PAY_DOOMED_BODY_FIRST,    // MTG_PAY_DOOMED_BODY_FIRST  item 6 (mana-clean, Fungus s30050019 DOMINATED-CREATURE): a token whose fading maker the plan's own activations empty (0/0 by combat, no toughness lord) taps before any other creature. Default ON; =0 -> the historical creature-band order
     COUNT
 };
 
@@ -1704,6 +1705,7 @@ inline const char* Name(int slot)
         "MTG_LINE_SPARE_FILTER_FEED",
         "MTG_PAY_SAC_LINE_RESERVE",
         "MTG_OPS_FIXED_REVEAL",
+        "MTG_PAY_DOOMED_BODY_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
