@@ -2939,6 +2939,11 @@ public:
     // decision, so the common one-Pod board pays nothing. Class accessor for the executor twin
     // (AIEngine's ActivatePod branch), which cannot see the file-static BpSiteMask.
     static bool PodBreakpointClassOn();
+    // The LAND-TUTOR breakpoint (MTG_BP_LAND_TUTOR, heurarm slot, default ON): a tutor that puts a
+    // land onto the battlefield (Crop Rotation) opens the deferred site-3 re-solve, so the fetched
+    // land's mana can fund the rest of the phase. Def-keyed, read by BOTH worlds (ParamKeyedDrawClass,
+    // the rollout's arming in the tutor_land_to_battlefield branch, AIEngine's creature_tutor_replan).
+    static bool LandTutorBreakpoint(const CardDefinition& def);
     // The structural gate both worlds share: does the active player control an UNTAPPED second
     // Pod-style source (pod_mv_delta != 0) that could act on the just-fetched creature?
     static bool PodChainAnotherActivatablePod(const GameState& state);

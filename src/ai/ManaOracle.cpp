@@ -361,7 +361,7 @@ std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
 // plan without it is on the menu or checked on its own (noop); it tapped a card taken off the top of the library
 // (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
 // (cont_land): a land drop the plan did not make paid for it.
-std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0};
+std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0}, g_eg_bp_cont{0};
 // The equip route's macros audited link by link (AuditRoute), and the links audited.
 std::atomic<long long> g_route_macros{0}, g_route_links{0}, g_route_us{0};   // ...and the audit's wall (us)
 // ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
@@ -411,8 +411,9 @@ struct Reporter
             by += std::string(" ") + kClsName[c] + "=" + std::to_string(g_cls[c].load());
         }
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
-        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
-                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
+        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld bp_cont=%lld ===\n",
+                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load(),
+                     g_eg_bp_cont.load());
         if (CostTrace())
         {
             std::fprintf(stderr, "=== MANA ORACLE audit applies by stage: own=%lld sibling-payments=%lld other-orders=%lld ===\n",
@@ -4232,6 +4233,55 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
                         || (a.chosen_x > 0 && a.def != nullptr && !a.def->card.m_mana_cost.has_x
                             && a.def->card.m_mana_cost.x_pips == 0);
         if (combo) { NoteUnmodeled("gate-rejected loop / combo variant (not driven)"); return v; }
+    }
+    // A LAND-TUTOR BREAKPOINT REACHES IT (item 6, Creature Giving; TurnSolver::LandTutorBreakpoint). A Crop
+    // Rotation on a plan opens the deferred site-3 re-solve, and that continuation is SEARCHED from the post-fetch
+    // board, where the fetched land is ordinary untapped mana for the flat gate. So when the plan less some of its
+    // hand casts -- still holding a land-tutor cast -- is on the menu (or enumerated), the casts it lacks are the
+    // continuation's to make: "Crop Rotation x2" is "Crop Rotation, then Crop Rotation off the fetched Orchard".
+    // Narrow by design: only that opener, only dropped HAND casts, the same land decision.
+    {
+        std::vector<std::size_t> cast_ix;
+        bool opener = false;
+        for (std::size_t i = 0; i < p.actions.size(); ++i)
+        {
+            const Action& a = p.actions[i];
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            cast_ix.push_back(i);
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d != nullptr && TurnSolver::LandTutorBreakpoint(*d)) { opener = true; }
+        }
+        if (opener && cast_ix.size() >= 2 && cast_ix.size() <= 10)
+        {
+            const std::size_t n = cast_ix.size();
+            for (std::size_t m = 1; m + 1 < (std::size_t{1} << n); ++m)   // m = the casts DROPPED (never all)
+            {
+                TurnSolver::Plan q = p;
+                bool keeps_opener = false;
+                std::vector<bool> drop(p.actions.size(), false);
+                for (std::size_t b = 0; b < n; ++b) { if ((m >> b) & 1) { drop[cast_ix[b]] = true; } }
+                q.actions.clear();
+                for (std::size_t i = 0; i < p.actions.size(); ++i)
+                {
+                    if (drop[i]) { continue; }
+                    q.actions.push_back(p.actions[i]);
+                    const Action& a = p.actions[i];
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if (a.kind == Action::Kind::CastFromHand && d != nullptr && TurnSolver::LandTutorBreakpoint(*d))
+                    { keeps_opener = true; }
+                }
+                if (!keeps_opener) { continue; }
+                const std::string qk = SiblingKey(q);
+                if (mv.on_menu.count(qk) != 0 || mv.observed.count(qk) != 0)
+                {
+                    g_eg_bp_cont.fetch_add(1, std::memory_order_relaxed);
+                    EgTrace(state, pre, p, "bp-cont: {" + PlanText(q) + "} is "
+                                           + (mv.on_menu.count(qk) != 0 ? "on the menu" : "enumerated")
+                                           + " and its land-tutor breakpoint's searched continuation casts the rest");
+                    return v;
+                }
+            }
+        }
     }
     const std::multiset<std::string> want = PlanHandCards(p);
     int n_casts = 0;

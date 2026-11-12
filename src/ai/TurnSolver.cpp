@@ -33398,6 +33398,24 @@ std::vector<int> TurnSolver::HandCardNumbers(const GameState& state)
 // cut of the general rule armed the executor's site-10 hook for those casts while the search had
 // armed site 5, and the bp_at indices diverged: Mirrorwing d3 lost 0.1266 at budget 10, 40 AND 160 --
 // flat in budget, which is what says "not churn, a real defect".
+// THE LAND-TUTOR BREAKPOINT (item 6, mana-clean Creature Giving s30060041 T2). Crop Rotation pays {G},
+// sacrifices a land (any land -- a TAPPED one costs nothing) and puts a land onto the battlefield, usually
+// UNTAPPED (Forbidden Orchard). That land is same-phase mana, but every cast of the plan was enumerated
+// against the pre-fetch board and no subset gate credits the fetch (which land arrives is a searched
+// pick, see the "Deliberately NOT modelled" note in CheckLine), so "Crop Rotation, then War-Riders +
+// Crop Rotation off the fetched Orchard" was unreachable at any budget (the oracle's ENUM-GAP: 232 in
+// 5,000 games). The fix is the acquisition shape (MTG_ACQ_RESOLVE, the Jumbo GSZ precedent): the cast
+// arms the deferred re-solve, the rest of the plan casts, then the continuation is SEARCHED from the
+// post-fetch board (site 3, fanned by the site-3 clause of the plan-mask predicate). Strictly additive:
+// a continuation that finds nothing collapses onto the base plan. Def-keyed so both worlds classify
+// identically (bp_at alignment). Only Crop Rotation carries tutor_land_to_battlefield.
+bool TurnSolver::LandTutorBreakpoint(const CardDefinition& def)
+{
+    if (!def.params.tutor_land_to_battlefield || !AcqResolveEnabled()) { return false; }
+    static const bool env = EnvOn("MTG_BP_LAND_TUTOR", true);
+    return heurarm::Flag(heurarm::BP_LAND_TUTOR, env);
+}
+
 bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinition& def)
 {
     const CardParams& p = def.params;
@@ -33416,6 +33434,7 @@ bool TurnSolver::ParamKeyedDrawClass(const GameState& state, const CardDefinitio
         || p.tutor_to_top
         || (AcqResolveEnabled()
             && ResolveProvider(state).PostCreatureTutorBreakpoint(state, def))
+        || TurnSolver::LandTutorBreakpoint(def)   // Crop Rotation (MTG_BP_LAND_TUTOR)
         // etb_dig_count is claimed only in the pre-fix world: MTG_BP_ETB_DIG hands it to site 10.
         || (p.etb_dig_count > 0 && !BpEtbDigEnabled())
         // The Zada/Mirrorwing trick class (site 5), whichever payload armed it.
@@ -68112,6 +68131,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // The trailing generic is_sacrifice block skips this spell (already paid here).
             if (is_sacrifice) { PerformSacrificeLandCost(state, name); }
             PerformLandTutorToBattlefield(state, state.active_player_index, def.params, tutor_target);
+            // MTG_BP_LAND_TUTOR: re-solve the rest of the phase off the fetched land (the GSZ arming
+            // below is the precedent; executor twin = AIEngine's creature_tutor_replan).
+            if (TurnSolver::LandTutorBreakpoint(def) && !s_human_play && sink_stack.empty())
+            {
+                deferred_cantrip_resolve = true;
+                deferred_cantrip_site = &def;
+                deferred_hand_before = deferred_snapshot(hand_at_cast);
+            }
         }
         else if (def.params.look_top_put_creature_count > 0)
         {
@@ -82427,6 +82454,8 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             if (AcqResolveEnabled() && (d->params.tutor_to_hand || d->params.damage_equals_top_mv))
             { mask |= 1 << 3; }
             if (TopResolveActive(state) && d->params.tutor_to_top) { mask |= 1 << 3; }
+            // The land tutor's deferred re-solve (MTG_BP_LAND_TUTOR) lands on site 3 too.
+            if (TurnSolver::LandTutorBreakpoint(*d)) { mask |= 1 << 3; }
         }
         if (d->params.impulse_exile > 0) { mask |= 1 << 2; }
         // CASCADE -- the breakpoint belongs to a card this plan does not name and cannot see

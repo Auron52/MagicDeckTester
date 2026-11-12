@@ -2761,6 +2761,15 @@ inline bool TeraDrainDoomedOn()
     static const bool on = EnvOn("MTG_TERA_DRAIN_DOOMED", true);
     return heurarm::Flag(heurarm::TERA_DRAIN_DOOMED, on);
 }
+// The sacrifice-a-land cost's victim drain (MTG_SAC_LAND_DRAIN, item 6): taps own untapped land #num for one unit of
+// mana into the float before PerformSacrificeLandCost sacrifices it. Installed by the AI layer (ManaPayment.cpp,
+// ApplyEnginePreTap; the colour is the payer's own any-pip choice); null -> no drain.
+inline void (*g_sac_land_drain_hook)(GameState& state, int controller, int num) = nullptr;
+inline bool SacLandDrainOn()
+{
+    static const bool on = EnvOn("MTG_SAC_LAND_DRAIN", true);
+    return heurarm::Flag(heurarm::SAC_LAND_DRAIN, on);
+}
 // Set by BoundaryFan::Cross while it fans the fetch, so an ordinal exhausted at rank 0 (the front, which the fan
 // DID branch on) is not counted as an uncovered pick by the census.
 inline thread_local bool t_stut_fan_crossing = false;
@@ -45834,6 +45843,31 @@ inline void PerformSacrificeLandCost(GameState& state, const std::string& spell_
         int chosen = (*g_play_sacrifice_chooser)(state, state.active_player_index, spell_name,
                                                  lands, def_opt);
         if (chosen >= 0 && chosen < static_cast<int>(lands.size())) { idx = lands[chosen]; }
+    }
+    // THE VICTIM DRAINS FIRST (MTG_SAC_LAND_DRAIN, item 6 of the mana-clean chain; default ON). Mana abilities are
+    // activated before costs are paid (CR 601.2g, then 601.2h), so an UNTAPPED victim can be tapped for mana and
+    // then sacrificed; the land is leaving either way, so the drain only ADDS a floating unit. Without it the
+    // tapped-first ranking's band order (shocks before an Orchard) sacrificed an untapped Stomping Ground and the
+    // phase's next cast tapped Birds of Paradise instead (Creature Giving s30063247 T3, the oracle's
+    // DOMINATED-CREATURE). Plain one-unit mana lands only -- a tap that costs anything (City of Brass's damage,
+    // Forbidden Orchard's opponent Spirit) or is not a plain mana tap (a fetchland, a bounce
+    // land's two units) is not a free addition and stays out. Human play keeps its own taps (chooser attached).
+    if (idx >= 0 && !state.battlefield[idx].tapped && g_sac_land_drain_hook != nullptr
+        && g_play_sacrifice_chooser == nullptr && SacLandDrainOn())
+    {
+        const Permanent& v = state.battlefield[idx];
+        const CardDefinition* vd = CardDatabase::Instance().LookupCached(v.card);
+        if (vd != nullptr && !v.card.IsCreature() && !v.is_animated && !vd->params.produces.empty()
+            && vd->params.tap_self_damage <= 0 && !vd->params.taps_spawn_opp_token
+            && vd->params.fetch_land_types.empty() && vd->params.produces_amount <= 1
+            && vd->params.enters_tapped_with_depletion <= 0 && !vd->params.storage_land)
+        {
+            const int num = v.card.m_number;
+            g_sac_land_drain_hook(state, state.active_player_index, num);
+            idx = -1;   // the tap does not move the battlefield, but re-find by number to be safe
+            for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+            { if (state.battlefield[i].card.m_number == num) { idx = i; break; } }
+        }
     }
     if (idx >= 0)
     {

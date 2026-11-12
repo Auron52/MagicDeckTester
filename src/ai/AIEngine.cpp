@@ -5506,8 +5506,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // ApplyPlanDirect already models (cast the draw spell, then re-solve and cast the
     // freshly revealed cards with the remaining mana). See stage_draw_break below.
     auto creature_tutor_replan = [&](const CardDefinition& d)
-    { return AcqResolveEnabled()
-          && ResolveProvider(state).PostCreatureTutorBreakpoint(state, d); };
+    { return (AcqResolveEnabled()
+              && ResolveProvider(state).PostCreatureTutorBreakpoint(state, d))
+          || TurnSolver::LandTutorBreakpoint(d); };   // Crop Rotation (MTG_BP_LAND_TUTOR)
     auto note_draw_engine = [&](const std::string& name)
     {
         const CardDefinition* d = CardDatabase::Instance().Lookup(name);

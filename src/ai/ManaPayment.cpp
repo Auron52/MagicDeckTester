@@ -11006,6 +11006,31 @@ struct TeraDrainInstaller
     }
     TeraDrainInstaller() { g_tera_drain_hook = &Drain; }
 } s_tera_drain_installer;
+// The sacrifice-a-land cost's victim drain (SpellEffects.h g_sac_land_drain_hook, MTG_SAC_LAND_DRAIN): one unit of the
+// victim's colours -- the payer's any-pip colour choice (LineDemandAnyPipColor, decklist order when no line is live).
+struct SacLandDrainInstaller
+{
+    static void Drain(GameState& state, int controller, int num)
+    {
+        if (controller != state.active_player_index) { return; }
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number != num || p.controller_index != controller) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->params.produces.empty()) { return; }
+            // A copy: EffectiveProduces may hand back a thread_local buffer (a reflecting source).
+            const std::vector<Color> prod = EffectiveProduces(state, controller, *d, false);
+            if (prod.empty()) { return; }
+            TurnSolver::PreTap t;
+            t.name  = p.card.m_name.str();
+            t.num   = num;
+            t.color = static_cast<int>(LineDemandAnyPipColor(state, prod, ManaPool{}, prod[0]));
+            (void)ApplyEnginePreTap(state, t);
+            return;
+        }
+    }
+    SacLandDrainInstaller() { g_sac_land_drain_hook = &Drain; }
+} s_sac_land_drain_installer;
 }
 
 bool ApplyKruphixBankTap(GameState& state, int source_id, char face)

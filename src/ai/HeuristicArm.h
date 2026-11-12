@@ -875,6 +875,8 @@ enum Slot : int
     TERA_DRAIN_DOOMED,        // MTG_TERA_DRAIN_DOOMED  item 5d (mana-clean, Stompy regression s2002 gi412): Terastodon's own-permanent destroy taps each UNTAPPED basic-land victim for its one colour into the float first (CR 605.3a; the land dies either way, so the drain only adds mana and decides no colour). SpellEffects.h, g_tera_drain_hook. Default ON; =0 -> the victim dies untapped as before
     PREPAY_REPLICATE,         // MTG_PREPAY_REPLICATE  item 6 (mana-clean, Slivers s30214758): the whole-turn prepay (BatchPrepayMainCasts) prices a pinned Hatchery replicate count (k x printed) into the joint bill, as Action::cost already does. Default ON; =0 -> the effective cost only
     PREPAY_LINE_AFFINITY,     // MTG_PREPAY_LINE_AFFINITY  item 6 (mana-clean, Slivers s30214131): the whole-turn prepay credits an affinity card (Thrumming Hivepool) with the line's matching creatures ranked before it (CastOrderRank) and their pinned copies, as SameTurnAffinityDiscountFor does. Default ON; =0 -> the board-only price
+    BP_LAND_TUTOR,            // MTG_BP_LAND_TUTOR  item 6 (mana-clean, Creature Giving s30060041): a land-to-battlefield tutor (Crop Rotation, tutor_land_to_battlefield) opens the deferred site-3 re-solve after it resolves, in both worlds (TurnSolver::LandTutorBreakpoint), so the fetched UNTAPPED land's mana funds the rest of the phase ("Crop Rotation, then War-Riders + Crop Rotation off the fetched Orchard"). Strictly additive search. Default ON; =0 -> no breakpoint
+    SAC_LAND_DRAIN,           // MTG_SAC_LAND_DRAIN  item 6 (mana-clean, Creature Giving s30063247): the sacrifice-a-land ADDITIONAL COST (Crop Rotation, PerformSacrificeLandCost) taps an UNTAPPED victim for mana into the float before it goes (CR 601.2g precedes 601.2h; the land is leaving, so the drain only adds mana). Plain mana lands only: no tap damage (City of Brass), no opponent spawn (Forbidden Orchard), no fetchland, one unit per tap. Default ON; =0 -> the victim dies untapped
     COUNT
 };
 
@@ -1694,6 +1696,8 @@ inline const char* Name(int slot)
         "MTG_TERA_DRAIN_DOOMED",
         "MTG_PREPAY_REPLICATE",
         "MTG_PREPAY_LINE_AFFINITY",
+        "MTG_BP_LAND_TUTOR",
+        "MTG_SAC_LAND_DRAIN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
