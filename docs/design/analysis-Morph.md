@@ -264,3 +264,18 @@ the durable record).
   The d0 gap includes the Morph-only beyond-horizon trick hold (INT-2d); the searched gap is the cast-order fold,
   the non-attacker fold and dropping AL's fetch-hold-off / tutor / discard hooks. Output build/scratch/morph-provab/.
 - MorphProvider stays (USER sign-off still collected: it replaced a route the deck rode before).
+
+## Claude-play sweep
+- commit: `f2df0a83f`
+- seeds: 50000 games: 18
+- driver: Claude agents (Sonnet players, one per game index 0..17 at seed 50000+gi; every flag adjudicated by an Opus
+  verifier). Benchmark = the search at play settings (d5 b20).
+- flags: 1 unresolved
+  - REAL ENGINE BUG (g10, T2): a spell//land MDFC played as its land back face (Legion Stronghold) and bounced by
+    Gruul Turf returns to hand as a land-only object -- the Legion Leadership front is lost (CR 712.8a: off the
+    battlefield/stack a DFC has only its front face). Fix site: the MDFC back-face builder in CardDatabase.cpp
+    should set `mdfc_front_name` so BounceKarooLand restores the front (and the other leave-battlefield paths).
+  - dismissed (g17, T5): a self-defeating 4-spell plan payable only by tapping the lone attacker Birds -- a legal
+    optimistic proposal the player chose; the shipped search does not pick it.
+- win turns: Claude = search on 12 games; Claude faster on 4 (g0 4 vs 5, g3 3 vs 4, g5 7 vs 8, g15 4 vs 5) -> 5c
+  budget-starvation check; Claude slower on 2 (g11, g12).
