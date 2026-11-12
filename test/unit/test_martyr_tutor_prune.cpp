@@ -134,3 +134,13 @@ TEST_CASE("martyr tutor prune: Ranger of Eos's pair takes distinct admitted name
     // =0: the default library-order pair.
     CHECK(Pair(MakeMt(kLib, {}, {}, 20), 0) == Names{"Mother of Runes", "Speaker of the Heavens"});
 }
+
+TEST_CASE("martyr tutor prune: MTG_MARTYR_TUTOR_FARM admits Curious Farm Animals while the gain is needed")
+{
+    const Names lib = {"Curious Farm Animals", "Mother of Runes", "Serra Ascendant", "Speaker of the Heavens"};
+    CHECK(Captain(MakeMt(lib, {}, {}, 20)) == Names{"Serra Ascendant", "Speaker of the Heavens"});   // default OFF
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = 1;
+    CHECK(Captain(MakeMt(lib, {}, {}, 20)) == Names{"Serra Ascendant", "Curious Farm Animals", "Speaker of the Heavens"});
+    CHECK(Captain(MakeMt(lib, {}, {}, 30)) == Names{"Serra Ascendant", "Speaker of the Heavens"});
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = -1;
+}
