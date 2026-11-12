@@ -51763,6 +51763,16 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
 // >>> MAINTENANCE BREADCRUMB: the same rule as ManaPruneBound's -- any FUTURE cost reducer credited
 // per-subset inside consider()/eval_and_push() (rather than baked into a.cost) MUST set `block` here
 // too, or it silently breaks byte-identity.
+// MTG_GATE_SUBRED (DEFAULT ON; =0 is the measurement hatch): a subtype cost reducer among the candidates makes the
+// selection-exact gate relevant (both enumerators' `gate_relevant`). Before it, only affinity / colour reducers did,
+// although ManaGateWouldHelp, BuildManaGateIndex and ManaPruneBound's MTG_SUBRED_BAIL all treat the subtype class the
+// same way -- so the scalar bound bailed to unbounded and no gate replaced it.
+static bool GateSubredOn() { static const bool on = EnvOn("MTG_GATE_SUBRED", true); return on; }
+static inline bool SubtypeReducerAction(const Action& a)
+{
+    return a.def != nullptr && (!a.def->params.reduces_spell_subtype.empty() || a.def->params.chooses_creature_type);
+}
+
 struct ManaGateTerm
 {
     int cost  = 0;   // this action's cost.ManaValue()  (the old gcost/icost term)
@@ -58492,7 +58502,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             && (cands[j].ritual_float > 0 || cands[j].rock_mana.Total() > 0
                 || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
-                                     || !cands[j].def->params.reduces_spell_color.empty()))))
+                                     || !cands[j].def->params.reduces_spell_color.empty()))
+                || (GateSubredOn() && SubtypeReducerAction(cands[j]))))   // see EnumeratePlans' twin
         { gate_relevant = true; }
         // The group key: hand slot / free-cast bank slot / mutually-exclusive activation or
         // multi-variant-sac family (PlanGroupKey), else -> independent bit.
@@ -76747,6 +76758,14 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 || cands[j].mint_gain > 0   // MTG_MINT_CREDIT_EXACT (0 off)
                 || (cands[j].def && (cands[j].def->params.affinity_for_subtype
                                      || !cands[j].def->params.reduces_spell_color.empty()))
+                // ...and a SUBTYPE reducer (Gargos, Dragonspeaker, Warchief; Incubator's chosen type). The
+                // legacy scalar bound BAILS on one (MTG_SUBRED_BAIL: ManaPruneBound returns unbounded), so a
+                // hand holding Gargos and no rock pruned NOTHING: every Hydra X combination reached the body
+                // and died there (P13 2026-11-12: 40k of 66k ef-scalar refusals on 30 Hydras d5 games had no
+                // gate). ManaGateWouldHelp already names the class and BuildManaGateIndex marks it `block` /
+                // `soft`, so building the gate here only adds the bound the other reducer classes already
+                // get. MTG_GATE_SUBRED=0 is the measurement hatch (see GateSubredOn).
+                || (GateSubredOn() && SubtypeReducerAction(cands[j]))
                 // ... and an ETB "untap up to N lands" cast, whose refund THIS enumerator's bound
                 // now credits (EtbUntapBoundCredit). Must match ManaGateWouldHelp's condition or the
                 // per-selection gate is never built on the one hand shape that needs it. Solve's
