@@ -677,6 +677,21 @@ inline bool PayDoomedBodyFirstOn()
     return heurarm::Flag(heurarm::PAY_DOOMED_BODY_FIRST, env_on);
 }
 
+// MTG_PAY_DOOMED_AHEAD_OF_LANDS -- DEFAULT ON; =0 keeps a doomed body (IsDoomedPlanBody) inside the creature band.
+// The body dies inside this line, so its mana is free: it pays ahead of the LANDS as well. The per-pip payer ranks
+// it in the plain tier on NEEDS first (a tap that leaves a colour the line still owes short loses to a land that
+// does not) and ahead of every land rank at equal needs; the whole-turn prepay (BatchPrepayMainCasts) tries
+// doomed-first hold rungs before its ladder -- every other source held, released one at a time, pain last -- so the
+// joint solve, which is colour-exact over the whole line, spends the doomed bodies before any land. mana-clean item
+// 6, Fungus s30055537 T4 (DOMINATED-CREATURE): {Beastmaster Ascension, Wild Growth, the Burst's last fade
+// activation} was prepaid with Ancient Tomb, a Forest and Utopia Mycon while five doomed Burst tokens stood
+// untapped. Ordering only (payment), inert without a fade-exhausting plan.
+inline bool DoomedBodyAheadOfLandsOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_DOOMED_AHEAD_OF_LANDS", true);
+    return PayDoomedBodyFirstOn() && heurarm::Flag(heurarm::PAY_DOOMED_AHEAD_OF_LANDS, env_on);
+}
+
 inline bool PaySacLineReserveOn()
 {
     static const bool env_on = EnvOn("MTG_PAY_SAC_LINE_RESERVE", true);

@@ -2013,3 +2013,118 @@ TEST_CASE("Doomed body first: the plan's last fade activation kills the Burst to
         heurarm::t_arm[heurarm::PAY_DOOMED_BODY_FIRST] = -1;
     }
 }
+
+namespace
+{
+Action PrepayCast(GameState& s, const std::string& name, bool adventure = false)
+{
+    const CardDefinition& d = Def(name);
+    s.players[0].hand.push_back(d.card);
+    Action a;
+    a.kind       = Action::Kind::CastFromHand;
+    a.card_name  = d.card.m_name;
+    a.hand_index = static_cast<int>(s.players[0].hand.size()) - 1;
+    if (adventure)
+    {
+        // The enumerator's adventure action: the card's NAME, the adventure face's cost, no def.
+        const CardDefinition& f = Def(d.params.adventure_face_name);
+        a.cost           = f.card.m_mana_cost;
+        a.is_noncreature = true;
+        a.card_mv        = f.card.m_mana_cost.ManaValue();
+        a.adventure      = true;
+    }
+    else
+    {
+        a.def            = &d;
+        a.cost           = d.card.m_mana_cost;
+        a.is_noncreature = !d.card.IsCreature();
+        a.card_mv        = d.card.m_mana_cost.ManaValue();
+    }
+    return a;
+}
+
+int UntappedOurs(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == 0 && !p.tapped && p.card.IsLand()) { ++n; } }
+    return n;
+}
+}  // namespace
+
+TEST_CASE("Prepay bills an ADVENTURE cast at its adventure face (Fungus Frolic {2}{G}, not Brightcap Badger {3}{G})")
+{
+    // mana-clean item 6, Fungus s30055300 T3 (DOMINATED-CREATURE): {Sporecrown Thallid + Fungus Frolic} is five mana;
+    // the whole-turn prepay looked the adventure action up by NAME, billed the Badger's {3}{G}, tapped six and floated
+    // one away. Four Forests + Ancient Tomb (six mana): the five-mana bill leaves a land untapped.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    for (int n : { 11, 12, 13, 14 }) { Put(s, "Forest", 0, n); }
+    Put(s, "Ancient Tomb", 0, 15);
+    const std::vector<Action> line = { PrepayCast(s, "Sporecrown Thallid"), PrepayCast(s, "Brightcap Badger", true) };
+    REQUIRE(TurnSolver::BatchPrepayMainCasts(s, line));
+    ManaPool f = s.floating_mana;
+    f.AddPool(s.floating_creature_mana);
+    CHECK(f.Total() == 5);
+    CHECK(UntappedOurs(s) == 1);
+}
+
+TEST_CASE("Doomed bodies pay ahead of the lands (MTG_PAY_DOOMED_AHEAD_OF_LANDS): per-pip payer and whole-turn prepay")
+{
+    // mana-clean item 6, Fungus s30055537 T4 (DOMINATED-CREATURE): Ancient Tomb, a Forest and Utopia Mycon paid while
+    // Burst tokens the line's own last fade activation kills stood untapped. Board: Badger (the grant), a Burst on ONE
+    // fade counter, two Forests, Ancient Tomb, then four Burst tokens (1/1 off that counter -> doomed).
+    EnsureCardsLoaded();
+    GameState s0 = Fresh();
+    Put(s0, "Brightcap Badger", 0, 50);
+    const int bi = Put(s0, "Saproling Burst", 0, 60);
+    s0.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+    Put(s0, "Forest", 0, 70);
+    Put(s0, "Forest", 0, 71);
+    Put(s0, "Ancient Tomb", 0, 72);
+    for (int n : { 1001, 1002, 1003, 1004 })
+    {
+        const int ti = PutSaprolingToken(s0, n);
+        s0.battlefield[static_cast<std::size_t>(ti)].created_by_number = 60;
+    }
+    PlanTraits t_plan;
+    t_plan.fade_exhaust_src[0] = 60;
+    t_plan.fade_exhaust_count  = 1;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        heurarm::t_arm[heurarm::PAY_DOOMED_AHEAD_OF_LANDS] = on ? 1 : 0;
+        {   // the per-pip payer: {1}{G}
+            GameState s = s0;
+            ManaCost c;
+            c.generic = 1;
+            c.green   = 1;
+            {
+                const PlanTraitsScope _pts(&t_plan);
+                REQUIRE(TapForCostShared(s, c, /*for_creature=*/false, nullptr, false));
+            }
+            CHECK(ByNumber(s, 70).tapped == !on);
+            if (on)
+            {
+                CHECK(!ByNumber(s, 71).tapped);
+                CHECK(!ByNumber(s, 72).tapped);
+                CHECK(ByNumber(s, 1001).tapped);
+                CHECK(ByNumber(s, 1002).tapped);
+            }
+        }
+        {   // the whole-turn prepay: Sporecrown Thallid {1}{G} + Saproling Migration {1}{G}
+            GameState s = s0;
+            const std::vector<Action> line = { PrepayCast(s, "Sporecrown Thallid"), PrepayCast(s, "Saproling Migration") };
+            {
+                const PlanTraitsScope _pts(&t_plan);
+                REQUIRE(TurnSolver::BatchPrepayMainCasts(s, line));
+            }
+            if (on)
+            {
+                CHECK(UntappedOurs(s) == 3);
+                for (int n : { 1001, 1002, 1003, 1004 }) { CHECK(ByNumber(s, n).tapped); }
+            }
+            else { CHECK(UntappedOurs(s) < 3); }
+        }
+        heurarm::t_arm[heurarm::PAY_DOOMED_AHEAD_OF_LANDS] = -1;
+    }
+}

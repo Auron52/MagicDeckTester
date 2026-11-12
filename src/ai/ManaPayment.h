@@ -663,6 +663,11 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
 // pre-payment as well as the per-cast greedy. See ActLineHoldEnabled for the measured drop rates.
 std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost);
 
+// A DOOMED BODY (MTG_PAY_DOOMED_BODY_FIRST): a token whose fading maker the current plan's own activations
+// empty and that no toughness lord keeps alive -- it dies inside this line, so its mana is free. Defined in
+// ManaPayment.cpp; read by the per-pip payer and BatchPrepayMainCasts' doomed-first rungs.
+bool IsDoomedPlanBody(const GameState& state, int active, const Permanent& p);
+
 // DEPLETION HOLD set (MTG_PAY_DEPLETION_HOLD -- see PayDepletionHoldOn in EngineFlags.h): the largest set
 // of the active player's untapped depletion lands (battlefield-index bits, restricted to `cand_mask`) that a
 // demand of `need` coloured pips (W,U,B,R,G) and `need_tot` mana in all can still be paid WITHOUT, from
