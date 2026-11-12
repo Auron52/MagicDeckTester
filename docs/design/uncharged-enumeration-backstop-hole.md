@@ -1,7 +1,7 @@
 # The per-game wall backstop cannot reach a top-level plan enumeration (found 2026-11-11, Hydras)
 
-Status: REMEDIES 2 AND 3 LANDED 2026-11-12 (see "Landed" at the end); the per-game result persistence fix and
-two USER questions remain open. Found while the Hydras value leaf (frozen at 387b4b646) was in its phase C matrix.
+Status: REMEDIES 2 AND 3 LANDED 2026-11-12 (see "Landed" at the end); the per-game result persistence fix LANDED
+2026-11-12 (036cf31c8); two USER questions remain open. Found while the Hydras value leaf (frozen at 387b4b646) was in its phase C matrix.
 
 ## What happened
 
@@ -62,7 +62,7 @@ underestimate: H1-H3 and V1-V8 had not yet run seed 9009 at all.
 **What WAS lost: compute, not results.** `mtg --batch` reports a job only when the whole job finishes, so the
 finished games of each killed chunk (up to 24 each; fewer if a job plays its games in order) existed only in the dying process and are being replayed (identical
 results, deterministic). USER: "we should make sure that this doesn't lose more games than the ones that were
-still running ... If it does I would like to fix that as well." **LANDED 2026-11-12 (P10, branch
+still running ... If it does I would like to fix that as well." **LANDED 2026-11-12 (P10, commit 036cf31c8 on
 `phase-1-2-deck-analyzer`; see `src/runner/BatchPartial.h`).** Every finished game is appended, flushed, to
 `<game-log-dir>/<job>.partial` (one self-checksummed line: gi, seed, win turn or abandoned, digest, units, ms,
 the per-game ceiling it ran under) before it counts as finished; a torn last line is dropped. `mtg --batch
@@ -110,4 +110,4 @@ Still open:
 * USER questions (not built): (a) should a budget-0 generation cell walk every group-wave tranche to the full hand
   (completeness) or is that a settings change; (b) should the walk CHARGE units per N positions so the unit
   ceiling bounds these games deterministically (changes every game's units and the matrix calibration).
-* The per-game result persistence fix above (a killed job loses only its in-flight games): LANDED 2026-11-12 (P10).
+* The per-game result persistence fix above (a killed job loses only its in-flight games): LANDED 2026-11-12 (P10, 036cf31c8).
