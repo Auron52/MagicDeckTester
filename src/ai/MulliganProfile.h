@@ -80,6 +80,11 @@ struct ValuePlay
     // Multiplier on FIT's affordability gate (see ValueArm.h t_deck_fit_alpha). 0 = unset => 1.0 = the
     // strict 1.10x-remaining gate. Melira ships 4.0.
     double fit_alpha = 0.0;
+    // FIT's admission rule for its single rollout pass (P12 prototype, 2026-11-12). "" / "fit" = the
+    // affordability walk against what the probe LEFT (1.10 x Remaining); "ladder" = replay the rollout
+    // ladder's own start gate (FullSearchLine) against the WHOLE decision budget, pricing each earlier
+    // pass at its rollout-twin estimate, so the pass lands at the depth the ladder would commit.
+    std::string fit_gate;
     // Defer FIT's per-game R calibration to first use. -1 unset => the engine default (ON). Melira ships
     // false: it is the one deck where deferring measures worse.
     int    fit_lazy_r = -1;

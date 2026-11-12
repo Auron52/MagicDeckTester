@@ -102261,6 +102261,12 @@ struct Printer
 }
 inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
 inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
+// value_play.fit_gate "ladder" / MTG_FIT_GATE_LADDER (P12 prototype; see FIT GATE = THE LADDER'S RULE).
+inline bool FitGateLadderOn()
+{
+    static const bool env = EnvOn("MTG_FIT_GATE_LADDER");
+    return (valuearm::t_deck_fit_gate_ladder >= 0) ? (valuearm::t_deck_fit_gate_ladder != 0) : env;
+}
 inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
 // AUDIT-only: the HEURISTIC ladder's per-pass INCREMENTAL cost (what the start-gate actually consumes -- the
 // memo makes this much less than a cold pass). Recorded around the audit shadow ladder to reveal the true
@@ -110728,8 +110734,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         lad_ttlook_last = g_tt_look_n - lad_tl0; lad_tthit_last = g_tt_hit_n - lad_th0; lad_ttlook_sum += lad_ttlook_last; lad_tthit_sum += lad_tthit_last;
         if (g_probe_recording && pass_depth >= 0 && pass_depth < 16)
         {
-            g_probe_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
-            g_probe_cost[pass_depth]   = cost;
+            // Under fit_gate "ladder" keep the LARGEST record per depth: MTG_BP_DEV_SEQ's second pass re-runs
+            // this ladder from the first pass's line memo, so its d1..D-1 passes cost ~0 and its pass D only
+            // the compound-wave increment -- overwriting would hand FIT a probe record of zeros (measured:
+            // 7 of 21 traced Hydras FIT decisions, each forced to dpass 1).
+            const long long lv = g_fs_leaf_evals - leaves_before;
+            if (FitGateLadderOn())
+            {
+                g_probe_leaves[pass_depth] = std::max(g_probe_leaves[pass_depth], lv);
+                g_probe_cost[pass_depth]   = std::max(g_probe_cost[pass_depth], cost);
+            }
+            else { g_probe_leaves[pass_depth] = lv; g_probe_cost[pass_depth] = cost; }
         }
         if (g_hlad_recording && pass_depth >= 0 && pass_depth < 16)
         {
@@ -111739,6 +111754,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const int d1_uncapped = std::max(1, committed);
         const int d1 = (fit_depth_cap > 0) ? std::min(d1_uncapped, fit_depth_cap) : d1_uncapped;
         SearchLine hl;
+        bool fit_gate_ladder = false;   // FIT GATE = THE LADDER'S RULE (set below)
+        int  fit_pass_depth  = 0;       // the depth the FIT pass actually completed at (reported under fit_gate_ladder)
+        long long fit_pass_units = 0;   // that pass's units
+        long long fit_roll_units = 0;   // every FIT rollout attempt's units this decision (overruns included)
         if (single_mode >= 1 && budget != nullptr && !budget->Unlimited())
         {
             // RESERVED variant: the pass runs on the REMAINING shared budget (the probe's gate kept room for
@@ -111766,6 +111785,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;
             }
             if (s_fit_lazy_r && single_mode == 2) { calibrate_single_R(); }
+            fit_gate_ladder = single_mode == 2 && FitGateLadderOn();   // see FIT GATE = THE LADDER'S RULE
             int dpass = d1;
             if (single_mode == 2)
             {
@@ -111820,6 +111840,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     const double est_h = ecost[d] + R * eleaf[d];
                     if (ecost[d] > 0.0 && est_h <= gate) { dpass = d; break; }
                 }
+                static const bool s_p12_fit_trace = EnvOn("MTG_P12_FIT_TRACE");   // P12 diagnostic, print-only
+                if (s_p12_fit_trace)
+                {
+                    std::fprintf(stderr, "[p12fit] T%d committed=%d dpass=%d R=%.1f rem=%.0f used=%lld limit=%lld gate=%.0f ladder=%d est:",
+                                 state.turn_number, committed, dpass, R, rem, budget->Used(), budget->Limit(), gate, fit_gate_ladder ? 1 : 0);
+                    for (int d = 1; d <= dtop; ++d) { std::fprintf(stderr, " d%d=%.0f(c%.0f,l%.0f)", d, ecost[d] + R * eleaf[d], ecost[d], eleaf[d]); }
+                    std::fprintf(stderr, "\n");
+                }
             }
             // TIGHTER GATE, now that dpass is known: the affordable depth may be shallower than d1, so a
             // pass that passed the R-free gate can still be unacceptable. Faithful to `taken == false` --
@@ -111844,8 +111872,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 const bool over = budget->Overrun();
                 budget->SetOverrunLimit(0);
                 g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+                fit_roll_units += budget->Used() - used_before;
                 if (!over)
                 {
+                    fit_pass_units = budget->Used() - used_before;
+                    if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   PASS dpass=%d units=%lld win=%d\n", dpass, budget->Used() - used_before, hl.win_turn); }
                     g_sres_passes.fetch_add(1, std::memory_order_relaxed);
                     // Refine this game's R from the pass just measured against the probe's tree at that depth.
                     if (dpass < 16 && g_probe_leaves[dpass] > 0 && g_probe_cost[dpass] > 0)
@@ -111857,12 +111888,55 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                             g_single_R = 0.6 * g_single_R + 0.4 * sample; ++g_single_R_n;
                         }
                     }
+                    fit_pass_depth = dpass;
                     break;
                 }
                 g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
+                if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   OVERRUN dpass=%d units=%lld win=%d\n", dpass, budget->Used() - used_before, hl.win_turn); }
                 if (s_sres_anytime && hl.win_turn <= max_turns && hl.win_turn < line.win_turn) { g_sres_partial.fetch_add(1, std::memory_order_relaxed); break; }
                 if (single_mode == 2 && dpass > 1) { --dpass; continue; }   // FIT: one shallower, as a ladder would
                 single_failed = true; g_sres_escalated.fetch_add(1, std::memory_order_relaxed); break;
+            }
+            // FIT GATE = THE LADDER'S RULE (value_play.fit_gate "ladder" / MTG_FIT_GATE_LADDER; P12 prototype,
+            // default OFF). The affordability walk above is a FLOOR, not the answer: it prices a rollout pass at
+            // probe cost + R x probe leaves against what the leafless probe LEFT, and on Hydras (d5 b20) that
+            // estimate is 2.4-20x the pass's real cost (R is calibrated on d1, whose rollouts play the whole game
+            // out; the rollout pass also cuts leaves the leafless probe cannot), while the probe has already
+            // spent ~60% of the budget -- so the pass ran shallower than the rollout ladder's committed depth on
+            // 21 of 21 traced decisions. From the pass that ran, CLIMB exactly as FullSearchLine's ladder does:
+            // pass k is admitted iff c_{k-1} x ratio <= kStartGateAlpha x (Limit - the rollout passes spent),
+            // ratio = c_{k-1}/c_{k-2} (kDefaultGrowth with one pass), on the passes' MEASURED costs, stopping at
+            // a verified win, with the same 25x overrun ceiling and anytime rule. The probe and the R calibration
+            // are NOT charged against that gate: the ladder never runs them, so this lands the pass at (at least)
+            // the ladder's depth and saves only the ladder's shallow rollout passes below the floor.
+            if (fit_gate_ladder && !single_failed && fit_pass_depth > 0)
+            {
+                const double lim = static_cast<double>(budget->EffectiveLimit());
+                double c_prev = static_cast<double>(fit_pass_units), c_prev2 = 0.0; bool have_prev2 = false;
+                FSLineCache climb_cache;
+                for (int d = fit_pass_depth + 1; d <= depth; ++d)
+                {
+                    if (hl.win_turn <= state.turn_number + fit_pass_depth - 1) { break; }   // verified: the ladder stops
+                    const double ratio = (have_prev2 && c_prev2 > 0.0) ? c_prev / c_prev2 : kDefaultGrowth;
+                    if (c_prev * ratio > kStartGateAlpha * (lim - static_cast<double>(fit_roll_units))) { break; }
+                    const long long ub = budget->Used();
+                    budget->SetOverrunLimit(SearchBudget::SatAdd(ub, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                    SearchLine att = FSLineWinComplete(state, d, max_turns, max_turns + 1, second_main, single_tt1, &climb_cache, budget);
+                    const bool over = budget->Overrun();
+                    budget->SetOverrunLimit(0);
+                    const long long cost = budget->Used() - ub;
+                    fit_roll_units += cost;
+                    g_sres_units.fetch_add(cost, std::memory_order_relaxed);
+                    if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   CLIMB d=%d units=%lld win=%d over=%d\n", d, cost, att.win_turn, over ? 1 : 0); }
+                    if (over)
+                    {
+                        // The ladder's anytime rule: an aborted pass is kept only for a strictly earlier win.
+                        if (s_sres_anytime && att.win_turn <= max_turns && att.win_turn < hl.win_turn) { hl = att; }
+                        break;
+                    }
+                    hl = att; fit_pass_depth = d;
+                    c_prev2 = c_prev; have_prev2 = true; c_prev = static_cast<double>(cost);
+                }
             }
         }
         else
@@ -111882,8 +111956,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         if (!single_failed)
         {
             line = hl;   // committed depth unchanged: the heuristic played the probe's depth
-            if (out_committed_depth) { *out_committed_depth = committed; }
-            RecordIdDepth(committed);
+            // Under fit_gate "ladder" the reported depth is the rollout pass's, as the ladder reports its
+            // committing pass: AIEngine's verified-win test (win_turn <= turn + depth - 1) then means "won
+            // inside the searched tree" for this line exactly as for the ladder's, instead of crediting a
+            // rollout-estimated win beyond a shallow pass's horizon with the leafless probe's depth.
+            const int rep = (fit_gate_ladder && fit_pass_depth > 0) ? fit_pass_depth : committed;
+            if (out_committed_depth) { *out_committed_depth = rep; }
+            RecordIdDepth(rep);
             return line;
         }
     }

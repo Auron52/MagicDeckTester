@@ -224,6 +224,10 @@ inline thread_local double      t_deck_exhaust_mult = 0.0;
 // wants 4 (-0.0125 +/- 0.0040 vs the full ladder at parity cost) while hinata/fivecolour want 1, where
 // raising it converts a FREE clean win into a paid trade. Tier 1 (acts wherever FIT acts).
 inline thread_local double      t_deck_fit_alpha = 0.0;
+// value_play.fit_gate "ladder" (P12 prototype): 1 = FIT admits its pass by the rollout ladder's start-gate
+// rule replayed on the whole decision budget; 0 = the classic affordability walk; -1 unset => env
+// MTG_FIT_GATE_LADDER (default off).
+inline thread_local int         t_deck_fit_gate_ladder = -1;
 // Per-deck opt-in skip allowance, per depth (MulliganProfile::escalation_skip_r; the profile outlives the
 // decision that DeckShapeScope points this at). nullptr / empty => the fleet default (R = 0).
 inline thread_local const std::vector<double>* t_deck_esc_skip_r = nullptr;
