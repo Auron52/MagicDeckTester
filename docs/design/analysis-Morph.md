@@ -247,3 +247,20 @@ the durable record).
   greedy; a searched-only rerun reads 0). MTG_FACEUP_AXIS_STATS=2 now also prints each real-end-step window.
 - Scenario test/scenarios/morph_d0_hold_pumps_for_lethal.json (d0; fails with MTG_MORPH_GREEDY_TRICK_HOLD=0).
 - Value-leaf note (R9) stands: ExtractMidGameFeatures sees a face-down creature as a plain 2/2.
+
+### INT-3 decision (2026-11-12) -- the declare-attackers cast window (D7 / Q2): MEASURED, PROVISIONALLY DEFERRED
+- Census (`logs/morph/census/exalted_doubler.py` over the INT-2d d3 b10 game logs, 100 games, 211 attack turns):
+  24 turns had a LONE attacker + >=1 Ignoble Hierarch + a main-1 Berserk / Legion Leadership. The exalted bonus a
+  post-exalted doubler would add (E x (2^n - 1), x2 under Temur Battle Rage) would have turned a non-lethal attack
+  lethal on **0 of 24** (most were already lethal; the non-lethal ones fell short by 7-17 against a gain of 1-6).
+- So the window is not built. It stays a PROVISIONAL Tier-4 deferral, disclosed as UNDER-RATING (lower bound only:
+  the search cannot see the window, so it never plans a line that needs it). Re-measure if a list adds exalted
+  density or more doublers.
+
+### Provider routing A/B (2026-11-12, HEAD 2c2dc16f7) -- MorphProvider vs the pre-INT-1 route (AntiLifegain)
+- Same binary, same seeds (930000 block), two concurrent 12-thread batches; arm B pinned with MTG_PROVIDER_DECK to
+  decks/Anti-Lifegain (the provider Wooded Foothills routed this list to before INT-1). Avg win turn:
+  d0 600 g 5.1467 vs 7.2550; d3 b10 600 g 4.5617 vs 4.7200; d5 b20 400 g 4.5475 vs 4.7100 (units -8% / -9%).
+  The d0 gap includes the Morph-only beyond-horizon trick hold (INT-2d); the searched gap is the cast-order fold,
+  the non-attacker fold and dropping AL's fetch-hold-off / tutor / discard hooks. Output build/scratch/morph-provab/.
+- MorphProvider stays (USER sign-off still collected: it replaced a route the deck rode before).
