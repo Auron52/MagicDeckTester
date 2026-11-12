@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "MDFC: A BOUNCED BACK-FACE LAND RETURNS AS ITS FRONT (CR 712.8a; Morph INT-4, sweep g10 seed 50010 T2).",
+    "",
+    "Turn 3: a face-up Den Protector (2/1, not sick), Legion Stronghold (Legion Leadership's land back face) as",
+    "our only land, Gruul Turf in hand, the opponent at 6. Play Gruul Turf: its ETB must return a land, and",
+    "Stronghold is the only one, so it goes back to hand -- as Legion Leadership. Attack for 2 (4 left). Turn 4:",
+    "Turf + the drawn Forest pay {1}{R/W} for Legion Leadership on Den Protector (double its power: 4) -> lethal.",
+    "",
+    "DISCRIMINATING: before the fix the spell//land back-face synthesis dropped mdfc_front_name, so the bounce",
+    "returned a land-only 'Legion Stronghold' and no pump exists on turn 4 (2 + 2 = 4 < 6: no win by turn 4).",
+    "Every battlefield -> zone push now maps a back face to its front through RevealedCard (SpellEffects.h)."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "battlefield": [
+    { "name": "Den Protector", "controller": 0, "sick": false },
+    { "name": "Legion Stronghold", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Gruul Turf"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 4,
+  "expect_win_turn": 4
+}

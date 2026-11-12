@@ -2980,21 +2980,10 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     }
     c.m_is_staged = false;
     c.m_def = nullptr;
-    // A double-faced card is only "a face" while it is on the battlefield; in every other zone it
-    // is the whole card, front face up (CR 712.2). So a bounced BACK face (Boulderloft Pathway)
-    // must return to hand as its FRONT (Branchloft Pathway), keeping the modal land-play choice it
-    // is entitled to. Without this the synthesized back -- which has no further face -- goes to
-    // hand locked to its one colour, silently deleting a real option. Gated on the synthesis-only
-    // mdfc_front_name, so this is byte-identical for every non-MDFC card, i.e. for every deck that
-    // does not pair an MDFC with a bounce effect (no shipped deck does; SelesnyaLifegain is the
-    // first, with 4 Branchloft Pathway against 2 Selesnya Sanctuary).
-    if (const CardDefinition* bd = CardDatabase::Instance().LookupCached(c);
-        bd != nullptr && !bd->params.mdfc_front_name.empty())
-    {
-        c.m_name = InternedName(bd->params.mdfc_front_name);
-        c.m_def  = nullptr;
-        c.RehashName();
-    }
+    // A double-faced card is only "a face" while it is on the battlefield (CR 712.8a): a bounced
+    // BACK face (Boulderloft Pathway, Legion Stronghold) returns to hand as its FRONT, keeping the
+    // modal land-or-spell choice. RevealedCard above does it -- the same mapping every other
+    // battlefield -> zone push uses (graveyard, exile, library), so this site is not special.
     EnterHand(state, controller, c, HandEntryReason::Bounce);
     state.battlefield.erase(state.battlefield.begin() + pick);
     // CR 704.5m right away (Bruna sweep C, seed 77001): an Aura on the bounced land (Wild Growth on

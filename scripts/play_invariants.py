@@ -167,6 +167,11 @@ def reply_for(dec):
     return [0]  # safe fallback: first option
 
 
+# Suffixes of the DB-synthesized cast faces (src/cards/CardDatabase.cpp): each names a cast variant of
+# the hand card before the suffix.
+SYNTH_FACE_SUFFIXES = (" (Face-down)", " (Kicked)", " (Bestowed)")
+
+
 def cast_availability_advisory(dec):
     """ADVISORY only: a main_phase plan casting a card not visible in hand/retrace_gy.
     Not a hard flag -- cascade / Vial deploy / staged-from-exile legitimately do this."""
@@ -189,7 +194,18 @@ def cast_availability_advisory(dec):
                 continue
             if c in bf:
                 continue
-            if c not in hand and c not in yard:
+            # A DB-synthesized face ("<X> (Face-down)" morph, "<X> (Kicked)", "<X> (Bestowed)",
+            # CardDatabase.cpp) is a variant of card <X>: a cast of it consumes hand card <X>, and a
+            # turn-face-up rides the casts list under the FACE's name while the owner's battlefield row
+            # names the real card <X>.
+            base = c
+            for suffix in SYNTH_FACE_SUFFIXES:
+                if c.endswith(suffix):
+                    base = c[: -len(suffix)]
+                    break
+            if base in bf:
+                continue
+            if base not in hand and base not in yard:
                 notes.append(f"turn {dec.get('turn')} plan {p.get('index')}: casts '{c}' "
                              f"not in hand/retrace_gy (cascade/vial/staged? -> verify)")
     return notes

@@ -291,6 +291,42 @@ TEST_CASE("morph: leaving the battlefield reveals the card (CR 708.9) -- sacrifi
     CHECK(RevealedCard(CardF("Forest", 1)).m_name.str() == "Forest");   // identity elsewhere
 }
 
+TEST_CASE("mdfc: a played BACK face leaves the battlefield as its FRONT (CR 712.8a) -- bounce, sacrifice, every zone")
+{
+    // Morph sweep g10 (seed 50010, T2): Gruul Turf bounced a Legion Stronghold, which returned to hand as a
+    // land-only card -- the Legion Leadership front was lost. The spell//land back-face synthesis dropped
+    // mdfc_front_name when it replaced the copied params.
+    EnsureCardsFd();
+    REQUIRE(DefF("Legion Stronghold").params.mdfc_front_name == "Legion Leadership");
+    REQUIRE(DefF("Turntimber, Serpentine Wood").params.mdfc_front_name == "Turntimber Symbiosis");
+    REQUIRE(DefF("Boulderloft Pathway").params.mdfc_front_name == "Branchloft Pathway");
+    {   // HAND: the Karoo bounce (shared by executor and rollout land drops).
+        GameState s = BaseF();
+        PutF(s, "Legion Stronghold", 5);
+        s.battlefield.back().tapped = true;
+        PutF(s, "Gruul Turf", 6);
+        BounceKarooLand(s, 0, IdxOf(s, 6));
+        REQUIRE(s.players[0].hand.size() == 1u);
+        CHECK(s.players[0].hand[0].m_name.str() == "Legion Leadership");
+        CHECK(s.players[0].hand[0].m_number == 5);
+        CHECK(ByNum(s, 5) == nullptr);
+    }
+    {   // GRAVEYARD: a sacrifice.
+        GameState s = BaseF();
+        PutF(s, "Legion Stronghold", 5);
+        SacrificePermanentAt(s, 0, IdxOf(s, 5));
+        REQUIRE(s.players[0].graveyard.size() == 1u);
+        CHECK(s.players[0].graveyard[0].m_name.str() == "Legion Leadership");
+        CHECK(s.players[0].graveyard[0].m_number == 5);
+    }
+    // EXILE / LIBRARY and every other battlefield -> zone push go through the same RevealedCard mapping.
+    CHECK(RevealedCard(CardF("Legion Stronghold", 3)).m_name.str() == "Legion Leadership");
+    CHECK(RevealedCard(CardF("Legion Stronghold", 3)).m_number == 3);
+    CHECK(RevealedCard(CardF("Soporific Springs", 4)).m_name.str() == "Sink into Stupor");
+    CHECK(RevealedCard(CardF("Boulderloft Pathway", 2)).m_name.str() == "Branchloft Pathway");
+    CHECK(RevealedCard(CardF("Legion Leadership", 1)).m_name.str() == "Legion Leadership");   // front: identity
+}
+
 TEST_CASE("morph: the LEAD flip precedes the casts -- Berserk doubles the face-up 7, not the face's 2")
 {
     EnsureCardsFd();

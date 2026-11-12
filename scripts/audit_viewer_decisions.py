@@ -2353,6 +2353,36 @@ def pick_toward(d, target_lc, land_names=()):
     return pick(d)
 
 
+def pick_face_up_window(d, target_lc):
+    """FACE_UP forcing (Morph): the opponent-end-step `face_up` prompt exists only while we control a
+    face-down permanent AND its morph/megamorph cost is payable from the mana we left UNTAPPED. The
+    developing line (pick_toward: the longest plan) hard-casts the card, or casts it face down and then
+    taps out on the following turns, so that window never opens -- which is how all three Morph cards
+    read as HARD MISS with a wired emitter (INT-4, 2026-11-12). So, on a main_phase choice:
+      * a face-down `target` of ours on the battlefield -> a plan that casts NOTHING (land drop if one
+        is offered; else pass), keeping every land open for the end-step flip;
+      * else `target` in hand -> the cheapest plan that casts it FACE DOWN (`face_down: 1`).
+    Returns a choice, or None to defer to pick_toward."""
+    if d.get("type") != "main_phase":
+        return None
+    plans = d.get("plans", [])
+    if not plans:
+        return None
+    bf = (d.get("me") or {}).get("battlefield") or []
+    if any(b.get("face_down") and str(b.get("name", "")).lower() == target_lc for b in bf):
+        idle = [p for p in plans if not p.get("actions") and not p.get("casts")]
+        with_land = [p for p in idle if p.get("land")]
+        if with_land or idle:
+            return (with_land or idle)[0]["index"]
+        return -1
+    fd = [p for p in plans
+          if any(str(a.get("card", "")).lower() == target_lc and a.get("face_down") == 1
+                 for a in p.get("actions", []))]
+    if fd:
+        return min(fd, key=lambda p: (len(p.get("actions", [])), 0 if p.get("land") else 1))["index"]
+    return None
+
+
 # Games the sweep's auto-escalation drives per candidate card. 40 is what the manual --verify-card
 # runs used to settle Boros Garrison / Stingscourger / Shard Volley; the escalation only fires for a
 # card the sweep already flagged, so the cost is paid on failures, not every run.
@@ -2409,6 +2439,9 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             t = d.get("type")
             if t not in ("main_phase", "mulligan", "bottom", "?"):
                 observed.add((t, (d.get("source") or "").lower()))
+            if t == "face_up":   # source is "Opponent's end step": attribute to the OPTIONS' cards
+                for o in d.get("options", []):
+                    observed.add((t, str(o.get("name", "")).lower()))
             # A sub-decision that lives as a plan-action KEY rather than its own frame still counts
             # as surfaced -- see PLAN_KEY_SATISFIES. Sourced from the action's own card so the
             # "was it THIS card's decision" test below stays exact.
@@ -2421,6 +2454,10 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             if any(str(c.get("name", "")).lower() == target_lc for c in hand):
                 in_hand_here = True
             choice = pick_toward(d, target_lc, land_names)
+            if "face_up" in want:
+                fu = pick_face_up_window(d, target_lc)
+                if fu is not None:
+                    choice = fu
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
                 jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
@@ -2455,6 +2492,8 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                 if back_lc and t == "land_entry" and (not land_back_here or back_lc not in s):
                     continue
                 if back_lc and t == "target" and (not cast_here or target_lc not in s):
+                    continue
+                if t == "face_up" and target_lc not in s:   # three morph cards share the type
                     continue
                 if t not in covered:
                     first_hit[t] = gi

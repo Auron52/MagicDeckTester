@@ -251,6 +251,12 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 bp.etb_pay_life_to_untap = def.params.mdfc_back_pay_life;
                 // Legion Stronghold: "This land enters tapped." -- always, no life alternative.
                 if (def.params.mdfc_back_enters_tapped) { bp.enters_tapped = true; }
+                // The clean face must still remember its front (CR 712.8a): off the battlefield the
+                // card is Legion Leadership, not a land-only Legion Stronghold. Every battlefield ->
+                // zone push reads this through RevealedCard (SpellEffects.h). It was dropped here
+                // when bp replaced the copied params (Morph sweep g10: a Gruul Turf bounce returned
+                // a land-only Stronghold to hand).
+                bp.mdfc_front_name = def.card.m_name.str();
                 back.params = std::move(bp);
             }
             m_def_hash[bn] = CardDefHash(entry) ^ std::hash<std::string>{}(bn);

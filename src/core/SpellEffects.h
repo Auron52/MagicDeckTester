@@ -3637,10 +3637,25 @@ inline Card UnkickedSpellCard(const CardDefinition& def, const Card& resolved)
 // is not a face-down face (one memoized-pointer read and an empty-string test), so it is inert -- and
 // byte-identical -- for every deck without a morph card. LKI is NOT this: a dies trigger sees the
 // face-down 2/2 (CR 603.10), so callers keep the unrevealed card for OnCreatureDies.
+//
+// MODAL DFC (CR 712.8a): the same rule for a double-faced card played as its synthesized BACK face
+// (Legion Stronghold, Boulderloft Pathway): outside the battlefield and the stack it has only its
+// FRONT face's characteristics, so it lands in hand / graveyard / exile / library as the front
+// (Legion Leadership, Branchloft Pathway) and keeps its spell-or-land choice. Keyed on the
+// synthesis-only mdfc_front_name, so identity for every card that is not a played back face.
 inline Card RevealedCard(const Card& c)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
-    if (d == nullptr || d->params.face_down_real_name.empty()) { return c; }
+    if (d == nullptr) { return c; }
+    if (!d->params.mdfc_front_name.empty())
+    {
+        const CardDefinition* f = CardDatabase::Instance().Lookup(d->params.mdfc_front_name);
+        if (f == nullptr) { return c; }
+        Card out     = f->card;
+        out.m_number = c.m_number;
+        return out;
+    }
+    if (d->params.face_down_real_name.empty()) { return c; }
     const CardDefinition* r = CardDatabase::Instance().Lookup(d->params.face_down_real_name);
     if (r == nullptr) { return c; }
     Card out     = r->card;
