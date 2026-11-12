@@ -380,3 +380,38 @@ TEST_CASE("morph pumps: plans differing only in a trick's TARGET are distinct pl
     CHECK(on_hand_birds);
     CHECK(on_bf_birds);                 // same cast-name multiset {Birds, Berserk}: both survive the dedup
 }
+
+// INT-5 USER RULE (2026-11-12): "The largest attacking creature should be the pump target always." Under
+// MorphProvider a solo-target trick is offered on the largest current attacker (combat damage: power, x2 for
+// double strike; ties -> first in battlefield order), plus at most ONE flippable face-down creature whose
+// face-up score beats it (interpretation a) and at most ONE hasty hand creature that beats it (b).
+TEST_CASE("morph pumps: tricks target the LARGEST attacker (+ the flippable face-down, + a bigger hasty hand body)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto targets = [](const GameState& s)
+    {
+        std::set<int> t;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+        {
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Berserk") { t.insert(a.enchant_target); }
+        }
+        return t;
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
+    PutM(s, "Birds of Paradise", 10);                  // 0 power: never the largest
+    PutBear(s, 11);                                    // 2/2, first of the 2-power tie -> the largest
+    PutM(s, "Blistering Firecat (Face-down)", 12);     // 2/2 now, 7/1 face up -> the (a) extra candidate
+    s.players[0].hand.push_back(CardM("Berserk", 101));
+    CHECK(targets(s) == std::set<int>{ 11, 12 });
+
+    // (b): a hasty hand creature bigger than every battlefield attacker is one extra candidate.
+    s.players[0].hand.push_back(CardM("Blistering Firecat", 102));
+    CHECK(targets(s) == std::set<int>{ 11, 12, 102 });
+
+    // Off switch / human play semantics: no provider narrowing -> every attacker class is offered again.
+    s.m_provider = nullptr;
+    CHECK(targets(s).count(10) == 1);
+}

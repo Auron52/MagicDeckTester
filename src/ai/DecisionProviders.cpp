@@ -8766,6 +8766,89 @@ bool MorphProvider::TrickTargetsAttackersOnly(const GameState&, const CardDefini
     return true;
 }
 
+// ---- INT-5: THE LARGEST-ATTACKER TRICK TARGET (USER rule 2026-11-12, verbatim: "The largest attacking
+// creature should be the pump target always. We should have a heuristic for this.") ---------------------
+// A USER-ORDERED PROVIDER RESTRICTION (CLAUDE.md: a provider may restrict options), not an engine greedy:
+// CollectActions' narrowed path enumerates exactly these targets and the search still branches over the
+// trick's cast, position, X / kicker and over the extra candidates below. The SAME list feeds the
+// beyond-horizon playout and the d0 runner (SolveUncached reads the same CollectActions), so search and
+// playout agree; OwnPumpTargetCandidates (the resolver's cast-time / fallback pick) ranks by the same score.
+// Off under human play, MTG_UNPRUNED / MTG_UNPRUNE=tricktarget, and MTG_MORPH_LARGEST_TRICK_TARGET=0.
+//
+// "LARGEST" = the most combat damage this turn: CombatPowerOf (printed + temp + counters + lords + ...)
+// x2 under double strike (CreatureHasDoubleStrike). Interpretations the plain rule does not settle (each
+// stated for the USER to confirm):
+//   (a) A FACE-DOWN creature that could be turned face up this turn (Blistering Firecat 2/2 -> 7/1 haste):
+//       the flip is not certain to be in the plan, so the face-down body is scored by its CURRENT size, and
+//       the face-down creature whose FACE-UP score (current power - face-down power + real power + 1 for
+//       megamorph; x2 for printed double strike) is largest is kept as ONE extra candidate when it beats
+//       the current largest. It qualifies if it can attack now, or its real face has haste. The morph cost's
+//       affordability is NOT checked (the plan decides; an unaffordable flip only costs one candidate).
+//   (b) A hasty HAND creature (TrickHandRecipientCanAttackThisTurn) whose score beats every battlefield
+//       attacker is kept as ONE extra candidate (the plan may not afford it; with no battlefield attacker it
+//       is the trick's only target).
+//   (c) Ties: the FIRST in battlefield (or hand) order -- deterministic; identical bodies fold anyway.
+// No attacker and no qualifying hand creature -> `out` stays empty (no narrowing): the non-attacker fold
+// (TrickTargetsAttackersOnly) then leaves nothing to target, exactly as before.
+static bool MorphLargestTrickTargetOn()
+{ static const bool on = EnvOn("MTG_MORPH_LARGEST_TRICK_TARGET", true); return on; }
+
+static int MorphCombatScore(const Permanent& p, const GameState& s)
+{
+    return std::max(0, CombatPowerOf(p, s)) * (CreatureHasDoubleStrike(p, s) ? 2 : 1);
+}
+
+void MorphProvider::TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                                          std::vector<int>& out) const
+{
+    (void)def;
+    if (!MorphLargestTrickTargetOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::TrickTarget)) { return; }
+    const int me = s.active_player_index;
+    int best_num = 0, best = -1;        // the largest current attacker
+    int flip_num = 0, flip_best = -1;   // (a) the largest face-up score among flippable face-down creatures
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || (!p.card.IsCreature() && !p.is_animated) || p.card.m_number == 0) { continue; }
+        const bool can_now = TrickRecipientCanAttackThisTurn(s, p);
+        const int score = MorphCombatScore(p, s);
+        if (can_now && score > best) { best = score; best_num = p.card.m_number; }
+        const CardDefinition* real = FaceDownRealDef(p);
+        if (real == nullptr || !real->card.m_power || !p.card.m_power) { continue; }
+        if (!can_now && !real->card.HasKeyword(Keyword::Haste)) { continue; }
+        const int up_pw = std::max(0, CombatPowerOf(p, s) - *p.card.m_power + *real->card.m_power
+                                      + (real->params.megamorph_cost ? 1 : 0));
+        const bool up_ds = real->card.HasKeyword(Keyword::DoubleStrike) || p.temp_double_strike;
+        const int up = up_pw * (up_ds ? 2 : 1);
+        if (up > flip_best) { flip_best = up; flip_num = p.card.m_number; }
+    }
+    int hand_num = 0, hand_best = -1;   // (b) the largest hasty hand creature
+    for (const Card& hc : s.players[me].hand)
+    {
+        if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || !hd->card.IsCreature() || !TrickHandRecipientCanAttackThisTurn(s, *hd)) { continue; }
+        const int score = std::max(0, hd->card.m_power.value_or(0))
+                        * (hd->card.HasKeyword(Keyword::DoubleStrike) ? 2 : 1);
+        if (score > hand_best) { hand_best = score; hand_num = hc.m_number; }
+    }
+    if (best_num != 0) { out.push_back(best_num); }
+    if (flip_num != 0 && flip_num != best_num && flip_best > best) { out.push_back(flip_num); }
+    if (hand_num != 0 && hand_best > best) { out.push_back(hand_num); }
+}
+
+// The resolver-side pick (cast-time "best own attacker" / a fizzle fallback): the same score as above.
+std::vector<int> MorphProvider::OwnPumpTargetCandidates(const GameState& s, int controller,
+                                                        const std::vector<int>& own_attackers) const
+{
+    if (!MorphLargestTrickTargetOn()) { return DeckProvider::OwnPumpTargetCandidates(s, controller, own_attackers); }
+    std::vector<int> out = own_attackers;
+    std::stable_sort(out.begin(), out.end(), [&](int a, int b) {
+        return MorphCombatScore(s.battlefield[static_cast<std::size_t>(a)], s)
+             > MorphCombatScore(s.battlefield[static_cast<std::size_t>(b)], s);
+    });
+    return out;
+}
+
 // Cleanup discard: the USER-AUTHORED bucket policy (2026-08-07). Three buckets -- ENABLER,
 // MANA, PAYOFF -- keep 1 enabler and enough mana, maximize payoffs. The discard-analysis
 // stage's static name order (Idyllic, StP, ...) measured d0 -0.00525 t=-4.21 but the user's

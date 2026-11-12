@@ -395,6 +395,12 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override { return true; }
     bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
+    // INT-5 USER RULE (2026-11-12): every solo-target trick goes on the LARGEST ATTACKING CREATURE (see the
+    // definition for the interpretations). MTG_MORPH_LARGEST_TRICK_TARGET=0 -> no narrowing (A/B arm).
+    void TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                               std::vector<int>& out) const override;
+    std::vector<int> OwnPumpTargetCandidates(const GameState& s, int controller,
+                                             const std::vector<int>& own_attackers) const override;
     // Morph INT-2d: the playout / d0 pump policy (beyond the horizon only; see the base declaration).
     // MTG_MORPH_GREEDY_TRICK_HOLD=0 restores the cast-every-trick greedy for an A/B.
     bool GreedyHoldsCombatTricksForLethal() const override
