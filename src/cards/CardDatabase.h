@@ -4990,6 +4990,11 @@ struct CardDefinition
     // false for a Register-built definition (no JSON to audit).
     bool upkeep_fold_audited = false;
     bool upkeep_fold_keeper  = false;
+    // THE SEQUENTIAL-WALK SUPPLY BOUND's card-data premise (TurnSolver.cpp SeqWalkProvablyShort): template,
+    // every `parameters` key and every keyword are in the audited set (CardDatabase.cpp, beside the upkeep
+    // fold's list), so the bound prices everything this card can do to a payment walk. false for a
+    // Register-built definition (no JSON to audit) -- such a card sends the subset to the real walk.
+    bool walk_bound_audited = false;
     // BEHAVIOURAL IDENTITY -- a digest of everything the engine can READ about this card, used to
     // decide when two DIFFERENTLY-NAMED cards are interchangeable. Equal digests mean the engine
     // cannot tell the two apart; 0 means "unknown, never matches anything" (see below).

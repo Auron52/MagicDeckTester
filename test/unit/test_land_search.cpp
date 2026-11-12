@@ -1106,3 +1106,19 @@ TEST_CASE("Landfall provider: a 'Forest card' search is not Primeval Titan's any
     for (const auto& pk : LandSearchPicks(s, 0, LandSearchSpecOf(D("Primeval Titan").params)))
     { for (const std::string& nm : pk) { CHECK(nm != "Forest"); CHECK(nm != "Mountain"); } }
 }
+
+// THE SEQUENTIAL-WALK SUPPLY BOUND's raw-key audit (CardDefinition::walk_bound_audited, CardDatabase.cpp;
+// the bound is TurnSolver.cpp SeqWalkProvablyShort). Every card of the Hydras list is audited -- the deck the
+// bound was built for -- and a mana dork, a rock, a two-mana land, a land Aura and a tapped-entry land search
+// are not: each is a supply the bound does not price, so a subset touching one is walked for real.
+TEST_CASE("Walk supply bound: the Hydras list is audited, unpriced mana sources are not")
+{
+    LoadCards();
+    for (const char* n : { "Kalonian Hydra", "Neverwinter Hydra", "Primordial Hydra", "Steelbane Hydra",
+                           "Voracious Hydra", "Forest", "Gargos, Vicious Watcher", "Vernal Bloom",
+                           "Nissa, Who Shakes the World", "Gauntlet of Power", "Search for Tomorrow",
+                           "Nature's Lore", "Lightning Greaves", "Three Visits", "Garruk, Primal Hunter" })
+    { CHECK_MESSAGE(D(n).walk_bound_audited, n); }
+    for (const char* n : { "Llanowar Elves", "Sol Ring", "Ancient Tomb", "Wild Growth", "Rampant Growth" })
+    { CHECK_FALSE_MESSAGE(D(n).walk_bound_audited, n); }
+}
