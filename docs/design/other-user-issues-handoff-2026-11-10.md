@@ -24,13 +24,52 @@ the two Living Wish amendments (`MTG_AA_WISH_COMBO_FIRST`, `MTG_AA_WISH_UNTAP_NE
 (`analysis-Unpredictable Cyclone.md`, Remand rulings). Replayed on the seeds: T2 suggests Brindle Boar, T5 Galvanic
 Alchemist, and 23746 offers Remand on Ulamog, the Infinite Gyre (it returns to hand, Remand draws).
 
-## Living Wish follow-up levers (2026-11-11) -- MEASURED, awaiting the USER
+## IN FLIGHT (2026-11-12): Living Wish land rules + ALCH_FIRST_AT2 ON + viewer "searched" marks
 
-`MTG_AA_WISH_ALCH_FIRST_AT2` and `MTG_AA_WISH_SPARE_MANA_FIRST` are committed DEFAULT OFF in `AaWishBucketSet`.
-The A/B and its readings are in `analysis-AccomplishedAlchemist.md`, "Two follow-up Wish levers". In short, AT2 is
-0 slower / 5 faster on held-out seeds and faster at d0 on every seed (recommended), SPARE is neutral, and the two
-adopted amendments are validated (off = 10 slower / 2 faster). If the USER adopts AT2: flip its default, add a unit
-case, accept alchemist smoke + regression GT with a note, commit + push, watch CI. No overnight run for GT.
+Committed and pushed: `cd0368564`, the AT2 / SPARE levers DEFAULT OFF, measured (ledger
+`analysis-AccomplishedAlchemist.md`, "Two follow-up Wish levers"). Rebased onto origin `01a3adbc1` (clean).
+UNCOMMITTED in the primary checkout (all USER-requested, all DEFAULT ON):
+
+* `MTG_AA_WISH_ALCH_FIRST_AT2` flipped ON. USER: "Let's enable 1, either way." SPARE_MANA_FIRST stays off (neutral).
+* `AccomplishedAlchemistProvider::TutorMarksSuggested` (Living Wish + Elvish Harbinger) and `tools/play/index.html`
+  tutor panel: "searched" badge on the narrowed set, the AI pick reads "recommended", a one-line explanation. USER:
+  "show which options are searched and the top one as the recommendation. That way the user knows that, even if their
+  preferred option is not "recommended", that it is picked up by the search." Verified on seed 23742 T2 (Boar
+  recommended, Boar + Arbor Elf searched); `test/viewer_client_check.js` passes (new testTutorSearchedMarks).
+* `MTG_AA_WISH_LAND_FIRST_AT3`: at 3 projected mana the land leads Arbor Elf unless the wished land cannot be played
+  this turn or next (hand lands >= drops left this turn + 1). USER, in order: "Frankly when at 3 mana the land seems
+  often like it would be better." / "If you have a land in hand the elf is probably better." / "If you are out of
+  lands the land is almost certainly better." / "Because you need to have 4 mana as soon as possible for the
+  Alchemist." / "A wished land beats the elf handily when it can be dropped for free this turn or next turn. The elf
+  needs to drop this turn to match (to match the land played next turn)." / "The only time the elf wins is when the
+  land cannot be played for 2 turns. Then the elf is pretty clearly better."
+* `MTG_AA_WISH_ONE_LAND`: only one of Forest / Island is offered: the Forest until two Forests are held (play + hand),
+  then the Island. USER: "I think we should choose only one of Forest or Island, but why would you want to drop both?
+  That seems dicey unless we know we will play the elf this turn." / "We should only recommend one land, also?" / "We
+  need at least 2 forests the way I see it. After that you can freely pick the Island if you want."
+* `MTG_AA_WISH_STRANDED_ELF`: the 2026-10-20 "the elf preferred" rule (Aura'd Forest -> Elf only, no land) applies
+  only when the Elf is castable THIS turn (an untapped green source, or a green land in hand with a drop left); else
+  one land comes back, ordered by LAND_FIRST_AT3. USER: "we need that fix, because an elf stranded in hand is pretty
+  bad. I would rather a land if that can get us to 4 mana next turn."
+* Unit expectations in `test/unit/test_accomplished_alchemist.cpp` updated for all of the above (NOT yet run against
+  the final two-Forests rule).
+
+Running: background `bash logs/aa_alch2/land_ab2.sh 2785154`. It waits on PID 2785154 (the AT2-only GT chain:
+smoke done -> `build/scratch/aa_land/smoke_A`, regression in progress -> copied to `regression_A`), then builds
+(`logs/aa_alch2/build4.log`), runs the AA units (`units4.log`), then smoke B, regression B (the land rules ON, the
+LAST runs of those tiers, so `--accept` promotes them), overnight A (`MTG_AA_WISH_LAND_FIRST_AT3=0
+MTG_AA_WISH_ONE_LAND=0 MTG_AA_WISH_STRANDED_ELF=0`) and overnight B. Logs `logs/aa_alch2/land_<mode>_<arm>.log`;
+wins `build/scratch/aa_land/<mode>_<arm>/`; DONE marker `logs/aa_alch2/LAND_DONE`. Session cron 5a74f861 checks it
+every 2 h. NOTE: smoke_A/regression_A were run BEFORE the rebase? No -- after it (binary rebuilt at 05:1x UTC on
+`01a3adbc1` + AT2 ON + marks); the AT2 smoke reproduces the 11-11 A/B arm 10 digests exactly.
+
+Next: `python3 logs/aa_alch2/compare_land.py` (A = AT2 only, B = + land rules; paired, loss = 9; weigh overnight).
+Fix any unit expectation the run flags. Accept alchemist smoke (`--deck=alchemist,alchemist2hg`) + regression
+(`--deck=alchemist`) GT with a note naming AT2 + the three land rules; `python3 test/check_gt_logs.py`; ledger entry
+in `analysis-AccomplishedAlchemist.md`; commit, `git pull --rebase`, push, watch CI in the background. Report the
+numbers to the USER. Open USER question: should LAND_FIRST apply at 2 mana too (now 3 only)?
+Lessons this round: never `pgrep -f` / `pkill -f` with a pattern that appears in the waiter's own command line (it
+hung a waiter overnight on 11-11 and killed a shell on 11-12); wait on a PID with `kill -0`.
 
 ## Changes made
 
