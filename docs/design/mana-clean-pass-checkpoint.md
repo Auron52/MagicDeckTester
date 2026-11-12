@@ -690,6 +690,35 @@ fungus 1,880, gods 4,300 (first run).
     {R}), when no other hand Pirate needs Territory's colour? Recommendation: yes, as a hand-demand-priced preference in
     the per-cast payer (the prepay's hand_demand), measured by a held-out A/B first.
 
+* **Round 4 (fourth item-6 agent, 2026-11-12).**
+  * **pirates: sac-draw fix VALIDATED + re-gated.** 91d60f424: smoke/regression only pirates rows, digest-only (searched
+    play-changed smoke d5 gi69 / regression d5 gi137 = like-for-like line changes, the Islet sac no longer kills a
+    creature); held-out A/B (seeds 7350001+, off = 5db96fbef binary, on = 91d60f424) pirates 5,000 net 0, pirates2hg
+    1,000 net 0, elementals / midrangeburn / treasure_hunt 1,000 byte-identical, slower 0. GT accepted de997635d.
+    Re-gate `pirates-6r-20261112` (PGO 8fe7c47af, 54000-58999): **263 issues** (fddce2636), UNMODELED 174 -> 0. Left:
+    244 "engine dropped [cast Lightning Bolt]" (the Territory-vs-Canal USER DECISION above, not settled) + 15 Dire
+    Fleet Captain + 4 Daring Buccaneer drops. Lead for the 19: s30054695 T4 {Spirebluff Canal + Dire Fleet Captain +
+    Staunch Crewmate} -- Crewmate's ETB dig draws Goblin Tomb Raider and the site-10 continuation casts it off the
+    Mountain the base plan's Dire Fleet Captain needed (the same continuation-vs-base-plan shape as the Bolt class).
+    The game still wins T4.
+  * **treasure_hunt: FIXED IN PART (50cfe59a2 + d0921c46b), rest PARKED.** `MTG_LINE_SPARE_DEPLETION` (heurarm, default
+    ON): LineSpareSourceMask's plain spare set excluded depletion lands, so {Treasure Hunt x2} off Saprazzan Skerry +
+    Sandstone Needle paid Hunt 1's {1} with the Skerry's second {U} and dropped Hunt 2 at every budget. A depletion
+    tier now taps the otherwise-spare depletion land for the generic, only when no plain spare can be tapped, no
+    colour is strictly short, and an exactly-owed colour has a unit in this payment's float. (The first cut, without
+    the float/strict guard, was net +2 on Niv over 6,000 games; with it net 0.) Issue seeds (190 games): APPLY-DROP
+    385 -> 218, no ISSUE class up. Held-out A/B (Release, flag arm pooled, 7350001+): treasure_hunt 3,000 net -1,
+    niv 6,000 net 0, mirrorwing 3,000 net 0, nine other depletion-land decks byte-identical; slower 0. Units 2843.
+    **PARKED remainder (218 APPLY-DROP + 30 ORDER + 19 ENUM-GAP + 71 ORACLE-GAP):** filter-land payments.
+    (a) s30061353 T4 {Cascade Bluffs + Hunt x2} off Reliquary Tower + Bluffs + Forgotten Cave: the paying route chains
+    Cave {R} -> Bluffs#2 {U}{U} -> Bluffs#4 {U}{U} for Hunt 1 so the Tower's {C} pays Hunt 2's {1}; the payer feeds
+    one Bluffs and leaves the Tower's {C}, which cannot feed the second Bluffs' {U/R}. (b) s30061127 T5 {Reliquary
+    Tower + Land's Edge + Hunt}: Land's Edge {1}{R}{R} must take the Tower {C} for its {1} and one U source as the
+    Bluffs feed, keeping Temple of Epiphany's {U} for Hunt; the engine spends both U sources. Both need a filter-feed-
+    aware line hold in the shared payer (keep a {U/R} feed / prefer {C} for generic when the line owes U), not
+    attempted. ORACLE-GAP 68 = {land + Land's Edge} (s30060179 T4: the engine taps Reliquary Tower, the oracle's
+    outcomes do not), analyzer side.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
