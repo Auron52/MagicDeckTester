@@ -3150,11 +3150,11 @@ static const std::string& BpNameOf(const Action& a)
 namespace {
 struct DeckShapeScope
 {
-    int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k;
+    int prev_l, prev_w, prev_c, prev_s, prev_a, prev_lr; double prev_x, prev_fa; int prev_fg; const std::vector<double>* prev_sr; const std::vector<double>* prev_er; std::string prev_k;
     DeckShapeScope(const MulliganProfile& p)
         : prev_l(valuearm::t_deck_ladder), prev_w(valuearm::t_deck_warm_none), prev_c(valuearm::t_deck_commit_model),
           prev_s(valuearm::t_deck_single), prev_a(valuearm::t_deck_alpha_relaxed), prev_lr(valuearm::t_deck_fit_lazy_r),
-          prev_x(valuearm::t_deck_exhaust_mult), prev_fa(valuearm::t_deck_fit_alpha), prev_sr(valuearm::t_deck_esc_skip_r), prev_er(valuearm::t_deck_emul_r),
+          prev_x(valuearm::t_deck_exhaust_mult), prev_fa(valuearm::t_deck_fit_alpha), prev_fg(valuearm::t_deck_fit_gate_ladder), prev_sr(valuearm::t_deck_esc_skip_r), prev_er(valuearm::t_deck_emul_r),
           prev_k(valuearm::t_deck_key)
     {
         valuearm::t_deck_ladder    = (p.value_play.ladder != "emulated") ? 0
@@ -3170,13 +3170,15 @@ struct DeckShapeScope
         // wherever FIT acts), so they ride the shape scope rather than the vp_here params.
         valuearm::t_deck_fit_alpha  = p.value_play.fit_alpha;
         valuearm::t_deck_fit_lazy_r = p.value_play.fit_lazy_r;
+        valuearm::t_deck_fit_gate_ladder = (p.value_play.fit_gate == "ladder") ? 1
+                                         : (p.value_play.fit_gate == "fit") ? 0 : -1;
         valuearm::t_deck_key       = p.value_source;
         valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
         valuearm::t_deck_emul_r     = &p.value_play.emul_r;
     }
     ~DeckShapeScope() { valuearm::t_deck_ladder = prev_l; valuearm::t_deck_warm_none = prev_w; valuearm::t_deck_commit_model = prev_c;
                         valuearm::t_deck_single = prev_s; valuearm::t_deck_alpha_relaxed = prev_a; valuearm::t_deck_fit_lazy_r = prev_lr;
-                        valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_key = prev_k;
+                        valuearm::t_deck_exhaust_mult = prev_x; valuearm::t_deck_fit_alpha = prev_fa; valuearm::t_deck_fit_gate_ladder = prev_fg; valuearm::t_deck_key = prev_k;
                         valuearm::t_deck_esc_skip_r = prev_sr; valuearm::t_deck_emul_r = prev_er; }
 };
 }   // namespace
@@ -4589,9 +4591,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && line.win_turn <= state.turn_number + searched_depth - 1;
                     if (s_fd_trace)
                     {
-                        std::fprintf(stderr, "[fd] T%d line win=%d searched_depth=%d verified=%d phases=%zu\n",
+                        std::fprintf(stderr, "[fd] T%d line win=%d searched_depth=%d verified=%d phases=%zu used=%lld\n",
                                      state.turn_number, line.win_turn, searched_depth, verified_win ? 1 : 0,
-                                     line.phases.size());
+                                     line.phases.size(), budget.Used());
                         for (const TurnSolver::PhasePlan& pp : line.phases)
                         { std::fprintf(stderr, "[fd]   phase pre=%d %s\n", pp.is_pre_combat ? 1 : 0, FdPlanText(pp.plan).c_str()); }
                     }
