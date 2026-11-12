@@ -1,5 +1,7 @@
 # Regression ground truth -- commit e0b9de5f7  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (smoke, 2026-11-12): INT-10 (bb6829c35): morph2hg smoke gi5 T6->T7 identical draws, recovers T6 at d8 b0; MorphProvider combat-is-over folds + Den LEAD pin identity fold
+# accepted-with-regressions (regression, 2026-11-12): INT-10 (bb6829c35): no searched slower game; MorphProvider combat-is-over folds + Den LEAD pin identity fold
 # accepted-with-regressions (smoke, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
 # accepted-with-regressions (regression, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
 # accepted-with-regressions (smoke, 2026-11-12): morph INT-5/6/7 (aad2a29a9-rebased #TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg only; searched slower 0; d0 slower 1 (morph_smoke_d0 gi399 T6->T7, recovers T5 at d8 b0); held-out A/B seeds 60000+ net faster on every deck (morph -248, morph2hg -121, mirrorwing -8, mirrorwing2hg -5 turns)
@@ -9,10 +11,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-morph_smoke_d0_s1001=5.0080/e072a446955ccd6f
-morph_smoke_d3_s1001=4.3400/f89f452be9862f2a
-morph_smoke_d5_s1001=4.2400/bb20161e7084e0f0
-morph2hg_smoke_d5_s1001=4.7200/4fe09dbad2145602
+morph_smoke_d0_s1001=5.0080/a3b321bae745d464
+morph_smoke_d3_s1001=4.3400/6db184410ce3dde2
+morph_smoke_d5_s1001=4.2400/0e21a807a6fefbad
+morph2hg_smoke_d5_s1001=4.6800/be3e9861dcfabddd
 hydras_smoke_d0_s1001=5.8480/4401470db4ecbd6f
 hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
 hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
@@ -210,11 +212,11 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-morph_regression_d0_s2002=4.9590/8474c877dc73f839
-morph_regression_d3_s2002=4.1467/6d31943dcc0f9add
-morph_regression_d5_s2002=4.1800/7d5860d6c29c022a
-morph_regression_d5_s3003=4.4133/79e7ea67deb64b67
-morph2hg_regression_d5_s2002=4.6000/12035765e7a93ca0
+morph_regression_d0_s2002=4.9580/d8296f62a8c2450e
+morph_regression_d3_s2002=4.1467/0ee6a1a92b95a8d2
+morph_regression_d5_s2002=4.1800/9e858616d2a88a8d
+morph_regression_d5_s3003=4.4133/44e4cdca17544399
+morph2hg_regression_d5_s2002=4.6000/79016a24d047a3ef
 morph_regression_d3_s30001=4.0000/d54e5f3f8f51a90b
 morph_regression_d5_s30001=4.0000/d54e5f3f8f51a90b
 hydras_regression_d0_s2002=5.7910/2f302f5e6f2a2826

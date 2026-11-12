@@ -602,6 +602,147 @@ runs (test/logs/smoke, test/logs/regression in the worktree) are intact. If the 
 - Fetch rule: accept the six unrecovered games as fetch variance + the no-shuffle hold (gi496)? The rule is -36
   games-turns and ~0.83x units on the held-out set.
 
+### INT-10 result (2026-11-12) -- the branching census ("what decisions are slow?"), two "combat is over" folds, the Den LEAD pin fold
+Commit `bb6829c35` (code + unit tests). Scratch: build/scratch/int10/ (b0/, cen_b0/, cen_d5b20/, tag*/, ab/, srec/). Instrument added (print-only, default off): a
+per-action TAG table in MTG_BRANCH_STATS (TurnSolver branchstats::g_by_tag -- kind + face-down mode + flip position +
+regrowth pin + kicker + redirect, plus copy-twin / two-flip / main-2 probes), so the census can say WHICH options the
+returned plans carry.
+
+**USER rulings (verbatim, 2026-11-12):** "Let's look for other prunes as needed, including for the fetchland Wooded
+Foothills. That should be relatively straightforward as goldfish can just always get stomping ground." and "Okay, what
+decisions are slow? 'Never pump a creature that can't attack this turn.' That makes sense."
+
+**1. Budget-0 screen (HEAD 3bd89f38f; seeds 30001+, 80 games each, abandon_units 2e6, MTG_SLOW_GAME_MS=5000).**
+d3: 77 played, 3 capped (gi34, gi46, gi58); d5: 76 played, 4 capped (gi34, gi46, gi55, gi58); gi25 ends just under the
+cap at both (1.87M / 1.88M units). 7/160 capped (was 9/80 at suite entry). 13 distinct games over 5 s; every slow game
+is slow at BOTH depths, so the cost is the board, not the depth.
+
+**2. Census of the worst five b0 games (d5, single-threaded, MTG_BRANCH_STATS / MTG_BRANCH_SHAPE / MTG_CAND_CENSUS).**
+Two shapes:
+- LONG STALLED games (gi34, gi58): no win by T8; every enumeration is narrow (avg odometer 2-4: "flat: 1-3 optional
+  casts"), 625-690k EnumeratePlans calls, units la_cand 35-38% / rollout_step 21-25% / greedy_fallback 19-23%. Nothing
+  unreasonable branches: an unlimited d5 search re-solved over eight turns of a hand that does not win.
+- MORPH-CARD games (gi25, gi46, gi55): the biggest option groups are Den Protector / Blistering Firecat -- size 3 per
+  morph card in hand (hard / face-down / face-down-and-up) and Den's flips x regrowth names; on the hot turn avg odometer
+  27-46, max 1024-1280, but the subset rules cut it ~10x before plans are built (plans per call 1.4-2.2) and
+  la_cand is 40-70% of units. MTG_CAND_CENSUS: candidates are distinct states (collapse 1.00-1.05x).
+
+**3. The play-setting census (d5 b20, 192 games, seeds 920000+, MTG_TURN_CENSUS single-threaded x24 + MTG_BRANCH_STATS).**
+1420 decisions; the slowest 10% hold 40% of units (median 2,925 units, max 79,058 = 4.4x budget; none past 5x). Units by
+site: la_cand 51%, rollout_step 14%, fs_main2 14%, greedy_fallback 12%, fs_pre 6%. **77% of all units are in mulligan
+bottom-TRIAL games** (census probe=1): with no keep table yet, every mulligan plays each candidate bottom out as a full
+game at play settings. Real play is 23%, concentrated on T1 (13.4%) and T2 (6.9%) -- whole-line searches through the d5
+horizon (top real decision: T2, 76k units, 48k candidates scored). 2.48M EnumeratePlans calls, odometer 231M, 3.56M
+plans returned (the subset rules cut ~65x before a plan is built).
+
+**4. Which options the returned plans carry (the TAG table; d5 b20, 3.56M plans; b0 gi55 1.24M plans).**
+
+| decision point | width / count | share of returned plans | reasonable? |
+|---|---|---|---|
+| main 2 (any plan) | 1.83M plans, 2.5 per call | 51% | yes (Hystrodon draws; G4 main 2 ON) |
+| **main 2 casting a solo-target trick** (Might, Vines, Legion Leadership, TBR; Berserk is illegal there) | 419k plans | **11.7%** (gi55 b0: 11.6%) | **NO -- no creature can attack after combat: pruned (a)** |
+| **main 2 face-up Blistering Firecat** (hard cast, face-down-and-up, or flip) | 101k plans | **2.8%** | **NO -- sacrificed at this end step without attacking: pruned (b)** |
+| Den Protector LEAD flip, UNPINNED base beside its named variants | 83k plans | 2.3% | duplicate (the pin resolves to one named variant): folded (c) |
+| morph card in hand: hard / face-down / face-down-and-up | group of 3 per card; b0 hot-turn odometer 27-46 avg | -- | yes (real choices: colour, a body now, a flip later) |
+| Den regrowth names x LEAD / TRAIL position | 2-9 per Den | ~10% (named + pin) | yes (searched per the USER's rulings) |
+| two hand copies cast with DIFFERENT variants (the copy twin the hand-cast fold leaves unfolded) | 4k plans | 0.1% | negligible -- no fold |
+| two flips of one face-down card name | 3k plans | 0.1% | negligible |
+| opponent-end-step flip fan | 236k crossings / 192 games | -- | yes (searched axis, MTG_FACEUP_AXIS_STATS searched-frame 0) |
+
+**5. As built (all three DEFAULT ON; (a) and (b) are sound dominance folds in the spirit of the USER's "Never pump a creature that can't
+attack this turn."; each an EnvOn + HeuristicArm slot, off under human play and MTG_UNPRUNED / tricktarget).**
+- (a) `MTG_MORPH_NO_POSTCOMBAT_TRICK` -- MorphProvider::TrickTargetCandidates: once this turn's combat is over
+  (StealCombatOver: post-combat main or end step; no additional combat queued) a solo-target trick gets the "no
+  recipient" sentinel, so no variant. Proof: every trick payload here (+N/+N, power doubling, double strike, first
+  strike, Wild Defiance's +3/+3) is until-end-of-turn combat value nothing in the list reads after combat (goldfish: no
+  blocks, no damage to our creatures; Berserk is already illegal after combat damage); casting only spends mana and
+  moves the card hand -> graveyard, which Den Protector's regrowth can at best undo. Before this, the provider's
+  recipient test (TrickRecipientCanAttackThisTurn -> CanAttackFull) had no phase term, so an UNTAPPED non-attacker (a
+  dork held back for exalted, Spellskite) counted as "can attack" in main 2.
+- (b) `MTG_MORPH_NO_POSTCOMBAT_SACUP` -- new hook DecisionProvider::EndStepSacFaceUpDeadAfterCombat (default false),
+  applied by a post-pass at the end of TurnSolver CollectActions (before the fold tags) for a face-down-capable deck:
+  after combat, a FACE-UP entry of an end-step-sacrifice creature -- the hard cast, the face-down-and-up cast, or
+  turning a face-down copy face up -- is dropped. Blistering Firecat then cannot attack, is sacrificed at this end
+  step, and lands in the graveyard; not doing it keeps the card in hand (or the face-down 2/2, still flippable at the
+  opponent's end step or next turn) and the mana. The face-down cast (face_down 1) stays, and the opponent-end-step flip
+  window is a separate axis (untouched).
+- Unit tests: "morph INT-10: no solo-target trick is offered after combat" (pre-combat: offered; post-combat: none;
+  lever off: offered; a deck with an extra combat: offered), "morph INT-10: no face-up Blistering Firecat entry after
+  combat (the face-down cast stays)" (hard / FD+up / flip present pre-combat and with the lever off, gone post-combat,
+  the FD cast kept).
+- (c) `MTG_FACEUP_LEAD_PIN_FOLD` -- ENGINE identity fold in EmitFaceUpActions (morph decks only: it needs a
+  turned_face_up_return_gy_to_hand card): a LEAD flip emits no UNPINNED base once its named regrowth variants are
+  emitted. The LEAD runs before every cast, so its graveyard is the pre-plan graveyard (less what an earlier LEAD
+  regrew), and every distinct name there has a named variant; the base resolves to the provider's pick among exactly
+  those names, and a stale named pin falls back to the same pick -- so the base is a duplicate. The TRAIL base stays (a
+  different position). Unit test "morph INT-10: Den Protector's unpinned LEAD flip is folded into its named variants".
+
+**Proposals (NOT built; judgement calls or not worth a build tonight).**
+- P2. Den Protector's named TRAIL variants for a hand instant the section can no longer cast (after combat every trick
+  is now unoffered, so a TRAIL naming one is a stale pin = a duplicate of the TRAIL base). Small; an identity fold.
+- P3. The two-copy twin (two hand copies of one morph card cast with different variants: the hand-cast fold's
+  CONDITION 2 leaves multi-variant slots unfolded) is 0.1% of plans -- not worth an engine change.
+- P4. Blistering Firecat hard cast vs face-down-and-up in main 1 when both are payable: the same permanent for one more
+  mana, but NOT a sound fold (the hard cast needs a third red the combined bill does not, so the leftover pools are
+  incomparable). Judgement -- would need a USER ruling and an A/B.
+- P5. 77% of the play-setting units are mulligan bottom TRIALS. Not a branching problem: the keep table the mulligan
+  generation is about to produce removes them from play (and from the value-leaf stage after it).
+- Still open from INT-8/9: E lethal-only (recommended), R12's no-second-target TBR at enumeration, R11 for unkicked
+  Vines, C inside continuations, the fetch-rule variance games.
+
+**6. Held-out A/B -- (a) + (b)** (seeds 70000+ morph 1000 / 72000+ morph2hg 300, play settings d5 b20, ONE pooled batch,
+23 threads, per-job flags; base = HEAD 3bd89f38f `build/scratch/int10/mtg.head`, same seeds, its own batch). f/s and sum
+vs base (unwon = 9); units vs base.
+
+| arm | morph avg | f/s | sum | units | morph2hg avg | f/s | sum | units |
+|---|---|---|---|---|---|---|---|---|
+| base 3bd89f38f | 4.2620 | | | 1 | 4.8333 | | | 1 |
+| **on** (a + b) | 4.2570 | 6/2 | -5 | **0.872** | 4.8233 | 3/0 | -3 | **0.834** |
+| (a) off | 4.2620 | 0/0 | 0 | 0.975 | 4.8300 | 1/0 | -1 | 0.966 |
+| (b) off | 4.2570 | 6/2 | -5 | 0.893 | 4.8233 | 3/0 | -3 | 0.870 |
+| both off | 4.2620 | 0/0 | 0 | 1.000 | 4.8333 | 0/0 | 0 | 1.000 |
+
+Both-off reproduces the base digests exactly (ff01c5d9 / c7855700): the isolation holds. (a) carries the score and ~10% of
+the units; (b) is score-neutral (play changes in 2 + 3 games) and worth 2-4% of the units. Slower games of "on":
+morph gi61 (T2: a NON-LETHAL Berserk is cast -- the INT-8/9 lever-E tie-break mechanism, reached through a different
+budget allocation; draws identical through T1) and gi445 (T1 land choice differs -- Stomping Ground vs a cracked Wooded
+Foothills -- so the draws diverge after the fetch shuffle: fetch variance).
+
+**7. Final binary (a + b + c, commit `bb6829c35`) on the same A/B.** Play-IDENTICAL to (a + b) on both decks (digests
+844b371a / e248fae9), units -0.05% (morph) / -0.09% (2HG): (c) only removes duplicate candidates. Its "c off" arm
+reproduces the (a + b) arm exactly (digest and units). So the final A/B vs base is the (a + b) row above.
+
+**d8 b0 recovery (final binary, one pooled batch):** morph gi61 T4 (base T4), gi445 T4 (base T4) -- both recover.
+
+**Budget-0 re-screen with the final binary** (same block: seeds 30001+, 80 games, cap 2e6): d3 **80/80 played, 0 capped**
+(was 3: gi34, gi46, gi58 now finish), avg 4.1250; d5 77 played, **3 capped** (gi34, gi55, gi58; gi46 now finishes),
+avg 4.1039. 3/160 capped, was 7/160. The remaining caps are the shapes of section 2: two stalled no-win hands (gi34,
+gi58) and one long Den Protector turn (gi55) -- neither is a branching defect left in the census.
+
+**Smoke (FULL tier, `bb6829c35`, THREADS=21):** only Morph moved (4 configs): morph d0 5.0080 = (play-changed 1),
+d3 4.3400 = (play-changed), d5 4.2400 = (play-changed), morph2hg d5 4.7200 -> 4.6800. Searched 1 slower / 2 faster /
+10 play-changed at the same score; d0 0 slower / 0 faster / 1 play-changed. The slower game, morph2hg gi5 T6 -> T7, has
+identical hand and draws (a line change at T2-T3: an early non-lethal Temur Battle Rage); at d8 b0 it is T6 (base T6) --
+recovers (repro at b20 reproduces T7). Scenarios 502/502; mtg-test 2887/2887.
+
+**Regression (FULL tier, `bb6829c35`, THREADS=22):** only Morph moved (5 configs): morph d0 4.9590 -> 4.9580, d3
+4.1467 = , d5 s2002 4.1800 = , d5 s3003 4.4133 = , morph2hg 4.6000 = (all play-changed); both 30001 unbudgeted backstop
+rows unchanged. Searched 0 slower / 0 faster / 15 play-changed; d0 0 slower / 1 faster / 2 play-changed. References:
+336 ok / 490 repaired / 1 beaten / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift /
+0 contract-fail (827); REQUIRE-BEAT 2/2. Every deck's aggregate is net <= 0 (only morph decks moved, each faster or equal).
+
+**GT: ACCEPTED** (the bar is met: every slower game -- A/B gi61, gi445, smoke 2HG gi5 -- recovers at d8 b0, and every
+deck is net <= 0): `regression.sh --smoke --accept-with-regressions=... --deck=morph,morph2hg`, then the regression tier
+the same way; `check_gt_logs.py` 1131 consistent / 0 stale; the regression_gt.txt diff is morph / morph2hg keys only.
+OVERNIGHT not re-run (USER: occasional, not per change).
+
+**For the USER (decisions stated, rules stand as built):**
+- (a) and (b) are presented as SOUND dominance folds (combat is over -> no attack -> the payload is dead), not
+  judgement prunes, so they are default ON; (a) is the direct extension of "Never pump a creature that can't attack
+  this turn." to main 2. Say if you want either off.
+- (c) is an engine identity fold, play-identical on the held-out set.
+- Open from INT-8/9 still: E lethal-only, R12, R11, C in continuations, the fetch-rule variance games.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18
