@@ -286,4 +286,8 @@ Ignoble Hierarch, Game Trail, Zada, Sandstone Needle (Mountain + Mirrorwing bott
   clairvoyant T1 land, and that line is worse whatever the draws.
 Next: why the NC search leaves the T3 land drop unused (a tapped land, nothing else to play) -- a search question,
 then decide g662.
+ANSWERED 2026-11-12 (checkpoint item 5g): K=8 sampling noise (one sample, an imagined-future continuation plus an
+in-continuation DOMINATED-CREATURE payment); K=32/64 play the land. The NC run still ends T6 because the NC executor
+never re-decides after a mid-main draw, so it cannot play the base's draw chain. The NC replay is no evidence either
+way; the 11-09 verdict (NOT clear clairvoyance) stands. USER DECISION: give NC an honest post-draw re-decision.
 
