@@ -158,6 +158,7 @@ TEST_CASE("sac-land pin, burn seed 30000241 T3: land, Shard Volley x2, Light Up 
     s.players[0].life     = 20;
     s.players[1].life     = 20;
     s.uses_second_main    = true;
+    s.deck_has_dredge     = false;   // the burn deck's own stamp (no dredge card): no land position after a draw cast
     int num = 1;
     for (const char* n : { "Shard Volley", "Shard Volley", "Mountain", "Skullcrack", "Light Up the Stage" })
     {

@@ -6046,7 +6046,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     };
     auto exec_cont_land_hook = [&](ExecContLand& L, const Action& a)
     {
-        if (!L.pending || L.slot <= 0 || !TurnSolver::PutsLandfallWatcher(a)) { return; }
+        if (!L.pending || L.slot <= 0 || !TurnSolver::LandSlotCounts(state, a)) { return; }
         if (++L.seen == L.slot) { exec_cont_land_finish(L); }
     };
     // BREAKPOINT LEFTOVERS (DecisionProvider::MergesBreakpointLeftovers, MergeBreakpointLeftovers):
@@ -6447,7 +6447,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // A positioned continuation land's tied-rank watchers first (lockstep with the
                 // rollout's slot_order on the same section, before the rank sort).
                 if (rdb_land.pending && rdb_land.slot > 0)
-                { TurnSolver::LandSlotWatchersFirst(extra.actions, rest); }
+                { TurnSolver::LandSlotWatchersFirst(state, extra.actions, rest); }
                 std::stable_sort(ena.begin(), ena.end(), [&](int x, int y)
                 {
                     const CardDefinition* dx = CardDatabase::Instance().Lookup(extra.actions[x].card_name);
@@ -6475,7 +6475,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             else
             {
                 if (rdb_land.pending && rdb_land.slot > 0)
-                { TurnSolver::LandSlotWatchersFirst(extra.actions, cont_order); }   // land position: ties
+                { TurnSolver::LandSlotWatchersFirst(state, extra.actions, cont_order); }   // land position: ties
                 std::stable_sort(cont_order.begin(), cont_order.end(), [&](int x, int y)
                 { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
                 ApplyDeckCastArrangement(state, extra.actions, cont_order);   // lockstep: ApplyPlanDirect
@@ -7005,7 +7005,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (!extra.searched_order && pod_cont_order.size() > 1)
                     {
                         if (pod_land.pending && pod_land.slot > 0)
-                        { TurnSolver::LandSlotWatchersFirst(extra.actions, pod_cont_order); }   // land position: ties
+                        { TurnSolver::LandSlotWatchersFirst(state, extra.actions, pod_cont_order); }   // land position: ties
                         std::stable_sort(pod_cont_order.begin(), pod_cont_order.end(),
                             [&](int x, int y)
                             { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
@@ -8065,7 +8065,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const bool land_pending = land_after_deferred && deferred_land_slot > 0;
         const bool acts_pending = plan.land_search_act_slot > 0 && !exec_ls_act_done;
         if (!land_pending && !acts_pending) { return; }
-        if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
+        if (!TurnSolver::LandSlotCounts(state, a)) { return; }
         if (land_pending && ++deferred_watchers_seen == deferred_land_slot) { exec_play_deferred_land(); }
         if (acts_pending && ++exec_ls_act_seen == plan.land_search_act_slot)
         {
@@ -8369,7 +8369,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
         ord.push_back(i);
     }
-    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, ord); }   // land position: ties
+    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(state, plan.actions, ord); }   // land position: ties
     if (OpaqueCastOrderActive(state))
     {
         std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
@@ -8482,7 +8482,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a))
         { order.push_back(i); }
     }
-    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, order); }   // land position: ties
+    if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(state, plan.actions, order); }   // land position: ties
     std::stable_sort(order.begin(), order.end(), [&](int x, int y)
     { return CastOrderLess(state, plan.actions[x], plan.actions[y]); });
     ApplyDeckCastArrangement(state, plan.actions, order);   // the deck's set-level order (lockstep: ApplyPlanDirect)
@@ -8841,7 +8841,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (!extra.searched_order && pe_cont_order.size() > 1)
                 {
                     if (pe_land.pending && pe_land.slot > 0)
-                    { TurnSolver::LandSlotWatchersFirst(extra.actions, pe_cont_order); }   // land position: ties
+                    { TurnSolver::LandSlotWatchersFirst(state, extra.actions, pe_cont_order); }   // land position: ties
                     std::stable_sort(pe_cont_order.begin(), pe_cont_order.end(),
                         [&](int x, int y)
                         { return CastOrderLess(state, extra.actions[x], extra.actions[y]); });
