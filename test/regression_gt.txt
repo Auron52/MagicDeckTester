@@ -1,5 +1,7 @@
 # Regression ground truth -- commit e0b9de5f7  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
+# accepted-with-regressions (smoke, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
+# accepted-with-regressions (regression, 2026-11-12): morph INT-8/9 (USER rulings R7-R14 + USER Wooded Foothills fetch rule; Berserk-first as ruled): movers morph/morph2hg only, every aggregate faster; held-out A/B seeds 60000+ morph -29 turns 0.84x units, morph2hg -14 turns 0.85x; every E/INT-8 slower game recovers at d8 b0; 6 fetch-rule slower games (A/B morph gi186/193/532/496, 2HG gi146, regression 2HG gi2) are library-shuffle divergence after the crack or the search holding an uncracked fetch to keep a seen library top (clairvoyance) -- adopted under the USER prune-adoption bar
 # accepted-with-regressions (smoke, 2026-11-12): morph INT-5/6/7 (aad2a29a9-rebased #TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg only; searched slower 0; d0 slower 1 (morph_smoke_d0 gi399 T6->T7, recovers T5 at d8 b0); held-out A/B seeds 60000+ net faster on every deck (morph -248, morph2hg -121, mirrorwing -8, mirrorwing2hg -5 turns)
 # accepted-with-regressions (regression, 2026-11-12): morph INT-5/6/7 (#TT dedup fix + USER largest-attacker trick rule + USER rulings 5/6 Spellskite twin), rebased onto origin cc24d1362: movers morph/morph2hg/mirrorwing/mirrorwing2hg + extraturns_regression_d5_s3003 (1 game, gi36 T4 unchanged; OURS: bisected to 5d55fe9f6 INT-2c SectionForgetHandExits, the origin binary reproduces origin GT and 5d55fe9f6 with that call removed reproduces it too -- a same-score tie on the winning extra turn); searched slower 0; d0 slower 1 (morph_regression_d0 gi213 T4->T5, recovers T4 at d8 b0); held-out A/B seeds 60000+ net faster on every deck
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
@@ -7,10 +9,10 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-morph_smoke_d0_s1001=5.0530/7bee3f0cfe66ab97
-morph_smoke_d3_s1001=4.3600/d4b7330960bd3038
-morph_smoke_d5_s1001=4.2400/0bb73e8b7b1b4c5b
-morph2hg_smoke_d5_s1001=4.8000/52c39f0451fa8a39
+morph_smoke_d0_s1001=5.0080/e072a446955ccd6f
+morph_smoke_d3_s1001=4.3400/f89f452be9862f2a
+morph_smoke_d5_s1001=4.2400/bb20161e7084e0f0
+morph2hg_smoke_d5_s1001=4.7200/4fe09dbad2145602
 hydras_smoke_d0_s1001=5.8480/4401470db4ecbd6f
 hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
 hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
@@ -208,13 +210,13 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-morph_regression_d0_s2002=5.0050/8c4f8dcc8242dff9
-morph_regression_d3_s2002=4.1733/ba60fd1aae5ec6e3
-morph_regression_d5_s2002=4.1867/d8ed70429e8759e0
-morph_regression_d5_s3003=4.4533/3ced454d1ff3ba27
-morph2hg_regression_d5_s2002=4.6267/6186c0829d68c988
-morph_regression_d3_s30001=4.0000/b0d44076c03338a0
-morph_regression_d5_s30001=4.0000/b0d44076c03338a0
+morph_regression_d0_s2002=4.9590/8474c877dc73f839
+morph_regression_d3_s2002=4.1467/6d31943dcc0f9add
+morph_regression_d5_s2002=4.1800/7d5860d6c29c022a
+morph_regression_d5_s3003=4.4133/79e7ea67deb64b67
+morph2hg_regression_d5_s2002=4.6000/12035765e7a93ca0
+morph_regression_d3_s30001=4.0000/d54e5f3f8f51a90b
+morph_regression_d5_s30001=4.0000/d54e5f3f8f51a90b
 hydras_regression_d0_s2002=5.7910/2f302f5e6f2a2826
 hydras_regression_d3_s2002=5.3867/8dc8d0544f203e7e
 hydras_regression_d5_s2002=5.3800/9c23aae1d8781467

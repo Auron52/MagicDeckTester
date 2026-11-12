@@ -1,0 +1,20 @@
+{
+ "merge": [
+  {
+   "cards": [
+    "Wooded Foothills",
+    "Stomping Ground"
+   ],
+   "why": "USER RULING 2026-11-12: 'I don't see many good merges. Probably Wooded Foothills and Stomping Ground is a reasonable one after the modifications.' After INT-9's MorphProvider fetch prune, Wooded Foothills is cracked on play for Stomping Ground (untapped for 2 life), so in a goldfish it is a Stomping Ground costing one more life that also thins the library."
+  }
+ ],
+ "keep_apart": [
+  {
+   "cards": [
+    "Birds of Paradise",
+    "Ignoble Hierarch"
+   ],
+   "why": "USER RULING 2026-11-12: 'Other than that maybe the dorks, but exalted can matter. So that leans toward K=18.' Ignoble Hierarch's exalted adds a point of combat damage that pump doublers (Berserk, Legion Leadership, Temur Battle Rage) multiply; Birds makes any colour and has flying."
+  }
+ ]
+}
