@@ -832,6 +832,37 @@ fungus 1,880, gods 4,300 (first run).
     oracle's pay2 taps a Tendo Ice Bridge that is in HAND on the plan's board (s30005620 gi22 T8: board Tendo#55 + City of
     Brass, pay2 uses Tendo#56) -- check whether the oracle realises an undeclared land drop for a "no land" plan (oracle
     false positive) before touching the engine's menu gate.
+* **Round 9 (ninth item-6 agent, 2026-11-12).**
+  * **FIXED (correctness): the whole-turn prepay billed an ADVENTURE cast at its creature face.** The fungus "Ancient
+    Tomb vs Saproling" shape (388 of 643 DOMINATED-CREATURE; s30055300 / s30055011 T3) was NOT the per-pip yield division:
+    the real payment is BatchPrepayMainCasts' joint solve, and `{Sporecrown Thallid + Fungus Frolic}` was billed
+    `{1}{G}+{3}{G}` (Brightcap Badger looked up by NAME -- the enumerator's adventure action carries no `def`) instead of
+    `{1}{G}+{2}{G}`, so the solve tapped six mana for a five-mana line (the 1/1 Saproling AND Tomb's second {C}, floated
+    away) and counted the adventure as a creature spell. `PrepayCastFace` (TurnSolver.cpp) swaps in the adventure /
+    bestow / kicker face exactly as apply_one and CastSpellFromHand do, at every per-act def read in the prepay. No lever
+    (a wrong bill). Both repros clean; unit test "Prepay bills an ADVENTURE cast...".
+  * **FIXED: doomed bodies pay ahead of the LANDS (`MTG_PAY_DOOMED_AHEAD_OF_LANDS`, heurarm, default ON).** s30055537 T4
+    `{Ascension + Wild Growth + the Burst's last fade activation}` was prepaid with Ancient Tomb, a Forest and Utopia Mycon
+    while five doomed Burst tokens stood untapped. `IsDoomedPlanBody` (ManaPayment.cpp, shared) feeds (a) the per-pip
+    payer: a doomed body competes in the plain tier on NEEDS first (a tap leaving a colour the line owes short loses to a
+    land) and ahead of every land rank at equal needs; (b) the prepay: doomed bodies are never in the creature hold, and
+    doomed-first rungs (every other source held, released one at a time -- plain lands, then pain, then bodies) run before
+    the ladder; the joint solve is colour-exact over the whole line, so the colour reserve holds by construction, and the
+    ladder runs unchanged when no rung pays. s30055537: DOMINATED 12 -> 0. Unit test "Doomed bodies pay ahead of the lands".
+  * Validation: units 2861/2861; held-out 7370001+ (old PGO HEAD vs new): fungus 4000 net -2 (2 faster, 0 slower, 25
+    digest diffs), minotaur (bestow) 2000 byte-identical; smoke 195/195 unchanged; regression 306/309, only fungusv3 rows
+    moved (searched slower 0, faster 1, 2 same-score; d0 1 digest-only) -> accepted. Commits 4bf18e485 (fix) + 1c17be8eb
+    (GT). Fungus/gods re-gate on fresh blocks NOT yet run (owed: ./build.sh pgo, then one pooled
+    `mana_clean.py run --games 5000 fungus gods`).
+  * **gods ENUM-GAP 86: PARKED (analyzer/enumeration, not a mana gate).** s30005620 T8 `{no land + Careful Study + Life from
+    the Loam}`: the oracle side was checked first. TapsContinuationLand DOES fire (Careful Study's breakpoint continuation
+    plays Tendo #56 from hand), but the fold's with-land key misses because the Loam action's `tutor_target` differs:
+    the gate-observe plan's Loam probe (TurnSolver.cpp ~91440, the live-graveyard fan) saw Careful Study DREDGE Golgari
+    Grave-Troll (milling lands #7/#17) and offers `L7,17,42`, while the menu's `land=Tendo [ordered] + CS + Loam` variants
+    offer only subsets of {42,53,58} -- with the land played first the dredge-vs-draw choice differs. So the realisation is
+    "Careful Study, THEN the land, then Loam on the milled lands": a land-position x dredge-choice interaction, not a mana
+    gate. Options: (a) oracle: relax the cont-land fold to the with-land plan with ANY Loam target set (unsound in general);
+    (b) engine: enumerate a land_slot after a dredge-capable draw. Not attempted; raise with the owner.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
