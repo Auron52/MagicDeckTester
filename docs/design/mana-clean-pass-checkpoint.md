@@ -663,6 +663,32 @@ fungus 1,880, gods 4,300 (first run).
   plans (T1 Thrumming Stone + 2 Apostles + 2 Rituals + Diabolic Intent) the oracle cannot try every order of, so it
   cannot say PHANTOM -> a sound order-free mana upper bound would settle them (analyzer). treasure_hunt APPLY-DROP 385:
   {Treasure Hunt x2} 122, {Cascade Bluffs + Land's Edge + Hunt} 64, {Bluffs + Hunt x2} 45 (lead in 6-handoff.md).
+* **Round 3 (third item-6 agent, 2026-11-12).**
+  * **goblins PARKED; WIP `wip/oracle-sacpay-fodder` 9449bf6de (pushed, NOT on the shared branch).** Oracle-only:
+    `PreTap::sac_fodder` + fodder classes in BuildSources (armed for the frontier payment table only, honouring the
+    payer's fodder_ok spares: the cast's sac victim, the activation's source / baked victim captured at the frontier as
+    `Hook::f_sac_spare`). On the 288 goblins issue seeds: ORACLE-GAP 608 -> 21, BUT ENUM-GAP 7 -> 791 and CAPPED
+    0 -> 727. The ENUM-GAPs are REAL engine menu-gate gaps the old instrument could not see: the gate does not credit
+    fodder the line itself creates -- Siege-Gang's three ETB tokens (s30110041 T4 {Siege-Gang + Chainwhirler}: pay
+    Siege-Gang eating Warchief, Chainwhirler eating the tokens + Prospector) and Prospectors the line casts (504 of
+    791, e.g. s30110142 T1 {Prospector, Prospector, Lackey} each paid by eating the previous Prospector; likely
+    dominated but no SOUND dominance proves it). CAPPED is the payment table on wide token boards (5 decisions hold
+    ~570). NEXT: (1) an ENGINE change -- the menu's mana gate credits line-created fodder (the MTG_SAC_PAY_PLAN_FODDER
+    shape, extended to ETB tokens and cast bodies), a play change needing tiers + held-out A/B; (2) an oracle fold for
+    the fodder classes (the payer eats fodder last and as few bodies as possible -- not by itself a dominance, so it
+    must be argued); then re-gate. Utopia Mycon decks (fungus) will move with this instrument too.
+  * **pirates: ENGINE BUG FIXED (local commit, see git log "Sac-draw lands: re-find the source").** The 174 UNMODELED
+    "a mana choice the oracle does not drive: Fiery Islet" were a real defect: the sac-draw activation erased
+    `begin()+idx` after a payment that cracked a Treasure sitting ahead of the Islet, so it sacrificed the NEXT permanent
+    (s30049175 T4: Daring Buccaneer died, the tapped Islet stayed). Fixed at AIEngine::PerformDigFull and both
+    TurnSolver sites; unit test test_sacdraw_refind.cpp.
+  * **pirates USER DECISION (payment policy, not settled):** APPLY-DROP 265 of 276 = "engine dropped [cast Lightning
+    Bolt]" in 60 of 5,000 games (1.2%); 226 of the 265 after a Staunch Crewmate cast/vial. The per-cast payer pays the
+    Pirate with Spirebluff Canal and strands Bolt; paying it with Unclaimed Territory's Pirate-only mana keeps the Canal
+    for the continuation's Bolt (s30049037 T3). Question: should the payer, paying a Pirate creature spell, spend
+    Unclaimed Territory's creature-type mana before a dual whose colour a noncreature card in HAND needs (Lightning Bolt
+    {R}), when no other hand Pirate needs Territory's colour? Recommendation: yes, as a hand-demand-priced preference in
+    the per-cast payer (the prepay's hand_demand), measured by a held-out A/B first.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
