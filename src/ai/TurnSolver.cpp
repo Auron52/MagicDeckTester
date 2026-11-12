@@ -60947,8 +60947,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // {C} -> Muscle's {1} pays all three, Hivepool at {0}). Only entries still in hand count (a
         // resolved one is on the board, and EffectiveCost has it). Payment only: every cast reprices live.
         static const bool s_line_affinity = EnvOn("MTG_PREPAY_LINE_AFFINITY", true);
-        if (s_line_affinity && !a.evoke && d->params.affinity_for_subtype && !d->params.subtypes_affected.empty()
-            && ec.generic > 0)
+        if (!a.evoke && d->params.affinity_for_subtype && !d->params.subtypes_affected.empty()
+            && ec.generic > 0 && heurarm::Flag(heurarm::PREPAY_LINE_AFFINITY, s_line_affinity))
         {
             const int a_rank = ResolveProvider(state).CastOrderRank(state, *d);
             int credit = 0;
@@ -61005,7 +61005,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // Cavern {U} + Cavern {C} pays all three). Pricing the copies here makes the joint bill the
         // line's real bill, as the enumeration already prices it. Both apply worlds call this.
         static const bool s_prepay_replicate = EnvOn("MTG_PREPAY_REPLICATE", true);
-        if (s_prepay_replicate && a.replicate_count > 0)
+        if (a.replicate_count > 0 && heurarm::Flag(heurarm::PREPAY_REPLICATE, s_prepay_replicate))
         { for (int c = 0; c < a.replicate_count; ++c) { AddManaCost(ec, d->card.m_mana_cost); } }
         combined.generic += ec.generic; combined.white += ec.white; combined.blue += ec.blue;
         combined.black += ec.black; combined.red += ec.red; combined.green += ec.green;

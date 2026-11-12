@@ -874,6 +874,8 @@ enum Slot : int
     PAY_REFINE_C_FOLD,        // MTG_PAY_REFINE_C_FOLD  item 5d half (2) (mana-clean, Angels s30210844): the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold). Split from MTG_PAY_EXCESS_RELEASE so each half is A/B'd on its own. Default ON; =0 -> the per-key compare as before
     TERA_DRAIN_DOOMED,        // MTG_TERA_DRAIN_DOOMED  item 5d (mana-clean, Stompy regression s2002 gi412): Terastodon's own-permanent destroy taps each UNTAPPED basic-land victim for its one colour into the float first (CR 605.3a; the land dies either way, so the drain only adds mana and decides no colour). SpellEffects.h, g_tera_drain_hook. Default ON; =0 -> the victim dies untapped as before
     SEL_GATE_SELF_EXCL,       // MTG_SEL_GATE_SELF_EXCL  the selection-exact emission test (SelGateExactRefuses) and the flat-fallback gate cut (OdoFlatCut) take a same-turn generic reducer's step off every OTHER selected cast but never its OWN (a reducer's static applies only from the battlefield, and it is cast first). SOUND (MTG_SEL_GATE_EXACT_VERIFY counts violations); moves play only through the work-priced ceilings. Hydras runaway P8/P9 2026-11-12. DEFAULT ON (held-out A/B: digests identical, units <= on all six reducer decks); =0 -> every selected cast discounted
+    PREPAY_REPLICATE,         // MTG_PREPAY_REPLICATE  item 6 (mana-clean, Slivers s30214758): the whole-turn prepay (BatchPrepayMainCasts) prices a pinned Hatchery replicate count (k x printed) into the joint bill, as Action::cost already does. Default ON; =0 -> the effective cost only
+    PREPAY_LINE_AFFINITY,     // MTG_PREPAY_LINE_AFFINITY  item 6 (mana-clean, Slivers s30214131): the whole-turn prepay credits an affinity card (Thrumming Hivepool) with the line's matching creatures ranked before it (CastOrderRank) and their pinned copies, as SameTurnAffinityDiscountFor does. Default ON; =0 -> the board-only price
     COUNT
 };
 
@@ -1692,6 +1694,8 @@ inline const char* Name(int slot)
         "MTG_PAY_REFINE_C_FOLD",
         "MTG_TERA_DRAIN_DOOMED",
         "MTG_SEL_GATE_SELF_EXCL",
+        "MTG_PREPAY_REPLICATE",
+        "MTG_PREPAY_LINE_AFFINITY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
