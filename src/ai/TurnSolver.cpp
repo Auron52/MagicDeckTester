@@ -3792,6 +3792,47 @@ static bool DomainWidenEnabled() { return g_domain_widen; }
 static const bool g_no_haste_dork_credit = EnvOn("MTG_NO_HASTE_DORK_CREDIT");
 static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
 
+// MTG_PENDING_BLANKET_HASTE (DEFAULT ON; =0 -> a blanket haste granter cast in the SAME plan credits
+// nothing). Concordant Crossroads cast in a plan makes every creature cast AFTER it able to tap at once,
+// so a mana creature cast after it (Undercellar Myconid's own {T}, or a Fungus under a live Brightcap
+// Badger's granted {T}: Add {G}) funds the casts after IT. The flat gates price the subset off the
+// pre-plan board and kept "Crossroads, Myconid, then Thallid off the new Myconid" off the menu
+// (mana-oracle ENUM-GAP fungus s30060073 T3, gate 20261112-172835). The Surrak-and-Goreclaw precedent
+// (pending_enter_haste): an odometer bound addend so the subset survives to be priced, an admission to
+// the sequential rescue walk, and the walk joining the granter and the hasted creature, so the subset
+// is offered only when a real per-cast payment in the apply worlds' order pays. Rescue-only: it can
+// only ADD subsets, each genuinely payable. Inert unless the list holds a mana-grant card (the walk
+// join reads LiveManaGrant, gated on deck_has_mana_grant) or the plan casts a blanket haste granter.
+static bool PendingBlanketHasteOn()
+{
+    static const bool on = EnvOn("MTG_PENDING_BLANKET_HASTE", true);
+    return HasteDorkCreditEnabled() && heurarm::Flag(heurarm::PENDING_BLANKET_HASTE, on);
+}
+// MTG_GRANT_HASTE_CAST_CREDIT (DEFAULT ON; =0 -> no stamp): see the grant-reached branch of the
+// hasted-creature rock stamp in CollectActions.
+static bool GrantHasteCastCreditOn()
+{
+    static const bool on = EnvOn("MTG_GRANT_HASTE_CAST_CREDIT", true);
+    return heurarm::Flag(heurarm::GRANT_HASTE_CAST_CREDIT, on);
+}
+static bool IsBlanketHasteDef(const CardDefinition* d)
+{
+    return d != nullptr && d->params.grants_haste && d->params.affects_all_creatures;
+}
+// A creature that taps for mana the moment it can use {T}: a printed mana dork, or a body the live
+// grant `g` reaches that has no printed mana ability of its own (GrantCastCredit's population).
+static bool BlanketHasteManaCreature(const GameState& state, const CardDefinition& def, const ManaGrant& g)
+{
+    if (!def.card.IsCreature() || def.params.enters_tapped || def.params.gy_land_exile_mana) { return false; }
+    if (def.tmpl == CardTemplate::ManaDork) { return true; }
+    if (!g.live || IsBaselineManaSource(def)) { return false; }
+    Permanent body;
+    body.card             = def.card;
+    body.controller_index = state.active_player_index;
+    body.owner_index      = state.active_player_index;
+    return GrantReaches(g, body);
+}
+
 // ---- The second main inside the search is SEARCHED, not greedy --------------------------------
 // USER BAR (2026-08-09): "we can't afford to have second main be greedy ... I want no greedy steps
 // except attack decisions [and] mana allocation." Closed 2026-09-05: "Can we delete that greedy
@@ -11638,6 +11679,17 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 { enter_haste_for_mana = true; break; }
             }
         }
+        // BLANKET HASTE (Concordant Crossroads; MTG_PENDING_BLANKET_HASTE): once a blanket haste
+        // granter is on the scratch board -- cast earlier in this walk or already there -- a creature
+        // cast now with a {T} mana ability (its own, or the board's live grant: Brightcap Badger on a
+        // Fungus / Saproling) taps for the casts after it. Joined like the Surrak dork above, with its
+        // hand ID so the scratch payer can tap it once.
+        if (!enter_haste_for_mana && PendingBlanketHasteOn() && def.card.IsCreature()
+            && !def.params.enters_tapped && !def.params.gy_land_exile_mana)
+        {
+            const ManaGrant g = LiveManaGrant(cp, cp.active_player_index);
+            if (g.blanket_haste && BlanketHasteManaCreature(cp, def, g)) { enter_haste_for_mana = true; }
+        }
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
                                      && !def.params.lens_imprint_land)
                                  || def.params.hinata_cost_reducer
@@ -11650,6 +11702,10 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  || (HasteDorkCreditEnabled()
                                      && def.params.other_nontoken_enters_counter_haste > 0)
                                  || enter_haste_for_mana
+                                 // ...and the blanket haste granter itself (Crossroads), so the
+                                 // creature casts after it see the haste (LiveManaGrant / CanTapNow).
+                                 || (PendingBlanketHasteOn() && def.params.grants_haste
+                                     && def.params.affects_all_creatures)
                                  // A land-tap bonus source (Vernal Bloom / Nissa / Gauntlet): the
                                  // lands still untapped after it tap for more (the Lens note above).
                                  || def.params.land_tap_bonus > 0;
@@ -41681,6 +41737,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                  && (def.card.HasKeyword(Keyword::Haste)
                      || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
         { AddSourceToPool(a.rock_mana, state, def); }
+        // ...and a hasted creature with NO printed mana ability that the board's LIVE mana grant
+        // reaches (Brightcap Badger on the battlefield: "each Fungus and Saproling you control has
+        // {T}: Add {G}"). Under Concordant Crossroads it taps the turn it is cast exactly like the
+        // hasted dork above, through the granted ability: "Shroofus Sproutsire, then Thallid off
+        // Shroofus" was priced as if Shroofus made nothing (mana-oracle ENUM-GAP fungus s30060029 T5,
+        // gate 20261112-172835). The same discipline as the branch above (a producer never funds its
+        // own cost; the board's lords and the board's grant only -- a Badger or Crossroads cast in the
+        // SAME plan is not credited here). One unit of the grant's colour, which is what the granted
+        // ability makes (GrantFaceFor). Inert without a live grant -> byte-identical for every deck
+        // whose list has no granted_tap_mana_subtypes card (deck_has_mana_grant false).
+        else if (RockRampEnumEnabled() && HasteDorkCastCreditOn() && state.deck_has_mana_grant
+                 && GrantHasteCastCreditOn()
+                 && def.card.IsCreature() && !IsBaselineManaSource(def) && !def.params.enters_tapped
+                 && (def.card.HasKeyword(Keyword::Haste)
+                     || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
+        {
+            const ManaGrant g = LiveManaGrant(state, state.active_player_index);
+            Permanent body;
+            body.card             = def.card;
+            body.controller_index = state.active_player_index;
+            body.owner_index      = state.active_player_index;
+            if (g.live && GrantReaches(g, body))
+            {
+                switch (g.color)
+                {
+                    case Color::White:     a.rock_mana.white     += 1; break;
+                    case Color::Blue:      a.rock_mana.blue      += 1; break;
+                    case Color::Black:     a.rock_mana.black     += 1; break;
+                    case Color::Red:       a.rock_mana.red       += 1; break;
+                    case Color::Colorless: a.rock_mana.colorless += 1; break;
+                    default:               a.rock_mana.green     += 1; break;
+                }
+            }
+        }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND -- see EtbTreasureSpendOn): the
         // Treasure its enter trigger makes is fresh-hold EXEMPT, so it is same-turn mana exactly like
         // a cast rock's first tap -- one WILD per Treasure, arriving only once the maker resolves.
@@ -77534,6 +77624,58 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
     }
+    // A BLANKET HASTE granter cast in this plan (Concordant Crossroads; see PendingBlanketHasteOn): the
+    // upper bound of what it can unlock -- each mana creature castable now (one tap each; a dork's real
+    // yield) and each summoning-sick mana body already on the board. Only an upper bound, so the
+    // odometer and the rescue's scalar ceiling let the subset reach the walk, which is the arbiter.
+    // 0 unless a granter is castable and none is live -> byte-identical everywhere else.
+    int pending_blanket_haste_bound = 0;
+    if (PendingBlanketHasteOn())
+    {
+        const ManaGrant g = LiveManaGrant(state, state.active_player_index);
+        bool live = g.blanket_haste;
+        if (!state.deck_has_mana_grant)
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+                if (IsBlanketHasteDef(CardDatabase::Instance().LookupCached(p.card))) { live = true; break; }
+            }
+        }
+        const bool pending = std::any_of(cands.begin(), cands.end(), [](const Action& a)
+            { return a.kind == Action::Kind::CastFromHand && IsBlanketHasteDef(a.def); });
+        if (pending && !live)
+        {
+            const Player& ap = state.players[state.active_player_index];
+            for (const Action& a : cands)
+            {
+                if (a.kind != Action::Kind::CastFromHand || !a.def || a.hand_index < 0
+                    || a.hand_index >= static_cast<int>(ap.hand.size())
+                    || !BlanketHasteManaCreature(state, *a.def, g)) { continue; }
+                if (a.def->tmpl == CardTemplate::ManaDork)
+                {
+                    ManaPool add, add_nc;
+                    HasteUnlockedManaOf(state, ap.hand[a.hand_index].m_number, add, add_nc);
+                    pending_blanket_haste_bound += add.Total();
+                }
+                else { pending_blanket_haste_bound += 1; }
+            }
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != state.active_player_index || p.tapped || !p.card.IsCreature()
+                    || CanTapNow(p, state.battlefield)) { continue; }
+                const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+                if (d != nullptr && d->tmpl == CardTemplate::ManaDork)
+                {
+                    ManaPool add, add_nc;
+                    HasteUnlockedManaOf(state, p.card.m_number, add, add_nc);
+                    pending_blanket_haste_bound += add.Total();
+                }
+                else if ((d == nullptr || !IsBaselineManaSource(*d)) && GrantReaches(g, p))
+                { pending_blanket_haste_bound += 1; }
+            }
+        }
+    }
     // Same-turn SCALING SOURCE widening scan (EnumeratePlans ONLY -- see the credit below).
     // State-only, so it is built ONCE here; the per-subset path is an int test plus a walk of the
     // selection. Zero live scaling sources -> every other deck/state is byte-identical.
@@ -79461,11 +79603,41 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                 }
                 pending_enter_haste = watcher && dork;
             }
+            // A blanket haste granter cast in THIS subset with something for it to unlock (a mana
+            // creature cast in the subset, or a sick mana body on the board -- the bound counted
+            // them). PendingBlanketHasteOn; the walk joins both and is the arbiter.
+            bool pending_blanket_haste = false;
+            if (pending_blanket_haste_bound > 0)
+            {
+                bool granter = false, creature = false;
+                const ManaGrant g = LiveManaGrant(state, state.active_player_index);
+                for (int j : sel)
+                {
+                    const Action& c = cands[j];
+                    if (c.kind != Action::Kind::CastFromHand || !c.def) { continue; }
+                    granter  |= IsBlanketHasteDef(c.def);
+                    creature |= BlanketHasteManaCreature(state, *c.def, g);
+                }
+                bool sick_body = false;
+                if (granter && !creature)
+                {
+                    for (const Permanent& p : state.battlefield)
+                    {
+                        if (p.controller_index != state.active_player_index || p.tapped
+                            || !p.card.IsCreature() || CanTapNow(p, state.battlefield)) { continue; }
+                        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+                        if ((d != nullptr && d->tmpl == CardTemplate::ManaDork)
+                            || ((d == nullptr || !IsBaselineManaSource(*d)) && GrantReaches(g, p)))
+                        { sick_body = true; break; }
+                    }
+                }
+                pending_blanket_haste = granter && (creature || sick_body);
+            }
             if (!ef_on && !seq_on_etb && !seq_on_aura && !pending_noncombat_discount
-                && !pending_enter_haste)
+                && !pending_enter_haste && !pending_blanket_haste)
             { return false; }
             bool interacts = (ef_on && any_hinata_credit) || pending_noncombat_discount
-                          || pending_enter_haste;
+                          || pending_enter_haste || pending_blanket_haste;
             int  aura_bonus  = 0;           // new mana a same-subset land Aura brings online
             bool other_inter = interacts;   // any interaction OTHER than a land Aura?
             int  nonaura     = 0;           // casts the Aura could be funding
@@ -79604,6 +79776,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // four coloured pips against pool 2 + Trace 1, rejected here, where each Cloud's two untaps pay the next
             // cast (mana-oracle ENUM-GAP). Computed only when the ceiling would reject; still an upper bound.
             int ef_ceiling = static_cast<int>((credited ? eff : pool).Total()) + aura_bonus;
+            if (pending_blanket_haste) { ef_ceiling += pending_blanket_haste_bound; }   // new total mana, an upper bound
             const int ef_pips = combined.ManaValue() - combined.generic;
             if (ef_ceiling < ef_pips && EfScalarRefundOn())
             {
@@ -80245,6 +80418,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     for (const ManaPool& u : haste_unlock) { haste_unlock_bound += u.Total(); }
     for (const ManaPool& u : enter_haste_unlock) { haste_unlock_bound += u.Total(); }
     haste_unlock_bound += pending_enter_haste_bound;
+    haste_unlock_bound += pending_blanket_haste_bound;   // Crossroads cast in the plan (PendingBlanketHasteOn)
     // ... and the same addend for the same-turn METALCRAFT credit, for exactly the reason above and
     // under ManaPruneBound's own maintenance breadcrumb ("any FUTURE cost reducer credited per-subset
     // in consider() rather than baked into a.cost"). MEASURED, not anticipated: with the credit on but
@@ -80404,7 +80578,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // generic, so the waived equip would be charged in full -- the same bail, to the waiver-aware
     // scalar bound (waiver_bound above). The haste-dork precedent; the gate is default OFF.
     if (SelectionExactManaGateEnabled() && gate_relevant && !any_haste_dork
-        && enter_haste_unlock.empty() && growth_bound == 0
+        && enter_haste_unlock.empty() && growth_bound == 0 && pending_blanket_haste_bound == 0
         && !any_hinata_credit && !spec_ctx.live && !any_storied && !manaoracle::t_gate_observe)
     {
         auto idx = std::make_unique<ManaGateIndex>();
