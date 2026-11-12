@@ -744,6 +744,29 @@ fungus 1,880, gods 4,300 (first run).
     full validation; not attempted this round).
   * pirates continuation drops (19) not started.
 
+* **Round 6 (sixth item-6 agent, 2026-11-12).**
+  * **treasure_hunt APPLY-DROP: FIXED IN PART (88401100b, GT bd1a8f9d4).** `MTG_LINE_SPARE_FILTER_FEED` (heurarm, default
+    ON): LineSpareSourceMask's over-count credited an untapped Cascade Bluffs with two {U} even when its only feed was
+    the one floating unit the generic pip was about to eat (s30070121 T4: Land's Edge's {R}{R} off Skerry {U}{U} ->
+    Bluffs, its {1} ate the second {U}, the new Bluffs was unfed and Hunt's {U} unpayable). The SHORT test now also
+    reads the supply left after the eat (the unit and the starved filter's credit), so the spare Tower {C} pays the {1}.
+    Issue seeds (136 games of th-6r5b): APPLY-DROP 299 -> 262, no other class moved. Held-out (Release, flag arm,
+    7350001+): th 4,000 / niv 4,000 / cyclone 2,000 / hinata 2,000 net 0 each, 1 digest diff, slower 0. Smoke +
+    regression: only th/niv rows, searched slower 0 (th reg d5 gi467 T5 like-for-like: the fixed shape), d0 faster.
+    **Tried and DELETED:** a generic-pip reroute to a starved filter's {C} (keep the dual up when it is the filter's
+    last feed). Issue seeds 262 -> 213, but held-out th net +1 / cyclone net +1, and th 7353426 + cyclone gi1587 stay
+    slower at d8 b0: a filter that is starved at payment time is re-fed later in the turn (a dig reveals a land, a
+    ramp filter's output), so keeping the dual up is not a dominance.
+    **PARKED remainder (~262):** the per-pip greedy pays Land's Edge's {R}{R} from two duals where one dual fed into
+    a Bluffs makes both (s30071552 / s30073118 / s30072175), stranding the filters; and {no land + Hunt} 68 is the
+    ORDER/continuation class. The whole-turn prepay (the joint solve that would pay these) DECLINES on every flood-engine
+    line (DRAW-SAFE, TurnSolver BatchPrepayMainCasts: a Treasure Hunt in `acts`). The source-level fix named there --
+    fold the recorded breakpoint_casts into the joint bill so the prepay can run on Hunt lines -- is the lead; a
+    per-pip "route the first pip through the filter" rule was measured wrong twice already (ManaPayment.cpp best_f
+    comment: th d0 gi442, Fluctuator s10).
+    Re-gate `th-6r6-20261112` (PGO 6858f5eb, 75000-79999): **267 issues** (was 375): APPLY-DROP 234, ORDER 15,
+    ENUM-GAP 18, ORACLE-GAP 0, UNMODELED 0; oracle-off play byte-identical.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
