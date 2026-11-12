@@ -870,6 +870,25 @@ fungus 1,880, gods 4,300 (first run).
     APPLY-DROP 0. **gods 3596** (10000-14999; was 10350): CAPPED-DECISION 3320 (still TWO decisions, analyzer budget,
     PARKED), ENUM-GAP 138, ORACLE-GAP 63, CAPPED 56, UNMODELED 14, APPLY-DROP 5. gods ENUM-GAP is still dominated by
     `{no land [ordered] + Careful Study|Faithless Looting + Life from the Loam}` (the item below).
+  * **gods ENUM-GAP (Loam after a dredging draw): ROOT-CAUSED, fix built, NOT ADOPTED (A/B fails) -> PARKED on
+    `wip/gods-land-after-dredge-draw` (39e029d04, pushed).** The search really could NOT reach "Careful Study (dredge
+    Grave-Troll, milling lands), THEN the land, THEN Loam on the milled lands": (1) the land-first plan reads the Gods
+    dredge rule (GodsDredgeCandidatesForRule, rule 4: lands in play / lands in hand) with the land already in play, so
+    the dredge answer and the milled graveyard differ; (2) {no land + CS + Loam} is correctly mana-gated (no land); (3)
+    the site-3 breakpoint node's continuation {land + Loam} uses only OLD cards, so MTG_BP_NEW_ONLY drops it (Loam is
+    not plan-pending in {no land + CS}). By the USER's NEW_ONLY ruling that is a base-model gap -> the owner's option
+    (b). The WIP adds TurnSolver::LandSlotCounts (PutsLandfallWatcher + a draw cast in a deck_has_dredge game) and
+    LandPositionAxisLive (LandOrderMatters, or a dredge card in graveyard/hand) at every position-count site in both
+    worlds; {land@after-CS + CS + Loam} then exists and its node continuation keeps Loam (plan-pending). Repros:
+    s30005620 T8 and s30013694 / 12463 / 12038 / 11070 T3 all ENUM-GAP -> 0 (one decision, s30013694 T3, shows
+    PHANTOM 24: {land=Cephalid Coliseum [ordered] + CS + Loam}, a degenerate position whose Loam drops -- the prefix
+    probe is Blanket at a breakpoint). Units 2862/2862 (burn sac-pin test needed `deck_has_dredge = false`, the burn
+    deck's real stamp). **Held-out gods 3000 (7380001+, PGO HEAD vs WIP Release): net +383, 47 slower / 25 faster,
+    5 wins -> unwon, 1 unwon -> win** -- the extra positions dilute Gods' budget. Fails the bar; not on the shared
+    branch. Lead (sound identity fold, cheaper): emit a dredge-anchor position (k and -1) only when the singleton
+    dredge answers recorded for the clone DIFFER from its land-first base's (DredgeSearchSingletonPolicy; same answers
+    -> same board modulo payment allocation, the standing exemption), then re-A/B; slower games still owe d8 b0
+    checks. A/B scratch: build/scratch/claude1110/6r10/ab.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
