@@ -81,3 +81,16 @@ TEST_CASE("read guard: the real caches serve exactly where the shadow serves or 
         }
     }
 }
+
+// Hydras P7 2026-11-12: a breakpoint derivation advances the CALLER's scripted pins (dredge / Keranos / sac cursors)
+// through the candidates it applies, and a cache hit advances nothing -- so a muted recompute standing in for a virtual
+// hit consumed pins the hit would have left (Gods regression gi 4: the next derivation lost a continuation whenever
+// the byte pool had dropped the entry). The mute restores them; a counted computation still consumes them.
+TEST_CASE("priced ledger: a muted recompute leaves the caller's scripted pins where it found them")
+{
+    const TurnSolver::MutePinProbe r = TurnSolver::MutePinRestoreProbeForTest();
+    CHECK(r.dredge == 2);
+    CHECK(r.keranos == 1);
+    CHECK(r.sac == 3);
+    CHECK(r.dredge_counted == 6);
+}
