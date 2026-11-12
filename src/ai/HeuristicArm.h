@@ -873,6 +873,8 @@ enum Slot : int
     PAY_EXCESS_RELEASE,       // MTG_PAY_EXCESS_RELEASE  item 5d (mana-clean, Angels s30210844 / Jumbo s30091733): a payment that made more mana than its bill gives the excess source back when that is a pure dominance. (1) The whole-turn prepay's give-back (MTG_PREPAY_SHRINK) also runs when the solve's SOURCES fit the bill's mana points but its MANA does not (multi-unit taps: an Arbor Elf unit, Sol Ring, Remote Farm), accepting only a strict subset of the solve's own taps; (2) the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold) -- half (2) has its own lever, MTG_PAY_REFINE_C_FOLD, below. Default ON; =0 -> (1) as before
     PAY_REFINE_C_FOLD,        // MTG_PAY_REFINE_C_FOLD  item 5d half (2) (mana-clean, Angels s30210844): the per-cast refine (MTG_PAY_REFINE) reads a floating {C} as covered by any other surplus unit of the same pool in a deck with no {C} pip (deck_spends_c_pip false, the GenericCFirstScope fold). Split from MTG_PAY_EXCESS_RELEASE so each half is A/B'd on its own. Default ON; =0 -> the per-key compare as before
     TERA_DRAIN_DOOMED,        // MTG_TERA_DRAIN_DOOMED  item 5d (mana-clean, Stompy regression s2002 gi412): Terastodon's own-permanent destroy taps each UNTAPPED basic-land victim for its one colour into the float first (CR 605.3a; the land dies either way, so the drain only adds mana and decides no colour). SpellEffects.h, g_tera_drain_hook. Default ON; =0 -> the victim dies untapped as before
+    PREPAY_REPLICATE,         // MTG_PREPAY_REPLICATE  item 6 (mana-clean, Slivers s30214758): the whole-turn prepay (BatchPrepayMainCasts) prices a pinned Hatchery replicate count (k x printed) into the joint bill, as Action::cost already does. Default ON; =0 -> the effective cost only
+    PREPAY_LINE_AFFINITY,     // MTG_PREPAY_LINE_AFFINITY  item 6 (mana-clean, Slivers s30214131): the whole-turn prepay credits an affinity card (Thrumming Hivepool) with the line's matching creatures ranked before it (CastOrderRank) and their pinned copies, as SameTurnAffinityDiscountFor does. Default ON; =0 -> the board-only price
     COUNT
 };
 
@@ -1690,6 +1692,8 @@ inline const char* Name(int slot)
         "MTG_PAY_EXCESS_RELEASE",
         "MTG_PAY_REFINE_C_FOLD",
         "MTG_TERA_DRAIN_DOOMED",
+        "MTG_PREPAY_REPLICATE",
+        "MTG_PREPAY_LINE_AFFINITY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
