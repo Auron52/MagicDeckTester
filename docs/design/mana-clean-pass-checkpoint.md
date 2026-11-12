@@ -775,6 +775,27 @@ fungus 1,880, gods 4,300 (first run).
     shown 0/0 (P/T = fade counters) and calls Shroofus + a 1/1 the attackers -- check the oracle's resource key reads
     the tokens' real power before touching the engine. gods ENUM-GAP 1756: cheap casts off a lone Tendo Ice Bridge with
     its charge counter kept off the menu by a mana gate; CAPPED-DECISION 2330 is one decision (s30002725 T6).
+* **Round 7 (seventh item-6 agent, 2026-11-12).**
+  * **pirates: FIXED (e0b9de5f7, GT 9af4ce18d).** (a) `MTG_PAY_SAC_LINE_RESERVE` (heurarm, ON): the pain band
+    (MTG_PAY_PAIN_LAST) ranked Fiery Islet's {U} behind the Treasure (rank 26), so Crewmate's {U} -- NOT its generic, as
+    triaged -- spent the only {B}; a pay-sac one-shot that is the line's last source of an owed colour now taps after
+    every other land (the CCO line reserve's band). (b) `MTG_OPS_FIXED_REVEAL` (heurarm, ON): the 4 Buccaneer drops were
+    NOT a cast-order question -- the payable-order Vial walk priced the reveal surcharge on the subset's realised order
+    instead of the asked one and took "vial Corsair, Malcolm, Buccaneer" ({2}{R}, no Pirate left); OrderPaysSequentially
+    now charges the asked order (the USER's 2026-09-27 Corsair > Buccaneer > Malcolm rescue is what it now finds). All
+    four seeds clean under MTG_MANA_ORACLE=3. Held-out 7360001+: pirates 5000 net 0 (5 digest diffs), mirrorwing 3000
+    net 0. Regression: only pirates d0 digests moved (accepted). extraturns_regression_d5_s2002 gi66 moved digest in the
+    POOLED run only; standalone the job reproduces GT on both binaries -> pool-context flake, not accepted, flag for the
+    owner.
+  * **gods ENUM-GAP: FIXED (e0b9de5f7), analyzer-side + Kruphix.** Not a menu gate: HumanPreTapOfferFor's plain faces read
+    the DEFINITION (EffectiveProduces), so a counterless Tendo Ice Bridge offered any colour and the oracle "paid"
+    Looting's {R} off it (s30004862: T1 Looting spent the counter; the engine was right). Now per-permanent
+    (EffectiveProducesFor); also removes phantom Kruphix bank colours. Gods 3000 held-out vs old binary net -1.
+  * **fungus DOMINATED-CREATURE: real engine miss, FIXED 72c31a8cc (`MTG_PAY_DOOMED_BODY_FIRST`; held-out fungus 4000 net 0, 0 diffs; regression + gate owed).** The 0/0 names are
+    printed P/T only; the oracle is right: s30050019 T4 the plan's own last fade activation kills the five Burst tokens,
+    and the payer (creature band, battlefield-order tie; autonomous hold value is 0) tapped Shroofus + a lasting 1/1
+    instead of them. PlanTraits::fade_exhaust_src + creature-band key[1] = -1 for a doomed token. 548 of 1089 flags carry
+    a Burst activation; the rest (e.g. s30050039 T3 Ancient Tomb + Hickory Woodlot float) are other shapes, untriaged.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
