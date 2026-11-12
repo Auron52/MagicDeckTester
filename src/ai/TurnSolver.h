@@ -1695,6 +1695,11 @@ public:
         std::vector<int> dredge_pins; // one physical card number per in-plan optional draw, 0 = normal
         std::vector<int> keranos_targets; // one live target rank per in-plan nonland reveal
         std::int16_t next_draw_dredge_choice = -1; // draw step after this turn's boundary
+        // MORPH: the searched opponent-end-step flip (GameState::scripted_eot_face_up, a rank into the
+        // EotFaceUpMenu, rank 0 = the provider's front); -1 = write nothing. Recorded by the BoundaryFan's face-up
+        // axis on the plan of the turn that crossed; written write-when-set by WritePostApplyStatePins. In the
+        // int16 hole after next_draw_dredge_choice (sizeof(Plan) unchanged).
+        std::int16_t eot_face_up_choice = -1;
         std::vector<int> next_draw_dredge_pins; // all eligible boundary draws, in event order
         int next_klothys_choice = -1; // resolution-time graveyard card and mana mode
         int next_keranos_choice = -1; // resolution-time damage target
@@ -2771,6 +2776,15 @@ public:
                                                            SearchBudget* budget, bool second_main);
     static int ChooseRealCrossingLand(GameState& state, int depth, int max_turns,
                                       SearchBudget* budget, bool second_main);
+    // ...and morph's opponent-end-step flip: an unpinned flip menu (a face-down permanent of ours) is searched at
+    // the end of the real turn, one crossing per menu rank; the winner goes to state.scripted_eot_face_up (-2 =
+    // nothing to decide: no face-down permanent, or a one-entry menu).
+    static int ChooseRealCrossingFaceUp(GameState& state, int depth, int max_turns,
+                                        SearchBudget* budget, bool second_main);
+    // Test hooks: the MTG_FACEUP_AXIS_STATS searched-frame count (must read 0), and every crossing the face-up
+    // axis makes from `state` as (recorded pin or -2, flipped-permanent count after the crossing).
+    static long long FaceUpSearchedFrameUnpinnedForTest();
+    static std::vector<std::pair<int, int>> FaceUpBoundaryForTest(const GameState& state);
     // ...and its RESOLUTION node: a suspended tutor's search the real upkeep meets uncovered (a ripple free copy no
     // crossing could foresee) is searched at resolution, one copy per rank; returns the rank (-1 = one candidate).
     static int ChooseRealResolutionFetch(const GameState& state, int controller, const CardParams& pp,
@@ -3671,6 +3685,11 @@ public:
         // (board-click `target`), never on the line. EMPTY keeps the legacy name-in-casts matching.
         std::vector<std::string> steals;
         std::vector<std::string> transforms;
+        // "faceup=<real name>" (also `face_up=`, the plan verb the viewer writes; Morph INT-2b): a main-phase
+        // turn-face-up of a face-down permanent (PermAbilityMode::TurnFaceUp / TurnFaceUpLate), naming the REAL
+        // card. Its own verb because the action's card is the face ("X (Face-down)") and a copy of X in hand is a
+        // different play. EMPTY keeps the legacy name-in-casts matching.
+        std::vector<std::string> face_ups;
         // "sacnamed=<Demon name | (no fetch)>" (Shadowborn INT-2): Shadowborn Apostle's "{B}, Sacrifice six
         // creatures named ~: put a Demon onto the battlefield" (PermAbilityMode::SacNamedTutorPut), naming
         // the FETCH (the pod= / ooze= reason: the source is any copy, the Demon is the choice; and
@@ -3895,6 +3914,7 @@ public:
         int boundary_land = -2;
         int boundary_klothys = -2;
         int boundary_keranos = -2;
+        int boundary_face_up = -2;   // morph's opponent-end-step flip (Plan::eot_face_up_choice)
         int boundary_dredge = -2; // next draw step's physical dredger, 0 = normal draw
         std::vector<int> boundary_dredge_pins;
     };

@@ -4116,6 +4116,27 @@ public:
         return best;
     }
 
+    // EotFaceUpOrder -- MORPH: the ORDER of our face-down permanents for the opponent-end-step flip
+    // (SpellEffects.h EotFaceUpMenu). `cands` = (battlefield index, the REAL card's definition), in
+    // battlefield order; reorder IN PLACE, never add or drop (an ORDER only: the search fans every
+    // payable subset, and this order decides the menu's FRONT -- rank 0, which wins every tie -- and the
+    // payment order). The front is "flip every payable one, in this order", the permitted playout greedy
+    // beyond the horizon and the d0 runner's. DEFAULT (a deliberate ranking): the largest face-up power
+    // first (a megamorph's +1/+1 counter counted), then battlefield order -- in a goldfish the power that
+    // reaches next turn's attack is what the flip buys.
+    virtual void EotFaceUpOrder(const GameState& s,
+                                std::vector<std::pair<int, const CardDefinition*>>& cands) const
+    {
+        (void)s;
+        auto pw = [](const CardDefinition* d)
+        {
+            return (d->card.m_power.has_value() ? *d->card.m_power : 0)
+                 + (d->params.megamorph_cost.has_value() ? 1 : 0);
+        };
+        std::stable_sort(cands.begin(), cands.end(),
+                         [&](const auto& a, const auto& b) { return pw(a.second) > pw(b.second); });
+    }
+
     // GyEquipmentReturnPick -- Forge Anew's "return target Equipment card from your graveyard to the
     // battlefield" when the cast carried no searched pick (a put path, the unpinned cast variant, a
     // pin whose card has left the graveyard). `legal` = graveyard indices of the Equipment cards,

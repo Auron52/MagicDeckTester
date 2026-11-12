@@ -1293,6 +1293,12 @@ struct GameState
     bool                     boundary_dredge_active = false;
     bool                     compressed_opponent_upkeep = false;
     bool                     keranos_first_own_draw_seen = false;
+    // MORPH -- THE SEARCHED OPPONENT-END-STEP FLIP (Plan::eot_face_up_choice; the BoundaryFan's face-up axis):
+    // a RANK into the opponent-end-step flip menu (EotFaceUpMenu, SpellEffects.h: rank 0 = the provider's
+    // EotFaceUpOrder front), consumed -- whatever it finds -- by PerformOpponentEndStepFaceUp in BOTH
+    // opponent_turn lambdas; -1 = unpinned (beyond the horizon the front, the permitted playout greedy).
+    // FUTURE-DETERMINING: folded value-gated. An int16 in the hole after the turn-god bools (sizeof unchanged).
+    std::int16_t             scripted_eot_face_up = -1;
     // Physical IDs with Athreos coin counters. Kept until a marked permanent
     // leaves, so the death/exile event can read its last-known counter state.
     std::vector<int>         athreos_coin_ids;

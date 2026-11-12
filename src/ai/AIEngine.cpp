@@ -720,7 +720,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
         || p.upkeep_tutor_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
-        || p.doth_put_choice >= 0
+        || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
@@ -776,6 +776,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_land_search_choice >= 0 && s.scripted_upkeep_land_search != p.upkeep_land_search_choice) { ok = false; }
     if (p.echo_choice >= 0             && s.scripted_echo != p.echo_choice)                        { ok = false; }
     if (p.doth_put_choice >= 0         && s.scripted_doth_put != p.doth_put_choice)                { ok = false; }
+    if (p.eot_face_up_choice >= 0      && s.scripted_eot_face_up != p.eot_face_up_choice)          { ok = false; }
     if (p.discard_choice >= 0          && discard_pin != p.discard_choice)                         { ok = false; }
     if (p.vial_charge_choice >= 0      && vial_pin != p.vial_charge_choice)                        { ok = false; }
     if (p.atk_dork_release >= 0        && dork_pin != p.atk_dork_release)                          { ok = false; }
@@ -3221,6 +3222,15 @@ void AIEngine::DecideCrossingFetch(GameState& state)
     {
         state.scripted_upkeep_land_search = land_pin;
         if (land_pin != 0) { m_committed_line.clear(); }
+    }
+    // Morph's opponent-end-step flip, when the committed line's crossing recorded none (no-op without a face-down
+    // permanent). A pick other than the front deviates from what the queued line assumed, so it clears that line.
+    const int fu_pin = TurnSolver::ChooseRealCrossingFaceUp(view, m_lookahead_depth, m_max_turns, &budget,
+                                                            m_search_post_combat);
+    if (fu_pin != -2)
+    {
+        state.scripted_eot_face_up = static_cast<std::int16_t>(fu_pin);
+        if (fu_pin != 0) { m_committed_line.clear(); }
     }
 }
 // ...and its RESOLUTION node (TurnSolver::ChooseRealResolutionFetch has the why): an uncovered suspended-tutor search

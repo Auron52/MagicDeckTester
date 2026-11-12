@@ -25589,6 +25589,296 @@ inline void TurnFaceDownPermanentUp(GameState& state, int controller, int idx)
     }
 }
 
+// ---- MORPH: THE OPPONENT-END-STEP FLIP WINDOW (morph.md step 7) ----------------------------------------------
+// "Turn it face up any time for its morph cost" includes the turn boundary, and one boundary window is not
+// dominated by the main-phase flips: at the OPPONENT'S end step (after it began) the mana left untapped at the end
+// of our turn is otherwise wasted, a Blistering Firecat turned up there misses that end step's sacrifice trigger
+// (CR 603.2: the ability did not exist when the step began) and survives into our turn, and a Den Protector there
+// can regrow a Firecat our own end step sacrificed. (Our upkeep / main 1 slot 0 equal the main-phase LEAD in a
+// goldfish; our own end step is dominated by the opponent's.) WHICH face-down permanents to flip there, and each
+// flipped Den Protector's target, is SEARCHED: the BoundaryFan (TurnSolver.cpp) crosses once per entry of the
+// menu below and the winning rank rides the plan of the turn that crossed (Plan::eot_face_up_choice ->
+// GameState::scripted_eot_face_up). Beyond the horizon (a narrowed playout, the d0 runner) the unpinned consumer
+// takes the menu's FRONT -- the permitted playout greedy; MTG_FACEUP_AXIS_STATS counts every unpinned choice by
+// frame class (the searched-frame count must read 0).
+struct EotFaceUpOption
+{
+    std::vector<int>         ids;      // physical card numbers, in flip (= payment) order
+    std::vector<std::string> regrow;   // per id: the pinned regrowth NAME ("" = none / the provider's pick)
+};
+// A face-up form that WEAKLY DOMINATES the face-down 2/2 once its cost is paid from mana nothing else can use
+// (the opponent's end step): no "when turned face up" trigger, no self-sacrifice, fixed power AND toughness >= 2,
+// so the flipped creature has every capability of the 2/2 and is no smaller (no card in the pool reads "face
+// down"). Hystrodon. NOT Firecat (it dies at our next end step once face up, so holding it for a bigger pump turn
+// is a real line) and NOT Den Protector (choosing its target before the next draw is an information cost).
+// EXTEND THIS PREDICATE when a morph card with a face-up drawback (an upkeep cost, "can't block", ...) is added.
+inline bool EotFaceUpDominates(const CardDefinition& real)
+{
+    return !real.params.turned_face_up_return_gy_to_hand && !real.params.endstep_sacrifice_self
+        && real.card.m_power.has_value() && *real.card.m_power >= 2
+        && real.card.m_toughness.has_value() && *real.card.m_toughness >= 2;
+}
+constexpr int kEotFaceUpMaxCands = 7;
+// Our face-down permanents, in the provider's EotFaceUpOrder: (battlefield index, real def).
+inline std::vector<std::pair<int, const CardDefinition*>> EotFaceUpCandidates(const GameState& s)
+{
+    std::vector<std::pair<int, const CardDefinition*>> c;
+    if (!s.deck_has_morph) { return c; }
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* r = FaceDownRealDef(p);
+        if (r != nullptr && static_cast<int>(c.size()) < kEotFaceUpMaxCands) { c.emplace_back(i, r); }
+    }
+    if (c.size() > 1) { ResolveProvider(s).EotFaceUpOrder(s, c); }
+    return c;
+}
+inline bool AnyEotFaceUpCandidate(const GameState& s)
+{
+    if (!s.deck_has_morph) { return false; }
+    for (const Permanent& p : s.battlefield)
+    { if (p.controller_index == s.active_player_index && FaceDownRealDef(p) != nullptr) { return true; } }
+    return false;
+}
+// Mana empties between steps (CR 500.4): whatever the engine still carries in its floating pools at the opponent's end
+// step was not produced there, so the window pays from UNTAPPED SOURCES only. The consumer saves the pools, empties
+// them for the flips, and restores them afterwards (a flip's own leftover mana empties with the step).
+struct EotFloatingPools
+{
+    ManaPool mana, creature, bigspell; const CardParams* bigspell_pp; int haste_c;
+    explicit EotFloatingPools(GameState& s)
+        : mana(s.floating_mana), creature(s.floating_creature_mana), bigspell(s.floating_bigspell_mana),
+          bigspell_pp(s.floating_bigspell_pp), haste_c(s.floating_haste_c) { Empty(s); }
+    static void Empty(GameState& s)
+    {
+        s.floating_mana = ManaPool{}; s.floating_creature_mana = ManaPool{};
+        s.floating_bigspell_mana = ManaPool{}; s.floating_bigspell_pp = nullptr; s.floating_haste_c = 0;
+    }
+    void Restore(GameState& s) const
+    {
+        s.floating_mana = mana; s.floating_creature_mana = creature; s.floating_bigspell_mana = bigspell;
+        s.floating_bigspell_pp = bigspell_pp; s.floating_haste_c = haste_c;
+    }
+};
+// Pay the turn-face-up costs of `ids` in order on `s` (the plain payer, both worlds); false at the first that
+// cannot be paid (or is no longer face down). The one payment routine the menu's payability test and the
+// consumer share, so a menu entry is payable exactly when the consumer can pay it.
+inline bool EotFaceUpPayAll(GameState& s, const std::vector<int>& ids)
+{
+    for (int id : ids)
+    {
+        const Permanent* p = nullptr;
+        for (const Permanent& q : s.battlefield)
+        { if (q.card.m_number == id && q.controller_index == s.active_player_index) { p = &q; break; } }
+        if (p == nullptr) { return false; }
+        const std::optional<ManaCost> cost = FaceUpCost(*p);
+        if (!cost || !TapForCostDirect(s, *cost, /*for_creature=*/false)) { return false; }
+    }
+    return true;
+}
+// The menu: every JOINTLY PAYABLE subset of the candidates (paid in the provider's order), crossed with each
+// flipped Den Protector's regrowth target (every distinct name in our graveyard now, the provider's
+// GyReturnToHandPick first). Entry 0 = the FRONT: the greedy "flip every one that still fits, in order", every
+// target the provider's pick. Then larger subsets first; "flip nothing" is always present. SOUND FOLD (USER
+// COLLAPSE rule): a subset that leaves out a payable EotFaceUpDominates permanent (Hystrodon) when adding it
+// would still be payable is dropped -- the superset is in the menu and weakly dominates it (same flips, the extra
+// mana has no other use at the opponent's end step, the face-up creature dominates the 2/2). The front is never
+// dropped. A function of the end-step state only, so the fan's crossings and the executor's consumer agree.
+inline std::vector<EotFaceUpOption> EotFaceUpMenu(const GameState& s)
+{
+    std::vector<EotFaceUpOption> menu;
+    const auto cands = EotFaceUpCandidates(s);
+    const int k = static_cast<int>(cands.size());
+    if (k == 0) { return menu; }
+    TapSpeculationScope _spec;
+    auto ids_of = [&](int mask)
+    {
+        std::vector<int> ids;
+        for (int j = 0; j < k; ++j)
+        { if (mask & (1 << j)) { ids.push_back(s.battlefield[static_cast<std::size_t>(cands[j].first)].card.m_number); } }
+        return ids;
+    };
+    std::vector<char> payable(static_cast<std::size_t>(1) << k, 0);
+    payable[0] = 1;
+    for (int m = 1; m < (1 << k); ++m)
+    {
+        GameState t = s;
+        EotFloatingPools::Empty(t);
+        payable[static_cast<std::size_t>(m)] = EotFaceUpPayAll(t, ids_of(m)) ? 1 : 0;
+    }
+    int front = 0;
+    for (int j = 0; j < k; ++j)
+    { if (payable[static_cast<std::size_t>(front | (1 << j))]) { front |= 1 << j; } }
+    auto dominated = [&](int m)
+    {
+        for (int j = 0; j < k; ++j)
+        {
+            if ((m & (1 << j)) == 0 && EotFaceUpDominates(*cands[j].second)
+                && payable[static_cast<std::size_t>(m | (1 << j))]) { return true; }
+        }
+        return false;
+    };
+    std::vector<int> masks{ front };
+    std::vector<int> rest;
+    for (int m = 0; m < (1 << k); ++m)
+    { if (m != front && payable[static_cast<std::size_t>(m)] && !dominated(m)) { rest.push_back(m); } }
+    std::stable_sort(rest.begin(), rest.end(), [](int a, int b)
+                     { return __builtin_popcount(static_cast<unsigned>(a)) > __builtin_popcount(static_cast<unsigned>(b)); });
+    masks.insert(masks.end(), rest.begin(), rest.end());
+    // Den Protector's target menu (the graveyard at the end step; a pin whose card has left by the flip falls back
+    // to the provider's pick at resolution -- a duplicate, never a lost line).
+    std::vector<std::string> targets;
+    {
+        const std::vector<Card>& gy = s.players[static_cast<std::size_t>(s.active_player_index)].graveyard;
+        if (!gy.empty())
+        {
+            const int pick = ResolveProvider(s).GyReturnToHandPick(s, s.active_player_index);
+            if (pick >= 0 && pick < static_cast<int>(gy.size())) { targets.push_back(gy[static_cast<std::size_t>(pick)].m_name.str()); }
+            for (const Card& c : gy)
+            {
+                const std::string nm = c.m_name.str();
+                if (std::find(targets.begin(), targets.end(), nm) == targets.end()) { targets.push_back(nm); }
+            }
+        }
+    }
+    for (int m : masks)
+    {
+        EotFaceUpOption base;
+        base.ids = ids_of(m);
+        std::vector<int> den_slots;
+        for (int j = 0, slot = 0; j < k; ++j)
+        {
+            if ((m & (1 << j)) == 0) { continue; }
+            base.regrow.push_back(std::string());
+            if (cands[j].second->params.turned_face_up_return_gy_to_hand && !targets.empty()) { den_slots.push_back(slot); }
+            ++slot;
+        }
+        // Odometer over the flipped Den Protectors' target ranks (all zeros -- the provider's picks -- first).
+        std::vector<int> r(den_slots.size(), 0);
+        for (;;)
+        {
+            EotFaceUpOption o = base;
+            for (std::size_t d = 0; d < den_slots.size(); ++d)
+            { o.regrow[static_cast<std::size_t>(den_slots[d])] = targets[static_cast<std::size_t>(r[d])]; }
+            menu.push_back(std::move(o));
+            if (menu.size() >= 0x7FFF) { return menu; }
+            bool advanced = false;
+            for (std::size_t d = den_slots.size(); d-- > 0; )
+            {
+                if (r[d] + 1 < static_cast<int>(targets.size())) { ++r[d]; advanced = true; break; }
+                r[d] = 0;
+            }
+            if (!advanced) { break; }
+        }
+    }
+    return menu;
+}
+inline thread_local int* g_eot_face_up_width_probe = nullptr;   // the BoundaryFan's probe: the menu's size
+// MTG_FACEUP_AXIS_STATS (TurnSolver.cpp faceupcensus): an UNPINNED opponent-end-step flip choice with more than one
+// option, classified by frame (searched-frame must read 0).
+using FaceUpUnpinnedHook = void (*)(const GameState&, int width);
+inline FaceUpUnpinnedHook g_faceup_unpinned_hook = nullptr;
+// Flip one option's permanents on the live state (pay, then turn face up under the regrowth pin).
+inline void EotFaceUpApply(GameState& state, const EotFaceUpOption& o)
+{
+    const int me = state.active_player_index;
+    for (std::size_t n = 0; n < o.ids.size(); ++n)
+    {
+        int idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number == o.ids[n] && q.controller_index == me) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }
+        const std::optional<ManaCost> cost = FaceUpCost(state.battlefield[static_cast<std::size_t>(idx)]);
+        if (!cost || !TapForCostDirect(state, *cost, /*for_creature=*/false)) { continue; }
+        // The payment may have moved the battlefield (it never adds or removes here, but re-find to be safe).
+        idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number == o.ids[n] && q.controller_index == me) { idx = i; break; }
+        }
+        if (idx < 0) { continue; }
+        const std::string& pin = o.regrow[n];
+        FaceUpRegrowPinScope _pin(pin.empty() ? nullptr : &pin);
+        TurnFaceDownPermanentUp(state, me, idx);
+    }
+}
+// THE CONSUMER, at the opponent's notional end step in BOTH opponent_turn lambdas (GameEngine::RunTurnFrom,
+// TurnSolver's SimulateEndAndStartNextTurn), after that end step's self-sacrifice sweep. The pin is consumed
+// whatever it finds. Human play: the `face_up` prompt (g_play_face_up_chooser), one flip at a time.
+inline void PerformOpponentEndStepFaceUp(GameState& state)
+{
+    const int pin = state.scripted_eot_face_up;
+    state.scripted_eot_face_up = -1;
+    if (!AnyEotFaceUpCandidate(state)) { return; }
+    if (g_play_face_up_chooser != nullptr)
+    {
+        for (;;)
+        {
+            const auto cands = EotFaceUpCandidates(state);
+            std::vector<int> idx;
+            std::vector<std::string> costs;
+            {
+                TapSpeculationScope _spec;
+                for (const auto& c : cands)
+                {
+                    GameState t = state;
+                    EotFloatingPools::Empty(t);
+                    if (EotFaceUpPayAll(t, { state.battlefield[static_cast<std::size_t>(c.first)].card.m_number }))
+                    {
+                        idx.push_back(c.first);
+                        costs.push_back(FaceUpCost(state.battlefield[static_cast<std::size_t>(c.first)])->ToString());
+                    }
+                }
+            }
+            if (idx.empty()) { return; }
+            const int k = (*g_play_face_up_chooser)(state, idx, costs);
+            if (k < 0 || k >= static_cast<int>(idx.size())) { return; }
+            EotFaceUpOption o;
+            o.ids.push_back(state.battlefield[static_cast<std::size_t>(idx[static_cast<std::size_t>(k)])].card.m_number);
+            o.regrow.push_back(std::string());   // the dig chooser asks at resolution
+            const EotFloatingPools saved(state);
+            EotFaceUpApply(state, o);
+            saved.Restore(state);
+        }
+    }
+    const bool full = pin >= 0 || g_eot_face_up_width_probe != nullptr || g_faceup_unpinned_hook != nullptr;
+    if (full)
+    {
+        const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(state);
+        if (g_eot_face_up_width_probe != nullptr) { *g_eot_face_up_width_probe = static_cast<int>(menu.size()); }
+        if (menu.empty()) { return; }
+        if (pin < 0 && g_faceup_unpinned_hook != nullptr) { g_faceup_unpinned_hook(state, static_cast<int>(menu.size())); }
+        const EotFloatingPools saved(state);
+        EotFaceUpApply(state, menu[static_cast<std::size_t>(pin >= 0 ? std::min(pin, static_cast<int>(menu.size()) - 1) : 0)]);
+        saved.Restore(state);
+        return;
+    }
+    // Unpinned, no probe: the FRONT only (the greedy "every one that still fits, in the provider's order",
+    // regrowth = the provider's pick at resolution) -- built without the full menu. Identical to menu[0].
+    const auto cands = EotFaceUpCandidates(state);
+    EotFaceUpOption o;
+    {
+        TapSpeculationScope _spec;
+        for (const auto& c : cands)
+        {
+            std::vector<int> trial = o.ids;
+            trial.push_back(state.battlefield[static_cast<std::size_t>(c.first)].card.m_number);
+            GameState t = state;
+            EotFloatingPools::Empty(t);
+            if (EotFaceUpPayAll(t, trial)) { o.ids = std::move(trial); o.regrow.push_back(std::string()); }
+        }
+    }
+    if (o.ids.empty()) { return; }
+    const EotFloatingPools saved(state);
+    EotFaceUpApply(state, o);
+    saved.Restore(state);
+}
+
 // The trigger body. Default target = the largest opponent creature by effective power (the shared
 // Chupacabra / Abominable Treefolk convention -- payoff ~0, spawns never attack or block); the human
 // board-clicks it (g_play_loyalty_chooser, the mandatory-ETB `target` shape). No opponent creature ->

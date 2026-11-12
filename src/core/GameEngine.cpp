@@ -345,6 +345,11 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.
         PerformEndStepDiscardHands(state, state.active_player_index);
+        // MORPH at the opponent's end step: its self-sacrifice sweep (inert -- a face-up Firecat died at ours),
+        // then the searched flip window (the plan's pin, the human's `face_up` prompt, or beyond the horizon the
+        // provider's front). Lockstep twin: SimulateEndAndStartNextTurn's opponent_turn. Deck-gated.
+        PerformEndStepSelfSacrifices(state);
+        PerformOpponentEndStepFaceUp(state);
         DayNightTurnBoundary(state);
     };
     while (state.NextExtraTurnIsOpponent() && !state.opponent_decked)
@@ -353,6 +358,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         opponent_turn();
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked) { opponent_turn(); }
+    state.scripted_eot_face_up = -1;   // a pin no opponent end step consumed (an extra turn of ours) expires here
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
     state.ephara_creature_entered_this_turn = false;
     // DAY / NIGHT turn-based check (CR 726.3a) for the opponent's notional untap and our next one

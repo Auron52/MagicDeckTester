@@ -365,3 +365,134 @@ TEST_CASE("morph: a non-morph deck is untouched -- deck_has_morph stays false")
     CHECK(!b.deck_has_morph);
     CHECK(!b.deck_has_endstep_self_sac);
 }
+
+// ---- THE OPPONENT-END-STEP FLIP WINDOW (Morph INT-2b; morph.md step 7) -------------------------------------
+namespace
+{
+GameState EotBase()
+{
+    GameState s = BaseF();
+    s.phase = Phase::PostCombatMain;
+    for (int n = 0; n < 6; ++n) { s.players[0].library.push_back(CardF("Forest", 200 + n)); }
+    return s;
+}
+std::vector<std::vector<int>> MenuIds(const GameState& s)
+{
+    std::vector<std::vector<int>> out;
+    for (const EotFaceUpOption& o : EotFaceUpMenu(s)) { out.push_back(o.ids); }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("morph eot: the menu fans flip-or-hold for a payable Firecat, the provider's front (flip) first")
+{
+    EnsureCardsFd();
+    GameState s = EotBase();
+    PutF(s, "Blistering Firecat (Face-down)", 7);
+    PutF(s, "Mountain", 50);
+    PutF(s, "Mountain", 51);
+    const auto m = MenuIds(s);
+    REQUIRE(m.size() == 2u);
+    CHECK(m[0] == std::vector<int>{ 7 });
+    CHECK(m[1].empty());
+    // One Mountain tapped: nothing is payable -- the only entry is "flip nothing".
+    GameState t = s;
+    t.battlefield[static_cast<std::size_t>(IdxOf(t, 51))].tapped = true;
+    const auto m1 = MenuIds(t);
+    REQUIRE(m1.size() == 1u);
+    CHECK(m1[0].empty());
+}
+
+TEST_CASE("morph eot: a pinned flip at the opponent's end step survives that end step and is paid from untapped lands")
+{
+    EnsureCardsFd();
+    GameState s = EotBase();
+    PutF(s, "Blistering Firecat (Face-down)", 7);
+    PutF(s, "Mountain", 50);
+    PutF(s, "Mountain", 51);
+    s.floating_mana.Add(Color::Red, 2);   // mana empties between steps: the window never spends a stale pool
+    GameState hold = s;
+    s.scripted_eot_face_up = 0;            // rank 0 = flip
+    PerformEndStepSelfSacrifices(s);       // the opponent's end step BEGINS: the face-down Firecat has no trigger
+    PerformOpponentEndStepFaceUp(s);
+    const Permanent* f = ByNum(s, 7);
+    REQUIRE(f != nullptr);
+    CHECK(f->card.m_name.str() == "Blistering Firecat");
+    CHECK(ByNum(s, 50)->tapped);
+    CHECK(ByNum(s, 51)->tapped);
+    CHECK(s.floating_mana.Total() == 2);   // the pre-existing pool is restored untouched
+    CHECK(s.scripted_eot_face_up == -1);   // consumed
+    hold.scripted_eot_face_up = 1;         // rank 1 = hold
+    PerformOpponentEndStepFaceUp(hold);
+    CHECK(ByNum(hold, 7)->card.m_name.str() == "Blistering Firecat (Face-down)");
+    CHECK(!ByNum(hold, 50)->tapped);
+}
+
+TEST_CASE("morph eot: the Hystrodon fold drops only subsets that leave out a payable Hystrodon")
+{
+    EnsureCardsFd();
+    CHECK(EotFaceUpDominates(DefF("Hystrodon")));
+    CHECK(!EotFaceUpDominates(DefF("Blistering Firecat")));
+    CHECK(!EotFaceUpDominates(DefF("Den Protector")));
+    GameState s = EotBase();
+    PutF(s, "Hystrodon (Face-down)", 8);
+    PutF(s, "Blistering Firecat (Face-down)", 7);
+    for (int n = 0; n < 3; ++n) { PutF(s, "Forest", 60 + n); }
+    PutF(s, "Mountain", 50);
+    PutF(s, "Mountain", 51);
+    const auto both = MenuIds(s);
+    // Front = both (the larger face-up power first: Firecat, then Hystrodon); {Firecat} and {} leave out a payable
+    // Hystrodon and are folded; {Hystrodon} (hold the Firecat for a pump turn) stays.
+    REQUIRE(both.size() == 2u);
+    CHECK(both[0] == std::vector<int>{ 7, 8 });
+    CHECK(both[1] == std::vector<int>{ 8 });
+    // Mana for only one of them (two Mountains + one Forest): {Firecat} cannot add Hystrodon, so it stays.
+    GameState t = s;
+    t.battlefield[static_cast<std::size_t>(IdxOf(t, 61))].tapped = true;
+    t.battlefield[static_cast<std::size_t>(IdxOf(t, 62))].tapped = true;
+    const auto one = MenuIds(t);
+    REQUIRE(one.size() == 2u);
+    CHECK(one[0] == std::vector<int>{ 7 });
+    CHECK(one[1].empty());
+}
+
+TEST_CASE("morph eot: Den Protector flipped there regrows a Firecat our end step sacrificed (each target searched)")
+{
+    EnsureCardsFd();
+    GameState s = EotBase();
+    PutF(s, "Den Protector (Face-down)", 9);
+    PutF(s, "Forest", 60);
+    PutF(s, "Forest", 61);
+    s.players[0].graveyard.push_back(CardF("Berserk", 30));
+    s.players[0].graveyard.push_back(CardF("Blistering Firecat", 31));
+    const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(s);
+    REQUIRE(menu.size() == 3u);   // regrow Firecat (the provider's pick: nonland, highest MV), regrow Berserk, hold
+    CHECK(menu[0].regrow == std::vector<std::string>{ "Blistering Firecat" });
+    CHECK(menu[1].regrow == std::vector<std::string>{ "Berserk" });
+    CHECK(menu[2].ids.empty());
+    GameState t = s;
+    t.scripted_eot_face_up = 1;
+    PerformOpponentEndStepFaceUp(t);
+    REQUIRE(t.players[0].hand.size() == 1u);
+    CHECK(t.players[0].hand[0].m_name.str() == "Berserk");
+    CHECK(PlusCountersOn(*ByNum(t, 9)) == 1);
+}
+
+TEST_CASE("morph eot: the BoundaryFan crosses once per menu rank and records the rank (the follow pin first)")
+{
+    EnsureCardsFd();
+    GameState s = EotBase();
+    PutF(s, "Blistering Firecat (Face-down)", 7);
+    PutF(s, "Mountain", 50);
+    PutF(s, "Mountain", 51);
+    const auto crossings = TurnSolver::FaceUpBoundaryForTest(s);
+    REQUIRE(crossings.size() == 2u);
+    CHECK(crossings[0] == std::pair<int, int>{ 0, 1 });   // rank 0: flipped at the opponent's end step, alive
+    CHECK(crossings[1] == std::pair<int, int>{ 1, 0 });   // rank 1: held face down
+    // No face-down permanent: the axis is not live, the single crossing records nothing.
+    GameState n = EotBase();
+    PutF(n, "Mountain", 50);
+    const auto none = TurnSolver::FaceUpBoundaryForTest(n);
+    REQUIRE(none.size() == 1u);
+    CHECK(none[0].first == -2);
+}

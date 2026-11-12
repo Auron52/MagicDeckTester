@@ -1623,6 +1623,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("demontrig", first.demon_trigger_choice != dup.demon_trigger_choice);
     pl("echo", first.echo_choice != dup.echo_choice);
     pl("doth", first.doth_put_choice != dup.doth_put_choice);
+    pl("eotfu", first.eot_face_up_choice != dup.eot_face_up_choice);
     pl("atkrel", first.atk_dork_release != dup.atk_dork_release);
     pl("bp", first.bp_choice != dup.bp_choice || first.bp_base != dup.bp_base);
     pl("etbc", first.etbcounter_choice != dup.etbcounter_choice);
@@ -7002,6 +7003,7 @@ static bool M2SkipEmptyApplyOn()
 static bool EchoUncoveredPending(const GameState& state);   // fwd (the searched echo axis, with the axes)
 static bool DothUncoveredPending(const GameState& state);   // fwd (the searched DotH put list, with BoundaryFan)
 static bool SuspendTutorUncoveredPending(const GameState& state);   // fwd (Profane's fetch, with BoundaryFan)
+static bool FaceUpUncoveredPending(const GameState& state);   // fwd (morph's opponent-end-step flip, with BoundaryFan)
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -7016,6 +7018,8 @@ static bool SecondMainUnproductive(const GameState& state)
     if (DothUncoveredPending(state)) { return false; }
     // ...and Profane Tutor's fetch at the next upkeep (MTG_PROFANE_RESOLVE_FAN): decided at the second main's crossing.
     if (SuspendTutorUncoveredPending(state)) { return false; }
+    // ...and morph's opponent-end-step flip (a face-down permanent of ours): decided at the second main's crossing.
+    if (FaceUpUncoveredPending(state)) { return false; }
     // Moraug: any landfall main 2 can make (a held land, a ramp spell main 1 could have cast, a fetch to crack)
     // buys an additional combat, so the phase is never skipped as a re-run of main 1 while the source is ours.
     if (ExtraCombatSecondMainLive(state)) { return false; }
@@ -15834,6 +15838,24 @@ static bool SubsetVampOutletInvalid(const GameState& state, const std::vector<Ac
         //       creature, a steal that makes its target a `sub` (for the transform), every graveyard-
         //       landfall `sub` creature in the graveyard and every pinned discard of one (it may return
         //       on the land drop, which is not an action of the selection).
+        // Rule 6c (Morph INT-2b): a HAND-SOURCE turn-face-up (TurnFaceUpLate with needs_cast_mask bit0: the hand
+        // copy is cast face down, then flipped after the plan's casts) without a FACE-DOWN cast (face_down 1) of
+        // that name in the selection. SOUND -- an identity fold, not a narrowing: the action's source is the
+        // hand card's number, which becomes a face-down permanent only through that cast; a hard cast (or the
+        // face-down-and-up cast, face_down 2) enters it face up, and no cast leaves it in hand -- either way the
+        // trailing pass finds no face-down source and skips the flip (PermAbilitySourceLive), so the plan plays
+        // exactly as the same selection WITHOUT the flip, which the subset walk enumerates on its own.
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TurnFaceUpLate
+            && (c.needs_cast_mask & 1) != 0)
+        {
+            int fd = 0;
+            for (int jdx : sel)
+            {
+                const Action& d = cands[static_cast<std::size_t>(jdx)];
+                if (d.kind == Action::Kind::CastFromHand && d.face_down == 1 && d.card_name == c.card_name) { ++fd; }
+            }
+            if (fd == 0) { return true; }   // 6c
+        }
         if (c.kind == Action::Kind::ActivatePermAbility
             && (c.ability_mode == Action::AbilityMode::TapSubtypeSteal
                 || c.ability_mode == Action::AbilityMode::TransformSelf))
@@ -16053,6 +16075,8 @@ enum : std::uint64_t
     kVfM4 = 1ull << 8,       kVfM4Keyed = 1ull << 9,  kVfBlood = 1ull << 10, kVfSteal = 1ull << 11,
     kVfNeedsSrc = 1ull << 12,   // rule 6a: needs_cast_mask & 1
     kVfConvPlan = 1ull << 13,   // rule 7: convoke_plan_pip > 0 || convoke_plan_other > 0
+    kVfFaceDownCast = 1ull << 14,   // rule 6c: a FACE-DOWN cast (face_down 1)
+    kVfFaceUpSrc = 1ull << 15,      // rule 6c: a hand-source TRAIL flip (TurnFaceUpLate, needs_cast_mask bit0)
 };
 struct VampRulePre
 {
@@ -16178,6 +16202,9 @@ static void BuildVampRulePre(const GameState& state, const std::vector<Action>& 
         if (st6) { b |= kVfSt6; }
         if (st6 && c.ability_mode == Action::AbilityMode::TapSubtypeSteal) { b |= kVfSteal; }
         if (st6 && (c.needs_cast_mask & 1) != 0) { b |= kVfNeedsSrc; }
+        if (c.kind == Action::Kind::CastFromHand && c.face_down == 1) { b |= kVfFaceDownCast; }
+        if (c.kind == Action::Kind::ActivatePermAbility && c.ability_mode == Action::AbilityMode::TurnFaceUpLate
+            && (c.needs_cast_mask & 1) != 0) { b |= kVfFaceUpSrc; }
         if (c.kind == Action::Kind::SacCreatureOutlet && c.sac_victim_id == kSameLineSacVictim) { b |= kVfSameSac; }
         // rule 2
         if (c.kind == Action::Kind::SacCreatureOutlet && (c.needs_cast_mask & 2) != 0 && !c.victim_name.empty())
@@ -16448,7 +16475,7 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
             if (!found) { pins[npins++] = PinCount{ x.pin, 1, idx }; }
         }
         if (b & kVfM4) { ++mode4; }
-        if (x.victim != nullptr || (b & (kVfSt6 | kVfR5 | kVfBlood)) != 0) { flagged[nflag++] = static_cast<int>(pi); }
+        if (x.victim != nullptr || (b & (kVfSt6 | kVfR5 | kVfBlood | kVfFaceUpSrc)) != 0) { flagged[nflag++] = static_cast<int>(pi); }
     }
     const bool bands = (any & kVfSt6) != 0;
     auto puts_of = [&](const std::string* key) -> int
@@ -16526,6 +16553,16 @@ static bool SubsetVampOutletInvalidPre(const GameState& state, const std::vector
         const int idx = sel[pi];
         const VampCandFacts& x = F[idx];
         if (x.victim != nullptr && puts_of(x.victim) == 0) { return true; }   // rule 2
+        if (x.bits & kVfFaceUpSrc)   // rule 6c (the slow rule's twin)
+        {
+            int fd = 0;
+            for (std::size_t k = 0; k < ns; ++k)
+            {
+                const VampCandFacts& y = F[sel[k]];
+                if ((y.bits & kVfFaceDownCast) != 0 && y.name == x.name) { ++fd; }
+            }
+            if (fd == 0) { return true; }
+        }
         if (x.bits & kVfSt6)   // rule 6
         {
             if ((x.bits & kVfNeedsSrc) != 0 && puts_of(x.name) == 0) { return true; }   // 6a
@@ -22877,6 +22914,9 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             || (a.kind == Action::Kind::ActivatePermAbility
                 && (a.ability_mode == Action::AbilityMode::TapSubtypeSteal
                     || a.ability_mode == Action::AbilityMode::TransformSelf))
+            // Morph: a hand-source TRAIL flip (rule 6c -- the face-down cast it needs).
+            || (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TurnFaceUpLate
+                && (a.needs_cast_mask & 1) != 0)
             // Vampires sweep items A / B: a creature-spell convoke arm (rule 7, the body books).
             || (a.kind == Action::Kind::CastFromHand && (a.convoke_green > 0 || a.convoke_other > 0)
                 && ConvokeTapsAtCast(d))
@@ -27700,6 +27740,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x4B4C4F54485953ull); fold(static_cast<uint64_t>(p.next_klothys_choice)); }
     if (p.next_keranos_choice >= 0)
     { fold(0x4B4552414E4F53ull); fold(static_cast<uint64_t>(p.next_keranos_choice)); }
+    if (p.eot_face_up_choice >= 0)
+    { fold(0x454F54465550ull); fold(static_cast<uint64_t>(p.eot_face_up_choice)); }
     // Shadowborn INT-2's demon-trigger pin -- same must-fold rule, value-gated (own domain tag).
     if (p.demon_trigger_choice >= 0)
     { fold(0x44454D4F4Eull); fold(static_cast<uint64_t>(p.demon_trigger_choice)); }   // "DEMON"
@@ -28112,6 +28154,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.suspend_tutor_choice == -1
         && p.next_draw_dredge_choice == -1 && p.next_draw_dredge_pins.empty()
         && p.next_klothys_choice == -1 && p.next_keranos_choice == -1
+        && p.eot_face_up_choice == -1
         && p.echo_choice == -1 && p.doth_put_choice == -1
         && p.fling_victim_choice == -1 && p.tectonic_mode_choice == -1
         && p.tectonic_keep_choice == -1
@@ -28168,6 +28211,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || !p.next_draw_dredge_pins.empty()
         || p.next_klothys_choice >= 0
         || p.next_keranos_choice >= 0
+        || p.eot_face_up_choice >= 0
         // Look-top pins (Risen Reef): every variant is a clone of its base differing only in a land /
         // order entry, and an entry past the decisions the apply actually reaches (a nonland top, a
         // look that never happened) leaves it on its base plan's state -- the inert-duplicate shape.
@@ -29118,6 +29162,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x4B4C4F54ull + static_cast<std::uint64_t>(p.next_klothys_choice)); }
     if (p.next_keranos_choice >= 0)
     { h = Mix(h, 0x4B455241ull + static_cast<std::uint64_t>(p.next_keranos_choice)); }
+    if (p.eot_face_up_choice >= 0)
+    { h = Mix(h, 0x46435550ull + static_cast<std::uint64_t>(p.eot_face_up_choice)); }
     if (p.demon_trigger_choice >= 0)
     { h = Mix(h, 0x444Dull + static_cast<std::uint64_t>(p.demon_trigger_choice)); }   // value-gated (Shadowborn)
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
@@ -55147,6 +55193,7 @@ namespace solvememo
             || a.next_draw_dredge_pins != b.next_draw_dredge_pins
             || a.next_klothys_choice != b.next_klothys_choice
             || a.next_keranos_choice != b.next_keranos_choice
+            || a.eot_face_up_choice != b.eot_face_up_choice
             || a.bp_pre != b.bp_pre
             || a.attack_land_search_choice != b.attack_land_search_choice
             || a.upkeep_land_search_choice != b.upkeep_land_search_choice
@@ -63803,6 +63850,17 @@ thread_local std::vector<std::string>* g_line_order_record = nullptr;
 thread_local std::vector<std::string>* g_line_order_capture = nullptr;
 thread_local std::vector<std::string>* g_human_step_fail_sink = nullptr;
 
+// MORPH: the REAL card a turn-face-up action flips -- its card is the synthesized "X (Face-down)" face (a board
+// flip) or the hand card itself (a hand-source TRAIL flip, which is cast face down first).
+static std::string FaceUpActionRealName(const Action& a)
+{
+    static const std::string kSuffix = " (Face-down)";
+    std::string nm = a.card_name.str();
+    if (nm.size() > kSuffix.size() && nm.compare(nm.size() - kSuffix.size(), kSuffix.size(), kSuffix) == 0)
+    { nm.resize(nm.size() - kSuffix.size()); }
+    return nm;
+}
+
 // Does an action of kind `k` answer a queued step the viewer wrote with LineSpec verb `verb`? The verb
 // is what separates two same-named things the human can mean (USER 2026-10-06, Snow seed 9 T3: the
 // Frost Augur in play vs the copy in hand), so it decides the KIND and the name decides the card. An
@@ -64015,6 +64073,15 @@ static bool HumanStepFromCard(Action::Kind k)
 // the exact one (two identical Clue Tokens: the plan cracks #1, the human clicked #2 -- same play).
 static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const GameState* state, bool twins)
 {
+    // `faceup=` / `face_up=` (morph) names the REAL card; the action's card is the face (or, for a hand-source
+    // TRAIL flip, the hand card itself). Either flip position matches: a plan carries at most one of them.
+    if (st.verb == "faceup" || st.verb == "face_up")
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility
+            || (a.ability_mode != Action::AbilityMode::TurnFaceUp && a.ability_mode != Action::AbilityMode::TurnFaceUpLate)
+            || FaceUpActionRealName(a) != st.name) { return false; }
+        return st.src <= 0 || a.sac_source_id == st.src || (twins && HumanTwinPermanents(state, st.src, a.sac_source_id));
+    }
     // `sacnamed=` (Shadowborn Apostle) names the DEMON it fetches -- the action's tutor_target, or kSacNamedNoFetch --
     // never the source card (the viewer's payload rule, index.html). Matching card_name here refused every queued
     // Apostle activation as "matches nothing in the committed plan" (USER rejection artifact s2 gi1 T4, 2026-11-04).
@@ -73911,6 +73978,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
+        PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
+        PerformOpponentEndStepFaceUp(state);
         DayNightTurnBoundary(state);
         return true;
     };
@@ -73921,6 +73990,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     }
     if (!state.NextExtraTurnIsOurs() && !state.opponent_decked)
     { if (!opponent_turn()) { return false; } }
+    state.scripted_eot_face_up = -1;   // twin of RunTurnFrom's expiry
     state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
     state.ephara_creature_entered_this_turn = false;
     // DAY / NIGHT turn-based check (CR 726.3a) -- lockstep twin of GameEngine::RunTurnFrom's call,
@@ -92254,6 +92324,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (int v : pl.next_draw_dredge_pins) { add(v); }
             add(pl.next_klothys_choice);
             add(pl.next_keranos_choice);
+            add(pl.eot_face_up_choice);   // morph's opponent-end-step flip: in padding, so the size pin cannot catch it
             add(pl.demon_trigger_choice);   // Shadowborn's demon triggers: in padding, so the size pin cannot catch it
             add(pl.echo_choice);   // the searched echo pin: in padding, so the size pin cannot catch it
             add(pl.doth_put_choice);   // the searched DotH put list: in padding, so the size pin cannot catch it
@@ -92465,6 +92536,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (a.next_draw_dredge_pins != b.next_draw_dredge_pins) { d += " next_draw_dredge_pins"; }
     if (a.next_klothys_choice != b.next_klothys_choice) { d += " next_klothys_choice"; }
     if (a.next_keranos_choice != b.next_keranos_choice) { d += " next_keranos_choice"; }
+    if (a.eot_face_up_choice != b.eot_face_up_choice) { d += " eot_face_up_choice"; }
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
@@ -94674,6 +94746,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         if (state.boundary_dredge_active) { mix(0xD0ED6E13ull + state.scripted_boundary_dredge_cursor); }
         if (state.scripted_boundary_klothys >= 0) { mix(0x4B4C4F54ull + state.scripted_boundary_klothys); }
         if (state.scripted_boundary_keranos >= 0) { mix(0x4B455241ull + state.scripted_boundary_keranos); }
+        if (state.scripted_eot_face_up >= 0) { mix(0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
         if (state.m1_hand_turn == state.TurnSeq())
         {
             mix(0x11BA + static_cast<std::uint64_t>(state.m1_hand_n));
@@ -98822,6 +98895,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
     { Fold(k, 0x4B4C4F54ull + state.scripted_boundary_klothys); }
     if (state.scripted_boundary_keranos >= 0)
     { Fold(k, 0x4B455241ull + state.scripted_boundary_keranos); }
+    if (state.scripted_eot_face_up >= 0)
+    { Fold(k, 0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
     if (state.deck_has_turn_gods)
     {
         Fold(k, 0x474F44530000ull + (state.keranos_first_own_draw_seen ? 1ull : 0ull));
@@ -101677,6 +101752,59 @@ struct Installer
 static Installer s_installer;
 }
 
+// MORPH -- THE SEARCHED OPPONENT-END-STEP FLIP (SpellEffects.h EotFaceUpMenu / PerformOpponentEndStepFaceUp). A
+// face-down permanent of ours that the state's pin does not cover: the crossing into the opponent's end step must
+// fan the flip menu (one crossing per rank, the provider's front first so it keeps every tie). Scope =
+// DothAxisLiveHere's: not in human play (the person answers the `face_up` prompt), not in a narrowed playout / the
+// d0 runner / a breakpoint enumeration (beyond the horizon the front is the permitted playout greedy), not at a
+// constant-leaf edge (the identity fold: that leaf cannot tell two flip sets apart, and a deeper pass searches
+// the crossing, so nothing is unfindable at any budget). False for every deck without a morph card.
+static bool FaceUpUncoveredPending(const GameState& state)
+{
+    return state.deck_has_morph && state.scripted_eot_face_up < 0 && g_bp_enum_depth == 0 && !t_rollout_narrow
+        && !HumanPlayActive() && !EchoEdgeFoldHere(state) && AnyEotFaceUpCandidate(state);
+}
+// MTG_FACEUP_AXIS_STATS: the no-greedy census for the opponent-end-step flip -- an UNPINNED choice (more than one
+// menu entry) resolved in a searched frame (a crossing no BoundaryFan covered: must read 0), in the playout beyond
+// the horizon (permitted), at a constant-leaf edge (the identity fold), outside any search, or at the executor's
+// real end step (the committed line's crossing recorded nothing and the crossing node did not decide it).
+namespace faceupcensus
+{
+inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_edge{0}, g_outside{0}, g_real{0};
+inline std::atomic<long long> g_fan_crossings{0}, g_unpinned_calls{0};
+static void Note(const GameState& s, int width)
+{
+    g_unpinned_calls.fetch_add(1, std::memory_order_relaxed);
+    if (width <= 1) { return; }
+    if (g_real_resolution) { g_real.fetch_add(1, std::memory_order_relaxed); return; }
+    if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    if (EchoEdgeFoldHere(s)) { g_edge.fetch_add(1, std::memory_order_relaxed); return; }
+    g_searched.fetch_add(1, std::memory_order_relaxed);
+    if (EnvInt("MTG_FACEUP_AXIS_STATS", 0) >= 2)
+    {
+        std::fprintf(stderr, "[faceup-axis] SEARCHED-FRAME unpinned flip: seed=%llu T%d width=%d\n",
+                     static_cast<unsigned long long>(s.game_seed), s.turn_number, width);
+    }
+}
+struct Installer
+{
+    Installer() { if (EnvOn("MTG_FACEUP_AXIS_STATS")) { g_faceup_unpinned_hook = &Note; } }
+    ~Installer()
+    {
+        if (g_faceup_unpinned_hook == nullptr) { return; }
+        std::fprintf(stderr, "[faceup-axis] unpinned opponent-end-step flips: searched-frame=%lld (must be 0) "
+                             "playout=%lld edge=%lld outside-window=%lld real-end-step=%lld | fan crossings=%lld "
+                             "unpinned windows (any width)=%lld\n",
+                     g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load(), g_real.load(),
+                     g_fan_crossings.load(), g_unpinned_calls.load());
+    }
+};
+static Installer s_installer;
+}
+long long TurnSolver::FaceUpSearchedFrameUnpinnedForTest() { return faceupcensus::g_searched.load(); }
+
 // THE BOUNDARY FAN, generalised (searched echo + searched Defense of the Heart). Every in-window crossing site
 // iterates it:
 //     BoundaryFan fan(pre, with_echo);
@@ -101693,8 +101821,9 @@ public:
     // stut_only: fan ONLY Profane's fetch (the executor's crossing node, TurnSolver::ChooseRealCrossingFetch,
     // which records that pin alone, so no other axis may be iterated beside it).
     BoundaryFan(const GameState& pre, bool with_echo, bool stut_only = false,
-                bool reanim_only = false, bool land_only = false)
+                bool reanim_only = false, bool land_only = false, bool face_up_only = false)
     {
+        if (face_up_only) { fu_ = FaceUpUncoveredPending(pre); return; }
         if (stut_only)
         {
             stut_ = SuspendTutorUncoveredPending(pre);
@@ -101760,10 +101889,15 @@ public:
                 for (int j = 0; j < c0_; ++j) { ranks_[j] = DothPinRank(pre.scripted_doth_put, j); }
             }
         }
+        // MORPH's opponent-end-step flip: the INNERMOST digit (decided at the opponent's end step, the earliest
+        // event of the crossing; its menu is a function of that end-step state alone), its width learned per
+        // crossing (the Klothys shape). False for every deck without a morph card.
+        fu_ = FaceUpUncoveredPending(pre);
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_; }
+    bool FaceUpLive() const { return fu_; }
     bool DothLive() const { return doth_; }
     bool TutorLive() const { return tutor_; }
     bool StutLive() const { return stut_; }
@@ -101782,6 +101916,7 @@ public:
         if (dredge_incomplete_)
         {
             dredge_incomplete_ = false;
+            fu_rank_ = 0; fu_width_ = 1;
             klothys_rank_ = 0; klothys_width_ = 1;
             keranos_rank_ = 0; keranos_width_ = 1;
             if (!dredge_pending_.empty())
@@ -101791,6 +101926,9 @@ public:
                 return true;
             }
         }
+        if (fu_ && fu_rank_ + 1 < fu_width_)
+        { ++fu_rank_; return true; }
+        fu_rank_ = 0; fu_width_ = 1;
         if (klothys_ && klothys_rank_ + 1 < klothys_width_)
         { ++klothys_rank_; return true; }
         klothys_rank_ = 0; klothys_width_ = 1;
@@ -101908,6 +102046,7 @@ public:
         if (doth_) { sx.scripted_doth_put = DothPinPack(kDothPinMaxOrd, ranks_); }
         if (klothys_) { sx.scripted_boundary_klothys = klothys_rank_; }
         if (keranos_) { sx.scripted_boundary_keranos = keranos_rank_; }
+        if (fu_) { sx.scripted_eot_face_up = static_cast<std::int16_t>(fu_rank_); }
     }
     // The crossing itself (SimulateEndAndStartNextTurn), with the probe open when a Defense of the Heart is live
     // so the fan learns the menu sizes this crossing met.
@@ -101949,6 +102088,7 @@ public:
     const std::vector<int>& DredgePins() const { return dredge_current_; }
     int KlothysPin() const { return klothys_ && klothys_width_ > 1 ? klothys_rank_ : -2; }
     int KeranosPin() const { return keranos_ && keranos_width_ > 1 ? keranos_rank_ : -2; }
+    int FaceUpPin() const { return fu_ && fu_width_ > 1 ? fu_rank_ : -2; }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
@@ -101962,12 +102102,15 @@ public:
         if (!dredge_current_.empty()) { p.next_draw_dredge_pins = dredge_current_; }
         if (KlothysPin() != -2) { p.next_klothys_choice = KlothysPin(); }
         if (KeranosPin() != -2) { p.next_keranos_choice = KeranosPin(); }
+        if (FaceUpPin() != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(FaceUpPin()); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
     void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin, int stut_pin,
                        int miracle_pin, int grace_pin, int emeria_pin, int land_pin,
-                       const std::vector<int>& dredge_pins, int klothys_pin, int keranos_pin) const
+                       const std::vector<int>& dredge_pins, int klothys_pin, int keranos_pin,
+                       int face_up_pin = -2) const
     {
+        if (face_up_pin != -2) { sx.scripted_eot_face_up = static_cast<std::int16_t>(face_up_pin); }
         if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
         if (doth_pin != -2) { sx.scripted_doth_put = doth_pin; }
         if (tutor_pin != -2) { sx.scripted_upkeep_tutor = static_cast<std::int16_t>(tutor_pin); }
@@ -102082,6 +102225,9 @@ private:
     bool             keranos_ = false;
     int              keranos_rank_ = 0;
     int              keranos_width_ = 1;
+    bool             fu_ = false;                     // morph's opponent-end-step flip is decided at this crossing
+    int              fu_rank_ = 0;
+    int              fu_width_ = 1;
     std::vector<int> dredge_current_;
     std::vector<std::vector<int>> dredge_pending_;
     int              s_nobs_  = 0;                    // suspended-tutor searches the last crossing resolved
@@ -102110,7 +102256,7 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 { *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
 bool BoundaryFan::Cross(GameState& sx)
 {
-    if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_)
+    if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_ && !fu_)
     { return SimulateEndAndStartNextTurn(sx); }
     bool ok = false;
     std::vector<int> dredge_offer;
@@ -102128,6 +102274,13 @@ bool BoundaryFan::Cross(GameState& sx)
     int* prior_klothys_probe = g_klothys_boundary_width_probe;
     int* prior_keranos_probe = g_keranos_boundary_width_probe;
     if (klothys_) { g_klothys_boundary_width_probe = &klothys_width; }
+    int fu_width = 1;
+    int* prior_fu_probe = g_eot_face_up_width_probe;
+    if (fu_)
+    {
+        g_eot_face_up_width_probe = &fu_width;
+        if (g_faceup_unpinned_hook != nullptr) { faceupcensus::g_fan_crossings.fetch_add(1, std::memory_order_relaxed); }
+    }
     if (keranos_) { g_keranos_boundary_width_probe = &keranos_width; }
     int* prior_tutor_probe = t_upkeep_tutor_width_probe;
     if (tutor_) { t_upkeep_tutor_width_probe = &tutor_width; }
@@ -102153,6 +102306,8 @@ bool BoundaryFan::Cross(GameState& sx)
     else { ok = SimulateEndAndStartNextTurn(sx); }
     t_upkeep_tutor_width_probe = prior_tutor_probe;
     g_klothys_boundary_width_probe = prior_klothys_probe;
+    g_eot_face_up_width_probe = prior_fu_probe;
+    if (fu_) { fu_width_ = std::max(1, fu_width); }
     g_keranos_boundary_width_probe = prior_keranos_probe;
     g_dredge_boundary_first_offer = saved_dredge_probe;
     if (!dredge_offer.empty())
@@ -102385,6 +102540,63 @@ std::pair<int, int> TurnSolver::ChooseRealCrossingReanimate(GameState& state, in
     if (chosen.first != -2) { state.scripted_grace_choice = static_cast<std::int16_t>(chosen.first); }
     if (chosen.second != -2) { state.scripted_upkeep_gy_reanimate = static_cast<std::int16_t>(chosen.second); }
     return chosen;
+}
+// THE EXECUTOR'S CROSSING NODE for morph's opponent-end-step flip (the ChooseRealCrossingFetch shape): the committed
+// line normally carries the flip (Plan::eot_face_up_choice, recorded where its search crossed the boundary); when its
+// crossing lay beyond the horizon (an early ladder pass committed the turn) nothing was recorded, so the flip is
+// SEARCHED here at the end of the real turn -- one crossing per rank of the end-step menu (the provider's front
+// first, so it keeps every tie), each next turn searched by SimulateToEnd, iteratively deepened under the decision
+// budget; the deepest completed pass decides (the budget only prices the deepening: unlimited runs every pass).
+int TurnSolver::ChooseRealCrossingFaceUp(GameState& state, int depth, int max_turns,
+                                         SearchBudget* budget, bool second_main)
+{
+    if (depth <= 0 || !FaceUpUncoveredPending(state)) { return -2; }
+    RevealLogPause _rlp;
+    TranspositionTable tt;
+    int chosen = -2;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        BoundaryFan fan(state, /*with_echo=*/false, false, false, false, /*face_up_only=*/true);
+        if (!fan.FaceUpLive()) { return -2; }
+        int best_wt = max_turns + 2, best_pin = -2;
+        bool wide = false;
+        while (fan.Next())
+        {
+            GameState ce = state;
+            fan.Stamp(ce);
+            int wt = max_turns + 1;
+            const int cut = best_wt <= max_turns ? best_wt - 1 : max_turns + 1;
+            if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (fan.FaceUpPin() != -2) { wide = true; }
+            if (wt < best_wt) { best_wt = wt; best_pin = fan.FaceUpPin(); }
+        }
+        if (!wide) { return -2; }
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
+    }
+    if (chosen != -2) { state.scripted_eot_face_up = static_cast<std::int16_t>(chosen); }
+    return chosen;
+}
+std::vector<std::pair<int, int>> TurnSolver::FaceUpBoundaryForTest(const GameState& state)
+{
+    std::vector<std::pair<int, int>> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        if (!fan.Cross(sx)) { continue; }
+        int up = 0;
+        for (const Permanent& p : sx.battlefield)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (p.controller_index == sx.active_player_index && d != nullptr
+                && (d->params.morph_cost || d->params.megamorph_cost)) { ++up; }
+        }
+        out.emplace_back(fan.FaceUpPin(), up);
+    }
+    return out;
 }
 int TurnSolver::ChooseRealCrossingLand(GameState& state, int depth, int max_turns,
                                        SearchBudget* budget, bool second_main)
@@ -102910,6 +103122,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
         if (m2_deferred_only && M2EmptyFastOn() && M2FixModeFor(state) == 0
             && SecondMainUnproductive(state) && !EchoUncoveredPending(state) && !DothUncoveredPending(state)
             && !SuspendTutorUncoveredPending(state) && !UpkeepLandUncoveredPending(state)
+            && !FaceUpUncoveredPending(state)
             && !state.deck_has_endstep_reanimate && !state.deck_has_upkeep_reanimate)
         {
             if (ConstantLeafExhausted(budget)) { ++g_fs_trunc_events; return { max_turns + 1, {} }; }
@@ -104076,6 +104289,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             int  best_land = -2;
             int  best_klothys = -2;
             int  best_keranos = -2;
+            int  best_face_up = -2;
             std::vector<int> best_dredge;
             bool have      = false;
             while (fan.Next())
@@ -104106,6 +104320,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_land = fan.LandPin();
                     best_klothys = fan.KlothysPin();
                     best_keranos = fan.KeranosPin();
+                    best_face_up = fan.FaceUpPin();
                     best_dredge = fan.DredgePins();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
@@ -104121,6 +104336,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             best_tail.boundary_land = best_land;
             best_tail.boundary_klothys = best_klothys;
             best_tail.boundary_keranos = best_keranos;
+            best_tail.boundary_face_up = best_face_up;
             best_tail.boundary_dredge_pins = std::move(best_dredge);
             return best_tail;
         }
@@ -104151,6 +104367,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     tail_line.boundary_land = -2;
     tail_line.boundary_klothys = -2;
     tail_line.boundary_keranos = -2;
+    tail_line.boundary_face_up = -2;
     tail_line.boundary_dredge_pins.clear();
     return tail_line;
 }
@@ -104168,6 +104385,7 @@ static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine&
     if (tail.boundary_land != -2) { p.upkeep_land_search_choice = tail.boundary_land; }
     if (tail.boundary_klothys != -2) { p.next_klothys_choice = tail.boundary_klothys; }
     if (tail.boundary_keranos != -2) { p.next_keranos_choice = tail.boundary_keranos; }
+    if (tail.boundary_face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(tail.boundary_face_up); }
     if (!tail.boundary_dredge_pins.empty()) { p.next_draw_dredge_pins = tail.boundary_dredge_pins; }
 }
 
@@ -111732,6 +111950,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1); iv("demontrig", q.demon_trigger_choice, -1);
                 iv("echo", q.echo_choice, -1);
                 iv("doth", q.doth_put_choice, -1);
+                iv("eotfu", q.eot_face_up_choice, -1);
                 std::fprintf(stderr, "[nc]   #%zu %s |%s\n", i, FsPlanText(q).c_str(), ax.c_str());
             }
         }
@@ -112090,7 +112309,7 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 struct BoundaryChoice
 {
     int echo = -2, doth = -2, tutor = -2, stut = -2, miracle = -2, grace = -2, emeria = -2, land = -2;
-    int klothys = -2, keranos = -2;
+    int klothys = -2, keranos = -2, face_up = -2;
     std::vector<int> dredge;
 };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
@@ -112106,6 +112325,7 @@ static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
     if (!bc.dredge.empty()) { p.next_draw_dredge_pins = bc.dredge; }
     if (bc.klothys != -2) { p.next_klothys_choice = bc.klothys; }
     if (bc.keranos != -2) { p.next_keranos_choice = bc.keranos; }
+    if (bc.face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(bc.face_up); }
 }
 static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
                                               int cutoff, bool second_main, TranspositionTable* tt)
@@ -112134,11 +112354,12 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
             best.stut = fan.StutPin(); best.miracle = fan.MiraclePin(); best.grace = fan.GracePin(); best.emeria = fan.EmeriaPin();
             best.land = fan.LandPin();
             best.dredge = fan.DredgePins(); best.klothys = fan.KlothysPin(); best.keranos = fan.KeranosPin();
+            best.face_up = fan.FaceUpPin();
         }
     }
     fan.RecordOnState(copy, best.echo, best.doth, best.tutor, best.stut,
                       best.miracle, best.grace, best.emeria, best.land,
-                      best.dredge, best.klothys, best.keranos);
+                      best.dredge, best.klothys, best.keranos, best.face_up);
     return best;
 }
 
@@ -115684,6 +115905,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         { Fold(k, 0x4B4C4F54ull + static_cast<std::uint64_t>(state.scripted_boundary_klothys)); }
         if (state.scripted_boundary_keranos >= 0)
         { Fold(k, 0x4B455241ull + static_cast<std::uint64_t>(state.scripted_boundary_keranos)); }
+        if (state.scripted_eot_face_up >= 0)
+        { Fold(k, 0x46435550ull + static_cast<std::uint64_t>(state.scripted_eot_face_up)); }
     }
     // Shadowborn's demon-trigger pin (Reaper end step + Overlord next upkeep): the axis skips the variant
     // equal to the inherited pin, so a memoised list under one pin is not another's. Value-gated.
@@ -117928,6 +118151,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.scripted_militia_pride_pay != now.scripted_militia_pride_pay) { d += " scripted_militia_pride_pay=" + std::to_string(static_cast<long long>(stored.scripted_militia_pride_pay)) + "/" + std::to_string(static_cast<long long>(now.scripted_militia_pride_pay)); }
     if (stored.scripted_discard_choice != now.scripted_discard_choice) { d += " scripted_discard_choice=" + std::to_string(static_cast<long long>(stored.scripted_discard_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_discard_choice)); }
     if (stored.scripted_doth_put != now.scripted_doth_put) { d += " scripted_doth_put=" + std::to_string(static_cast<long long>(stored.scripted_doth_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_doth_put)); }
+    if (stored.scripted_eot_face_up != now.scripted_eot_face_up) { d += " scripted_eot_face_up=" + std::to_string(static_cast<long long>(stored.scripted_eot_face_up)) + "/" + std::to_string(static_cast<long long>(now.scripted_eot_face_up)); }
     if (stored.scripted_echo != now.scripted_echo) { d += " scripted_echo=" + std::to_string(static_cast<long long>(stored.scripted_echo)) + "/" + std::to_string(static_cast<long long>(now.scripted_echo)); }
     if (stored.scripted_fb_hold != now.scripted_fb_hold) { d += " scripted_fb_hold=" + std::to_string(static_cast<long long>(stored.scripted_fb_hold)) + "/" + std::to_string(static_cast<long long>(now.scripted_fb_hold)); }
     if (stored.scripted_fling_victim != now.scripted_fling_victim) { d += " scripted_fling_victim=" + std::to_string(static_cast<long long>(stored.scripted_fling_victim)) + "/" + std::to_string(static_cast<long long>(now.scripted_fling_victim)); }
@@ -119455,6 +119679,23 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         }
         if (!any_src) { return "you control nothing with a sacrifice-six-to-search ability (sacnamed=" + fetch + ")"; }
     }
+    // --- faceup= (morph): a face-down permanent of ours whose REAL card is the name, or the same card in hand (a
+    // face-down cast in this line can supply it -- the LegalNotEnumerated grade).
+    for (const std::string& name : spec.face_ups)
+    {
+        bool any = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index) { continue; }
+            const CardDefinition* r = FaceDownRealDef(p);
+            if (r != nullptr && r->card.m_name.str() == name) { any = true; break; }
+        }
+        for (const Card& c : s.ActivePlayer().hand) { if (c.m_name.str() == name) { any = true; break; } }
+        if (!any) { return "you control no face-down '" + name + "' to turn face up"; }
+        const CardDefinition* d = def_of(name);
+        if (d && !(d->params.morph_cost || d->params.megamorph_cost))
+        { return "'" + name + "' has no morph or megamorph cost"; }
+    }
     for (const std::string& name : spec.transforms)
     {
         if (!live(name))
@@ -120178,7 +120419,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       // worse than a reject because the human sees no error at all.
                       spec.tap_lifes.empty() && spec.aura_swaps.empty()
                       && spec.land_searches.empty()
-                      && spec.steals.empty() && spec.transforms.empty()
+                      && spec.steals.empty() && spec.transforms.empty() && spec.face_ups.empty()
                       && spec.sac_nameds.empty()
                       && spec.untap_acts.empty() && spec.tap_draws.empty()))
     {
@@ -120360,6 +120601,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     std::vector<std::string> sortedTransforms = spec.transforms;
     std::sort(sortedTransforms.begin(), sortedTransforms.end());
     const bool transform_declared = !spec.transforms.empty();
+    std::vector<std::string> sortedFaceUps = spec.face_ups;
+    std::sort(sortedFaceUps.begin(), sortedFaceUps.end());
+    const bool faceup_declared = !spec.face_ups.empty();
     // tapdraw= (Staff of Domination's "{5}, {T}: Draw a card"), the taplife= declared-vs-legacy split.
     std::vector<std::string> sortedTapDraws = spec.tap_draws;
     std::sort(sortedTapDraws.begin(), sortedTapDraws.end());
@@ -120451,6 +120695,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> landSearchNames;
         std::vector<std::string> stealNames;
         std::vector<std::string> transformNames;
+        std::vector<std::string> faceUpNames;
         std::vector<int> jitteModes, gyExileModes;
         std::vector<LineSpec::FigureSpec> figureModes;
         std::vector<TurnSolver::LineSpec::PodSpec> podActs;
@@ -120567,6 +120812,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (transform_declared && a.kind == Action::Kind::ActivatePermAbility
                 && a.ability_mode == Action::AbilityMode::TransformSelf)
             { transformNames.push_back(a.card_name); continue; }
+            if (faceup_declared && a.kind == Action::Kind::ActivatePermAbility
+                && (a.ability_mode == Action::AbilityMode::TurnFaceUp
+                    || a.ability_mode == Action::AbilityMode::TurnFaceUpLate))
+            { faceUpNames.push_back(FaceUpActionRealName(a)); continue; }
             if (pod_declared && a.kind == Action::Kind::ActivatePod)
             { podActs.push_back({ a.tutor_target.str(), a.sac_victim_id }); continue; }
             if (ooze_declared && a.kind == Action::Kind::GraveyardExileGrow)
@@ -120792,6 +121041,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = transformNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedTransforms) { continue; }
+        }
+        if (faceup_declared)
+        {
+            std::vector<std::string> v2 = faceUpNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedFaceUps) { continue; }
         }
         if (pod_declared && !PodsMatch(spec.pods, podActs)) { continue; }
         if (ooze_declared)
@@ -123694,6 +123949,7 @@ static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver:
         // with identical zones differ here when anywhere).
         const std::pair<const char*, long long> pins[] = {
             {"demon_trigger", copy.scripted_demon_trigger}, {"doth_put", copy.scripted_doth_put},
+            {"eot_face_up", copy.scripted_eot_face_up},
             {"fb_hold", copy.scripted_fb_hold}, {"echo", copy.scripted_echo},
             {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"suspend_tutor", copy.scripted_suspend_tutor},
             {"discard", copy.scripted_discard_choice},
@@ -123929,6 +124185,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     { s.scripted_boundary_dredge = p.next_draw_dredge_pins; s.scripted_boundary_dredge_cursor = 0; }
     if (p.next_klothys_choice >= 0) { s.scripted_boundary_klothys = p.next_klothys_choice; }
     if (p.next_keranos_choice >= 0) { s.scripted_boundary_keranos = p.next_keranos_choice; }
+    // Morph's opponent-end-step flip, chosen where the turn's line crossed the boundary (BoundaryFan) -- write-when-set.
+    if (p.eot_face_up_choice >= 0) { s.scripted_eot_face_up = p.eot_face_up_choice; }
     // Shadowborn's demon triggers (Reaper end step + Overlord next upkeep): the end step and the upkeep
     // consume their own halves (PerformEndStepMorbidDestroy / PerformUpkeepSacrificeCreature).
     if (p.demon_trigger_choice >= 0) { s.scripted_demon_trigger = p.demon_trigger_choice; }

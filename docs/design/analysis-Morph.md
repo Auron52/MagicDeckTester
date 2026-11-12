@@ -190,3 +190,15 @@ the durable record).
 
 ## Approved deferrals
 (none yet)
+
+### INT-2b result (2026-11-12) -- the opponent-end-step flip window
+- BUILT: morph.md step 7 -- the searched opponent-end-step flip (BoundaryFan face-up axis, executor crossing
+  node, `face_up` viewer decision on all four sites, MTG_FACEUP_AXIS_STATS tripwire = 0 in searched frames on
+  the 460-game pooled batch), the Hystrodon weak-dominance fold (G3 default), the `faceup=` composer token,
+  and rule 6c (a hand-source TRAIL flip without a face-down cast -- an identity fold).
+- Sanity clock (pooled, FACEDOWN_AUDIT on, no abort): d0 6.68 -> 6.68, d3 b10 4.40 -> 4.41, d5 b20 4.45 -> 4.48.
+- OPEN (logs/morph/int2b-handoff.md): (A) at a finite budget no line holding a face-down Firecat to the
+  opponent's end step is ever simulated (the fixture passes only at b0); (B) Den Protector's TRAIL regrowth of a
+  card cast that section does not open a breakpoint (the section window diffs m_numbers) -- root cause found;
+  (C) PlanHasDeadFaceUpPin deferred (not sound without a "can put a hand card in the graveyard" predicate);
+  (D) d0 flip knowledge (step 8) not started.

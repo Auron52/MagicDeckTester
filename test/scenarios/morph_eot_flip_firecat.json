@@ -1,0 +1,59 @@
+{
+  "_comment": [
+    "MORPH: THE OPPONENT-END-STEP FLIP (Morph INT-2b, 2026-11-12; morph.md step 7).",
+    "",
+    "Turn 2: a face-down Blistering Firecat cast THIS turn (summoning sick), two Mountains untapped, the Forest",
+    "tapped, Berserk + Temur Battle Rage in hand, a Forest on top for turn 3. The searched line turns the Firecat",
+    "face up at the OPPONENT'S end step with the two Mountains this turn would otherwise waste: it has missed that",
+    "end step's sacrifice trigger, so on turn 3 it attacks as a 7/1 and the four lands pay Berserk ({G}: 14) and",
+    "Temur Battle Rage ({1}{R}: double strike) -> 28.",
+    "",
+    "DISCRIMINATING: flipping on turn 3 instead costs the {R}{R} turn 3 needs (two Forests left: Berserk, no",
+    "red for the Rage -> 14); flipping on turn 2 for haste (7) gets it sacrificed at turn 2's end step. Only",
+    "the end-of-turn window wins on turn 3.",
+    "",
+    "BUDGET 0 (unlimited), deliberately: at a FINITE budget (b100 .. b100000, d3) no line that holds the face-down",
+    "Firecat to the opponent's end step is ever simulated (MTG_FACEUP_AXIS_STATS: 0 fan crossings, 0 unpinned",
+    "windows), so the budgeted search takes the turn-2 haste flip (7 damage). An open INT-2b finding (logs/morph/",
+    "int2b-handoff.md); move this fixture to a finite budget once the budgeted reachability is fixed."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 2,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": true
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": true
+    }
+  ],
+  "hand": [
+    "Berserk",
+    "Temur Battle Rage"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 4,
+  "expect_win_turn": 3
+}

@@ -704,6 +704,13 @@ extern thread_local bool g_play_frame_no_ordinal;
 // replay byte-identically as the heuristic. Nulled by RevealLogPause; inert unless set.
 using StorageHoldChooser = std::function<bool(const GameState& state, const Permanent& land, int counters)>;
 extern thread_local StorageHoldChooser* g_play_storage_hold_chooser;
+// MORPH -- turn face up at the OPPONENT'S END STEP (the `face_up` decision; SpellEffects.h
+// PerformOpponentEndStepFaceUp). Offered the battlefield indices of our face-down permanents whose
+// turn-face-up cost is payable now, with those costs; returns an index into `face_down_idx` to flip
+// one (re-asked after each flip), or -1 = done. Human play only; nulled during search (RevealLogPause).
+using FaceUpChooser = std::function<int(const GameState& state, const std::vector<int>& face_down_idx,
+                                        const std::vector<std::string>& costs)>;
+extern thread_local FaceUpChooser* g_play_face_up_chooser;
 // The play viewer opts into a pre-draw Magus of the Bazaar activation choice. Saved
 // reference replays without the flag keep their original positional choices.
 extern thread_local bool g_play_magus_upkeep_prompt;
@@ -1149,6 +1156,7 @@ inline bool AllPlayHooksNull()
         && g_play_demonstrate_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
+        && g_play_face_up_chooser == nullptr
         && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
         && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr
         && g_play_loyalty_chooser == nullptr
@@ -1211,6 +1219,7 @@ struct RevealLogPause
     FirebreatheChooser* saved_fbchooser;
     CastOrderChooser* saved_cochooser;
     StorageHoldChooser* saved_shchooser;
+    FaceUpChooser*      saved_fuchooser;
     TutorChooser*       saved_tutorchooser;
     BounceChooser*      saved_ahchooser;
     FirebreatheChooser* saved_jitchooser;
@@ -1273,6 +1282,7 @@ struct RevealLogPause
         saved_fbchooser = g_play_firebreathe_chooser;
         saved_cochooser = g_play_cast_order_chooser;
         saved_shchooser = g_play_storage_hold_chooser;
+        saved_fuchooser = g_play_face_up_chooser;
         saved_tutorchooser = g_play_tutor_chooser;
         saved_ahchooser = g_play_attach_host_chooser;
         saved_jitchooser = g_play_jitte_chooser;
@@ -1301,6 +1311,7 @@ struct RevealLogPause
         g_play_fling_chooser = nullptr;
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
+        g_play_face_up_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
@@ -1337,6 +1348,7 @@ struct RevealLogPause
                         g_play_firebreathe_chooser = saved_fbchooser;
                         g_play_cast_order_chooser = saved_cochooser;
                         g_play_storage_hold_chooser = saved_shchooser;
+                        g_play_face_up_chooser = saved_fuchooser;
                         g_play_tutor_chooser = saved_tutorchooser;
                         g_play_attach_host_chooser = saved_ahchooser;
                         g_play_jitte_chooser = saved_jitchooser;

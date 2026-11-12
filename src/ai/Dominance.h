@@ -606,6 +606,9 @@ static_assert(sizeof(Player) == 216,
 // +2 bits (2026-11-10, Hydras; no size change -- the deck_has_turn_gods bitfield byte): `deck_has_land_tap_bonus`
 // and `deck_has_chosen_color_pump`. Classification: DECK CONSTANTS, stamped once in StampDeckTraits and never
 // written again; they only skip walks that provably find nothing -- nothing to fold.
+// +0 bytes (2026-11-12, morph's searched opponent-end-step flip): `scripted_eot_face_up` (an int16_t, in the hole
+// after keranos_first_own_draw_seen). Classification: FUTURE-DETERMINING (set by the turn's plan apply, consumed at
+// the opponent's end step of the crossing), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
 static_assert(sizeof(GameState) == 1408,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1040,6 +1043,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x4B4C4F540000ull + static_cast<std::uint64_t>(s.scripted_boundary_klothys)); }
     if (s.scripted_boundary_keranos >= 0)
     { fold(0x4B4552410000ull + static_cast<std::uint64_t>(s.scripted_boundary_keranos)); }
+    if (s.scripted_eot_face_up >= 0)   // the searched opponent-end-step flip (morph), same class, value-gated
+    { fold(0x464355500000ull + static_cast<std::uint64_t>(s.scripted_eot_face_up)); }
     if (s.deck_has_turn_gods)
     {
         fold(0x474F44530000ull + (s.keranos_first_own_draw_seen ? 1ull : 0ull));

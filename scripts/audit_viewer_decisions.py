@@ -183,8 +183,9 @@ MANIFEST = {
     "redirects_spell_target_to_self": ("main_phase",     truthy),
     # Morph INT-2: the face-down cast (Action::face_down 1, and 2 = turned face up at once) is a main_phase
     # plan VARIANT of the hand cast, and the main-phase turn-face-up is a plan verb ("face_up", position
-    # "first" / "after casts"). The END-OF-TURN face_up decision (opponent's end step) is NOT built yet --
-    # owed with the BoundaryFan axis (INT-2 handoff); add ("face_up", truthy) here when it lands.
+    # "first" / "after casts"). The END-OF-TURN flip at the OPPONENT'S end step is the `face_up` decision
+    # (g_play_face_up_chooser, PerformOpponentEndStepFaceUp) -- added for both keys in expected_for_card below,
+    # since a param maps to one manifest type here.
     "morph_cost": ("main_phase",                         truthy),
     "megamorph_cost": ("main_phase",                     truthy),
     # Den Protector's "return target card from your graveyard to your hand": the searched pin in the
@@ -2035,6 +2036,10 @@ def expected_for_card(card, deck_cards=None):
             pass  # classified: inert / main_phase-ride / user-approved deferral
         else:
             unmapped.add(key)   # UNCLASSIFIED -> unmapped decision (wire it to surface) or new param -> guard trips
+    # Morph / megamorph (INT-2b): beside the main_phase plan variants, the opponent-end-step flip window
+    # surfaces the `face_up` board prompt (one flip per answer, -1 = done).
+    if p.get("morph_cost") or p.get("megamorph_cost"):
+        exp.add("face_up")
     # Midrange Burn: the activation itself, any-target damage, and two non-targeting fuel costs.
     if p.get("tap_graveyard_exile_damage", 0) > 0:
         exp.update({"main_phase", "target", "gy_return_one"})

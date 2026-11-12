@@ -2359,7 +2359,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2447,7 +2447,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='treasurify';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='face_up' || dec==='treasurify';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
   // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
@@ -4325,7 +4325,7 @@ function initBoardSel(d){
     // the AI is recommending for pairing").
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
     if (def) S.boardSel.add('m:'+def.perm_index);
-  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='face_up'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
     // Multi-victim burst: seed the WHOLE cost, not one body of it -- the engine's whole default when it
@@ -4353,7 +4353,7 @@ function initHandSel(d){
 function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='face_up' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -4373,14 +4373,14 @@ function wireDecisionBoard(d, dec){
       t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
     });
   }
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='treasurify'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='face_up' || dec==='treasurify'){
     const legal=legalTargetKeys(d);
     // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
     // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
     // there is no choice to make and letting a click deselect one would only be able to produce an
     // un-confirmable state.
     const ro = dec==='sacrifice' && sacBurstForced(d);
-    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='treasurify')?1
+    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='face_up'||dec==='treasurify')?1
               : dec==='sacrifice' ? sacBurstNeed(d)
               : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
@@ -5420,6 +5420,17 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Decline</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
+  if (dec==='face_up'){
+    // MORPH at the OPPONENT'S END STEP: turn one of your face-down permanents face up (its morph cost is paid
+    // from what you left untapped), re-asked after each flip; "Done" (-1) ends the window.
+    const sel=[...(S.boardSel||[])];
+    const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    return `<h3>Opponent's end step — turn a face-down creature face up?</h3>`+
+      `<div class="sub">Click one of your face-down creatures to pay its morph cost from your untapped mana and turn it face up now. A Blistering Firecat turned up here has missed this end step's sacrifice trigger and survives into your turn; a Den Protector's regrowth asks for its card next. Or click Done to keep the rest face down.</div>`+
+      `<div class="pbtns"><span class="pcount">Turning up: <b>${opt?esc(opt.name)+' ('+esc(opt.cost||'')+')':'(pick a face-down creature)'}</b></span>`+
+      `<span class="spacer"></span><button id="decnoattach" class="ghost">Done</button>`+
+      `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Turn face up</button></div>`;
+  }
   if (dec==='treasurify'){
     // Kitesail Larcenist's ETB, ONE prompt per player: which of THAT player's artifacts/creatures
     // becomes a Treasure, or none ("up to one"). Board click, like flicker; the side is in d.side.
@@ -5628,7 +5639,8 @@ function wireDecisionPanel(d, dec){
     // attach_host: "Leave unattached" replies -1 (the equipment stays on the battlefield loose).
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');
-    if (na) na.onclick=()=>pushChoice(d, -1, dec==='flicker' ? `${d.source}: decline ${d.source==='Extraplanar Lens'?'imprint':'flicker'}`
+    if (na) na.onclick=()=>pushChoice(d, -1, dec==='face_up' ? `Opponent's end step: done turning face up`
+                                           : dec==='flicker' ? `${d.source}: decline ${d.source==='Extraplanar Lens'?'imprint':'flicker'}`
                                            : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
                                            : (dec==='attach_host' && d.soulbond) ? `${d.source}: soulbond — not paired`
                                            : (dec==='attach_host' && d.pick) ? `${d.source}: attach nothing`
@@ -6281,6 +6293,10 @@ function commitBoardSel(d, dec){
     oi=opt?opt.index:d.heuristic_default;
     lab=d.source==='Extraplanar Lens' ? `${d.source}: imprint ${opt?opt.name:'land'}`
                                      : `${d.source}: flicker ${opt?opt.name:'permanent'}`;
+  } else if (dec==='face_up'){
+    const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
+    oi=opt?opt.index:-1;
+    lab=opt?`Opponent's end step: turn ${opt.name} face up (${opt.cost||''})`:`Opponent's end step: done turning face up`;
   } else if (dec==='treasurify'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:-1; lab=`${d.source}: ${opt?(opt.label||opt.name)+' becomes a Treasure':'no Treasure'}`;

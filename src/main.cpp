@@ -1380,6 +1380,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // MORPH (CR 702.37): the face-down cast ({3}, a nameless 2/2) shares the hard cast's name.
+        if (a.face_down == 1) { tag += " (face down)"; }
+        if (a.face_down == 2) { tag += " (face down, then turned face up)"; }
         // PITCH EVOKE (Fury): WHICH card the evoke exiles -- the variants differ only in it.
         if (!a.pitch_name.empty()) { tag += " (exile " + a.pitch_name.str() + " from hand)"; }
         // REMAND rider (Action::remand_by): "cast X, then Remand it" shares X's name with the plain
@@ -4287,6 +4290,32 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
              "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick."); }
 }
 
+// MORPH -- turn face up at the OPPONENT'S END STEP (the `face_up` decision, SpellEffects.h
+// PerformOpponentEndStepFaceUp): options = our face-down permanents whose morph / megamorph cost the mana we
+// left untapped can pay now (the REAL name -- the owner sees the card, CR 708.5 -- and the cost). Reply an
+// option index to flip it (re-asked after each flip), or -1 = done. Default = 0 (the provider's
+// EotFaceUpOrder front: the autonomous playout flips every payable one in this order).
+static void WriteFaceUpDecisionJson(std::ostream& os, const GameState& s, const std::vector<int>& face_down_idx,
+                                    const std::vector<std::string>& costs, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("face_up").Source("Opponent's end step").Turn(s)
+     .Board(s).HeuristicDefault(face_down_idx.empty() ? -1 : 0);
+    d.Array("options", face_down_idx.size(), [&](std::size_t i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(face_down_idx[i])];
+        const CardDefinition* real = FaceDownRealDef(p);
+        const std::string nm = real != nullptr ? real->card.m_name.str() : p.card.m_name.str();
+        os << "{ \"index\": " << i << ", \"perm_index\": " << face_down_idx[i] << ", \"name\": "; JsonStr(os, nm);
+        os << ", \"cost\": "; JsonStr(os, i < costs.size() ? costs[i] : std::string());
+        os << ", \"megamorph\": " << (real != nullptr && real->params.megamorph_cost ? "true" : "false");
+        os << ", \"label\": "; JsonStr(os, nm + " (" + (i < costs.size() ? costs[i] : std::string()) + ")"); os << " }";
+    });
+    d.Note("reply an option index to pay that face-down creature's morph cost from your untapped mana and turn it "
+           "face up now (a Firecat turned up here missed this end step's sacrifice trigger and survives into your "
+           "turn), or -1 = done. Asked again after each flip. Default = the AI's order.");
+}
+
 // Kitesail Larcenist `treasurify` decision: for ONE player's side, the human picks WHICH artifact or
 // creature that player controls becomes a Treasure artifact (loses every other type and ability), or
 // -1 for none ("up to one"). Fired for the OPPONENT side always, and for the own side on an Aether
@@ -5611,7 +5640,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "landsearch"){ ls.land_searches.push_back(val); }
         else if (key == "steal")     { ls.steals.push_back(val); }       // Captivating Vampire's steal (Vampires B)
         else if (key == "sacnamed")  { ls.sac_nameds.push_back(val); }   // Shadowborn Apostle (the Demon)
-        else if (key == "transform") { ls.transforms.push_back(val); }   // Bloodline Keeper's {B} transform // Wilds / Myriad / Khalni crack
+        else if (key == "transform") { ls.transforms.push_back(val); }
+        else if (key == "faceup" || key == "face_up") { ls.face_ups.push_back(val); }   // morph: turn <real name> face up   // Bloodline Keeper's {B} transform // Wilds / Myriad / Khalni crack
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")
         {
@@ -6027,6 +6057,7 @@ g_play_cast_order_chooser = nullptr;
 g_play_attackers_chooser = nullptr;
 g_play_tap_pref_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
+g_play_face_up_chooser = nullptr;
 if (!keep_sinks)   // --choices-then-auto keeps them: the search's turns still narrate final_events
 {
     g_play_draw_sink = nullptr;
@@ -6376,6 +6407,7 @@ struct ClaudePlayHarness
     AttackersChooser      attackers_chooser;    // --force-attackers (reference replay)
     TapPrefChooser        tap_pref_chooser;     // --tap-pref (reference replay)
     StorageHoldChooser    storage_hold_chooser;
+    FaceUpChooser         face_up_chooser;
     LandEntryChooser      land_entry_chooser;
     SoulfireTargetChooser soulfire_chooser;
 
@@ -8161,6 +8193,38 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_flicker_chooser = &flicker_chooser;
+
+    // Morph's opponent-end-step flip: one face-down permanent per answer (re-asked after each flip), -1 = done.
+    // Shares the --choices stream. Default = 0, the provider's front.
+    face_up_chooser =
+        [this](const GameState& s, const std::vector<int>& face_down_idx, const std::vector<std::string>& costs) -> int
+        {
+            int di = static_cast<int>(cursor);
+            const int def = face_down_idx.empty() ? -1 : 0;
+        claude_retry_faceup:
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < -1 || chosen >= static_cast<int>(face_down_idx.size())) { chosen = def; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteFaceUpDecisionJson(ss, s, face_down_idx, costs, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteFaceUpDecisionJson(std::cout, s, face_down_idx, costs, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_faceup; }
+            std::exit(70);
+        };
+    g_play_face_up_chooser = &face_up_chooser;
 
     // Kitesail Larcenist (treasurify): per side, the player picks which artifact/creature becomes a
     // Treasure, or -1 for none. `controller` here is the SIDE being chosen for (FireOwnEtbTriggers
