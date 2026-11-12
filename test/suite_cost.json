@@ -275,13 +275,13 @@
   },
   "martyr": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 3356.0202,
+   "cost_per_game_ms": 5758.2958,
    "jobs": 7,
    "key": "martyr",
-   "note": "SCALED to hinata's committed entry: measured 0.690x hinata in ONE pooled --cost run (martyr 30515.215 vs hinata 44227.64 ms/game) on a 12-thread i5-1235U laptop (2026-11-10), whose absolute ms are ~9x this table's box. Refill with --measure-all on the reference box.",
+   "note": "SCALED to hinata's committed entry: measured 0.896x hinata in ONE pooled --cost run (martyr 20764.0 vs hinata 23165.347 ms/game) on a 12-thread laptop (2026-11-12, after the 1-drop tutor prune; 0.690x on 2026-11-10), whose absolute ms are not this table's box. Refill with --measure-all on the reference box.",
    "tier": "regression",
    "total_core_ms": 1694052,
-   "worst_case": "martyr_regression_d5_b20"
+   "worst_case": "martyr2hg_regression_d5_b20"
   },
   "melira": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
