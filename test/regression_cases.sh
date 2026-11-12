@@ -90,6 +90,7 @@ declare -A DECK_FILE=(
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
   [hydras]=decks/Hydras/Hydras.cod
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
+  [morph]=decks/Morph/Morph.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -142,6 +143,7 @@ declare -A DECK_PROF=(
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
   [hydras]=decks/Hydras/Hydras.profile.json
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
+  [morph]=decks/Morph/Morph.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -172,6 +174,13 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Morph: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, hydras sizing
+  # (similar per-game cost). No card scales with opponents or reads starting life, so morph2hg is the
+  # small searched 2HG canary every deck carries. docs/design/analysis-Morph.md.
+  "morph      0  1001 1000  0"
+  "morph      3  1001   50 10"
+  "morph      5  1001  100 20"
+  "morph2hg   5  1001   25 20"
   # Hydras: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, extraturns
   # sizing. No card scales with opponents or reads starting life, so hydras2hg is the small searched
   # 2HG canary every deck carries (30 team life lengthens the clock). analysis-hydras.md.
@@ -710,6 +719,16 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # Morph: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
+  "morph      0  2002 1000  0"
+  "morph      3  2002   75 10"
+  "morph      5  2002  150 20"
+  "morph      5  3003  150 20"
+  "morph2hg   5  2002   75 20"
+  # Morph unlimited backstop: screened 30001..30020 at d3 and d5 (abandon_units 2e6, MTG_SLOW_GAME_MS=5000).
+  # The deck's budget-0 tail is heavy (30010/30011 hit the cap); 30001..30003 run under 1 s at both depths.
+  "morph            3 30001   3 0"
+  "morph            5 30001   3 0"
   # Hydras: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
   "hydras     0  2002 1000  0"
   "hydras     3  2002   75 10"
@@ -1158,6 +1177,22 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Morph: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
+  # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
+  "morph      0  4004 2000  0"
+  "morph      0  6006 2000  0"
+  "morph      0  8008 2000  0"
+  "morph      0 10010 2000  0"
+  "morph      3  4004  125 10"
+  "morph      5  4004  300 20"
+  "morph      5  5005  300 20"
+  "morph      5  6006  300 20"
+  "morph      5  7007  300 20"
+  "morph2hg   5  4004  100 20"
+  # Morph unlimited backstop: 30101..30120 screened (7 of 40 games hit the 2e6 cap, 30101 at both depths);
+  # the 30108 block (5 games, re-screened at its own base) runs under 3 s per game at both depths.
+  "morph            3 30108   5 0"
+  "morph            5 30108   5 0"
   # Hydras: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
   # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
   "hydras     0  4004 2000  0"

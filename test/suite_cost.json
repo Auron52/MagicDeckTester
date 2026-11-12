@@ -336,6 +336,16 @@
    "total_core_ms": 4326988,
    "worst_case": "modernrwburn2hg_regression_d5_b20"
   },
+  "morph": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 11065.1053,
+   "jobs": 7,
+   "key": "morph",
+   "note": "SCALED to hinata's committed entry: measured 1.722x hinata in ONE pooled --cost run (morph 9086.8667 vs hinata 5275.7033 ms/game, 2026-11-12); rescaled on the INT-11 rebase so the pinned hinata entry stays origin's. Refill with --measure-all on the reference box.",
+   "tier": "regression",
+   "total_core_ms": 2295922,
+   "worst_case": "morph2hg_regression_d5_b20"
+  },
   "niv": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 768.2933,
