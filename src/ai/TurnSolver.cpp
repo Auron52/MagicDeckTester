@@ -40863,15 +40863,51 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 }
                 if (watcher && !magnet && skite != nullptr) { redirect_num = skite->card.m_number; }
             }
+            // The CAST-TIME target twin (USER rulings 5 + 6, 2026-11-12): under a provider that names
+            // kTrickBestOwnTarget as a trick's only target (MorphProvider's largest-attacker rule) the redirect
+            // twin is kept ONLY while a target watcher is around (redirect_num != 0 already requires one, on our
+            // battlefield or in hand -- a hand Wild Defiance the plan casts first resolves before the trick; one
+            // the plan never casts leaves the twin the plain cast at {U/P} more, dominated). Its original target
+            // is the largest attacker EXCLUDING every redirector (ResolveSoloTargetTrick), so it needs a
+            // non-redirector recipient: an own creature that can attack, or a hasty hand creature.
+            // Ruling 5 verbatim: "Yes, let's drop spellskites ability heuristically unless Wild Defiance is
+            // active. If it is active we should keep it for the potential double pump."
+            // Ruling 6 verbatim: "The important thing if we are pumping this way is that Spellskite should not
+            // be the target even if it is the largest creature. The reason being that we cannot get the benefit
+            // of redirecting."
+            bool redirect_sentinel = false;   // set once the provider narrowing is known (narrow_has_best)
+            auto sentinel_redirect_ok = [&]() -> bool
+            {
+                if (!redirect_sentinel || redirect_num == 0) { return false; }
+                for (const Permanent& p : state.battlefield)
+                {
+                    if (p.controller_index != state.active_player_index || p.card.m_number == redirect_num) { continue; }
+                    if (!p.def_absent)
+                    {
+                        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+                        if (pd != nullptr && pd->params.redirects_spell_target_to_self) { continue; }
+                    }
+                    if (TrickRecipientCanAttackThisTurn(state, p)) { return true; }
+                }
+                for (const Card& hc : ap.hand)
+                {
+                    if (hc.m_number == 0 || hc.m_is_staged) { continue; }
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hd != nullptr && hd->card.IsCreature() && !hd->params.redirects_spell_target_to_self
+                        && TrickHandRecipientCanAttackThisTurn(state, *hd)) { return true; }
+                }
+                return false;
+            };
             auto redirect_ok = [&](int tgt_num) -> bool
             {
+                if (tgt_num == kTrickBestOwnTarget) { return sentinel_redirect_ok(); }
                 if (redirect_num == 0 || tgt_num <= 0 || tgt_num == redirect_num) { return false; }
                 for (const Permanent& p : state.battlefield)
                 {
                     if (p.controller_index == state.active_player_index && p.card.m_number == tgt_num)
                     { return TrickRecipientCanAttackThisTurn(state, p); }
                 }
-                return false;   // a hand creature / sentinel target: no redirect twin
+                return false;   // a hand creature target: no redirect twin
             };
             // hand_name: non-empty iff the target is a SAME-PLAN HAND creature (stamped on the
             // action for the cheap subset legality filter).
@@ -41082,6 +41118,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // add a second copy of it.
             const bool narrow_has_best =
                 std::find(narrow.begin(), narrow.end(), kTrickBestOwnTarget) != narrow.end();
+            redirect_sentinel = narrow_has_best;   // the provider-named cast-time target may carry the twin
             if (!narrow.empty())
             {
                 for (int num : narrow)
@@ -56454,7 +56491,9 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             { watch += d->params.spell_target_watch_pump_power; }
         }
     }
-    std::vector<const CardDefinition*> best_tricks;   // cast-time-target tricks (credited after the loop)
+    // Cast-time-target tricks (credited after the loop), each with its Spellskite redirect (0 = none; USER rulings
+    // 5 + 6: the twin's ORIGINAL target is the largest non-redirector, the payload lands on the redirector).
+    std::vector<std::pair<const CardDefinition*, int>> best_tricks;
     // One trick's payload onto `payload_to`; `watched` != 0 = a Spellskite redirect's original target, whose
     // watchers fire too.
     auto add_trick = [&](const CardDefinition& d, int payload_to, int watched)
@@ -56495,7 +56534,7 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
         }
         // The CAST-TIME target (kTrickBestOwnTarget -- MorphProvider's largest-attacker rule, Morph INT-6): it has
         // no recipient yet, so it is credited below, after every explicit target and flip is in.
-        if (c.enchant_target == kTrickBestOwnTarget) { best_tricks.push_back(d); continue; }
+        if (c.enchant_target == kTrickBestOwnTarget) { best_tricks.emplace_back(d, c.trick_redirect); continue; }
         add_trick(*d, c.trick_redirect != 0 ? c.trick_redirect : c.enchant_target,
                   c.trick_redirect != 0 ? c.enchant_target : 0);
     }
@@ -56539,14 +56578,21 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
     // the pumps already credited to it are in; ties to the first in battlefield order, then same-plan hasty hand
     // creatures (cast before the tricks in the canonical order). Additive tricks first, doublers after (the
     // MorphProvider cast-order tiers). Re-ranked per trick, so a plan's tricks stack exactly as they resolve.
-    std::stable_sort(best_tricks.begin(), best_tricks.end(), [](const CardDefinition* a, const CardDefinition* b)
+    std::stable_sort(best_tricks.begin(), best_tricks.end(),
+                     [](const std::pair<const CardDefinition*, int>& a, const std::pair<const CardDefinition*, int>& b)
     {
         const auto tier = [](const CardDefinition* d)
         { return (d->params.trick_double_power || d->params.grants_temp_double_strike) ? 1 : 0; };
-        return tier(a) < tier(b);
+        return tier(a.first) < tier(b.first);
     });
-    for (const CardDefinition* d : best_tricks)
+    auto is_redirector = [](const CardDefinition* cd)
+    { return cd != nullptr && cd->params.redirects_spell_target_to_self; };
+    for (const auto& [d, redirect] : best_tricks)
     {
+      // The twin first picks among non-redirectors; with none it degrades to the plain pick (the resolver's floor).
+      for (int pass = (redirect != 0 ? 0 : 1); pass < 2; ++pass)
+      {
+        const bool exclude = pass == 0;
         int pick = 0, pick_score = -1;
         auto consider = [&](int num)
         {
@@ -56561,7 +56607,10 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
         for (const Permanent& p : state.battlefield)
         {
             if (p.controller_index == me && p.card.m_number != 0 && (p.card.IsCreature() || p.is_animated))
-            { consider(p.card.m_number); }
+            {
+                if (exclude && !p.def_absent && is_redirector(CardDatabase::Instance().LookupCached(p.card))) { continue; }
+                consider(p.card.m_number);
+            }
         }
         for (int j : sel)
         {
@@ -56569,10 +56618,15 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             if (c.kind != Action::Kind::CastFromHand) { continue; }
             const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
             if (cd == nullptr || !cd->card.IsCreature()) { continue; }
+            if (exclude && is_redirector(cd)) { continue; }
             for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
             { if (hc.m_name == c.card_name && hc.m_number != 0) { consider(hc.m_number); break; } }
         }
-        if (pick != 0) { add_trick(*d, pick, 0); }
+        if (pick == 0) { continue; }
+        if (exclude && pick != redirect) { add_trick(*d, redirect, pick); }   // A's watcher, then the payload on S
+        else                             { add_trick(*d, pick, 0); }
+        break;
+      }
     }
     int credit = 0;
     for (const Rec& r : recs)

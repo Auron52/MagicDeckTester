@@ -4333,7 +4333,11 @@ inline bool CanAttackFull(const Permanent&, const std::vector<Permanent>&, int, 
 // Battlefield index of the controller's best attacker (highest effective power among creatures
 // that can attack this turn), or -1. Used to target an own-creature pump (Invigorate) at the
 // creature whose extra damage matters most.
-inline int FindBestOwnAttacker(const GameState& state, int controller_index)
+// exclude_redirector: skip every permanent carrying redirects_spell_target_to_self (Spellskite) -- the
+// ORIGINAL target of a Spellskite-redirected cast-time trick (USER ruling 6, 2026-11-12: "Spellskite should
+// not be the target even if it is the largest creature. The reason being that we cannot get the benefit of
+// redirecting.").
+inline int FindBestOwnAttacker(const GameState& state, int controller_index, bool exclude_redirector = false)
 {
     // WHICH of your creatures a self-targeting pump picks is provider-owned
     // (OwnPumpTargetCandidates); the base rule is the historical highest-power pick.
@@ -4346,6 +4350,11 @@ inline int FindBestOwnAttacker(const GameState& state, int controller_index)
         const Permanent& p = state.battlefield[i];
         if (p.controller_index != controller_index) { continue; }
         if (!CanAttackFull(p, state.battlefield, controller_index, &hs)) { continue; }
+        if (exclude_redirector && !p.def_absent)
+        {
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+            if (pd != nullptr && pd->params.redirects_spell_target_to_self) { continue; }
+        }
         mine.push_back(i);
     }
     if (mine.empty()) { return -1; }
@@ -27463,7 +27472,12 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     // target does.
     if (target_number == kTrickBestOwnTarget)
     {
-        ti = FindBestOwnAttacker(state, controller);
+        // A Spellskite-redirected twin (USER rulings 5 + 6, 2026-11-12): the ORIGINAL target is the largest
+        // attacker OTHER than a redirector -- its Wild Defiance trigger is the twin's whole point, and aiming
+        // at the Spellskite itself would forfeit it. With no such attacker the twin degrades to the plain pick
+        // (the redirect below then has si == ti and does nothing: the plain variant at {U/P} more, dominated).
+        if (redirect_to != 0) { ti = FindBestOwnAttacker(state, controller, /*exclude_redirector=*/true); }
+        if (ti < 0) { ti = FindBestOwnAttacker(state, controller); }
         if (ti < 0) { ti = FindBestOwnCreature(state, controller); }
         if (ti < 0) { return false; }
         // The plan named no creature, so the viewer learns the one picked HERE (Morph INT-6: the USER's

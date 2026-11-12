@@ -8789,8 +8789,15 @@ bool MorphProvider::TrickTargetsAttackersOnly(const GameState&, const CardDefini
 // "narrowed, no candidate" sentinel, which is exactly what the non-attacker fold (TrickTargetsAttackersOnly)
 // left before: no variant. With no attacker NOW the sentinel needs a body cast in the same plan
 // (SubsetHasMissingTrickTarget, the best_needs_body shape).
-// LOST BY CONSTRUCTION (stated for the USER): the Spellskite redirect twin (redirect_ok refuses a sentinel; it
-// moved the payload off the largest attacker onto the Spellskite for a Wild Defiance trigger on each).
+// THE SPELLSKITE REDIRECT TWIN (USER rulings 5 + 6, 2026-11-12, verbatim: "Yes, let's drop spellskites ability
+// heuristically unless Wild Defiance is active. If it is active we should keep it for the potential double pump."
+// / "The important thing if we are pumping this way is that Spellskite should not be the target even if it is the
+// largest creature. The reason being that we cannot get the benefit of redirecting."): the sentinel carries the
+// twin ONLY while a target watcher (Wild Defiance; spell_target_watch_pump_*) is on our battlefield or in hand
+// (TurnSolver redirect_ok / sentinel_redirect_ok). Its ORIGINAL target is the largest attacker EXCLUDING every
+// redirector (FindBestOwnAttacker exclude_redirector) -- its watcher trigger fires on the cast -- and the payload
+// is redirected onto the Spellskite, whose own watcher trigger fires too. The plain variant keeps the plain rule
+// (largest attacker, Spellskite counted).
 // Off under human play, MTG_UNPRUNED / MTG_UNPRUNE=tricktarget, and MTG_MORPH_LARGEST_TRICK_TARGET=0 (DEFAULT ON;
 // =0 restores the per-creature target variants under the non-attacker fold).
 static bool MorphLargestTrickTargetOn()

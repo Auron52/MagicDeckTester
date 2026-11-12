@@ -493,3 +493,82 @@ TEST_CASE("morph pumps: largest-attacker rule -- a TRAIL flip later in the plan 
     CHECK(built.nums[0] == 31);
     CHECK(built.state == &s);
 }
+
+// USER rulings 5 + 6 (2026-11-12, verbatim): "Yes, let's drop spellskites ability heuristically unless Wild
+// Defiance is active. If it is active we should keep it for the potential double pump." / "The important thing if
+// we are pumping this way is that Spellskite should not be the target even if it is the largest creature. The
+// reason being that we cannot get the benefit of redirecting."
+TEST_CASE("morph pumps: largest-attacker rule -- the Spellskite twin exists only with Wild Defiance")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto twins = [](const GameState& s)
+    {
+        int n = 0;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+        {
+            if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Might of Old Krosa") { continue; }
+            CHECK(a.enchant_target == kTrickBestOwnTarget);            // the rule: one cast-time target
+            if (a.trick_redirect != 0) { CHECK(a.trick_redirect == 11); ++n; }
+        }
+        return n;
+    };
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
+    PutBear(s, 10);
+    PutM(s, "Spellskite", 11);
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    CHECK(twins(s) == 0);                                              // Defiance absent: no twin
+    GameState in_hand = s;
+    in_hand.players[0].hand.push_back(CardM("Wild Defiance", 102));
+    CHECK(twins(in_hand) >= 1);                                        // in hand: kept (the plan may cast it first)
+    PutM(s, "Wild Defiance", 20);
+    CHECK(twins(s) >= 1);                                              // Defiance active: the twin is offered
+    // Spellskite the ONLY creature: the twin has no non-redirector original target, so there is none.
+    GameState lone = BaseM();
+    lone.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(lone, "Forest", 40 + k); }
+    PutM(lone, "Spellskite", 11);
+    PutM(lone, "Wild Defiance", 20);
+    lone.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    CHECK(twins(lone) == 0);
+}
+
+TEST_CASE("morph pumps: largest-attacker rule -- the twin resolves: both Defiance triggers, payload on Spellskite")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    const int b  = PutBear(s, 10);
+    const int sk = PutM(s, "Spellskite", 11);
+    PutM(s, "Wild Defiance", 20);
+    Cast(s, "Might of Old Krosa", kTrickBestOwnTarget, /*redirect=*/11);
+    CHECK(Power(s, b) == 5);                                           // original target: its Defiance +3 only
+    CHECK(Power(s, sk) == 7);                                          // 0 + 3 (redirect trigger) + 4 (Might)
+}
+
+TEST_CASE("morph pumps: largest-attacker rule -- Spellskite as the LARGEST is never the twin's original target")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    const int small = PutBear(s, 10);                                  // 2 power
+    const int sk    = PutM(s, "Spellskite", 11);
+    s.battlefield[static_cast<std::size_t>(sk)].temp_power_bonus = 5;  // Spellskite 5: the largest
+    const int mid   = PutBear(s, 12);
+    s.battlefield[static_cast<std::size_t>(mid)].temp_power_bonus = 1; // 3: the next-largest
+    PutM(s, "Wild Defiance", 20);
+    CHECK(FindBestOwnAttacker(s, 0) == sk);                            // the plain rule counts Spellskite
+    CHECK(FindBestOwnAttacker(s, 0, /*exclude_redirector=*/true) == mid);
+    GameState plain = s;
+    Cast(plain, "Might of Old Krosa", kTrickBestOwnTarget);            // plain variant: Spellskite, one trigger
+    CHECK(Power(plain, sk) == 12);
+    CHECK(Power(plain, mid) == 3);
+    Cast(s, "Might of Old Krosa", kTrickBestOwnTarget, /*redirect=*/11);
+    CHECK(Power(s, mid) == 6);                                         // the next-largest was the original target
+    CHECK(Power(s, small) == 2);
+    CHECK(Power(s, sk) == 12);                                         // 5 + 3 (redirect trigger) + 4 (Might)
+}
