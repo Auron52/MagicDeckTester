@@ -109403,6 +109403,21 @@ namespace
     // Bootstrap growth ratio used for pass 1's estimate, before two completed
     // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
     constexpr double kDefaultGrowth = 6.0;
+    // PRICED START GATE, the one rule (FullSearchLine's ladder AND FIT's climb under fit_gate "ladder" call this, so the
+    // climb is admitted by exactly the ladder's priced test): true = the next pass may START. pr_prev / pr_prev2 = the
+    // priced work (workctr::t_priced) of the last two completed passes. Only consulted while the priced ceiling is armed
+    // and the gate is on (decisionwork::PricedGateOn, default OFF); counts its refusals like the inline original did.
+    inline bool PricedStartGateFits(long long pr_prev, long long pr_prev2, bool have_prev2)
+    {
+        if (!(decisionwork::t_pr_limit > 0 && decisionwork::PricedGateOn() && pr_prev > 0)) { return true; }
+        const double pratio = (have_prev2 && pr_prev2 > 0)
+                            ? static_cast<double>(pr_prev) / static_cast<double>(pr_prev2) : kDefaultGrowth;
+        const double pest = static_cast<double>(pr_prev) * pratio;
+        const double prem = static_cast<double>(decisionwork::t_pr_limit
+                                                - (workctr::t_priced - decisionwork::t_pr_start));
+        if (pest > kStartGateAlpha * std::max(0.0, prem)) { ++decisionwork::t_pr_gate_refusals; return false; }
+        return true;
+    }
     // Overrun guard: once a pass is running past budget, abort + roll back only
     // when it has spent more than the ceiling below. "Almost done" passes always finish.
     // The ceiling is max(beta*budget, FLOOR): for small per-decision budgets beta*budget
@@ -110639,15 +110654,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // the decision's priced allowance is not STARTED -- the prior pass commits now -- instead of being started,
             // tripping the ceiling near its end and rolling back (measured: goblins 2hg gi30 X=10 spent the full 23.6 s
             // priced and then discarded a 69k-unit pass). Turn-complete: it never cuts a pass, it declines to begin one.
-            if (fits && decisionwork::t_pr_limit > 0 && decisionwork::PricedGateOn() && pr_prev > 0)
-            {
-                const double pratio = (have_prev2 && pr_prev2 > 0)
-                                    ? static_cast<double>(pr_prev) / static_cast<double>(pr_prev2) : kDefaultGrowth;
-                const double pest = static_cast<double>(pr_prev) * pratio;
-                const double prem = static_cast<double>(decisionwork::t_pr_limit
-                                                        - (workctr::t_priced - decisionwork::t_pr_start));
-                if (pest > kStartGateAlpha * std::max(0.0, prem)) { fits = false; ++decisionwork::t_pr_gate_refusals; }
-            }
+            if (fits && !PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { fits = false; }
             if (!fits) { break; }
         }
 
@@ -111863,9 +111870,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;
             }
             static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
+            // P12b parity lever MTG_FIT_CLIMB_CACHE (default OFF; only read under fit_gate "ladder"): the climb keeps the
+            // completed FIT pass's line memo, as FullSearchLine's ladder keeps one line_cache across all its passes.
+            static const bool s_fit_climb_cache = EnvOn("MTG_FIT_CLIMB_CACHE");
+            FSLineCache fit_kept_cache;
+            long long fit_pr_prev = 0;   // priced work of the completed FIT pass (the ladder's priced start gate)
             for (;;)
             {
                 FSLineCache attempt_cache;
+                const long long pr_before_fit = workctr::t_priced;
                 const long long used_before = budget->Used();
                 budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
                 hl = FSLineWinComplete(state, dpass, max_turns, max_turns + 1, second_main, single_tt1, &attempt_cache, budget);
@@ -111889,6 +111902,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                         }
                     }
                     fit_pass_depth = dpass;
+                    fit_pr_prev = workctr::t_priced - pr_before_fit;
+                    if (fit_gate_ladder && s_fit_climb_cache) { fit_kept_cache = std::move(attempt_cache); }
                     break;
                 }
                 g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
@@ -111913,12 +111928,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             {
                 const double lim = static_cast<double>(budget->EffectiveLimit());
                 double c_prev = static_cast<double>(fit_pass_units), c_prev2 = 0.0; bool have_prev2 = false;
-                FSLineCache climb_cache;
+                long long pr_prev = fit_pr_prev, pr_prev2 = 0;
+                FSLineCache climb_cache_own;
+                FSLineCache& climb_cache = s_fit_climb_cache ? fit_kept_cache : climb_cache_own;
                 for (int d = fit_pass_depth + 1; d <= depth; ++d)
                 {
                     if (hl.win_turn <= state.turn_number + fit_pass_depth - 1) { break; }   // verified: the ladder stops
                     const double ratio = (have_prev2 && c_prev2 > 0.0) ? c_prev / c_prev2 : kDefaultGrowth;
                     if (c_prev * ratio > kStartGateAlpha * (lim - static_cast<double>(fit_roll_units))) { break; }
+                    if (!PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { break; }   // the ladder's priced gate, same code
+                    const long long pr_before_climb = workctr::t_priced;
                     const long long ub = budget->Used();
                     budget->SetOverrunLimit(SearchBudget::SatAdd(ub, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
                     SearchLine att = FSLineWinComplete(state, d, max_turns, max_turns + 1, second_main, single_tt1, &climb_cache, budget);
@@ -111936,6 +111955,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     }
                     hl = att; fit_pass_depth = d;
                     c_prev2 = c_prev; have_prev2 = true; c_prev = static_cast<double>(cost);
+                    pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before_climb;
                 }
             }
         }
