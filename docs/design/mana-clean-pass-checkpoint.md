@@ -1026,7 +1026,11 @@ fungus 1,880, gods 4,300 (first run).
     hold. Found with MTG_TAPDBG (now also traces the oracle's EngineApply) + MTG_PREPAY_HOLD_TRACE. Units 2908/2908 (new
     test fails with the lever off). Held-out fungus 2000 paired games @7400001+ (one pooled batch): 0 digest diffs,
     net 0. Smoke 199/199 and regression 316/316 unchanged (nothing to accept), check_gt_logs clean.
-    Fungus re-gate on block 70000-74999 (PGO) NOT yet run -- owed by the next agent.
+    Fungus re-gate on block 70000-74999 (PGO, src e00293916e05, run 20261112-230310, round 16): **773 issues** (was 543 on
+    65000-69999): ENUM-GAP 206 (143), DOMINATED-CREATURE 149 (112), CAPPED 343 (250), ORACLE-GAP 67 (34), UNMODELED 6 (4),
+    APPLY-DROP-ORDER 2 (0); play identity oracle-on/off byte-identical. Every class rose ~30-40% at equal decisions
+    (40398 vs 40375), non-issue classes too (PHANTOM 1633/1515, CONTINUATION-DIFFERS 9790/8755): reads as block variance
+    plus the cap fix reaching the oracle's own EngineApply, not a play regression (bc7ab839d's A/B: 0 digest diffs).
   * **fungus DOMINATED-CREATURE remaining (LEADS, not fixed).** (1) PRE-FLOAT DOOMED BODIES: on the same seed the flag
     moves to {Undercellar Myconid + Utopia Mycon + Burst x1} with Badger in the continuation: the prepay now pays the
     plan's 4 from four doomed tokens, the fifth dies untapped at the activation, and the continuation's Badger taps the
