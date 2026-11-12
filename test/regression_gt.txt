@@ -1,4 +1,4 @@
-# Regression ground truth -- commit e0b9de5f7  date 2026-11-12
+# Regression ground truth -- commit 93451927b  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -300,10 +300,10 @@ vampires_regression_d3_s30001=4.3000/092417a29e2ce8ce
 vampires_regression_d5_s30001=4.3000/092417a29e2ce8ce
 whiteknights_regression_d3_s30001=4.1500/7a077a89bdfc6a0d
 whiteknights_regression_d5_s30001=4.1500/93afeefa560c7137
-fungusv3_regression_d0_s2002=5.3110/1da68b2e6f4826f4
+fungusv3_regression_d0_s2002=5.3110/10bf810a54bcae4f
 fungusv3_regression_d3_s2002=4.5333/3ff31eef51ace5a4
-fungusv3_regression_d5_s2002=4.5480/71ed8eaadd574efd
-fungusv3_regression_d5_s3003=4.5560/c1744ff5c57db690
+fungusv3_regression_d5_s2002=4.5480/fc728fb61a74116f
+fungusv3_regression_d5_s3003=4.5520/98e1594afa7f2f0b
 slivers_regression_d0_s2002=4.6870/776d83e90a90479f
 slivers_regression_d3_s2002=4.2160/dac64041ea2f0cd7
 slivers_regression_d5_s2002=4.2123/5672ed9f93c87e3f
