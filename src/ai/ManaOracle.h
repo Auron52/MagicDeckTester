@@ -114,6 +114,14 @@ namespace manaoracle
         // engine's too. Never a frontier, never a failed payment the engine would not have failed.
         bool                   safe      = false;
         bool                   abandoned = false;
+        // The apply's own drop sinks (Realize's cast_drops / act_drops; null elsewhere) and, at the frontier, whether
+        // either already held a drop: an action dropped BEFORE the frontier is dropped again by every extension of
+        // this script (the prefix replays identically), so no outcome below it is Full -- Realize's hit-only cut.
+        const std::vector<std::string>* drops_cast = nullptr;
+        const std::vector<std::string>* drops_act  = nullptr;
+        bool                   f_dropped = false;
+        bool DroppedSoFar() const
+        { return (drops_cast != nullptr && !drops_cast->empty()) || (drops_act != nullptr && !drops_act->empty()); }
     };
 
     extern thread_local Hook* t_hook;

@@ -9404,6 +9404,7 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.ended          = true;
         h.frontier       = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_dropped      = h.DroppedSoFar();
         h.f_cost         = cost_in;
         h.f_for_creature = for_creature;
         h.f_creature_ability = PayingCreatureAbility();
