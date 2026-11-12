@@ -102315,11 +102315,15 @@ struct Printer
 inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
 inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
 // value_play.fit_gate "ladder" / MTG_FIT_GATE_LADDER (P12 prototype; see FIT GATE = THE LADDER'S RULE).
-inline bool FitGateLadderOn()
+// value_play.fit_gate "ladder_rem" / MTG_FIT_GATE_LADDER_REM (P14): the same, with the climb charged against the
+// decision's true Remaining. FitGateCode() = 0 off | 1 ladder | 2 ladder_rem (valuearm::FitGateResolve).
+inline int FitGateCode()
 {
-    static const bool env = EnvOn("MTG_FIT_GATE_LADDER");
-    return (valuearm::t_deck_fit_gate_ladder >= 0) ? (valuearm::t_deck_fit_gate_ladder != 0) : env;
+    static const bool env_l = EnvOn("MTG_FIT_GATE_LADDER");
+    static const bool env_r = EnvOn("MTG_FIT_GATE_LADDER_REM");
+    return valuearm::FitGateResolve(valuearm::t_deck_fit_gate_ladder, env_l, env_r);
 }
+inline bool FitGateLadderOn() { return FitGateCode() != 0; }
 inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
 // AUDIT-only: the HEURISTIC ladder's per-pass INCREMENTAL cost (what the start-gate actually consumes -- the
 // memo makes this much less than a cold pass). Recorded around the audit shadow ladder to reveal the true
@@ -111893,6 +111897,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const int d1 = (fit_depth_cap > 0) ? std::min(d1_uncapped, fit_depth_cap) : d1_uncapped;
         SearchLine hl;
         bool fit_gate_ladder = false;   // FIT GATE = THE LADDER'S RULE (set below)
+        int  fit_gate_code   = 0;       // 0 off | 1 "ladder" | 2 "ladder_rem" (valuearm::FitGateCode)
         int  fit_pass_depth  = 0;       // the depth the FIT pass actually completed at (reported under fit_gate_ladder)
         long long fit_pass_units = 0;   // that pass's units
         long long fit_roll_units = 0;   // every FIT rollout attempt's units this decision (overruns included)
@@ -111923,7 +111928,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;
             }
             if (s_fit_lazy_r && single_mode == 2) { calibrate_single_R(); }
-            fit_gate_ladder = single_mode == 2 && FitGateLadderOn();   // see FIT GATE = THE LADDER'S RULE
+            fit_gate_code   = (single_mode == 2) ? FitGateCode() : 0;
+            fit_gate_ladder = fit_gate_code != 0;   // see FIT GATE = THE LADDER'S RULE
             int dpass = d1;
             if (single_mode == 2)
             {
@@ -112066,7 +112072,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 {
                     if (hl.win_turn <= state.turn_number + fit_pass_depth - 1) { break; }   // verified: the ladder stops
                     const double ratio = (have_prev2 && c_prev2 > 0.0) ? c_prev / c_prev2 : kDefaultGrowth;
-                    if (c_prev * ratio > kStartGateAlpha * (lim - static_cast<double>(fit_roll_units))) { break; }
+                    // "ladder": Limit - FIT's own rollout units. "ladder_rem": the true Remaining (probe, calibration and
+                    // FIT passes all charged), the very quantity FullSearchLine's start gate reads.
+                    const double allow = valuearm::FitClimbAllowance(fit_gate_code, lim, static_cast<double>(fit_roll_units),
+                                                                     static_cast<double>(budget->Remaining()));
+                    if (c_prev * ratio > kStartGateAlpha * allow) { break; }
                     if (!PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { break; }   // the ladder's priced gate, same code
                     const long long pr_before_climb = workctr::t_priced;
                     const long long ub = budget->Used();

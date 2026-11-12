@@ -3170,8 +3170,7 @@ struct DeckShapeScope
         // wherever FIT acts), so they ride the shape scope rather than the vp_here params.
         valuearm::t_deck_fit_alpha  = p.value_play.fit_alpha;
         valuearm::t_deck_fit_lazy_r = p.value_play.fit_lazy_r;
-        valuearm::t_deck_fit_gate_ladder = (p.value_play.fit_gate == "ladder") ? 1
-                                         : (p.value_play.fit_gate == "fit") ? 0 : -1;
+        valuearm::t_deck_fit_gate_ladder = valuearm::FitGateCode(p.value_play.fit_gate);
         valuearm::t_deck_key       = p.value_source;
         valuearm::t_deck_esc_skip_r = &p.escalation_skip_r;
         valuearm::t_deck_emul_r     = &p.value_play.emul_r;

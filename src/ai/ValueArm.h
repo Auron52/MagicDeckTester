@@ -224,10 +224,34 @@ inline thread_local double      t_deck_exhaust_mult = 0.0;
 // wants 4 (-0.0125 +/- 0.0040 vs the full ladder at parity cost) while hinata/fivecolour want 1, where
 // raising it converts a FREE clean win into a paid trade. Tier 1 (acts wherever FIT acts).
 inline thread_local double      t_deck_fit_alpha = 0.0;
-// value_play.fit_gate "ladder" (P12 prototype): 1 = FIT admits its pass by the rollout ladder's start-gate
-// rule replayed on the whole decision budget; 0 = the classic affordability walk; -1 unset => env
-// MTG_FIT_GATE_LADDER (default off).
+// value_play.fit_gate (P12/P14 prototypes): -1 unset => env (MTG_FIT_GATE_LADDER_REM, then MTG_FIT_GATE_LADDER;
+// both default off); 0 = "fit", the classic affordability walk; 1 = "ladder", the probe-record max fix + FIT
+// climbs by the rollout ladder's start-gate rule against (Limit - FIT's own rollout units); 2 = "ladder_rem",
+// the same fix and climb, but the climb's gate reads the decision's TRUE Remaining (probe + R calibration +
+// FIT passes all charged), exactly the quantity FullSearchLine's ladder gates on.
 inline thread_local int         t_deck_fit_gate_ladder = -1;
+// The sidecar string -> the code above. Unknown strings read as unset (-1), like a missing key.
+inline int FitGateCode(const std::string& s)
+{
+    if (s == "ladder_rem") { return 2; }
+    if (s == "ladder")     { return 1; }
+    if (s == "fit")        { return 0; }
+    return -1;
+}
+// Resolve the deck code against the env defaults: the deck wins when set, else REM env, else LADDER env.
+inline int FitGateResolve(int deck_code, bool env_ladder, bool env_ladder_rem)
+{
+    if (deck_code >= 0) { return deck_code; }
+    return env_ladder_rem ? 2 : (env_ladder ? 1 : 0);
+}
+// The units the FIT climb may plan against before admitting its next pass. Code 1 ("ladder"): the whole
+// decision limit less FIT's own rollout units (the leafless probe and the calibration are NOT charged).
+// Code 2 ("ladder_rem"): the decision's true remaining budget. Never negative.
+inline double FitClimbAllowance(int code, double limit, double fit_roll_units, double remaining)
+{
+    const double a = (code == 2) ? remaining : (limit - fit_roll_units);
+    return a > 0.0 ? a : 0.0;
+}
 // Per-deck opt-in skip allowance, per depth (MulliganProfile::escalation_skip_r; the profile outlives the
 // decision that DeckShapeScope points this at). nullptr / empty => the fleet default (R = 0).
 inline thread_local const std::vector<double>* t_deck_esc_skip_r = nullptr;
