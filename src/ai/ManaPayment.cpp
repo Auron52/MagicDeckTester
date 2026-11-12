@@ -461,7 +461,8 @@ bool IsDoomedPlanBody(const GameState& state, int active, const Permanent& p)
     return false;
 }
 
-static bool TapDbgReal() { return g_real_resolution && t_refine_probe == 0; }
+thread_local int g_tapdbg_oracle_apply = 0;   // TEMP DIAG (claude1115): oracle EngineApply taps
+static bool TapDbgReal() { return (g_real_resolution && t_refine_probe == 0) || g_tapdbg_oracle_apply > 0; }
 
 // Tap one non-filter source, producing `amt` of colour `col`, applying depletion
 // decrement and pain. Mirrors the accounting in BuildAvailableMana (AddSourceToPool).

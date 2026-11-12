@@ -3921,6 +3921,19 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         //
         // This is the payment-layer analogue of the adopted sac-outlet count pool: one axis over
         // identical outlets instead of a powerset over them.
+        //
+        // ...and "any k of them" holds only for tokens this solve may TAP. A RESERVED token (the caller's
+        // hold mask -- the whole-turn prepay's hold ladder, an attacker hold) is refused by the DFS below,
+        // so admitting it spent a cap slot on a source that can never pay and left an eligible token past
+        // the cap: Fungus s30065330 T4 {Utopia Mycon + Brightcap Badger + the Burst's last fade activation}
+        // (cost 5): the doomed-first rung held the two lasting 1/1s and offered the five doomed Burst
+        // tokens, the cap admitted the held 1/1 #1000 plus four doomed ones, the rung read "unpayable",
+        // and the next rung paid with a Forest -- so the fifth doomed token died untapped and the line's
+        // later cast tapped the lasting 1/1 (DOMINATED-CREATURE). Skipping reserved tokens BEFORE the
+        // count (the DFS's own test, below) restores the cap's losslessness under any hold.
+        // MTG_GRANT_CAP_SKIP_RESERVED=0 restores the old count.
+        static const bool s_cap_skip_reserved_env = EnvOn("MTG_GRANT_CAP_SKIP_RESERVED", true);
+        const bool s_cap_skip_reserved = heurarm::Flag(heurarm::GRANT_CAP_SKIP_RESERVED, s_cap_skip_reserved_env);
         const int granted_cap = std::max(1, cost.ManaValue());
         int granted_taken = 0;
         for (int i = 0; i < n; ++i)
@@ -3933,6 +3946,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (!d)
             {
                 if (!GrantReaches(grant, p) || !GrantedBodyCanTap(grant, p, state.battlefield)) { continue; }
+                if (s_cap_skip_reserved && (reserved_mask & (1ull << (i & 63)))) { continue; }
                 if (granted_taken >= granted_cap) { continue; }
                 ++granted_taken;
                 s_src_cands_buf.push_back({ i, &GrantFaceFor(grant, p) });

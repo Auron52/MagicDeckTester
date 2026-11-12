@@ -896,6 +896,7 @@ enum Slot : int
     FACEUP_LEAD_PIN_FOLD,     // MTG_FACEUP_LEAD_PIN_FOLD  Morph INT-10 (engine identity fold): a regrowth LEAD flip (Den Protector) emits no UNPINNED base once its named variants are emitted (the base resolves to one of them). Default ON; =0 -> the base is kept
     PAY_DOOMED_AHEAD_OF_LANDS,// MTG_PAY_DOOMED_AHEAD_OF_LANDS  item 6 (mana-clean, Fungus s30055537 T4 DOMINATED-CREATURE): a doomed body (IsDoomedPlanBody) pays ahead of the LANDS too -- the per-pip payer's plain tier on needs first, and the whole-turn prepay's doomed-first hold rungs (every other source held, released one at a time). Default ON; =0 -> creature band only
     GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one unit of the grant colour (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
+    GRANT_CAP_SKIP_RESERVED,  // MTG_GRANT_CAP_SKIP_RESERVED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE): the backtrack's granted-Saproling cap skips tokens in the caller's reserved (hold) mask before counting, so a held body never takes the slot of a tappable one. Default ON; =0 -> the old count
     COUNT
 };
 
@@ -1736,6 +1737,7 @@ inline const char* Name(int slot)
         "MTG_FACEUP_LEAD_PIN_FOLD",
         "MTG_PAY_DOOMED_AHEAD_OF_LANDS",
         "MTG_GRANT_HASTE_CAST_CREDIT",
+        "MTG_GRANT_CAP_SKIP_RESERVED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

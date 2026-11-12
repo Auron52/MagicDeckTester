@@ -2128,3 +2128,35 @@ TEST_CASE("Doomed bodies pay ahead of the lands (MTG_PAY_DOOMED_AHEAD_OF_LANDS):
         heurarm::t_arm[heurarm::PAY_DOOMED_AHEAD_OF_LANDS] = -1;
     }
 }
+
+TEST_CASE("Granted-token cap skips RESERVED tokens (MTG_GRANT_CAP_SKIP_RESERVED): the doomed-only rung pays")
+{
+    // mana-clean item 6, Fungus s30065330 T4 (DOMINATED-CREATURE): the backtrack admits at most cost.ManaValue() granted
+    // Saproling tokens; a HELD lasting 1/1 ahead of the doomed tokens in battlefield order took a cap slot, so the
+    // doomed-first rung could not pay and the next rung tapped a Forest, leaving a doomed token to die untapped.
+    // Board: Badger, a Burst on ONE fade counter, a Forest, a lasting 1/1 #1000, then four doomed Burst tokens. The line
+    // {Sporecrown Thallid {1}{G} + Saproling Migration {1}{G}} is exactly the four doomed tokens.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Brightcap Badger", 0, 50);
+    const int bi = Put(s, "Saproling Burst", 0, 60);
+    s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+    Put(s, "Forest", 0, 70);
+    PutSaprolingToken(s, 1000);
+    for (int n : { 1001, 1002, 1003, 1004 })
+    {
+        const int ti = PutSaprolingToken(s, n);
+        s.battlefield[static_cast<std::size_t>(ti)].created_by_number = 60;
+    }
+    PlanTraits t_plan;
+    t_plan.fade_exhaust_src[0] = 60;
+    t_plan.fade_exhaust_count  = 1;
+    const std::vector<Action> line = { PrepayCast(s, "Sporecrown Thallid"), PrepayCast(s, "Saproling Migration") };
+    {
+        const PlanTraitsScope _pts(&t_plan);
+        REQUIRE(TurnSolver::BatchPrepayMainCasts(s, line));
+    }
+    for (int n : { 1001, 1002, 1003, 1004 }) { CHECK(ByNumber(s, n).tapped); }
+    CHECK(!ByNumber(s, 1000).tapped);
+    CHECK(!ByNumber(s, 70).tapped);
+}

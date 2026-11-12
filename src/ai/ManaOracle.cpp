@@ -1,6 +1,7 @@
 // MANA COMPLETENESS ORACLE -- MTG_MANA_ORACLE. See ManaOracle.h for the mechanism and
 // docs/design/mana-completeness-oracle.md for the invariant, the classes and what is not modelled yet.
 #include "ManaOracle.h"
+extern thread_local int g_tapdbg_oracle_apply;   // TEMP DIAG (claude1115)
 #include "EngineFlags.h"
 #include "EscStats.h"
 #include "HeuristicArm.h"
@@ -3015,7 +3016,30 @@ std::string DiffText(const GameState& e, const GameState& o)
     }
     if (e.players[a].sideboard.size() != o.players[a].sideboard.size()) { add("sideboard size differs"); }
     if (e.players[a].graveyard.size() != o.players[a].graveyard.size()) { add("graveyard size differs"); }
+    else
+    {
+        std::multiset<std::string> eg, og;
+        for (const Card& c : e.players[a].graveyard) { eg.insert(c.m_name.str()); }
+        for (const Card& c : o.players[a].graveyard) { og.insert(c.m_name.str()); }
+        if (eg != og)
+        {
+            std::string t;
+            for (const std::string& x : eg) { if (og.count(x) < eg.count(x) && t.find(x) == std::string::npos) { t += " +" + x; } }
+            for (const std::string& x : og) { if (eg.count(x) < og.count(x) && t.find(x) == std::string::npos) { t += " -" + x; } }
+            add("graveyard cards differ (engine vs oracle:" + t + ")");
+        }
+    }
     if (e.players[a].library.size() != o.players[a].library.size()) { add("library size differs"); }
+    else
+    {
+        const Library& el = e.players[a].library;
+        const Library& ol = o.players[a].library;
+        for (std::size_t i = 0; i < el.size(); ++i)
+        {
+            if (el.RawAt(i).m_number != ol.RawAt(i).m_number)
+            { add("library order differs at " + std::to_string(i)); break; }
+        }
+    }
     if (e.players[1 - a].life != o.players[1 - a].life) { add("opponent life differs"); }
     if (e.spells_cast_this_turn != o.spells_cast_this_turn) { add("spells cast differs"); }
     if (e.scripted_early_ondemand_crack != o.scripted_early_ondemand_crack)
@@ -3321,7 +3345,10 @@ EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& 
     std::shared_ptr<RouteTape> tape = HasComboRoute(plan) ? std::make_shared<RouteTape>() : nullptr;
     RouteTape* const saved_tape = t_route_tape;
     t_route_tape = tape.get();
+    static const bool s_tdbg = EnvOn("MTG_TAPDBG");
+    if (s_tdbg) { std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY T%d plan={%s}\n", root.turn_number, PlanText(plan).c_str()); ++g_tapdbg_oracle_apply; }
     TurnSolver::ApplyPlan(e.st, plan, pre);
+    if (s_tdbg) { --g_tapdbg_oracle_apply; std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY END\n"); }
     t_route_tape = saved_tape;
     g_play_dropped_cast_sink = saved_cast;
     g_act_drop_sink          = saved_act;
