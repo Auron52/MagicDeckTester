@@ -809,6 +809,29 @@ fungus 1,880, gods 4,300 (first run).
     s30002725 last gate. Analyzer perf, not an engine miss.
   * **fungus 1169** (55000-59999; was 1880): DOMINATED-CREATURE 1089 -> **643**, ENUM-GAP 179, CAPPED 267, ORACLE-GAP 69,
     UNMODELED 10, APPLY-DROP-ORDER 1.
+  * **Triage leads (not fixed).** fungus DOMINATED-CREATURE 643 over 200 games: 428 keep a lasting 1/1 Saproling (Brightcap
+    Badger's granted {T}: Add {G}) and 388 of those have the oracle pay with **Ancient Tomb**. Shape (s30055300 T3,
+    `{land=Forest + cast:Sporecrown Thallid + cast:Brightcap Badger}`; s30055011 T3 `{Forest + Saproling Migration +
+    Brightcap Badger}`): the oracle pays the first cast with Woodlot (+Forest), floats the extra, and pays the second with
+    Ancient Tomb's {C}{C} + the float -- exact, Saproling untapped. The engine's apply taps the Saproling AND Forest AND Tomb
+    (6 units for a 5-unit line, `float={*x1}` at the end). Tap trace (temporary `TapDbgReal` override, not committed):
+    `Woodlot; granted {G}; Forest; Tomb` -- the Saproling is tapped while Tomb is still untapped, i.e. inside one payment
+    the creature band beat Tomb for a generic/G pip, then Tomb paid a single remaining pip and floated one. Lead: find
+    why Tomb (tap_self_damage_any_mode, yield 2) loses to a creature there (its kind/band for a generic pip, or the
+    harm/usable division at ManaPayment.cpp ~2585 when only one unit of this payment is left but the LINE owes more:
+    `payable` reads only this payment's nd_left, not g_line_unpaid_cost -- the depletion-waste rule at ~2833 already adds
+    the line's later demand). Repros: `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=3 build/PGO/mtg decks/Fungus/Fungus.cod
+    --profile decks/Fungus/Fungus.profile.json --games 1 --seed 30055300 --game-index 55300` (and 30055011/55011).
+    A second fungus shape (s30055537 T4, plan with `act:Saproling Burst(x1)` that empties the Burst): doomed 0/0 tokens
+    should pay ahead of LANDS too (Tomb/Forest kept by the oracle), but MTG_PAY_DOOMED_BODY_FIRST only reorders inside the
+    creature band (key[0] = rank); moving a doomed body ahead of lands needs the line's colour reserve respected (a doomed
+    {G} may be the line's last G) -- not a one-line change.
+    gods CAPPED-DECISION: analyzer decision budget on Tendo + Looting/Loam/retrace/Careful Study menus (2 decisions per
+    5000; 3 so far across gates: s30002725 gi60 T6, s30007073 gi3 T6, s30009146 gi6 T4) -- PARKED as analyzer perf.
+    gods ENUM-GAP 86 (19 games): `{no land [ordered] + Careful Study|Faithless Looting + Life from the Loam}` where the
+    oracle's pay2 taps a Tendo Ice Bridge that is in HAND on the plan's board (s30005620 gi22 T8: board Tendo#55 + City of
+    Brass, pay2 uses Tendo#56) -- check whether the oracle realises an undeclared land drop for a "no land" plan (oracle
+    false positive) before touching the engine's menu gate.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
