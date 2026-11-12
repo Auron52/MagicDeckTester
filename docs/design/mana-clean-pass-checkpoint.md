@@ -992,6 +992,29 @@ fungus 1,880, gods 4,300 (first run).
     Owed before adoption: units, a held-out pooled A/B (manifest ready: build/scratch/claude1113/ab/m.json, fungus 4000 at
     7390001+, both levers off vs on in ONE batch; cmp.py beside it, split the .wins by the fungoff_/funon_ prefix first),
     smoke + regression, `./build.sh pgo`, then the gate `mana_clean.py run --games 5000 fungus`.
+* **Round 14 (fourteenth item-6 agent, 2026-11-12).**
+  * **fungus ENUM-GAP (mid-plan source credit): (b) `MTG_GRANT_HASTE_CAST_CREDIT` ADOPTED (shared branch c6a9afe3e,
+    default ON); (a) `MTG_PENDING_BLANKET_HASTE` DROPPED -> USER DECISION.** MTG_DBG_SEQ=1 on s30060073 T3 (mtg.wip
+    90e02c290): the walk for {Crossroads, Thallid, Myconid} runs Thallid > Myconid > Crossroads -- Crossroads LAST, so the
+    pending-haste join never fires; the oracle's paying order is Crossroads > Undercellar Myconid > Thallid (Thallid paid
+    by the freshly cast, hasted Myconid). Making it pay needs the walk AND the real-play apply order (PayableCastOrderCore
+    sites 0+1) to put the haste granter ahead of the creature casts and the mv3 dork ahead of the mv1 Thallid: a cast-ORDER
+    change in real play, which is USER-owned. (a) removed from the change (wip 473d9ccdc, branch pushed); (b) alone:
+    units 2907/2907; s30060029 T5 ENUM-GAP 2 -> 0, s30060073 T3 unchanged (1).
+    Held-out A/B fungus 4000 games @7390001+ (one pooled batch, off vs on): 7 digest diffs, 0 faster, 0 slower, net +0
+    (MT=99 and MT=9). Smoke: only fungusv3_smoke_d0_s1001 moved (gi765 play-changed, same win turn, aggregate 5.2450
+    unchanged) -> accepted. BreachingDragonstorm unchanged.
+    Regression: only fungusv3_regression_d0_s2002 moved (3 d0 games play-changed, same win turns, aggregate 5.3110
+    unchanged), no searched row, backstop rows green -> accepted (GT commit fa4fcebb6, check_gt_logs clean).
+    **Gate (PGO, src b52075562665): fungus 65000-69999, 5000 games, verdict issues, 543** (previous block 60000-64999:
+    758): ENUM-GAP 143 (was 209), DOMINATED-CREATURE 112 (144), ORACLE-GAP 34 (37), CAPPED 250 (350), UNMODELED 4.
+    Oracle-off play identity byte-identical. Report logs/mana_clean/20261112-214404/report.md. 19 of the 23 flags in the
+    listed top ENUM-GAP signatures pay only as "Concordant Crossroads > (mana creature) > ...", i.e. the dropped (a) class.
+  * **USER DECISION (new): a blanket haste granter cast ahead of the creature casts in a plan.** Making the Crossroads
+    lines findable needs the walk AND the real-play apply order to put Concordant Crossroads (and then the hasted mana
+    creature) ahead of the other casts when that is what pays -- a cast-order change. Recommendation: allow a
+    payability-driven reorder (only when the canonical order fails and the granter-first order pays), lockstep in
+    SeqWalkFixedOrder and PayableCastOrderCore sites 0+1; it adds lines, it does not reorder lines that already pay.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
