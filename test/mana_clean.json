@@ -7157,6 +7157,42 @@
      "seed": 30210000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "DOMINATED-LAND": 507
+     },
+     "commit": "c1ed1a922bed82e2e4dbd68a729c0cd22b604536",
+     "date": "2026-11-12T05:14:05Z",
+     "decisions": 37119,
+     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
+     "game_index": 215000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 135290,
+     "ms_on": 713179,
+     "report": "logs/mana_clean/slivers-6-20261112/report.md",
+     "run": "slivers-6-20261112",
+     "seed": 30215000,
+     "src": "51f0ad5723af8933088aff6123a310b81dc7dce9",
+     "verdict": "clean"
     }
    ]
   },
