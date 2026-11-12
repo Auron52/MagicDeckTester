@@ -1447,3 +1447,25 @@ _none_ -- every blocking gate is green or already signed off.
   `keep_adoption_attribution.py`: every changed game is a different mulligan count or a different bottom,
   **0 unexplained**, baselines reproduced on both sides. Overnight GT left to the periodic overnight run (its own
   outstanding accept is the USER's call); the overnight ENTRY-set rows were NOT expanded (open question to the USER).
+
+## Value leaf (2026-11-12, first generation) -- NOT adopted; a TRADE for the USER
+`bash scripts/valueleaf.sh run decks/Hydras` frozen at 387b4b646 (src 4fb4b4fa76, PGO+LTO), 2026-11-11 18:37 -
+2026-11-12 05:45 UTC. Phase C stalled ~6 h on two runaway H4 games (an uncharged top-level plan enumeration the
+wall cap cannot reach: `docs/design/uncharged-enumeration-backstop-hole.md`); on the USER's instruction they were
+skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incrementally with no finished game lost.
+- **Matrix:** 400 paired games/cell x H1-H5, V1-V8; risk gate CLEAN (1 abandoned game each in H4, H5 = the skips).
+  Staged crossover 1->1 2->1 3->1 4->2 5->3 6->4 7->6 8->6; C0 leaf K=5; the leaf-rule ON/OFF A/B kept ON.
+- **Phase E A/B vs live (no leaf), 8 seeds x 1000 games, units as the cost basis:**
+
+  | arm    | delta t  | paired t | seeds b/w/t | units  | core-s |
+  |--------|----------|----------|-------------|--------|--------|
+  | staged | -0.00488 | -4.68    | 7/0/1       | 1.219x | 2.07x  |
+  | emul   | -0.00075 | -3.00    | 5/0/3       | 1.016x | 1.15x  |
+  | nlesc  | -0.00113 | -1.47    | 4/2/2       | 1.021x | 2.33x  |
+  | nlfit  | +0.00237 | +2.01    | 2/6/0       | 0.756x | 0.60x  |
+
+- **E.5: nothing adopted.** Every better arm costs more (a TRADE, the USER's call); nlfit is cheaper but notably
+  worse. E.7 (play setting) and E.6 (escalation skip) were skipped because there is no live leaf; both must run
+  if the USER adopts the staged model.
+- **Shipped as `decks/Hydras/Hydras.value.DISABLED.json`** (inert in play; the engine reads only `.value.json`), so
+  play and GT are unchanged and nothing needed accepting.
