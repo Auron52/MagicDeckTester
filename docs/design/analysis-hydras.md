@@ -1483,3 +1483,42 @@ skipped (gi 15 @ seed 9009, gi 287 @ seed 11011) and the run resumed incremental
   different mulligan count, a different bottom, or bottom order only). `extraturns_regression_d5_s2002` differed by
   digest only (same score) in the pooled run; solo it reproduces GT 254115e71dd5ea00, so its GT was kept (pool
   residency, the P6/P7 cache work).
+
+## Cost work (P13, 2026-11-12)
+
+Worktree `.claude/worktrees/hydras-perf`, branch `hydras-perf` (from `hydras-enum-collapse`). Scratch, binaries and
+logs: `build/scratch/p13/`. Profile build (Release codegen + symbols); the box was shared throughout, so walls are
+paired (both arms concurrently, same load) or indicative.
+
+**Where the wall goes (30 games, regression shapes d5 b20 std + 2HG, keep table attached, `--threads 1`, perf -F 99
+dwarf).** Nothing dominates; the cost is per search node. Inclusive: EnumeratePlans 31% (odometer walk 15%,
+the plan body 9%, pair sort 1.6%), ApplyPlanDirect ~17%, mana payment (TapForCostShared*) 12.6%, FSLine 15%,
+CollectActions 8.7%, SubsetPayableSequential walks 4.6%, BuildSimKeyBase 3.3%. Self-time leaks found:
+`CardParams` copies 2.2% (a whole `CardDefinition` copied per planned cast in ApplyPlanDirect), and
+LandHasSubtypeNow + LandTypeChangedToIsland 2.3% (a battlefield walk per land per mana query, looking for an
+Islandizing Aura that this deck cannot have). Per-unit cost: ~70 us/unit, against the ~28 us median deck of the
+priced-budget fit; units/game ~13k. The turn census (58 decisions) has every decision at ~1x its budget, so the
+search is BUDGET-BOUND: wall per game = units (fixed by the budget) x wall per unit, and only per-unit cost moves
+it. The ID ladder's warm-up is 30% of all units (`ladder WARM-UP (superseded)`); that is a search-shape setting
+(P12's area), not touched here.
+
+**The gate-vs-body census (`MTG_GATE_EF_CENSUS=1`, new, inert by default).** Same 30 games: 857k selections entered
+EnumeratePlans' body for 363k plans. Of them: 305k are X-waste (a Hydra below its max X, dropped at the win
+projection after the whole body ran: 304.6k dropped, 0.7k kept as wins); mana refusals 247k = ef-walk-fail 146k
+(a GameState-copy sequential payment walk each), ef-scalar 66k, ef-no-interact 35k. USER's point holds: colour is
+not the issue. Of the 66k ef-scalar refusals only 26k had a selection-exact gate at all: **40k came from hands
+holding Gargos and no rock, where the gate was never built**. `gate_relevant` (both enumerators) listed affinity
+and colour reducers but not SUBTYPE reducers, while ManaPruneBound bails to unbounded on one (MTG_SUBRED_BAIL),
+so a Gargos hand pruned NOTHING: every Hydra X combination reached the body. Where the gate was built, a
+"reachable rock credit" pip rule would refuse 13.8k of the 26k (the gate credits rocks the board cannot pay for,
+the body's flat credit does not); small, not built.
+- The sequential payment walk (SubsetPayableSequential, 4.6% of wall inclusive) SUCCEEDS 1,038 times and FAILS
+  146,116 times on the 30 games (99.3% fail). That is the next lever: an exact cheap pre-test for the walk's
+  failure (its cast order is fixed, CastOrderRank), audited by a VERIFY mode. Not built.
+
+| lever | commit | work removed (30 games) | play | wall | status |
+|---|---|---|---|---|---|
+| no CardDefinition copy per planned cast + `deck_has_islandize` | e26da83b8 | 2.2% + 2.3% self time | identical (digests, per-game units, every work count) | 0.74x (single-thread concurrent arms, contended; paired 32-thread run owed) | committed locally, not pushed |
+| MTG_GATE_SUBRED: subtype reducers build the gate | f40e33e0b | body entries -9.5%, odometer -5.5%, greedy -3.6%, pay -0.9% | 30 games identical; can move units elsewhere (priced ceiling) | not measurable yet | committed locally; A/B on the subtype-reducer decks owed |
+| X-waste early drop | - | up to 36% of body entries | exact only with a sound per-call no-win bound | <= ~4% | not built |
+| walk failure pre-test | - | up to 99% of 147k walks | exact by construction + VERIFY | <= ~4.6% | not built |
