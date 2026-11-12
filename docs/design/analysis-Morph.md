@@ -202,3 +202,20 @@ the durable record).
   card cast that section does not open a breakpoint (the section window diffs m_numbers) -- root cause found;
   (C) PlanHasDeadFaceUpPin deferred (not sound without a "can put a hand card in the graveyard" predicate);
   (D) d0 flip knowledge (step 8) not started.
+
+### INT-2c result (2026-11-12) -- open findings A and B closed (commit 1ebdb3bb2)
+- (A) ROOT CAUSE was not a budget gate: with the land drop already made, a main whose enumeration had any plan
+  got NO pass (FSLineWin's idle node and SolveWithLookahead's pass were appended only to an EMPTY list), so the
+  scenario's main 1 was {flip the Firecat} and the hold line was unenumerable at every budget and depth (d3 b0
+  passed only via the root's no-win fallback + the executor's crossing node; d2 b0 failed). FIX:
+  `FaceUpHoldPassMissing` appends the pass (with its sub-decision axes) in both hosts while the end-step flip
+  axis is live and the list has no apply-empty plan -- adds a line, removes none. morph_eot_flip_firecat now runs
+  at d3 b100 (passes d2/d3/d5 at b0..b100000), plus a d2 b0 twin.
+- (B) FIX: `TurnSolver::SectionForgetHandExits` drops every section-snapshot number no longer in hand, in both
+  worlds at the same point (after the casts and the Krenko taps, before the trailing pass); a card cast then
+  regrown by the trailing-pass flip reads as new. Remand / buyback returns (inside one cast) stay old.
+  morph_den_protector_regrow_pump.json activated (fails with MTG_BP_HAND_ENTRY=0, as it should).
+- Gates: unit 2860/2860; scenarios 496/496; coverage 19/19 full; pooled batch (FACEDOWN_AUDIT on, 24 thr, same
+  manifest as INT-2b) d0 6.68, d3 b10 4.41, d5 b20 4.4833, audit 4.395 no abort -- every digest IDENTICAL to INT-2b
+  (fan crossings 333,815 -> 334,135, units +0.1%); SMOKE 195/195, play-changed=0 searched and d0.
+- Still open: (C) PlanHasDeadFaceUpPin, (D) d0 flip knowledge (step 8).
