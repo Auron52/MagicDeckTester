@@ -1675,3 +1675,26 @@ b20 / b20 / b60 / b20 / b14), seed 70707, 1,500 standard + 500 2HG games per dec
 Both clear the bar (aggregate net <= 0 and no slower game, so no d8 b0 recovery is owed). X-waste removes
 UNCOUNTED work (no budget unit moves), so it is also byte-identical in play; SUBRED removes counted work and moved
 one Goblins digest without moving a win turn.
+
+### P13d (2026-11-12): landing branch for SUBRED, X-waste and the walk pre-test
+
+Branch `hydras-perf` was rebased onto origin 9ba5851a1, which already contains the overnight GT accept fec16d7d2.
+On it: SUBRED **332d72ebc**, P13 ledger 3e213fa4d, X-waste **69a80c50e**, P13b ledger 04876820f, and the walk
+pre-test **56056b4c8**, cherry-picked from `hydras-walk` 1b9610c41. The older hashes fd39ce908 / be42f1846 above
+are the pre-rebase copies. The branch is pushed to `wip/hydras-perf` only. The parent session integrates it into
+`phase-1-2-deck-analyzer` in its push window.
+
+**Walk pre-test (MTG_WALK_PRETEST, default ON; `=0` walks every subset; `MTG_WALK_PRETEST_VERIFY=1` audits).**
+`SeqWalkProvablyShort` (TurnSolver.cpp) runs at the top of `SubsetPayableSequential`. It bounds the mana a
+sequential walk could realise and skips the walk when even that bound falls short. Cards outside the
+`CardDefinition::walk_bound_audited` whitelist (CardDatabase.cpp) fall through to the walk. Measured by P13c, all
+single-thread:
+- Hydras, 30 games (s2002, d5 b20): 62% of walks proved short, 0 violations, digests and units identical, user
+  instructions 95.73G -> 81.51G (-14.9%).
+- Hydras, 80 std + 40 2HG games (s3003): 13% of walks proved short, 0 violations, instructions -0.8%. The saving
+  depends on the seed.
+- Cross-deck audit (221 searched regression rows, 663 games, 50 decks): 0 violations and every digest identical.
+
+**Landing gates on the rebased tree (MTG_PGO=0, under box.lock):** unit tests 2860/2860. Smoke: 195 passed, 0
+configs changed. Regression: 309 passed, 0 configs changed. No GT moved, so no accept is owed. The Hydras vs
+Hinata yardstick was not re-measured; P13b's 0.20-0.27x still stands.
