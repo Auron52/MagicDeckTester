@@ -228,6 +228,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
         h.ended         = true;
         h.frontier      = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_dropped     = h.DroppedSoFar();
         h.f_cost        = ManaCost{};
         h.f_tapahead    = count;
         h.f_lands_only  = lands_only;
@@ -351,6 +352,8 @@ std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies
                        g_gate_rejects{0}, g_gate_rejects_checked{0}, g_gate_rejects_skipped{0};
 // Realize's HIT-ONLY cut: fail-option scripts a hit-only search did not build (each a whole subtree).
 std::atomic<long long> g_hit_only_cut{0};
+std::atomic<long long> g_order_fold{0};   // order variants not realised: an earlier order is the same apply
+std::atomic<long long> g_hit_only_drop_cut{0};   // hit-only frontiers below an already-dropped action
 // MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
 // payments; the other orders of a drop).
 std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
@@ -417,6 +420,10 @@ struct Reporter
         }
         if (g_hit_only_cut.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld unpayable-payment subtrees not built ===\n", g_hit_only_cut.load()); }
+        if (g_order_fold.load() != 0)
+        { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld order variants are an earlier order's apply (trailing activations) ===\n", g_order_fold.load()); }
+        if (g_hit_only_drop_cut.load() != 0)
+        { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld frontiers below a dropped action not built ===\n", g_hit_only_drop_cut.load()); }
         if (g_route_macros.load() != 0)
         {
             std::fprintf(stderr, "=== MANA ORACLE combo routes: %lld equip-route macros audited, %lld links, %lld ms ===\n",
@@ -2672,6 +2679,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 h.f_state = &fr.st;
                 h.all_engine = all_engine;
                 std::vector<std::string> cast_drops, act_drops;
+                h.drops_cast = &cast_drops;
+                h.drops_act  = &act_drops;
                 std::vector<std::string>* saved_cast = g_play_dropped_cast_sink;
                 std::vector<std::string>* saved_act  = g_act_drop_sink;
                 g_play_dropped_cast_sink = &cast_drops;
@@ -2717,6 +2726,14 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 }
                 if (h.frontier)
                 {
+                    // HIT-ONLY, DROPPED PREFIX (item 5f): an action this script already dropped before the frontier
+                    // (an equip ordered ahead of its Equipment, a cast the earlier payments starved) is dropped again
+                    // by every script extending it -- the prefix replays identically -- so nothing below this frontier
+                    // is Full, hence never Clean, hence never a hit, and `accept` is never asked about it. Exactly
+                    // the fail-option argument below; the fail-free, drop-free scripts are applied in the same order.
+                    // Jumbo seed 30094355 T4: most of a 7-action plan's 5,039 other orders put an equip first.
+                    if (hit_only && stop_at_full && h.f_dropped)
+                    { g_hit_only_drop_cut.fetch_add(1, std::memory_order_relaxed); continue; }
                     g_frontiers.fetch_add(1, std::memory_order_relaxed);
                     fr.script       = std::move(script);
                     fr.cost         = h.f_cost;
@@ -3072,8 +3089,38 @@ std::string ActionKey(const Action& x)
 // per-decision work budget (MTG_MANA_ORACLE_DECISION_S) still bounds the cost: past it the verdict is
 // CAPPED-DECISION, never a claim.
 constexpr std::size_t kPhantomOrderBound = 5040;   // seven distinct movable actions
+
+// THE TRAILING-ACTIVATION FOLD (item 5f, Jumbo seed 30094355 T4). An order variant is applied on the explicit
+// route (Plan::searched_order), and outside the viewer's human sequence (human_action_order / human_sequence, the
+// only route that dispatches an activation inline at its vector position) that route walks the vector's CASTS --
+// CastFromHand, an ordered Garth copy, a Vial put -- in order and runs every board activation in the TRAILING PASS
+// after them, in the activations' own relative order (or the provider's rank). So two orders with the same casts
+// in the same order and the same activations in the same order are ONE apply, whatever their interleaving, and an
+// order search permuting both (OtherOrders with_acts) repeats each realisation C(n, k) times: the T&N + Chariot +
+// Finale + Greaves + Arbor Elf + two equips plan's 5,039 orders are 240 distinct applies. Folded: one order per
+// class, the FIRST one the permutation walk meets (so the walk's first hit, and the order its APPLY-DROP-ORDER
+// names, are unchanged). Garth stays positional (GarthOrderedEnabled puts it in the cast walk). A sound identity
+// fold, default ON; MTG_ORACLE_ORDER_FOLD=0 restores the unfolded walk, MTG_ORACLE_ORDER_FOLD_CHECK=1 realises
+// every folded order too and aborts on any difference from its class's order (AuditPlan's orders loop).
+bool OrderFoldOn()
+{
+    static const bool v = EnvOn("MTG_ORACLE_ORDER_FOLD", true);
+    return v;
+}
+bool OrderFoldCheck()
+{
+    static const bool v = EnvOn("MTG_ORACLE_ORDER_FOLD_CHECK");
+    return v;
+}
+bool OrderFoldTrailing(const Action& a)
+{
+    return TurnSolver::IsTrailingActivation(a.kind) && a.kind != Action::Kind::GarthActivate;
+}
+
 std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool with_acts = false,
-                                          bool* all_tried = nullptr, std::size_t max_distinct = 180)
+                                          bool* all_tried = nullptr, std::size_t max_distinct = 180,
+                                          bool fold = false,
+                                          std::vector<std::vector<TurnSolver::Plan>>* folded = nullptr)
 {
     const std::size_t kMaxDistinctOrders = max_distinct; // default: bounded near the old five-action ceiling (120)
     std::vector<TurnSolver::Plan> out;
@@ -3084,6 +3131,7 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
         if (a.kind == Action::Kind::PlayLand || a.sacrifice_land) { continue; }
         if (a.kind == Action::Kind::CastFromHand || with_acts) { slots.push_back(i); }
     }
+    fold = fold && with_acts && OrderFoldOn() && !plan.human_action_order && !plan.human_sequence;
     std::vector<std::string> keys;
     std::map<std::string, std::size_t> copies;
     std::size_t distinct = 1;
@@ -3098,6 +3146,19 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
     const bool complete = distinct <= kMaxDistinctOrders;
     if (all_tried != nullptr) { *all_tried = complete; }
     if (slots.size() < 2 || !complete) { return out; }
+    // The fold's class of an order: its casts in order, then its trailing activations in order.
+    std::set<std::string> seen_class;
+    std::map<std::string, std::size_t> class_at;   // class -> its order's index in `out` (the check's list)
+    auto class_of = [&](const TurnSolver::Plan& p)
+    {
+        std::string pos, trail;
+        for (const std::size_t slot : slots)
+        {
+            const Action& a = p.actions[slot];
+            (OrderFoldTrailing(a) ? trail : pos) += ActionKey(a) + "\x1f";
+        }
+        return pos + "\x1e" + trail;
+    };
     std::vector<std::size_t> perm(slots.size());
     for (std::size_t i = 0; i < perm.size(); ++i) { perm[i] = i; }
     const auto less_key = [&](std::size_t a, std::size_t b) { return keys[a] < keys[b]; };
@@ -3111,6 +3172,18 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
         TurnSolver::Plan p = plan;
         for (std::size_t i = 0; i < slots.size(); ++i) { p.actions[slots[i]] = plan.actions[slots[perm[i]]]; }
         p.searched_order = true;
+        if (fold)
+        {
+            const std::string c = class_of(p);
+            if (!seen_class.insert(c).second)
+            {
+                g_order_fold.fetch_add(1, std::memory_order_relaxed);
+                if (folded != nullptr) { (*folded)[class_at[c]].push_back(std::move(p)); }
+                continue;
+            }
+            class_at[c] = out.size();
+            if (folded != nullptr) { folded->emplace_back(); }
+        }
         out.push_back(p);
     } while (std::next_permutation(perm.begin(), perm.end(), less_key));
     return out;
@@ -3833,11 +3906,55 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         bool all_tried = true, other_partial = false;
         std::string other_why;   // the first reason another order's search was partial
         struct OrdersCost { long long a0 = t_dec_applies; ~OrdersCost() { g_cost_orders.fetch_add(t_dec_applies - a0); } } _orders_cost;
-        for (const TurnSolver::Plan& alt : OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound))
+        std::vector<std::vector<TurnSolver::Plan>> folded;
+        const std::vector<TurnSolver::Plan> alts = OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound,
+                                                               /*fold=*/true, OrderFoldCheck() ? &folded : nullptr);
+        for (std::size_t ai = 0; ai < alts.size(); ++ai)
         {
+            const TurnSolver::Plan& alt = alts[ai];
             if (DecisionOut())
             { other_partial = true; if (other_why.empty()) { other_why = "the decision work budget ran out"; } break; }
-            Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true, {}, false, &e_want);
+            // HIT-ONLY (item 5f, Jumbo seed 30094355 T4: 80 engine-drop T&N x Finale x Greaves plans spent the
+            // decision's whole 300 priced s here, 6.76M of 6.77M applies). This loop reads only a HIT -- a Clean
+            // outcome holding e_want -- and the partial signals. A script carrying a fail option can never be a hit
+            // (Clean refuses any fail), nor can anything it reaches, so not building it (Realize's hit_only) drops
+            // exactly the subtrees that cannot answer the question. The partial signals lose only notes from those
+            // subtrees: an UNMODELED / unscripted / capped there says nothing about a fail-free payment, and every
+            // fail-free script is still applied, in the same order, with the same Pareto prune (fail frontiers are
+            // keyed apart). So the YES verdict (APPLY-DROP-ORDER) is unchanged, and the NO claim (PHANTOM) still
+            // needs every fail-free payment of every order searched in full.
+            Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true, {}, false, &e_want, nullptr, nullptr,
+                                     /*hit_only=*/true);
+            if (OrderFoldCheck() && ai < folded.size())
+            {
+                // MTG_ORACLE_ORDER_FOLD_CHECK: every order the fold skipped must realise exactly as its class's order.
+                auto print = [&](const Realization& x)
+                {
+                    std::string t = "capped=" + std::to_string(x.capped ? 1 : 0) + " hit=" + std::to_string(x.hit)
+                                  + " outs=" + std::to_string(x.outcomes.size());
+                    for (const std::string& u : x.unmodeled) { t += " unm[" + u + "]"; }
+                    for (const Outcome& o : x.outcomes)
+                    {
+                        t += " {" + std::to_string(CoreKey(o.st)) + " clean=" + std::to_string(o.Clean() ? 1 : 0)
+                           + " " + ScriptText(o.script) + " u=" + o.unscripted + "}";
+                    }
+                    return t;
+                };
+                const std::string want_txt = print(ra);
+                for (const TurnSolver::Plan& dup : folded[ai])
+                {
+                    const Realization rd = Realize(root, dup, pre, /*stop_at_full=*/true, {}, false, &e_want, nullptr,
+                                                   nullptr, /*hit_only=*/true);
+                    const std::string got = print(rd);
+                    if (got != want_txt && !DecisionOut())
+                    {
+                        std::fprintf(stderr, "[mana-oracle] ORDER-FOLD MISMATCH %s\n  class order {%s}: %s\n  folded order {%s}: %s\n",
+                                     Ctx(root, pre).c_str(), PlanText(alt).c_str(), want_txt.c_str(), PlanText(dup).c_str(),
+                                     got.c_str());
+                        std::abort();
+                    }
+                }
+            }
             if (ra.capped || !ra.unmodeled.empty())
             {
                 other_partial = true;
