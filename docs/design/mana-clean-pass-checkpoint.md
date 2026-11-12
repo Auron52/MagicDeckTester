@@ -889,6 +889,51 @@ fungus 1,880, gods 4,300 (first run).
     dredge answers recorded for the clone DIFFER from its land-first base's (DredgeSearchSingletonPolicy; same answers
     -> same board modulo payment allocation, the standing exemption), then re-A/B; slower games still owe d8 b0
     checks. A/B scratch: build/scratch/claude1110/6r10/ab.
+* **Round 11 (eleventh item-6 agent, 2026-11-12).**
+  * **gods ENUM-GAP fold built, A/B STILL FAILS -> PARKED, USER DECISION.** `wip/gods-land-after-dredge-draw`
+    403635f95 (pushed; NOT on the shared branch) adds `MTG_LAND_DREDGE_ANCHOR_FOLD` (default ON on that branch):
+    after the axes + breakpoint fan, a dredge-anchor position clone folds into its land-first partner when the two
+    are the same Plan apart from the position (operator== with land_slot / hand indices / value / land_tie_key /
+    bp_base normalised -- so the recorded singleton dredge pins, every axis pin and the breakpoint choice match)
+    AND applying both reaches the same zones (life, hand set, graveyard + library in order, battlefield objects).
+    Only where !LandOrderMatters and the dredge policy is singleton; erase keeps order and remaps bp_base. Repros
+    s30005620 T8 / s30013694 T3: MISS 0; the fold removes 113/1090 and 2174/5306 clones. Unit test reworked (three
+    Gods in the graveyard make the position change the dredge answer; without them the fold removes it).
+    **Held-out gods 3000 (7380001+, PGO 0b2e06 vs fold Release): net +7 at unwon=9 (the suite metric), +277 at
+    unwon=99 (cmp.py); 32 slower / 25 faster; 4 wins -> unwon (gi 1111, 1905, 2738, 2804), 1 unwon -> win (2489);
+    among games both arms win the turn delta is +3.** (Unfolded WIP: +23 / +383, 47 slower.) Work units 79.3M off,
+    89.6M unfolded, 85.2M folded. **Every slower game recovers at --depth 8 --budget-ms 0 (32 of 32: build/scratch/claude1110/6r11/d8; gi218 took 31 min)**,
+    the four win->unwon included, so the loss is budget dilution, not a defect: gi1905 diverges at T3 (Magus of
+    the Bazaar instead of Life from the Loam) on a board where the only dredger is Stinkweed Imp in HAND.
+  * **Why the dilution remains, and the next lead (not built).** LandSlotCounts counts EVERY draw cast once a
+    dredge card is in hand or graveyard, but a draw can only be dredged when a dredger is in the GRAVEYARD at that
+    draw; with the dredger only in hand (gi1905: Faithless Looting draws BEFORE it discards) the extra positions
+    differ only in which card the post-draw discard keeps (the zones test keeps those as distinct lines, correctly).
+    Narrowing the anchor to draws that can dredge -- count a draw cast only while a dredge card is in our graveyard
+    at its dispatch (live state in both worlds' slot hooks; the enumeration's position bound would need the same
+    plan-walk) -- matches the owner's option-(b) wording ("a draw that can dredge or mill") and should cut most of
+    the remaining clones. Not attempted this round (lockstep risk across the enumeration bound and both hooks).
+  * **PHANTOM at s30013694 T3 (24 flags, one plan `{land=Cephalid Coliseum [ordered] + CS + Loam}`) is NOT soundly
+    cuttable with the current machinery.** The clone drops Loam (Coliseum enters tapped; two sources for three
+    mana). The existing unpayable-prefix/suffix cut would remove it, but PositionPrefixProbeGuard returns Blanket
+    because Careful Study opens a draw breakpoint -- exactly the case where a continuation may buy the mana back --
+    so cutting it means extending the probe to breakpoint-opening plans for every deck, not a dredge-local fix.
+    PHANTOM does not fail mana-clean (search noise); left as is.
+  * **USER DECISION (raised, not settled):** keep option (b) off (gods keeps ENUM-GAP ~138/5000, the Loam-after-
+    dredge line unreachable), or accept the measured cost (+7 turns / 3000 games at unwon=9; 4 of 3000 games lose
+    their win within max_turns at the shipped budget, all recover at d8 b0), or have the next agent build the
+    "draws that can dredge" narrowing first. Recommendation: build the narrowing and re-A/B before deciding.
+  * **fungus ENUM-GAP 209 triage (leads only, from build/scratch/mana_clean/20261112-172835/on.0.err).** ONE
+    mechanism: the order-free mana gate does not credit sources that come online MID-PLAN. (a) 131 flags:
+    Concordant Crossroads cast in the plan, then a creature cast after it taps for mana (haste) -- Undercellar
+    Myconid's own {T}: any colour, or a Fungus/Saproling under Brightcap Badger's granted {T}: {G}; e.g. s30060073
+    T3 `{Crossroads + Thallid + Undercellar Myconid}`, oracle order Crossroads > Myconid > Thallid with pay3 from
+    the new Myconid#53. (b) ~69 flags: Crossroads ALREADY on the battlefield; a creature cast in the plan
+    (Shroofus Sproutsire, Thallid, Myconid) taps under Badger / its own ability for the next cast (s30060029 T5
+    `{Saproling Burst + Shroofus + Thallid}`). (c) 9 flags, no Crossroads: Brightcap Badger cast in the plan grants
+    {T}: {G} to existing non-sick Fungus/Saprolings that pay the rest (s30060047 T4, s30060142 T5). Fix site: the
+    enumeration's mana gate needs an in-plan source credit for hasty same-turn mana creatures and for a granted
+    tap-for-mana static that resolves mid-plan (cf. the existing treasure / dork credits). Untouched this round.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
