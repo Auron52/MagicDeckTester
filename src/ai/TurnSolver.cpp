@@ -3791,6 +3791,13 @@ static bool DomainWidenEnabled() { return g_domain_widen; }
 // mana dork -> byte-identical for every deck without that pairing. See HasteUnlockedManaOf.
 static const bool g_no_haste_dork_credit = EnvOn("MTG_NO_HASTE_DORK_CREDIT");
 static bool HasteDorkCreditEnabled() { return !g_no_haste_dork_credit; }
+// MTG_GRANT_HASTE_CAST_CREDIT (DEFAULT ON; =0 -> no stamp): see the grant-reached branch of the
+// hasted-creature rock stamp in CollectActions.
+static bool GrantHasteCastCreditOn()
+{
+    static const bool on = EnvOn("MTG_GRANT_HASTE_CAST_CREDIT", true);
+    return heurarm::Flag(heurarm::GRANT_HASTE_CAST_CREDIT, on);
+}
 
 // ---- The second main inside the search is SEARCHED, not greedy --------------------------------
 // USER BAR (2026-08-09): "we can't afford to have second main be greedy ... I want no greedy steps
@@ -41979,6 +41986,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                  && (def.card.HasKeyword(Keyword::Haste)
                      || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
         { AddSourceToPool(a.rock_mana, state, def); }
+        // ...and a hasted creature with NO printed mana ability that the board's LIVE mana grant
+        // reaches (Brightcap Badger on the battlefield: "each Fungus and Saproling you control has
+        // {T}: Add {G}"). Under Concordant Crossroads it taps the turn it is cast exactly like the
+        // hasted dork above, through the granted ability: "Shroofus Sproutsire, then Thallid off
+        // Shroofus" was priced as if Shroofus made nothing (mana-oracle ENUM-GAP fungus s30060029 T5,
+        // gate 20261112-172835). The same discipline as the branch above (a producer never funds its
+        // own cost; the board's lords and the board's grant only -- a Badger or Crossroads cast in the
+        // SAME plan is not credited here). One unit of the grant's colour, which is what the granted
+        // ability makes (GrantFaceFor). Inert without a live grant -> byte-identical for every deck
+        // whose list has no granted_tap_mana_subtypes card (deck_has_mana_grant false).
+        else if (RockRampEnumEnabled() && HasteDorkCastCreditOn() && state.deck_has_mana_grant
+                 && GrantHasteCastCreditOn()
+                 && def.card.IsCreature() && !IsBaselineManaSource(def) && !def.params.enters_tapped
+                 && (def.card.HasKeyword(Keyword::Haste)
+                     || HasHasteFromLords(def.card, state.battlefield, state.active_player_index)))
+        {
+            const ManaGrant g = LiveManaGrant(state, state.active_player_index);
+            Permanent body;
+            body.card             = def.card;
+            body.controller_index = state.active_player_index;
+            body.owner_index      = state.active_player_index;
+            if (g.live && GrantReaches(g, body))
+            {
+                switch (g.color)
+                {
+                    case Color::White:     a.rock_mana.white     += 1; break;
+                    case Color::Blue:      a.rock_mana.blue      += 1; break;
+                    case Color::Black:     a.rock_mana.black     += 1; break;
+                    case Color::Red:       a.rock_mana.red       += 1; break;
+                    case Color::Colorless: a.rock_mana.colorless += 1; break;
+                    default:               a.rock_mana.green     += 1; break;
+                }
+            }
+        }
         // ETB TREASURE (Corsair Captain; MTG_ETB_TREASURE_SPEND -- see EtbTreasureSpendOn): the
         // Treasure its enter trigger makes is fresh-hold EXEMPT, so it is same-turn mana exactly like
         // a cast rock's first tap -- one WILD per Treasure, arriving only once the maker resolves.
