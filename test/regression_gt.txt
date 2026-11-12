@@ -1,4 +1,4 @@
-# Regression ground truth -- commit f8c15a68b  date 2026-11-12
+# Regression ground truth -- commit fe05bfbc1  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (smoke, 2026-11-12): INT-10 (bb6829c35): morph2hg smoke gi5 T6->T7 identical draws, recovers T6 at d8 b0; MorphProvider combat-is-over folds + Den LEAD pin identity fold
 # accepted-with-regressions (regression, 2026-11-12): INT-10 (bb6829c35): no searched slower game; MorphProvider combat-is-over folds + Den LEAD pin identity fold
@@ -319,10 +319,10 @@ vampires_regression_d3_s30001=4.3000/092417a29e2ce8ce
 vampires_regression_d5_s30001=4.3000/092417a29e2ce8ce
 whiteknights_regression_d3_s30001=4.1500/7a077a89bdfc6a0d
 whiteknights_regression_d5_s30001=4.1500/93afeefa560c7137
-fungusv3_regression_d0_s2002=5.3110/1da68b2e6f4826f4
+fungusv3_regression_d0_s2002=5.3110/10bf810a54bcae4f
 fungusv3_regression_d3_s2002=4.5333/3ff31eef51ace5a4
-fungusv3_regression_d5_s2002=4.5480/71ed8eaadd574efd
-fungusv3_regression_d5_s3003=4.5560/c1744ff5c57db690
+fungusv3_regression_d5_s2002=4.5480/fc728fb61a74116f
+fungusv3_regression_d5_s3003=4.5520/98e1594afa7f2f0b
 slivers_regression_d0_s2002=4.6870/776d83e90a90479f
 slivers_regression_d3_s2002=4.2160/dac64041ea2f0cd7
 slivers_regression_d5_s2002=4.2123/5672ed9f93c87e3f
