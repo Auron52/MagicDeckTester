@@ -1529,6 +1529,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // ...and its global sub-gate (GameState::deck_has_land_tap_bonus): Vernal Bloom & co. ride the
         // land-Aura readers, so such a card stamps BOTH bits.
         bool land_tap_bonus = false;
+        bool islandize = false;
         bool chosen_color_pump = false;   // GameState::deck_has_chosen_color_pump (Gauntlet of Power)
         // The landfall dispatch and land-drop position gate: landfall triggers
         // plus Horn's land-play draw, whose cast-before-land order matters.
@@ -1623,6 +1624,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.land_tap_bonus > 0)          { land_aura = true; land_tap_bonus = true; }
+                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island) { islandize = true; }
                 if (d->params.chosen_color_pump_power != 0
                     || d->params.chosen_color_pump_tough != 0) { chosen_color_pump = true; }
                 // Horn watches the land PLAY, so casting it before the drop is
@@ -1705,6 +1707,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // nothing (each one tests is_land_aura on what it finds), so this is dead-code elimination.
         state.deck_has_land_aura         = garth || land_aura;
         state.deck_has_land_tap_bonus    = garth || land_tap_bonus;
+        state.deck_has_islandize         = garth || islandize;
         state.deck_has_chosen_color_pump = garth || chosen_color_pump;
         // Same reasoning, and no lever either: a clear bit PROVES no landfall or
         // land-play watcher can make this deck's land position matter.

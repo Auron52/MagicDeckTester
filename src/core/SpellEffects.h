@@ -1994,7 +1994,7 @@ inline Color DripLandAnyPipColor(const GameState& state, int active,
 // cost ...". Land subtypes (Forest/Plains/...) are stored in the card's m_subtypes.
 inline bool LandTypeChangedToIsland(const GameState& state, const Permanent& land)
 {
-    if (!land.card.IsLand()) { return false; }
+    if (!state.deck_has_islandize || !land.card.IsLand()) { return false; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.islandize_target != 0 && p.islandize_target == land.card.m_number)

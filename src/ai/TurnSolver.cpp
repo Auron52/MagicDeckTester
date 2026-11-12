@@ -52824,6 +52824,104 @@ namespace enumstats
     inline Dumper g_dumper;
 }
 
+// MTG_GATE_EF_CENSUS=1 (diagnostic, inert by default; P13 Hydras cost work, 2026-11-12): where do the selections
+// the odometer's mana gate ADMITS die in EnumeratePlans' body, and -- for the ones the body's mana section
+// refuses -- which credit the gate counted that the body did not. Relaxed atomics only; no search work.
+namespace gefcensus
+{
+    inline bool On() { static const bool v = EnvOn("MTG_GATE_EF_CENSUS"); return v; }
+    inline thread_local const ManaGateIndex* t_gate = nullptr;   // the enumeration's gate (null: legacy path)
+    enum Lab { kFlatPool, kEfScalar, kEfWalkFail, kEfNoInteract, kEfAura, kOtherMana, kLabs };
+    inline const char* LabName(int l)
+    {
+        static const char* const n[kLabs] = { "flat-pool", "ef-scalar", "ef-walk-fail", "ef-no-interact",
+                                              "ef-aura-*", "other" };
+        return n[l];
+    }
+    inline std::atomic<std::uint64_t> g_mana_rej[kLabs];
+    inline std::atomic<std::uint64_t> g_body_enter{0}, g_mana_section{0}, g_emitted{0}, g_xwaste{0},
+                                      g_xwaste_dropped{0}, g_walk_ok{0}, g_walk_fail{0};
+    // ef-scalar refusals, by the rock-credit state the body reached: none of the selected rocks credited
+    // (the board cannot pay them in any greedy order), some, or all of them.
+    inline std::atomic<std::uint64_t> g_es_rock_none{0}, g_es_rock_part{0}, g_es_rock_all{0}, g_es_no_rock{0};
+    // ...and the sums behind them (pips, the body's ceiling, the gate's budget, the selection's rock gain and
+    // cost, what the body credited), so a mean of each is one division.
+    inline std::atomic<std::int64_t> g_es_pips{0}, g_es_ceil{0}, g_es_gate_budget{0}, g_es_gate_need{0},
+                                     g_es_rock_gain{0}, g_es_rock_cost{0}, g_es_credited{0}, g_es_pool{0};
+    // How many ef-scalar refusals a candidate gate rule would have refused at the odometer instead:
+    // pips(S) > pool + the gate's non-rock gains + the rock gain the body's greedy walk can credit.
+    inline std::atomic<std::uint64_t> g_es_rule_reach{0}, g_es_gate_had{0};
+    struct Dump
+    {
+        ~Dump()
+        {
+            if (!On()) { return; }
+            std::fprintf(stderr, "[gef-census] body_enter=%llu mana_section=%llu emitted=%llu xwaste=%llu xwaste_dropped=%llu walk ok=%llu fail=%llu\n",
+                         (unsigned long long)g_body_enter.load(), (unsigned long long)g_mana_section.load(),
+                         (unsigned long long)g_emitted.load(), (unsigned long long)g_xwaste.load(),
+                         (unsigned long long)g_xwaste_dropped.load(), (unsigned long long)g_walk_ok.load(),
+                         (unsigned long long)g_walk_fail.load());
+            for (int l = 0; l < kLabs; ++l)
+            { std::fprintf(stderr, "[gef-census]   mana-reject %-14s %llu\n", LabName(l), (unsigned long long)g_mana_rej[l].load()); }
+            const double n = std::max<double>(1.0, (double)g_mana_rej[kEfScalar].load());
+            std::fprintf(stderr, "[gef-census] ef-scalar: gate_built=%llu rock none=%llu part=%llu all=%llu no-rock=%llu | means: pips %.2f ceil %.2f pool %.2f "
+                                 "gate_need %.2f gate_budget %.2f rock_gain %.2f rock_cost %.2f credited %.2f | rule_reach_refuses=%llu\n",
+                         (unsigned long long)g_es_gate_had.load(),
+                         (unsigned long long)g_es_rock_none.load(), (unsigned long long)g_es_rock_part.load(),
+                         (unsigned long long)g_es_rock_all.load(), (unsigned long long)g_es_no_rock.load(),
+                         g_es_pips.load() / n, g_es_ceil.load() / n, g_es_pool.load() / n, g_es_gate_need.load() / n,
+                         g_es_gate_budget.load() / n, g_es_rock_gain.load() / n, g_es_rock_cost.load() / n,
+                         g_es_credited.load() / n, (unsigned long long)g_es_rule_reach.load());
+        }
+    };
+    inline Dump g_dump;
+}
+static void GefCensusEfScalar(const std::vector<Action>& cands, const std::vector<int>& sel, const ManaPool& pool,
+                              const ManaPool& eff, bool credited, int pips, int ceil, int aura_bonus)
+{
+    using namespace gefcensus;
+    long long rgain = 0, rcost = 0; bool any_rock = false;
+    ManaCost rock_costs;
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        if (c.rock_mana.Total() <= 0) { continue; }
+        any_rock = true; rgain += c.rock_mana.Total(); rcost += c.cost.ManaValue();
+        rock_costs.white += c.cost.white; rock_costs.blue += c.cost.blue; rock_costs.black += c.cost.black;
+        rock_costs.red += c.cost.red; rock_costs.green += c.cost.green;
+        rock_costs.colorless += c.cost.colorless; rock_costs.generic += c.cost.generic;
+    }
+    const long long cred = credited ? static_cast<long long>(eff.Total()) - static_cast<long long>(pool.Total()) : 0;
+    long long reach = 0;
+    if (any_rock) { reach = pool.CanPay(rock_costs) ? rgain : static_cast<long long>(SequencedRockProduction(pool, cands, sel).Total()); }
+    if (!any_rock) { g_es_no_rock.fetch_add(1, std::memory_order_relaxed); }
+    else if (reach <= 0) { g_es_rock_none.fetch_add(1, std::memory_order_relaxed); }
+    else if (reach < rgain) { g_es_rock_part.fetch_add(1, std::memory_order_relaxed); }
+    else { g_es_rock_all.fetch_add(1, std::memory_order_relaxed); }
+    g_es_pips.fetch_add(pips, std::memory_order_relaxed);
+    g_es_ceil.fetch_add(ceil, std::memory_order_relaxed);
+    g_es_pool.fetch_add(static_cast<long long>(pool.Total()), std::memory_order_relaxed);
+    g_es_rock_gain.fetch_add(rgain, std::memory_order_relaxed);
+    g_es_rock_cost.fetch_add(rcost, std::memory_order_relaxed);
+    g_es_credited.fetch_add(cred, std::memory_order_relaxed);
+    const ManaGateIndex* g = t_gate;
+    if (g == nullptr) { return; }
+    g_es_gate_had.fetch_add(1, std::memory_order_relaxed);
+    long long need = 0, gain = 0, nonrock = 0, picks = 0, ltb = 0;
+    for (int j : sel)
+    {
+        const ManaGateTerm& t = g->term[static_cast<std::size_t>(j)];
+        need += t.cost; gain += t.gain; picks += t.picks; ltb += t.ltb;
+        nonrock += t.gain - static_cast<long long>(cands[static_cast<std::size_t>(j)].rock_mana.Total())
+                 - static_cast<long long>(t.picks) * g->ltb_all;
+    }
+    g_es_gate_need.fetch_add(need, std::memory_order_relaxed);
+    g_es_gate_budget.fetch_add(static_cast<long long>(g->pool_total) + gain, std::memory_order_relaxed);
+    // The candidate rule: the most the body's ef ceiling could read, from the gate's own terms.
+    const long long upper = static_cast<long long>(pool.Total()) + reach + picks * ltb + std::max(0LL, nonrock) + aura_bonus;
+    if (pips > upper) { g_es_rule_reach.fetch_add(1, std::memory_order_relaxed); }
+}
+
 static inline void EnumStatsHash(std::uint64_t& h, std::uint64_t v)
 { h ^= v + 0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2); }
 
@@ -66363,9 +66461,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Desperate Ritual SPLICE: pay (splice_count+1) times the printed cost (single Medallion floor
         // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
         // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
-        CardDefinition pay_def = def;
+        // The flashback face is the only case that needs a modified definition, so only it pays for a copy:
+        // a CardDefinition copy (CardParams' strings and vectors) on every planned cast was ~2% of Hydras'
+        // d5 wall (P13, 2026-11-12). EffectiveCost reads the definition's fields, never its address.
+        std::optional<CardDefinition> fb_def;
         if (from_graveyard && def.params.flashback_cost)
-        { pay_def.card.m_mana_cost = *def.params.flashback_cost; }
+        { fb_def.emplace(def); fb_def->card.m_mana_cost = *def.params.flashback_cost; }
+        const CardDefinition& pay_def = fb_def ? *fb_def : def;
         ManaCost ec = EffectiveCost(pay_def, state, splice_count + 1);
         if (def.params.tooth_and_nail && chosen_x == 2) { ec.generic += 2; }
         // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
@@ -77073,6 +77175,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
         if (enumstats::Enabled()) { enumstats::g_e_enter.fetch_add(1, std::memory_order_relaxed); }
+        if (gefcensus::On()) { gefcensus::g_body_enter.fetch_add(1, std::memory_order_relaxed); }
         // THE CYCLE-SEED PIN FOLD (sound; see CycleSeedPinRedundant): the sibling with the readable pin
         // is emitted beside this selection.
         if (seed_fold.on && CycleSeedPinRedundant(seed_fold, cands, sel)) { return; }
@@ -78379,9 +78482,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
             if (ef_ceiling < ef_pips)
             { if (s_dbg_seq) { std::fprintf(stderr, "[dbgseq] scalar reject\n"); }
+              if (gefcensus::On()) { GefCensusEfScalar(cands, sel, pool, eff, credited, ef_pips, ef_ceiling, aura_bonus); }
               _ct.label = "ef-scalar"; return false; }
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
             else { _ct.label = "ef-walk-fail"; }
+            if (gefcensus::On()) { (exec_feas == 1 ? gefcensus::g_walk_ok : gefcensus::g_walk_fail).fetch_add(1, std::memory_order_relaxed); }
             return exec_feas == 1;
         };
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
@@ -78478,6 +78583,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // MANA ORACLE observe mode (ManaOracle.h, the oracle's own menu only): record nothing, reject
         // nothing -- every mana gate below lets the subset through, so the oracle can diff this list
         // against the real menu and test each mana-rejected plan for a payable line (ENUM-GAP).
+        if (gefcensus::On())
+        {
+            gefcensus::g_mana_section.fetch_add(1, std::memory_order_relaxed);
+            if (mana_reject)
+            {
+                const char* l = _ct.label ? _ct.label : "";
+                int k = gefcensus::kOtherMana;
+                if (!std::strcmp(l, "flat-pool")) { k = gefcensus::kFlatPool; }
+                else if (!std::strcmp(l, "ef-scalar")) { k = gefcensus::kEfScalar; }
+                else if (!std::strcmp(l, "ef-walk-fail")) { k = gefcensus::kEfWalkFail; }
+                else if (!std::strcmp(l, "ef-no-interact")) { k = gefcensus::kEfNoInteract; }
+                else if (!std::strncmp(l, "ef-aura", 7)) { k = gefcensus::kEfAura; }
+                gefcensus::g_mana_rej[k].fetch_add(1, std::memory_order_relaxed);
+            }
+        }
         if (mana_reject && !manaoracle::t_gate_observe) { return; }   // trace label set above (flat-pool or an ef-* reason)
         if (sacrifice_count > total_lands)                   { _ct.label = "sac-lands"; return; }
         if (discard_lands_used > lands_in_hand)              { _ct.label = "discard-lands"; return; }
@@ -78750,6 +78870,11 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // its own question; widening it here would change other decks.
         if (!wins && has_extra_lethal
             && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
+        if (iren_waste && gefcensus::On())
+        {
+            gefcensus::g_xwaste.fetch_add(1, std::memory_order_relaxed);
+            if (!wins) { gefcensus::g_xwaste_dropped.fetch_add(1, std::memory_order_relaxed); }
+        }
         // MTG_IRENCRAG_WASTE, deferred from the restrictor loop (lethal-exempt) -- see the twin.
         if (iren_waste && !wins)
         {
@@ -78960,6 +79085,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             for (const auto& [k, n] : by_kind) { std::fprintf(stderr, "  candidate %s x%d\n", k.c_str(), n); }
         }
         workctr::Inc(workctr::kPlanEmit);
+        if (gefcensus::On()) { gefcensus::g_emitted.fetch_add(1, std::memory_order_relaxed); }
         if (ds_on_push) { ds_on_push(); }
     };
 
@@ -79143,6 +79269,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     }
     const ManaGateIndex* gate    = gate_owned.get();      // null -> legacy scalar path
     const bool           gate_on = (gate != nullptr);
+    struct GefGateScope   // MTG_GATE_EF_CENSUS: the body reads this enumeration's gate (restored on exit: nesting)
+    {
+        const ManaGateIndex* prev;
+        explicit GefGateScope(const ManaGateIndex* g) : prev(gefcensus::t_gate) { gefcensus::t_gate = g; }
+        ~GefGateScope() { gefcensus::t_gate = prev; }
+    } gef_gate_scope(gefcensus::On() ? gate : gefcensus::t_gate);
     // MTG_SEL_GATE_EXACT (see SelGateExactRefuses): the odometer's emissions pass through this. Armed only
     // where the reducer discount is the one per-subset credit in play (no metalcraft equip credit, no
     // first-equip waiver, no scaled-dork growth, no cost reframe).

@@ -1066,6 +1066,12 @@ struct GameState
     // extra battlefield walk for global sources (a clear bit proves the walk finds none). Same stamp
     // discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE for an unstamped state.
     bool                     deck_has_land_tap_bonus : 1     = true;  // Vernal Bloom & co.
+    // Can any land on the battlefield become an Island (LandTypeChangedToIsland)? Only a land Aura with
+    // land_aura_sets_island or a kicked Tide Shaper (kicked_etb_target_land_island, whose kicked face copies
+    // the printed card's params) can do it, so a clear bit PROVES the per-land battlefield walk finds nothing:
+    // dead-code elimination, no lever (P13 2026-11-12: the walk ran once per land per mana query, ~2% of
+    // Hydras' d5 wall). Same stamp discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE.
+    bool                     deck_has_islandize : 1          = true;
     // Gauntlet of Power's chosen-colour anthem (CardParams::chosen_color_pump_*): gates ComputeLordBonus's
     // battlefield walk when the caller passes no prefiltered anthem list. cards.json holds every deck's
     // cards, so a DB-wide constant would always be true; this per-game stamp is the real gate. Same
