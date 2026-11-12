@@ -625,6 +625,44 @@ fungus 1,880, gods 4,300 (first run).
   `sacoutlet:Siege-Gang Commander` paid by Skirk Prospector sac-for-mana, which the oracle does not enumerate ("no
   payment exists") -> ANALYZER-side; shadowborn 260 UNMODELED (long Apostle/Ritual/Culling lines, "too many actions to
   try every order"). Full flag lines: build/scratch/mana_clean/due6-20261112/on.0.err.
+* **creature_giving PARKED (2026-11-12, second item-6 agent); WIP on `wip/cg-landtutor-bp` 29f421703 (pushed, NOT on
+  the shared branch, NOT validated).** Mechanism of the 232 ENUM-GAPs: Crop Rotation's fetched UNTAPPED land is
+  same-phase mana, but every cast is enumerated against the pre-fetch board and no subset gate credits the fetch
+  (CheckLine's "Deliberately NOT modelled" note), so "CR, then War-Riders + CR off the fetched Orchard" (s30060041 T2)
+  was unreachable at any budget. WIP fix (3 parts): (1) `MTG_BP_LAND_TUTOR` (heurarm): a tutor_land_to_battlefield cast
+  arms the deferred site-3 re-solve in both worlds (ParamKeyedDrawClass, the rollout's tutor_land_to_battlefield
+  branch, AIEngine creature_tutor_replan, plan-mask bit 3) -- the Jumbo GSZ precedent; (2) oracle: a gate-rejected
+  plan whose sub-plan (some hand casts dropped, a land-tutor cast kept) is on the menu is reached by the searched
+  continuation (`bp_cont` counter); (3) `MTG_SAC_LAND_DRAIN` (heurarm): an untapped plain-mana sac-land victim taps
+  into the float before PerformSacrificeLandCost sacrifices it. On the 121 issue seeds: ENUM-GAP 232 -> 0, but the
+  continuation boards now show **DOMINATED-CREATURE 52** (was 3): a continuation Crop Rotation is paid by Birds of
+  Paradise while the land that same cast then sacrifices was untapped and could pay (s30063801 T3 {Stomping Ground +
+  CR}: engine ends Birds tapped + float {R} from the drained Stomping Ground). SacLandPayVictim (the "victim pays
+  first" rule) evidently does not take effect on those continuation casts; MTG_NO_BATCH_PAY=1 does not change it, so
+  it is not the whole-turn prepay. NEXT: instrument SacLandPayVictim (front / tapped / returned id) on s30063801 T3 in
+  the continuation apply; once DOMINATED-CREATURE is back to ~0, run the full validation (units, smoke, regression,
+  held-out A/B on creature_giving + burn (Shard Volley) + any Harrow deck) and the 5,000-game re-gate.
+* **hydras: USER DECISION (not settled).** APPLY-DROP-ORDER 223 flags in 69 of 5,000 games (gate due6-20261112):
+  the authored HydrasProvider::CastOrderRank (Vernal Bloom 1 < Gauntlet/Nissa 2 < Nature's Lore / Search for
+  Tomorrow / Three Visits 3) drops the rank-3 untapped-Forest fetch (Nature's Lore 83+16+12, Search for Tomorrow 46+4,
+  Three Visits 39) when the line has TWO doublers or a doubler it cannot pay before the fetch: the paying order puts
+  the fetch BEFORE the last doubler, so the fetched Forest pays the doubler (s30000004 T4 {Bloom, Bloom, Search}:
+  Search first off two Forests under the first Bloom, then both Blooms; s30000111 T6 {Bloom, Gauntlet, Lore x2}).
+  Question: may the fetch move ahead of the last doubler when the ranked order does not pay the line and the moved
+  order does (one arrangement per line, the Jumbo MTG_JUMBO_OG_BREAKPOINT shape)? Recommendation: yes, measured by a
+  held-out A/B first. Also 19 ENUM-GAP / 6 ORACLE-GAP / 1 APPLY-DROP not yet triaged.
+* **Leads gathered for the rest (no src change):** goblins ORACLE-GAP 608 = the oracle has no source face for the
+  engine's sac-pay fodder (Skirk Prospector eats Goblin bodies during payment, ManaPayment best_kind 5 /
+  CommitPaySacSacrifices; ApplyPreTapImpl has no such PreTap) -> analyzer-only fix, no tiers needed. pirates UNMODELED
+  174 = Fiery Islet mana not driven by the oracle (analyzer); APPLY-DROP 265 "engine dropped [cast Lightning Bolt]" after
+  Staunch Crewmate: the oracle pays Crewmate with Unclaimed Territory's creature-only mana and keeps Spirebluff Canal
+  for the continuation's Bolt, the engine spends the Canal (s30049037 T3). Bolt is cast by the site-10 continuation
+  after Crewmate's ETB dig, so the payer cannot see it ("a lost action was not declared in the plan"); keeping the
+  Canal is not a deck-wide dominance (Territory's any-colour Pirate mana pays Dire Fleet Captain's {B}), so a fix needs
+  the payer to price the HAND's castables (the prepay's hand_demand) -- a payment-policy question, not a prune. shadowborn UNMODELED 260 = 9-10 action
+  plans (T1 Thrumming Stone + 2 Apostles + 2 Rituals + Diabolic Intent) the oracle cannot try every order of, so it
+  cannot say PHANTOM -> a sound order-free mana upper bound would settle them (analyzer). treasure_hunt APPLY-DROP 385:
+  {Treasure Hunt x2} 122, {Cascade Bluffs + Land's Edge + Hunt} 64, {Bluffs + Hunt x2} 45 (lead in 6-handoff.md).
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
