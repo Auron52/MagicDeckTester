@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a748c3a16  date 2026-11-12
+# Regression ground truth -- commit ecab0614d  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -147,9 +147,9 @@ fluctuator_smoke_d5_s1001=3.5314/1719605529d48639
 giants_smoke_d0_s1001=6.0330/b44f550b033af9d5
 giants_smoke_d3_s1001=5.9000/36e129d00a2a3b84
 giants_smoke_d5_s1001=5.7600/1f1796e715568119
-pirates_smoke_d0_s1001=4.7310/49587004560c9fef
+pirates_smoke_d0_s1001=4.7310/2750a5f1d9247296
 pirates_smoke_d3_s1001=4.3200/9f34e8d62b2d4abe
-pirates_smoke_d5_s1001=4.3543/c5c0725c5fdedcfe
+pirates_smoke_d5_s1001=4.3543/afde838d4ca8f36d
 selesnyav2_smoke_d0_s1001=5.0810/7539da01ec284f5a
 selesnyav2_smoke_d3_s1001=4.4600/4b6cff175f3db3ed
 selesnyav2_smoke_d5_s1001=4.5943/00d59f7e34f2e04c
@@ -432,9 +432,9 @@ giants_regression_d0_s2002=5.9740/2f68d8c66225e84e
 giants_regression_d3_s2002=5.5600/a84b860838ab21ec
 giants_regression_d5_s2002=5.5900/87793dd2c8245967
 giants_regression_d5_s3003=5.5200/9b597af622a4a77f
-pirates_regression_d0_s2002=4.7350/c1789b700fdfe0a9
+pirates_regression_d0_s2002=4.7350/190cf512508ca030
 pirates_regression_d3_s2002=4.4000/fc603d10004511e4
-pirates_regression_d5_s2002=4.3350/24e3e10611067e36
+pirates_regression_d5_s2002=4.3350/fc9e54f5fe7425cb
 pirates_regression_d5_s3003=4.4000/f0870b1ef4bdcf11
 selesnyav2_regression_d0_s2002=5.0450/4f7576f9ceea550c
 selesnyav2_regression_d3_s2002=4.5800/f1c075ba68437386
