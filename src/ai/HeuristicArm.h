@@ -895,8 +895,7 @@ enum Slot : int
     MORPH_NO_POSTCOMBAT_SACUP, // MTG_MORPH_NO_POSTCOMBAT_SACUP  Morph INT-10 (b): no face-up entry (hard cast, face-down-and-up cast, turn face up) of an end-step-sacrifice creature (Blistering Firecat) once this turn's combat is over (sound dominance). Default ON; =0 -> offered after combat
     FACEUP_LEAD_PIN_FOLD,     // MTG_FACEUP_LEAD_PIN_FOLD  Morph INT-10 (engine identity fold): a regrowth LEAD flip (Den Protector) emits no UNPINNED base once its named variants are emitted (the base resolves to one of them). Default ON; =0 -> the base is kept
     PAY_DOOMED_AHEAD_OF_LANDS,// MTG_PAY_DOOMED_AHEAD_OF_LANDS  item 6 (mana-clean, Fungus s30055537 T4 DOMINATED-CREATURE): a doomed body (IsDoomedPlanBody) pays ahead of the LANDS too -- the per-pip payer's plain tier on needs first, and the whole-turn prepay's doomed-first hold rungs (every other source held, released one at a time). Default ON; =0 -> creature band only
-    PENDING_BLANKET_HASTE,    // MTG_PENDING_BLANKET_HASTE  item 6 (mana-clean, Fungus ENUM-GAP): a blanket haste granter (Concordant Crossroads) cast in the SAME plan unlocks the mana creatures cast after it -- odometer bound addend, sequential-walk admission, walk joins. Rescue-only. Default ON; =0 -> no credit
-    GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one {G} (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
+    GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one unit of the grant colour (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
     COUNT
 };
 
@@ -1736,7 +1735,6 @@ inline const char* Name(int slot)
         "MTG_MORPH_NO_POSTCOMBAT_SACUP",
         "MTG_FACEUP_LEAD_PIN_FOLD",
         "MTG_PAY_DOOMED_AHEAD_OF_LANDS",
-        "MTG_PENDING_BLANKET_HASTE",
         "MTG_GRANT_HASTE_CAST_CREDIT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
