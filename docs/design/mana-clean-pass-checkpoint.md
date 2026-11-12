@@ -719,6 +719,31 @@ fungus 1,880, gods 4,300 (first run).
     attempted. ORACLE-GAP 68 = {land + Land's Edge} (s30060179 T4: the engine taps Reliquary Tower, the oracle's
     outcomes do not), analyzer side.
 
+* **Round 5 (fifth item-6 agent, 2026-11-12).**
+  * **Integration push** (owner-authorised, once): the 14 item-6 commits rebased onto origin fe0152699 (Hydras flat-gate
+    cut, SEL_GATE_SELF_EXCL ON, Hydras keep table); conflicts only the HeuristicArm.h slot list (both kept) and the GT
+    header. Smoke 195/195 + regression 309/309 PASS with 0 configs changed; GT re-accepted 0ec21a795, pushed 09:46 UTC.
+  * **shadowborn_apostle: FIXED (analyzer, lossless) -- UNMODELED 260 -> 0.** 30bf98ef4: a PHANTOM order walk past
+    kPhantomOrderBound (5,040 orders) now searches the plan's trailing-activation FOLD CLASSES (positional multiset
+    orders x trailing multiset orders, one representative each, original class skipped) when they fit
+    kPhantomClassBound (40,320). Only reached where the full walk stops short, so every completed verdict is
+    untouched. Verified: `MTG_ORACLE_WALK_BOUND_TEST=1` (diagnostic: forces 1,501 plans the full walk completes through
+    the class walk) gives verdict lines byte-identical to the default run on the 18 issue games, including the 13
+    APPLY-DROP-ORDER orders. Unit test updated 276dc6ea8 (8 distinct casts now PHANTOM; 9 stay UNMODELED). The
+    per-step affordability bound was NOT needed. Re-gate `th-sb-6r5-20261112` (PGO b28d972b5, 45000-49999): **33
+    issues** (was 320): APPLY-DROP-ORDER 14 = Lake of the Dead + Thrumming Stone + Sire of Insanity lines where the
+    order Stone > Ritual > ... > Sire pays (cast order; USER-owned, not settled), APPLY-DROP 12, ENUM-GAP 7 (not triaged).
+  * **treasure_hunt re-gate** (same run, 65000-69999): **519 issues** -- ENUM-GAP 30, APPLY-DROP 341, ORDER 25,
+    ORACLE-GAP 123. **ORACLE-GAP FIXED (analyzer) c0ba6df13** `MTG_ORACLE_FED_ORDER` (default ON): PayEnum::Build
+    tapped fed faces in battlefield order, so a chain (Reliquary Tower {C} -> Ferrous Lake {U}{R} -> its {U} feeds
+    Cascade Bluffs {R}{R}) was never verified in the order that works; when the default order fails and >= 2 taps are
+    fed, every other fed order is paid for real. Issue games (112): ORACLE-GAP 123 -> 0, every other class unchanged,
+    digests identical on/off. Not yet re-gated (next block 70000-74999). **APPLY-DROP 341 still PARKED**: top
+    signature {Cascade Bluffs + Land's Edge + Hunt} x24 -- the per-cast payer pays Land's Edge without leaving a
+    filter feed / the Tower {C} for Hunt (depth-1 rollback pays; needs a filter-feed-aware line hold in the engine payer,
+    full validation; not attempted this round).
+  * pirates continuation drops (19) not started.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
