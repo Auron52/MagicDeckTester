@@ -864,6 +864,12 @@ fungus 1,880, gods 4,300 (first run).
     gate. Options: (a) oracle: relax the cont-land fold to the with-land plan with ANY Loam target set (unsound in general);
     (b) engine: enumerate a land_slot after a dredge-capable draw. Not attempted; raise with the owner.
 
+* **Round 10 (tenth item-6 agent, 2026-11-12).**
+  * **Gate `20261112-172835`** (PGO src 0b2e06555884, one pooled run, oracle-off byte-identical): **fungus 758**
+    (60000-64999; was 1169): ENUM-GAP 209, DOMINATED-CREATURE 144 (was 643), CAPPED 350, ORACLE-GAP 37, UNMODELED 18,
+    APPLY-DROP 0. **gods 3596** (10000-14999; was 10350): CAPPED-DECISION 3320 (still TWO decisions, analyzer budget,
+    PARKED), ENUM-GAP 138, ORACLE-GAP 63, CAPPED 56, UNMODELED 14, APPLY-DROP 5. gods ENUM-GAP is still dominated by
+    `{no land [ordered] + Careful Study|Faithless Looting + Life from the Loam}` (the item below).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
