@@ -24,7 +24,13 @@ the two Living Wish amendments (`MTG_AA_WISH_COMBO_FIRST`, `MTG_AA_WISH_UNTAP_NE
 (`analysis-Unpredictable Cyclone.md`, Remand rulings). Replayed on the seeds: T2 suggests Brindle Boar, T5 Galvanic
 Alchemist, and 23746 offers Remand on Ulamog, the Infinite Gyre (it returns to hand, Remand draws).
 
-## IN FLIGHT (2026-11-12): Living Wish land rules + ALCH_FIRST_AT2 ON + viewer "searched" marks
+## CLOSED (2026-11-12): Living Wish land rules + ALCH_FIRST_AT2 ON + viewer "searched" marks
+
+PUSHED 2026-11-12 ~10:00 UTC as `828c1a45e` (AT2 ON + LAND_FIRST_AT3 + ONE_LAND + STRANDED_ELF + viewer marks) and
+`80d17fc85` (LAND_FIRST_AT2), after two rebases onto origin; each rebase was rebuilt and the alchemist smoke +
+regression cells reran byte-identical to the accepted GT (`check_gt_logs.py` 1108 consistent). Backup branch deleted.
+Nothing open for the USER on this thread. The alchemist OVERNIGHT GT moves with these rules and is left to the
+periodic overnight run.
 
 Committed and pushed: `cd0368564`, the AT2 / SPARE levers DEFAULT OFF, measured (ledger
 `analysis-AccomplishedAlchemist.md`, "Two follow-up Wish levers"). Rebased onto origin `01a3adbc1` (clean).
