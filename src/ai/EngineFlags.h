@@ -343,6 +343,17 @@ inline bool LineSpareTightOn()
     return heurarm::Flag(heurarm::LINE_SPARE_TIGHT, env_on);
 }
 
+// MTG_LINE_SPARE_DEPLETION (DEFAULT ON; =0 restores the plain-only spare set) -- LineSpareSourceMask's
+// DEPLETION TIER: a SHORT line whose generic pip found no plain spare to tap may tap an otherwise-spare
+// depletion land (it makes no colour the rest of the line owes) instead of eating a floating unit the line
+// owes. mana-clean item 6, treasure_hunt {Treasure Hunt x2} off Saprazzan Skerry + Sandstone Needle (APPLY-DROP,
+// gate due6-20261112). Same shared payer -> executor, rollout and walks in lockstep.
+inline bool LineSpareDepletionOn()
+{
+    static const bool env_on = EnvOn("MTG_LINE_SPARE_DEPLETION", true);
+    return heurarm::Flag(heurarm::LINE_SPARE_DEPLETION, env_on);
+}
+
 // MTG_PAY_PAIN_LAST (Vampires sweep F, 2026-10-18; DEFAULT ON, =0 restores the historical order) --
 // COLOURED MANA THAT COSTS LIFE IS THE PAYER'S LAST RESORT. The scarcity greedy (TapForCostSharedOnce,
 // ManaPayment.cpp) ranks a source whose tap for the pip being paid is a damaging COLOURED mode behind

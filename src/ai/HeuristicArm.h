@@ -876,6 +876,7 @@ enum Slot : int
     SEL_GATE_SELF_EXCL,       // MTG_SEL_GATE_SELF_EXCL  the selection-exact emission test (SelGateExactRefuses) and the flat-fallback gate cut (OdoFlatCut) take a same-turn generic reducer's step off every OTHER selected cast but never its OWN (a reducer's static applies only from the battlefield, and it is cast first). SOUND (MTG_SEL_GATE_EXACT_VERIFY counts violations); moves play only through the work-priced ceilings. Hydras runaway P8/P9 2026-11-12. DEFAULT ON (held-out A/B: digests identical, units <= on all six reducer decks); =0 -> every selected cast discounted
     PREPAY_REPLICATE,         // MTG_PREPAY_REPLICATE  item 6 (mana-clean, Slivers s30214758): the whole-turn prepay (BatchPrepayMainCasts) prices a pinned Hatchery replicate count (k x printed) into the joint bill, as Action::cost already does. Default ON; =0 -> the effective cost only
     PREPAY_LINE_AFFINITY,     // MTG_PREPAY_LINE_AFFINITY  item 6 (mana-clean, Slivers s30214131): the whole-turn prepay credits an affinity card (Thrumming Hivepool) with the line's matching creatures ranked before it (CastOrderRank) and their pinned copies, as SameTurnAffinityDiscountFor does. Default ON; =0 -> the board-only price
+    LINE_SPARE_DEPLETION,     // MTG_LINE_SPARE_DEPLETION  item 6 (mana-clean, treasure_hunt {Treasure Hunt x2} off Saprazzan Skerry + Sandstone Needle): a SHORT line's generic pip with no tappable plain spare taps an otherwise-spare DEPLETION land before eating a floating unit the line owes (LineSpareSourceMask depletion tier). Default ON; =0 -> plain spares only
     COUNT
 };
 
@@ -1696,6 +1697,7 @@ inline const char* Name(int slot)
         "MTG_SEL_GATE_SELF_EXCL",
         "MTG_PREPAY_REPLICATE",
         "MTG_PREPAY_LINE_AFFINITY",
+        "MTG_LINE_SPARE_DEPLETION",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
