@@ -115,7 +115,23 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-11 ~23:15 UTC) -- RESUME HERE
+## Checkpoint (2026-11-12 ~03:10 UTC) -- RESUME HERE
+
+PUSHED 0425e34e4 (01:38 UTC; next shared-branch push no earlier than ~05:38 UTC). CI green (windows, ubuntu,
+determinism parity). Contents: the 1-drop tutor prune (7d2bb4f37) + smoke GT (5be4bb944: 191 unchanged, martyr
+4 faster / 0 slower) + regression GT (0425e34e4, deck-scoped accepted-with-regressions note). Ref bench 10/10 (5.2 = 5.2).
+REGRESSION SLOWER GAMES: d3 s2002 gi28 recovers at d8 b0; d3+d5 s2002 gi0 (T5 -> T6) does NOT. Root cause: on T3
+Ranger-Captain fetched Curious Farm Animals with the prune off; T4 cast {W} + sacrifice {2} gains 3 (its dies
+trigger) -- with a hand of lands Martyr's reveal gains nothing -- and lifelink puts life at 28 over Speaker's 27
+gate, Angel in main 2, win T5. The prune fetches Serra instead -> 25 life, Angel a turn later, T6.
+AMENDMENT (USER decides): MTG_MARTYR_TUTOR_FARM -- admit Farm Animals while life < the top own threshold, ranked
+after Martyr. On branch wip/martyr-tutor-farm (worktree a35bc76b5), NOT landed. Recovers gi0 (T5 at d8 b0). Held-out
+A/B vs the literal rule (build/scratch/martyr/ab6, same seeds as ab5): std 5.3167 -> 5.3183 (1 slower gi233, recovers
+at d8 b0; 0 faster; net +1), 2HG 5.6250 = 5.6250. A wash; the USER's literal rule stays the default.
+NEXT: cost gate ALONE (logs/martyr-lifegain/costgate.log) -> overnight tier --deck=martyr,martyr2hg (first accept:
+no martyr overnight keys yet) -> Stage 5 remainder -> mullgen.sh run -> valueleaf.sh run.
+
+### Checkpoint (2026-11-11 ~23:15 UTC, history)
 
 1-DROP TUTOR PRUNE (USER request below) BUILT + MEASURED + LANDED LOCALLY: 7d2bb4f37 (cherry-pick of worktree
 d34e16db7) on bf1784395, not pushed (4-hour window opens ~01:12 UTC). MTG_MARTYR_TUTOR_PRUNE (heurarm
