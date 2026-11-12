@@ -7933,6 +7933,50 @@
      "seed": 30065000,
      "src": "b28d972b542283f2d9e28ce07bbb094d577623b3",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 299,
+      "CONTINUATION-DIFFERS": 99,
+      "DOMINATED-LAND": 16619,
+      "DOMINATED-LIFE": 270,
+      "DROP-COVERED": 29155,
+      "ENUM-GAP": 23,
+      "HIDDEN-INFO": 2,
+      "PHANTOM": 2714,
+      "UNMODELED": 53
+     },
+     "commit": "637df85db017694a6ae1de7fb837c8b0b70e696e",
+     "date": "2026-11-12T10:29:08Z",
+     "decisions": 35542,
+     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
+     "game_index": 70000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 375,
+     "life_breakpoints": [],
+     "ms_off": 846154,
+     "ms_on": 1335120,
+     "report": "logs/mana_clean/th-6r5b-20261112/report.md",
+     "run": "th-6r5b-20261112",
+     "seed": 30070000,
+     "src": "d020df00fe79c7673297aa2cb427d341d98af473",
+     "verdict": "issues"
     }
    ]
   },
