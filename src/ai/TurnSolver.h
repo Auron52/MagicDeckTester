@@ -2702,6 +2702,12 @@ public:
         long long nest_odo = -1;                                  // an enclosing computation's work after a free hit
     };
     static ReadGuardProbe ReadGuardProbeForTest(bool searchbudget_read, int kind);
+    // The priced ledger's MUTED recompute leaves the caller's scripted pins where it found them (pledger::PinScripts):
+    // a dredge script with 4 pins at cursor 2, a Keranos target script, and the sac cursor are advanced inside a
+    // mute; returned are the three values after the mute ends (expected 2, 1, 3), and the dredge cursor after the
+    // same advance OUTSIDE a mute (expected 6 -- a counted computation still consumes them).
+    struct MutePinProbe { std::size_t dredge = 0, keranos = 0; int sac = 0; std::size_t dredge_counted = 0; };
+    static MutePinProbe MutePinRestoreProbeForTest();
 
     // Committed-depth telemetry (MTG_ROLLOUT_STATS; counters only, no behaviour). Called once per
     // top-level main-phase decision with the depth iterative deepening actually COMMITTED. See the

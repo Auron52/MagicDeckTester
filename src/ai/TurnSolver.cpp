@@ -4384,7 +4384,9 @@ static bool CacheHitCharge(const cachecharge::Cost& c, int how = kHitPlain)
     if (ok && !cachecharge::Affordable(g, c.greedy)) { ok = false; }
     if (!ok) { cachecharge::g_hits_refused.fetch_add(1, std::memory_order_relaxed); return false; }
     cachecharge::g_hits_replayed.fetch_add(1, std::memory_order_relaxed);
-    if (c.budget_read)   // an enclosing computation inherits the dependence -- and its kind
+    // An enclosing computation inherits the dependence -- and its kind. Under the ledger (kHitLed / kHitStandIn) the
+    // caller has already propagated the SHADOW's (pledger::ReadsFrom); this entry's flags depend on its residency history.
+    if (c.budget_read && plain)
     { ++budgetbind::t_reads; if (!c.budget_read_sb) { ++budgetbind::t_preads; } }
     if (replay)
     {
@@ -95879,6 +95881,17 @@ inline void NestAdd(const Ent& e)
     for (cachecharge::Rec* r = cachecharge::t_rec; r != nullptr; r = r->outer)
     { for (int k = 0; k < workctr::kKinds; ++k) { r->add[k] += e.w[k]; } }
 }
+// What a hit on this entry tells an ENCLOSING computation about budget dependence (CacheHitCharge's ++t_reads /
+// ++t_preads), from the SHADOW: a free virtual hit propagates the entry's reads, and a replayed one stands in for a
+// recompute of a priced-only reader, which reads the priced ceiling only. Called at the lookup's decision, whether the
+// real cache then serves (CacheHitCharge propagates nothing under the ledger) or a muted recompute runs (its own
+// reads are dropped when the mute ends). The real entry's flags depend on how it came to be stored.
+inline void ReadsFrom(const Ent& e)
+{
+    if ((e.f & kBudgetRead) == 0) { return; }
+    ++budgetbind::t_reads;
+    if ((e.f & kBudgetReadSb) == 0) { ++budgetbind::t_preads; }
+}
 inline void NotePeak()
 {
     const long long n = static_cast<long long>(t_enum.size() + t_bp.size() + t_front.size());
@@ -95886,18 +95899,116 @@ inline void NotePeak()
     while (n > p && !g_peak.compare_exchange_weak(p, n, std::memory_order_relaxed)) {}
 }
 // RAII: armed => everything until scope exit is a virtual-cache hit (counts nothing).
+inline bool LedgerStatsOn() { static const bool v = EnvOn("MTG_PLAN_POOL_STATS") || EnvOn("MTG_PLAN_LEDGER_STATS"); return v; }
+// DIAGNOSTIC (MTG_PLAN_LEDGER_STATS): mutes whose scope moved a counter that is NOT muted --
+// [0] budgetbind::t_reads, [1] t_preads, [2] t_binds, [3] g_fs_trunc_events, [4] g_condemn_drops, [5] max_dropped,
+// [6] the caller's scripted pins (PinScripts; restored).
+inline std::atomic<long long> g_mute_moved[7];
+// THE CALLER'S SCRIPTED PINS (Hydras P7, 2026-11-12). A plan being applied hands its searched pins to the resolutions
+// below it through cursor scripts: the dredge chain (ScriptedDredge, core/HandEntry.h), the Keranos target chain, and
+// the flat sac / land-search / look-top / Incinerator cursors. A breakpoint derivation runs INSIDE that apply, and the
+// continuation candidates it applies on copies of the state read the same scripts -- so a derivation ADVANCES the
+// caller's cursors (BuildBreakpointKey folds the remaining pins, so the derivation's list depends on them too). A
+// cache hit advances nothing. So a muted recompute, which stands in for a hit the virtual cache served, consumed pins
+// the hit would have left: Gods regression gi 4, T5 u=6262 -- a front-only canon derivation, muted only because the
+// FULL bp entry the virtual cache served had left the byte pool, took the dredge cursor 2/4 -> 6/4; the caller's next
+// derivation then keyed on no remaining pins and derived 4 continuations instead of 5 (Magus + Faithless Looting
+// lost). So the plan list itself, not only the priced count, followed plan-pool residency. A mute therefore restores
+// every cursor (and the first-offer / singleton records those scripts append to) to what it held when it was armed:
+// the recompute leaves the caller's pins exactly as the hit would have.
+struct PinScripts
+{
+    struct Dr { ScriptedDredge* s; std::size_t cursor; bool first_empty; std::size_t rec_n; };
+    struct Kt { ScriptedKeranosTargets* s; std::size_t cursor; std::size_t offer_n; };
+    std::vector<Dr> dredge;
+    std::vector<Kt> keranos;
+    int sac = 0, land_search = 0, look_land = 0, look_order = 0;
+    std::size_t incinerator = 0;
+    bool dredge_boundary_empty = false;
+    int keranos_width = 0;
+    void Save()
+    {
+        for (ScriptedDredge* d = g_scripted_dredge; d != nullptr; d = d->previous_script)
+        {
+            dredge.push_back({ d, d->cursor, d->first_unpinned != nullptr && d->first_unpinned->empty(),
+                               d->singleton_record != nullptr ? d->singleton_record->size() : 0 });
+        }
+        for (ScriptedKeranosTargets* t = g_scripted_keranos_targets; t != nullptr; t = t->previous)
+        { keranos.push_back({ t, t->cursor, t->first_offer != nullptr ? t->first_offer->size() : 0 }); }
+        sac = g_scripted_sac_cursor; land_search = g_scripted_land_search_cursor;
+        look_land = g_scripted_look_top_land_cursor; look_order = g_scripted_look_top_order_cursor;
+        incinerator = g_incinerator_pin_cursor;
+        dredge_boundary_empty = g_dredge_boundary_first_offer != nullptr && g_dredge_boundary_first_offer->empty();
+        keranos_width = g_keranos_boundary_width_probe != nullptr ? *g_keranos_boundary_width_probe : 0;
+    }
+    // True when the recompute moved any of them (MTG_PLAN_LEDGER_STATS).
+    bool Restore()
+    {
+        bool moved = false;
+        for (const Dr& d : dredge)
+        {
+            if (d.s->cursor != d.cursor) { d.s->cursor = d.cursor; moved = true; }
+            if (d.first_empty && !d.s->first_unpinned->empty()) { d.s->first_unpinned->clear(); moved = true; }
+            if (d.s->singleton_record != nullptr && d.s->singleton_record->size() > d.rec_n)
+            { d.s->singleton_record->resize(d.rec_n); moved = true; }
+        }
+        for (const Kt& t : keranos)
+        {
+            if (t.s->cursor != t.cursor) { t.s->cursor = t.cursor; moved = true; }
+            if (t.s->first_offer != nullptr && t.s->first_offer->size() > t.offer_n)
+            { t.s->first_offer->resize(t.offer_n); moved = true; }
+        }
+        if (g_scripted_sac_cursor != sac || g_scripted_land_search_cursor != land_search
+            || g_scripted_look_top_land_cursor != look_land || g_scripted_look_top_order_cursor != look_order
+            || g_incinerator_pin_cursor != incinerator)
+        { moved = true; }
+        g_scripted_sac_cursor = sac; g_scripted_land_search_cursor = land_search;
+        g_scripted_look_top_land_cursor = look_land; g_scripted_look_top_order_cursor = look_order;
+        g_incinerator_pin_cursor = incinerator;
+        if (dredge_boundary_empty && !g_dredge_boundary_first_offer->empty()) { g_dredge_boundary_first_offer->clear(); moved = true; }
+        if (g_keranos_boundary_width_probe != nullptr && *g_keranos_boundary_width_probe != keranos_width)
+        { *g_keranos_boundary_width_probe = keranos_width; moved = true; }
+        return moved;
+    }
+};
 struct Mute
 {
     bool on = false;
+    unsigned long long r0 = 0, p0 = 0, b0 = 0, t0 = 0, d0 = 0; int md0 = 0;
+    PinScripts pins;
     void Arm(bool stat = true)
     {
         if (on) { return; }
         on = true;
         ++workctr::t_mute;
         if (stat) { g_muted.fetch_add(1, std::memory_order_relaxed); }
+        r0 = budgetbind::t_reads; p0 = budgetbind::t_preads; b0 = budgetbind::t_binds;
+        if (LedgerStatsOn()) { t0 = g_fs_trunc_events; d0 = g_condemn_drops; md0 = groupwave::g_state.max_dropped; }
+        pins.Save();
     }
-    // The outermost mute ending: what the payable-mana cache stored under it is dropped (ManaCacheMuteEnd).
-    ~Mute() { if (on && --workctr::t_mute == 0) { ManaCacheMuteEnd(); } }
+    // The mute ending. (1) The budget-predicate counters go back to what they were when it was armed: the muted
+    // recompute runs only where the REAL cache missed, and in a context that has cut (a replay) it reads SearchBudget
+    // predicates that the counted computation it stands in for did not, so letting its reads reach an enclosing
+    // COUNTED computation would set that one's budget_read_sb by residency -- and a shadow entry with
+    // kBudgetReadSb keeps no replay work, so the next lookup of it recomputes instead of replaying (Hydras P6:
+    // gods gi 4 moved 182 payments between counted and replayed at --threads 32 vs 8). The lookup's own
+    // propagation is the SHADOW's (pledger::ReadsFrom, at the decision). (2) The caller's scripted pins go back to
+    // what they held (PinScripts). (3) The outermost mute ending: what the payable-mana cache stored under it is
+    // dropped (ManaCacheMuteEnd).
+    ~Mute()
+    {
+        if (!on) { return; }
+        const bool pins_moved = pins.Restore();
+        if (LedgerStatsOn())
+        {
+            const bool mv[7] = { budgetbind::t_reads != r0, budgetbind::t_preads != p0, budgetbind::t_binds != b0,
+                                 g_fs_trunc_events != t0, g_condemn_drops != d0, groupwave::g_state.max_dropped != md0,
+                                 pins_moved };
+            for (int i = 0; i < 7; ++i) { if (mv[i]) { g_mute_moved[i].fetch_add(1, std::memory_order_relaxed); } }
+        }
+        budgetbind::t_reads = r0; budgetbind::t_preads = p0; budgetbind::t_binds = b0;
+        if (--workctr::t_mute == 0) { ManaCacheMuteEnd(); }
+    }
 };
 inline void ClearGame() { t_enum.clear(); t_bp.clear(); t_front.clear(); t_enum_epoch = ~0ull; }
 struct Dump
@@ -95910,6 +96021,9 @@ struct Dump
         std::fprintf(stderr, "[plan-ledger] refused_stores refine=%lld mana_t2=%lld mana=%lld rgc=%lld (MTG_MUTE_NO_STORE)\n",
                      WorkctrRefusedStores(workctr::kRefRefine), WorkctrRefusedStores(workctr::kRefManaT2),
                      WorkctrRefusedStores(workctr::kRefMana), WorkctrRefusedStores(workctr::kRefRgc));
+        std::fprintf(stderr, "[plan-ledger] mutes that moved: reads=%lld preads=%lld binds=%lld trunc=%lld condemn=%lld md=%lld pins=%lld\n",
+                     g_mute_moved[0].load(), g_mute_moved[1].load(), g_mute_moved[2].load(), g_mute_moved[3].load(),
+                     g_mute_moved[4].load(), g_mute_moved[5].load(), g_mute_moved[6].load());
     }
 };
 inline Dump g_dump;
@@ -96058,6 +96172,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLand(const GameState& sta
         sh_rep   = sh_found && !sh_hit && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
         if (sh_hit) { pledger::NestAdd(st->second); }
         if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
+        if (sh_hit || sh_rep) { pledger::ReadsFrom(st->second); }
     }
     pledger::Mute led_mute;
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
@@ -96333,6 +96448,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansM2Memoized(const GameState& s
         sh_rep   = sh_found && !sh_hit && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
         if (sh_hit) { pledger::NestAdd(st->second); }
         if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
+        if (sh_hit || sh_rep) { pledger::ReadsFrom(st->second); }
     }
     pledger::Mute led_mute;
     if (it != cache.end() && it->second.epoch == g_decision_epoch && it->second.has_plans
@@ -119469,6 +119585,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         sh_rep   = st != pledger::t_bp.end() && !sh_exact && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
         if (sh_exact) { pledger::NestAdd(st->second); }
         if (sh_rep) { pledger::Replay(st->second); }   // counted now, whether the real cache serves or we recompute muted
+        if (sh_exact || sh_rep) { pledger::ReadsFrom(st->second); }
         if (bpreenum::On()) { bpreenum::NoteLookup(st != pledger::t_bp.end() ? st->second.f : -1, sh_exact); }
         if (!sh_exact && cache.find(key) != cache.end()) { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
     }
@@ -119810,6 +119927,7 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
                             && pledger::WouldReplay(st->second);   // MTG_CACHE_READ_GUARD_KIND
                 if (sh_alias) { pledger::NestAdd(st->second); }
                 if (sh_alias_rep) { pledger::Replay(st->second); }
+                if (sh_alias || sh_alias_rep) { pledger::ReadsFrom(st->second); }
             }
             BpEnumMap::iterator at = cache.find(alias_key);
             if (at != cache.end() && BpEnumEpochScoped() && at->second.epoch != g_decision_epoch) { at = cache.end(); }
@@ -120389,7 +120507,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
         if (led)
         {
             sh_hit = sh_found && pledger::WouldServe(sh_e);
-            if (sh_hit) { pledger::NestAdd(sh_e); }
+            if (sh_hit) { pledger::NestAdd(sh_e); pledger::ReadsFrom(sh_e); }
             else
             {
                 // (A FULL shadow entry never replays here: its counted work is the full list's, not the front's.)
@@ -120398,6 +120516,7 @@ static bool BpCanonFront(const GameState& state, bool is_pre_combat, TurnSolver:
                 sh_front_rep = !sh_hit && ft != pledger::t_front.end() && pledger::WouldReplay(ft->second);
                 if (sh_hit) { pledger::NestAdd(ft->second); }
                 if (sh_front_rep) { pledger::Replay(ft->second); }   // counted now, served or recomputed muted
+                if (sh_hit || sh_front_rep) { pledger::ReadsFrom(ft->second); }
             }
             if (!sh_hit && (it != bpcache::t_plans.end() || bpcanon::t_fronts.find(key) != bpcanon::t_fronts.end()))
             { pledger::g_forced.fetch_add(1, std::memory_order_relaxed); }
@@ -125859,6 +125978,28 @@ TurnSolver::ObserverIsolationScope::~ObserverIsolationScope()
     for (int k = 0; k < workctr::kKinds; ++k) { workctr::t_n[k] = v.work_n[k]; workctr::t_replayed[k] = v.work_replayed[k]; }
     workctr::t_priced          = v.work_priced;
     g_decision_epoch           = v.epoch;
+}
+
+TurnSolver::MutePinProbe TurnSolver::MutePinRestoreProbeForTest()
+{
+    MutePinProbe r;
+    const std::vector<int> dredge_pins = { 11, 12, 13, 14 };
+    const std::vector<int> keranos_pins = { 0, 1 };
+    ScriptedDredge dredge(dredge_pins);
+    ScriptedKeranosTargets keranos(keranos_pins);
+    dredge.cursor = 2; keranos.cursor = 1;
+    const int sac0 = g_scripted_sac_cursor;
+    g_scripted_sac_cursor = 3;
+    {
+        pledger::Mute m;
+        m.Arm(/*stat=*/false);
+        dredge.cursor += 4; keranos.cursor += 1; g_scripted_sac_cursor += 2;
+    }
+    r.dredge = dredge.cursor; r.keranos = keranos.cursor; r.sac = g_scripted_sac_cursor;
+    dredge.cursor += 4;
+    r.dredge_counted = dredge.cursor;
+    g_scripted_sac_cursor = sac0;
+    return r;
 }
 
 TurnSolver::ReadGuardProbe TurnSolver::ReadGuardProbeForTest(bool searchbudget_read, int kind)
