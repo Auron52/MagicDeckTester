@@ -15720,7 +15720,7 @@ static bool SubsetPostCombatPumpDiscardDominated(const GameState& state, const s
     //     its position-k clones) is enumerated after its drop, so its `h` is already exact.
     // Every widening keeps the plan, so a bound in the cautious direction costs only search.
     bool land_after = false;
-    if (LandOrderMatters(state) && ap.lands_played_this_turn < ap.LandDropsAvailable())
+    if (TurnSolver::LandPositionAxisLive(state) && ap.lands_played_this_turn < ap.LandDropsAvailable())
     {
         for (const Card& hc : ap.hand)
         {
@@ -33736,6 +33736,38 @@ bool TurnSolver::PutsLandfallWatcher(const Action& a)
                             || d->params.scry_reveal_land_to_battlefield);
 }
 
+// MTG_LAND_AFTER_DREDGE_DRAW (DEFAULT ON; =0 disables): the dredge-draw land position (TurnSolver.h,
+// LandSlotCounts). The one reader both worlds go through.
+static bool LandAfterDredgeDrawOn()
+{
+    static const bool on = EnvOn("MTG_LAND_AFTER_DREDGE_DRAW", true);
+    return on;
+}
+
+bool TurnSolver::LandSlotCounts(const GameState& state, const Action& a)
+{
+    if (PutsLandfallWatcher(a)) { return true; }
+    if (!state.deck_has_dredge || !LandAfterDredgeDrawOn()) { return false; }
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    return d != nullptr && (d->tmpl == CardTemplate::DrawSpell || IsSelfDrawXCast(*d, a.draw_target)
+                            || d->params.cast_draw > 0);
+}
+
+bool TurnSolver::LandPositionAxisLive(const GameState& state)
+{
+    if (LandOrderMatters(state)) { return true; }
+    if (!state.deck_has_dredge || !LandAfterDredgeDrawOn()) { return false; }
+    const Player& ap = state.players[static_cast<std::size_t>(state.active_player_index)];
+    const auto dredger = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->params.dredge > 0;
+    };
+    return std::any_of(ap.graveyard.begin(), ap.graveyard.end(), dredger)
+        || std::any_of(ap.hand.begin(), ap.hand.end(), dredger);
+}
+
 // ---- The reveal outlet's position (Martyr of Sands; see TurnSolver.h) ------------------------------
 bool TurnSolver::IsRevealOutletDef(const CardDefinition* d)
 {
@@ -33850,10 +33882,11 @@ bool TurnSolver::PutsGyLandfallFeeder(const GameState& state, const Action& a)
     return false;
 }
 
-void TurnSolver::LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order)
+void TurnSolver::LandSlotWatchersFirst(const GameState& state, const std::vector<Action>& acts,
+                                       std::vector<int>& order)
 {
-    std::stable_partition(order.begin(), order.end(),
-                          [&acts](int i) { return PutsLandfallWatcher(acts[static_cast<std::size_t>(i)]); });
+    std::stable_partition(order.begin(), order.end(), [&state, &acts](int i)
+                          { return LandSlotCounts(state, acts[static_cast<std::size_t>(i)]); });
 }
 
 bool TurnSolver::KarooSlotCounts(const GameState& state, const Action& a, bool every)
@@ -70761,7 +70794,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool cont_pending = slot_cont && cont_land.pending && cont_land.slot > 0;
             const bool acts_pending = slot_top && plan.land_search_act_slot > 0 && !ls_act_done;
             if (!land_pending && !cont_pending && !acts_pending) { return; }
-            if (!TurnSolver::PutsLandfallWatcher(a)) { return; }
+            if (!TurnSolver::LandSlotCounts(state, a)) { return; }
             if (land_pending && ++deferred_watchers_seen == deferred_land_slot) { play_deferred_land(); }
             if (cont_pending && ++cont_land.seen == cont_land.slot) { play_cont_land(); }
             if (acts_pending && ++ls_act_seen == plan.land_search_act_slot)
@@ -71418,7 +71451,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(a) || is_put(a))
                     { ord.push_back(i); }
                 }
-                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, ord); }   // land position: ties
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(state, acts, ord); }   // land position: ties
                 if (OpaqueCastOrderActive(state))
                 {
                     std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
@@ -71479,7 +71512,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(acts[i]) || is_put(acts[i]))
                     { order.push_back(i); }
                 }
-                if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, order); }   // land position: ties
+                if (slot_order) { TurnSolver::LandSlotWatchersFirst(state, acts, order); }   // land position: ties
                 std::stable_sort(order.begin(), order.end(), [&](int x, int y)
                 { return CastOrderLess(state, acts[x], acts[y]); });
                 ApplyDeckCastArrangement(state, acts, order);   // the deck's set-level order (lockstep: TakeTurn)
@@ -77221,7 +77254,7 @@ static bool CycleSeedWalkRedundant(const GameState& state, const CycleSeedFoldCt
     if (!c.on || !c.replacer_out || sel.size() != 1 || !state.deck_has_cycle_draw_replacement) { return false; }
     const Action& seed = cands[static_cast<std::size_t>(sel[0])];
     if (!IsCycleSeed(seed) || seed.def == nullptr || seed.def->card.IsLand()) { return false; }
-    if (LandOrderMatters(state) || !StableShuffleEnabled()) { return false; }
+    if (TurnSolver::LandPositionAxisLive(state) || !StableShuffleEnabled()) { return false; }
     // RandomBottom keys on card NUMBERS: two library cards sharing one (the rollout files a resolved spell as its
     // number-0 template; an Eldrazi's graveyard shuffle brings those into the library) tie, and their order is then
     // not a function of the set alone. Distinct numbers only.
@@ -91404,7 +91437,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     if (TurnSolver::IsLandSearchActivation(a))
                     { acts = true; act_names.push_back(a.card_name.str()); continue; }
-                    const bool watcher = TurnSolver::PutsLandfallWatcher(a);
+                    const bool watcher = TurnSolver::LandSlotCounts(state, a);
                     if (watcher) { ++watchers; }
                     if (ActionReadsLibraryTop(a)) { reads_top = true; }
                     if (a.kind != Action::Kind::CastFromHand) { continue; }
@@ -94122,7 +94155,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
             }
         }
-        if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop)
+        if (TurnSolver::LandPositionAxisLive(state) && !land_name.empty() && !karoo_drop)
         { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
@@ -94332,12 +94365,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // every re-derived continuation loop, and its commit-the-line replay walks the record, which holds
     // the PlayLand where it was played). Breakpoint candidate lists only grow for a deck with a
     // landfall card, so every other deck's bp_choice numbering is byte-identical.
-    if (LandOrderMatters(state))
+    if (TurnSolver::LandPositionAxisLive(state))
     {
-        const auto watchers_in = [](const TurnSolver::Plan& p)
+        const auto watchers_in = [&state](const TurnSolver::Plan& p)
         {
             int n = 0;
-            for (const Action& a : p.actions) { if (TurnSolver::PutsLandfallWatcher(a)) { ++n; } }
+            for (const Action& a : p.actions) { if (TurnSolver::LandSlotCounts(state, a)) { ++n; } }
             return n;
         };
         // Vampires A2: a plan whose ACTIVATION puts a graveyard-landfall card (Bloodghast) into our
@@ -121202,7 +121235,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             Action probe;
             probe.kind      = Action::Kind::CastFromHand;
             probe.card_name = spec.casts[static_cast<std::size_t>(i)];
-            kth_is_watcher  = PutsLandfallWatcher(probe);
+            kth_is_watcher  = LandSlotCounts(state, probe);
             if (kth_is_watcher) { ++m; }
         }
         wantSlot = (kth_is_watcher && spec.land_at_cast <= static_cast<int>(spec.casts.size()))

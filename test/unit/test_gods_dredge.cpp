@@ -797,3 +797,85 @@ TEST_CASE("Dredge choices remain available in a depth-one Gods draw search")
     std::fprintf(stderr, "[gods-dredge-depth1] plans=%zu budget_used=%lld\n",
                  plans.size(), budget.Used());
 }
+
+// MTG_LAND_AFTER_DREDGE_DRAW (mana-clean ENUM-GAP, Gods s30005620 gi5620 T8): in a deck that can dredge, the land
+// drop is also offered right AFTER a draw cast ("Careful Study, then the land, then Life from the Loam on what the
+// dredge milled"). The continuation cannot carry that line -- the land and Loam are old cards, so MTG_BP_NEW_ONLY
+// drops it -- and the land-first plan reads the dredge answer with the land already in play.
+TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot after Careful Study)")
+{
+    CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+    GodsProvider provider;
+    auto card = [](const char* name, int number)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+        REQUIRE(d != nullptr);
+        Card c = d->card;
+        c.m_number = number;
+        return c;
+    };
+    auto build = [&](bool dredge_deck)
+    {
+        GameState s;
+        s.m_provider = &provider;
+        s.active_player_index = 0;
+        s.turn_number = 4;
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        s.deck_has_landfall     = false;
+        s.deck_has_scry_watcher = false;
+        s.deck_has_dredge       = dredge_deck;
+        for (int i = 0; i < 2; ++i)
+        {
+            Permanent land;
+            land.card = card(i == 0 ? "City of Brass" : "Forest", 1 + i);
+            land.controller_index = 0;
+            land.owner_index = 0;
+            s.battlefield.push_back(land);
+        }
+        s.players[0].hand.push_back(card("Careful Study", 10));
+        s.players[0].hand.push_back(card("Life from the Loam", 11));
+        s.players[0].hand.push_back(card("Forest", 12));
+        s.players[0].hand.push_back(card("Phenax, God of Deception", 13));   // the discards' fodder
+        s.players[0].hand.push_back(card("Kruphix, God of Horizons", 14));
+        s.players[0].graveyard.push_back(card("Golgari Grave-Troll", 20));
+        for (int i = 0; i < 16; ++i) { s.players[0].library.push_back(card("Forest", 60 + i)); }
+        for (int i = 0; i < 20; ++i) { s.players[1].library.push_back(card("Forest", 200 + i)); }
+        return s;
+    };
+    // A plan playing the Forest right after Careful Study, then Loam.
+    const auto positioned = [](const std::vector<TurnSolver::Plan>& plans) -> const TurnSolver::Plan*
+    {
+        for (const TurnSolver::Plan& p : plans)
+        {
+            if (p.land_to_play != "Forest" || p.land_slot != 1 || !p.searched_order || p.actions.size() != 2) { continue; }
+            if (p.actions[0].card_name == "Careful Study" && p.actions[1].card_name == "Life from the Loam") { return &p; }
+        }
+        return nullptr;
+    };
+
+    GameState s = build(true);
+    Action cast;
+    cast.kind = Action::Kind::CastFromHand;
+    cast.card_name = "Careful Study";
+    CHECK(TurnSolver::LandSlotCounts(s, cast));
+    CHECK(TurnSolver::LandPositionAxisLive(s));
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* p = positioned(plans);
+    REQUIRE(p != nullptr);
+    CHECK_FALSE(p->dredge_pins.empty());   // Careful Study's first draw dredges the Grave-Troll (land still in hand)
+    GameState after = s;
+    TurnSolver::ApplyPlan(after, *p, true);
+    int lands = 0;
+    for (const Permanent& q : after.battlefield) { lands += q.controller_index == 0 && q.card.IsLand(); }
+    CHECK(lands == 3);
+    bool loam_in_gy = false;
+    for (const Card& c : after.players[0].graveyard) { loam_in_gy |= c.m_name == "Life from the Loam"; }
+    CHECK(loam_in_gy);   // cast, after the land paid for it
+
+    // A deck with no dredge card counts the watchers only: no position after a draw.
+    GameState plain = build(false);
+    CHECK_FALSE(TurnSolver::LandSlotCounts(plain, cast));
+    CHECK_FALSE(TurnSolver::LandPositionAxisLive(plain));
+    CHECK(positioned(TurnSolver::EnumerateMainPlans(plain, true)) == nullptr);
+}

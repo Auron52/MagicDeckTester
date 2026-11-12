@@ -2385,6 +2385,32 @@ public:
     // built on: the enumeration emits a position after each such action, and both worlds' cast
     // loops count exactly these actions to find position k (lockstep by construction).
     static bool PutsLandfallWatcher(const Action& a);
+    // ---- THE DREDGE-DRAW LAND POSITION (MTG_LAND_AFTER_DREDGE_DRAW, DEFAULT ON, 2026-11-12) ----------
+    // A draw that may be REPLACED BY DREDGE is a second kind of action the land's position can matter
+    // at: the dredge answer is read at the draw, off the board and hand as they stand (the Gods
+    // provider's rule counts lands in play and lands in hand), and the dredge's mill fills the graveyard
+    // a later Life from the Loam targets. So "Careful Study (dredge Golgari Grave-Troll, milling two
+    // lands), THEN Tendo Ice Bridge, THEN Loam on the milled lands" is a different line from both the
+    // land-first plan (the drop changes the dredge answer) and every continuation (the land and Loam
+    // are old cards, so MTG_BP_NEW_ONLY drops that continuation -- by the USER's ruling a line reachable
+    // only through an old-card continuation is a gap to fix at the BASE). Gods s30005620 gi5620 T8
+    // (mana-clean ENUM-GAP 86 / 5000 games). The owner's call (option b): the engine offers the land
+    // drop after such a draw.
+    //
+    // LandSlotCounts is THE position counter both worlds read (the enumeration's position bound, the
+    // rollout's slot_hook, the executor's exec_slot_hook / exec_cont_land_hook, LandSlotWatchersFirst,
+    // CheckLine's landat= mapping): PutsLandfallWatcher, plus -- in a deck that can dredge
+    // (GameState::deck_has_dredge, a per-game stamp, so the count never moves mid-apply) -- a hand or
+    // graveyard cast that draws for us (DrawSpell, a self-target DrawX, a cast_draw rider). Every deck
+    // without a dredge card counts exactly the watchers it counted before.
+    static bool LandSlotCounts(const GameState& state, const Action& a);
+    // Is the land-POSITION axis live on this board? LandOrderMatters (landfall / scry watchers), or the
+    // dredge-draw anchor above with a dredge card where this turn's casts can dredge it: in the graveyard,
+    // or in hand (a discard ahead of the draw -- Faithless Looting -- puts it there). A dredge card
+    // reaches the graveyard mid-section in no other way: a dredge mill needs one there already, and the
+    // plan's activations (Phenax, Cephalid Coliseum, Magus) trail its casts. (Disclosed boundary: a
+    // future self-MILL cast ahead of a draw -- Thought Scour -- would need adding.)
+    static bool LandPositionAxisLive(const GameState& state);
     // ---- THE REVEAL OUTLET'S POSITION (Martyr of Sands, 2026-10-27) --------------------------------
     // "{1}, Reveal X white cards from your hand, Sacrifice this creature: You gain three times X life."
     // X is the hand at ACTIVATION, so WHERE the activation sits among the plan's casts changes what it
@@ -2423,7 +2449,8 @@ public:
     // only the otherwise-arbitrary plan-order tie-break inside a rank -- never a provider rank. Both
     // worlds call it at the same point for the same plans (the rollout's apply_plan_actions, the
     // executor's main and continuation loops).
-    static void LandSlotWatchersFirst(const std::vector<Action>& acts, std::vector<int>& order);
+    static void LandSlotWatchersFirst(const GameState& state, const std::vector<Action>& acts,
+                                      std::vector<int>& order);
     // Were this plan's casts enumerated on the board WITH its land already played -- so its
     // hand_index values index the POST-drop hand? True for a hand land played first or at a
     // position (a position-k plan is a clone of a land-first plan) and for a hand Karoo (removed from
