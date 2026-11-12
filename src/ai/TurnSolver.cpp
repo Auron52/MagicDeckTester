@@ -93542,6 +93542,152 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
     AppendMiraclePlanVariants(state, all, pb_lazy);
     return all;
 }
+
+// ---- THE DREDGE-ANCHOR POSITION IDENTITY FOLD (MTG_LAND_DREDGE_ANCHOR_FOLD, DEFAULT ON, 2026-11-12) --------
+// The dredge-draw land position (TurnSolver::LandSlotCounts) clones every land-first plan with a draw cast
+// into "the land after the k-th draw" (and every no-land plan into "the land after the casts"). It exists for
+// ONE reason: the land's position changes what a dredge-replaced draw answers (the Gods rule reads lands in
+// play and lands in hand) and what the draw's discard keeps. Where it changes neither, the clone is the
+// land-first plan again: same choices, same dredge answers, same zones -- a pure duplicate that dilutes the
+// budget (held-out Gods 3000, 7380001+: the unfolded WIP cost net +383).
+//
+// THE TEST IS EXACT, PER ENTRY, AFTER EVERY AXIS AND BREAKPOINT FAN. A clone (land_slot != 0) folds into a
+// land-first entry (land_slot == 0) only when (1) the two are the SAME PLAN apart from the position -- Plan
+// operator== with land_slot, the hand indices (a land-after clone of a no-land plan indexes the pre-drop
+// hand), the ordering-only value / land_tie_key and the bp_base back-pointer normalised -- which includes
+// the recorded dredge_pins (DredgeSearchSingletonPolicy: one answer per draw, recorded at the draw), every
+// axis pin and the breakpoint choice; and (2) applying both reaches the same ZONES: every player's life,
+// hand (as a set), graveyard and library (in order), and the battlefield's objects. So the folded entry's
+// realised line IS its partner's, modulo which sources paid -- the standing mana-payment exemption, the same
+// one the unpayable-prefix cut above rests on. A clone whose apply drops a cast, discards differently, or
+// whose continuation (bp_choice) lands elsewhere differs in (2) and stays.
+//
+// WHY NOTHING DOWNSTREAM IS LOST. A breakpoint continuation of the clone's line opens either AFTER the land
+// (then its board is the partner's, the zones being equal and the land placed) or BEFORE it (then its board
+// is the no-land plan's over the same prefix, with the land still in hand and the drop unused -- that plan
+// is enumerated in its own right and its continuations re-offer every land position, LandPositionAxisLive
+// inside a derivation). Every pin of the clone is a pin of the partner (condition 1), so no axis value
+// becomes unreachable either.
+//
+// SCOPE. Only where the dredge-draw anchor is the ONLY reason positions exist (!LandOrderMatters: no landfall
+// or scry watcher, so every position here is a dredge anchor), only under the singleton dredge policy (the
+// answers are recorded on the plan), never under human play (the viewer never narrows), and only on a
+// materialised list. Inside a derivation too: the fold reads nothing but the entries and their applies.
+// The erase keeps list order and remaps every bp_base (a POST-erase index; a variant whose base folded
+// keeps -1, the "no back-pointer" value MTG_BP_WAVE_NSKIP already handles).
+static std::uint64_t DredgeAnchorZonesKey(const GameState& s)
+{
+    std::uint64_t h = 1469598103934665603ull;
+    const auto mix = [&h](std::uint64_t v) { h = (h ^ v) * 1099511628211ull; };
+    std::vector<int> nums;
+    for (const Player& p : s.players)
+    {
+        mix(0x5A0E5ull);
+        mix(static_cast<std::uint64_t>(static_cast<std::int64_t>(p.life)));
+        nums.clear();
+        for (const Card& c : p.hand) { nums.push_back(c.m_number); }
+        std::sort(nums.begin(), nums.end());
+        mix(0x4A4Eull + nums.size());
+        for (int n : nums) { mix(static_cast<std::uint64_t>(n + 1)); }
+        mix(0x6779ull + p.graveyard.size());
+        for (const Card& c : p.graveyard) { mix(static_cast<std::uint64_t>(c.m_number + 1)); }
+        mix(0x11Bull + p.library.size());
+        for (std::size_t i = 0, n = p.library.size(); i < n; ++i)
+        { mix(static_cast<std::uint64_t>(p.library.RawAt(i).m_number + 1)); }
+    }
+    std::vector<std::pair<int, int>> bf;
+    bf.reserve(s.battlefield.size());
+    for (const Permanent& q : s.battlefield) { bf.emplace_back(q.card.m_number, q.controller_index); }
+    std::sort(bf.begin(), bf.end());
+    mix(0xBF00ull + bf.size());
+    for (const auto& [n, c] : bf) { mix(static_cast<std::uint64_t>(n + 1) * 4 + static_cast<std::uint64_t>(c)); }
+    return h;
+}
+
+static void FoldDredgeAnchorLandPositions(const GameState& state, bool is_pre_combat,
+                                          std::vector<TurnSolver::Plan>& all, const PbLazyLayout* pb_lazy)
+{
+    static const bool on = EnvOn("MTG_LAND_DREDGE_ANCHOR_FOLD", true);
+    if (!on || !state.deck_has_dredge || HumanPlayActive() || g_dredge_probe_offer != nullptr) { return; }
+    if (pb_lazy != nullptr && pb_lazy->active) { return; }
+    if (LandOrderMatters(state) || !TurnSolver::LandPositionAxisLive(state) || !DredgeSearchSingletonPolicy(state))
+    { return; }
+    const auto is_clone = [](const TurnSolver::Plan& p)
+    { return p.land_decided && !p.land_to_play.empty()
+             && (p.land_slot == TurnSolver::kLandSlotAfterCasts || p.land_slot > 0); };
+    bool any_clone = false;
+    for (const TurnSolver::Plan& p : all) { if (is_clone(p)) { any_clone = true; break; } }
+    if (!any_clone) { return; }
+    // Land-first partners, bucketed on the position-blind census hash (it ignores land_slot and hand indices;
+    // the exact test below is operator==).
+    std::unordered_map<std::uint64_t, std::vector<std::size_t>> partners;
+    for (std::size_t i = 0; i < all.size(); ++i)
+    {
+        const TurnSolver::Plan& p = all[i];
+        if (p.land_decided && !p.land_to_play.empty() && p.land_slot == 0)
+        { partners[vampaxis::PlanH(p, vampaxis::kLandSlot)].push_back(i); }
+    }
+    if (partners.empty()) { return; }
+    std::unordered_map<std::size_t, std::uint64_t> zones_memo;
+    const auto zones_of = [&](std::size_t i) -> std::uint64_t
+    {
+        const auto it = zones_memo.find(i);
+        if (it != zones_memo.end()) { return it->second; }
+        GameState copy = state;
+        {
+            RevealLogPause quiet;
+            ApplyPlanDirect(copy, all[i], is_pre_combat);
+        }
+        const std::uint64_t z = DredgeAnchorZonesKey(copy);
+        zones_memo.emplace(i, z);
+        return z;
+    };
+    std::vector<char> drop(all.size(), 0);
+    std::size_t n_folded = 0, n_clones = 0;
+    for (std::size_t ci = 0; ci < all.size(); ++ci)
+    {
+        const TurnSolver::Plan& c = all[ci];
+        if (!is_clone(c)) { continue; }
+        ++n_clones;
+        const auto bucket = partners.find(vampaxis::PlanH(c, vampaxis::kLandSlot));
+        if (bucket == partners.end()) { continue; }
+        for (std::size_t bi : bucket->second)
+        {
+            const TurnSolver::Plan& b = all[bi];
+            if (b.actions.size() != c.actions.size()) { continue; }
+            TurnSolver::Plan n = c;
+            n.land_slot    = 0;
+            n.value        = b.value;
+            n.land_tie_key = b.land_tie_key;
+            n.bp_base      = b.bp_base;
+            for (std::size_t k = 0; k < n.actions.size(); ++k) { n.actions[k].hand_index = b.actions[k].hand_index; }
+            if (!(n == b)) { continue; }
+            if (zones_of(ci) != zones_of(bi)) { continue; }
+            drop[ci] = 1;
+            ++n_folded;
+            break;
+        }
+    }
+    TRACE("landafter", "T%d dredge-anchor fold: %zu of %zu position clones are their land-first partner",
+          state.turn_number, n_folded, n_clones);
+    if (n_folded == 0) { return; }
+    std::vector<int> new_index(all.size(), -1);
+    std::size_t w = 0;
+    for (std::size_t i = 0; i < all.size(); ++i)
+    {
+        if (drop[i]) { continue; }
+        new_index[i] = static_cast<int>(w);
+        if (w != i) { all[w] = std::move(all[i]); }
+        ++w;
+    }
+    all.resize(w);
+    for (TurnSolver::Plan& p : all)
+    {
+        if (p.bp_base >= 0 && static_cast<std::size_t>(p.bp_base) < new_index.size())
+        { p.bp_base = new_index[static_cast<std::size_t>(p.bp_base)]; }
+    }
+}
+
 static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const GameState& state,
                                                                     bool is_pre_combat,
                                                                     PbLazyLayout* pb_lazy)
@@ -94799,6 +94945,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     { std::fprintf(stderr, "[axes-mem] turn=%d stage=post-bp plans=%zu pre-bp=%lld rss_mb=%lld\n",
                    state.turn_number, all.size(), pre_axes, membudget::CurrentRssBytes() / (1024 * 1024)); }
     PbAxesAndTwins(state, is_pre_combat, all, pb_lazy);   // the axes, then the soulbond decline twins
+    FoldDredgeAnchorLandPositions(state, is_pre_combat, all, pb_lazy);   // identity fold (see the helper)
     if (axes_stats)
     {
         t_bpd_pre_axes = pre_axes;

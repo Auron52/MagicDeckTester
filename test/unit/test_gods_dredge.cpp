@@ -814,7 +814,7 @@ TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot a
         c.m_number = number;
         return c;
     };
-    auto build = [&](bool dredge_deck)
+    auto build = [&](bool dredge_deck, bool gods_in_gy)
     {
         GameState s;
         s.m_provider = &provider;
@@ -839,6 +839,16 @@ TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot a
         s.players[0].hand.push_back(card("Phenax, God of Deception", 13));   // the discards' fodder
         s.players[0].hand.push_back(card("Kruphix, God of Horizons", 14));
         s.players[0].graveyard.push_back(card("Golgari Grave-Troll", 20));
+        // Three Gods in the graveyard and no Replenish: with the Forest PLAYED (three lands) the Gods rule
+        // draws naturally; with it still in HAND it dredges the Grave-Troll -- so the position changes the
+        // dredge answer and is a line of its own. Without them both boards dredge the Troll, the clone is
+        // its land-first partner again, and MTG_LAND_DREDGE_ANCHOR_FOLD removes it.
+        if (gods_in_gy)
+        {
+            s.players[0].graveyard.push_back(card("Mogis, God of Slaughter", 21));
+            s.players[0].graveyard.push_back(card("Nylea, God of the Hunt", 22));
+            s.players[0].graveyard.push_back(card("Pharika, God of Affliction", 23));
+        }
         for (int i = 0; i < 16; ++i) { s.players[0].library.push_back(card("Forest", 60 + i)); }
         for (int i = 0; i < 20; ++i) { s.players[1].library.push_back(card("Forest", 200 + i)); }
         return s;
@@ -854,7 +864,7 @@ TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot a
         return nullptr;
     };
 
-    GameState s = build(true);
+    GameState s = build(true, true);
     Action cast;
     cast.kind = Action::Kind::CastFromHand;
     cast.card_name = "Careful Study";
@@ -873,8 +883,13 @@ TEST_CASE("Dredge deck offers the land drop right after a draw cast (land_slot a
     for (const Card& c : after.players[0].graveyard) { loam_in_gy |= c.m_name == "Life from the Loam"; }
     CHECK(loam_in_gy);   // cast, after the land paid for it
 
+    // Same dredge answer either way (no Gods in the graveyard): the position is folded into land-first.
+    GameState same = build(true, false);
+    CHECK(TurnSolver::LandPositionAxisLive(same));
+    CHECK(positioned(TurnSolver::EnumerateMainPlans(same, true)) == nullptr);
+
     // A deck with no dredge card counts the watchers only: no position after a draw.
-    GameState plain = build(false);
+    GameState plain = build(false, true);
     CHECK_FALSE(TurnSolver::LandSlotCounts(plain, cast));
     CHECK_FALSE(TurnSolver::LandPositionAxisLive(plain));
     CHECK(positioned(TurnSolver::EnumerateMainPlans(plain, true)) == nullptr);
