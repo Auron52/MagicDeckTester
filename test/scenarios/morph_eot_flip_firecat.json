@@ -12,10 +12,12 @@
     "red for the Rage -> 14); flipping on turn 2 for haste (7) gets it sacrificed at turn 2's end step. Only",
     "the end-of-turn window wins on turn 3.",
     "",
-    "BUDGET 0 (unlimited), deliberately: at a FINITE budget (b100 .. b100000, d3) no line that holds the face-down",
-    "Firecat to the opponent's end step is ever simulated (MTG_FACEUP_AXIS_STATS: 0 fan crossings, 0 unpinned",
-    "windows), so the budgeted search takes the turn-2 haste flip (7 damage). An open INT-2b finding (logs/morph/",
-    "int2b-handoff.md); move this fixture to a finite budget once the budgeted reachability is fixed."
+    "BUDGETED (d3 b100). Until INT-2c this fixture was pinned to budget 0 because no searched line ever held the",
+    "face-down Firecat: with the land drop already made the main-1 menu was {flip} and no host appended a PASS",
+    "(FSLineWin's idle node / SolveWithLookahead's pass ran only on an EMPTY list), so the hold line was",
+    "unenumerable at every budget and depth (d3 b0 passed only through the root's no-win fallback plus the",
+    "executor's crossing node). TurnSolver.cpp FaceUpHoldPassMissing appends the pass while the end-step flip axis",
+    "is live. Twin: morph_eot_flip_firecat_d2_b0.json (the shallow, unbudgeted shape that also failed)."
   ],
   "deck": "decks/Morph/Morph.cod",
   "turn": 2,
@@ -53,7 +55,7 @@
   "library_filler": "Forest",
   "library_size": 30,
   "depth": 3,
-  "budget_ms": 0,
+  "budget_ms": 100,
   "max_turns": 4,
   "expect_win_turn": 3
 }

@@ -8733,6 +8733,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             spectacle_filtered.end());
     }
     const std::vector<Action>& own_final = spectacle_hoisted_source >= 0 ? spectacle_filtered : exec_own_acts;
+    // The section window forgets every card that has left the hand by now (TurnSolver::SectionForgetHandExits;
+    // rollout twin before ApplyPlanDirect's trailing pass), so a cast card the trailing pass returns is new.
+    if (BpHandEntryEnabled()) { TurnSolver::SectionForgetHandExits(exec_hand_at_section, state); }
     if (pending_cont_acts.empty()) { exec_trailing_activations(own_final); }
     else
     {

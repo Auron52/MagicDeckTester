@@ -2300,6 +2300,27 @@ public:
         if (HandGainedACard(before, state)) { return true; }
         return before.empty() && !state.players[state.active_player_index].hand.empty();
     }
+    // THE SECTION WINDOW FORGETS A CARD THAT LEFT THE HAND (Morph INT-2c, 2026-11-12). The window diffs card
+    // NUMBERS, and a card keeps its number across zones, so a card CAST this section and then returned to
+    // hand by the trailing pass read as "already there": Den Protector turned face up after the casts
+    // (TurnFaceUpLate) regrowing the Might of Old Krosa main 1 just cast opened no breakpoint, and the
+    // regrown pump could not be cast again that phase at any budget
+    // (test/scenarios/morph_den_protector_regrow_pump.json). Both worlds call this at the same point --
+    // after the section's casts and the Krenko taps, before the trailing pass (ApplyPlanDirect;
+    // AIEngine::TakeTurn) -- so a snapshot number not in hand THERE has left it, and its return in the
+    // trailing pass is new material. An emptied snapshot is a real empty hand (SectionHandGainedACard's
+    // reading). A card that leaves and returns inside ONE cast (Remand's X, a buyback) is still in hand at
+    // this point, so it stays old exactly as before; the per-cast window already covers every return a
+    // later cast makes. Generic, not deck-gated: one pass over the snapshot when the hand-entry rule is on.
+    static void SectionForgetHandExits(std::vector<int>& snapshot, const GameState& state)
+    {
+        const auto& hand = state.players[state.active_player_index].hand;
+        snapshot.erase(std::remove_if(snapshot.begin(), snapshot.end(), [&hand](int n)
+        {
+            for (const auto& c : hand) { if (c.m_number == n) { return false; } }
+            return true;
+        }), snapshot.end());
+    }
     // THE LIBRARY-TOP TWIN of HandGainedACard (Courser of Kruphix, 2026-10-15): a playable top land
     // exists NOW that was not the playable top at the snapshot (`top_snapshot` = PlayableTopLandNumber
     // taken at the same points as the hand snapshot; 0 = none was playable), and the drop is open and

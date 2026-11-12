@@ -1,0 +1,61 @@
+{
+  "_comment": [
+    "MORPH: DEN PROTECTOR'S TRAIL REGROWTH OPENS A SEARCHED BREAKPOINT (Morph INT-2b, 2026-11-12; morph.md step 15).",
+    "",
+    "Turn 3: a face-down Den Protector that entered on turn 2 (not sick), four Forests untapped, Might of Old",
+    "Krosa in hand, the opponent at 11. Cast Might in main 1 (+4/+4: 6/6), turn Den Protector face up AFTER it",
+    "({1}{G}, megamorph +1/+1 counter: 2/1 + 1 + 4 = 7/6) returning the Might from the graveyard, and cast it",
+    "again ({G}: 11) -> 11 damage.",
+    "",
+    "DISCRIMINATING: the regrown Might is a card the plan never held, so only a breakpoint continuation can",
+    "cast it; without one the best line is 7 (Might, flip) and the win slips past turn 3.",
+    "",
+    "ROOT CAUSE (INT-2c): the section window (MTG_BP_HAND_ENTRY, site 10) diffs hand card NUMBERS, and the Might",
+    "cast in main 1 then regrown by the trailing-pass flip keeps its number, so it read as 'already in hand'.",
+    "TurnSolver::SectionForgetHandExits drops every snapshot number no longer in hand before the trailing pass, in",
+    "both worlds (ApplyPlanDirect; AIEngine::TakeTurn)."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 11,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Den Protector (Face-down)",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Forest",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Might of Old Krosa"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 3,
+  "expect_win_turn": 3
+}

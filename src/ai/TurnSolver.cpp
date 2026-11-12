@@ -72452,6 +72452,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         { line_order_trace("tokens", a); ApplyTapForTokens(state, state.active_player_index, a.sac_source_id); }
     }
 
+    // The section window forgets every card that has left the hand by now (SectionForgetHandExits; executor
+    // twin at the same point in AIEngine::TakeTurn), so a cast card the trailing pass returns is new material.
+    if (BpHandEntryEnabled()) { TurnSolver::SectionForgetHandExits(hand_at_section, state); }
     // ...and the trailing pass, UNLESS the human's declared order already ran every activation
     // inline at its own position (human_seq). Skipping it there is what makes the interleave a
     // reordering rather than a duplication.
@@ -101764,6 +101767,25 @@ static bool FaceUpUncoveredPending(const GameState& state)
     return state.deck_has_morph && state.scripted_eot_face_up < 0 && g_bp_enum_depth == 0 && !t_rollout_narrow
         && !HumanPlayActive() && !EchoEdgeFoldHere(state) && AnyEotFaceUpCandidate(state);
 }
+// THE HOLD PASS (morph's opponent-end-step flip; Morph INT-2c, 2026-11-12). A main whose enumeration offers
+// a plan offers no PASS unless its land drop is still open (the no-land pass, add_for_land("", "")): the
+// hosts append the pass only when the list is EMPTY (FSLineWin's idle node, SolveWithLookahead's empty
+// candidate set). That silently assumes "doing something" is never worse than passing, which a face-down
+// permanent breaks: turning Blistering Firecat face up in main 1 or main 2 hands its end-step sacrifice the
+// turn's own end step, while holding the {R}{R} and turning it face up at the OPPONENT's end step keeps a
+// haste-less 7/1 for the next turn. With the drop already made (a mid-turn root, the scenario's turn 2) the
+// only plan left was the flip, the hold line was never enumerated, and morph_eot_flip_firecat was unwinnable
+// in the search at EVERY budget and depth (d3 b0 passed only because the root's no-win fallback happened to
+// pass and the executor's crossing node then searched the flip). So while the end-step flip axis is live
+// (FaceUpUncoveredPending: a face-down permanent of ours, the window not yet pinned, a searched frame) and the
+// list holds no apply-empty plan, the host appends the pass. It ADDS a line and removes none; at every other
+// node (every deck without a face-down permanent) nothing changes.
+static bool FaceUpHoldPassMissing(const GameState& state, const std::vector<TurnSolver::Plan>& plans)
+{
+    if (plans.empty() || !FaceUpUncoveredPending(state)) { return false; }
+    for (const TurnSolver::Plan& p : plans) { if (IsApplyEmptyPlan(p)) { return false; } }
+    return true;
+}
 // MTG_FACEUP_AXIS_STATS: the no-greedy census for the opponent-end-step flip -- an UNPINNED choice (more than one
 // menu entry) resolved in a searched frame (a crossing no BoundaryFan covered: must read 0), in the playout beyond
 // the horizon (permitted), at a constant-leaf edge (the identity fold), outside any search, or at the executor's
@@ -105486,8 +105508,12 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // Byte-identical wherever the node had any plan at all.
         static const bool s_fs_idle_node_env = EnvOn("MTG_FS_IDLE_NODE", true);
         const bool s_fs_idle_node = heurarm::Flag(heurarm::FS_IDLE_NODE, s_fs_idle_node_env);
-        if (pre.empty() && s_fs_idle_node)
+        // ...and THE HOLD PASS (FaceUpHoldPassMissing): a node with plans, its drop made, and a face-down
+        // permanent whose opponent-end-step flip the pass keeps open.
+        const bool fu_hold = FaceUpHoldPassMissing(state, pre);
+        if ((pre.empty() || fu_hold) && s_fs_idle_node)
         {
+            if (fu_hold) { PbLazyMaterialize(pre, pre_lazy); }   // the pass and its clones go after every plan
             TurnSolver::Plan idle;
             idle.land_decided = true;   // no drop to take -> "(defer)": never a greedy land play
             pre.push_back(std::move(idle));
@@ -112626,8 +112652,13 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     // dig deck the empty-of-gas cycle was AUTOMATIC here (a depth>0 lookahead node: the rollout's
     // searched turns, the uncommitted fallback). Under MTG_DIG_SEARCHED_CHOICE, when a dig sibling is
     // wanted, the pass (marked 2) and its no-dig twin are SCORED like any candidate set instead.
-    if (candidates.empty())
+    // ...and THE HOLD PASS (FaceUpHoldPassMissing): candidates exist, but a face-down permanent's opponent-end-
+    // step flip makes passing a line none of them is -- appended and SCORED like any candidate.
+    const bool fu_hold = FaceUpHoldPassMissing(state, candidates);
+    if (candidates.empty() || fu_hold)
     {
+        if (fu_hold) { PbLazyMaterialize(candidates, pb_lazy); }   // the pass and its clones go after every plan
+        const std::size_t idle_at = candidates.size();
         candidates.push_back(Plan{});
         // A pre-combat pass gets every sub-decision axis an enumerated plan would (the no-dig twin and
         // every pin it carries into this turn's combat and beyond -- AppendIdlePassAxes); a post-combat
@@ -112636,7 +112667,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
         else
         {
             AppendIdleDigSiblings(state, candidates);
-            AppendIdleEchoVariants(state, candidates, 0);   // an echo obligation since main 1 (MTG_ECHO_AXIS)
+            AppendIdleEchoVariants(state, candidates, idle_at);   // an echo obligation since main 1 (MTG_ECHO_AXIS)
         }
         if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
     }
