@@ -1,8 +1,6 @@
-# Regression ground truth -- commit 382418fe8  date 2026-11-12
+# Regression ground truth -- commit dd00cbb6d  date 2026-11-12
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-12): hydras: rebased onto origin; discard buckets ON + K=14 keep table re-accepted; every changed game explained (flag toggle reproduces GT, keep attribution 0 unexplained); extraturns_regression_d5_s2002 GT kept at its solo digest (pool residency)
-# accepted-with-regressions (regression, 2026-11-12): hydras: rebased onto origin; discard buckets ON + K=14 keep table re-accepted; every changed game explained (flag toggle reproduces GT, keep attribution 0 unexplained); extraturns_regression_d5_s2002 GT kept at its solo digest (pool residency)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
