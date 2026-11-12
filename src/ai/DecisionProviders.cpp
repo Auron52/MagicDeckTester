@@ -49598,7 +49598,8 @@ struct AaWishCensus
     int  hand_lands = 0;      // lands in hand (MTG_AA_WISH_LAND_FIRST_AT3)
     int  land_drops_left = 0; // land drops still unused this turn (MTG_AA_WISH_LAND_FIRST_AT3)
     bool elf_castable_now = false;   // a {G} this turn for Arbor Elf (MTG_AA_WISH_STRANDED_ELF)
-    int  forests = 0;                // Forests in play + in hand (MTG_AA_WISH_ONE_LAND: the Island after two)
+    int  forests = 0;
+    bool land_aura = false;          // a land Aura of ours in play (MTG_AA_WISH_LAND_FIRST_AT2)                // Forests in play + in hand (MTG_AA_WISH_ONE_LAND: the Island after two)
     int  gain_storm = 0;      // a held storm lifegain's ONE extra copy (Weather the Storm: +3) -- read only by
                               // the wish rule's UNTAP_NET test (the USER 2026-11-11, below)
     int  mana_board = 0;      // `mana` before the hand's lands: the battlefield's projected mana (the discard cap)
@@ -49671,6 +49672,7 @@ AaWishCensus AaTakeWishCensus(const GameState& s, int controller)
                 if (a.aura_attached_to != p.card.m_number || a.controller_index != controller) { continue; }
                 const CardDefinition* ad = CardDatabase::Instance().LookupCached(a.card);
                 if (ad == nullptr || !ad->params.is_land_aura) { continue; }
+                c.land_aura = true;
                 bonus += ad->params.land_aura_extra_mana;
                 if (AaHasColour(LandAuraProducesFor(*ad, a), Color::Blue)) { c.blue = c.blue_firm = true; }
             }
@@ -49847,8 +49849,14 @@ static std::vector<std::string> AaWishBucketSet(const GameState& s, int controll
     // stay offered, the search plays both lines. (The 2026-10-20 "the elf preferred" rule -- an Elf re-tapping an
     // Aura'd Forest, lands not offered -- is unchanged.)
     static const bool s_land_first3 = EnvOn("MTG_AA_WISH_LAND_FIRST_AT3", true);
+    // THE SAME AT TWO MANA WITHOUT A LAND AURA (USER 2026-11-12, MTG_AA_WISH_LAND_FIRST_AT2, DEFAULT ON; =0 -> the Elf
+    // leads at 2 mana): "Land before Arbor Elf makes sense at 2 if we don't have a land enchantment. Presumably we
+    // have no land for next turn, so it would be best to have a land." (With a land Aura the Elf re-taps for more.)
+    static const bool s_land_first2 = EnvOn("MTG_AA_WISH_LAND_FIRST_AT2", true);
     const bool land_drops_soon = c.hand_lands < c.land_drops_left + 1;
-    const int elf_rank = (s_land_first3 && c.mana >= 3 && c.mana < 4 && land_drops_soon) ? kIsland + 1 : kElf;
+    const bool land_first = land_drops_soon
+                         && ((s_land_first3 && c.mana == 3) || (s_land_first2 && c.mana == 2 && !c.land_aura));
+    const int elf_rank = land_first ? kIsland + 1 : kElf;
     // ONE LAND (USER 2026-11-12, MTG_AA_WISH_ONE_LAND, DEFAULT ON; =0 -> Forest and Island both offered when no blue
     // source is held). The USER: "I think we should choose only one of Forest or Island, but why would you want to
     // drop both? That seems dicey unless we know we will play the elf this turn." WHICH one, the USER again: "We need

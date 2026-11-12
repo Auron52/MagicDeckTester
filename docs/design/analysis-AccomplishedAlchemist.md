@@ -1631,6 +1631,15 @@ The two slower held-out games, both d5 b20, both recover at b100 and b400 (B = A
   Boar. A budget-width effect, not a ranking error.
 * s7007 gi212 (A 5, B 6): the T3 line diverges (B does not cast the Wish on T3); same budget-width shape.
 
+**Follow-up the same day: `MTG_AA_WISH_LAND_FIRST_AT2` (DEFAULT ON).** Asked whether LAND_FIRST should apply at 2
+mana too, the USER: "Land before Arbor Elf makes sense at 2 if we don't have a land enchantment. Presumably we have
+no land for next turn, so it would be best to have a land." and "If we have a land enchantment, the elf likely wins
+as it can allow you to have 4 mana once it is down." So at exactly 2 projected mana with NO land Aura of ours in
+play, the land leads the Elf under the same drop condition as at 3; with a land Aura the Elf leads. A/B vs
+`6e958bb6a`, paired: searched smoke 0/0, regression 0/0, held-out overnight n=2535 net -1 (0 slower / 1 faster) --
+the search already branches over both, so only the order moves; the d0 runner gains on every cell: smoke -22,
+regression -36, overnight -18 / -53 / -26 / -40 (4 seeds x 2000). Smoke + regression GT accepted.
+
 Accepted smoke (alchemist, alchemist2hg) + regression (alchemist) GT 2026-11-12; overnight left to the periodic run.
 Units: the three Wish cases the rules move were updated (one land; `hl3` now opens the land drop, since `FreshAa`
 spends it), and `ExpectWishAa` logs the list it got on a failure.

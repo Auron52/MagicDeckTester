@@ -72,6 +72,9 @@ DONE 06:20 UTC: overnight held-out searched n=2535 net -26 (2 slower / 24 faster
 b100/b400. Smoke + regression GT accepted, full units 2842/2842, ledger entry in `analysis-AccomplishedAlchemist.md`
 ("The Living Wish land rules (2026-11-12)"). Committed locally; shared-branch push held to >= 09:26 UTC (4-hour
 rule), backup branch pushed meanwhile. Remaining: push + CI watch; open USER question below.
+Then MTG_AA_WISH_LAND_FIRST_AT2 (USER 2026-11-12: land before the Elf at 2 mana unless a land Aura is held): A/B vs
+6e958bb6a searched 0 slower / 1 faster held-out, d0 strongly better; smoke + regression GT accepted; committed on top.
+The open question below is ANSWERED. All six of the other player's reports re-verified on this binary (11-12).
 
 (Old) Next: `python3 logs/aa_alch2/compare_land.py` (A = AT2 only, B = + land rules; paired, loss = 9; weigh overnight). Accept alchemist smoke (`--deck=alchemist,alchemist2hg`) + regression
 (`--deck=alchemist`) GT with a note naming AT2 + the three land rules; `python3 test/check_gt_logs.py`; ledger entry

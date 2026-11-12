@@ -2258,7 +2258,8 @@ TEST_CASE("Wish buckets: held Staff makes missing Alchemist urgent at three mana
     PutAa(s, "Forest"); PutAa(s, "Forest");
     // Two mana (MTG_AA_WISH_ALCH_FIRST_AT2, USER-ADOPTED 2026-11-11): the lacking Alchemist alone leads the mana
     // bucket; Lifegain stays behind it. (Alchemist held at two mana -> the mana bucket leads: the COMBO FIRST case.)
-    ExpectWishAa(s, { "Accomplished Alchemist", "Arbor Elf", "Island", "Brindle Boar" });   // one land: two Forests held
+    // One land (two Forests held), and with no land Aura it leads the Elf (MTG_AA_WISH_LAND_FIRST_AT2).
+    ExpectWishAa(s, { "Accomplished Alchemist", "Island", "Arbor Elf", "Brindle Boar" });
     PutAa(s, "Forest");
     // Three mana: every lacking combo bucket (Alchemist, then Lifegain) ahead of the mana bucket.
     // At three mana the land leads the Elf (MTG_AA_WISH_LAND_FIRST_AT3), and only one land is offered.
@@ -2289,10 +2290,10 @@ TEST_CASE("Wish buckets: COMBO FIRST at three mana -- seed 23742 T2, the Boar ah
     GameState tapped = s;
     for (Permanent& p : tapped.battlefield) { if (p.card.IsLand()) { p.tapped = true; } }
     ExpectWishAa(tapped, { "Brindle Boar", "Island", "Arbor Elf" });
-    GameState two = WishAa();                            // two mana: the mana bucket still leads
+    GameState two = WishAa();                            // two mana: the mana bucket still leads, the land first
     HandAa(two, "Accomplished Alchemist"); HandAa(two, "Staff of Domination");
     PutAa(two, "Forest"); PutAa(two, "Forest");
-    ExpectWishAa(two, { "Arbor Elf", "Island", "Brindle Boar" });
+    ExpectWishAa(two, { "Island", "Arbor Elf", "Brindle Boar" });
 }
 
 // another player's viewer report relayed 2026-11-11, AA seed 23742 T5: "suggested getting Scholar of Atheros instead of Galvanic Alchemist".
@@ -2377,6 +2378,24 @@ TEST_CASE("Wish buckets: MANA -- Arbor Elf ALONE when it re-taps a land-Aura For
     auto& sb = gone.players[0].sideboard;
     sb.erase(std::remove_if(sb.begin(), sb.end(), [](const Card& c) { return c.m_name.str() == "Arbor Elf"; }), sb.end());
     ExpectWishAa(gone, { "Island" });
+}
+
+// USER 2026-11-12 (MTG_AA_WISH_LAND_FIRST_AT2): "Land before Arbor Elf makes sense at 2 if we don't have a land
+// enchantment. Presumably we have no land for next turn, so it would be best to have a land."
+TEST_CASE("Wish buckets: MANA at two -- the land leads the Elf unless a land Aura is held")
+{
+    GameState s = WishAa();
+    HandAa(s, "Accomplished Alchemist"); HandAa(s, "Nourish"); HandAa(s, "Crab Umbra"); HandAa(s, "Stroke of Genius");
+    GameState plain = s;
+    PutAa(plain, "Forest"); PutAa(plain, "Forest");
+    ExpectWishAa(plain, { "Island", "Arbor Elf" });
+    GameState aura = s;                                  // a Wild Growth Forest: 2 mana, the Elf re-taps it for 2
+    const int f = PutAa(aura, "Forest");
+    AttachAa(aura, "Wild Growth", f);
+    ExpectWishAa(aura, { "Arbor Elf" });                 // "the elf preferred"
+    GameState stranded = aura;                           // ... no {G} left for it: a land comes back, behind the Elf
+    for (Permanent& p : stranded.battlefield) { if (p.card.IsLand()) { p.tapped = true; } }
+    ExpectWishAa(stranded, { "Arbor Elf", "Forest" });
 }
 
 TEST_CASE("Wish buckets: LIFEGAIN -- Brindle Boar only with no lifegain held; the Staff's gain-1 is not lifegain")
