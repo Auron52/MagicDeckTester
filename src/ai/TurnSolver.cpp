@@ -53597,6 +53597,23 @@ namespace enumstats
 // MTG_GATE_EF_CENSUS=1 (diagnostic, inert by default; P13 Hydras cost work, 2026-11-12): where do the selections
 // the odometer's mana gate ADMITS die in EnumeratePlans' body, and -- for the ones the body's mana section
 // refuses -- which credit the gate counted that the body did not. Relaxed atomics only; no search work.
+static bool XwasteEarlyOn() { static const bool on = EnvOn("MTG_XWASTE_EARLY", true); return on; }
+static bool XwasteEarlyVerifyOn() { static const bool on = EnvOn("MTG_XWASTE_EARLY_VERIFY"); return on; }
+namespace xwearly
+{
+    inline std::atomic<std::uint64_t> g_drops{0}, g_v_reach{0}, g_v_emit{0};
+    struct Dump
+    {
+        ~Dump()
+        {
+            if (!XwasteEarlyVerifyOn() && !EnvOn("MTG_GATE_EF_CENSUS")) { return; }
+            std::fprintf(stderr, "[xwaste-early] drops=%llu verify: kept_past_projection=%llu emitted=%llu\n",
+                         (unsigned long long)g_drops.load(), (unsigned long long)g_v_reach.load(),
+                         (unsigned long long)g_v_emit.load());
+        }
+    };
+    inline Dump g_dump;
+}
 namespace gefcensus
 {
     inline bool On() { static const bool v = EnvOn("MTG_GATE_EF_CENSUS"); return v; }
@@ -53645,6 +53662,29 @@ namespace gefcensus
         }
     };
     inline Dump g_dump;
+}
+// MTG_GEF_WALKLOG=1 (with MTG_GATE_EF_CENSUS=1; diagnostic, P13b): one line per body sequential-walk call.
+static void GefWalkLog(const GameState& state, const std::vector<Action>& cands, const std::vector<int>& sel,
+                       const ManaPool& pool, const ManaPool& eff, bool credited, const ManaCost& combined, int pips,
+                       int ceil, int aura_bonus, bool ok)
+{
+    static const bool on = EnvOn("MTG_GEF_WALKLOG");
+    if (!on) { return; }
+    std::string s;
+    char b[256];
+    std::snprintf(b, sizeof b, "[gef-walk] ok=%d t=%d pool=%d eff=%d cr=%d comb=%d gen=%d pips=%d ceil=%d aura=%d |",
+                  (int)ok, state.turn_number, (int)pool.Total(), (int)eff.Total(), (int)credited, combined.ManaValue(),
+                  combined.generic, pips, ceil, aura_bonus);
+    s += b;
+    for (int j : sel)
+    {
+        const Action& c = cands[static_cast<std::size_t>(j)];
+        std::snprintf(b, sizeof b, " %s{k%d x%d mv%d rf%d rk%d}", c.card_name.str().c_str(), (int)c.kind, c.chosen_x,
+                      c.cost.ManaValue(), c.ritual_float, (int)c.rock_mana.Total());
+        s += b;
+    }
+    s += "\n";
+    std::fputs(s.c_str(), stderr);
 }
 static void GefCensusEfScalar(const std::vector<Action>& cands, const std::vector<int>& sel, const ManaPool& pool,
                               const ManaPool& eff, bool credited, int pips, int ceil, int aura_bonus)
@@ -78256,6 +78296,43 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         if (dd && fa.kind == Action::Kind::CastFromHand && held_provider.HoldCastUnlessLethal(state, *dd))
         { cand_held[j] = 1; any_held = true; }
     }
+    // MTG_XWASTE_EARLY (DEFAULT ON; =0 -> the drop happens only at the win projection, as before). An {X} cast
+    // below its useful maximum (XCastBelowMax) is dropped at the win projection unless the plan wins THIS turn,
+    // after the whole body (mana section, sequential walks, colour gates) has run on it. When no selection of
+    // this call can reach the opponent's life, `wins` is false for every one of them, so the drop is decided by
+    // XCastBelowMax alone and can be taken at the body's entry. `xw_nowin` is that per-call proof: the body's
+    // projection is EXACTLY pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk + noncreature_count *
+    // (prowess_attackers + haste_cast_prowess) + boros + direct_dmg (+ fill) + cannons + freecast + kill_combo +
+    // ping, plus ProjectsAlternateWin. It is armed only where every non-sum term is inert for the whole call
+    // (no Mana Cannons, no free-caster, no counter pinger, no extra-lethal model, no creature mana source and no
+    // attack-tap candidate so atk_tap_lost == 0, no DirectDamage cast so no kill combo and no Boros Charm, no
+    // fill face), and the sum terms are bounded by their sum over EVERY candidate. Output-identical by
+    // construction; it removes counted work, so a budgeted search can move (play change: A/B + GT).
+    // MTG_XWASTE_EARLY_VERIFY=1 keeps the late drop and counts any selection the early test would have dropped
+    // that the body went on to emit or to keep past the projection ([xwaste-early] at exit; must be 0).
+    bool xw_nowin = false;
+    if (XwasteEarlyOn() && !cannons_ctx.live && freecast_ctx.casters <= 0 && !state.deck_has_counter_ping
+        && !has_extra_lethal && atk_mana_srcs.empty() && atk_tap_ctx.cand_bit.empty()
+        && atk_tap_ctx.cand_mask.empty() && atk_tap_ctx.cand_walk.empty())
+    {
+        long long ub = std::max(0, pending_atk);
+        int n_nc = 0, n_hp = 0;
+        bool inert = true;
+        for (int j = 0; j < static_cast<int>(cands.size()) && inert; ++j)
+        {
+            const Action& xa = cands[static_cast<std::size_t>(j)];
+            if (fill_face_ok[static_cast<std::size_t>(j)]) { inert = false; break; }
+            if (xa.card_name == "Boros Charm") { inert = false; break; }
+            const CardDefinition* xd = xa.def ? xa.def : CardDatabase::Instance().LookupInterned(xa.card_name);
+            if (xd != nullptr && xd->tmpl == CardTemplate::DirectDamage) { inert = false; break; }
+            ub += std::max(0, xa.direct_damage) + std::max(0, xa.vial_attack_power)
+                + std::max(0, xa.haste_attack_power) + std::max(0, xa.cond_artifact_haste_power);
+            if (xa.is_noncreature) { ++n_nc; }
+            if (xa.haste_prowess) { ++n_hp; }
+        }
+        ub += static_cast<long long>(n_nc) * (std::max(0, prowess_attackers) + n_hp);
+        xw_nowin = inert && ub < state.Opponent().life;
+    }
 
     // SATURATED HUMAN-PLAY COLLAPSE (see HumanEnumSaturated above the function). Evaluated ONCE
     // here -- it is state-only -- and false for every rollout and every autonomous run, so the
@@ -78687,6 +78764,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             }
         }
 
+        // MTG_XWASTE_EARLY: see `xw_nowin`. Same test as the late drop's XCastBelowMax loop, same arguments.
+        bool xw_early = false;
+        if (xw_nowin)
+        {
+            for (int j : sel)
+            {
+                const Action& c = cands[j];
+                if (c.kind != Action::Kind::CastFromHand || !c.cost.has_x) { continue; }
+                if (ResolveProvider(state).XCastBelowMax(state, cands, sel, j, static_cast<int>(pool.Total())
+                                                         + XMaxSamePlanExactCredit(state, cands, sel, lp_cross)))
+                { xw_early = true; break; }
+            }
+            if (xw_early && !XwasteEarlyVerifyOn())
+            { xwearly::g_drops.fetch_add(1, std::memory_order_relaxed); _ct.label = "iren-waste"; return; }
+        }
         ManaCost combined;
         ManaCost noncreature_combined;
         int sacrifice_count    = 0;
@@ -79758,6 +79850,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             if (SubsetPayableSequential(state, cands, sel)) { exec_feas = 1; }
             else { _ct.label = "ef-walk-fail"; }
             if (gefcensus::On()) { (exec_feas == 1 ? gefcensus::g_walk_ok : gefcensus::g_walk_fail).fetch_add(1, std::memory_order_relaxed); }
+            if (gefcensus::On()) { GefWalkLog(state, cands, sel, pool, eff, credited, combined, ef_pips, ef_ceiling, aura_bonus, exec_feas == 1); }
             return exec_feas == 1;
         };
         // Filter/ramp-land color conversion the flat pool can't express -> real-payment fallback.
@@ -80141,6 +80234,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // its own question; widening it here would change other decks.
         if (!wins && has_extra_lethal
             && ResolveProvider(state).ProjectsAlternateWin(state, {})) { wins = true; }
+        if (xw_early && !(iren_waste && !wins)) { xwearly::g_v_reach.fetch_add(1, std::memory_order_relaxed); }
         if (iren_waste && gefcensus::On())
         {
             gefcensus::g_xwaste.fetch_add(1, std::memory_order_relaxed);
@@ -80356,6 +80450,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             { ++by_kind[a.card_name.str() + ":" + std::to_string(static_cast<int>(a.kind))]; }
             for (const auto& [k, n] : by_kind) { std::fprintf(stderr, "  candidate %s x%d\n", k.c_str(), n); }
         }
+        if (xw_early) { xwearly::g_v_emit.fetch_add(1, std::memory_order_relaxed); }
         workctr::Inc(workctr::kPlanEmit);
         if (gefcensus::On()) { gefcensus::g_emitted.fetch_add(1, std::memory_order_relaxed); }
         if (ds_on_push) { ds_on_push(); }
