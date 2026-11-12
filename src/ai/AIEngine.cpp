@@ -8130,6 +8130,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
     // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed.
     LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
+    // ...and the plan's TRAIL flips for the cast-time largest-attacker pick (Morph INT-6; ApplyPlanDirect's twin).
+    PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
     // Plan::land_search_act_slot == 0 -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed

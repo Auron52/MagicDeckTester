@@ -26620,7 +26620,70 @@ inline constexpr int kTrickOpponentTarget = -1;
 // has to say it itself. Resolved by FindBestOwnAttacker in ResolveSoloTargetTrick -- one shared
 // resolver, so the rollout and the executor pick the same body (lockstep). Negative like the
 // opponent sentinel, so every `enchant_target > 0` aura/trick guard stays untouched.
+// Also the Morph INT-6 largest-attacker target (MorphProvider::TrickTargetCandidates): there it is the
+// trick's ONLY variant, ranked by LargestAttackerScore below.
 inline constexpr int kTrickBestOwnTarget = -2;
+
+// ---- THE PLAN'S PENDING TRAIL FLIPS (Morph INT-6; USER 2026-11-12) -----------------------------------------
+// The USER's largest-attacker rule ("The largest attacking creature should be the pump target always") ranks a
+// creature by its size AT COMBAT, and the USER's rulings put the plan's turn-face-up flips inside that count:
+// "I think we should plan which we are going to flip in the plan", "Or the heuristic can look at whether it is
+// flipped in the plan if that occurs later". A LEAD flip (PermAbilityMode::TurnFaceUp) runs before every cast
+// of the plan (ApplyFaceUpLeadActs), so the board at the cast already shows it. A TRAIL flip (TurnFaceUpLate:
+// Den Protector, whose regrowth of a pump the plan cast first makes its POSITION load-bearing and searched)
+// runs after the casts, so the cast-time pick has to LOOK AHEAD to it: this records the sources of the plan's
+// trail flips for the length of the plan's application. Installed at the plan-application site of BOTH worlds
+// (ApplyPlanDirect, AIEngine::TakeTurn) from the same TurnSolver::PlanTrailFlipsFor, so they read alike.
+// Keyed on the GameState being applied: a copy (a nested rollout) never inherits it. Once a flip has happened
+// its permanent is face up (FaceDownRealDef null), so the entry goes inert by itself. Read only through
+// LargestAttackerScore.
+// STATED PRECONDITION: a breakpoint continuation applied inside a plan keeps the OUTER plan's entries (no
+// Morph card opens a mid-cast breakpoint today; the pool's only draw is Hystrodon's, a combat trigger).
+struct PlanTrailFlips
+{
+    const GameState*   state = nullptr;
+    std::array<int, 8> nums{};
+    int                n = 0;
+    bool Pending(const GameState& s, int num) const
+    {
+        if (&s != state || num == 0) { return false; }
+        for (int k = 0; k < n; ++k) { if (nums[static_cast<std::size_t>(k)] == num) { return true; } }
+        return false;
+    }
+};
+inline thread_local PlanTrailFlips g_plan_trail_flips;
+class PlanTrailFlipsScope
+{
+public:
+    explicit PlanTrailFlipsScope(const PlanTrailFlips& v) : m_prev(g_plan_trail_flips) { g_plan_trail_flips = v; }
+    ~PlanTrailFlipsScope() { g_plan_trail_flips = m_prev; }
+    PlanTrailFlipsScope(const PlanTrailFlipsScope&)            = delete;
+    PlanTrailFlipsScope& operator=(const PlanTrailFlipsScope&) = delete;
+private:
+    PlanTrailFlips m_prev;
+};
+
+// The combat damage `p` deals THIS turn as the plan in execution leaves it: CombatPowerOf (printed + temp
+// pumps already resolved + counters + lords + ...), x2 under double strike, and -- for a face-down creature the
+// plan turns face up in its trailing pass -- its FACE-UP size (real power in place of the face-down 2, +1 for a
+// megamorph counter, and the real face's printed double strike). The USER's "largest" measure, generic and
+// param-driven (morph_cost / megamorph_cost / the face-down face); with no trail flip pending it is simply
+// combat power x DS.
+inline int LargestAttackerScore(const Permanent& p, const GameState& s)
+{
+    int  pw = CombatPowerOf(p, s);
+    bool ds = CreatureHasDoubleStrike(p, s);
+    if (g_plan_trail_flips.n > 0 && g_plan_trail_flips.Pending(s, p.card.m_number))
+    {
+        const CardDefinition* real = FaceDownRealDef(p);
+        if (real != nullptr && real->card.m_power && p.card.m_power)
+        {
+            pw += *real->card.m_power - *p.card.m_power + (real->params.megamorph_cost ? 1 : 0);
+            ds = ds || real->card.HasKeyword(Keyword::DoubleStrike);
+        }
+    }
+    return std::max(0, pw) * (ds ? 2 : 1);
+}
 
 // A real CR-121 DRAW of n cards for `controller`: counts Player::cards_drawn_this_turn (the Fists
 // of Flame pump reads it), feeds the viewer draw sink, and flags deck-out (CR 104.3c) exactly as
@@ -27403,6 +27466,15 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
         ti = FindBestOwnAttacker(state, controller);
         if (ti < 0) { ti = FindBestOwnCreature(state, controller); }
         if (ti < 0) { return false; }
+        // The plan named no creature, so the viewer learns the one picked HERE (Morph INT-6: the USER's
+        // largest-attacker rule resolves every trick this way).
+        if (g_play_event_sink && !g_tap_speculating && g_play_target_chooser == nullptr)
+        {
+            EmitPlayEvent(state.turn_number, "pump",
+                          def.card.m_name.str() + " targets "
+                          + state.battlefield[static_cast<std::size_t>(ti)].card.m_name.str()
+                          + " (target picked at cast)");
+        }
     }
     else if (target_number != 0)
     {

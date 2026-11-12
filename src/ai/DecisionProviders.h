@@ -395,8 +395,9 @@ public:
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override { return true; }
     bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
-    // INT-5 USER RULE (2026-11-12): every solo-target trick goes on the LARGEST ATTACKING CREATURE (see the
-    // definition for the interpretations). MTG_MORPH_LARGEST_TRICK_TARGET=0 -> no narrowing (A/B arm).
+    // INT-6 USER RULE (2026-11-12): every solo-target trick goes on the LARGEST ATTACKING CREATURE, picked at
+    // CAST time (one kTrickBestOwnTarget variant; see the definition). MTG_MORPH_LARGEST_TRICK_TARGET=0 -> the
+    // per-creature variants again (A/B arm).
     void TrickTargetCandidates(const GameState& s, const CardDefinition& def,
                                std::vector<int>& out) const override;
     std::vector<int> OwnPumpTargetCandidates(const GameState& s, int controller,

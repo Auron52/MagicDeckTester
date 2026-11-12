@@ -12472,6 +12472,23 @@ void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>
     }
 }
 
+// Battlefield sources only (needs_cast_mask == 0): a hand-source trail flip turns up a creature this plan casts
+// face down, summoning-sick and without haste in every pool today, so it can never be the attacker ranked.
+PlanTrailFlips TurnSolver::PlanTrailFlipsFor(const GameState& state, const std::vector<Action>& acts)
+{
+    PlanTrailFlips t;
+    if (!state.deck_has_morph) { return t; }
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUpLate
+            || a.needs_cast_mask != 0 || a.sac_source_id == 0 || t.n == static_cast<int>(t.nums.size()))
+        { continue; }
+        t.nums[static_cast<std::size_t>(t.n++)] = a.sac_source_id;
+    }
+    if (t.n > 0) { t.state = &state; }
+    return t;
+}
+
 std::vector<Action> TurnSolver::WithoutLandSearchActs(const std::vector<Action>& acts)
 {
     std::vector<Action> out;
@@ -41060,6 +41077,11 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // opened by MTG_UNPRUNED/tricktarget). Empty = no narrowing (enumerate all legal).
             std::vector<int> narrow;
             ResolveProvider(state).TrickTargetCandidates(state, def, narrow);
+            // A provider may name the CAST-TIME target itself (MorphProvider, the USER's largest-attacker
+            // rule: kTrickBestOwnTarget is its only variant) -- then the mint-credit emission below must not
+            // add a second copy of it.
+            const bool narrow_has_best =
+                std::find(narrow.begin(), narrow.end(), kTrickBestOwnTarget) != narrow.end();
             if (!narrow.empty())
             {
                 for (int num : narrow)
@@ -41162,7 +41184,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // The cast-time target (see best_dork_num / best_is_none above the target loops). In
             // the best_is_none shape it is legal only in a subset that also casts a body
             // (SubsetHasMissingTrickTarget) -- alone it is the fizzle the d0 smoke tier found.
-            if (best_dork_num != 0 || best_is_none) { emit(kTrickBestOwnTarget, 0); }
+            if ((best_dork_num != 0 || best_is_none) && !narrow_has_best) { emit(kTrickBestOwnTarget, 0); }
             // USER rule (2026-08-12): with a magnet out, the untargeted "bank the Treasure, no
             // trigger" variant is dominated by targeting the magnet (same mana, strictly more
             // Treasures + pumps) -- suppressed under the same tricktarget gate (magnet_on_bf is
@@ -56432,6 +56454,19 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             { watch += d->params.spell_target_watch_pump_power; }
         }
     }
+    std::vector<const CardDefinition*> best_tricks;   // cast-time-target tricks (credited after the loop)
+    // One trick's payload onto `payload_to`; `watched` != 0 = a Spellskite redirect's original target, whose
+    // watchers fire too.
+    auto add_trick = [&](const CardDefinition& d, int payload_to, int watched)
+    {
+        const CardParams& tp = d.params;
+        if (watched != 0) { rec(watched).add += watch; }
+        Rec& r = rec(payload_to);
+        const int add = std::max(tp.power_bonus, tp.mainphase_power_bonus);   // every greedy cast here is main phase
+        if (tp.trick_double_power) { ++r.ndbl; r.add += add; }
+        else                       { r.add += watch + add; }
+        if (tp.grants_temp_double_strike) { r.ds = true; }
+    };
     for (int j : sel)
     {
         const Action& c = cands[static_cast<std::size_t>(j)];
@@ -56450,62 +56485,102 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
             }
             continue;
         }
-        if (c.kind != Action::Kind::CastFromHand || c.enchant_target <= 0) { continue; }
+        if (c.kind != Action::Kind::CastFromHand
+            || (c.enchant_target <= 0 && c.enchant_target != kTrickBestOwnTarget)) { continue; }
         const CardDefinition* d = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
         if (d == nullptr || !d->params.solo_target_trick) { continue; }
         if (c.kicked)
         {
             if (const CardDefinition* kd = CardDatabase::Instance().Lookup(d->card.m_name.str() + " (Kicked)")) { d = kd; }
         }
-        const CardParams& tp = d->params;
-        const int payload_to = c.trick_redirect != 0 ? c.trick_redirect : c.enchant_target;
-        if (c.trick_redirect != 0) { rec(c.enchant_target).add += watch; }   // the original target's watchers fire
-        Rec& r = rec(payload_to);
-        const int add = std::max(tp.power_bonus, tp.mainphase_power_bonus);   // every greedy cast here is main phase
-        if (tp.trick_double_power) { ++r.ndbl; r.add += add; }
-        else                       { r.add += watch + add; }
-        if (tp.grants_temp_double_strike) { r.ds = true; }
+        // The CAST-TIME target (kTrickBestOwnTarget -- MorphProvider's largest-attacker rule, Morph INT-6): it has
+        // no recipient yet, so it is credited below, after every explicit target and flip is in.
+        if (c.enchant_target == kTrickBestOwnTarget) { best_tricks.push_back(d); continue; }
+        add_trick(*d, c.trick_redirect != 0 ? c.trick_redirect : c.enchant_target,
+                  c.trick_redirect != 0 ? c.enchant_target : 0);
     }
-    int credit = 0;
-    for (const Rec& r : recs)
+    // The recipient's base: -1 = no credit (cannot attack this turn, or a dork the payment must tap).
+    auto base_of = [&](int num, bool& had_ds) -> int
     {
-        int base = 0;
-        bool had_ds = false;
-        bool found = false;
+        had_ds = false;
         for (const Permanent& p : state.battlefield)
         {
-            if (p.card.m_number != r.num || p.controller_index != me) { continue; }
-            found = true;
-            if (!TrickRecipientCanAttackThisTurn(state, p)) { base = -1; break; }
+            if (p.card.m_number != num || p.controller_index != me) { continue; }
+            if (!TrickRecipientCanAttackThisTurn(state, p)) { return -1; }
             if (taps_creature_mana && !p.def_absent)
             {
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
-                if (pd != nullptr && pd->tmpl == CardTemplate::ManaDork) { base = -1; break; }
+                if (pd != nullptr && pd->tmpl == CardTemplate::ManaDork) { return -1; }
             }
-            base = std::max(0, CombatPowerOf(p, state));
             had_ds = CreatureHasDoubleStrike(p, state);
-            break;
+            return std::max(0, CombatPowerOf(p, state));
         }
-        if (!found)
+        // A same-plan hand creature (trick_hand_target): only a hasty one attacks this turn.
+        for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
         {
-            // A same-plan hand creature (trick_hand_target): only a hasty one attacks this turn.
-            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
-            {
-                if (hc.m_number != r.num) { continue; }
-                const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
-                if (hd != nullptr && hd->card.IsCreature() && TrickHandRecipientCanAttackThisTurn(state, *hd)
-                    && hd->card.m_power) { base = std::max(0, *hd->card.m_power); found = true; }
-                break;
-            }
+            if (hc.m_number != num) { continue; }
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd != nullptr && hd->card.IsCreature() && TrickHandRecipientCanAttackThisTurn(state, *hd)
+                && hd->card.m_power) { return std::max(0, *hd->card.m_power); }
+            return -1;
         }
-        if (!found || base < 0) { continue; }
+        return -1;
+    };
+    auto after_of = [&](const Rec& r, int base, bool had_ds) -> int
+    {
         int pw = base + r.lead + r.add;
         // Doublers after the additive tier; each one's own watcher trigger resolves before it doubles.
         for (int k = 0; k < r.ndbl; ++k) { pw = 2 * (pw + watch); }
         pw = std::max(0, pw + r.trail);
-        const int before = base * (had_ds ? 2 : 1);
-        const int after  = pw * ((had_ds || r.ds) ? 2 : 1);
-        credit += std::max(0, after - before);
+        return pw * ((had_ds || r.ds) ? 2 : 1);
+    };
+    // Each cast-time trick lands on the LARGEST recipient as the resolver will rank it -- the attack-eligible
+    // creature with the most combat damage once the plan's flips (lead AND trail: the resolver's look-ahead) and
+    // the pumps already credited to it are in; ties to the first in battlefield order, then same-plan hasty hand
+    // creatures (cast before the tricks in the canonical order). Additive tricks first, doublers after (the
+    // MorphProvider cast-order tiers). Re-ranked per trick, so a plan's tricks stack exactly as they resolve.
+    std::stable_sort(best_tricks.begin(), best_tricks.end(), [](const CardDefinition* a, const CardDefinition* b)
+    {
+        const auto tier = [](const CardDefinition* d)
+        { return (d->params.trick_double_power || d->params.grants_temp_double_strike) ? 1 : 0; };
+        return tier(a) < tier(b);
+    });
+    for (const CardDefinition* d : best_tricks)
+    {
+        int pick = 0, pick_score = -1;
+        auto consider = [&](int num)
+        {
+            bool had_ds = false;
+            const int base = base_of(num, had_ds);
+            if (base < 0) { return; }
+            Rec probe{num};
+            for (const Rec& r : recs) { if (r.num == num) { probe = r; break; } }
+            const int sc = after_of(probe, base, had_ds);
+            if (sc > pick_score) { pick_score = sc; pick = num; }
+        };
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index == me && p.card.m_number != 0 && (p.card.IsCreature() || p.is_animated))
+            { consider(p.card.m_number); }
+        }
+        for (int j : sel)
+        {
+            const Action& c = cands[static_cast<std::size_t>(j)];
+            if (c.kind != Action::Kind::CastFromHand) { continue; }
+            const CardDefinition* cd = c.def ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+            if (cd == nullptr || !cd->card.IsCreature()) { continue; }
+            for (const Card& hc : state.players[static_cast<std::size_t>(me)].hand)
+            { if (hc.m_name == c.card_name && hc.m_number != 0) { consider(hc.m_number); break; } }
+        }
+        if (pick != 0) { add_trick(*d, pick, 0); }
+    }
+    int credit = 0;
+    for (const Rec& r : recs)
+    {
+        bool had_ds = false;
+        const int base = base_of(r.num, had_ds);
+        if (base < 0) { continue; }
+        credit += std::max(0, after_of(r, base, had_ds) - base * (had_ds ? 2 : 1));
     }
     return credit;
 }
@@ -65203,6 +65278,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed
     // as the executor's (AIEngine::TakeTurn).
     LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
+    // ...and the plan's TRAIL flips, for the cast-time largest-attacker pick's look-ahead (Morph INT-6; same
+    // builder and the same point as the executor's twin in AIEngine::TakeTurn).
+    PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
     // What the human's REMAINING QUEUE wants (docs/design/viewer-line-macros.md). Unlike the hold
     // above it is not derived from this plan's costs -- the continuation is in the NEXT committed
     // segment, which this process cannot see, so the viewer declares it. 0 for every plan that

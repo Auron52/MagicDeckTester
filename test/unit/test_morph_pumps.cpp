@@ -14,8 +14,10 @@
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
 
+#include <algorithm>
 #include <set>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -381,37 +383,113 @@ TEST_CASE("morph pumps: plans differing only in a trick's TARGET are distinct pl
     CHECK(on_bf_birds);                 // same cast-name multiset {Birds, Berserk}: both survive the dedup
 }
 
-// INT-5 USER RULE (2026-11-12): "The largest attacking creature should be the pump target always." Under
-// MorphProvider a solo-target trick is offered on the largest current attacker (combat damage: power, x2 for
-// double strike; ties -> first in battlefield order), plus at most ONE flippable face-down creature whose
-// face-up score beats it (interpretation a) and at most ONE hasty hand creature that beats it (b).
-TEST_CASE("morph pumps: tricks target the LARGEST attacker (+ the flippable face-down, + a bigger hasty hand body)")
+// INT-6 USER RULE (2026-11-12): "The largest attacking creature should be the pump target always." Under
+// MorphProvider every solo-target trick has ONE target variant, the cast-time sentinel kTrickBestOwnTarget; the
+// creature is picked when the trick resolves -- the most combat damage (power, x2 double strike; ties -> first in
+// battlefield order), counting a TRAIL flip the plan makes after the casts (rulings 2-4).
+TEST_CASE("morph pumps: largest-attacker rule -- one cast-time variant per trick, none without a recipient")
 {
     EnsureCardsMorph();
     static const MorphProvider mp;
-    auto targets = [](const GameState& s)
+    auto variants = [](const GameState& s, const char* name)
     {
-        std::set<int> t;
+        std::vector<int> t;
         for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
         {
-            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Berserk") { t.insert(a.enchant_target); }
+            if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { t.push_back(a.enchant_target); }
         }
         return t;
     };
     GameState s = BaseM();
     s.m_provider = &mp;
     for (int k = 0; k < 3; ++k) { PutM(s, "Forest", 40 + k); }
-    PutM(s, "Birds of Paradise", 10);                  // 0 power: never the largest
-    PutBear(s, 11);                                    // 2/2, first of the 2-power tie -> the largest
-    PutM(s, "Blistering Firecat (Face-down)", 12);     // 2/2 now, 7/1 face up -> the (a) extra candidate
+    PutM(s, "Birds of Paradise", 10);
+    PutBear(s, 11);
+    PutM(s, "Blistering Firecat (Face-down)", 12);
     s.players[0].hand.push_back(CardM("Berserk", 101));
-    CHECK(targets(s) == std::set<int>{ 11, 12 });
+    s.players[0].hand.push_back(CardM("Vines of Vastwood", 102));
+    CHECK(variants(s, "Berserk") == std::vector<int>{ kTrickBestOwnTarget });
+    CHECK(variants(s, "Vines of Vastwood") == std::vector<int>{ kTrickBestOwnTarget, kTrickBestOwnTarget });   // kicked + not
 
-    // (b): a hasty hand creature bigger than every battlefield attacker is one extra candidate.
-    s.players[0].hand.push_back(CardM("Blistering Firecat", 102));
-    CHECK(targets(s) == std::set<int>{ 11, 12, 102 });
+    // No creature can attack this turn and no hasty creature in hand: no variant (the old non-attacker fold's answer).
+    GameState sick = BaseM();
+    sick.m_provider = &mp;
+    for (int k = 0; k < 3; ++k) { PutM(sick, "Forest", 40 + k); }
+    sick.battlefield[static_cast<std::size_t>(PutBear(sick, 11))].entered_this_turn = true;
+    sick.players[0].hand.push_back(CardM("Berserk", 101));
+    CHECK(variants(sick, "Berserk").empty());
+    // ...a hasty hand creature the plan can cast first is a recipient.
+    sick.players[0].hand.push_back(CardM("Blistering Firecat", 103));
+    CHECK(variants(sick, "Berserk") == std::vector<int>{ kTrickBestOwnTarget });
 
-    // Off switch / human play semantics: no provider narrowing -> every attacker class is offered again.
+    // Without the provider (human play / MTG_UNPRUNE=tricktarget / =0 take this road): every target again.
     s.m_provider = nullptr;
-    CHECK(targets(s).count(10) == 1);
+    const std::vector<int> all = variants(s, "Berserk");
+    CHECK(std::find(all.begin(), all.end(), 11) != all.end());
+    CHECK(std::find(all.begin(), all.end(), kTrickBestOwnTarget) == all.end());
+}
+
+TEST_CASE("morph pumps: largest-attacker rule -- the cast-time pick (power, double strike, ties, pumps stack)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    const int birds = PutM(s, "Birds of Paradise", 10);
+    const int bear  = PutBear(s, 11);
+    const int bear2 = PutBear(s, 13);
+    (void)birds;
+    // Tie (2 vs 2): the first in battlefield order.
+    CHECK(FindBestOwnAttacker(s, 0) == bear);
+    Cast(s, "Might of Old Krosa", kTrickBestOwnTarget);   // main phase: +4/+4 -> the first bear is 6/6
+    CHECK(Power(s, bear) == 6);
+    Cast(s, "Berserk", kTrickBestOwnTarget);              // the pumps STACK on the largest: 12
+    CHECK(Power(s, bear) == 12);
+    CHECK(Power(s, bear2) == 2);
+    // Double strike doubles the score: a 3-power double striker beats a 5-power creature.
+    GameState d = BaseM();
+    d.m_provider = &mp;
+    const int five = PutBear(d, 21);
+    d.battlefield[static_cast<std::size_t>(five)].temp_power_bonus = 3;
+    const int ds = PutBear(d, 22);
+    d.battlefield[static_cast<std::size_t>(ds)].temp_power_bonus = 1;
+    d.battlefield[static_cast<std::size_t>(ds)].temp_double_strike = true;
+    CHECK(FindBestOwnAttacker(d, 0) == ds);
+}
+
+TEST_CASE("morph pumps: largest-attacker rule -- a TRAIL flip later in the plan counts (look-ahead)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    const int hyst = PutM(s, "Hystrodon (Face-down)", 30);     // 2/2 face down; first in battlefield order
+    const int den  = PutM(s, "Den Protector (Face-down)", 31); // 2/2 face down; 2/1 + a megamorph counter face up
+    CHECK(FindBestOwnAttacker(s, 0) == hyst);                  // a tie on the board as it stands
+    {
+        PlanTrailFlips t;
+        t.state = &s;
+        t.nums[0] = 31;
+        t.n = 1;
+        const PlanTrailFlipsScope scope(t);
+        CHECK(LargestAttackerScore(s.battlefield[static_cast<std::size_t>(den)], s) == 3);
+        CHECK(FindBestOwnAttacker(s, 0) == den);               // 3 at combat beats 2
+        const GameState copy = s;                              // a copy (a nested rollout) never inherits it
+        CHECK(FindBestOwnAttacker(copy, 0) == hyst);
+    }
+    CHECK(FindBestOwnAttacker(s, 0) == hyst);                  // scope gone
+
+    // The builder: only TRAIL battlefield flips; a LEAD flip has already happened when the casts run.
+    std::vector<Action> acts(2);
+    acts[0].kind = Action::Kind::ActivatePermAbility;
+    acts[0].ability_mode = Action::AbilityMode::TurnFaceUp;
+    acts[0].sac_source_id = 30;
+    acts[1] = acts[0];
+    acts[1].ability_mode = Action::AbilityMode::TurnFaceUpLate;
+    acts[1].sac_source_id = 31;
+    const PlanTrailFlips built = TurnSolver::PlanTrailFlipsFor(s, acts);
+    CHECK(built.n == 1);
+    CHECK(built.nums[0] == 31);
+    CHECK(built.state == &s);
 }

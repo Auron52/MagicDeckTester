@@ -64,6 +64,8 @@ struct ContPins
     }
 };
 
+struct PlanTrailFlips;   // SpellEffects.h (Morph INT-6: the plan's trail flips, TurnSolver::PlanTrailFlipsFor)
+
 // The line hold a recorded continuation cast was paid under (Action::rec_line_hold).
 struct LineHoldStamp
 {
@@ -3364,6 +3366,10 @@ public:
     // (liveness, then the plain payer -- a special action, no creature-ability scope -- then the shared
     // TurnFaceDownPermanentUp). No-op for a plan without one.
     static void ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>& acts, GameLogger* log = nullptr);
+    // ...and the plan's TRAIL turn-face-up sources (TurnFaceUpLate), for the cast-time largest-attacker pick's
+    // look-ahead (PlanTrailFlips, SpellEffects.h). ONE builder for both worlds' PlanTrailFlipsScope; empty
+    // (n == 0) for a plan without one and for every deck without a morph card.
+    static PlanTrailFlips PlanTrailFlipsFor(const GameState& state, const std::vector<Action>& acts);
     // ...and the PRE-CAST SUBSET form of the position (Plan::land_search_act_slot <= -2, 2026-10-19):
     // bit i of the mask = the plan's i-th land-search activation (in `actions` order) runs in the
     // pre-cast pass, every other one in the trailing pass -- "crack Myriad Landscape BEFORE the Vial-put
