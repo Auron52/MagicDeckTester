@@ -1187,15 +1187,24 @@ TEST_CASE("mana oracle: repeated casts admit exactly bounded six-action order pr
     CHECK(Has(wide, "PHANTOM"));
     CHECK_FALSE(Has(wide, "UNMODELED"));
 
-    // Eight distinct actions are 40,320 orders, beyond the bound: no NO claim, UNMODELED.
+    // Eight distinct casts are 40,320 orders, beyond the full walk's bound but exactly kPhantomClassBound fold
+    // classes (no trailing activation, so every order is its own class): the class walk tries them all, PHANTOM.
     GameState s8 = Board({});
     s8.players[0].life = s8.players[1].life = 20;
     Hand(s8, { "Diabolic Intent", "Shadowborn Apostle", "Dark Ritual", "Thrumming Stone", "Sire of Insanity",
-               "Culling the Weak", "Abhorrent Overlord", "Reaper from the Abyss" });
-    const TurnSolver::Plan beyond = PlanOf({ CastAction(s8, "Diabolic Intent"), CastAction(s8, "Shadowborn Apostle"),
-                                              CastAction(s8, "Dark Ritual"), CastAction(s8, "Thrumming Stone"),
-                                              CastAction(s8, "Sire of Insanity"), CastAction(s8, "Culling the Weak"),
-                                              CastAction(s8, "Abhorrent Overlord"), CastAction(s8, "Reaper from the Abyss") });
+               "Culling the Weak", "Abhorrent Overlord", "Reaper from the Abyss", "Demonic Tutor" });
+    const TurnSolver::Plan eight = PlanOf({ CastAction(s8, "Diabolic Intent"), CastAction(s8, "Shadowborn Apostle"),
+                                             CastAction(s8, "Dark Ritual"), CastAction(s8, "Thrumming Stone"),
+                                             CastAction(s8, "Sire of Insanity"), CastAction(s8, "Culling the Weak"),
+                                             CastAction(s8, "Abhorrent Overlord"), CastAction(s8, "Reaper from the Abyss") });
+    const auto classed = manaoracle::PlanVerdict(s8, true, eight, { eight });
+    INFO("eight: ", Joined(classed));
+    CHECK(Has(classed, "PHANTOM"));
+    CHECK_FALSE(Has(classed, "UNMODELED"));
+
+    // Nine distinct casts are 362,880 orders and classes, beyond both bounds: no NO claim, UNMODELED.
+    TurnSolver::Plan beyond = eight;
+    beyond.actions.push_back(CastAction(s8, "Demonic Tutor"));
     const auto partial = manaoracle::PlanVerdict(s8, true, beyond, { beyond });
     INFO("beyond: ", Joined(partial));
     CHECK(Has(partial, "UNMODELED"));
