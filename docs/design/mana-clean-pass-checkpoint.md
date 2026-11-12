@@ -766,6 +766,15 @@ fungus 1,880, gods 4,300 (first run).
     comment: th d0 gi442, Fluctuator s10).
     Re-gate `th-6r6-20261112` (PGO 6858f5eb, 75000-79999): **267 issues** (was 375): APPLY-DROP 234, ORDER 15,
     ENUM-GAP 18, ORACLE-GAP 0, UNMODELED 0; oracle-off play byte-identical.
+  * **pirates 19 (triaged, not fixed; handed off).** All 15 Dire Fleet Captain drops are ONE decision (s30054695 T4,
+    plan variants of {Canal + Captain + Staunch Crewmate}); not the prepay (MTG_NO_BATCH_PAY=1 identical). The engine
+    spends the Treasure -- the only {B} source -- on Crewmate's {1}{U} while two {R} sources stay up, so Captain's {B}
+    is unpayable: a payer generic-pip choice for a pay-sac Treasure (LineSpareSourceMask excludes pay-sac sources). The
+    4 Daring Buccaneer drops are APPLY-DROP-ORDER (vial Corsair Captain first makes the Treasure).
+  * **fungus / gods (triage leads only).** fungus DOMINATED-CREATURE 1089: the oracle pays with Saproling Burst tokens
+    shown 0/0 (P/T = fade counters) and calls Shroofus + a 1/1 the attackers -- check the oracle's resource key reads
+    the tokens' real power before touching the engine. gods ENUM-GAP 1756: cheap casts off a lone Tendo Ice Bridge with
+    its charge counter kept off the menu by a mana gate; CAPPED-DECISION 2330 is one decision (s30002725 T6).
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
