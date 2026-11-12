@@ -654,6 +654,19 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Blistering Firecat": {
+    "cmc": 4.0,
+    "keywords": [
+      "Haste",
+      "Morph",
+      "Trample"
+    ],
+    "mana_cost": "{1}{R}{R}{R}",
+    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nMorph {R}{R} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.)",
+    "power": "7",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Cat"
+  },
   "Blood Crypt": {
     "cmc": 0.0,
     "keywords": [],
@@ -1600,6 +1613,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Den Protector": {
+    "cmc": 2.0,
+    "keywords": [
+      "Megamorph"
+    ],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "Creatures with power less than this creature's power can't block it.\nMegamorph {1}{G} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its megamorph cost and put a +1/+1 counter on it.)\nWhen this creature is turned face up, return target card from your graveyard to your hand.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Human Warrior"
   },
   "Desperate Ritual": {
     "cmc": 2.0,
@@ -3102,6 +3126,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Hystrodon": {
+    "cmc": 5.0,
+    "keywords": [
+      "Morph",
+      "Trample"
+    ],
+    "mana_cost": "{4}{G}",
+    "oracle_text": "Trample\nWhenever this creature deals combat damage to a player, you may draw a card.\nMorph {1}{G}{G} (You may cast this card face down as a 2/2 creature for {3}. Turn it face up any time for its morph cost.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Creature — Beast"
   },
   "Ice-Fang Coatl": {
     "cmc": 2.0,
