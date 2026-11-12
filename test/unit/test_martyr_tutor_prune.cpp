@@ -47,7 +47,13 @@ GameState MakeMt(const Names& library, const Names& board, const Names& hand, in
     s.players[0].life     = life;
     int num = 1;
     for (const std::string& n : library) { s.players[0].library.push_back(PhMt(n, num++)); }
-    for (const std::string& n : hand)    { s.players[0].hand.push_back(PhMt(n, num++)); }
+    for (const std::string& n : hand)
+    {
+        // The real definition (colour mask included): MTG_MARTYR_TUTOR_FARM_DRY reads the hand's colours.
+        Card c = CardDatabase::Instance().Lookup(n)->card;
+        c.m_number = num++;
+        s.players[0].hand.push_back(c);
+    }
     for (const std::string& n : board)
     {
         Permanent p;
@@ -133,4 +139,36 @@ TEST_CASE("martyr tutor prune: Ranger of Eos's pair takes distinct admitted name
           == Names{"Serra Ascendant", "Mother of Runes"});
     // =0: the default library-order pair.
     CHECK(Pair(MakeMt(kLib, {}, {}, 20), 0) == Names{"Mother of Runes", "Speaker of the Heavens"});
+}
+
+TEST_CASE("martyr tutor prune: MTG_MARTYR_TUTOR_FARM admits Curious Farm Animals while the gain is needed")
+{
+    const Names lib = {"Curious Farm Animals", "Mother of Runes", "Serra Ascendant", "Speaker of the Heavens"};
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = 0;   // =0: the literal three-card rule
+    CHECK(Captain(MakeMt(lib, {}, {}, 20)) == Names{"Serra Ascendant", "Speaker of the Heavens"});
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = -1;  // default ON (empty hand: Martyr's reveal is dry)
+    CHECK(Captain(MakeMt(lib, {}, {}, 20)) == Names{"Serra Ascendant", "Curious Farm Animals", "Speaker of the Heavens"});
+    CHECK(Captain(MakeMt(lib, {}, {}, 30)) == Names{"Serra Ascendant", "Speaker of the Heavens"});
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = -1;
+}
+
+TEST_CASE("martyr tutor prune: MTG_MARTYR_TUTOR_FARM_DRY admits Farm only while the hand holds no white card")
+{
+    const Names lib = {"Curious Farm Animals", "Mother of Runes", "Serra Ascendant", "Speaker of the Heavens"};
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = 1;
+    // gi0's shape: a hand of lands -- Martyr's reveal is dry, Farm is admitted.
+    CHECK(Captain(MakeMt(lib, {"Martyr of Sands"}, {"Plains", "Plains"}, 21))
+          == Names{"Serra Ascendant", "Curious Farm Animals", "Speaker of the Heavens"});
+    // gi233's shape: a white card (Lurrus, W/B hybrid) in hand -- Martyr out-gains Farm, Farm pruned.
+    CHECK(Captain(MakeMt(lib, {"Martyr of Sands"}, {"Plains", "Lurrus of the Dream-Den"}, 20))
+          == Names{"Serra Ascendant", "Speaker of the Heavens"});
+    // A colourless card (Jitte) does not count.
+    CHECK(Captain(MakeMt(lib, {}, {"Umezawa's Jitte"}, 20))
+          == Names{"Serra Ascendant", "Curious Farm Animals", "Speaker of the Heavens"});
+    // =0 -> the broad amendment (white in hand does not matter).
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM_DRY] = 0;
+    CHECK(Captain(MakeMt(lib, {"Martyr of Sands"}, {"Plains", "Lurrus of the Dream-Den"}, 20))
+          == Names{"Serra Ascendant", "Curious Farm Animals", "Speaker of the Heavens"});
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM_DRY] = -1;
+    heurarm::t_arm[heurarm::MARTYR_TUTOR_FARM] = -1;
 }
