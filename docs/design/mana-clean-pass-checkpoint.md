@@ -934,6 +934,28 @@ fungus 1,880, gods 4,300 (first run).
     {T}: {G} to existing non-sick Fungus/Saprolings that pay the rest (s30060047 T4, s30060142 T5). Fix site: the
     enumeration's mana gate needs an in-plan source credit for hasty same-turn mana creatures and for a granted
     tap-for-mana static that resolves mid-plan (cf. the existing treasure / dork credits). Untouched this round.
+* **Round 12 (twelfth item-6 agent, 2026-11-12).**
+  * **Integration push 831f74445 at 20:24:27 UTC** (owner-authorized, one push): rebased the 8 local commits onto origin
+    4f3522ad4 (Morph INT-2..11 + the Windows popcount fix). HeuristicArm.h lever conflict resolved by keeping both
+    sides; the fungusv3 GT commit was dropped in the rebase and RE-MEASURED: smoke 199/199 (0 changed), regression
+    312/316 with the fungusv3 rows equal to the pre-rebase accept (re-accepted `--deck=fungusv3`, 831f74445) and
+    `extraturns_regression_d5_s2002` gi66 (same T5, play differs) = the known pooled-batch flake, NOT accepted.
+    check_gt_logs consistent. CI run 43300002107 (build/scratch/claude1110/6r12/ci/ci.log).
+  * **gods option (b), dredge-anchor narrowed to a dredge card ALREADY IN THE GRAVEYARD (not hand-only): STILL FAILS ->
+    PARKED, USER DECISION.** `wip/gods-dredge-anchor-gy-only` 3246c72bc (pushed under a NEW name; the old
+    `wip/gods-land-after-dredge-draw` 403635f95 on origin is unchanged): LandPositionAxisLive drops the hand clause;
+    MTG_LAND_AFTER_DREDGE_DRAW is now a heurarm per-job lever so both arms ran in ONE pooled batch. Units (dredge set)
+    pass incl. a new hand-only -> axis-off check; repros s30005620 / s30013694 MISS 0. **Held-out gods 3000 (7380001+):
+    net +4 at unwon=9, +274 at unwon=99; 30 slower / 26 faster (was 32/25); digest-diff 214 (was 325); among games both
+    arms win the turn delta is now 0 (was +3); the SAME 4 wins -> unwon (gi 1111, 1905, 2738, 2804) and 1 unwon -> win
+    (2489) remain; work units 79.25M off / 83.83M on (fold-only 85.2M).** The off arm (lever off) is byte-identical to
+    round 10's off arm on all 3000 games, so the rebase did not move gods play and the lever is inert when off. The
+    narrowing removed the turn-level dilution entirely; what is left is 4 win->unwon flips, all of which recovered at
+    d8 b0 in round 11 (not re-run this round). gi1905 still flips, so its divergence is NOT the hand-only case the
+    round-11 note assumed -- next look: the divergence turn's graveyard at gi1905 / 1111 / 2738 / 2804.
+  * **USER DECISION (updated):** keep option (b) off (gods ENUM-GAP ~138/5000 stays), or accept +4 turns / 3000 at
+    unwon=9 (4 games lose their win at the shipped budget, 1 gains one; both-won games unchanged). Recommendation:
+    one more look at the 4 flips (if they share a mechanism it may be a fixable defect rather than budget), else accept.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
