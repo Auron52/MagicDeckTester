@@ -910,6 +910,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
 // tier the {1} taps the Needle ({U}+{R} float) and both Hunts pay. The tier can only change a payment the plain
 // rule left on the stranding path; the counter it spends is the line's price, which the search weighs against
 // every other line.
+static int LocalFloatUnits(const ManaPool& f, int c)
+{
+    const int u[5] = { f.white, f.blue, f.black, f.red, f.green };
+    return u[c];
+}
 static std::uint64_t LineSpareSourceMask(const GameState& state, int active, bool for_creature,
                                          const int later[5], const ManaPool& local_float,
                                          std::uint64_t reserved_mask, bool& short_line,
@@ -1005,6 +1010,25 @@ static std::uint64_t LineSpareSourceMask(const GameState& state, int active, boo
     // the Farm's second {W} paid Righteous's generic, Sol Ring's {C} floated, and Lightstall was dropped
     // (strict `>` read owed 1 vs supply 1 as not short).
     const bool tight = LineSpareTightOn();
+    if (depletion_tier)
+    {
+        // The tier spends a COUNTER, so it is taken only when it RESCUES the line on this count: no colour is
+        // short even with every unit kept (later > supply -- the line fails whatever this pip takes, and the
+        // counter would buy nothing), and some colour is owed exactly what is left (the unit this pip would
+        // eat is the one a later pip needs). Niv-Mizzet held-out (2026-11-12): without this guard the tier
+        // also fired on hopeless lines, net +2 over 6,000 games.
+        bool strict = false, exact = false;
+        for (int c = 0; c < 5; ++c)
+        {
+            if (later[c] > supply[c]) { strict = true; }
+            // ...and THIS payment floats a unit of that colour: the generic pip would eat it. With nothing of it
+            // floating the pip taps a source either way, and the plain payer's choice stands (Niv-Mizzet: firing on
+            // a Bluffs/Needle board with an empty float moved 26 of 6,000 games, 0 faster).
+            else if (later[c] > 0 && later[c] == supply[c] && LocalFloatUnits(local_float, c) > 0) { exact = true; }
+        }
+        short_line = !strict && exact;
+        return short_line ? spare : 0;
+    }
     for (int c = 0; c < 5; ++c)
     {
         if (later[c] > supply[c] || (tight && later[c] > 0 && later[c] == supply[c]))
