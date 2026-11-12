@@ -96730,6 +96730,7 @@ static void GameLineCacheClear();        // MTG_GAME_LINE_CACHE's per-game map (
 static void IdHintGameClear();           // MTG_ID_HINT_GAME's previous-decision hint map (defined with it, below)
 static void InWinCacheClear();           // MTG_INWIN_CACHE's per-game map (defined with it, below)
 static void RolloutSuffixProbeClear();   // MTG_ROLLOUT_SUFFIX_PROBE (diagnostic)
+static void EtChainClearPerGame();       // Extra Turns' verified chain trial state (defined with it, below)
 // DIAGNOSTIC ONLY (MTG_AA_ROUTE_APPLY_CLEARBP; AlchemistComboRouteApply): drop the breakpoint-continuation
 // caches -- the plan cache BpEnumEntryFor serves from and the canon-front memo -- exactly as their own
 // clear-all eviction does when the plan pool or the entry cap binds, so a test can force that eviction to land
@@ -96790,6 +96791,11 @@ void TurnSolver::ClearPerGameCaches()
     // The EDF combo route's board-keyed trial memo -- same channel, see EdfComboRouteClearMemo.
     EdfComboRouteClearMemo();
     AlchemistComboRouteClearMemo();
+    // Extra Turns' chain-trial state (etchain): keyed on the game SEED alone, so a reused worker that had
+    // just played ANOTHER JOB's game with the same seed (the suite's d3 / d5 / 2HG jobs share their seeds)
+    // kept that game's failed_round -- this game then skipped its trial at that turn -- and its replay
+    // steps. See EtChainClearPerGame.
+    EtChainClearPerGame();
     FluctKeepPayableClearMemo();               // Fluctuator's keep-needed payability memo
     g_incinerator_pin_cursor = 0;              // advances unpinned on every Incinerator trigger (see BuildBreakpointKey)
     manaoracle::ClearRefineMemoPerGame();      // the mana oracle's payment-refine memo
@@ -98975,6 +98981,22 @@ namespace etchain
     inline thread_local int first_seq = -1;
     inline thread_local int failed_round = -1;
     inline thread_local std::vector<EtChainStep> steps;
+}
+// Per game (TurnSolver::ClearPerGameCaches). The state above is reset inside the trial only when the
+// game SEED changes, and every suite deck's d3, d5 and 2HG jobs play the same seeds: in a pooled batch a
+// worker that had just finished another job's same-seed game kept its failed_round (the trial at that
+// turn was then skipped outright) and its active chain. Measured (docs/design/pooled-vs-solo-play-drift.md):
+// 16 replicas of extraturns_smoke_d3_s1001 in one 32-thread batch, 1-9 of 800 games off their solo
+// result, gi 28 at 44,989 units instead of 22,543. Cleared here, every game starts from the state a fresh
+// thread gives it -- the state solo play already started from, since a solo job's consecutive games on
+// a thread never share a seed.
+static void EtChainClearPerGame()
+{
+    etchain::active = false;
+    etchain::seed = 0;
+    etchain::first_seq = -1;
+    etchain::failed_round = -1;
+    etchain::steps.clear();
 }
 static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool second_main,
                                 TurnSolver::SearchLine& out)
