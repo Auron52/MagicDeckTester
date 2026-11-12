@@ -18,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <functional>
@@ -352,7 +353,8 @@ std::atomic<long long> g_decisions{0}, g_plans{0}, g_plans_skipped{0}, g_applies
                        g_gate_rejects{0}, g_gate_rejects_checked{0}, g_gate_rejects_skipped{0};
 // Realize's HIT-ONLY cut: fail-option scripts a hit-only search did not build (each a whole subtree).
 std::atomic<long long> g_hit_only_cut{0};
-std::atomic<long long> g_order_fold{0};   // order variants not realised: an earlier order is the same apply
+std::atomic<long long> g_order_fold{0};
+std::atomic<long long> g_order_fold_class_walk{0};   // plans past the order bound searched by their fold classes   // order variants not realised: an earlier order is the same apply
 std::atomic<long long> g_hit_only_drop_cut{0};   // hit-only frontiers below an already-dropped action
 // MTG_MANA_ORACLE_COST_TRACE: applies by AuditPlan stage (its own realisation incl. the capped retry; the siblings'
 // payments; the other orders of a drop).
@@ -422,6 +424,8 @@ struct Reporter
         { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld unpayable-payment subtrees not built ===\n", g_hit_only_cut.load()); }
         if (g_order_fold.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld order variants are an earlier order's apply (trailing activations) ===\n", g_order_fold.load()); }
+        if (g_order_fold_class_walk.load() != 0)
+        { std::fprintf(stderr, "=== MANA ORACLE order fold: %lld plans past the order bound searched by fold class ===\n", g_order_fold_class_walk.load()); }
         if (g_hit_only_drop_cut.load() != 0)
         { std::fprintf(stderr, "=== MANA ORACLE hit-only cuts: %lld frontiers below a dropped action not built ===\n", g_hit_only_drop_cut.load()); }
         if (g_route_macros.load() != 0)
@@ -3089,6 +3093,7 @@ std::string ActionKey(const Action& x)
 // per-decision work budget (MTG_MANA_ORACLE_DECISION_S) still bounds the cost: past it the verdict is
 // CAPPED-DECISION, never a claim.
 constexpr std::size_t kPhantomOrderBound = 5040;   // seven distinct movable actions
+constexpr std::size_t kPhantomClassBound = 40320;  // the fold-class walk's (OtherOrders): eight distinct positional actions
 
 // THE TRAILING-ACTIVATION FOLD (item 5f, Jumbo seed 30094355 T4). An order variant is applied on the explicit
 // route (Plan::searched_order), and outside the viewer's human sequence (human_action_order / human_sequence, the
@@ -3123,6 +3128,11 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
                                           std::vector<std::vector<TurnSolver::Plan>>* folded = nullptr)
 {
     const std::size_t kMaxDistinctOrders = max_distinct; // default: bounded near the old five-action ceiling (120)
+    // MTG_ORACLE_WALK_BOUND_TEST=<n> (DIAGNOSTIC ONLY): the PHANTOM walk's FULL-order bound drops to n while its
+    // fold-class walk keeps kPhantomOrderBound, so plans the full walk completes go through the class walk instead
+    // -- the check that the class walk reaches the same verdicts (compare a batch's PHANTOM / ORDER counts).
+    static const std::size_t s_walk_test = []
+    { const char* v = std::getenv("MTG_ORACLE_WALK_BOUND_TEST"); return v != nullptr ? std::size_t(std::strtoull(v, nullptr, 10)) : std::size_t(0); }();
     std::vector<TurnSolver::Plan> out;
     std::vector<std::size_t> slots;
     for (std::size_t i = 0; i < plan.actions.size(); ++i)
@@ -3132,6 +3142,7 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
         if (a.kind == Action::Kind::CastFromHand || with_acts) { slots.push_back(i); }
     }
     fold = fold && with_acts && OrderFoldOn() && !plan.human_action_order && !plan.human_sequence;
+    const std::size_t full_bound = (s_walk_test != 0 && max_distinct == kPhantomOrderBound && fold) ? s_walk_test : kMaxDistinctOrders;
     std::vector<std::string> keys;
     std::map<std::string, std::size_t> copies;
     std::size_t distinct = 1;
@@ -3141,10 +3152,72 @@ std::vector<TurnSolver::Plan> OtherOrders(const TurnSolver::Plan& plan, bool wit
         keys.push_back(key);
         const std::size_t count = ++copies[key];
         distinct = distinct * keys.size() / count; // exact multiset-permutation recurrence
-        if (distinct > kMaxDistinctOrders) { break; }
+        if (distinct > full_bound) { break; }
     }
-    const bool complete = distinct <= kMaxDistinctOrders;
+    const bool complete = distinct <= full_bound;
     if (all_tried != nullptr) { *all_tried = complete; }
+    if (slots.size() >= 2 && !complete && fold)
+    {
+        // THE FOLD-CLASS WALK (item 6, Shadowborn seed 30043153 T1: Thrumming Stone + 2 Apostles + 2 Rituals + Diabolic
+        // Intent + suspend Lotus Bloom + the Apostle activation, 10,080 orders but 1,260 apply classes). The bound is
+        // on the orders WALKED, and under the trailing-activation fold above only one order per class is ever applied,
+        // so a plan whose CLASS count fits the bound can be searched in full: walk the casts' (positional) multiset
+        // orders times the trailing activations' multiset orders, each class realised once by its representative
+        // (positional items in the plan's positional slots, trailing ones in its trailing slots). The original's own
+        // class is skipped (it realises exactly as the plan, which the caller has already applied). Only reached where
+        // the full walk exceeds the bound, so every plan the full walk completes is untouched. Sound by the fold's own
+        // argument; MTG_ORACLE_ORDER_FOLD=0 turns both off.
+        // The class walk's own bound: a PHANTOM walk takes kPhantomClassBound (eight distinct positional actions);
+        // the per-decision work budget still bounds the cost, past it the verdict is CAPPED-DECISION, never a claim.
+        const std::size_t class_bound = max_distinct == kPhantomOrderBound ? kPhantomClassBound : kMaxDistinctOrders;
+        while (keys.size() < slots.size()) { keys.push_back(ActionKey(plan.actions[slots[keys.size()]])); }   // the count loop stops early
+        std::vector<std::size_t> pos_at, trail_at;   // indices into `slots`
+        for (std::size_t i = 0; i < slots.size(); ++i)
+        { (OrderFoldTrailing(plan.actions[slots[i]]) ? trail_at : pos_at).push_back(i); }
+        auto count_of = [&](const std::vector<std::size_t>& at)
+        {
+            std::map<std::string, std::size_t> c;
+            std::size_t n = 1, len = 0;
+            for (const std::size_t i : at)
+            {
+                ++len;
+                n = n * len / ++c[keys[i]];
+                if (n > class_bound) { return class_bound + 1; }
+            }
+            return n;
+        };
+        const std::size_t np = count_of(pos_at), nt = count_of(trail_at);
+        if (np <= class_bound && nt <= class_bound && np * nt <= class_bound)
+        {
+            if (all_tried != nullptr) { *all_tried = true; }
+            g_order_fold_class_walk.fetch_add(1, std::memory_order_relaxed);
+            const auto by_key = [&](std::size_t a, std::size_t b) { return keys[a] < keys[b]; };
+            std::vector<std::size_t> pp = pos_at, tp0 = trail_at;
+            std::sort(pp.begin(), pp.end(), by_key);
+            std::sort(tp0.begin(), tp0.end(), by_key);
+            auto same = [&](const std::vector<std::size_t>& perm, const std::vector<std::size_t>& at)
+            {
+                for (std::size_t i = 0; i < at.size(); ++i) { if (keys[perm[i]] != keys[at[i]]) { return false; } }
+                return true;
+            };
+            do
+            {
+                const bool pos_orig = same(pp, pos_at);
+                std::vector<std::size_t> tp = tp0;
+                do
+                {
+                    if (pos_orig && same(tp, trail_at)) { continue; }
+                    TurnSolver::Plan p = plan;
+                    for (std::size_t i = 0; i < pos_at.size(); ++i)   { p.actions[slots[pos_at[i]]]   = plan.actions[slots[pp[i]]]; }
+                    for (std::size_t i = 0; i < trail_at.size(); ++i) { p.actions[slots[trail_at[i]]] = plan.actions[slots[tp[i]]]; }
+                    p.searched_order = true;
+                    if (folded != nullptr) { folded->emplace_back(); }
+                    out.push_back(std::move(p));
+                } while (std::next_permutation(tp.begin(), tp.end(), by_key));
+            } while (std::next_permutation(pp.begin(), pp.end(), by_key));
+            return out;
+        }
+    }
     if (slots.size() < 2 || !complete) { return out; }
     // The fold's class of an order: its casts in order, then its trailing activations in order.
     std::set<std::string> seen_class;
