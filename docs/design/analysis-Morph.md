@@ -265,16 +265,44 @@ the durable record).
   the non-attacker fold and dropping AL's fetch-hold-off / tutor / discard hooks. Output build/scratch/morph-provab/.
 - MorphProvider stays (USER sign-off still collected: it replaced a route the deck rode before).
 
+### INT-4 result (2026-11-12, commit `01be1014d`) -- the verify_deck + claude-play sweep items
+1. **MDFC back face leaves the battlefield as its front (CR 712.8a)** -- the sweep's g10 bug; see the sweep section
+   below. Generic: `RevealedCard` maps a played back face (Legion Stronghold, Soporific Springs, Turntimber,
+   Boulderloft / Slitherbore Pathway) to its front at every battlefield -> zone push, both worlds; BounceKarooLand's
+   private Pathway block folded into it.
+   SMOKE (not accepted): every non-Morph config BYTE-IDENTICAL (195/199, incl. the MDFC decks Auras, Melira, Merfolk,
+   Selesnya v2, Stompy -- none bounces or kills a back-face land in those seeds). Morph moves: d0 5.110 -> 5.109
+   (gi888 T5 -> T4), d3 4.58 = 4.58, d5 4.49 = 4.49, 2HG d5 5.28 -> 5.24 (gi8 T6 -> T5); slower = 0 in every
+   config; 10 searched + 5 d0 games change play at the same score, every explained one holds both Gruul Turf and
+   Legion Leadership (the search now sees a bounced Stronghold come back as a castable pump).
+2. **viewer `face_up` HARD MISS was a FORCING GAP in the auditor, not the emitter.** The prompt needs a face-down
+   permanent of ours AND its morph cost payable from untapped mana at the opponent's end step; the developing line
+   (longest plan) hard-casts or taps out, so the window never opened. `pick_face_up_window`
+   (scripts/audit_viewer_decisions.py): with a face-down target on board choose a cast-nothing plan (land drop
+   kept), else the cheapest face-down cast of the target; `face_up` is attributed to its OPTION names (source is
+   "Opponent's end step"). `--verify-card`: Firecat VERIFIED gi0, Hystrodon gi1, Den Protector gi6 (face_up + dig),
+   source_confirmed on all three.
+3. **viewer_wiring `dig`**: the Den Protector reuse row in tools/play/DECISIONS.md had its emitter/GUI cells shifted
+   (the provider's `GyReturnToHandPick` in the emitter column). The regrowth IS wired (`ResolveEtbReturnGyToHand` ->
+   `g_play_dig_chooser`); the row now names `WriteDigDecisionJson` / `digPanelHtml`.
+4. **play_invariants advisories**: a "<X> (Face-down)" / "(Kicked)" / "(Bestowed)" cast is a cast variant of hand
+   card X (`SYNTH_FACE_SUFFIXES`, scripts/play_invariants.py).
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18
 - driver: Claude agents (Sonnet players, one per game index 0..17 at seed 50000+gi; every flag adjudicated by an Opus
   verifier). Benchmark = the search at play settings (d5 b20).
-- flags: 1 unresolved
-  - REAL ENGINE BUG (g10, T2): a spell//land MDFC played as its land back face (Legion Stronghold) and bounced by
-    Gruul Turf returns to hand as a land-only object -- the Legion Leadership front is lost (CR 712.8a: off the
-    battlefield/stack a DFC has only its front face). Fix site: the MDFC back-face builder in CardDatabase.cpp
-    should set `mdfc_front_name` so BounceKarooLand restores the front (and the other leave-battlefield paths).
+- flags: 0 unresolved
+  - RESOLVED in `01be1014d` (INT-4) -- REAL ENGINE BUG (g10, T2): a spell//land MDFC played as its land back face
+    (Legion Stronghold) and bounced by Gruul Turf returned to hand as a land-only object -- the Legion Leadership
+    front was lost (CR 712.8a: off the battlefield/stack a DFC has only its front face). Root cause: the
+    spell//land back-face synthesis in CardDatabase.cpp replaced the copied params with a clean `bp` and dropped
+    `mdfc_front_name` (the Pathway path kept it). Fix: `bp.mdfc_front_name` is set, and `RevealedCard`
+    (SpellEffects.h) -- the wrapper every battlefield -> hand / graveyard / exile / library push already goes
+    through, executor and rollout -- now maps any played back face to its front, so the fix is not bounce-only.
+    Pinned by the unit test `mdfc: a played BACK face leaves the battlefield as its FRONT` and the scenario
+    `morph_mdfc_bounced_stronghold_returns_leadership` (turn-4 kill exists only if the bounce returns Leadership).
   - dismissed (g17, T5): a self-defeating 4-spell plan payable only by tapping the lone attacker Birds -- a legal
     optimistic proposal the player chose; the shipped search does not pick it.
 - win turns: Claude = search on 12 games; Claude faster on 4 (g0 4 vs 5, g3 3 vs 4, g5 7 vs 8, g15 4 vs 5) -> 5c
