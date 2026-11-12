@@ -115,7 +115,21 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-12 ~11:00 UTC) -- RESUME HERE
+## Checkpoint (2026-11-12 ~18:45 UTC) -- RESUME HERE
+
+FARM AMENDMENT LANDED, DEFAULT ON (a80914138 + GT 045348604): Ranger-Captain / Ranger of Eos admit Curious Farm
+Animals (after Martyr) only while life < the top own threshold AND the hand holds no white card (Martyr's reveal
+dry). The first DRY build was inert (CardHasColorNamed on a hand Card reads no mask; fixed via
+CountHandCardsOfColor). Held-out ab7 (d5 b20, std 79001 x600, 2HG 80001 x200): literal 5.3167 / 5.6250; broad
+5.3183 (+1 gi233, units +4.8%); DRY 5.3167 / 5.6250 (0 slower / 0 faster, units +0.04%). Regression s2002 gi0
+T6 -> T5 at d3 b10 and d5 b20; smoke d0 gi742 line change only. Smoke + regression GT accepted (martyr-scoped);
+overnight keys for d3/d5 may now be stale -> left to the periodic overnight run (USER: no re-runs). Decision
+surfaced to the USER (they suggested "prune it in more cases"; =0 restores the literal rule).
+5c2 EXTENSION RUNNING (PGO of the pre-Farm tree, logs/martyr-lifegain/tiebreak-b2.log, task bat0jrqq3).
+NEXT: push -> on the extension's verdict pool with the first run -> 5h audit_viewer_decisions -> verify_deck
+--write-ledger -> Stage 6 report -> mullgen.sh run (alone) -> valueleaf.sh run.
+
+### Checkpoint (2026-11-12 ~11:00 UTC, history)
 
 REBASED onto origin cc24d1362 (upstream mana 5d/5f cuts + hydras), unpushed. Release rebuilt; post-rebase smoke
 ALL PASS, 195/195 unchanged, 0 play changes (logs/martyr-lifegain/postrebase-smoke.log). The pre-rebase martyr
