@@ -1162,6 +1162,17 @@ fungus 1,880, gods 4,300 (first run).
   Possible same-shape leads NOT verified (no repro): Aether Hub (colours cost {E}) and Tarnished Citadel / Grand
   Coliseum (colours cost damage) also list C + every colour, so a {C} tap of theirs booked `wild` could later pay a
   colour without the {E} / damage.
+  Validation: held-out A/B gods 2000 @7410001+ (one pooled batch): 3 digest diffs, 1 faster, 1 slower (gi1509 T5 -> T6,
+  T5 in both arms at --depth 8 --budget-ms 0), net +0 (MT=99 and MT=9). Smoke 199/199, regression 316/316 unchanged (so
+  04610571a's diagnostics are covered; no ET gi66 flake); check_gt_logs clean; no GT accept. Commit c93235150.
+  **Gate (PGO, src a1c7b02fc837): gods 15000-19999, 5000 games, issues 4231** (block 10000-14999: 3596). ORACLE-GAP
+  63 -> 20, ENUM-GAP 138 -> 111, APPLY-DROP 5 -> 43, UNMODELED 14 -> 10, CAPPED 56 -> 356 (315 of them one game,
+  s30016458 T8: seven lands with three Tendos, the payment search hits 20000 applies), CAPPED-DECISION 3320 -> 3691
+  (2 decisions). Identity byte-identical. **Remaining Tendo-shaped ORACLE-GAP (PARKED, not traced):** s30018016 T6
+  `{Careful Study + Magus}` and s30018089 T5 `{[ordered] Looting + Magus}` still report `engine graft that equalizes:
+  battlefield,#54` / `#53`, i.e. the engine ends with a Tendo counter that every oracle line spends. The prepay path is
+  fixed, so this one is a different payer path (per-cast payer, ordered-cast route, or the mana cache). Trace it the
+  same way: `MTG_TAPDBG=1` + the repro in the report (the TFCD lines print each cost and the float).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
