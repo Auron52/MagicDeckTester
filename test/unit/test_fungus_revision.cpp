@@ -2403,7 +2403,9 @@ TEST_CASE("item B (c): a tap queued AFTER an exhausting act=Saproling Burst is r
 TEST_CASE("item B (e), decision 14: a Burst activation whose tokens die is offered only with a lord or a death payoff")
 {
     EnsureCardsLoaded();
-    for (int board = 0; board < 4; ++board)   // 0 bare, 1 Sporecrown, 2 Slimefoot, 3 bare with the lever off
+    // 0 bare, 1 Sporecrown, 2 Slimefoot, 3 bare with the lever off, 4 a Sporecrown in HAND (the plan may cast it
+    // before the activation -- fungusv3 s88402216's T3 kill)
+    for (int board = 0; board < 5; ++board)
     {
         CAPTURE(board);
         GameState s = Fresh();
@@ -2411,6 +2413,12 @@ TEST_CASE("item B (e), decision 14: a Burst activation whose tokens die is offer
         s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
         if (board == 1) { Put(s, "Sporecrown Thallid", 0, 70); }
         if (board == 2) { Put(s, "Slimefoot, the Stowaway", 0, 90); }
+        if (board == 4)
+        {
+            Card c = Def("Sporecrown Thallid").card;
+            c.m_number = 71;
+            s.players[0].hand.push_back(c);
+        }
         heurarm::t_arm[heurarm::FADE_NO_DEAD_ACT] = static_cast<std::int8_t>(board == 3 ? 0 : 1);
         const std::vector<int> ks = FadeActionKs(s);
         heurarm::t_arm[heurarm::FADE_NO_DEAD_ACT] = -1;

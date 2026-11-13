@@ -47840,11 +47840,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // Covers every route a Burst activation is searched through: the landmark menu, the {1} fallback,
                 // the full ladder, and every breakpoint / site-9 continuation (they enumerate through here).
                 // Autonomous search only: a human may make any legal activation.
+                // THE PLAN MAY CAST THE LORD FIRST. This menu is read off the ROOT board, but a plan applies its casts
+                // before its trailing activations, so a Sporecrown Thallid cast in the same plan lifts the 0/0 to a
+                // 1/1 (fungusv3 s88402216 T3: Sporecrown + Crossroads + Ascension, then the Burst's last counter --
+                // a T3 kill the root-board test deleted; the held-out A/B and --depth 8 --budget-ms 0 both showed
+                // it). So every lord in HAND counts too, summed over copies (the generous direction): the k is
+                // dropped only when no castable-this-plan lord could save the token. An Ascension in hand cannot go
+                // live before combat, and a later main phase re-enumerates on its own board.
                 static const bool s_no_dead_act = EnvOn("MTG_FADE_NO_DEAD_ACT", true);
                 const bool no_dead_act = heurarm::Flag(heurarm::FADE_NO_DEAD_ACT, s_no_dead_act)
                                       && !HumanPlayActive();
                 int  fresh_t   = 0;
                 bool fresh_t_k = false;
+                int  hand_t    = 0;      // toughness the hand's lords could add (cast earlier in the same plan)
+                bool fresh_t_k_hand = false;
                 for (int k : counts)
                 {
                     if (no_dead_act)
@@ -47859,7 +47868,28 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                                                       sd->params.fade_token_color);
                                 fresh_t_k = true;
                             }
-                            if (left_k + fresh_t <= 0 && fade_read().drain_per_death_opt <= 0) { continue; }
+                            if (!fresh_t_k_hand)
+                            {
+                                const int me = state.active_player_index;
+                                for (const Card& hc : state.players[me].hand)
+                                {
+                                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                                    if (hd == nullptr || !IsLordPermanent(*hd)) { continue; }
+                                    GameState g = state;
+                                    Permanent lp;
+                                    lp.card             = hd->card;
+                                    lp.card.m_number    = hc.m_number;
+                                    lp.controller_index = me;
+                                    lp.owner_index      = me;
+                                    lp.def_absent       = false;
+                                    g.battlefield.push_back(lp);
+                                    hand_t += std::max(0, FreshTokenAnthemToughness(g, me, sd->params.fade_token_subtypes,
+                                                                                    sd->params.fade_token_color)
+                                                          - fresh_t);
+                                }
+                                fresh_t_k_hand = true;
+                            }
+                            if (left_k + fresh_t + hand_t <= 0 && fade_read().drain_per_death_opt <= 0) { continue; }
                         }
                     }
                     Action a;
