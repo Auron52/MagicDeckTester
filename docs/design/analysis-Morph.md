@@ -278,6 +278,32 @@ the durable record).
   partition needs MORE taps than main's joint payment (a Karoo split), the post-combat state keeps main's taps.
 - Viewer: the executor emits a `combat` history line "<doublers> cast in combat after exalted (declare-attackers
   step): <attacker> +N power (exalted +E doubled)". Human and AI lines share both appliers, so they agree.
+- Separate modelling fix found on the way (`MTG_EXALTED_DS_PROJECTION`, default ON): the attack projection
+  (`PendingAttackDamageImpl`) added exalted's base +E ONCE for a double striker, but exalted is power until end of
+  turn (CR 702.83a), which the combat core folds into `base_pw` before the double-strike split. Under Temur Battle
+  Rage the projection under-counted by E. It now adds (E + doubler extra) x (ds ? 2 : 1); a Jitte bearer goes
+  through the `JitteDamageMath` difference.
+- Tests: 10 unit cases (8 doubler, 2 projection == combat); scenarios 507/507, including
+  `morph_doubler_after_exalted_lethal` (T3; T4 under `=0`), `..._float_stays_main` (T4) and the USER's seed 8
+  board `morph_seed8_might_double_berserk_after_exalted` (T5; T6 under `=0`); full mtg-test 2933/2933.
+  Byte-identity: Anti-Lifegain, Melira Pod and Mirrorwing (12 games each, seed 71000, their play depth, b20) give
+  identical .wins digests and units with both flags ON vs both OFF.
+- Held-out A/B (2026-11-13, one pooled batch, seed 60000+, d5 b20, per-job flags; output
+  build/scratch/exalted/wins3). A = both flags off (the parent's behaviour), B = projection fix only, C = both:
+
+  | deck     | games | A avg  | B avg  | C avg  | C vs A faster/slower | units A -> C          |
+  |----------|-------|--------|--------|--------|----------------------|-----------------------|
+  | morph    | 1000  | 4.0960 | 4.0960 | 4.0500 | 43 / 0               | 6,994,253 -> 6,493,510 (-7.2%) |
+  | morph2hg | 300   | 4.8233 | 4.8233 | 4.7767 | 14 / 1               | 6,122,020 -> 5,784,167 (-5.5%) |
+
+  B is byte-identical to A on both decks (digest-identical, same units): Morph's Temur Battle Rage plus a lone
+  exalted attacker never sat on a projection-decided margin in this sample. The one slower game (morph2hg gi 295:
+  T4 -> T5) recovers to T4 at `--depth 8 --budget-ms 0`.
+- USER seed 8 (the reported line): with both flags on, the T5 board (Might of Old Krosa -> Spellskite, Spellskite
+  alone, Berserk x2 after exalted = 20 vs 18) wins T5 on the USER's line. The search finds that line itself from
+  the T5 hand-off (`--choices-then-auto`, d5 b20). The full claude-play stream is in logs/morph/seed8-line.txt
+  (worktree morph-exalted). As dealt, Temur Battle Rage gave a second kill on that board under every flag setting:
+  Might + Berserk + TBR = (8+1) x2 = 18.
 
 ### Provider routing A/B (2026-11-12, HEAD 2c2dc16f7) -- MorphProvider vs the pre-INT-1 route (AntiLifegain)
 - Same binary, same seeds (930000 block), two concurrent 12-thread batches; arm B pinned with MTG_PROVIDER_DECK to
