@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102325,7 +102325,9 @@ namespace p18
         // start is refused at no cost (heur pays nothing for it either); only passes heur would start are walked and
         // priced. Measured 2026-11-13 (T3): refused passes' leafless walks were Landfall's and Melira's largest
         // overhead (1.64M / 1.43M units, vs 0.76M / 0.86M for the double walk).
-        o.hx = k.find("_phx") != std::string::npos;
+        // _phx<10F>: refuse only when the extrapolation exceeds F x the admit line (no digits: F = 1).
+        { const std::size_t p = k.find("_phx");
+          if (p != std::string::npos) { o.hx = true; const double f = std::atof(k.c_str() + p + 4) / 10.0; o.hxf = f > 0.0 ? f : 1.0; } }
         { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
@@ -111239,7 +111241,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 const double pe = p18_est[static_cast<std::size_t>(k - 1)];
                 const double e = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
                 const double remh = std::max(0.0, rem0 - priced);
-                const bool fitsh = g_reserve_value_pass ? (e + e <= gate_alpha * remh) : (e <= gate_alpha * remh);
+                const bool fitsh = g_reserve_value_pass ? (e + e <= kn.hxf * gate_alpha * remh) : (e <= kn.hxf * gate_alpha * remh);
                 if (!fitsh)
                 {
                     if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remh, e, 0.0, 0, 0, 0, 0, std::string("phx")}); }
