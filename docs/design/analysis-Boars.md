@@ -100,6 +100,8 @@ Then: build, coverage re-check, cost + field audits, provider (BoarsProvider), S
 ## Open USER questions (surfaced, not blocking)
 
 1. D1-D8 above (each taken provisionally).
+2. I3b risk 3: Raggadragga's cast-trigger target is ONE shared per-turn rank, so two 7+-mana casts in a turn cannot
+   pick independent targets (a line unfindable at any budget). Recommendation: build a per-cast rank in I4. See "I3b done".
 
 ## I1 done (2026-11-13) -- Windswept Heath, Flinthoof Boar, Herald's Horn
 
@@ -301,3 +303,86 @@ Snow (Jorn, the predicate the new clause extends) IDENTICAL 20/20. Boars 40 game
 **Open questions (surfaced, not blocking)**
 * D6 for End-Raze: main 2 opens on the turns a granted mana creature is untapped post-combat (agent default per D6).
 * D2: End-Raze's trample (printed and granted) inert, PROVISIONAL.
+
+
+## I3b done (2026-11-13) -- Raggadragga, Goreguts Boss
+
+Commit: `db1c83d1b` on `boars-analysis` (local only, not pushed). Unit tests 2966/2966 pass (I3c fixed one compile error in the new file: `AvailableManaPool(exec)` -> `AvailableManaPool(exec, nullptr)`; no engine bug found) (`test/unit/test_boars_raggadragga.cpp`,
+6 cases). Byte-identity vs the I3a binary (`--games 20 --seed 9101 --depth 3 --budget-ms 10 --ignore-play-profile`,
+`[win]` lines): Unpredictable Cyclone, Snow, Stompy Surprise all IDENTICAL, 20/20 games each (sorted `[win]` lines; the unsorted compare reported DIFFER only from the parallel completion order -- `i3b_ident.sh` now sorts). Boars 40 games at d3 b10: rc 0, 40/40 wins, avg 5.525 turns (21 x T5, 17 x T6, 2 x T7), no assert. Audits: audit_card_costs rc 0 (614/614 match Scryfall); audit_card_fields offline rc 0 (the oracle-divergence lines are advisory -- bracket notes, as for every implemented card); audit_viewer_decisions `--no-sweep` rc 0, oracle cross-check clean, expected decisions bounce / creature_type / dig / land_entry / target / tutor_etb. The Scryfall snapshot entry was written
+from the already-downloaded JSON (`build/scratch/boars/scry/RaggadraggaGoregutsBoss.json`, the fields do_update writes),
+without a `--update` round trip, to avoid the 429s I1-I3a hit.
+
+**Landed**
+* **cards.json** (cost/oracle verbatim from Scryfall + bracket; `template custom`, Legendary Human Boar 4/4): params
+  `lord_affects_mana_ability_creatures` + `power_bonus`/`tough_bonus` 2, `attack_untap_mana_ability_attackers`,
+  `cast_trigger_untap_pump_target_min_spent` 7 / `_power` 7 / `_tough` 7 / `_grants_trample` (inert, D2 PROVISIONAL).
+* **Anthem**: ONE predicate `CreatureHasManaAbility(state, self, card)` (SpellEffects.h, beside ManaDefOf): HAS the
+  ability, never can-use (mana dork / `produces` / creature mana rock / sac-for-mana / Alchemist / animated mana land /
+  a live Brightcap grant, the grant walk gated on `deck_has_mana_grant`). `IsLordPermanent` + a `process_lord` branch
+  in `ComputeLordBonus` -- every P/T reader in both worlds. Sick Birds and tapped Sage are 2/3 and 2/5.
+* **Draft risk 5 (EffectivePower misses the anthem)**: the attack-decision power reader (`AttackPowerOf`) already adds
+  lords. The dork hold tower (`HoldManaSourceForCollapsedMain`, which tests `EffectivePower() > 0`) and the three
+  other dork attack/hold sites I3a touched now also exempt `AttackUntapsAttacker` (Raggadragga out + a mana ability):
+  attacking costs that dork no mana, the vigilance-equivalent SOUND exemption.
+* **Attack untap** (Jorn shape, both combats): `AttackUntapManaAttackers(state, ctrl, atk_idx, declared_n)` at the Jorn
+  capture point takes only the first `declared_n` slots (DECLARED attackers; a put/token is not, CR 508.4 -- Ilharg's
+  put is excluded by construction), as m_numbers; `UntapManaAttackers` right after `ResolveCombatDamage` /
+  `CounterPingFinish`, before `PingDorkFinish` (an untapped Druid can then ping), with `NoteUntapEffect`.
+* **Main 2 (D6)**: `UntapSecondMainLive` third clause -- a Raggadragga we control AND an own untapped creature with a
+  mana ability that can tap now (pure-board proxy, the Jorn/I3a precedent; a dork held home only widens main 2). Deck
+  stamp `deck_has_attack_untap` ORs the param. No GameState field for this clause.
+* **Cast trigger**: in the shared `FireOnCastTriggers`, `mana_spent >= 7` (the I2b argument) collects one trigger per
+  own Raggadragga; resolved after the loop's tokens/clues via `ChooseCastTriggerTargets(..., untap_pump=true)` +
+  NEW `ResolveUntapPumpTarget` (re-found by m_number, CR 608.2b; untap with `NoteUntapEffect`; +7/+7 temp; trample
+  recorded only). Order vs Herald's counters / other cast triggers is a sound identity (pumps and counters commute).
+* **Target = searched** (Ulamog's machinery): `CastTriggerTargetClasses(..., untap_pump)` = creatures only, shroud
+  excluded, opponent creatures folded away in SEARCH when an own creature is legal (sound vs the passive opponent;
+  human play sees the full set). **Risk 4**: the fold key (LandfallTargetFoldKey) already mixes `tapped` and
+  `entered_this_turn` and refuses temp bonuses -- unit-tested (tapped / sick / ready Birds are three classes). NEW
+  provider hook `DecisionProvider::UntapPumpTargetOrder` (ORDER only, a pure board function so both worlds agree): own
+  tapped mana creatures that can tap now (largest yield first), own untapped attack-capable creatures (highest attack
+  power), the rest of ours, the opponent's. Axis: `RaggaUntapPumpAxisWidth` -- a plan with a Raggadragga out or cast AND
+  a cast whose spend can reach 7 (`CastSpendMayReach`: MV >= 7, an {X}, or a kicker) gets ranks up to the creature
+  count (board creatures either side + creature cards the plan casts; an upper bound because paying can SPLIT a class
+  by tapping one copy, so board classes are not a bound). No cap. Stamp `deck_has_cast_target_trigger` ORs the param.
+* **Risk 1 (mid-phase refund)**: `ResolveUntapPumpTarget` bumps NEW `GameState::cast_untap_refunds` (uint8, monotonic,
+  bool padding, sizeof unchanged; Dominance.h classification: read only as a delta -> nothing to fold) when it untaps
+  a TAPPED own mana creature that can tap now. `CollectActivationKeys` emits NEW `kActUntapRefund` (219) on the
+  Raggadragga with the counter in bits 40+, so breakpoint site 9 (shared by both worlds) sees a new key and re-plans the
+  rest of the phase; `PlanOpensBreakpoint` marks such plans for the site-9 wave. Unit-tested: the rollout apply of
+  End-Raze off a Sage untaps the Sage and `PostEntryActivationPending` is true, false again with the counter reset.
+* BoarsProvider signature ORs all three Raggadragga params; all eight params in `kHandAuditedParams` (Horn take-fold).
+  Viewer: `cast_trigger_untap_pump_target_min_spent` -> MANIFEST `target` (+ the trailing scan); the anthem / attack
+  untap / amounts / trample in INERT_PARAMS; two DECISIONS.md rows (the `target` reuse and a no-decision row).
+
+**Deviations / owed**
+* **Risk 3 OWED (per-turn shared rank)**: the rank is still ONE whole-turn policy; two qualifying casts in one turn
+  share it, so "a different target for each" is findable only where the shared rank happens to name both. A per-cast
+  pin needs an ordinal that is lockstep across the executor's continuation re-installs and the rollout's inherited pin
+  -- a new per-turn state field plus mixed-radix decoding in both pin consumers. Reachability in this list: two of
+  End-Raze (8, or 7 with a Horn) / Decimator (emerge 9 - victim MV) in one turn needs >= 14 mana in a turn -- rare, but
+  real with a Sage refund. Raised for the USER; recorded in code (`RaggaUntapPumpAxisWidth` comment).
+* **Risk 2 hook for I4**: the cast-trigger axis still skips any plan that carries another axis (`sac_pins`, ...).
+  I4's emerge must NOT carry its victim on `sac_pins` through that skip (every emerge plan would silently take rank 0 --
+  a greedy pick inside the window), or must cross the two axes. Comment at `RaggaUntapPumpAxisWidth`.
+* `CastSpendMayReach` covers MV / X / kicker only; a Raggadragga deck with buyback / entwine / replicate spells must
+  extend it (comment). The width bound counts creature CARDS the plan casts, not tokens a mid-plan trigger makes (none
+  in this pool).
+* The m2 clause does not check that the dork attacked (as I3a); sound, wider.
+* Site 9 stands down behind an earlier counted breakpoint in the same apply (its standing rule), so a refund after an
+  earlier breakpoint is re-planned only by main 2 / the next decision.
+
+**Open questions (surfaced, not blocking)**
+* **Risk 3 -- OPEN USER QUESTION: build a per-cast target rank, or accept the shared per-turn rank as owed?**
+  Raggadragga's "untap target creature, +7/+7" target is searched on the same whole-turn rank policy as the
+  Ulamogs' cast triggers: one rank per plan, applied to EVERY qualifying cast that turn. With two 7+-mana casts in one
+  turn (two of End-Raze / Decimator, >= 14 mana, reachable with a Sage refund), the search can only find target pairs
+  that the one rank names for both casts -- e.g. "untap the Sage, then pump the Boar" may be unfindable at ANY budget.
+  That breaks the completeness-at-large-budget invariant (a line made unfindable rather than re-priced), even though
+  it is rare in this list. **Recommendation: build it**, folded into I4 (Decimator emerge touches the same axis and
+  must already resolve the `sac_pins` skip, risk 2): a per-turn cast-trigger ordinal in GameState, advanced in
+  lockstep by the executor's continuation re-installs and the rollout's inherited pin, with mixed-radix decoding of
+  the rank in both pin consumers. Until the USER answers, the agent default is to proceed with I4 and build it there.
+* D2: Raggadragga's trample grant inert, PROVISIONAL. D6: main 2 opens on a Raggadragga turn with an untapped mana
+  creature post-combat (pure-board proxy).

@@ -27,7 +27,11 @@ run stands and what to do next.
     `FireOnCastTriggers(mana_spent)` at every site, `self_haste_cost` main_phase manifest row. Angels / Burn /
     Five Colour byte-identical vs I2a. I4 emerge must pass its paid cost and sacrifice before the call.
   * I3a DONE (End-Raze Forerunners, `temp_vigilance`, combat-kept-mana clause in `UntapSecondMainLive`; Stompy /
-    Angels / Snow byte-identical vs I2b). I3b TODO: Raggadragga (add its attack-untap clause to the same predicate).
+    Angels / Snow byte-identical vs I2b).
+  * I3b DONE `db1c83d1b`: Raggadragga (anthem via CreatureHasManaAbility, declared-attacker untap + main-2 clause,
+    7-mana cast trigger on the searched cast-trigger rank, refund -> site 9). 2966/2966 unit tests; Unpredictable
+    Cyclone / Snow / Stompy Surprise byte-identical vs I3a; Boars 40/40 at d3 b10. OPEN USER Q: per-cast target rank
+    (risk 3; recommend building it in I4). I4 must not ride emerge on `sac_pins` through the cast-trigger axis skip.
   * I4 TODO: Decimator emerge.
   * I5 TODO: Ilharg (+ exalted declared-count fix, put creatures not firing attack triggers,
     legend-rule keep choice in the viewer).
@@ -42,5 +46,5 @@ run stands and what to do next.
 
 ## Open USER questions (surfaced, not blocking; repeat in the closing report)
 
-D1-D8 in the ledger ("Agent defaults taken"), plus from I1: the viewer now asks a creature type for
+D1-D8 in the ledger ("Agent defaults taken"), I3b risk 3 (per-cast Raggadragga target rank), plus from I1: the viewer now asks a creature type for
 Urza's Incubator / Mimic / Automaton in other decks; Boars no longer rides AntiLifegainProvider.
