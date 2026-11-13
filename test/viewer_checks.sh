@@ -388,6 +388,28 @@ if [ "$MODE" != line ]; then
   fi
 fi
 
+#   * human plan realised (engine) -- human_plan_realised_check.py walks Spirits seeds 1-12 through the
+#     --claude-play protocol and COMMITS EVERY OFFERED main-phase plan, asserting the commit's
+#     dropped_casts equals the plan's own `drops` label: a plan without the label casts everything it
+#     lists. Spirits integrator E3 (2026-11-13): an offered Souls + flashback line paid differently in
+#     the human commit than in autonomous play and dropped the flashback, and ~200 one-ordering plans
+#     (the colored_creature_only noncreature-pool optimism) read `not_verified` and dropped a cast.
+#     Needs python3 + the binary; ~2 min.
+if [ "$MODE" != line ]; then
+  if command -v python3 >/dev/null 2>&1 && [ -f "$HERE/human_plan_realised_check.py" ]; then
+    if [ ! -f "$BIN" ]; then
+      echo "FAIL: human plan realised check needs the binary but '$BIN' is missing."
+      rc=1
+    else
+      echo "--- human plan realised (every offered plan casts what it lists, or says it drops) ---"
+      if MTG_BIN="$BIN" python3 "$HERE/human_plan_realised_check.py"; then :; else
+        echo "FAIL: an offered main-phase plan's human commit dropped a cast its menu entry did not disclose."
+        rc=1
+      fi
+    fi
+  fi
+fi
+
 # 1g) INTERACTIVE PARITY (python + binary). ~1 min. The persistent --interactive child is what
 #     every ordinary viewer click now runs on (tools/play/server.js runStepCached), and its whole
 #     claim is that it emits the frames a stateless respawn would. Nothing else here can check

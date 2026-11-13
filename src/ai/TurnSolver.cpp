@@ -23463,8 +23463,9 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
 
 // FLASHBACK COPIES (SubsetFilterPre::gy_copy_runs; Spirits integrator B, 2026-11-13). CollectActions offers a
 // flashback card once per graveyard COPY plus once per hand copy it can cast this main (PENDING: the card
-// reaches the graveyard when that cast resolves, and every graveyard cast applies after the hand casts in
-// both worlds). `real` = min(graveyard copies of the name, its candidates) -- an over-count only admits a
+// reaches the graveyard when that cast resolves; both worlds keep a PENDING flashback after the hand cast that
+// puts its copy there -- ApplyGraveyardCastDependencyOrder -- while every other flashback rides the cast
+// sequence at its CastOrderRank since 507049f75). `real` = min(graveyard copies of the name, its candidates) -- an over-count only admits a
 // pending cast whose apply then finds no card (a no-op the post-apply dedup folds), never the reverse.
 // Lurrus permission casts (gy_cast_source_id >= 0) and retrace casts (one per name) are not runs. Runs with
 // a single REAL candidate can trip neither clause of the filter, so they are not built: EMPTY for every
@@ -51149,9 +51150,13 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
     }
 
     // FLASHBACK FROM HAND, SAME MAIN (Spirits integrator B, 2026-11-13; hole B1). A flashback card cast from
-    // HAND this main can be flashed back in the SAME main: it resolves into the graveyard, and every graveyard
-    // cast applies AFTER the plan's hand casts in both worlds (ApplyPlanDirect's trailing CastFromGraveyard
-    // pass; AIEngine::TakeTurn's likewise). The retrace / flashback block enumerates only the graveyard the
+    // HAND this main can be flashed back in the SAME main: it resolves into the graveyard, and in both worlds the
+    // PENDING flashback stays after the hand cast that puts its copy there (ApplyGraveyardCastDependencyOrder
+    // inside ApplyPayableCastOrder[At], ManaPayment.cpp). Since 507049f75 (integrator E2) a flashback / Lurrus
+    // graveyard cast otherwise RIDES the cast sequence at its CastOrderRank (GyCastRidesCastSequence) instead of
+    // trailing every hand cast; breakpoint classes (Looting, Throes retrace) and graveyard readers (Mystic
+    // Retrieval) still trail (ApplyPlanDirect's trailing CastFromGraveyard pass; AIEngine::TakeTurn's
+    // likewise). MTG_GY_CAST_IN_SEQUENCE=0 restores the all-trailing order. The retrace / flashback block enumerates only the graveyard the
     // plan STARTED from, and no breakpoint opens when the cast card lands there (site 9's kActGyCast is
     // Lurrus's permission), so "Lingering Souls, then its flashback" was unfindable at any budget. One PENDING
     // CastFromGraveyard per hand copy that has a hand cast in this list, legal only beside that cast
@@ -51175,7 +51180,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             if (!cast_here) { continue; }
             // A REGROWTH flashback (Mystic Retrieval) needs a target for EACH cast: the hand cast takes one,
             // so the flashback needs a second -- one already in the graveyard, or another hand card the plan
-            // can cast into it first (graveyard casts apply after every hand cast). Fewer than two in both
+            // can cast into it first (a graveyard READER like Retrieval still trails every hand cast). Fewer than two in both
             // zones together and the pending cast can never be legal (a superset test, never a miss).
             if (hd->params.tutor_from_graveyard)
             {
@@ -76668,6 +76673,14 @@ static std::string SimulateLandPlay(GameState& state)
 // viewer renders as a warning. Every line stays reachable, summaries are byte-identical, and the
 // menu stops lying. MTG_ORDER_DROP_LABEL=0 stops collecting the names.
 static const bool g_order_drop_label = EnvOn("MTG_ORDER_DROP_LABEL", true);
+// MTG_HUMAN_DROP_PROBE_ALL (DEFAULT ON; =0 restores the suspend-only single-ordering probe and the inherited Karoo-clone
+// label): the human menu probes EVERY offered plan for the casts it would drop, not only multi-ordering cast sets.
+// Viewer-only (callers gate on HumanPlayActive); see the single-ordering probe in EnumeratePlans.
+static bool HumanDropProbeAllOn()
+{
+    static const bool on = g_order_drop_label && EnvOn("MTG_HUMAN_DROP_PROBE_ALL", true);
+    return on;
+}
 
 static bool OrderingSearchEnabled(const GameState& state)
 {
@@ -84634,16 +84647,40 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             // (Visits' fetched Forest would pay the suspend) yet the realised order spends a Forest on the
             // suspend and drops Visits (Hydras sweep, seed 50004 T2). With one hand cast there is no ordering
             // to permute, so the drop probe below never ran and the plan read `not_verified`. Probe it here
-            // once, the same way, so the menu says `known_drops`. Viewer-only (HumanPlayActive); a plan
-            // without such a suspend is pushed exactly as before.
-            if (g_order_drop_label && HumanPlayActive() && reorder.size() == 1
-                && std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
-                   { return a.kind == Action::Kind::Suspend && a.cost.ManaValue() > 0; }))
+            // once, the same way, so the menu says `known_drops`. Viewer-only (HumanPlayActive).
+            //
+            // EVERY SINGLE-ORDERING PLAN, not only the suspend form (MTG_HUMAN_DROP_PROBE_ALL, default ON;
+            // =0 restores the suspend-only probe; Spirits integrator E3, 2026-11-13). The flat pools the
+            // enumerator admits a subset with are an upper bound, and two of their known optimisms reach the
+            // menu as plans the commit cannot make: (a) a colored_creature_only land (Unclaimed Territory) is
+            // counted any-colour for a NONCREATURE spell (MTG_CCO_NONCREATURE_POOL, default off -- see that
+            // card's bracket note), so Spirits offers "cast: Lingering Souls (flashback)" whose {B} only a
+            // Territory could make; (b) a hand cast beside a graveyard cast, a Vial put or an activation is a
+            // one-cast ordering, so it never reached the probe below. test/human_plan_realised_check.py walked
+            // Spirits seeds 1-12 and found ~200 such commits reading `not_verified` and dropping a cast. The
+            // plan stays (deleting a dropping plan was measured wrong twice -- see g_order_drop_label) and now
+            // SAYS so. One extra ApplyPlanDirect per one-ordering human-menu plan; autonomous enumeration and
+            // every plan's identity are untouched (would_drop is a label read only by the viewer JSON,
+            // CheckLine's declared-drop filter and a census).
+            const bool s_probe_all = HumanDropProbeAllOn();
+            if (g_order_drop_label && HumanPlayActive() && !p.actions.empty()
+                && (s_probe_all
+                    || (reorder.size() == 1
+                        && std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+                           { return a.kind == Action::Kind::Suspend && a.cost.ManaValue() > 0; }))))
             {
+                // The plan's land is not decided yet here (EnumeratePlansWithLand stamps it afterwards), and an
+                // undecided pre-combat plan makes ApplyPlanDirect play the GREEDY land first. `state` already
+                // holds this plan's land (played, or a deferred Karoo taken out of the hand), so the probe plays
+                // none: a land=none plan otherwise borrowed a land the commit never plays (Spirits seed 22 T2,
+                // "land=none; cast: Aether Vial" read `drops` -- the greedy Chancery bounced the Vial's only
+                // Territory -- and committed clean).
+                TurnSolver::Plan probe = p;
+                if (s_probe_all && !probe.land_decided) { probe.land_decided = true; probe.land_to_play.clear(); }
                 std::vector<std::string> dropped;
                 g_enum_drop_names = &dropped;
                 GameState copy = state;
-                ApplyPlanDirect(copy, p, is_pre_combat);
+                ApplyPlanDirect(copy, probe, is_pre_combat);
                 g_enum_drop_names = nullptr;
                 p.would_drop = std::move(dropped);
             }
@@ -95758,6 +95795,21 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 {
                     TurnSolver::Plan v = p;
                     v.land_slot = TurnSolver::KarooSlotBefore(r, karoo_pos_every);
+                    // HUMAN MENU LABEL (MTG_HUMAN_DROP_PROBE_ALL; Spirits integrator E3, 2026-11-13). The clone
+                    // inherited `would_drop` from the AFTER-the-casts plan it copies, but an earlier drop bounces
+                    // a land BEFORE some casts: a victim whose mana does not float (spend-restricted, e.g.
+                    // Unclaimed Territory) takes its mana away (Spirits seed 22 T2, "land=Azorius Chancery
+                    // (before Aether Vial); cast: Aether Vial" read not_verified and dropped the Vial). Probe the
+                    // clone itself, from the pre-land board, as the commit plays it. Viewer-only.
+                    if (HumanPlayActive() && HumanDropProbeAllOn())
+                    {
+                        std::vector<std::string> dropped;
+                        g_enum_drop_names = &dropped;
+                        GameState vcopy = state;
+                        ApplyPlanDirect(vcopy, v, is_pre_combat);
+                        g_enum_drop_names = nullptr;
+                        v.would_drop = std::move(dropped);
+                    }
                     karoo_pos.push_back(std::move(v));
                 }
             }

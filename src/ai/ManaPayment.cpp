@@ -2110,13 +2110,23 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     int spare_take = -1;
     auto produce_impl = [&](auto& self, Color needed, bool any, bool allow_ramp) -> bool
     {
-        // LINE-SPARE GENERIC FIRST (autonomous; MTG_LINE_SPARE_GENERIC_FIRST, default ON; =0 -> the
-        // historical order). See LineSpareSourceMask for the rule, the case and why it is sound. A generic
-        // pip of a COLOUR-SHORT line, while this payment floats nothing the line can spare, taps a SPARE
-        // source first -- one nested attempt with every non-spare source held -- and falls through to the
-        // unchanged selection below when none can be tapped. Human play keeps its own float hold (below).
-        if (any && !paying_snow && !line_float_bypass && !feeding && LineSpareGenericFirstOn()
-            && !HumanPlayActive())
+        // LINE-SPARE GENERIC FIRST (MTG_LINE_SPARE_GENERIC_FIRST, default ON; =0 -> the historical order).
+        // See LineSpareSourceMask for the rule, the case and why it is sound. A generic pip of a COLOUR-SHORT
+        // line, while this payment floats nothing the line can spare, taps a SPARE source first -- one nested
+        // attempt with every non-spare source held -- and falls through to the unchanged selection below when
+        // none can be tapped.
+        //
+        // HUMAN PLAY TOO (2026-11-13, Spirits integrator E3; it was autonomous-only). The human's committed
+        // line is the plan the viewer OFFERED, and the menu offers it because the search's enumeration and
+        // the autonomous executor both realise it -- with this rule. Without it the human commit of the very
+        // same plan paid differently: Spirits seed 8 T5, `land=Godless Shrine; cast: Lingering Souls,
+        // Lingering Souls (flashback)` off Azorius Chancery + Unclaimed Territory x2 paid the hand Souls'
+        // generic with the Shrine and stranded the flashback's {B} (the line read as offered, the commit
+        // dropped half of it). The rule fires only on a colour-short line and only ever spends a source no
+        // later pip OF THE DECLARED LINE can use, so it can never cost that line a cast; the human float hold
+        // below still runs whenever it does not fire. test/scenarios/spirits_human_souls_flashback_pays_
+        // like_autonomous.json; test/human_plan_realised_check.py walks every offered plan.
+        if (any && !paying_snow && !line_float_bypass && !feeding && LineSpareGenericFirstOn())
         {
             const ManaCost& lu = g_line_unpaid_cost;
             const int n = static_cast<int>(state.battlefield.size());

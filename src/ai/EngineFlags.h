@@ -345,7 +345,8 @@ inline bool LineFloatCoveredOn()
 
 // MTG_LINE_SPARE_GENERIC_FIRST (DEFAULT ON; =0 disables) -- the shared payer's line-aware generic tap
 // (produce_impl in TapForCostSharedOnce, ManaPayment.cpp): a colour-short line's generic pip taps a SPARE
-// source first. One payer for executor, rollout and the payability walks -> lockstep by construction.
+// source first. One payer for executor, rollout and the payability walks -> lockstep by construction;
+// human play reads it too (2026-11-13) so a human commit realises the offered plan the way the executor does.
 inline bool LineSpareGenericFirstOn()
 {
     static const bool env_on = EnvOn("MTG_LINE_SPARE_GENERIC_FIRST", true);
