@@ -22047,7 +22047,9 @@ int SpiritsProvider::FetchLandSearchPickWidth(const GameState& s, int controller
 // USER: "8 you could try to adjust if it seems to make sense to do so, but I wouldn't spend a lot of time."
 bool SpiritsProvider::ComboCardValue(const GameState& s, const CardDefinition& def, int dmg_unit, int& out) const
 {
-    static const bool env = EnvOn("MTG_SPIRITS_LORD_VALUE");   // default OFF pending the A/B
+    // ADOPTED default ON (clean win, 2026-11-13, seed 630000 paired: d0 5.1900 -> 5.1220, 90 faster / 23 slower
+    // of 1000; d3 3/0 and d5 1/0 of 400; fewer units at both). =0 restores EvalCard's own-body price.
+    static const bool env = EnvOn("MTG_SPIRITS_LORD_VALUE", true);
     if (!heurarm::Flag(heurarm::SPIRITS_LORD_VALUE, env)) { return false; }
     const CardParams& pp = def.params;
     if (!def.card.IsCreature() || pp.power_bonus <= 0 || pp.affects_all_creatures
