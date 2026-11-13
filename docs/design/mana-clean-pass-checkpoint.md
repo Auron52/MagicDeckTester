@@ -1365,3 +1365,20 @@ fungus 1,880, gods 4,300 (first run).
   represent): s30029388 T5 x3, s30027045 T5 x3, s30029896 T5, and one T6 (same Looting + Magus + Coliseum shape).
   Not classified yet. CAPPED-DECISION / CAPPED / ENUM-GAP swings are block variance of the heavy decisions, as on the
   earlier gates. Report logs/mana_clean/20261113-173816/report.md.
+* **Queue item A round 5 (2026-11-13): alchemist d0 gi83 FIXED (MTG_PREPAY_WILD_REPLAY, default ON; 08a332712 +
+  6212a0bbc smoke GT + 470b33bc3 regression GT, local).** Mechanism: the shared payer's line-float rung
+  (LineFloatTapFirstPlan, MTG_LINE_FLOAT_TAP_FIRST) and the hybrid float order replay SpendFloatingTowardCost on a copy
+  of the general float WITHOUT the prepay's record. Under the literal booking the bill's generic funding is colour
+  units + WildTrueRec::fund, so the record-blind replay paid Living Wish's {1} with the {U} Crab Umbra owed (W..G order),
+  the rung held that pip off the float and the payer tapped a Forest (twice); the Staff's {3} then tapped the Alchemist
+  and the T6 kill became T7. GeneralFloatReplay (ManaPayment.cpp) replays under the record exactly as the payer drains
+  (generic funding first); off the literal booking it is not consulted. Units 2965/2965 (+1). Held-out A/B (seeds
+  88250000+, 51 decks, 500/arm, 1500/arm on 10, 71,000 games): slower 0, cyclone -1, niv -1, rest net 0
+  (logs/mana-clean-chain/wildA-r5/). Smoke: searched slower 0, faster 1 (cyclone d5 gi56 6->5, round 4's churn game
+  back); regression: searched slower 0 / faster 0 / 17 play-changed same score; d0 alchemist gi83 7->6, cyclone moves
+  all lever-attributed AND byte-identical to the tag version (LITERAL=0). check_gt_logs clean (1146).
+  **Gods residual ORACLE-GAP (8): all ANALYZER-SIDE** (logs/mana-clean-chain/wildA-r5-oraclegap.txt): the prepay pays
+  the whole {Careful Study | Faithless Looting} + Magus bill up front, the cantrip's breakpoint re-plan drops the Magus,
+  and its prepaid share floats; the oracle (per-cast payments, typed set-asides, never `wild`) cannot reproduce that
+  leftover (an any-colour CoB unit floats `wild` legitimately; a Forest/Coliseum tapped only for the dropped cast).
+  Engine life >= oracle life in every flag; no illegal tap (Tendo counters checked). Not fixed (analyzer completeness).
