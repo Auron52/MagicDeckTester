@@ -1780,6 +1780,15 @@ public:
         // militia_pride_pay_choice is (VALUE-gated: != -1). A positive pin may carry kAttackPutTuckBit (GameState.h):
         // Ilharg's death "may" for the legend-rule loser the put makes (I5b item 3) -- bit = tuck, no bit = leave.
         std::int16_t attack_put_choice = -1;
+        // THE TURN'S LEGEND-RULE KEEP (CR 704.5j, Boars LK 2026-11-13): 0 = no pin (the provider's LegendKeepIndex),
+        // 1 = keep the OLDEST copy, 2 = keep the NEWEST, for every legend rule of this turn that no name-scoped rider
+        // (Action::legend_keep, kAttackPutKeepNewBit) decides: a legendary land drop, a put, a nested free cast, a
+        // token / copy entrant, a reanimation. Fanned by AppendSubdecisionAxes' LEGEND-KEEP TURN FAN (the base is
+        // stamped 1, the twin 2) only where the turn can reach such a group (LegendKeepTurnFanLive). Rides
+        // GameState::scripted_legend_keep (WritePostApplyStatePins, both worlds). Folded VALUE-gated (!= 0) wherever
+        // attack_put_choice is, and an axis variant (PlanIsAxisVariantExceptOrder): a twin whose turn met no group
+        // lands on its base's state.
+        std::int8_t legend_keep_turn = 0;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's

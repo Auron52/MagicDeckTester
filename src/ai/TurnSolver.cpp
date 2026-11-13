@@ -952,6 +952,7 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
         || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
         || p.attack_put_choice != -1           // Ilharg's attack put (I5a)
+        || p.legend_keep_turn != 0             // the turn's legend-rule keep (Boars LK)
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
         || p.fb_hold_choice >= 0               // the searched banked hold: read at THIS combat's pump only
         || PlanHasAttackTriggerPin(p);        // Tectonic mode / keep, Flinger victim (the *_PIN_FOLD levers)
@@ -1611,6 +1612,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
     pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
     pl("attackput", first.attack_put_choice != dup.attack_put_choice);
+    pl("legendkeep", first.legend_keep_turn != dup.legend_keep_turn);
     pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
@@ -28579,6 +28581,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
     if (p.attack_put_choice != -1)
     { fold(0x1A630000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_put_choice + 3))); }
+    if (p.legend_keep_turn != 0) { fold(0x1E6C7000ull + static_cast<uint64_t>(p.legend_keep_turn)); }   // Boars LK
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -28891,7 +28894,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1
-        && p.attack_put_choice == -1
+        && p.attack_put_choice == -1 && p.legend_keep_turn == 0
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
@@ -28947,6 +28950,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
         || p.attack_put_choice != -1
+        || p.legend_keep_turn != 0   // the turn's legend-rule keep (Boars LK): an inert twin lands on its base's state
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -29896,6 +29900,7 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0xEA4CCA11ull + static_cast<std::uint64_t>(p.early_ondemand_crack)); }
     if (p.attack_put_choice != -1)   // Ilharg's attack put (value-gated)
     { h = Mix(h, 0x1A630000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.attack_put_choice + 3))); }
+    if (p.legend_keep_turn != 0) { h = Mix(h, 0x1E6C7000ull + static_cast<std::uint64_t>(p.legend_keep_turn)); }   // Boars LK
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.athreos_coin_choice >= 0)
     { h = Mix(h, 0xA7E05C01ull + static_cast<std::uint64_t>(p.athreos_coin_choice)); }
@@ -56365,6 +56370,7 @@ namespace solvememo
             || a.combat_transform_choice != b.combat_transform_choice
             || a.militia_pride_pay_choice != b.militia_pride_pay_choice
             || a.attack_put_choice != b.attack_put_choice
+            || a.legend_keep_turn != b.legend_keep_turn
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
@@ -75734,6 +75740,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
     state.scripted_attack_put = -1;                // Ilharg's searched attack put (same lockstep)
+    state.scripted_legend_keep = 0;                // the turn's searched legend-rule keep (Boars LK; same lockstep)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -88440,6 +88447,102 @@ namespace dothstats
     };
     static Dumper g_dumper;
 }
+// ---- LEGEND-KEEP TURN FAN's reach test (Boars LK, 2026-11-13) ------------------------------------------------------
+// Can a plan's turn make a legend-rule group (CR 704.5j) that no name-scoped rider decides? Conservative in the
+// direction of fanning (a missed route would leave the provider's pick in the window), tight enough that a deck with
+// no such route is untouched. The per-state half (LegendKeepTurnZonesOf) is computed once per AppendSubdecisionAxes.
+//   * NAMES: the legendary permanents of ours on the battlefield, plus every legendary permanent card the plan casts.
+//   * R1 LAND: the plan's land drop is a legendary land with a same-name land of ours on the battlefield.
+//   * R2 COPY: a token-copy / copy-entrant source (on our battlefield or in the plan) with any NAME present.
+//   * R3 ENTRY: a non-cast entry source (a put from hand / library, a tutor-put, a nested free cast, a reanimation,
+//     a dig-attach -- LegendEntryRouteParams) on our battlefield or in the plan, AND a legendary permanent card of a
+//     NAME in our hand, library or graveyard.
+// Upkeep-only routes (Marit Lage's Slumber, Emeria) fire before any plan of their turn and are not covered here.
+static bool LegendEntryRouteParams(const CardParams& q)
+{
+    return !q.combat_damage_puts_subtype_from_hand.empty() || q.tooth_and_nail || q.finale_of_devastation
+        || q.tutor_to_battlefield_single || q.reveal_x_put_permanents || q.replenish_enchantments
+        || q.reanimate_creature_max_mv > 0 || q.endstep_modal_reanimate_mv > 0 || q.ltb_return_creatures > 0
+        || q.etb_exile_free_cast_max_mv > 0 || q.cycle_draw_exile_shared_type_freecast || q.cascade_max_mv > 0
+        || q.shuffle_reveal_freecast || q.combat_damage_free_cast || q.upkeep_adds_charge
+        || q.tap_put_from_hand_cost.has_value() || q.pod_activation_cost.has_value() || q.attack_dig_attach_count > 0;
+}
+static bool LegendCopyRouteParams(const CardParams& q)
+{
+    return q.token_copy_of_target || q.enter_as_copy_of_entrant || q.enter_as_copy_of_creature;
+}
+struct LegendKeepTurnZones
+{
+    std::vector<InternedName> bf_names;     // our legendary permanents' names
+    std::vector<InternedName> zone_names;   // legendary permanent cards in our hand / library / graveyard
+    bool entry_route = false;               // a LegendEntryRouteParams source on our battlefield
+    bool copy_route  = false;               // a LegendCopyRouteParams source on our battlefield
+};
+static LegendKeepTurnZones LegendKeepTurnZonesOf(const GameState& state)
+{
+    LegendKeepTurnZones z;
+    const int me = state.active_player_index;
+    auto add = [](std::vector<InternedName>& v, const InternedName& n)
+    { if (std::find(v.begin(), v.end(), n) == v.end()) { v.push_back(n); } };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        if (q.card.HasSupertype(Supertype::Legendary)) { add(z.bf_names, q.card.m_name); }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d != nullptr)
+        {
+            z.entry_route = z.entry_route || LegendEntryRouteParams(d->params);
+            z.copy_route  = z.copy_route || LegendCopyRouteParams(d->params);
+        }
+    }
+    const Player& pl = state.players[static_cast<std::size_t>(me)];
+    auto scan = [&](const auto& zone)
+    {
+        for (const Card& c : zone)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.HasSupertype(Supertype::Legendary) && d->card.IsPermanentCard())
+            { add(z.zone_names, c.m_name); }
+        }
+    };
+    scan(pl.hand);
+    scan(pl.library);
+    scan(pl.graveyard);
+    return z;
+}
+static bool LegendKeepTurnFanLive(const GameState& state, const LegendKeepTurnZones& z, const TurnSolver::Plan& p)
+{
+    const int me = state.active_player_index;
+    if (!p.land_to_play.empty() && !z.bf_names.empty())
+    {
+        const CardDefinition* ld = CardDatabase::Instance().Lookup(p.land_to_play);
+        if (ld != nullptr && ld->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& q : state.battlefield)
+            { if (q.controller_index == me && q.card.m_name == ld->card.m_name) { return true; } }
+        }
+    }
+    bool entry = z.entry_route, copy = z.copy_route;
+    std::vector<InternedName> cast_names;
+    for (const Action& a : p.actions)
+    {
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        entry = entry || LegendEntryRouteParams(d->params);
+        copy  = copy || LegendCopyRouteParams(d->params);
+        if (a.kind == Action::Kind::CastFromHand && d->card.HasSupertype(Supertype::Legendary) && d->card.IsPermanentCard())
+        { cast_names.push_back(a.card_name); }
+    }
+    if (z.bf_names.empty() && cast_names.empty()) { return false; }
+    if (copy) { return true; }
+    if (!entry) { return false; }
+    for (const InternedName& n : z.zone_names)
+    {
+        if (std::find(z.bf_names.begin(), z.bf_names.end(), n) != z.bf_names.end()) { return true; }
+        if (std::find(cast_names.begin(), cast_names.end(), n) != cast_names.end()) { return true; }
+    }
+    return false;
+}
 // An obligation pending that the state's pin does not cover -- the second main has an echo decision to make,
 // so its 0-cost empty path (which never enumerates) must not be taken.
 static bool EchoUncoveredPending(const GameState& state)
@@ -94031,6 +94134,46 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // ---- LEGEND-KEEP TURN FAN (CR 704.5j; Boars LK, 2026-11-13) --------------------------------------------------
+    // The routes I5b item 4 left to the provider: a legend rule no name-scoped rider decides (Action::legend_keep on a
+    // cast, kAttackPutKeepNewBit on Ilharg's put) -- a legendary LAND drop beside a same-name land (The Grey Havens,
+    // legend-ruled at the beginning-of-combat SBA), a put onto the battlefield (Goblin Lackey's Muxus, the tutor-puts'
+    // Surrak, Genesis Wave, Pod, Vial, Stoneforge, a dig-attach), a free cast nested in another card's resolution
+    // (Unpredictable Cyclone's Emrakul, cascade, Breaching Dragonstorm), a token / copy entrant, a reanimation. With
+    // depth remaining the provider's LegendKeepIndex was a single heuristic pick (the no-greedy rule). Every plan whose
+    // turn can make such a group (LegendKeepTurnFanLive) is now TWINNED: the base stamped legend_keep_turn 1 (keep the
+    // oldest), a clone 2 (keep the newest); both worlds read it through GameState::scripted_legend_keep for every
+    // un-ridered legend rule of the turn. Runs LAST, after every axis has cloned, so each variant gets its twin (a full
+    // product, no axis skips a stamped plan). A twin whose turn met no group lands on its base's state
+    // (PlanIsAxisVariantExceptOrder: the inert-twin identity fold). LIMITATION (disclosed): one answer per turn --
+    // two DIFFERENT un-ridered groups in one turn get "both oldest" / "both newest", not the mixed pair. Same gate
+    // as the item-4 pass: searched decision space only (the d0 runner and rollout leaves keep the provider's
+    // keep -- the permitted playout policy; human play answers at the legend rule itself).
+    if (!HumanPlayActive() && g_searched_play && (g_search_candidate_enum || g_condemn_root_turn < 0) && !all.empty())
+    {
+        const LegendKeepTurnZones z = LegendKeepTurnZonesOf(state);
+        auto live_of = [&](const TurnSolver::Plan& p)
+        { return p.legend_keep_turn == 0 && LegendKeepTurnFanLive(state, z, p); };
+        bool any = false;
+        for (const TurnSolver::Plan& p : all) { if (live_of(p)) { any = true; break; } }
+        if (any)
+        {
+            // A lazily held clone block shares its base's land and actions, so it is live exactly when its base is:
+            // materialise it so every clone gets its twin (the Loam fan's precedent).
+            if (pb_lazy && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
+            std::vector<TurnSolver::Plan> lk_extra;
+            for (TurnSolver::Plan& p : all)
+            {
+                if (!live_of(p)) { continue; }
+                p.legend_keep_turn = 1;
+                TurnSolver::Plan v = p;
+                v.legend_keep_turn = 2;
+                v.bp_wave0 = false;
+                lk_extra.push_back(std::move(v));
+            }
+            all.insert(all.end(), std::make_move_iterator(lk_extra.begin()), std::make_move_iterator(lk_extra.end()));
+        }
+    }
 }
 
 // ---- THE IDLE PASS A PRE-COMBAT HOST APPENDS GETS EVERY SUB-DECISION AXIS (2026-10-17) ----------
@@ -94505,6 +94648,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.combat_transform_choice);
             add(pl.militia_pride_pay_choice);
             add(pl.attack_put_choice);
+            add(pl.legend_keep_turn);
             add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
@@ -94704,6 +94848,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
     if (!(a.attack_put_choice == b.attack_put_choice)) { d += " attack_put_choice"; }
+    if (!(a.legend_keep_turn == b.legend_keep_turn)) { d += " legend_keep_turn"; }
     if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
@@ -94956,6 +95101,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
             if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
             if (p.attack_put_choice != -1) { s += " | aput" + std::to_string((int)p.attack_put_choice); }
+            if (p.legend_keep_turn != 0) { s += " | lkeep" + std::to_string((int)p.legend_keep_turn); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -96931,6 +97077,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         if (state.scripted_early_ondemand_crack) { mix(0xEA4CCA11ull); }
         if (state.scripted_attack_put != -1)   // Ilharg's attack put (value-gated: every other deck's key unchanged)
         { mix(0x1A630000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_attack_put + 3))); }
+        if (state.scripted_legend_keep != 0)   // the turn's legend-rule keep (Boars LK, value-gated)
+        { mix(0x1E6C7000ull + static_cast<std::uint64_t>(state.scripted_legend_keep)); }
         for (int v : state.scripted_boundary_dredge) { mix(0xD0ED6E12ull); mix(static_cast<std::uint64_t>(v + 1)); }
         for (int id : state.athreos_coin_ids) { mix(0xA7E05C02ull); mix(static_cast<std::uint64_t>(id)); }
         if (state.boundary_dredge_active) { mix(0xD0ED6E13ull + state.scripted_boundary_dredge_cursor); }
@@ -101323,7 +101471,9 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
                               state.scripted_combat_aura_swap_in, state.scripted_attack_attach,
                               state.scripted_fb_hold, state.scripted_combat_transform,
-                              state.scripted_militia_pride_pay, state.scripted_attack_put };
+                              state.scripted_militia_pride_pay, state.scripted_attack_put,
+                              // + the turn's legend-rule keep (Boars LK; 0 = unset, mapped to the -1 gate)
+                              state.scripted_legend_keep == 0 ? -1 : static_cast<int>(state.scripted_legend_keep) };
         for (int i = 0; i < static_cast<int>(sizeof(cpins) / sizeof(cpins[0])); ++i)
         {
             if (cpins[i] != -1)
@@ -120963,6 +121113,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.scripted_combat_land_search_crack != now.scripted_combat_land_search_crack) { d += " scripted_combat_land_search_crack=" + std::to_string(static_cast<long long>(stored.scripted_combat_land_search_crack)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_land_search_crack)); }
     if (stored.scripted_combat_landfall_target != now.scripted_combat_landfall_target) { d += " scripted_combat_landfall_target=" + std::to_string(static_cast<long long>(stored.scripted_combat_landfall_target)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_landfall_target)); }
     if (stored.scripted_combat_transform != now.scripted_combat_transform) { d += " scripted_combat_transform=" + std::to_string(static_cast<long long>(stored.scripted_combat_transform)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_transform)); }
+    if (stored.scripted_legend_keep != now.scripted_legend_keep) { d += " scripted_legend_keep=" + std::to_string(static_cast<int>(stored.scripted_legend_keep)) + "/" + std::to_string(static_cast<int>(now.scripted_legend_keep)); }
     if (stored.scripted_attack_put != now.scripted_attack_put) { d += " scripted_attack_put=" + std::to_string(static_cast<long long>(stored.scripted_attack_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_attack_put)); }
     if (stored.scripted_militia_pride_pay != now.scripted_militia_pride_pay) { d += " scripted_militia_pride_pay=" + std::to_string(static_cast<long long>(stored.scripted_militia_pride_pay)) + "/" + std::to_string(static_cast<long long>(now.scripted_militia_pride_pay)); }
     if (stored.scripted_discard_choice != now.scripted_discard_choice) { d += " scripted_discard_choice=" + std::to_string(static_cast<long long>(stored.scripted_discard_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_discard_choice)); }
@@ -127118,6 +127269,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
     if (p.attack_put_choice != -1)         { s.scripted_attack_put = p.attack_put_choice; }   // Ilharg (I5a)
+    if (p.legend_keep_turn != 0)           { s.scripted_legend_keep = p.legend_keep_turn; }   // the turn's legend keep (LK)
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)

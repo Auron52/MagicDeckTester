@@ -745,3 +745,178 @@ TEST_CASE("I5b legend keep: Ilharg's attack put carries the keep answer in its p
         { CHECK(std::count(c.begin(), c.end(), want) == 1); }
     }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Boars LK (2026-11-13): the legend-rule keep on every route WITHOUT a cast rider is SEARCHED for the turn
+// (Plan::legend_keep_turn -> GameState::scripted_legend_keep): legendary land drops, puts, nested free casts, token /
+// copy entrants, reanimation.
+// ---------------------------------------------------------------------------------------------------------------------
+namespace
+{
+constexpr const char* kHavens = "The Grey Havens";
+constexpr const char* kMuxus  = "Muxus, Goblin Grandee";
+constexpr const char* kSurrak = "Surrak and Goreclaw";
+std::vector<int> LkTurnKeeps(const GameState& s, const TurnSolver::Plan& base)
+{
+    std::vector<int> out;
+    for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { base }))
+    { out.push_back(p.legend_keep_turn); }
+    // Other axes may fan the same plan (the Havens' etb_scry disposition, the Lackey pick): reduce to the SHAPE --
+    // {1, 2} = every variant twinned (as many keep-old as keep-new, none unpinned), {0} = none twinned.
+    const long n0 = std::count(out.begin(), out.end(), 0), n1 = std::count(out.begin(), out.end(), 1),
+               n2 = std::count(out.begin(), out.end(), 2);
+    if (n0 == 0 && n1 > 0 && n1 == n2) { return { 1, 2 }; }
+    if (n1 == 0 && n2 == 0 && n0 > 0) { return { 0 }; }
+    return out;
+}
+// The Grey Havens #10 on the battlefield (TAPPED for mana this turn), a second Havens #20 in hand, no land played.
+GameState LkHavensBoard()
+{
+    GameState s = IBase();
+    s.players[0].lands_played_this_turn = 0;
+    IPut(s, kHavens, 10);
+    s.battlefield.back().tapped = true;
+    s.players[0].hand.push_back(ICard(kHavens, 20));
+    return s;
+}
+TurnSolver::Plan LkLandPlan(const char* land)
+{
+    TurnSolver::Plan p;
+    p.land_decided = true;
+    p.land_to_play = land;
+    return p;
+}
+}   // namespace
+
+TEST_CASE("LK land: a legendary land drop beside a same-name land is twinned; a plain drop or a lone legend is not")
+{
+    LkSearchedScope searched;
+    const GameState s = LkHavensBoard();
+    CHECK(LkTurnKeeps(s, LkLandPlan(kHavens)) == std::vector<int>{ 1, 2 });
+    CHECK(LkTurnKeeps(s, LkLandPlan("Forest")) == std::vector<int>{ 0 });
+    {   // no Havens on the battlefield: the drop makes no group
+        GameState t = s;
+        t.battlefield.clear();
+        CHECK(LkTurnKeeps(t, LkLandPlan(kHavens)) == std::vector<int>{ 0 });
+    }
+    {   // autonomous d0 (not searched play): the provider's keep is the d0 runner's policy
+        TurnSolver::SetSearchedPlay(false);
+        CHECK(LkTurnKeeps(s, LkLandPlan(kHavens)) == std::vector<int>{ 0 });
+        TurnSolver::SetSearchedPlay(true);
+    }
+}
+
+TEST_CASE("LK land: the turn pin decides the beginning-of-combat keep -- the rollout and the executor read it alike")
+{
+    for (int keep : { 0, 1, 2 })
+    {
+        CAPTURE(keep);
+        TurnSolver::Plan plan = LkLandPlan(kHavens);
+        plan.legend_keep_turn = static_cast<std::int8_t>(keep);
+        GameState roll = LkHavensBoard();
+        TurnSolver::ApplyPlan(roll, plan, /*is_pre_combat=*/true);
+        CHECK(roll.scripted_legend_keep == keep);
+        REQUIRE(IFind(roll, 20) != nullptr);   // the drop is legend-ruled at the beginning-of-combat SBA
+        EnforceLegendRule(roll, 0);
+        // The executor writes the same state pin (WritePostApplyStatePins) before it plays the plan.
+        GameState exec = LkHavensBoard();
+        TurnSolver::WritePostApplyStatePins(exec, plan);
+        exec.players[0].hand.pop_back();
+        IPut(exec, kHavens, 20);
+        EnforceLegendRule(exec, 0);
+        const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;   // 0: the provider keeps the oldest
+        for (const GameState* g : { &roll, &exec })
+        {
+            CHECK(IFind(*g, survivor) != nullptr);
+            CHECK(IFind(*g, loser) == nullptr);
+            CHECK(InGraveyard(*g, loser));
+        }
+        // keep-newest keeps an UNTAPPED Havens (a mana for main 2); keep-oldest the tapped one.
+        if (keep != 0) { CHECK(IFind(roll, survivor)->tapped == (keep == 1)); }
+    }
+    {   // a name-scoped cast rider still wins for ITS legend; the turn pin covers the rest
+        GameState s = LkHavensBoard();
+        IPut(s, kHavens, 20);
+        s.scripted_legend_keep = 2;
+        {
+            LegendKeepPinScope pin(1, kHavens);
+            EnforceLegendRule(s, 0);
+        }
+        CHECK(IFind(s, 10) != nullptr);
+        CHECK(IFind(s, 20) == nullptr);
+    }
+    {   // the turn pin is the ACTIVE player's: the opponent's legend rule is the provider's
+        GameState s = IBase();
+        IPut(s, kHavens, 10, /*controller=*/1);
+        IPut(s, kHavens, 20, /*controller=*/1);
+        s.scripted_legend_keep = 2;
+        EnforceLegendRule(s, 1);
+        CHECK(IFind(s, 10) != nullptr);
+        CHECK(IFind(s, 20) == nullptr);
+    }
+}
+
+TEST_CASE("LK put: Goblin Lackey's put of a second Muxus is twinned and reads the turn pin")
+{
+    LkSearchedScope searched;
+    GameState s = IBase();
+    IPut(s, "Goblin Lackey", 5);
+    IPut(s, kMuxus, 10);
+    s.battlefield.back().tapped = true;
+    s.players[0].hand.push_back(ICard(kMuxus, 20));
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    CHECK(LkTurnKeeps(s, base) == std::vector<int>{ 1, 2 });
+    {   // no Lackey (no non-cast route): the hand Muxus can only be CAST -- the cast's own twin (item 4) covers it
+        GameState t = s;
+        t.battlefield.erase(t.battlefield.begin());
+        CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });
+    }
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        GameState g = s;
+        g.phase = Phase::Combat;
+        g.scripted_legend_keep = static_cast<std::int8_t>(keep);
+        FireCombatDamageCheatIntoPlay(g, 0, std::vector<int>{ 0 });
+        const int survivor = keep == 1 ? 10 : 20, loser = keep == 1 ? 20 : 10;
+        CHECK(IFind(g, survivor) != nullptr);
+        CHECK(IFind(g, loser) == nullptr);
+    }
+}
+
+TEST_CASE("LK put: a tutor-put (Green Sun's Zenith) that can find a second Surrak is twinned; none to find is not")
+{
+    LkSearchedScope searched;
+    GameState s = IBase();
+    IPut(s, kSurrak, 10);
+    s.players[0].library.push_back(ICard(kSurrak, 20));
+    s.players[0].hand.push_back(ICard("Green Sun's Zenith", 30));
+    Action gsz;
+    gsz.kind      = Action::Kind::CastFromHand;
+    gsz.card_name = InternedName("Green Sun's Zenith");
+    TurnSolver::Plan base = IPlan({ gsz });
+    base.land_decided = true;
+    CHECK(LkTurnKeeps(s, base) == std::vector<int>{ 1, 2 });
+    TurnSolver::Plan none;
+    none.land_decided = true;
+    CHECK(LkTurnKeeps(s, none) == std::vector<int>{ 0 });   // nothing in the plan can put the library Surrak
+    GameState t = s;
+    { Library& lib = t.players[0].library; Library keep; for (std::size_t i = 0; i + 1 < lib.size(); ++i) { keep.push_back(lib[i]); } lib = keep; }
+    CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });   // no second Surrak to find
+}
+
+TEST_CASE("LK copy: a token copy of our legend (Twinflame) is twinned")
+{
+    LkSearchedScope searched;
+    GameState s = IBase();
+    IPut(s, kSurrak, 10);
+    Action tf;
+    tf.kind      = Action::Kind::CastFromHand;
+    tf.card_name = InternedName("Twinflame");
+    TurnSolver::Plan base = IPlan({ tf });
+    base.land_decided = true;
+    CHECK(LkTurnKeeps(s, base) == std::vector<int>{ 1, 2 });
+    GameState t = IBase();   // no legend of ours: nothing to copy into a group
+    CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });
+}

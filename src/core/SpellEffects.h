@@ -8470,8 +8470,12 @@ inline thread_local std::vector<int> g_pending_zero_toughness;
 //     The new copy's own enter trigger is unaffected either way: it triggered on entering and resolves even if
 //     that copy is the one put into the graveyard (the engine banks it inline; LegendRuleLoser only hides the
 //     doomed copy from OTHER watchers' sight and target lists).
-//   * UNPINNED (the playout beyond the horizon, the d0 runner, entry routes with no searched rider -- token copies,
-//     reanimation, flicker returns): the provider's LegendKeepIndex (the permitted playout policy).
+//   * SEARCHED FOR THE TURN (Boars LK): every OTHER entry route -- a legendary land drop, a put onto the battlefield, a
+//     free cast nested in another card's resolution, a token / copy entrant, a reanimation -- reads the plan's
+//     Plan::legend_keep_turn through GameState::scripted_legend_keep (1 oldest / 2 newest, the active player's
+//     groups). AppendSubdecisionAxes' LEGEND-KEEP TURN FAN twins every plan whose turn can reach such a group.
+//   * UNPINNED (the playout beyond the horizon, the d0 runner, a plan no fan reached): the provider's
+//     LegendKeepIndex (the permitted playout policy).
 struct LegendKeepPin
 {
     std::int8_t v = 0;     // 0 none, 1 keep oldest, 2 keep newest
@@ -8553,6 +8557,10 @@ inline int LegendKeepPick(const GameState& state, int controller, const std::vec
     if (dup.empty()) { return -1; }
     if (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == name)
     { return g_legend_keep_pin.v == 1 ? dup.front() : dup.back(); }
+    // ...else the TURN's searched keep (GameState::scripted_legend_keep, Boars LK): the plan's answer for every
+    // legend rule no rider names -- land drops, puts, nested free casts, token / copy entrants, reanimation.
+    if (state.scripted_legend_keep != 0 && controller == state.active_player_index)
+    { return state.scripted_legend_keep == 1 ? dup.front() : dup.back(); }
     int keep = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
     if (g_play_sacrifice_chooser == nullptr || controller != state.active_player_index) { return keep; }
     std::vector<int> nums;
@@ -27470,7 +27478,8 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
                   keep == g.second.front() ? "oldest" : "other",
                   d_tap, d_sick, d_dmg, d_ctr, d_pump,
                   (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0,
-                  (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == g.first) ? 1 : 0,
+                  (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == g.first) ? 1
+                  : (state.scripted_legend_keep != 0 && controller_index == state.active_player_index) ? 2 : 0,
                   LegendCopiesInterchangeable(state, g.second) ? 1 : 0);
         }
         for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }

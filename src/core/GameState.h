@@ -1258,6 +1258,17 @@ struct GameState
     // the spell's resolution (StackEntry::dies_tuck, EffectHandler::Resolve) and the attack put's legend rule
     // (Plan::attack_put_choice's tuck bit). Back to 0 at every node boundary, so nothing folds it.
     std::int8_t              dies_tuck_pin = 0;
+    // THE TURN'S SEARCHED LEGEND-RULE KEEP (CR 704.5j; Boars LK, 2026-11-13): Plan::legend_keep_turn, the keep for
+    // every legend rule of THIS turn that no name-scoped rider pins (LegendKeepPinScope: the cast / attack-put twins of
+    // I5b item 4) -- a legendary LAND drop (legend-ruled at the beginning-of-combat SBA), a put onto the battlefield
+    // (Goblin Lackey, the tutor-puts, Genesis Wave, Pod, Vial, Stoneforge), a free cast nested in another card's
+    // resolution (Unpredictable Cyclone, cascade, Breaching Dragonstorm), a token or copy entrant, a reanimation.
+    // 0 = unpinned (the provider's LegendKeepIndex -- the playout policy beyond the horizon), 1 = keep the OLDEST
+    // copy, 2 = keep the NEWEST. Written write-when-set by WritePostApplyStatePins (before the plan's actions, both
+    // worlds), cleared with the combat pins at both turn starts, folded value-gated into the dominance / dedup keys.
+    // Read by LegendKeepPick for the active player's groups only. Placed in the 1-byte hole after dies_tuck_pin
+    // (sizeof(GameState) unchanged, measured).
+    std::int8_t              scripted_legend_keep = 0;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
     // Ilharg, the Raze-Boar's attack put (Plan::attack_put_choice, Boars I5a): a per-turn COMBAT PIN.

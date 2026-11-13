@@ -406,6 +406,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
     state.scripted_attack_put = -1;     // Ilharg's searched attack put (same lockstep)
+    state.scripted_legend_keep = 0;     // the turn's searched legend-rule keep (Boars LK; same lockstep)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)

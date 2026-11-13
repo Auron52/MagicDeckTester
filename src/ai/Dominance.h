@@ -628,6 +628,9 @@ static_assert(sizeof(Player) == 216,
 // scripted_combat_transform). Classification: TRANSIENT -- set only inside a DiesTuckPinScope (one cast, one
 // resolution, one attack put) and back to 0 before any node boundary, so two compared states never differ in it --
 // NOTHING TO FOLD.
+// +0 bytes (2026-11-13, Boars LK -- the turn's searched legend-rule keep): `scripted_legend_keep` (an int8_t in the
+// hole after dies_tuck_pin). Classification: a per-turn COMBAT-style pin (scripted_attack_put's class) -- FOLDED in
+// Build(), value-gated (!= 0).
 static_assert(sizeof(GameState) == 1416,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -1038,6 +1041,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
     if (s.scripted_attack_put != -1)   // Ilharg's attack put (I5a), its own domain tag
     { fold(0x1A63000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_put + 3))); }
+    if (s.scripted_legend_keep != 0)   // the turn's legend-rule keep (Boars LK), its own domain tag
+    { fold(0x1E6C700000ull + static_cast<std::uint64_t>(s.scripted_legend_keep)); }
     if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
