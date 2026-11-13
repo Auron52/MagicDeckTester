@@ -102099,14 +102099,18 @@ namespace p16
     // heuristic-ladder trace. The ladder then runs passes 1..K-1 LEAFLESS and only pass K on rollouts -- the
     // "skip every superseded rollout, knowing K" upper bound. Never a play shape: it reads another run's answers.
     struct OKey { unsigned long long s; int ord; bool operator<(const OKey& o) const { return s != o.s ? s < o.s : ord < o.ord; } };
-    struct OVal { int T, sm, K; };
+    struct OVal { int T, sm, K, W; };
     inline const std::map<OKey, OVal>& Oracle()
     {
         static const std::map<OKey, OVal> m = []{
             std::map<OKey, OVal> r; const char* f = std::getenv("MTG_P16_ORACLE");
             if (f == nullptr || *f == '\0') { return r; }
-            std::ifstream in(f); unsigned long long sd; int ord, T, sm, K;
-            while (in >> sd >> ord >> T >> sm >> K) { r[OKey{sd, ord}] = OVal{T, sm, K}; }
+            std::ifstream in(f); std::string ln;
+            while (std::getline(in, ln))
+            {
+                unsigned long long sd; int ord, T, sm, K, W = 0;
+                if (std::sscanf(ln.c_str(), "%llu %d %d %d %d %d", &sd, &ord, &T, &sm, &K, &W) >= 5) { r[OKey{sd, ord}] = OVal{T, sm, K, W}; }
+            }
             return r; }();
         return m;
     }
@@ -102114,6 +102118,7 @@ namespace p16
     inline thread_local int  t_o_ord = 0;
     inline thread_local bool t_o_dead = false;   // this game diverged from the record: stop applying it
     inline thread_local int  t_oracle_K = 0;     // the current decision's recorded committing depth (0 = none)
+    inline thread_local int  t_oracle_W = 0;     // P17 aspiration oracle: the recorded committing pass's win turn (0 = none)
     inline void OracleBegin(unsigned long long seed, int T, bool sm)
     {
         t_oracle_K = 0;
@@ -102129,6 +102134,7 @@ namespace p16
         auto it = m.find(OKey{seed, ord});
         if (it == m.end() || it->second.T != T || it->second.sm != (sm ? 1 : 0)) { t_o_dead = true; return; }
         t_oracle_K = it->second.K;
+        t_oracle_W = (valuearm::t_deck_key.find("asp") != std::string::npos) ? it->second.W : 0;   // arm dir holds "asp"
     }
     // MTG_P17_LEDGER (print-only): each recorded pass also carries the delta of the p17 snapshot since the previous
     // record (or the decision's start), so a decision's passes plus its residual sum to the decision exactly.
@@ -106170,22 +106176,6 @@ namespace inwin
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_material{0}, g_ver_printed{0};
     inline void Clear() { t_map.clear(); t_bytes = 0; }
     inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
-    // The key context: gamelc::Tag (leaf, beam, second-main, labeller), or under MTG_P17_INWIN_ANYLEAF the same
-    // context WITHOUT the leaf kind -- an in-window proof reads no leaf (a win inside the window beats every leaf
-    // estimate, which lies past it; a no-win is served only to a query whose cutoff is inside the window).
-    inline TranspositionTable::Key Ctx(TranspositionTable::Key k, const GameState& state)
-    {
-        static const bool env = EnvOn("MTG_P17_INWIN_ANYLEAF");
-        if (!heurarm::Flag(heurarm::P17_INWIN_ANYLEAF, env)) { return gamelc::Tag(k, state); }
-        Fold(k, 0x6A3E0001ULL);
-        Fold(k, 0x5EAFF7EEULL);   // "any leaf"
-        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_width)));
-        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_leafdepth)));
-        Fold(k, g_esc_beam_static ? 1u : 0u);
-        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
-        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
-        return k;
-    }
     inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
     // The key context: gamelc::Tag (leaf, beam, second-main, labeller), and under MTG_LEAFLESS_READS_LEAFED the same
     // context WITHOUT the leaf kind. An in-window proof reads no leaf: a win at w <= T+k-1 lies inside the window, where
@@ -110990,7 +110980,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
         OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic; see g_oo_vals)
         _oop.Begin(tt, budget);
-        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt,
+        // P17 aspiration oracle (measurement only): the committing pass starts at the recorded final win turn.
+        const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
+                           ? std::min(root_cut, p16::t_oracle_W) : root_cut;
+        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt,
                                        &line_cache, budget);
         _oop.End(state, pass_depth, max_turns, second_main, attempt, budget);
         bool aborted = (budget != nullptr && budget->Overrun());
@@ -111639,7 +111632,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 std::fwrite(ln.data(), 1, ln.size(), stderr);
                 p16::t_passes.clear();
             }
-            if (p16::t_hyb_nest == 1) { p16::t_oracle_K = 0; }
+            if (p16::t_hyb_nest == 1) { p16::t_oracle_K = 0; p16::t_oracle_W = 0; }
             --p16::t_hyb_nest;
         }
     } _p16dec(state, budget, out_committed_depth, second_main, max_turns);
