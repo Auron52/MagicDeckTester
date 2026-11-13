@@ -744,3 +744,15 @@ any draw in it."* The abort guard is gone; `handentry::NoteFirstDraw` is miracle
 - **Q8 lord value (MTG_SPIRITS_LORD_VALUE)**, seed 630000 paired: d0 1000: 5.1900 -> 5.1220 (90 faster / 23 slower,
   t -6.4); d3 400: -0.0075 (3/0); d5 400: -0.0025 (1/0); units lower at d3/d5. Clean win -> ADOPTED default ON
   (4b9c49ac5) per the USER's adopt-clean-wins rule.
+
+## RESUME HERE (checkpoint 2026-11-13 ~22:20 UTC; supersedes the ~20:50 block above)
+**Done since:** USER rulings recorded; fetch rule 3b41ab662 (+ FetchLandSearchPickWidth hook); lord value adopted
+4b9c49ac5; Labyrinth draw cap MODELLED (integrator F, 352969c1b); retrace_gy housekeeping; measurements above;
+units 2943/2943, scenarios 513/513; smoke = only the 6 explained gods/martyr keys -> ACCEPTED 67eb90b2a.
+**Running:** full regression tier (`logs/spirits/regr_int.log`), to accept the same explained gods/martyr movement.
+**Next:** (1) inspect + accept regression (only gods/martyr keys may move); (2) suite admission via one agent from
+`logs/spirits/suite-admission-brief.md` (box quiet for the cost gate); (3) verify_deck to green; (4) shared-branch
+push in the 4 h window (check_references_safe, rebase, rebuild, smoke, check_gt_logs, CI watch); (5) Stage 6 report.
+**Open USER questions:** cast-order proposal; discard-bucket proposal; Q4 fetch hold; the creature-only-land reading
+(W/U yes, B no) and the basic order (Plains while lib Plains > lib Islands, else Island) in the fetch rule; Labyrinth
+ruling (a capped draw cannot be replaced by dredge/Cyclone).
