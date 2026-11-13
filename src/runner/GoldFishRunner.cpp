@@ -1285,8 +1285,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
-    // Spirit of the Labyrinth's fail-closed draw-cap guard (handentry::NoteFirstDraw). Mainboard AND
-    // sideboard: a wished-in cap card would be just as unmodelled.
+    // Spirit of the Labyrinth's per-turn draw cap (core/DrawCap.h). Mainboard AND sideboard: a wished-in
+    // cap card caps draws just the same.
     state.deck_has_draw_cap = [&deck]{
         for (const auto* zone : {&deck.mainboard, &deck.sideboard})
             for (const Card& c : *zone)

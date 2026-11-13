@@ -26867,7 +26867,10 @@ bool MirrorwingProvider::TrickCastSensible(const GameState& s, int me,
         int proj = std::max(swarm, alone);
         proj += 2 * (treasures + def.params.creates_treasures);      // Treasure pump on a target
         if (def.params.pump_per_cards_drawn_power > 0)               // the candidate's own pump
-        { proj += def.params.pump_per_cards_drawn_power * (drawn + def.params.cast_draw + 1); }
+        {   // the cast's own draws, as many as a per-turn draw cap still allows (core/DrawCap.h; identity uncapped)
+            proj += def.params.pump_per_cards_drawn_power
+                  * (drawn + drawcap::Allowed(s, me, def.params.cast_draw) + 1);
+        }
         if (fists_in_hand > 0) { proj += drawn + 2; }                // a held Fists can also fire
         if (proj >= s.players[1 - me].life) { return true; }
     }

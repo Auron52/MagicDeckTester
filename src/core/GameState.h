@@ -1073,9 +1073,10 @@ struct GameState
     bool                     deck_has_chosen_color_pump : 1  = true;  // Gauntlet of Power
     // 2026-11-13 (Spirits), a BITFIELD in the same byte (sizeof(GameState) unchanged): the deck holds a card
     // with each_player_draw_cap_per_turn (Spirit of the Labyrinth). DECK CONSTANT (StampDeckTraits, mainboard
-    // + sideboard); arms ONLY the fail-closed abort in handentry::NoteFirstDraw -- the cap itself is an inert,
-    // PROVISIONAL deferral. Nothing to fold: it never changes play. DEFAULT FALSE: every other deck (and an
-    // unstamped unit-test state) skips the check.
+    // + sideboard); arms the per-turn draw cap (core/DrawCap.h: drawcap::CapPerTurn returns 0 at once when it is
+    // false), so every other deck is byte-identical. Never folded itself (deck constant); for a cap deck
+    // BuildSimKeyBase folds cards_drawn_this_turn. DEFAULT FALSE: an unstamped unit-test state has no cap (a
+    // test sets it).
     bool                     deck_has_draw_cap : 1           = false;
     // 2026-11-13 (Spirits, Usher of the Fallen's BOAST), a BITFIELD in the same byte (sizeof(GameState)
     // unchanged): the mainboard holds a card with CardParams::activate_only_if_attacked_this_turn. DECK CONSTANT
