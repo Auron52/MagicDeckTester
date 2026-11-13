@@ -10236,9 +10236,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // Desperate Ritual SPLICE: pay (splice_count+1)*printed cost (single Medallion floor inside
     // EffectiveCost). Matches the enum's a.cost and the rollout's apply_one -> lockstep. copies=1 for
     // every non-spliced cast -> byte-identical.
+    // A LURRUS permission cast (gy_cast_src >= 0) is a graveyard cast: THE shared GraveyardCastSpellCost,
+    // as the rollout's apply_one prices it (Patrician Geist's "{1} less from your graveyard" lives there).
+    // Identical to EffectiveCost for a card with no flashback_cost when no Geist is out.
     ManaCost effective = riders.miracle && def->params.miracle_cost.has_value()
         ? EffectiveSpellCostWithBase(*def, state, *def->params.miracle_cost)
-        : EffectiveCost(*def, state, splice_count + 1);
+        : gy_cast_src >= 0 ? GraveyardCastSpellCost(*def, state, splice_count + 1)
+                           : EffectiveCost(*def, state, splice_count + 1);
     // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
     // lockstep with the enumeration's a.cost and the rollout's apply_one).
     if (evoke && def->params.evoke_cost.has_value()) { effective = *def->params.evoke_cost; }

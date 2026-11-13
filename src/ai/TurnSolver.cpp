@@ -8305,9 +8305,36 @@ struct SameTurnReducerCounts
     // printed subtype -- its type is decided at ETB and predicted here off the same shared helper.
     std::unordered_map<uint16_t, int> sub;
     std::unordered_map<uint16_t, int> sub_creature;
+    // Patrician Geist (reduces_graveyard_cast_generic) entering this plan, summed: discounts each
+    // GRAVEYARD cast in the subset. Exact, not optimistic: both apply worlds resolve every graveyard
+    // cast after the hand casts and Vial puts (ApplyPlanDirect's trailing pass; AIEngine::TakeTurn).
+    int gy_cast = 0;
     bool Any() const
-    { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty(); }
+    { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty() || gy_cast > 0; }
 };
+
+// The per-copy "{N} less from your graveyard" a plan action puts onto the battlefield: a Patrician Geist
+// CAST from hand or PUT by Aether Vial (a Vial action carries no def; looked up by name, the
+// ActionColoredReducerDef shape). 0 for every other action and every deck without the param.
+static int ActionGyCastReducerAmount(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::ActivateVial) { return 0; }
+    const CardDefinition* d = a.def;
+    if (d == nullptr && a.kind == Action::Kind::ActivateVial)
+    { d = CardDatabase::Instance().LookupInterned(a.card_name); }
+    return d != nullptr ? d->params.reduces_graveyard_cast_generic : 0;
+}
+static bool AnyGyCastReducerWithGyCast(const std::vector<Action>& cands)
+{
+    bool red = false, gy = false;
+    for (const Action& a : cands)
+    {
+        if (ActionGyCastReducerAmount(a) > 0)              { red = true; }
+        if (a.kind == Action::Kind::CastFromGraveyard)      { gy  = true; }
+        if (red && gy) { return true; }
+    }
+    return false;
+}
 
 static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
                                                    const std::vector<Action>& cands,
@@ -8317,6 +8344,7 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
     uint16_t chosen = SubtypeRegistry::kNone;   // lazily resolved; deck-constant
     for (int j : sel)
     {
+        rc.gy_cast += ActionGyCastReducerAmount(cands[j]);   // Patrician Geist (0 elsewhere)
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
         if (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type)
@@ -8360,6 +8388,9 @@ static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
     if (!dj || cands[j].cost.generic <= 0) { return 0; }   // nothing to discount
     const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
     int reducers = 0;
+    // A graveyard cast gets every same-plan Geist's "{1} less" (a Geist already on the battlefield is in
+    // its a.cost; the min() below caps the total at what generic is left).
+    if (cands[j].kind == Action::Kind::CastFromGraveyard) { reducers += rc.gy_cast; }
     if (mc.red   > 0) { reducers += rc.red; }
     if (mc.white > 0) { reducers += rc.white; }
     if (mc.blue  > 0) { reducers += rc.blue; }
@@ -52972,6 +53003,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
     // per-subset discount shape as the Medallion bail above (pip credit, not generic).
     for (const Action& a : cands)
     { if (ActionColoredReducerDef(a)) { return std::numeric_limits<int>::max(); } }
+    // A Patrician Geist cast/vialed THIS turn takes {1} off each graveyard cast in the plan (the
+    // CountSameTurnReducers gy_cast credit): "Geist + flashback Lingering Souls" is 3 + 1 on four lands,
+    // which the printed 3 + 2 here would prune. Only when a graveyard cast is among the cands too.
+    if (AnyGyCastReducerWithGyCast(cands)) { return std::numeric_limits<int>::max(); }
     // Hollow One's cost_less_per_cycle_or_discard is the same class, and the most extreme instance:
     // its discount grows WITHIN the turn as cycles resolve, so a {5} printed cost this scalar bound
     // reads as 5 is really 0 after three free cycles. Bailing keeps the prune from dropping the
@@ -53156,6 +53191,7 @@ static inline bool ManaGateWouldHelp(const std::vector<Action>& cands, const Gam
                           // see ManaPruneBound (MTG_SUBRED_BAIL).
                           || !a.def->params.reduces_spell_subtype.empty()
                           || a.def->params.chooses_creature_type))
+            || ActionGyCastReducerAmount(a) > 0   // Patrician Geist (soft term, below)
             || EtbUntapBoundCredit(etb_state, a) > 0
             || LandAuraBoundCredit(etb_state, a) > 0
             || UntapLandActionBoundCredit(etb_state, a) > 0)
@@ -53231,7 +53267,8 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                               || (a.def->params.cost_less_per_cycle_or_discard > 0
                                || a.def->params.cost_less_per_opponent_noncombat_damage)
                               || a.def->params.chooses_creature_type))
-                   || ActionColoredReducerDef(a) != nullptr) ? 1 : 0;   // Ragemonger pip credit
+                   || ActionColoredReducerDef(a) != nullptr      // Ragemonger pip credit
+                   || ActionGyCastReducerAmount(a) > 0) ? 1 : 0; // Patrician Geist (graveyard casts)
         t.gen = std::max(0, a.cost.generic);
         if (ltb_sum > 0 && a.kind == Action::Kind::CastFromHand && a.def != nullptr)
         {
@@ -53239,15 +53276,19 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
             { t.picks = std::max(0, a.def->params.land_search_count - a.def->params.land_search_to_hand); }
             if (a.def->params.land_tap_bonus > 0) { t.ltb = a.def->params.land_tap_bonus; }
         }
+        // (A Vial-put Geist carries no def: its term blocks HARD, which only passes more selections.)
         if (t.block && a.def != nullptr && ActionColoredReducerDef(a) == nullptr
             && !a.def->params.affinity_for_subtype && a.def->params.cost_less_per_cycle_or_discard <= 0
             && !a.def->params.cost_less_per_opponent_noncombat_damage)
         {
-            // Only the generic reducers are left to have set `block`.
+            // Only the generic reducers are left to have set `block`. Patrician Geist's graveyard
+            // discount is one of them: it lowers only a graveyard cast's generic, by its own step, so
+            // counting it against every selected cast keeps SelGateExactRefuses an upper bound.
             t.soft = 1;
             t.red  = (a.def->params.reduces_spell_color.empty() ? 0 : 1)
                    + ((!a.def->params.reduces_spell_subtype.empty() || a.def->params.chooses_creature_type)
-                      ? std::max(1, a.def->params.reduces_spell_subtype_amount) : 0);
+                      ? std::max(1, a.def->params.reduces_spell_subtype_amount) : 0)
+                   + ActionGyCastReducerAmount(a);
         }
     }
     out.pool_total   = pool.Total();
@@ -78700,6 +78741,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                        || ra.def->params.chooses_creature_type))
         { any_reducer = true; break; }
     }
+    // ...and Patrician Geist (cast or Vial-put) beside a graveyard cast it would discount.
+    if (!any_reducer && AnyGyCastReducerWithGyCast(cands)) { any_reducer = true; }
     // Same-subset reveal-or-pay additional cost (Daring Buccaneer) among the candidates -- gates the
     // per-subset SameSubsetRevealSurcharge debit. Inert for every deck without one.
     const bool any_reveal_cost = AnyRevealCostCand(cands);
@@ -80876,7 +80919,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                     || (c.def && (!c.def->params.reduces_spell_color.empty()
                                   || !c.def->params.reduces_spell_subtype.empty()
                                   || c.def->params.chooses_creature_type))
-                    || ActionColoredReducerDef(c) != nullptr) { interacts = true; break; }
+                    || ActionColoredReducerDef(c) != nullptr
+                    || ActionGyCastReducerAmount(c) > 0) { interacts = true; break; }
             }
             if (interacts)
             {

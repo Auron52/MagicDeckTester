@@ -4204,6 +4204,17 @@
     "toughness": "2",
     "type_line": "Creature — Merfolk"
   },
+  "Mausoleum Wanderer": {
+    "cmc": 1.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Flying\nWhenever another Spirit you control enters, this creature gets +1/+1 until end of turn.\nSacrifice this creature: Counter target instant or sorcery spell unless its controller pays {X}, where X is this creature's power.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Spirit"
+  },
   "Mavren Fein, Dusk Apostle": {
     "cmc": 3.0,
     "keywords": [],
@@ -4783,6 +4794,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Patrician Geist": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "Flying\nOther Spirits you control get +1/+1.\nSpells you cast from your graveyard cost {1} less to cast.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit Knight"
   },
   "Peat Bog": {
     "cmc": 0.0,

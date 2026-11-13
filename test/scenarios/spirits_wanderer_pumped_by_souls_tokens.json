@@ -1,0 +1,23 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator B2), Mausoleum Wanderer's until-end-of-turn pump: a non-sick Wanderer (1/1) and Lingering Souls in hand on three lands. Opponent 3. Casting Souls before combat makes two Spirit tokens; each entry gives the Wanderer +1/+1 until end of turn, so it attacks as a 3/3 and kills T4. Without the pump it hits for 1 (T4 -> 2; T5 Wanderer 1 + tokens 2 = 3 -> kill T5).",
+  "battlefield": [
+    { "name": "Godless Shrine" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Mausoleum Wanderer", "sick": false }
+  ],
+  "hand": [ "Lingering Souls" ],
+  "expect_win_turn": 4
+}

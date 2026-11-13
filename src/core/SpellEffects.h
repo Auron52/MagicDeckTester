@@ -8214,6 +8214,30 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
                               + " counter (" + what + " entered)");
             }
         }
+        // Mausoleum Wanderer: "Whenever another Spirit you control enters, this creature gets +1/+1
+        // until end of turn." The Youthful Valkyrie filter with an UNTIL-EOT payload: temp_power_bonus /
+        // temp_tough_bonus, which BOTH cleanup sites clear (GameEngine::CleanupStep and its rollout twin),
+        // the landfall_self_pump precedent -- NOT a counter. "Another" is the loop's entrant skip, "you
+        // control" the controller test. Mandatory, untargeted, additive: trigger order is inert. Written
+        // through state.battlefield[i]; nothing here adds a permanent, so `w` / `n` stay valid.
+        if ((wp.own_creature_enters_self_temp_power > 0 || wp.own_creature_enters_self_temp_tough > 0)
+            && w.controller_index == entered_controller
+            && enters_subtype_ok(wp))
+        {
+            Permanent& wm = state.battlefield[static_cast<std::size_t>(i)];
+            wm.temp_power_bonus += wp.own_creature_enters_self_temp_power;
+            wm.temp_tough_bonus += wp.own_creature_enters_self_temp_tough;
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xE2\x9E\x95 " + wm.card.m_name.str() + ": +"
+                              + std::to_string(wp.own_creature_enters_self_temp_power) + "/+"
+                              + std::to_string(wp.own_creature_enters_self_temp_tough)
+                              + " until end of turn ("
+                              + state.battlefield[static_cast<std::size_t>(entered_index)].card.m_name.str()
+                              + " entered)");
+            }
+        }
         // Hamletback Goliath: "Whenever another creature enters, you may put X +1/+1 counters on
         // this creature, where X is that creature's power." Deliberately has NO
         // `w.controller_index == entered_controller` gate -- the oracle says only "another

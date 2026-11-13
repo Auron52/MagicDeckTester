@@ -1,0 +1,25 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 12,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator B2), Patrician Geist's '{1} less from your graveyard' CAST IN THE SAME MAIN as the flashback it discounts: four lands, Geist {2}{U} + flashback Lingering Souls {B} = 4 (priced at the plan's start the flashback is {1}{B}: 3 + 2 = 5). Supreme Phantom (not sick) and the Geist lord each other and the tokens. Opponent 12. The only T5 kill: T4 Geist + flashback -> Phantom 2 (10); T5 Phantom 2 + Geist 3 + tokens 3 + 3 = 11. Geist alone T4 then flashback T5 (sick tokens): 2 + 5 = 7; flashback T4 then Geist T5: 1 + 8 = 9 -> kill T6. Without the same-turn credit (MTG_NO_COST_TRICKS=1) the line is never enumerated and this fixture reads win T6.",
+  "battlefield": [
+    { "name": "Watery Grave" },
+    { "name": "Godless Shrine" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Supreme Phantom", "sick": false }
+  ],
+  "graveyard": [ "Lingering Souls" ],
+  "hand": [ "Patrician Geist" ],
+  "expect_win_turn": 5
+}
