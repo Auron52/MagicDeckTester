@@ -10300,6 +10300,7 @@ inline std::uint64_t ActSig(const Action& a)
     if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
     if (a.emerge) { MixA(h, 0xE3E6ull + static_cast<std::uint64_t>(a.soulfire_own_targets)); }   // emerge + its victim (set-gated)
     if (a.dies_tuck != 0) { MixA(h, 0xD1E5ull + static_cast<std::uint64_t>(a.dies_tuck)); }   // Ilharg's death may (set-gated)
+    if (a.legend_keep != 0) { MixA(h, 0x1E6Cull + static_cast<std::uint64_t>(a.legend_keep)); }   // CR 704.5j keep (set-gated)
     return h;
 }
 struct Seen { const GameState* obj; bool verdict; };
@@ -11268,6 +11269,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         if (a.evoke)     { s += "[evoke]"; }
         if (a.emerge)    { s += "[emerge:" + std::to_string(a.soulfire_own_targets) + "]"; }
         if (a.dies_tuck != 0) { s += a.dies_tuck == 1 ? "[tuck]" : "[leave]"; }
+        if (a.legend_keep != 0) { s += a.legend_keep == 1 ? "[keep-old]" : "[keep-new]"; }
         if (!a.pitch_name.empty()) { s += "[pitch:" + a.pitch_name.str() + "]"; }   // Fury's exiled card
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
@@ -19639,6 +19641,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     if (a.face_down != 0) { FoldMix(h, 0xFD0Dull + static_cast<std::uint64_t>(a.face_down)); }   // morph face-down cast: set-gated (else unchanged)
     if (a.emerge) { FoldMix(h, 0xE3E6ull); }   // emerge cast (Decimator): set-gated (else unchanged)
     if (a.dies_tuck != 0) { FoldMix(h, 0xD1E5ull + static_cast<std::uint64_t>(a.dies_tuck)); }   // Ilharg's death may (I5b)
+    if (a.legend_keep != 0) { FoldMix(h, 0x1E6Cull + static_cast<std::uint64_t>(a.legend_keep)); }   // CR 704.5j keep (I5b-4)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -28711,6 +28714,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
            std::to_string(static_cast<long long>(y.evoke))); }
     if (x.dies_tuck != y.dies_tuck)
     { add("dies_tuck", std::to_string(static_cast<int>(x.dies_tuck)), std::to_string(static_cast<int>(y.dies_tuck))); }
+    if (x.legend_keep != y.legend_keep)
+    { add("legend_keep", std::to_string(static_cast<int>(x.legend_keep)), std::to_string(static_cast<int>(y.legend_keep))); }
     if (x.emerge != y.emerge)
     { add("emerge", std::to_string(static_cast<int>(x.emerge)), std::to_string(static_cast<int>(y.emerge))); }
     if (x.pitch_name != y.pitch_name)
@@ -50338,6 +50343,64 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         if (any) { actions.swap(out); }
     }
 
+    // LEGEND-KEEP PASS (CR 704.5j, Boars I5b item 4). Casting a LEGENDARY card while a same-name permanent of ours is
+    // on the battlefield makes the legend rule ask its controller which copy to keep, and the copies are NOT
+    // interchangeable: the new one is summoning-sick and fresh, the old one may be tapped, may have attacked, may
+    // carry counters, damage, an Aura or Equipment (Lightning Greaves), a temp pump, a loyalty ability already used,
+    // or an end-step rider (Ilharg's "return it to your hand"). The provider's LegendKeepIndex used to make that
+    // choice in the search window; it is now SEARCHED: every such cast is twinned, legend_keep 1 (keep the oldest,
+    // the new copy dies) / 2 (keep the newest, the old copy dies), and both worlds read the twin's answer
+    // (LegendKeepPinScope over the cast; the executor's StackEntry for the resolution; LegendRuleLoser reads the
+    // same pick, so the enter watchers see the right copy as dead). The old copy's state at the cast is known here
+    // and is never field-identical to a fresh entrant in any way this pass can PROVE (a same-turn copy can still
+    // differ by what the cascade gives the survivor), so there is no identity fold at this point; the fold lives
+    // where identity is provable (LegendCopiesInterchangeable, human play). A plan that casts TWO copies of one
+    // legend with none on the battlefield is fanned at plan level (AppendSubdecisionAxes' LEGEND-KEEP FAN), where
+    // every cast of the name carries the same answer. Searched play only: the d0 runner (the dup-legend prune's
+    // carve-out) and a rollout leaf (the phyrexian precedent) keep the provider's keep -- the permitted playout
+    // policy -- and human play answers at the legend rule itself (the board-click `legend_keep` decision).
+    if (!HumanPlayActive() && g_searched_play && (g_search_candidate_enum || g_condemn_root_turn < 0))
+    {
+        const int me = state.active_player_index;
+        std::vector<Action> out;
+        bool any = false;
+        for (std::size_t i = 0; i < actions.size(); ++i)
+        {
+            const Action& a = actions[i];
+            bool twin = false;
+            if (a.kind == Action::Kind::CastFromHand && a.legend_keep == 0 && a.face_down == 0)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (d != nullptr && d->card.HasSupertype(Supertype::Legendary) && d->card.IsPermanentCard())
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == me && q.card.HasSupertype(Supertype::Legendary)
+                            && q.card.m_name == a.card_name) { twin = true; break; }
+                    }
+                }
+            }
+            if (!twin)
+            {
+                if (any) { out.push_back(a); }
+                continue;
+            }
+            if (!any)
+            {
+                any = true;
+                out.reserve(actions.size() + 4);
+                for (std::size_t k = 0; k < i; ++k) { out.push_back(actions[k]); }
+            }
+            Action o = a;
+            o.legend_keep = 1;   // keep the oldest
+            out.push_back(std::move(o));
+            Action n = a;
+            n.legend_keep = 2;   // keep the newest (the cast copy)
+            out.push_back(std::move(n));
+        }
+        if (any) { actions.swap(out); }
+    }
+
     // RIPPLE PIN PASS (Thrumming Stone; Shadowborn INT-3 -- EmitRipplePins has the shape and the folds).
     // Decision space only (a rollout leaf plays the playout policy beyond the horizon, the phyrexian
     // precedent below); human play answers every ripple choice at resolution. deck_has_ripple false ->
@@ -68154,6 +68217,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // (an emerge victim at the cast, a legend-rule loser at the resolution). Executor twins: CastSpellFromHand's
         // scope and the StackEntry copy EffectHandler::Resolve installs.
         DiesTuckPinScope _dies_tuck(state, riders.dies_tuck);
+        // The CR 704.5j keep (Action::legend_keep, Boars I5b item 4), same extent; executor twins: CastSpellFromHand's
+        // scope and the StackEntry copy EffectHandler::Resolve installs.
+        LegendKeepPinScope _legend_keep(riders.legend_keep, name);
         const bool     cascade_hit_free = cascade_free;   // ...and the cascade one-shot, likewise
         cascade_free = false;
         const bool     no_cast_record = suppress_cast_record;   // ...and its recording twin (Cyclone R2)
@@ -69192,6 +69258,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.devour_count       = cast_devour;
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
             rec.dies_tuck          = riders.dies_tuck;   // Ilharg's death "may" (I5b): the replay pins the same answer
+            rec.legend_keep        = riders.legend_keep;   // ...and the CR 704.5j keep (I5b item 4)
             // ...and the RIPPLE chain pins (Shadowborn INT-3): the replayed cast must stamp the same script.
             rec.ripple_pinned      = riders.ripple_pinned;
             rec.ripple_reveals     = riders.ripple_reveals;
@@ -77437,6 +77504,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
                 if (DiesTuckTagLive(p.actions, act)) { w.Put((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }   // Ilharg's death (I5b)
+                if (act.legend_keep != 0) { w.Put(act.legend_keep == 1 ? "#LK1" : "#LK2"); }   // CR 704.5j keep (I5b-4)
                 if (!act.pitch_name.empty()) { w.Put("#EX"); w.Put(act.pitch_name); }   // PITCH EVOKE (Fury)
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
@@ -82884,6 +82952,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         if (cd && cd->params.emerge_cost.has_value()) { k += (act.emerge ? "#EM1" : "#EM0"); }
                         // Ilharg's death "may" (I5b item 3): tuck / leave are DISTINCT plans where the rider is live.
                         if (DiesTuckTagLive(p.actions, act)) { k += ((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }
+                        if (act.legend_keep != 0) { k += (act.legend_keep == 1 ? "#LK1" : "#LK2"); }   // CR 704.5j keep
                         // PITCH EVOKE (Fury): WHICH card the evoke exiles -- distinct plans.
                         // Only a pitch variant carries it, so no existing deck moves.
                         if (!act.pitch_name.empty()) { k += "#EX" + act.pitch_name.str(); }
@@ -88398,6 +88467,73 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // Where `all` ended before the axes ran. Everything appended past here is a CLONE of some plan
     // already in the list, and the loop at the end of this function un-stamps the one field a clone
     // must not inherit. See the note there.
+    // LEGEND-KEEP FAN (CR 704.5j, Boars I5b item 4) -- the same-plan half of CollectActions' LEGEND-KEEP PASS. A plan
+    // that casts TWO OR MORE copies of one legend while none is on the battlefield makes a legend rule at the later
+    // copy's resolution, which CollectActions cannot see (it enumerates the main phase once, before either cast). The
+    // plan is fanned here: every unpinned cast of that name in the base plan is stamped legend_keep 1 (keep the
+    // oldest) and a clone stamped 2 (keep the newest) is appended. Stamping EVERY cast of the name with one answer
+    // makes the result independent of execution order (the earlier copy's rider is inert: no group exists at its
+    // resolution), so the two plans differ in exactly the answer that applies -- no inert twins. Runs BEFORE the
+    // other axes so they fan both answers, and inside a continuation derivation too (an ACTION rider, recorded with
+    // the cast). Idempotent: a stamped cast is never re-fanned. Same gate as the pass (searched decision space, not
+    // human play); a plan with no repeated legendary cast is untouched (one name walk per cast).
+    if (!HumanPlayActive() && g_searched_play && (g_search_candidate_enum || g_condemn_root_turn < 0))
+    {
+        const std::size_t lk_n = all.size();
+        std::vector<TurnSolver::Plan> lk_extra;
+        for (std::size_t pi = 0; pi < lk_n; ++pi)
+        {
+            std::vector<InternedName> names;   // legendary names cast 2+ times with no rider
+            {
+                const std::vector<Action>& acts = all[pi].actions;
+                for (std::size_t i = 0; i < acts.size(); ++i)
+                {
+                    const Action& a = acts[i];
+                    if (a.kind != Action::Kind::CastFromHand || a.legend_keep != 0 || a.face_down != 0) { continue; }
+                    bool seen = false;
+                    for (const InternedName& n : names) { if (n == a.card_name) { seen = true; break; } }
+                    if (seen) { continue; }
+                    bool again = false;
+                    for (std::size_t j = i + 1; j < acts.size() && !again; ++j)
+                    {
+                        const Action& b = acts[j];
+                        again = b.kind == Action::Kind::CastFromHand && b.legend_keep == 0 && b.face_down == 0
+                             && b.card_name == a.card_name;
+                    }
+                    if (!again) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if (d == nullptr || !d->card.HasSupertype(Supertype::Legendary) || !d->card.IsPermanentCard())
+                    { continue; }
+                    names.push_back(a.card_name);
+                }
+            }
+            if (names.empty()) { continue; }
+            const long fam0 = static_cast<long>(lk_extra.size());
+            for (const InternedName& n : names)
+            {
+                // The family so far: the base plan (f == -1) and the clones already made for earlier names.
+                const long fam_end = static_cast<long>(lk_extra.size());
+                for (long f = -1; f < fam_end - fam0; ++f)
+                {
+                    TurnSolver::Plan& member = f < 0 ? all[pi] : lk_extra[static_cast<std::size_t>(fam0 + f)];
+                    for (Action& a : member.actions)
+                    {
+                        if (a.kind == Action::Kind::CastFromHand && a.legend_keep == 0 && a.face_down == 0
+                            && a.card_name == n) { a.legend_keep = 1; }
+                    }
+                    TurnSolver::Plan v = member;
+                    for (Action& a : v.actions)
+                    {
+                        if (a.kind == Action::Kind::CastFromHand && a.legend_keep == 1 && a.card_name == n)
+                        { a.legend_keep = 2; }
+                    }
+                    lk_extra.push_back(std::move(v));
+                }
+            }
+        }
+        if (!lk_extra.empty())
+        { all.insert(all.end(), std::make_move_iterator(lk_extra.begin()), std::make_move_iterator(lk_extra.end())); }
+    }
     const std::size_t n_before_axes = all.size();
     static const bool s_axes_mem_trace = EnvOn("MTG_AXES_MEM_TRACE");
     if (s_axes_mem_trace && all.size() >= 10000)
@@ -92266,47 +92402,55 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     v.attack_put_choice = -2;
                     extra.push_back(std::move(v));
                 }
-                const Card* inh_card = nullptr;   // the inherited pin's card: its NAME is the put the base already makes
-                if (inherited > 0)
-                { for (const Card& h : hp.hand) { if (h.m_number == inherited) { inh_card = &h; break; } } }
                 for (const Card& c : cands)
                 {
                     // Ilharg's death "may" (Boars I5b item 3): putting a LEGENDARY card with
                     // dies_to_library_position beside a same-name permanent (on the battlefield, or cast by this
                     // plan) dooms a copy -- tuck it or leave it is a second searched answer: the kAttackPutTuckBit
                     // twin. The plain pin is the explicit "leave".
-                    bool tuck_twin = false;
+                    // ...and WHICH copy the legend rule keeps (CR 704.5j, Boars I5b item 4) is a third: putting ANY
+                    // legendary card beside a same-name permanent makes the group, and the put copy (tapped,
+                    // attacking, returning to hand at end of turn) is never the older copy's twin -- the
+                    // kAttackPutKeepNewBit twin keeps the put copy, the plain pin keeps the older one.
+                    bool tuck_twin = false, keep_twin = false;
                     {
                         const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
-                        if (cd != nullptr && cd->params.dies_to_library_position > 0
-                            && cd->card.HasSupertype(Supertype::Legendary) && c.m_number < kAttackPutTuckBit)
+                        if (cd != nullptr && cd->card.HasSupertype(Supertype::Legendary) && c.m_number < kAttackPutTuckBit)
                         {
+                            bool group = false;
                             for (const Permanent& q : state.battlefield)
-                            { if (q.controller_index == me && q.card.m_name == c.m_name) { tuck_twin = true; break; } }
+                            { if (q.controller_index == me && q.card.m_name == c.m_name) { group = true; break; } }
                             for (const Action& a : p.actions)
                             {
-                                if (a.kind == Action::Kind::CastFromHand && a.card_name == c.m_name) { tuck_twin = true; break; }
+                                if (a.kind == Action::Kind::CastFromHand && a.card_name == c.m_name) { group = true; break; }
                             }
+                            keep_twin = group;
+                            tuck_twin = group && cd->params.dies_to_library_position > 0;
                         }
                     }
-                    const int tuck_pin = c.m_number | kAttackPutTuckBit;
-                    bool inh_tuck_same = false;   // the base already carries a tuck pin for this NAME (identity fold)
-                    if (inherited > 0 && (inherited & kAttackPutTuckBit) != 0)
+                    // The base already carries a pin for this NAME with the same answer bits: identity fold.
+                    int inh_bits = -1;
+                    if (inherited > 0)
                     {
-                        const int inh_num = inherited & ~kAttackPutTuckBit;
+                        const int inh_num = inherited & ~(kAttackPutTuckBit | kAttackPutKeepNewBit);
                         for (const Card& h : hp.hand)
-                        { if (h.m_number == inh_num && h.m_name == c.m_name) { inh_tuck_same = true; break; } }
+                        {
+                            if (h.m_number == inh_num && h.m_name == c.m_name)
+                            { inh_bits = inherited & (kAttackPutTuckBit | kAttackPutKeepNewBit); break; }
+                        }
                     }
-                    if (tuck_twin && !inh_tuck_same)
+                    // Emission order: the tuck twin, then the plain pin (both as before item 4), then the keep-new
+                    // twins -- so a deck with no legendary put is byte-identical.
+                    for (const int bits : { kAttackPutTuckBit, 0, kAttackPutKeepNewBit | kAttackPutTuckBit,
+                                            kAttackPutKeepNewBit })
                     {
+                        if ((bits & kAttackPutTuckBit) != 0 && !tuck_twin) { continue; }
+                        if ((bits & kAttackPutKeepNewBit) != 0 && !keep_twin) { continue; }
+                        if (inh_bits == bits) { continue; }
                         TurnSolver::Plan v = p;
-                        v.attack_put_choice = static_cast<std::int16_t>(tuck_pin);
+                        v.attack_put_choice = static_cast<std::int16_t>(c.m_number | bits);
                         extra.push_back(std::move(v));
                     }
-                    if (inherited == c.m_number || (inh_card != nullptr && inh_card->m_name == c.m_name)) { continue; }
-                    TurnSolver::Plan v = p;
-                    v.attack_put_choice = static_cast<std::int16_t>(c.m_number);
-                    extra.push_back(std::move(v));
                 }
             };
             for (const TurnSolver::Plan& p : all)

@@ -2445,6 +2445,25 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
+// legend_keep (CR 704.5j, every legend -- Boars I5b item 4): the group's short name from the source
+// ("Legend rule: choose <name> to keep") and one line telling a copy apart from its twins.
+function legendKeepName(d){
+  const m=/^Legend rule: choose (.*) to keep$/.exec(d.source||'');
+  return m?m[1]:'copy';
+}
+function legendKeepLabel(o){
+  const bits=[`#${o.card_num}`];
+  if (o.loyalty>0) bits.push(`${o.loyalty} loyalty`, o.can_activate?'can activate':'already activated');
+  if (o.is_creature) bits.push(o.sick?'summoning sick':'can attack');
+  if (o.tapped) bits.push('tapped');
+  if (o.attacked) bits.push('attacked this turn');
+  if (o.plus_counters) bits.push(`+${o.plus_counters}/+${o.plus_counters} counters`);
+  if (o.minus_counters) bits.push(`${o.minus_counters} -1/-1 counters`);
+  if (o.damage) bits.push(`${o.damage} damage`);
+  if (o.returns_at_end) bits.push('returns to hand at end of turn');
+  if (Array.isArray(o.attached) && o.attached.length) bits.push('with '+o.attached.join(', '));
+  return bits.join(' · ');
+}
 const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_abilities','creature_type','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
@@ -5473,9 +5492,14 @@ function promptPanelHtml(d, dec){
   if (dec==='legend_keep'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
-    const label=opt?`#${opt.card_num} · ${opt.loyalty} loyalty · ${opt.can_activate?'can activate':'already activated'}`:'(choose a Chandra)';
-    return `<h3>Keep one Chandra — legend rule</h3>`+
-      `<div class="sub">Click the copy to keep. The other goes to your graveyard. A fresh Chandra can use a loyalty ability even if the older copy already used one this turn.</div>`+
+    const who=legendKeepName(d);
+    const label=opt?legendKeepLabel(opt):`(choose a ${esc(who)})`;
+    const rows=(d.options||[]).map(o=>`<div>${esc(o.name)} — ${legendKeepLabel(o)}</div>`).join('');
+    const walker=(d.options||[]).some(o=>o.loyalty>0);
+    return `<h3>Keep one ${esc(who)} — legend rule</h3>`+
+      `<div class="sub">Click the copy to keep. The others go to your graveyard (a creature put there this way dies, so its death triggers fire).`+
+      (walker?` A fresh planeswalker can use a loyalty ability even if the older copy already used one this turn.`:'')+`</div>`+
+      `<div class="sub">${rows}</div>`+
       `<div class="pbtns"><span class="pcount">Keeping: <b>${label}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Keep this copy</button></div>`;
   }
@@ -6439,7 +6463,7 @@ function commitBoardSel(d, dec){
   } else if (dec==='legend_keep'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default;
-    lab=`Legend rule: keep Chandra #${opt?opt.card_num:'default'}`;
+    lab=`Legend rule: keep ${legendKeepName(d)} #${opt?opt.card_num:'default'}`;
   } else if (dec==='sacrifice'){
     const need=sacBurstNeed(d);
     if (need>1){

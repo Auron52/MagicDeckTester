@@ -2041,6 +2041,7 @@ STATE_GATED_TYPES = {
 
 def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_side=False):
     names = set()
+    counts = {}   # copies per name (the legend-rule keep needs two copies of one legend)
     if deck_path.lower().endswith(".cod"):
         # Cockatrice XML: <card number="4" name="..."/> under the "main" zone (plus the "side" zone
         # with --sideboard: a wish deck -- Prevent Damage's four Living Wish -- plays its sideboard,
@@ -2054,18 +2055,29 @@ def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_s
                 nm = card.get("name")
                 if nm:
                     names.add(nm.strip())
+                    try:
+                        counts[nm.strip()] = counts.get(nm.strip(), 0) + int(card.get("number") or 1)
+                    except ValueError:
+                        counts[nm.strip()] = counts.get(nm.strip(), 0) + 1
     else:
         for ln in open(deck_path):
             ln = ln.strip()
             if not ln or ln.lower() in ("sideboard", "mainboard"):
                 continue
-            names.add(re.sub(r"^\s*\d+x?\s+", "", ln).strip())
+            nm = re.sub(r"^\s*\d+x?\s+", "", ln).strip()
+            names.add(nm)
+            m = re.match(r"^\s*(\d+)", ln)
+            counts[nm] = counts.get(nm, 0) + (int(m.group(1)) if m else 1)
     d = json.load(open(cards_json))
     cards = d if isinstance(d, list) else list(d.get("cards", d.values()))
     # An alternate printing listed by its oracle name (an entry's scryfall_name) is the same card.
     alias = {c["scryfall_name"]: c["name"] for c in cards if c.get("scryfall_name") and c.get("name")}
     names = {alias.get(n, n) for n in names}
-    return [c for c in cards if c.get("name") in names], names
+    counts = {alias.get(n, n): k for n, k in counts.items()}
+    out = [c for c in cards if c.get("name") in names]
+    for c in out:
+        c["_deck_count"] = counts.get(c.get("name"), 1)
+    return out, names
 
 
 def expected_for_card(card, deck_cards=None):
@@ -2114,6 +2126,13 @@ def expected_for_card(card, deck_cards=None):
         exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
+    # The legend rule (CR 704.5j): two copies of one legendary permanent -> the board-click `legend_keep`
+    # (LegendKeepPick in SpellEffects.h; every legend since Boars I5b item 4, not just Chandra). Asked only when the
+    # copies differ (identical copies fold), so a sweep can legitimately miss it; expected only for a deck that runs
+    # two or more copies of the card.
+    if ("Legendary" in (card.get("supertypes") or []) and card.get("_deck_count", 1) >= 2
+            and not set(card.get("types") or []) <= {"Instant", "Sorcery"}):
+        exp.add("legend_keep")
     if p.get("klothys_first_main"):
         exp.add("choose_color")
     if p.get("replenish_enchantments") and deck_cards is not None:

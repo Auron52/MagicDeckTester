@@ -4244,6 +4244,36 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         {
             os << ", \"card_num\": " << p.card.m_number << ", \"loyalty\": " << p.loyalty
                << ", \"can_activate\": " << (!p.loyalty_activated_this_turn ? "true" : "false");
+            // Every legend (Boars I5b item 4), not just Chandra: what tells the copies apart, so the player can
+            // see what each keep buys -- summoning sickness, combat, counters, attachments, end-step riders.
+            int plus = 0, minus = 0;
+            for (const Counter& c : p.counters)
+            {
+                if (c.type == Counter::Type::PlusOnePlusOne) { plus += c.count; }
+                else if (c.type == Counter::Type::MinusOneMinusOne) { minus += c.count; }
+            }
+            bool sick = false;
+            if ((p.card.IsCreature() || p.is_animated) && p.entered_this_turn)
+            {
+                Permanent q = p;
+                q.tapped = false;
+                sick = !CanAttackFull(q, s.battlefield, p.controller_index);
+            }
+            std::vector<std::string> attached;
+            for (const Permanent& e : s.battlefield)
+            {
+                if (e.equipped_to == p.card.m_number || e.aura_attached_to == p.card.m_number)
+                { attached.push_back(e.card.m_name.str()); }
+            }
+            os << ", \"is_creature\": " << (p.card.IsCreature() ? "true" : "false")
+               << ", \"sick\": " << (sick ? "true" : "false")
+               << ", \"attacked\": " << (p.AttacksThisTurn() != 0 ? "true" : "false")
+               << ", \"plus_counters\": " << plus << ", \"minus_counters\": " << minus
+               << ", \"damage\": " << p.damage
+               << ", \"returns_at_end\": " << (p.return_at_end_step ? "true" : "false")
+               << ", \"attached\": [";
+            for (std::size_t k = 0; k < attached.size(); ++k) { if (k) { os << ", "; } JsonStr(os, attached[k]); }
+            os << "]";
         }
         os << " }";
     });
@@ -4265,8 +4295,14 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     }
     if (legend_keep)
     {
-        d.Note("reply an option index -- keep that Chandra; the other goes to the graveyard. "
-               "Default = the AI's pick.");
+        // The group's name as the source says it ("Legend rule: choose <name> to keep") -- every legend, not just
+        // Chandra (Boars I5b item 4).
+        std::string who = source.substr(std::string("Legend rule: ").size());
+        if (who.rfind("choose ", 0) == 0) { who = who.substr(7); }
+        const std::size_t tail = who.rfind(" to keep");
+        if (tail != std::string::npos) { who = who.substr(0, tail); }
+        d.Note("reply an option index -- keep that " + who + "; the other copies go to the graveyard (a creature "
+               "put there this way dies). Default = the AI's pick.");
         return;
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "

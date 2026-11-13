@@ -399,9 +399,10 @@ TEST_CASE("I5b dies clause: the enumeration twins every cast that kills an Ilhar
         std::sort(out.begin(), out.end());
         return out;
     };
-    {   // a legendary duplicate on the battlefield: tuck / leave, no untwinned cast
+    {   // a legendary duplicate on the battlefield: tuck / leave, no untwinned cast (each also twinned on the
+        // legend-rule keep since I5b item 4 -- two casts per answer)
         const GameState s = ILegendBoard();
-        CHECK(tucks(s, kIlharg, false) == std::vector<int>{ 1, 2 });
+        CHECK(tucks(s, kIlharg, false) == std::vector<int>{ 1, 1, 2, 2 });
     }
     {   // the emerge cast whose victim is Ilharg: twinned
         const GameState s = IEmergeBoard();
@@ -526,5 +527,221 @@ TEST_CASE("I5b emerge record: a breakpoint continuation's emerge cast replays as
         INFO("permanent ", roll.battlefield[i].card.m_number);
         CHECK(exec.battlefield[i].card.m_number == roll.battlefield[i].card.m_number);
         CHECK(exec.battlefield[i].tapped == roll.battlefield[i].tapped);
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// I5b item 4: the legend-rule keep (CR 704.5j) is SEARCHED in both worlds and asked of a human for every legend.
+// ---------------------------------------------------------------------------------------------------------------------
+namespace
+{
+constexpr const char* kRagga = "Raggadragga, Goreguts Boss";
+struct LkSearchedScope
+{
+    bool saved = g_searched_play;
+    LkSearchedScope() { TurnSolver::SetSearchedPlay(true); }
+    ~LkSearchedScope() { TurnSolver::SetSearchedPlay(saved); }
+};
+Action LkCast(const char* name, int legend_keep, int dies_tuck = 0)
+{
+    Action a = ICast(name, dies_tuck);
+    a.legend_keep = static_cast<std::int8_t>(legend_keep);
+    return a;
+}
+// Ilharg #10 (TAPPED: it differs from a fresh copy) on the battlefield, a second Ilharg #20 in hand, five lands.
+GameState LkIlhargBoard()
+{
+    GameState s = ILegendBoard();
+    s.battlefield[0].tapped = true;
+    return s;
+}
+// A human chooser that records every legend-rule prompt and keeps option `pick`.
+struct LkChooser
+{
+    int                      pick;
+    std::vector<std::string> sources;
+    BounceChooser            fn;
+    BounceChooser*           saved;
+    explicit LkChooser(int p) : pick(p), saved(g_play_sacrifice_chooser)
+    {
+        fn = [this](const GameState&, int, const std::string& source, const std::vector<int>&, int) -> int
+        { sources.push_back(source); return pick; };
+        g_play_sacrifice_chooser = &fn;
+    }
+    ~LkChooser() { g_play_sacrifice_chooser = saved; }
+};
+}   // namespace
+
+TEST_CASE("I5b legend keep: the cast's rider decides which copy survives -- executor and rollout agree")
+{
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        GameState roll = LkIlhargBoard();
+        TurnSolver::ApplyPlan(roll, IPlan({ LkCast(kIlharg, keep, /*dies_tuck=*/2) }), /*is_pre_combat=*/true);
+        GameState exec = LkIlhargBoard();
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        ManaPool avail = AvailableManaPool(exec);
+        MtgTestSeam::CastWithDiesTuck(eng, exec, exec.players[0].hand.back(), avail, /*dies_tuck=*/2, false, 0, keep);
+        REQUIRE_FALSE(exec.stack.empty());
+        CHECK(exec.stack.front().legend_keep == keep);
+        IResolveStack(exec);
+        CHECK(g_legend_keep_pin.v == 0);   // the scope never leaks
+        for (const GameState* s : { &roll, &exec })
+        {
+            const int survivor = keep == 1 ? 10 : 20, loser = keep == 1 ? 20 : 10;
+            CHECK(IFind(*s, survivor) != nullptr);
+            CHECK(IFind(*s, loser) == nullptr);
+            CHECK(InGraveyard(*s, loser));   // left (dies_tuck 2): the death clause reads the loser either way
+        }
+        // keep-newest keeps the UNTAPPED fresh copy; keep-oldest the tapped one.
+        CHECK(IFind(roll, keep == 1 ? 10 : 20)->tapped == (keep == 1));
+        CHECK(IFind(exec, keep == 1 ? 10 : 20)->tapped == (keep == 1));
+    }
+}
+
+TEST_CASE("I5b legend keep: differing copies -- both keep answers are reachable by the search")
+{
+    LkSearchedScope searched;
+    auto keeps = [](const GameState& s, const char* name) {
+        std::vector<int> out;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name == name) { out.push_back(a.legend_keep); } }
+        std::sort(out.begin(), out.end());
+        return out;
+    };
+    {   // Raggadragga on the battlefield, a second in hand: keep-oldest / keep-newest
+        GameState s = ILegendBoard();
+        s.battlefield.erase(s.battlefield.begin());
+        s.players[0].hand.clear();
+        IPut(s, kRagga, 30);
+        s.players[0].hand.push_back(ICard(kRagga, 31));
+        CHECK(keeps(s, kRagga) == std::vector<int>{ 1, 2 });
+    }
+    {   // Ilharg: the keep axis crosses the dies-clause axis (four casts)
+        const GameState s = LkIlhargBoard();
+        CHECK(keeps(s, kIlharg) == std::vector<int>{ 1, 1, 2, 2 });
+    }
+    {   // a lone legend (no same-name permanent): no keep twin
+        GameState s = ILegendBoard();
+        s.battlefield.erase(s.battlefield.begin());
+        s.players[0].hand.clear();
+        s.players[0].hand.push_back(ICard(kRagga, 31));
+        CHECK(keeps(s, kRagga) == std::vector<int>{ 0 });
+    }
+    {   // two copies cast by ONE plan, none on the battlefield: the plan is fanned, both casts carry one answer
+        GameState s = ILegendBoard();
+        s.battlefield.erase(s.battlefield.begin());
+        s.players[0].hand.clear();
+        Action a = ICast(kRagga, 0), b = ICast(kRagga, 0);
+        TurnSolver::Plan two = IPlan({ a, b }), one = IPlan({ a });
+        two.land_decided = one.land_decided = true;
+        int fan_old = 0, fan_new = 0, singles = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { two, one }))
+        {
+            if (p.actions.size() == 1) { ++singles; CHECK(p.actions[0].legend_keep == 0); continue; }
+            REQUIRE(p.actions.size() == 2u);
+            CHECK(p.actions[0].legend_keep == p.actions[1].legend_keep);
+            if (p.actions[0].legend_keep == 1) { ++fan_old; }
+            if (p.actions[0].legend_keep == 2) { ++fan_new; }
+        }
+        CHECK(fan_old == 1);
+        CHECK(fan_new == 1);
+        CHECK(singles == 1);
+    }
+    {   // autonomous d0 (not searched play): no twins -- the provider's keep is the d0 runner's policy
+        TurnSolver::SetSearchedPlay(false);
+        const GameState s = LkIlhargBoard();
+        for (int k : keeps(s, kIlharg)) { CHECK(k == 0); }
+        TurnSolver::SetSearchedPlay(true);
+    }
+}
+
+TEST_CASE("I5b legend keep: identical copies fold; a differing non-Chandra legend asks the human, once")
+{
+    GameState s = IBase();
+    IPut(s, kRagga, 30, 0, /*sick=*/true);
+    IPut(s, kRagga, 31, 0, /*sick=*/true);
+    CHECK(LegendCopiesInterchangeable(s, { 0, 1 }));
+    {   // identical: no prompt, the provider's keep (oldest)
+        LkChooser human(1);
+        GameState t = s;
+        EnforceLegendRule(t, 0);
+        CHECK(human.sources.empty());
+        CHECK(IFind(t, 30) != nullptr);
+        CHECK(IFind(t, 31) == nullptr);
+    }
+    s.battlefield[0].tapped = true;
+    CHECK_FALSE(LegendCopiesInterchangeable(s, { 0, 1 }));
+    {   // differing: asked with the short name, and the human's keep (the newest) is applied
+        LkChooser human(1);
+        GameState t = s;
+        EnforceLegendRule(t, 0);
+        REQUIRE(human.sources.size() == 1u);
+        CHECK(human.sources[0] == "Legend rule: choose Raggadragga to keep");
+        CHECK(IFind(t, 31) != nullptr);
+        CHECK(IFind(t, 30) == nullptr);
+    }
+    {   // the provisional loser asks FIRST (inside the cascade) and the SBA reuses that answer: one prompt, consistent
+        LkChooser human(1);
+        GameState t = s;
+        CHECK(LegendRuleLoser(t.battlefield[0], t));         // #30 is the copy the human dropped
+        CHECK_FALSE(LegendRuleLoser(t.battlefield[1], t));
+        EnforceLegendRule(t, 0);
+        CHECK(human.sources.size() == 1u);
+        CHECK(IFind(t, 31) != nullptr);
+        CHECK(IFind(t, 30) == nullptr);
+        CHECK(g_legend_keep_asked.controller == -1);          // consumed by the SBA
+    }
+    {   // the searched pin decides when installed, and only for the legend it names
+        GameState t = s;
+        {
+            LegendKeepPinScope pin(2, kRagga);
+            CHECK(LegendRuleLoser(t.battlefield[0], t));
+            EnforceLegendRule(t, 0);
+        }
+        CHECK(IFind(t, 31) != nullptr);
+        GameState u = s;
+        {
+            LegendKeepPinScope pin(2, kIlharg);   // another name: the provider keeps the oldest
+            EnforceLegendRule(u, 0);
+        }
+        CHECK(IFind(u, 30) != nullptr);
+    }
+}
+
+TEST_CASE("I5b legend keep: Ilharg's attack put carries the keep answer in its pin (kAttackPutKeepNewBit)")
+{
+    for (bool keep_new : { false, true })
+    {
+        CAPTURE(keep_new);
+        GameState s = IBase();
+        s.phase = Phase::Combat;
+        const int il = IPut(s, kIlharg, 10);
+        s.players[0].hand.push_back(ICard(kIlharg, 20));
+        s.scripted_attack_put = static_cast<std::int16_t>(20 | (keep_new ? kAttackPutKeepNewBit : 0));
+        std::vector<int> atk = { il };
+        int declared_n = 1;
+        FireAttackPutFromHand(s, 0, atk, declared_n);
+        const int survivor = keep_new ? 20 : 10, loser = keep_new ? 10 : 20;
+        REQUIRE(IFind(s, survivor) != nullptr);
+        CHECK(IFind(s, loser) == nullptr);
+        CHECK(InGraveyard(s, loser));
+        CHECK(atk.size() == 1u);   // exactly one Ilharg is still attacking
+        CHECK(g_legend_keep_pin.v == 0);
+        if (keep_new) { CHECK(IFind(s, 20)->return_at_end_step); }
+    }
+    {   // the search fans the keep-new twins beside the plain and tuck pins
+        GameState s = IBase();
+        IPut(s, kIlharg, 10);
+        s.players[0].hand.push_back(ICard(kIlharg, 20));
+        TurnSolver::Plan base;
+        base.land_decided = true;
+        std::vector<int> c;
+        for (const TurnSolver::Plan& p : TurnSolver::SubdecisionAxesForTest(s, /*is_pre_combat=*/true, { base }))
+        { c.push_back(p.attack_put_choice); }
+        for (int want : { 20, 20 | kAttackPutTuckBit, 20 | kAttackPutKeepNewBit,
+                          20 | kAttackPutKeepNewBit | kAttackPutTuckBit })
+        { CHECK(std::count(c.begin(), c.end(), want) == 1); }
     }
 }

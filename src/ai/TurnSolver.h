@@ -518,6 +518,16 @@ struct Action
     // if the SAME plan casts another copy first, so plan_signature tags 3 / 4 only in that case -- the twins of a
     // plan casting one copy carry an inert rider and fold onto one plan (a sound identity fold).
     std::int8_t dies_tuck          = 0;
+    // LEGEND-RULE KEEP (CR 704.5j, Boars I5b item 4): which copy THIS cast's legend rule keeps when the cast is a
+    // legendary card and another same-name permanent of ours is on the battlefield at its resolution. 0 = no
+    // legend rule (every other action) / unpinned (the provider's LegendKeepIndex -- the playout policy beyond
+    // the horizon), 1 = keep the OLDEST copy (the new one dies), 2 = keep the NEWEST (the cast copy survives,
+    // the older one dies). A SEARCHED axis: the LEGEND-KEEP pass (CollectActions) twins a legendary cast with a
+    // same-name permanent already on the battlefield, and AppendSubdecisionAxes fans a plan that casts two copies
+    // of one legend (every cast of that name in the plan carries the same answer, so execution order cannot
+    // matter). Rides CastRiders into both cast paths (a LegendKeepPinScope over the cast) and the executor's
+    // StackEntry (the resolution); folded into plan_signature / ActSig / ActionFoldSig only when nonzero.
+    std::int8_t legend_keep        = 0;
     // LURRUS OF THE DREAM-DEN (CardParams::gy_cast_permanent_max_mv, 2026-11-10): a CastFromGraveyard
     // cast made under a graveyard CAST PERMISSION -- the permission source's card.m_number (a deck card
     // number, so it fits). -1 for every other action, including a retrace cast (which carries
@@ -1177,12 +1187,16 @@ struct CastRiders
     // Action::dies_tuck (Ilharg's death "may"): installed as GameState::dies_tuck_pin over the cast by both
     // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
     std::int8_t dies_tuck      = 0;
+    // Action::legend_keep (CR 704.5j keep, Boars I5b item 4): installed as the legend-keep pin over the cast by both
+    // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
+    std::int8_t legend_keep    = 0;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
         r.emerge            = a.emerge;
         r.dies_tuck         = a.dies_tuck;
+        r.legend_keep       = a.legend_keep;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;

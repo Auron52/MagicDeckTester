@@ -62,11 +62,12 @@ struct MtgTestSeam
     // The executor's hand cast with Ilharg's death "may" rider (CastRiders::dies_tuck, Boars I5b item 3), optionally
     // in EMERGE mode off `victim`. Pushes the StackEntry (carrying dies_tuck); the caller resolves it.
     static void CastWithDiesTuck(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int dies_tuck,
-                                 bool emerge = false, int victim = 0)
+                                 bool emerge = false, int victim = 0, int legend_keep = 0)
     {
         CastRiders riders = e.m_cast_riders.Take();
         riders.emerge    = emerge;
         riders.dies_tuck = static_cast<std::int8_t>(dies_tuck);
+        riders.legend_keep = static_cast<std::int8_t>(legend_keep);   // CR 704.5j keep (Boars I5b item 4)
         e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, victim, -1, -1, 0, std::string(), 0,
                             false, false, -1, 0, 0, 0, false, false, false, riders);
     }

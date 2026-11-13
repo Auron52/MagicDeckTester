@@ -8451,6 +8451,137 @@ struct LifegainCounterTargetPinScope
 // enters_with_x_plus_counters entrant, so every other deck's queue stays empty (byte-identical); the
 // general 0-toughness entrant is the same rule and a follow-up, not a rider on this card.
 inline thread_local std::vector<int> g_pending_zero_toughness;
+// LEGEND-RULE KEEP (CR 704.5j: the controller CHOOSES which same-name legendary permanent to keep; Boars I5b item 4).
+// The choice is made in ONE place, LegendKeepPick, read by BOTH the provisional loser below (LegendRuleLoser, during
+// the enter cascade) and the state-based action itself (EnforceLegendRule), so the copy the watchers treat as dead is
+// always the copy the SBA removes:
+//   * SEARCHED (a pin): the cast / attack put that makes the group carries Action::legend_keep (StackEntry::
+//     legend_keep for the executor's resolution) or kAttackPutKeepNewBit, installed for the dynamic extent of that
+//     cast / resolution / put by LegendKeepPinScope. 1 = keep the OLDEST copy (lowest battlefield index -- entry
+//     order), 2 = keep the NEWEST. The pin names the legend it decides, so a nested legend rule for another name is
+//     not captured by it. The search branches both answers (CollectActions' LEGEND-KEEP pass; AppendSubdecisionAxes'
+//     same-plan fan; the attack-put axis), so no in-window pick is made by the engine.
+//   * HUMAN PLAY: the board-click `legend_keep` decision (g_play_sacrifice_chooser, nulled in every hypothetical by
+//     RevealLogPause) for EVERY legend whose copies differ (LegendCopiesInterchangeable is the identity fold: a
+//     group of field-identical copies has no decision content and is not asked). Asked at the FIRST point the
+//     answer is needed -- possibly the provisional loser check inside the enter cascade, which is rules-faithful:
+//     the SBA happens before any enter trigger is put on the stack (CR 704.3) -- and the answer is remembered for
+//     the group (g_legend_keep_asked) so the SBA removes exactly the copy the cascade already treated as dead.
+//     The new copy's own enter trigger is unaffected either way: it triggered on entering and resolves even if
+//     that copy is the one put into the graveyard (the engine banks it inline; LegendRuleLoser only hides the
+//     doomed copy from OTHER watchers' sight and target lists).
+//   * UNPINNED (the playout beyond the horizon, the d0 runner, entry routes with no searched rider -- token copies,
+//     reanimation, flicker returns): the provider's LegendKeepIndex (the permitted playout policy).
+struct LegendKeepPin
+{
+    std::int8_t v = 0;     // 0 none, 1 keep oldest, 2 keep newest
+    std::string name;      // the legend it decides
+};
+inline thread_local LegendKeepPin g_legend_keep_pin;
+struct LegendKeepPinScope
+{
+    LegendKeepPin prev;
+    bool          armed;
+    LegendKeepPinScope(int v, const std::string& name) : armed(v != 0)
+    {
+        if (!armed) { return; }
+        prev = g_legend_keep_pin;
+        g_legend_keep_pin.v    = static_cast<std::int8_t>(v == 1 ? 1 : 2);
+        g_legend_keep_pin.name = name;
+    }
+    ~LegendKeepPinScope() { if (armed) { g_legend_keep_pin = std::move(prev); } }
+    LegendKeepPinScope(const LegendKeepPinScope&) = delete;
+    LegendKeepPinScope& operator=(const LegendKeepPinScope&) = delete;
+};
+// The human's (or the identity fold's) answer for one same-name group, remembered from the provisional check to the
+// SBA. Real human play only (the chooser is null in every hypothetical), so no search branch can read it.
+struct LegendKeepAsked
+{
+    int              controller = -1;
+    int              turn       = -1;
+    std::vector<int> nums;          // the group's card numbers, in battlefield order
+    int              keep_num   = 0;
+};
+inline thread_local LegendKeepAsked g_legend_keep_asked;
+// IDENTITY FOLD: every copy of the group is field-identical apart from its card number and battlefield slot -- same
+// tapped state, age (summoning sickness), control age, token-ness and counters, and nothing else that can tell two
+// copies apart (damage, attachments either way, temp pumps / keywords, loyalty or a used loyalty ability, end-step
+// riders, having attacked, animation, copy effects, chosen values, once-per-turn flags). Fail closed: any of those
+// present on any copy makes the group a real decision.
+inline bool LegendCopiesInterchangeable(const GameState& state, const std::vector<int>& dup)
+{
+    if (dup.size() < 2) { return true; }
+    auto counts = [](const Permanent& p, int (&c)[8])
+    {
+        for (int& x : c) { x = 0; }
+        for (const Counter& k : p.counters)
+        {
+            const int t = static_cast<int>(k.type);
+            if (t >= 0 && t < 8) { c[t] += k.count; } else { c[7] += 1000 + k.count; }
+        }
+    };
+    const Permanent& a = state.battlefield[static_cast<std::size_t>(dup.front())];
+    int ca[8];
+    counts(a, ca);
+    for (int idx : dup)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+        if (p.damage != 0 || p.pending_death_trigger != 0 || p.aura_attached_to != 0 || p.equipped_to != 0
+            || p.marked_for_destruction || p.temp_power_bonus != 0 || p.temp_tough_bonus != 0
+            || p.charge_counters != 0 || p.verse_counters != 0 || p.storage_counters != 0 || p.loyalty != 0
+            || p.loyalty_activated_this_turn || p.temp_haste || p.temp_lifelink || p.temp_double_strike
+            || p.temp_vigilance || p.temp_indestructible || p.exile_at_end || p.sac_at_end_step
+            || p.destroy_at_end_if_attacked || p.return_at_end_step || p.AttacksThisTurn() != 0 || p.is_animated
+            || !static_cast<const std::string&>(p.copy_printed_name).empty() || p.chosen_color != -1
+            || p.chosen_subtype_id != 0 || p.chosen_keyword_mask != 0 || p.linked_exile_number != 0
+            || p.once_per_turn_used || p.skip_next_untap || p.paired_with != 0)
+        { return false; }
+        if (p.tapped != a.tapped || p.entered_this_turn != a.entered_this_turn
+            || p.gained_control_this_turn != a.gained_control_this_turn || p.is_token != a.is_token)
+        { return false; }
+        int cp[8];
+        counts(p, cp);
+        for (int t = 0; t < 8; ++t) { if (cp[t] != ca[t]) { return false; } }
+        for (const Permanent& q : state.battlefield)
+        { if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number) { return false; } }
+    }
+    return true;
+}
+// The battlefield index to KEEP for one same-name group `dup` (ascending battlefield indices) of `name`.
+inline int LegendKeepPick(const GameState& state, int controller, const std::vector<int>& dup, const std::string& name)
+{
+    if (dup.empty()) { return -1; }
+    if (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == name)
+    { return g_legend_keep_pin.v == 1 ? dup.front() : dup.back(); }
+    int keep = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
+    if (g_play_sacrifice_chooser == nullptr || controller != state.active_player_index) { return keep; }
+    std::vector<int> nums;
+    nums.reserve(dup.size());
+    for (int idx : dup) { nums.push_back(state.battlefield[static_cast<std::size_t>(idx)].card.m_number); }
+    LegendKeepAsked& asked = g_legend_keep_asked;
+    if (asked.controller == controller && asked.turn == state.turn_number && asked.nums == nums)
+    {
+        for (int idx : dup)
+        { if (state.battlefield[static_cast<std::size_t>(idx)].card.m_number == asked.keep_num) { return idx; } }
+    }
+    if (!LegendCopiesInterchangeable(state, dup))
+    {
+        auto it = std::find(dup.begin(), dup.end(), keep);
+        const int default_option = it == dup.end() ? 0 : static_cast<int>(it - dup.begin());
+        // "Chandra, Torch of Defiance" -> "Chandra": the card's short name, as a player says it.
+        const std::size_t comma = name.find(',');
+        const std::string shortname = comma == std::string::npos ? name : name.substr(0, comma);
+        const int chosen = (*g_play_sacrifice_chooser)(state, controller,
+            "Legend rule: choose " + shortname + " to keep", dup, default_option);
+        if (chosen >= 0 && chosen < static_cast<int>(dup.size())) { keep = dup[static_cast<std::size_t>(chosen)]; }
+    }
+    asked.controller = controller;
+    asked.turn       = state.turn_number;
+    asked.nums       = std::move(nums);
+    asked.keep_num   = (keep >= 0 && keep < static_cast<int>(state.battlefield.size()))
+                     ? state.battlefield[static_cast<std::size_t>(keep)].card.m_number : 0;
+    return keep;
+}
 // LEGEND-RULE LOSER (MTG_LEGEND_SBA_FIRST, HeuristicArm.h). The legend rule is a state-based action
 // (CR 704.5j), and SBAs are performed BEFORE any triggered ability goes on the stack (CR 704.3), so
 // the copy the legend rule removes is gone before an enter trigger RESOLVES -- it cannot see the
@@ -8488,7 +8619,9 @@ inline bool LegendRuleLoser(const Permanent& q, const GameState& state)
         dup.push_back(i);
     }
     if (self < 0) { return false; }
-    const int keep = ResolveProvider(state).LegendKeepIndex(state, q.controller_index, dup);
+    // The SAME pick the SBA will make (LegendKeepPick: the searched pin, the human's remembered answer, else the
+    // provider), so the copy the watchers treat as dead is the one EnforceLegendRule removes.
+    const int keep = LegendKeepPick(state, q.controller_index, dup, q.card.m_name.str());
     return keep != self;
 }
 inline bool DoomedEntrant(const Permanent& q, const GameState& state)
@@ -26978,10 +27111,14 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
     // Ilharg's death "may" for the legend-rule loser this put makes (Boars I5b item 3): a positive pin carries it
     // EXPLICITLY -- kAttackPutTuckBit = tuck, no bit = leave. Unpinned (-1) leaves it to DiesTuckDefault.
     int pin_tuck = 0;
+    // ...and the CR 704.5j keep for the same-name group the put makes (Boars I5b item 4): kAttackPutKeepNewBit = keep
+    // the PUT copy, no bit = keep the older one. Unpinned (-1) leaves it to the provider's LegendKeepIndex.
+    int pin_keep = 0;
     if (pin > 0)
     {
         pin_tuck = (pin & kAttackPutTuckBit) ? 1 : 2;
-        pin &= ~kAttackPutTuckBit;
+        pin_keep = (pin & kAttackPutKeepNewBit) ? 2 : 1;
+        pin &= ~(kAttackPutTuckBit | kAttackPutKeepNewBit);
     }
     const int nd = std::min(declared_n, static_cast<int>(atk_idx.size()));
     std::vector<std::pair<int, const CardDefinition*>> srcs;   // (m_number, def) -- identified before any put
@@ -27000,6 +27137,7 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
     {
         const int want = first ? pin : -1;
         const int want_tuck = first ? pin_tuck : 0;
+        const int want_keep = first ? pin_keep : 0;
         first = false;
         Player& ap = state.players[controller];
         std::vector<int> cand_hand;
@@ -27072,6 +27210,7 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
         }
         {
             DiesTuckPinScope _dies_tuck(state, want_tuck);   // a legend-rule loser reads the searched "may" (I5b)
+            LegendKeepPinScope _legend_keep(want_keep, raw.m_name.str());   // ...and the searched keep (I5b item 4)
             FireEtbWatchers(state, controller, slot);
             slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
             if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }
@@ -27298,21 +27437,9 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     for (const auto& g : groups)
     {
         if (g.second.size() < 2) { continue; }
-        int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
-        // A human chooses which Chandra survives. Reuse the existing board-click
-        // chooser at the real SBA; rollouts have that chooser nulled and use the
-        // provider's deterministic keep. Chandra has no enter/leave watcher that
-        // depends on the provisional LegendRuleLoser check before this SBA.
-        if (g.first == "Chandra, Torch of Defiance" && g_play_sacrifice_chooser != nullptr
-            && controller_index == state.active_player_index)
-        {
-            auto it = std::find(g.second.begin(), g.second.end(), keep);
-            const int default_option = it == g.second.end() ? 0 : static_cast<int>(it - g.second.begin());
-            const int chosen = (*g_play_sacrifice_chooser)(state, controller_index,
-                "Legend rule: choose Chandra to keep", g.second, default_option);
-            if (chosen >= 0 && chosen < static_cast<int>(g.second.size()))
-            { keep = g.second[static_cast<std::size_t>(chosen)]; }
-        }
+        // The searched pin, else (human play) the board-click keep for every legend whose copies differ, asked at the
+        // first point the answer is needed and remembered to here, else the provider (LegendKeepPick, above).
+        const int keep = LegendKeepPick(state, controller_index, g.second, g.first);
         // MTG_TRACE=legend: is "keep the original" ever actually WRONG? One copy dies either way and
         // the ETB is already banked before this state-based action runs, so the choice is purely
         // about WHICH BODY survives -- i.e. it can only matter when the copies differ in a way that
@@ -27336,14 +27463,19 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
             // Auras are NOT compared here (the link is aura->host via aura_attached_to, so it needs
             // a battlefield scan); noted so a "differs=0" is read as "none of these five differ",
             // not as "the copies are provably identical".
-            TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d",
+            // pinned=1: a searched rider decided (LegendKeepPinScope); 0: the provider's LegendKeepIndex (or a
+            // human). interch=1: LegendCopiesInterchangeable -- the keep cannot matter.
+            TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d pinned=%d interch=%d",
                   state.turn_number, g.first.c_str(), g.second.size(),
                   keep == g.second.front() ? "oldest" : "other",
                   d_tap, d_sick, d_dmg, d_ctr, d_pump,
-                  (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0);
+                  (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0,
+                  (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == g.first) ? 1 : 0,
+                  LegendCopiesInterchangeable(state, g.second) ? 1 : 0);
         }
         for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }
     }
+    if (g_legend_keep_asked.controller >= 0) { g_legend_keep_asked = LegendKeepAsked{}; }   // this SBA consumed it
     if (doomed.empty()) { return; }
     std::sort(doomed.begin(), doomed.end());
     // Attachments fall off a doomed legend (CR 704.5j + 301.5c): zero aura_attached_to /

@@ -227,6 +227,10 @@ struct StackEntry
                                         // EffectHandler::Resolve installs it (DiesTuckPinScope) for the
                                         // resolution, so a legend-rule loser reads it. The rollout twin is
                                         // apply_one's scope over the whole inline cast + resolution.
+    std::int8_t         legend_keep    = 0;         // CR 704.5j keep (Action::legend_keep via CastRiders, Boars
+                                        // I5b item 4): 0 unpinned, 1 keep the oldest copy, 2 keep the newest.
+                                        // EffectHandler::Resolve installs it (LegendKeepPinScope) for the
+                                        // resolution; the rollout twin is apply_one's scope.
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::
@@ -332,6 +336,10 @@ struct RippleScript
 // Plan::attack_put_choice / GameState::scripted_attack_put: the TUCK bit of a positive pin (Ilharg's death "may" for
 // the legend-rule loser the put makes, Boars I5b item 3). Card numbers stay far below it (a deck is ~60-100 cards).
 constexpr int kAttackPutTuckBit = 0x2000;
+// ...and the KEEP-NEW bit (CR 704.5j, Boars I5b item 4): putting a legendary card beside a same-name permanent makes a
+// legend-rule choice. Set = keep the PUT copy (the older one dies); a positive pin without it = keep the OLDER copy.
+// Both explicit; the search fans the keep-new twin only where the put makes a same-name group. Still < INT16_MAX.
+constexpr int kAttackPutKeepNewBit = 0x4000;
 
 struct GameState
 {

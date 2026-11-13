@@ -4051,6 +4051,13 @@ public:
     // the same name, so you CHOOSE one to keep and the rest go to the graveyard. `duplicates` is the
     // battlefield indices of one such same-name group, ascending; return the index to KEEP.
     //
+    // SUPERSEDED IN THE SEARCH WINDOW (Boars I5b item 4, 2026-11-13): the keep is now SEARCHED -- a legendary
+    // cast beside a same-name permanent is twinned (Action::legend_keep 1 keep-oldest / 2 keep-newest), a plan
+    // casting two copies is fanned, and Ilharg's attack put carries kAttackPutKeepNewBit -- and a human is asked
+    // for every legend (LegendKeepPick, SpellEffects.h). This hook is now ONLY the playout policy beyond the
+    // horizon, the d0 runner's keep, the human prompt's default, and the keep for entry routes that carry no
+    // searched rider (token copies, reanimation, flicker returns). The measurement below is kept as history.
+    //
     // The base rule keeps the OLDEST (lowest battlefield index). The rules make this the
     // controller's choice for a reason: the copies are not interchangeable once one carries an aura,
     // counters, or damage, or once one is summoning-sick and another is not.
