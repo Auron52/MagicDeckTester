@@ -1,17 +1,14 @@
-# Regression ground truth -- commit c6a9afe3e  date 2026-11-12
+# Regression ground truth -- commit af2296167  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing/mirrorwing2hg move from OUR #TT plan-signature dedup fix (INT-5); the origin-only binary reproduces origin GT on these keys. Searched slower 0, faster 2, d0 unchanged; same digests as the pre-rebase INT-7..10 GT. Morph keys PASS unchanged under origin's payer/oracle changes.
-# accepted-with-regressions (regression, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing (OUR #TT dedup fix, INT-5) + extraturns_regression_d5_s3003 gi36 (same-score line tie, OURS: bisected in INT-7 to 5d55fe9f6 SectionForgetHandExits); the origin-only binary reproduces origin GT on every moved key. Searched slower 0, faster 2, d0 unchanged. Morph keys PASS unchanged.
-# accepted-with-regressions (regression, 2026-11-12): hinata_regression_d5_s2002 gi21 T6->T5 (faster): plan-cache read-guard replay re-prices the priced derivation ceiling; held-out Hinata A/B 2x2400 paired (seed 50007+, b30) identical play 0 slower/0 faster, units 0.99994x
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-morph_smoke_d0_s1001=5.0080/a3b321bae745d464
-morph_smoke_d3_s1001=4.3400/6db184410ce3dde2
-morph_smoke_d5_s1001=4.2400/0e21a807a6fefbad
-morph2hg_smoke_d5_s1001=4.6800/be3e9861dcfabddd
+morph_smoke_d0_s1001=4.7380/34fc50d3a92be7bd
+morph_smoke_d3_s1001=4.0200/eb01ec2903a67eb6
+morph_smoke_d5_s1001=4.0900/3a8343cd0bfcea70
+morph2hg_smoke_d5_s1001=4.5200/58fe1d5ea858cfee
 hydras_smoke_d0_s1001=5.8480/4401470db4ecbd6f
 hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
 hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
@@ -209,13 +206,13 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-morph_regression_d0_s2002=4.9580/d8296f62a8c2450e
-morph_regression_d3_s2002=4.1467/0ee6a1a92b95a8d2
-morph_regression_d5_s2002=4.1800/9e858616d2a88a8d
-morph_regression_d5_s3003=4.4133/44e4cdca17544399
-morph2hg_regression_d5_s2002=4.6000/79016a24d047a3ef
-morph_regression_d3_s30001=4.0000/d54e5f3f8f51a90b
-morph_regression_d5_s30001=4.0000/d54e5f3f8f51a90b
+morph_regression_d0_s2002=4.7730/770f3e7a37cda5a5
+morph_regression_d3_s2002=4.0800/b6b787855d388523
+morph_regression_d5_s2002=4.0933/d305a5d52127fd66
+morph_regression_d5_s3003=4.1867/0aa1225466a6322b
+morph2hg_regression_d5_s2002=4.7200/317d253524366956
+morph_regression_d3_s30001=4.3333/6b1266b664296d26
+morph_regression_d5_s30001=4.3333/6b1266b664296d26
 hydras_regression_d0_s2002=5.7910/2f302f5e6f2a2826
 hydras_regression_d3_s2002=5.3867/8dc8d0544f203e7e
 hydras_regression_d5_s2002=5.3800/9c23aae1d8781467

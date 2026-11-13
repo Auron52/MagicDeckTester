@@ -798,3 +798,23 @@ regression 2HG gi2 diverge in library order after the crack; 2HG gi146 (checked 
 T3 lands Stomping Ground from hand so Foothills cracks a turn later, and the T4 draw differs: Forest vs Den
 Protector) is the same; gi496 is the search holding an uncracked fetch so it does not shuffle away a library top
 it can see, i.e. clairvoyance. Berserk-first stays AS RULED pending the USER's answer on the lethal-only amendment.
+
+## Mulligan profile + viewer morph support (2026-11-13)
+
+- **Keep table ADOPTED** (27eb15869): `mullgen.sh run decks/Morph fast`, K=18 (bucket policy
+  `Morph.buckets.json`: Wooded Foothills + Stomping Ground merged, Birds / Ignoble kept apart, USER
+  2026-11-12), Phase F setting d1 b3. Validation PASSED 2026-11-13T03:08Z: keep (exhaustive vs static)
+  -0.2488t (4/4 seeds, t -28.6), bottoming (blind exhaustive vs lookahead, confounded) -0.0805t (4/4, t -12.9).
+- **Viewer morph support** (af2296167): face-down cast badge ({3}), face-down-and-flip badge where the
+  engine offers it, Den Protector trailing flip badge, click a face-down creature to queue "turn face up";
+  LineSpec `facedown=` / `facedownup=` (enforced like `kicked=`: absent = hard cast); CheckLine prices a
+  declared face-down cast at {3}. Gaps: CheckLine does not charge the face-up cost (pre-existing); a
+  hand-badge flip matches by name when a face-up and face-down copy coexist; no in-combat flip window.
+- **GT accept (smoke + regression) on af2296167**: ONLY morph / morph2hg moved (every other deck
+  byte-identical => the viewer change is inert for AI play). Smoke: d0 5.008->4.738, d3 4.34->4.02,
+  d5 4.24->4.09, 2HG d5 4.68->4.52. Regression: d0 4.958->4.773, d3 4.1467->4.08, d5 s2002 4.18->4.0933,
+  d5 s3003 4.4133->4.1867, 2HG d5 4.60->4.72 (slower), budget-0 backstops d3/d5 4.00->4.33 (3 games;
+  smoke rows, not quality). Expected for a mulligan adoption (different kept hands); the keep table's
+  own held-out validation is the quality verdict.
+- **Value leaf: ON HOLD** (USER 2026-11-13: "let's hold on the value-leaf until I have had a chance to
+  make some references. We'll finish the mulligan profile, however.").
