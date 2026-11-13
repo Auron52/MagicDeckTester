@@ -1210,6 +1210,25 @@ fungus 1,880, gods 4,300 (first run).
     rollout -- is non-local and moves every deck that prepays a multi-cast bill. Not attempted here. Evidence for the
     USER: all 20 gods ORACLE-GAP flags of that gate (12 signatures) are prepaid {Looting / Careful Study + Magus}
     bills of this shape; two traced, three more read from the report (graft = a Tendo / Creek counter, or a `{*x1}` float).
+* **Item 10 (Prevent Damage, first agent, 2026-11-13): UNMODELED and the {Manabarbs + Dina} ORACLE-GAP family FIXED;
+  the rest of the gaps / drops are not yet diagnosed.** Start: gate 17000-21999, 2823 issues (UNMODELED 2475, all "payment
+  enumeration capped"; ORACLE-GAP 193; CAPPED 106; APPLY-DROP-ORDER 29; APPLY-DROP 20).
+  * **FIXED (oracle) 10bd9643a: tap memo.** PayEnum memoises a tap set's Verify outcome at two levels: a pre-tap key
+    (each face's effect key + summed exact pool delta) and a post-tap key (TapFoldKey; it needs Permanent::mana_tap_mark,
+    which the mid-turn key leaves out, or Karplusan {G}+Brushland {C} merges with {C}+{G}: seed 30017158 T6). Beseech's
+    {6} had needed 13,686 probes for 82 results. MTG_ORACLE_TAP_MEMO (ON), MTG_ORACLE_TAP_MEMO_VERIFY=1: 0 LOST / 0 PRE on
+    606 games across 14 decks at ceiling 1e6. **946d89a40: probe ceiling 4096 -> 65536** (the gate's 326 flagged games:
+    UNMODELED 430 -> 20, oracle CPU +16%, play identical).
+  * **FIXED (engine) 85d707f24: MTG_PD_BATCH_BARBS.** PdBatchTimingDominated now treats Manabarbs as monotone when a
+    Tamanoa / Purity is already out, with no sac outlet in the plan. A barb hit is then worth at least 0 to both life
+    totals, so the whole-turn batch is dominated and gets declined. Before this, {Manabarbs + Dina} tapped everything
+    before Dina resolved and lost the drains. Flagged games: ORACLE-GAP 222 -> 78. Held-out A/B on seeds 7430001+,
+    3000 games per arm: 22 digest diffs, 0 slower, net +0. Smoke: 4 PD rows play-changed at the same score (d0 7.294 ->
+    7.292), accepted. Regression and gate results: logs/mana-clean-chain/10-handoff.md.
+  * **OPEN (not diagnosed), with repros in the handoff:** remaining ORACLE-GAP (GSZ + Pyrohemia s30018568 T6, where the
+    engine's life is HIGHER; Spellshock / Manabarbs + Dina s30017653; Manabarbs + Living Wish s30020554 / 30020523,
+    engine life higher). APPLY-DROP: the {Rolling Earthquake X + Dina} first cast leaves no {R} (payer). APPLY-DROP-ORDER:
+    "Quake first pays". Quake sits at USER cast-order rank 25, so any reorder is a USER question.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
