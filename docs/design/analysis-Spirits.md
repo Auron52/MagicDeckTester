@@ -726,3 +726,21 @@ any draw in it."* The abort guard is gone; `handentry::NoteFirstDraw` is miracle
   `audit_viewer_decisions.py --no-sweep` rc 0 (INERT_PARAMS text updated). Play-neutrality: Spirits 50 games
   seed 610000 d3 b10, per-game logs byte-identical vs `build/PGO/mtg` (stamped HEAD:src). Smoke not run (orchestrator).
 
+
+## Measurements after the USER rulings (2026-11-13 evening)
+- **Horizon tie-break (5c2):** `leaf_tiebreak_check.py` 0 changed games of 12,000 paired -> the lever never binds on
+  Spirits; default kept (the tool's "re-run at --blocks 48" is moot at 0/12,000; re-run only if asked).
+- **Fetch rule (3b41ab662) vs the every-target fan**, seed 620000, pooled, both arms in one batch:
+  d0 600: -0.0017 (1 faster / 0 slower); d3 400: +0.0075 (1/4); d5 400: +0.0075 (1/4); units -21% (d3) / -25% (d5).
+  With MTG_NO_SEARCH_SHUFFLE=1 (both arms): d3/d5 +0.0050 (0/2), units -18% / -26%. The two remaining slower games
+  (gi120, gi399) are DRAW THINNING: the unpruned search cracks the Strand for the exact land that is the next draw
+  (gi399: the Plains drawn T3; gi120: the Island drawn T3), which only a library-order-aware search can do; with the
+  shuffle on, the extra slower games are the shuffle re-roll (gi120: the post-fetch draws differ from T3). The
+  rule's measured cost is therefore clairvoyance; KEPT ON (the USER's rule).
+- **5e narrowings vs MTG_UNPRUNED=1**, seed 630000 d3/d5 400 each: d3 -0.0025 (5 faster / 4 slower), d5 -0.0050 (4/2),
+  units +17% / +29%. Every one of the 9 differing games reproduces with ONLY `MTG_UNPRUNE=fetch,landpick` opened ->
+  the own-nonbasic prune, the Skyclave/Orchid default target and the boast-only main 2 changed no game; the fetch
+  gate is the fetch rule above (clairvoyant thinning both ways).
+- **Q8 lord value (MTG_SPIRITS_LORD_VALUE)**, seed 630000 paired: d0 1000: 5.1900 -> 5.1220 (90 faster / 23 slower,
+  t -6.4); d3 400: -0.0075 (3/0); d5 400: -0.0025 (1/0); units lower at d3/d5. Clean win -> ADOPTED default ON
+  (4b9c49ac5) per the USER's adopt-clean-wins rule.
