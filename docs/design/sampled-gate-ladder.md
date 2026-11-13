@@ -67,6 +67,32 @@ empty budget (Hydras 67 of 1696 decisions, Snow 43/1063, Alchemist 25/841). Fixe
 threshold <= 0 never fits; the threshold is capped by the real remaining budget; a pass 1 that does not fit stops
 the ladder; at least 2 sampled rollouts before a verdict; the bound carries forward).
 
+## Iteration 2 (S2, the exhausted-budget fix, same seeds): close, and every remaining loss is SHALLOWER
+
+| deck | g units / thread-CPU / dturn (better/worse) | g_pz10 |
+|---|---|---|
+| Hydras (1000) | 0.945x / 0.973x / -0.0010 (3/2) | 0.929x / 0.934x / -0.0010 |
+| Alchemist (400) | 0.767x / 0.630x / +0.0050 (2/4) | 0.734x / 0.644x / +0.0050 |
+| EDF (400) | 0.891x / 0.766x / +0.0050 (0/2) | 0.764x / 0.641x / +0.0100 |
+| Snow (400) | 0.996x / 1.141x / +0.0050 (0/2) | 0.931x / 1.026x / +0.0050 |
+| Midrange Burn (400) | 0.942x / 0.951x / -0.0025 (3/1) | 0.899x / 0.860x / +0.0000 |
+
+Attribution (`attrib.py`): DEEPER divergences are now quality-neutral on every deck (Alchemist T1 deeper 1 better /
+0 worse, all others 0/0); EVERY loss is a T1 SHALLOWER divergence (Alchemist 1/4, EDF 0/2, Snow 0/2). The two EDF
+losers (`lose.py`): game 312 -- heur admitted pass 2 on c1 x 6 = 10.3k and the pass cost 54k on an 18k budget (3x;
+our price 75k was RIGHT, heur's overspend found T5 vs T6); game 369 -- heur's pass 2 cost 14.6k (fits), our 2-sample
+price was 107k +- 44k (7x high: the real pass finds a T3 incumbent early and every later rollout is cut at 2; the
+samples ran at the pass-1 incumbent's cut). So: a refusal is the lossy side, and it is taken on 2 samples.
+Snow's thread-CPU 1.14x at 0.996x units: the pricing work is CPU-dearer than its unit charge.
+
+S3 (in flight) screens, on the same seeds, one pooled batch: _pf15/_pf20/_pf30 (ROBUST-OR-EXACT: a verdict in the
+band (thr/F, thr*F] hands the decision to the heuristic ladder from pass 1, gate credited with the pricing spend),
+_pfa20 (asymmetric: only refusals need the margin), _pd15 (admit at 1.5x thr), _prx (REFUSE-EXACT: at the first
+refusal run pass K on rollouts and continue on the heuristic ladder's own gate, c_{K-1} = the priced cost, remaining
+credited back to the heuristic ladder's spend), _pmr80/_pmr160 (a refusal needs 8/16 samples). A 10-game probe of
+_prx (EDF games 310-319) recovers game 312 but costs 1.74x units: pass K's real cost is WARMED by the sampled rollouts
+(721317 T1: 3.5k vs heur's 12.6k), so the heuristic gate sees a cheap c_K and admits a deeper pass (112k).
+
 ## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
 - S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
