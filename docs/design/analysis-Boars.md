@@ -218,3 +218,37 @@ Windswept Heath, so the baseline was the I1 build.) Boars itself, 40 games: 1 fa
 **Open questions (surfaced, not blocking)**
 * Draft Q3: the post-combat finish skips human play (the CounterPingFinish precedent); the end-step sweep runs there.
 * Draft Q2 (2HG attack vs ping) as above.
+
+## I2b done (2026-11-13) -- Herald of Ilharg, mana-spent plumbing, viewer manifest
+
+Commit: `103bb7592` on `boars-analysis` (local only, not pushed). Unit tests 2954/2954 pass (`test/unit/test_boars_herald.cpp`).
+audit_card_costs rc 0 (612/612); audit_card_fields --update hit Scryfall 429s (rc 1; Herald was fetched), offline rc 0.
+`audit_viewer_decisions.py decks/Boars/Boars.cod --no-sweep` rc 0. Byte-identity vs the I2a binary (`--games 20 --seed 9101
+--depth 3 --budget-ms 10 --ignore-play-profile`): Angels, Burn (Eidolon), Five Colour (Mana Cannons) IDENTICAL 20/20.
+
+**Landed**
+* **Herald of Ilharg**: `creature_cast_trigger_plus_counters` 2 + `creature_cast_counter_damage_min_mv` 5 in the shared
+  `FireOnCastTriggers` (own Heralds only; PutPlusCounters, then printed MV >= 5 -> TotalCountersOn damage x OpponentHeads via
+  DealPermanentAbilityDamage). Never sees its own cast; puts are not casts. Trample inert (D2).
+* **Projection** `MTG_ATTACK_HERALD_TRIGGER` (default ON, heurarm slot `ATTACK_HERALD_TRIGGER`): both consider() sites add the
+  ping plus a pre-combat ATTACKING Herald's growth, walked in PlanCastOrder. A Herald cast in the plan joins for later casts; its
+  own growth is not credited (needs haste). `xw_nowin` stands down while a Herald is live. Inert for every deck without one.
+* **`FireOnCastTriggers(state, def, int mana_spent)`**: REQUIRED at every site. Executor `cast_mana_spent` = `x_effective`
+  minus creature-convoke taps, 0 on spend_free / alt lifegain. Rollout twin off `ec` (0 on free_cast / alt_cost). Retrace = its
+  effective cost. Free casts (PushFreeCast, ripple, suspend, Invigorate redirect) = 0. Garth = printed + X ("you still pay its
+  costs"). Madness = `o.reduced`. Remand / Remand chain = their EffectiveSpellCost. Nothing reads it yet (Raggadragga, I3).
+  Test probe: `g_cast_trigger_mana_spent_probe`. Tested: Herald hard cast = 4, with a Horn = 3, in both worlds.
+  **For I4 (emerge):** pass the emerge cost actually paid (after Horn) and sacrifice BEFORE the call.
+* BoarsProvider signature ORs in `creature_cast_trigger_plus_counters`. Both Herald params are in `kHandAuditedParams`.
+* Viewer: `self_haste_cost` -> MANIFEST `main_phase` (the I1 leftover). Both Herald params go in INERT_PARAMS (no decision),
+  plus a DECISIONS.md no-decision row.
+
+**Deviations / not done**
+* No `[fd-diverge]` assert comparing the executor and rollout mana_spent (the draft's optional item). Lockstep is by
+  construction, and the unit test checks both worlds.
+* The Ilharg-put "no trigger" test is owed to I5 (Ilharg is not in cards.json yet).
+
+**Open questions (surfaced, not blocking)**
+* INERT_PARAMS rows for the two Herald params need the USER's OK (viewer paperwork).
+* D8: Herald's cast-order rank is USER-owned. The draft suggests Herald goes after the dorks and before the other creatures.
+  Not encoded.
