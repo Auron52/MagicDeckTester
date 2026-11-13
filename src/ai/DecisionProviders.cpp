@@ -41276,6 +41276,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.scripted_upkeep_gy_reanimate);
     v.push_back(s.scripted_echo);
     v.push_back(s.scripted_doth_put);
+    if (const long long dk = s.DoublerDeferKey(); dk != -1) { v.push_back(dk); }   // doubler-after-exalted run
     v.push_back(s.scripted_demon_trigger); v.push_back(s.creature_died_this_turn);
     v.push_back(s.combat_damage_prevented_this_turn);
     v.push_back(static_cast<long long>(s.battlefield.size()));

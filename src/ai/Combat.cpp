@@ -663,7 +663,9 @@ static bool FbProbeCombat(GameState& probe, std::vector<int>& idx, FbPayer payer
     FbBankedHoldScope _hold(hold);
     const int active = probe.active_player_index;
     ApplyFirebreathing(probe, active, idx, AvailableManaPool(probe), std::numeric_limits<int>::max(), payer);
-    const int exalted = (static_cast<int>(idx.size()) == 1) ? CountExalted(probe.battlefield, active) : 0;
+    int exalted = (static_cast<int>(idx.size()) == 1) ? CountExalted(probe.battlefield, active) : 0;
+    if (exalted > 0)   // the trailing doublers cast after exalted (MTG_DOUBLER_AFTER_EXALTED), as the combat sites
+    { exalted += DoublerDeferExaltedExtra(probe, probe.battlefield[static_cast<std::size_t>(idx[0])], exalted); }
     ResolveCombatDamage(probe, idx, exalted, /*collect_descs=*/false);
     return probe.Opponent().life <= 0 || dmgev::OpponentLostRaw(probe);
 }

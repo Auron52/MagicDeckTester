@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "DOUBLER AFTER EXALTED -- the CR 500.4 half (USER 2026-11-13 on the emptying: \"take the best possible option of",
+    "the two\"). Turn 3: a ready face-down Blistering Firecat (2/2), a SUMMONING-SICK Ignoble Hierarch (exalted, but it",
+    "cannot tap for mana), an untapped Gruul Turf ({R}{G}) and Mountain; Might of Old Krosa + Legion Leadership in hand;",
+    "the opponent at 14.",
+    "",
+    "Main can cast both (Might off the Turf's {G}, Leadership off the floating {R} + the Mountain): (2 + 4) x 2 = 12, +1",
+    "exalted = 13 -- one short. Leadership CANNOT be cast in combat: the floating {R} empties when main ends, and no split",
+    "of the two lands pays Might's {G} in main and Leadership's {1}{R/W} in combat. So the doubler stays in main and",
+    "turn 3 is not lethal: crediting the combat cast here ((2 + 4 + 1) x 2 = 14) would be a phantom win. Turn 4 swings",
+    "for the last point."
+  ],
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 14,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Ignoble Hierarch", "controller": 0, "sick": true },
+    { "name": "Blistering Firecat (Face-down)", "controller": 0, "sick": false },
+    { "name": "Gruul Turf", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [
+    "Might of Old Krosa",
+    "Legion Leadership"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 4
+}

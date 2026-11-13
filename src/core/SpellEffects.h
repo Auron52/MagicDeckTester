@@ -27322,6 +27322,82 @@ inline bool TrickHandRecipientCanAttackThisTurn(const GameState& state, const Ca
     return false;
 }
 
+// ---- DOUBLER AFTER EXALTED (MTG_DOUBLER_AFTER_EXALTED; the model is on GameState::dbl_defer_*) -------
+// USER 2026-11-13: "we need to be able to berserk and Legion Leadership in the attack phase, if there is
+// exalted. Otherwise we miss out on damage. ... Anything doubler cast at the end will be assumed to be in
+// the attack phase." The trailing run of doubler casts of a pre-combat main is treated as cast in the
+// declare-attackers step after exalted resolves. They still RESOLVE in main (same payment, targets and
+// watcher triggers -- an instant cast in combat changes none of those), and combat credits the one thing
+// the combat-time cast changes: the doubled power includes exalted's +E. One shared reader per side:
+// NoteDoublerResolved (ApplyTrickPayload, both worlds) and DoublerDeferExaltedExtra (every lone-attacker
+// exalted site: the executor's combat, the rollout's SimulateCombat, the attack projection, the
+// firebreathing probe).
+
+// Called by ApplyTrickPayload for one trick_double_power instance on the creature at `ti`, AFTER the
+// doubling; `pw_before` = its combat power before this instance (before its watcher trigger).
+inline void NoteDoublerResolved(GameState& s, int controller, int ti, int pw_before)
+{
+    if (!DoublerAfterExaltedOn()) { return; }
+    const int seq = s.TurnSeq();
+    // A doubler that cannot be moved to combat stays in main -- and then no EARLIER doubler trails the
+    // plan any more, so the whole run is void (dbl_defer_turn = -1), not just this instance.
+    if (s.phase != Phase::PreCombatMain || controller != s.active_player_index
+        || s.battlefield[static_cast<std::size_t>(ti)].controller_index != controller
+        || s.dbl_pay_turn != seq || s.dbl_pay_ok == 0 || s.spells_cast_this_turn > s.dbl_pay_max_spells
+        || CountExalted(s.battlefield, controller) <= 0)
+    { s.dbl_defer_turn = -1; return; }
+    // Continuing the run: nothing but this doubler (or another copy of the same spell) has been cast
+    // since its last doubler.
+    const bool cont = s.dbl_defer_turn == seq
+                   && (s.dbl_defer_spells == s.spells_cast_this_turn
+                       || s.dbl_defer_spells == s.spells_cast_this_turn - 1);
+    if (!cont) { s.dbl_defer_num[0] = s.dbl_defer_num[1] = 0; s.dbl_defer_n[0] = s.dbl_defer_n[1] = 0; }
+    const Permanent& t = s.battlefield[static_cast<std::size_t>(ti)];
+    const int num = t.card.m_number;
+    int slot = -1;
+    for (int i = 0; i < 2; ++i) { if (s.dbl_defer_n[i] > 0 && s.dbl_defer_num[i] == num) { slot = i; } }
+    // Its power moved between its last run doubler and this one (an activation -- a flip, an equip):
+    // those earlier doublers cannot move past that change, so this target's run restarts here.
+    if (slot >= 0 && s.dbl_defer_pw[slot] != pw_before) { s.dbl_defer_n[slot] = 0; s.dbl_defer_num[slot] = 0; slot = -1; }
+    if (slot < 0)
+    {
+        for (int i = 0; i < 2; ++i) { if (s.dbl_defer_n[i] == 0) { slot = i; break; } }
+        if (slot < 0) { s.dbl_defer_turn = -1; return; }   // a third distinct target: not modelled, run void
+        s.dbl_defer_num[slot] = num;
+        s.dbl_defer_n[slot]   = 0;
+    }
+    if (s.dbl_defer_n[slot] < 30) { ++s.dbl_defer_n[slot]; }
+    s.dbl_defer_pw[slot] = static_cast<std::int16_t>(std::min(CombatPowerOf(t, s), 32767));
+    s.dbl_defer_turn     = static_cast<std::int16_t>(seq);
+    s.dbl_defer_spells   = static_cast<std::int16_t>(s.spells_cast_this_turn);
+}
+
+// The run's slot for `p` when it is live NOW (same turn, no spell since, power unchanged), else -1.
+inline int DoublerDeferLiveSlot(const GameState& s, const Permanent& p)
+{
+    if (s.dbl_defer_turn != s.TurnSeq() || s.dbl_defer_spells != s.spells_cast_this_turn) { return -1; }
+    for (int i = 0; i < 2; ++i)
+    {
+        if (s.dbl_defer_n[i] > 0 && s.dbl_defer_num[i] == p.card.m_number
+            && CombatPowerOf(p, s) == s.dbl_defer_pw[i])
+        { return i; }
+    }
+    return -1;
+}
+
+// The EXTRA power a LONE attacker `lone` gets because its run doublers resolve after exalted's +E:
+// 2^n (P + E) instead of 2^n P + E, i.e. E * (2^n - 1). Add it to the exalted bonus at the site that
+// computed `exalted` = CountExalted (exactly one attacker). 0 when nothing is deferred.
+inline int DoublerDeferExaltedExtra(const GameState& s, const Permanent& lone, int exalted)
+{
+    if (exalted <= 0 || s.dbl_defer_turn != s.TurnSeq()) { return 0; }
+    if (!DoublerAfterExaltedOn()) { return 0; }
+    const int slot = DoublerDeferLiveSlot(s, lone);
+    if (slot < 0) { return 0; }
+    const int n = std::min<int>(s.dbl_defer_n[slot], 20);
+    return exalted * ((1 << n) - 1);
+}
+
 // Wild Defiance (CardParams::spell_target_watch_pump_*): "Whenever a creature you control becomes the
 // target of an instant or sorcery spell, that creature gets +3/+3 until end of turn." Fire every such
 // watcher for ONE "becomes the target" event on the creature at battlefield index `ti` -- one +N/+N per
@@ -27376,6 +27452,8 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
     if (pp.grants_extra_land_drop > 0) { pl.bonus_land_drops_this_turn += pp.grants_extra_land_drop; }
 
     if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { return; }
+    // Doubler-after-exalted (NoteDoublerResolved below): the recipient's power BEFORE this instance.
+    const int dbl_pw_before = pp.trick_double_power ? CombatPowerOf(state.battlefield[ti], state) : 0;
     // Wild Defiance: the target watcher's trigger resolves BEFORE this spell (CR 603.3), so it lands
     // first and a doubler below doubles it. Own creatures only (an opponent-target sentinel recipient is
     // theirs, and their Defiance never exists in a goldfish).
@@ -27445,6 +27523,7 @@ inline void ApplyTrickPayload(GameState& state, int controller, const CardDefini
         const int x = std::max(0, CombatPowerOf(tgt, state));
         tgt.temp_power_bonus += x;
         pw += x;   // the trace below reports the whole bonus
+        NoteDoublerResolved(state, controller, ti, dbl_pw_before);
     }
     // DIG INSTRUMENT (MTG_TRICK_TRACE, default off): real-resolution-only dump of where a trick
     // payload landed -- target, pump, treasure count -- for diffing an executed turn against the

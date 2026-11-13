@@ -66,6 +66,16 @@ inline bool LethalCutVerifyEnabled()
     return on;
 }
 
+// MTG_DOUBLER_AFTER_EXALTED (USER 2026-11-13; DEFAULT ON, =0 restores doublers-before-exalted) -- the trailing
+// run of power-doubler casts of a pre-combat main counts as cast in the declare-attackers step after exalted
+// resolves (GameState::dbl_defer_* note, SpellEffects.h DoublerDeferExaltedExtra). Read by the shared marker
+// and combat helper (both worlds) and by TurnSolver::NoteDoublerDeferPayable (both plan appliers).
+inline bool DoublerAfterExaltedOn()
+{
+    static const bool env = EnvOn("MTG_DOUBLER_AFTER_EXALTED", true);
+    return heurarm::Flag(heurarm::DOUBLER_AFTER_EXALTED, env);
+}
+
 // MTG_SAC_OUTLET_PAY_SCOPE (Vampires A2 0.4, 2026-10-18; DEFAULT ON, =0 restores the mis-modelled
 // payment) -- a creature-sac outlet's mana cost is an ACTIVATED ABILITY OF A CREATURE SOURCE, so both
 // trailing passes pay it under CreatureAbilityPayScope, exactly as ActivatePump / a creature-source

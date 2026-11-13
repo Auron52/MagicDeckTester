@@ -905,6 +905,7 @@ enum Slot : int
     LEAFLESS_READS_LEAFED,    // MTG_LEAFLESS_READS_LEAFED  ENGINE IDENTITY FOLD (P17/P19, 2026-11-13): a LEAFLESS (constant-leaf) node at turn T, depth k answers from a LEAFED (rollout or value-leaf) pass's game-line-cache entry for the same (state, depth), restricted to its window T..T+k-1 (an in-window win is its answer; a win past the window, or a no-win bound covering min(cutoff, T+k-1), is its no-win); its in-window cache lookups clamp the cutoff to T+k-1; and the in-window cache key drops the leaf kind (an in-window proof reads no leaf). A leaf sits at turn T+k, so a leafless node sees nothing past its window and every read is exact. See logs/hydras-research/P19-leafless-read.md
     PD_BATCH_BARBS,           // MTG_PD_BATCH_BARBS  item 10 (mana-clean, Prevent Damage {Manabarbs + Dina} ORACLE-GAP): PD_BATCH_TIMING treats a Manabarbs as MONOTONE when a gain engine (Tamanoa / Purity) is already on the board -- each barb hit is then worth >= 0 to both life totals -- so a batch holding it is declined like any other dominated timing (no sac outlet in the plan). TurnSolver.cpp PdBatchTimingDominated. Default ON; =0 -> a Manabarbs keeps the batch
     PD_HARM_LINE_REPAIR,      // MTG_PD_HARM_LINE_REPAIR  item 10 (mana-clean, Prevent Damage APPLY-DROP s30024638 T3 {Living Wish + Rolling Earthquake X=1}): the pain-HARMFUL payment's exact path, when BOTH the minimum-damage assignment and the historical one strand a later cast of the line, re-pays holding each source either of them tapped (one at a time, capped at the survivable room) and keeps the least-damage payment that leaves the line payable (dmgev::PainAwarePay). Default ON; =0 -> the stranding minimum stands
+    DOUBLER_AFTER_EXALTED,    // MTG_DOUBLER_AFTER_EXALTED  USER 2026-11-13 ("Anything doubler cast at the end will be assumed to be in the attack phase"): a pre-combat main's trailing run of power doublers (trick_double_power: Berserk, Legion Leadership) counts as cast in the declare-attackers step after exalted, so a lone attacker's doubled power includes exalted's +E (SpellEffects.h DoublerDeferExaltedExtra), when the plan-start probe finds the run payable in combat with main's floating mana gone (CR 500.4; TurnSolver::NoteDoublerDeferPayable). A modelling correction. Default ON; =0 -> doublers resolve before exalted as before
     COUNT
 };
 
@@ -1754,6 +1755,7 @@ inline const char* Name(int slot)
         "MTG_LEAFLESS_READS_LEAFED",
         "MTG_PD_BATCH_BARBS",
         "MTG_PD_HARM_LINE_REPAIR",
+        "MTG_DOUBLER_AFTER_EXALTED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

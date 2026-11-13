@@ -609,7 +609,10 @@ static_assert(sizeof(Player) == 216,
 // +0 bytes (2026-11-12, morph's searched opponent-end-step flip): `scripted_eot_face_up` (an int16_t, in the hole
 // after keranos_first_own_draw_seen). Classification: FUTURE-DETERMINING (set by the turn's plan apply, consumed at
 // the opponent's end step of the crossing), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
-static_assert(sizeof(GameState) == 1408,   // verify combined current fields in the integrated build
+// +24 bytes (2026-11-13, MTG_DOUBLER_AFTER_EXALTED): the dbl_defer_* run and the dbl_pay_* probe verdict.
+// Classification: FUTURE-DETERMINING within the turn (the run decides this turn's combat damage), FOLDED in Build()
+// value-gated through GameState::DoublerDeferKey (and in BuildDedupKey); the probe verdict only gates marking.
+static_assert(sizeof(GameState) == 1432,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -953,6 +956,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xA5A0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap)); }
     if (s.scripted_combat_aura_swap_in >= 0)   // human-play deferred swap's fixed Aura (value-gated)
     { fold(0xA5B0000ull + static_cast<std::uint64_t>(s.scripted_combat_aura_swap_in)); }
+    // The doubler-after-exalted run (MTG_DOUBLER_AFTER_EXALTED): the same future-determining class as the
+    // combat pins, value-gated (-1 = no live run).
+    if (const long long dk = s.DoublerDeferKey(); dk != -1)
+    { fold(0xD0B1E50000ull ^ (static_cast<std::uint64_t>(dk) << 5)); }
     // Raubahn's attack-attach pin: the same FUTURE-DETERMINING class as the Bruna pin, value-gated.
     if (s.scripted_attack_attach >= 0)
     { fold(0xA77A0000ull + static_cast<std::uint64_t>(s.scripted_attack_attach)); }

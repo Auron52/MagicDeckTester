@@ -8207,6 +8207,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // cost of the main hand casts and pre-load floating so the casts below drain the pool instead of
     // the stranding per-cast greedy. Same (state, plan.actions) inputs as the rollout at the same
     // logical point (after the land drop; Vial puts now ride the cast sequence) -> identical prepay. Declined -> greedy.
+    // Doubler after exalted (MTG_DOUBLER_AFTER_EXALTED): can the plan's doublers be paid in combat? Same
+    // point and inputs as ApplyPlanDirect's call (lockstep); a no-op without a doubler and exalted.
+    TurnSolver::NoteDoublerDeferPayable(state, plan.actions);   // checks the phase itself
     const bool loam_target_plan = std::any_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);

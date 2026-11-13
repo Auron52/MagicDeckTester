@@ -257,6 +257,28 @@ the durable record).
   the search cannot see the window, so it never plans a line that needs it). Re-measure if a list adds exalted
   density or more doublers.
 
+### INT-12 (2026-11-13) -- D7 BUILT on USER ruling: doublers cast at the end resolve after exalted (MTG_DOUBLER_AFTER_EXALTED)
+- USER (verbatim): "Hmm... Another issue is that we need to be able to berserk and Legion Leadership in the attack
+  phase, if there is exalted. Otherwise we miss out on damage. It could be handled similarily to Arcanum wings swap in
+  the Bruna deck. Anything doubler cast at the end will be assumed to be in the attack phase."
+  On the mana emptying (verbatim): "Right, I suppose the right way to handle the emptying is to take the best possible
+  option of the two and perhaps display it in the history. So, if it is cast in the attack phase we would specify that
+  in the history."
+- Model (default ON, `MTG_DOUBLER_AFTER_EXALTED=0` reverts; per-job heurarm slot DOUBLER_AFTER_EXALTED): the trailing
+  run of `trick_double_power` casts of a pre-combat main still RESOLVES in main (same payment, targets, Wild Defiance
+  triggers), and every lone-attacker exalted site (executor combat, rollout SimulateCombat, the attack projection, the
+  firebreathing probe) adds `E x (2^n - 1)` through the shared `DoublerDeferExaltedExtra` -- exactly what doubling
+  after exalted's +E adds (each doubling is affine with slope 2). The run (`GameState::dbl_defer_*`) is marked by the
+  shared resolver and voided by any later spell, a power change to its target, a post-combat main, or a third target.
+- CR 500.4: `TurnSolver::NoteDoublerDeferPayable` (both plan appliers, before the prepay) proves on a copy that the
+  plan's doublers are payable in the declare-attackers step from the sources the rest of the plan leaves untapped,
+  main's floating mana emptied; two partitions are tried (main first; doublers' sources first). Unpayable -> the
+  doublers stay in main (the "best of the two": when payable, the combat cast is the same spells with more damage).
+  Approximations: activation costs (flips, Spellskite's {U/P}) are not re-priced in the probe; where the combat
+  partition needs MORE taps than main's joint payment (a Karoo split), the post-combat state keeps main's taps.
+- Viewer: the executor emits a `combat` history line "<doublers> cast in combat after exalted (declare-attackers
+  step): <attacker> +N power (exalted +E doubled)". Human and AI lines share both appliers, so they agree.
+
 ### Provider routing A/B (2026-11-12, HEAD 2c2dc16f7) -- MorphProvider vs the pre-INT-1 route (AntiLifegain)
 - Same binary, same seeds (930000 block), two concurrent 12-thread batches; arm B pinned with MTG_PROVIDER_DECK to
   decks/Anti-Lifegain (the provider Wooded Foothills routed this list to before INT-1). Avg win turn:

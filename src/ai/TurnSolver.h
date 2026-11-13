@@ -3162,6 +3162,16 @@ public:
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
+    // DOUBLER AFTER EXALTED (MTG_DOUBLER_AFTER_EXALTED, USER 2026-11-13; GameState::dbl_defer_* note):
+    // the CR 500.4 half. Called by BOTH plan appliers (ApplyPlanDirect, the executor's TakeTurn) at the
+    // same point, just before the whole-turn prepay: when the plan casts a power doubler and exalted is
+    // on our side, prove on a COPY that the plan's doubler casts are payable in the declare-attackers step
+    // -- every other cast paid first (the prepay, else per-cast), main's floating mana then emptied, the
+    // doublers paid from the sources still untapped -- and stamp the verdict (dbl_pay_*). The USER's ruling
+    // on the emptying: "take the best possible option of the two" -- when the combat cast is payable it is
+    // the better one (same spells, more damage); when it is not, the doublers stay in main. No-op (one
+    // flag test, then one action scan) for every other plan.
+    static void NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts);
     // A face-targeted Lavamancer activation can be the sole source of a
     // same-plan spectacle discount. Return its action index so both apply
     // worlds can run it before the spectacle cast, rather than in the trailing

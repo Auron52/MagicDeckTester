@@ -1473,6 +1473,46 @@ struct GameState
     // named the Aura when they committed the line, so the combat window applies THAT Aura without
     // re-asking. Same lifetime as the pin above; consumed with it.
     int                      scripted_combat_aura_swap_in = -1;
+    // DOUBLER AFTER EXALTED (MTG_DOUBLER_AFTER_EXALTED, USER 2026-11-13: "we need to be able to berserk
+    // and Legion Leadership in the attack phase, if there is exalted ... Anything doubler cast at the end
+    // will be assumed to be in the attack phase"). The trailing run of power-doubler casts
+    // (CardParams::trick_double_power) of a pre-combat main is treated as cast in the declare-attackers
+    // step, after exalted resolves -- SpellEffects.h DoublerDeferExaltedExtra is the model and the one
+    // reader. The doublers resolve in main exactly as before (same payment, same targets, same Wild
+    // Defiance triggers); these fields remember the run so combat can credit what the combat-time cast
+    // adds: doubling AFTER exalted's +E gives E * (2^n - 1) more power to a lone attacker carrying n
+    // run doublers (each doubling is p -> 2(p + watcher pump), affine with slope 2, so the gap doubles
+    // per doubler). A run is valid only in the turn (dbl_defer_turn == TurnSeq) and while no other spell
+    // has been cast since its last doubler (dbl_defer_spells == spells_cast_this_turn), and per target
+    // only while its combat power still equals dbl_defer_pw (an unmorph, equip or pump after the run
+    // would reorder past a power change). CR 500.4 (mana empties between steps): a run is marked only
+    // when the plan-start probe (TurnSolver::NoteDoublerDeferPayable -> dbl_pay_*) found the run payable
+    // in combat from the sources the rest of the plan leaves untapped, with main's floating mana gone.
+    // Turn-stamped, so nothing ever needs clearing; folded (DoublerDeferKey) into the dedup key, the
+    // dominance key and the route signature only while live, so every deck without exalted AND a
+    // doubler keeps its exact keys.
+    std::int16_t             dbl_defer_turn   = -1;
+    std::int16_t             dbl_defer_spells = -1;
+    std::int16_t             dbl_pay_turn     = -1;   // TurnSeq() of the probe below; -1 = never
+    std::int16_t             dbl_pay_max_spells = -1; // spells_cast_this_turn the probed plan reaches
+    std::int32_t             dbl_defer_num[2] = { 0, 0 };   // target card numbers (0 = empty slot)
+    std::int16_t             dbl_defer_pw[2]  = { 0, 0 };   // its combat power after its last run doubler
+    std::int8_t              dbl_defer_n[2]   = { 0, 0 };   // run doublers resolved on it
+    std::int8_t              dbl_pay_ok       = 0;    // the probe's verdict for this turn's plan
+    // Key fold for the live run (-1 = none): two states that differ only in which doublers trail the plan
+    // deal different combat damage. Value-gated by every caller (-1 folds nothing).
+    long long DoublerDeferKey() const
+    {
+        if (dbl_defer_turn != TurnSeq() || dbl_defer_spells != spells_cast_this_turn) { return -1; }
+        long long k = 0;
+        for (int i = 0; i < 2; ++i)
+        {
+            if (dbl_defer_n[i] <= 0) { continue; }
+            k = k * 1000003LL + static_cast<long long>(dbl_defer_num[i]) * 64 + dbl_defer_n[i];
+            k = k * 131 + dbl_defer_pw[i];
+        }
+        return k == 0 ? -1 : (k & 0x7fffffffffffLL);
+    }
     // (Raubahn's searched attack-attach pin, scripted_attack_attach, lives further down -- beside
     // free_casts_available, in existing padding -- see its note there.)
     // Searched CLEANUP DISCARD (Plan::discard_choice): which candidate of the provider's ranked

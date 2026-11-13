@@ -1211,6 +1211,37 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, state.active_player_index) : 0;
+    // Doubler after exalted (USER 2026-11-13, MTG_DOUBLER_AFTER_EXALTED): the plan's trailing doublers
+    // are cast now, after exalted resolved, so they double its +E too. Lockstep twin: SimulateCombat.
+    if (exalted_bonus > 0)
+    {
+        const Permanent& lone = state.battlefield[static_cast<std::size_t>(atk_idx[0])];
+        const int dbl_extra = DoublerDeferExaltedExtra(state, lone, exalted_bonus);
+        if (dbl_extra > 0)
+        {
+            if (g_play_event_sink)
+            {
+                // The run's spells are the latest doubler cards in the graveyard (nothing was cast after them).
+                const int slot = DoublerDeferLiveSlot(state, lone);
+                int left = slot >= 0 ? state.dbl_defer_n[slot] : 0;
+                std::string names;
+                const auto& gy = state.ActivePlayer().graveyard;
+                for (auto it = gy.rbegin(); it != gy.rend() && left > 0; ++it)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(*it);
+                    if (d == nullptr || !d->params.trick_double_power) { continue; }
+                    names = it->m_name.str() + (names.empty() ? "" : ", ") + names;
+                    --left;
+                }
+                if (names.empty()) { names = "the doublers"; }
+                EmitPlayEvent(state.turn_number, "combat",
+                              names + " cast in combat after exalted (declare-attackers step): "
+                              + lone.card.m_name.str() + " +" + std::to_string(dbl_extra)
+                              + " power (exalted +" + std::to_string(exalted_bonus) + " doubled)");
+            }
+            exalted_bonus += dbl_extra;
+        }
+    }
 
 
     // Raubahn, Bull of Ala Mhigo's attack trigger ("attach up to one target Equipment you control to

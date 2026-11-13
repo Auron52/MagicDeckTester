@@ -305,6 +305,7 @@ add_executable(mtg-test
     test/unit/test_dup_action_fold.cpp
     test/unit/test_kitty_discard.cpp
     test/unit/test_bucket_policy.cpp
+    test/unit/test_morph_doubler_exalted.cpp
     test/unit/test_cost_reducers.cpp
     test/unit/test_escalation_budget.cpp
     test/unit/test_subtype_registry.cpp

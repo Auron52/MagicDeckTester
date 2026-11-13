@@ -13142,7 +13142,17 @@ static int PendingAttackDamageImpl(const GameState& state)
 
     // Exalted (Ignoble Hierarch): a creature attacking ALONE gets +1/+1 per Exalted ability.
     if (static_cast<int>(attackers.size()) == 1)
-    { dmg += CountExalted(state.battlefield, active); }
+    {
+        const int ex = CountExalted(state.battlefield, active);
+        dmg += ex;
+        // ...and the trailing doublers cast after it (MTG_DOUBLER_AFTER_EXALTED): their extra is power,
+        // so a double striker deals it in both steps, as ResolveCombatDamage does.
+        if (ex > 0)
+        {
+            const int extra = DoublerDeferExaltedExtra(state, *attackers[0], ex);
+            if (extra > 0) { dmg += extra * (CreatureHasDoubleStrike(*attackers[0], state) ? 2 : 1); }
+        }
+    }
 
     // Estimate attack-trigger tokens (Adeline, Hero of Bladehold) for this turn only: const path
     // cannot create them, so add their immediate damage (token base power + anthem bonus) if
@@ -62031,6 +62041,65 @@ int TurnSolver::SpectacleGraveyardDamageFirst(const GameState& state, const std:
     return spectacle ? lavamancer : -1;
 }
 
+void TurnSolver::NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts)
+{
+    if (!DoublerAfterExaltedOn() || state.phase != Phase::PreCombatMain) { return; }
+    int casts = 0;
+    bool any_doubler = false;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        ++casts;
+        const CardDefinition* d = PrepayCastFace(a);
+        if (d != nullptr && d->params.trick_double_power) { any_doubler = true; }
+    }
+    if (!any_doubler || CountExalted(state.battlefield, state.active_player_index) <= 0) { return; }
+    state.dbl_pay_turn       = static_cast<std::int16_t>(state.TurnSeq());
+    state.dbl_pay_max_spells = static_cast<std::int16_t>(state.spells_cast_this_turn + casts);
+    state.dbl_pay_ok         = 0;
+    RevealLogPause quiet;   // feasibility probes on copies: never ask a human or emit events
+    std::vector<Action> pre;
+    std::vector<const Action*> dbl;
+    for (const Action& a : acts)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = PrepayCastFace(a);
+        if (d != nullptr && d->params.trick_double_power) { dbl.push_back(&a); }
+        else { pre.push_back(a); }
+    }
+    // The casts that stay in main, paid as the appliers pay them: the joint prepay, else cast by cast.
+    // (Activation costs -- a flip, Spellskite's {U/P} -- are not re-priced: an approximation, see the doc.)
+    auto pay_main = [&](GameState& c) -> bool
+    {
+        if (pre.size() >= 2 && BatchPrepayMainCasts(c, pre)) { return true; }
+        for (const Action& a : pre)
+        {
+            const CardDefinition* d = PrepayCastFace(a);
+            if (!TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature())) { return false; }
+        }
+        return true;
+    };
+    auto pay_doublers = [&](GameState& c) -> bool
+    {
+        for (const Action* a : dbl) { if (!TapForCostDirect(c, a->cost, false)) { return false; } }
+        return true;
+    };
+    // CR 500.4: mana empties between steps, so nothing either side floats over to the other.
+    auto empty_pool = [](GameState& c) { c.floating_mana = ManaPool{}; c.floating_creature_mana = ManaPool{}; };
+    // Two partitions of the same board, either suffices: main's casts first (the realised order), or the
+    // doublers' sources set aside first -- the greedy payer would otherwise spend a source the combat cast
+    // needs (Might of Old Krosa's {G} off a Gruul Turf instead of the Hierarch leaves Leadership unpaid).
+    {
+        GameState c = state;
+        if (pay_main(c)) { empty_pool(c); if (pay_doublers(c)) { state.dbl_pay_ok = 1; return; } }
+    }
+    {
+        GameState c = state;
+        empty_pool(c);
+        if (pay_doublers(c)) { empty_pool(c); if (pay_main(c)) { state.dbl_pay_ok = 1; return; } }
+    }
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                       bool mint_prefix, bool hand_demand, bool allow_partial)
 {
@@ -73457,6 +73526,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // mis-scoped prefix costs payment quality, never payability. Gated on bp_capture, so it can
     // only ever affect a search-internal node pend -- the executor's committed apply passes no
     // capture and is untouched by construction.
+    // Doubler after exalted (MTG_DOUBLER_AFTER_EXALTED): can the plan's doublers be paid in combat? Same
+    // point and inputs as the executor's call in AIEngine::TakeTurn (lockstep); a no-op without a doubler
+    // and exalted.
+    TurnSolver::NoteDoublerDeferPayable(state, plan.actions);   // checks the phase itself
     const bool loam_target_plan = std::any_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -74629,6 +74702,10 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
     int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
                         ? CountExalted(state.battlefield, active) : 0;
+    // Doubler after exalted (MTG_DOUBLER_AFTER_EXALTED): the trailing doublers double exalted's +E too.
+    // Lockstep twin: GameEngine::CombatPhase (same position, same shared helper).
+    if (exalted_bonus > 0)
+    { exalted_bonus += DoublerDeferExaltedExtra(state, state.battlefield[static_cast<std::size_t>(atk_idx[0])], exalted_bonus); }
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Shared with the
@@ -100418,6 +100495,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
     }
+    // The doubler-after-exalted run (MTG_DOUBLER_AFTER_EXALTED): which doublers trail the plan decides
+    // this turn's combat damage. Value-gated (-1 = no live run), so every other deck keeps its exact key.
+    if (const long long dk = state.DoublerDeferKey(); dk != -1)
+    { Fold(k, 0xD0B1E5A17E5ull ^ (static_cast<std::uint64_t>(dk) << 7)); }
     return k;
 }
 // ...and the LAND-SEARCH state pins (Primeval Titan's attack pick, Search for Tomorrow's off-suspend

@@ -1,0 +1,50 @@
+{
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 18,
+  "opponent_life": 18,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Ignoble Hierarch",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Spellskite",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Berserk",
+    "Berserk",
+    "Blistering Firecat",
+    "Might of Old Krosa",
+    "Stomping Ground",
+    "Vines of Vastwood",
+    "Wild Defiance"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 7,
+  "expect_win_turn": 5,
+  "_comment": [
+    "USER seed 8 (2026-11-13): \"I found an example of it in Seed 8 where Might of Old Krosa + Double Berserk on",
+    "Spellskite should be lethal, but isn't because of the issue\". The T5 board of Morph seed 8 (game-index 7) on the USER's line:",
+    "Hierarch + Spellskite ready, Gruul Turf untapped, Stomping Ground in hand (bounced on T4), opponent at 18. Temur Battle Rage",
+    "REMOVED from hand so the only kill is the USER's: Might of Old Krosa (main, +4/+4) on Spellskite, Spellskite attacks alone",
+    "(exalted +1), both Berserks cast after exalted: (0+4+1) x2 x2 = 20 >= 18. Doubled before exalted it is 4x4+1 = 17.",
+    "Mana: Might {G} in main (Hierarch), the Berserks {G}{G} in combat from Gruul Turf + Stomping Ground (paid 2 life, untapped).",
+    "DISCRIMINATING: MTG_DOUBLER_AFTER_EXALTED=0 does not win on turn 5. Shipped depth/budget (d5 b20)."
+  ]
+}
