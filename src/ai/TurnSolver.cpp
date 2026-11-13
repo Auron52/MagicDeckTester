@@ -18636,9 +18636,17 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
     return out;
 }
 
-// See the header. EMPTY means "nothing to add" -- the callers then install no scope at all, which is
-// what keeps the lever byte-identical when off (an empty PlanSourceReserveScope is NOT a no-op: it
-// would clear an outer reservation for the duration of an inline activation).
+// RepeatExtrasBesideOwed: WHY APPLY-TIME CAPPING (not billing all K on the plan's books) AND WHY IT HOLDS AT EVERY
+// BUDGET. The cap reads only the board and the plan being applied -- never a budget, a node count or a
+// g_unbudgeted_play test -- so it is the same function of (state, plan) at --budget-ms 0 as at the shipped
+// budget: no line becomes findable or unfindable as the budget moves. Billing K x cost in plan payability
+// instead would refuse, at EVERY budget, the self-funding sink lines (EDF's Drain / ExileTop extras paid from
+// mana the earlier steps produce), which is a completeness loss; capping at apply keeps the K branching in the
+// enumeration intact and only stops the extras from eating what the plan's LATER named activations are owed.
+// LOCKSTEP: the executor (AIEngine exec_trailing_activations) and the rollout (TurnSolver
+// apply_trailing_activations) call this at the same point -- the SpendRepeatActivations argument for the K-1
+// extras of the same trailing element, with the same trailing list -- so a planned line realises identically in
+// both worlds.
 int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
                                        const std::vector<Action>& trailing)
 {
@@ -18722,6 +18730,9 @@ int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const
     return lo;
 }
 
+// See the header. EMPTY means "nothing to add" -- the callers then install no scope at all, which is
+// what keeps the lever byte-identical when off (an empty PlanSourceReserveScope is NOT a no-op: it
+// would clear an outer reservation for the duration of an inline activation).
 std::vector<int> TurnSolver::ActivationTapReserveUnion(const GameState& state,
                                                       const std::vector<Action>& acts)
 {
