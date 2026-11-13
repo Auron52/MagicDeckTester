@@ -93,6 +93,39 @@ credited back to the heuristic ladder's spend), _pmr80/_pmr160 (a refusal needs 
 _prx (EDF games 310-319) recovers game 312 but costs 1.74x units: pass K's real cost is WARMED by the sampled rollouts
 (721317 T1: 3.5k vs heur's 12.6k), so the heuristic gate sees a cheap c_K and admits a deeper pass (112k).
 
+## Iteration 3 (S3, 28,600 games, 11 arms, same seeds): nothing clears the bar on all five decks
+
+Thread-CPU vs heur / dturn (better/worse games):
+
+| arm | Hydras | Alchemist | EDF | Snow | Midrange Burn |
+|---|---|---|---|---|---|
+| g | 0.981x -0.0010 (3/2) | 0.657x +0.0050 (2/4) | 0.763x +0.0050 (0/2) | 1.139x +0.0050 (0/2) | 0.951x -0.0025 (3/1) |
+| _pf15 | 0.972x -0.0010 | 0.834x +0.0025 | 0.697x +0.0075 (0/3) | 1.218x +0.0050 | 0.962x -0.0050 |
+| _pf20 | 0.981x -0.0010 | 0.821x +0.0025 | 0.754x +0.0075 (0/3) | 1.148x +0.0025 | 0.952x -0.0025 |
+| _pf30 | 0.986x -0.0020 | 0.864x +0.0050 (0/2) | 0.853x +0.0050 | 1.159x +0.0025 | 0.994x -0.0025 |
+| _pfa20 | 0.991x -0.0010 | 0.859x +0.0025 | 0.861x +0.0050 | 1.244x +0.0025 | 1.022x -0.0075 |
+| _pd15 | 1.021x -0.0020 | 0.883x 0 (2/2) | 0.830x +0.0050 | 1.291x 0 | 0.999x -0.0075 |
+| _pd20 | 1.031x -0.0020 | 1.013x -0.0025 | 0.907x +0.0050 | 1.361x -0.0025 | 1.025x -0.0075 |
+| _pd25 | 1.054x -0.0030 | 1.105x -0.0050 | 0.923x +0.0050 | 1.467x -0.0050 | 1.050x -0.0100 |
+| _prx | 1.112x -0.0030 (3/0) | 1.132x -0.0025 (2/1) | 1.156x 0 (0/0) | 1.665x -0.0050 (2/0) | 1.181x -0.0075 (3/0) |
+| _pmr80 | 1.006x -0.0010 | 0.790x +0.0050 | 0.761x +0.0050 | 1.174x +0.0050 | 0.950x -0.0025 |
+
+Read: ROBUST-OR-EXACT (_pf) does not remove the losses at F <= 3: the losing refusals are priced 1.0-7x over
+their threshold, and in most of them the price was RIGHT -- the heuristic ladder admitted a pass whose real cost
+was at or beyond 1.1 x remaining (Alchemist 159: priced 18.2k +- 0.5k on 64 samples vs thr 18.0k, heur paid 18.7k;
+395: heur 18.5k on thr 18.5k; Snow 199: priced 20.5k, heur 18.0k on thr 17.1k; EDF 312: heur 54k on 18k). The
+heuristic ladder's quality edge on those games IS its overspend. Leaning deeper (_pd) or handing refusals to its gate
+(_prx: 2 shallower decisions left on Snow, quality best everywhere) buys the quality back, but deeper commits are
+expensive (prx 1.09-1.67x CPU: pass K's real cost is warmed by the samples, so the heuristic gate sees a cheap c_K
+and admits K+1). Snow's pricing is as expensive as what it saves (early sampled 3.42M units vs heur's superseded
+3.63M), which is why g sits at 1.14x CPU there.
+9 of the 9 S2 losers inspected: 7 are heur committing pass 2 where g committed pass 1 -- the heuristic ladder's
+BOOTSTRAP check (c1 x 6.0 vs 1.1 x remaining), whose only input is the rollout cost of pass 1, the cheapest pass.
+
+S4 (in flight): _pb1 BOOTSTRAP-EXACT -- pass 1 runs on rollouts exactly as the heuristic ladder runs it, its own
+bootstrap check decides pass 2 on that real cost, and prices admit passes 3+ only (variants _pz10, _pd15, _pmr80).
+10-game probe: both EDF losers (312, 369) recovered.
+
 ## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
 - S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
