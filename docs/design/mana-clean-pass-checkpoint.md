@@ -1235,6 +1235,16 @@ fungus 1,880, gods 4,300 (first run).
     repros. ADO is not a payer defect: the plan-order assignment that would pay is LETHAL in both the oracle and the
     engine's model (s30026406). **USER DECISION pending** (cast order), after checking whether that lethality is real.
     Owed: held-out A/B, smoke + regression, re-gate. Details: logs/mana-clean-chain/10-handoff.md (#2).
+  * **Agent #3 (2026-11-13):** MTG_PD_HARM_LINE_REPAIR VALIDATED: held-out A/B seeds 7440001+, 3000 games/arm, one
+    pooled batch: 0 digest diffs, net +0. Rebased onto 2ae3364d0 (GT conflict: upstream aggregate kept, PD rows
+    re-accepted under the rebased binary). Smoke 195/199 (4 PD rows; d0 7.294 -> 7.292, gi169 unwon both ways is the
+    only HARM_LINE_REPAIR move), regression 314/316 (2 PD rows, digests = the pre-rebase BATCH_BARBS accept), 0 slower,
+    check_gt_logs clean. **ADO s30026406 is NOT a cast-order question: the lethality was a MODELLING GAP.** The charge
+    is Citadel:B 3 (its coloured mode deals 3, not 1) + Tomb 2 = 5 at life 5, lethal only because a payment's pain was
+    one batch checked before any Tamanoa gain. A player may activate each mana ability BEFORE the cast (CR 605.3a), keep
+    the mana floating (CR 500.4) and let each Tamanoa trigger resolve between taps, so with a Tamanoa out only the
+    largest single tap must fit under life. Fix in progress: MTG_PD_FLOAT_FLUSH (FlushDamageEvents re-sequences a
+    batch that would be lethal, smallest tap first; PaymentPainSafe uses the largest single tap under a Tamanoa).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
