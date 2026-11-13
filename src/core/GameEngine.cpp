@@ -405,6 +405,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
+    state.scripted_attack_put = -1;     // Ilharg's searched attack put (same lockstep)
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
@@ -1127,13 +1128,17 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // reaches the attacking Plants too. Searched (Plan::combat_crack_choice); the human is asked.
     FireCombatLandSearchCracks(state, state.active_player_index, atk_idx);
 
-    const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
+    int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join (Ilharg's put may shrink it)
     // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
     // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
     // TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, state.active_player_index, atk_idx);
     FireMilitiaPrideTokens(state, state.active_player_index, atk_idx);
+    // Ilharg, the Raze-Boar's attack put (Boars I5a): after the declared count, before anything reads power, so a
+    // put End-Raze's ETB pump lands before damage. Mirrors SimulateOneCombatAfterTitan (lockstep, ONE shared
+    // helper). Param-gated inert (one scan of the declared attackers).
+    FireAttackPutFromHand(state, state.active_player_index, atk_idx, declared_n);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     if (!atk_idx.empty())
@@ -1337,6 +1342,9 @@ void GameEngine::EndStep(GameState& state)
     // (Permanent::sac_at_end_step). Lockstep twin at the same position in
     // TurnSolver::SimulateEndAndStartNextTurn; no-op for every deck that never sets the flag.
     PerformEndStepDelayedSacrifices(state);
+    // Ilharg's put: "Return that creature to your hand at the beginning of the next end step"
+    // (Permanent::return_at_end_step). Lockstep twin at the same position in the rollout; no-op without the bit.
+    PerformEndStepDelayedReturns(state);
     // Berserk's "destroy that creature if it attacked this turn" (Permanent::destroy_at_end_if_attacked).
     // Lockstep twin at the same position in TurnSolver::SimulateEndAndStartNextTurn; no-op without the bit.
     DestroyAttackedAtEndStep(state);

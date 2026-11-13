@@ -216,6 +216,10 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "cast_trigger_untap_pump_power", "cast_trigger_untap_pump_tough", "cast_trigger_untap_pump_grants_trample",
                 // Decimator of the Provinces (I4): an alternative cost and a cast-trigger team pump -- never a card.
                 "emerge_cost", "cast_trigger_team_pump_power", "cast_trigger_team_pump_tough", "cast_trigger_team_pump_trample",
+                // Ilharg, the Raze-Boar (I5a): the put moves a card hand -> battlefield (the hand only shrinks); the
+                // end-step RETURN is a hand gain, so it is audited ONLY together with HornTakeFoldHolds' explicit
+                // bounded term (+1 per attack-put source that could attack this turn) -- never on its own.
+                "attack_put_creature_from_hand", "attack_put_return_at_end_step",
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -2038,6 +2042,11 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_trigger_team_pump_power   = params.value("cast_trigger_team_pump_power", 0);
     p.cast_trigger_team_pump_tough   = params.value("cast_trigger_team_pump_tough", 0);
     p.cast_trigger_team_pump_trample = params.value("cast_trigger_team_pump_trample", false);
+    // Ilharg, the Raze-Boar (Boars I5a): the attack-trigger put and its end-step return.
+    p.attack_put_creature_from_hand = params.value("attack_put_creature_from_hand", false);
+    p.attack_put_return_at_end_step = params.value("attack_put_return_at_end_step", false);
+    if (p.attack_put_return_at_end_step && !p.attack_put_creature_from_hand)
+        throw std::runtime_error("attack_put_return_at_end_step requires attack_put_creature_from_hand");
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

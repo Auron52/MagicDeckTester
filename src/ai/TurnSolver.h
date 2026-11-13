@@ -1745,6 +1745,11 @@ public:
         // Militia's Pride: number of declared nontoken attacker triggers for which to pay {W}.
         // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
         std::int16_t militia_pride_pay_choice = -1;
+        // Ilharg, the Raze-Boar's attack put (Boars I5a): -1 = no pin (the provider's AttackPutDefault), -2 = decline,
+        // > 0 = the CARD NUMBER of the creature card to put (a number, not a rank: a cast between plan time and combat
+        // re-ranks the hand -- the Flinger reasoning). Rides GameState::scripted_attack_put. Folded wherever
+        // militia_pride_pay_choice is (VALUE-gated: != -1).
+        std::int16_t attack_put_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -3000,6 +3005,9 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // Test hook (Boars I5a): AppendSubdecisionAxes over `plans` (the base plans of one enumeration node), exactly
+    // as the search fans them; returns the list with every axis variant appended.
+    static std::vector<Plan> SubdecisionAxesForTest(const GameState& state, bool is_pre_combat, std::vector<Plan> plans);
     // Test hook (searched echo, MTG_ECHO_AXIS): the rollout's turn boundary itself (end step, cleanup,
     // untap, upkeep -- echo included -- and the draw), exactly as every search host runs it. False = the
     // game ended on the boundary (an empty-library draw).

@@ -839,7 +839,8 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.damage != 0 || p.pending_death_trigger != 0)          { return false; }
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
         if (p.temp_haste || p.is_animated || p.exile_at_end
-            || p.sac_at_end_step || p.destroy_at_end_if_attacked)   { return false; }
+            || p.sac_at_end_step || p.destroy_at_end_if_attacked
+            || p.return_at_end_step)                                 { return false; }   // Ilharg's put (I5a)
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
         if (p.temp_vigilance)                                       { return false; }   // End-Raze Forerunners until-EOT grant
@@ -1031,6 +1032,8 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     if (s.scripted_militia_pride_pay >= 0)
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
+    if (s.scripted_attack_put != -1)   // Ilharg's attack put (I5a), its own domain tag
+    { fold(0x1A63000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_put + 3))); }
     if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with

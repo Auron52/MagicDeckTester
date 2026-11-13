@@ -728,7 +728,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
-        || p.militia_pride_pay_choice >= 0
+        || p.militia_pride_pay_choice >= 0 || p.attack_put_choice != -1
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 // A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
@@ -767,6 +767,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.militia_pride_pay_choice >= 0
         && s.scripted_militia_pride_pay != p.militia_pride_pay_choice)                               { ok = false; }
+    if (p.attack_put_choice != -1 && s.scripted_attack_put != p.attack_put_choice)                 { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }

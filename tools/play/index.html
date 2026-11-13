@@ -4962,10 +4962,14 @@ function lackeyPanelHtml(d){
   // game froze the moment Goblin Lackey connected (user-reported, Goblins seed 25).
   const aiPick=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
   const defName=(cands.find(c=>c.index===aiPick)||{}).name;
-  let h=`<h3>Goblin Lackey — put a Goblin into play</h3>`;
-  h+=`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
+  // Ilharg, the Raze-Boar's attack put (Boars I5a) reuses this panel: d.trigger==='attack' -> generic wording.
+  const atk=d.trigger==='attack';
+  let h=atk?`<h3>${esc(d.source||'Attack trigger')} — put a creature onto the battlefield attacking</h3>`
+           :`<h3>Goblin Lackey — put a Goblin into play</h3>`;
+  h+=atk?`<div class="sub"><b>${esc(d.source||'')}</b> attacked — you may put a creature card from your hand onto the battlefield tapped and attacking (it returns to your hand at the beginning of the next end step). Click one, or decline.</div>`
+        :`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
   h+=`<div class="tutgrid">`;
-  if(!cands.length) h+=`<span class="hint">No Goblin permanent in hand.</span>`;
+  if(!cands.length) h+=`<span class="hint">${atk?'No creature card in hand.':'No Goblin permanent in hand.'}</span>`;
   cands.forEach(c=>{
     const def=c.index===aiPick && c.name===defName;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+

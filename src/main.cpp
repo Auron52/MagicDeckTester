@@ -4629,6 +4629,15 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
+    // Ilharg, the Raze-Boar's attack put (Boars I5a) reuses this decision: the shared FireAttackPutFromHand passes a
+    // source ending in "(attack)". The candidates are creature cards and the put is tapped and attacking.
+    const bool attack = source.size() >= 8 && source.compare(source.size() - 8, 8, "(attack)") == 0;
+    if (attack)
+    {
+        d.Word("trigger", "attack");
+        d.Note("reply a candidate index to put that creature card from hand onto the battlefield tapped and attacking (it returns to hand at the beginning of the next end step), or -1 to decline. Default = the AI's pick.");
+        return;
+    }
     d.Note("reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick.");
 }
 

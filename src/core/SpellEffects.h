@@ -9796,7 +9796,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
@@ -17043,6 +17043,55 @@ inline void PerformEndStepDelayedSacrifices(GameState& state)
                                 "battlefield this turn)");
             }
             SacrificePermanentAt(state, d.second, i);
+            break;
+        }
+    }
+}
+
+// Ilharg, the Raze-Boar's delayed trigger (Permanent::return_at_end_step, Boars I5a): "Return that creature to
+// your hand at the beginning of the next end step." Called right after PerformEndStepDelayedSacrifices at BOTH
+// end-step sites in lockstep (GameEngine::EndStep, TurnSolver's SimulateEndAndStartNextTurn), before cleanup, so
+// the returned card counts toward the cleanup hand size. Re-found by m_number + the bit after each return. A body
+// that already left the battlefield (an emerge victim in main 2, a legend-rule loser) is simply not found: the
+// delayed trigger does nothing (CR 603.7c -- it tracks that object only). Attachments fall off (CR 301.5c);
+// counters and until-end-of-turn effects die with the object (CR 400.7). No-op (one bit test per permanent) for
+// every deck without the param.
+inline void PerformEndStepDelayedReturns(GameState& state)
+{
+    std::vector<std::pair<int, int>> due;   // (m_number, controller)
+    for (const Permanent& p : state.battlefield)
+    { if (p.return_at_end_step) { due.emplace_back(p.card.m_number, p.controller_index); } }
+    for (const std::pair<int, int>& d : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != d.first || q.controller_index != d.second || !q.return_at_end_step)
+            { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "zone",
+                              "\xE2\x8F\xB3 " + q.card.m_name.str()
+                              + " -- returned to hand at the beginning of the end step (put attacking by Ilharg)");
+            }
+            const int num = q.card.m_number;
+            const int owner = q.owner_index;
+            Card returned = RevealedCard(q.card);
+            if (!q.copy_printed_name.empty())
+            {
+                const CardDefinition* printed = CardDatabase::Instance().Lookup(q.copy_printed_name.str());
+                if (printed) { returned = printed->card; returned.m_number = num; }
+            }
+            for (Permanent& o : state.battlefield)
+            {
+                if (o.equipped_to      == num) { o.equipped_to      = 0; }
+                if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
+            }
+            state.battlefield.erase(state.battlefield.begin() + i);
+            FireLeavesBattlefieldTriggers(state, d.second, returned);
+            EnterHand(state, owner, returned, HandEntryReason::Bounce);
+            RefreshDevotionCreatures(state);
+            RefreshReconfigureCreatures(state);
             break;
         }
     }
@@ -24793,6 +24842,20 @@ inline bool UntapSecondMainLive(const GameState& state)
         if (ragga && !p.tapped && (p.card.IsCreature() || p.is_animated) && CreatureHasManaAbility(state, &p, p.card)
             && CanTapNow(p, state.battlefield))
         { return true; }
+        // FOURTH CLAUSE (Boars I5a, D6): Ilharg's put body (Permanent::return_at_end_step) is a resource that exists
+        // only from combat until the end step -- a legal EMERGE victim in main 2 (Decimator of the Provinces: the
+        // body cast for {G}{G}{G} after an End-Raze / Decimator put, a 7/7 that STAYS). Live when such a body is
+        // on our battlefield AND an emerge card is in hand. Affordability is not checked: opening main 2 only
+        // widens the phase to a superset of main 1's remaining options (the I3a argument), so the wider
+        // condition is sound. A pure function of the post-combat board + hand (both already in every key).
+        if (p.return_at_end_step)
+        {
+            for (const Card& c : state.players[me].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                if (hd && hd->params.emerge_cost.has_value() && !c.m_is_staged) { return true; }
+            }
+        }
     }
     return false;
 }
@@ -26710,6 +26773,143 @@ inline void FireMilitiaPrideTokens(GameState& state, int controller, std::vector
                 atk_idx.push_back(i);
             }
         }
+    }
+}
+
+// ---- ILHARG, THE RAZE-BOAR's ATTACK PUT (CardParams::attack_put_creature_from_hand, Boars I5a) ----------------
+// "Whenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking.
+// Return that creature to your hand at the beginning of the next end step." ONE shared body, called at the same
+// point in BOTH combats (GameEngine::CombatPhase, TurnSolver's SimulateOneCombatAfterTitan): after `declared_n` is
+// taken and before anything reads power, so a put End-Raze Forerunners' ETB team pump lands before damage.
+//   * CREATURE-SCOPED: a source fires only from the DECLARED prefix atk_idx[0, declared_n) (the Hero of Bladehold
+//     gate) -- a put Ilharg was never declared (CR 508.4) and does not trigger itself.
+//   * The pick: GameState::scripted_attack_put (consumed by the FIRST trigger): -2 = decline, > 0 = the hand card
+//     with that number (missing -> the default, counted in g_attack_put_pin_miss), -1 = the provider's
+//     AttackPutDefault (beyond the horizon -- the playout policy; inside the window the pin is searched).
+//     Human play asks through the shared `lackey_put` chooser (every creature card in hand, unpruned).
+//   * CR 508.1f: the declared non-vigilant attackers are tapped FIRST (this engine otherwise defers the attack
+//     tap to ResolveCombatDamage), so an End-Raze put cannot leave them untapped through its vigilance grant.
+//   * The put body enters TAPPED, through the shared enter cascade (FireEtbWatchers + FireOwnEtbTriggers), NOT
+//     cast (no cast triggers), then the legend rule. atk_idx is rebuilt BY CARD NUMBER afterwards (an enter /
+//     legend-rule erase shifts indices), the declared prefix first (`declared_n` shrinks if a declared attacker
+//     left), then the put body appended as an undeclared attacker.
+// `live` = false (the projection's scratch copy): no chooser, no reveal, no play event.
+inline std::atomic<long long> g_attack_put_pin_miss{0};
+inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<int>& atk_idx, int& declared_n,
+                                  bool live = true)
+{
+    const int pin = state.scripted_attack_put;
+    state.scripted_attack_put = -1;
+    const int nd = std::min(declared_n, static_cast<int>(atk_idx.size()));
+    std::vector<std::pair<int, const CardDefinition*>> srcs;   // (m_number, def) -- identified before any put
+    for (int k = 0; k < nd; ++k)
+    {
+        const int i = atk_idx[static_cast<std::size_t>(k)];
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.attack_put_creature_from_hand) { srcs.emplace_back(p.card.m_number, d); }
+    }
+    if (srcs.empty()) { return; }
+    bool first = true;
+    for (const auto& [src_num, sd] : srcs)
+    {
+        const int want = first ? pin : -1;
+        first = false;
+        Player& ap = state.players[controller];
+        std::vector<int> cand_hand;
+        for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
+        {
+            const Card& c = ap.hand[static_cast<std::size_t>(h)];
+            if (c.m_is_staged) { continue; }   // impulse-exiled, not in hand (the Lackey rule)
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd && cd->card.IsCreature()) { cand_hand.push_back(h); }
+        }
+        if (cand_hand.empty() || want == -2) { continue; }   // "may": nothing to put, or the searched decline
+        std::vector<Card> cards;
+        cards.reserve(cand_hand.size());
+        for (int h : cand_hand) { cards.push_back(ap.hand[static_cast<std::size_t>(h)]); }
+        int pick = -1;
+        if (want > 0)
+        {
+            for (int k = 0; k < static_cast<int>(cards.size()); ++k)
+            { if (cards[static_cast<std::size_t>(k)].m_number == want) { pick = k; break; } }
+            if (pick < 0) { g_attack_put_pin_miss.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (pick < 0) { pick = ResolveProvider(state).AttackPutDefault(state, controller, cards); }
+        if (live && g_play_lackey_chooser && !g_tap_speculating)
+        {
+            const int r = (*g_play_lackey_chooser)(state, controller, sd->card.m_name.str() + " (attack)", cards, pick);
+            if (r == -1) { continue; }   // the human declined
+            if (r >= 0 && r < static_cast<int>(cards.size())) { pick = r; }
+        }
+        // CR 508.1f: the declaration taps every declared non-vigilant attacker before any attack trigger resolves.
+        const int ndk = std::min(declared_n, static_cast<int>(atk_idx.size()));
+        for (int k = 0; k < ndk; ++k)
+        {
+            const int i = atk_idx[static_cast<std::size_t>(k)];
+            if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+            Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (!CreatureHasVigilance(p, state)) { p.tapped = true; }
+        }
+        std::vector<int> atk_nums;
+        atk_nums.reserve(atk_idx.size());
+        for (int i : atk_idx)
+        {
+            atk_nums.push_back(i >= 0 && i < static_cast<int>(state.battlefield.size())
+                               ? state.battlefield[static_cast<std::size_t>(i)].card.m_number : -1);
+        }
+        const int hidx = cand_hand[static_cast<std::size_t>(pick)];
+        const Card raw = ap.hand[static_cast<std::size_t>(hidx)];
+        ap.hand.erase(ap.hand.begin() + hidx);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+        Permanent perm;
+        perm.card               = d ? d->card : raw;
+        perm.card.m_number      = raw.m_number;
+        perm.controller_index   = controller;
+        perm.owner_index        = controller;
+        perm.entered_this_turn  = true;
+        perm.tapped             = true;
+        perm.return_at_end_step = sd->params.attack_put_return_at_end_step;
+        state.battlefield.push_back(perm);
+        int slot = static_cast<int>(state.battlefield.size()) - 1;
+        if (live && RevealVisible())
+        {
+            EmitReveal(state.turn_number, sd->card.m_name.str() + " (put attacking)",
+                       { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
+                       /*dispositions*/ { "\xE2\x86\x92 battlefield tapped and attacking (from hand)" });
+        }
+        if (live && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          sd->card.m_name.str() + " attacked -- put " + raw.m_name.str()
+                          + " onto the battlefield tapped and attacking");
+        }
+        FireEtbWatchers(state, controller, slot);
+        slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+        if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }
+        slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+        if (slot >= 0 && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
+        { EnforceLegendRule(state, controller); }
+        // Rebuild the attacker list by card number: the declared prefix first, then the undeclared rest, then the
+        // put body (if it survived its own cascade and the legend rule).
+        std::vector<int> rebuilt;
+        rebuilt.reserve(atk_nums.size() + 1);
+        int new_declared = 0;
+        for (int k = 0; k < static_cast<int>(atk_nums.size()); ++k)
+        {
+            if (atk_nums[static_cast<std::size_t>(k)] < 0) { continue; }
+            const int hint = atk_idx[static_cast<std::size_t>(k)];
+            const int at = RefindPermanentByNumber(state, controller, atk_nums[static_cast<std::size_t>(k)], hint);
+            if (at < 0) { continue; }
+            rebuilt.push_back(at);
+            if (k < declared_n) { ++new_declared; }
+        }
+        const int put_at = RefindPermanentByNumber(state, controller, raw.m_number, -1);
+        if (put_at >= 0) { rebuilt.push_back(put_at); }
+        atk_idx.swap(rebuilt);
+        declared_n = new_declared;
     }
 }
 
@@ -46119,14 +46319,26 @@ inline bool HornTakeFoldHolds(const GameState& state, int controller, int later_
         return d != nullptr && d->hand_gain_audited;
     };
     bool unlimited = false;
+    // Ilharg, the Raze-Boar's end-step RETURN (attack_put_return_at_end_step, Boars I5a) is a hand gain: a BOUNDED
+    // term of +1 per attack-put source that could attack this turn (on the battlefield, in hand, or among the looked
+    // cards), one put -- hence at most one return -- per trigger. (The returned card left this hand for the put, so
+    // the true net is 0; the +1 is kept as the conservative bound the take fold's proof can read without that.)
+    int put_returns = 0;
+    auto put_return_src = [](const CardDefinition* d)
+    { return d != nullptr && d->params.attack_put_return_at_end_step; };
     for (const Permanent& q : state.battlefield)
     {
         if (q.controller_index != controller) { continue; }
         const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
         if (d == nullptr || !d->hand_gain_audited) { return false; }
         if (d->params.no_max_hand_size) { unlimited = true; }
+        if (put_return_src(d)) { ++put_returns; }
     }
-    for (const Card& c : pl.hand)      { if (!audited(c)) { return false; } }
+    for (const Card& c : pl.hand)
+    {
+        if (!audited(c)) { return false; }
+        if (put_return_src(CardDatabase::Instance().LookupCached(c))) { ++put_returns; }
+    }
     for (const Card& c : pl.graveyard) { if (!audited(c)) { return false; } }
     for (const StagedCard& sc : pl.staged_cards) { if (!audited(sc.card)) { return false; } }
     const int look = 2 + later_triggers;
@@ -46135,9 +46347,10 @@ inline bool HornTakeFoldHolds(const GameState& state, int controller, int later_
     {
         if (k++ >= look) { break; }
         if (!audited(c)) { return false; }
+        if (put_return_src(CardDatabase::Instance().LookupCached(c))) { ++put_returns; }
     }
     if (unlimited) { return true; }
-    return static_cast<int>(pl.hand.size()) + 2 + later_triggers <= 7;
+    return static_cast<int>(pl.hand.size()) + 2 + later_triggers + put_returns <= 7;
 }
 
 inline void PerformUpkeepHornReveal(GameState& state)
@@ -47319,7 +47532,7 @@ inline bool SacLandTwins(const GameState& state, const Permanent& a, const Perma
         if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
             || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
             || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
-            || p->destroy_at_end_if_attacked || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
+            || p->destroy_at_end_if_attacked || p->return_at_end_step || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
             || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
     }
     for (const Permanent& q : state.battlefield)
@@ -50687,6 +50900,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0)   // Scythecat Cub
         | (p.destroy_at_end_if_attacked ? 67108864 : 0));   // Berserk's delayed destroy
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
+    if (p.return_at_end_step) { k += "|ret"; }   // Ilharg put body: returns to hand at end step (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
     if (p.temp_vigilance) { k += "|vig"; }   // End-Raze Forerunners' until-EOT vigilance (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);

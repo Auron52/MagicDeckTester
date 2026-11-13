@@ -1390,6 +1390,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             // second clause, Boars I3a / D6). Raggadragga's attack untap: the third clause (Boars I3b).
             if (d && d->params.etb_other_creatures_grant_vigilance) { return true; }
             if (d && d->params.attack_untap_mana_ability_attackers) { return true; }
+            // Ilharg's put body as an emerge victim before its end-step return: the fourth clause (Boars I5a / D6).
+            if (d && d->params.attack_put_return_at_end_step) { return true; }
         }
         return false;
     }();

@@ -689,6 +689,11 @@ struct Permanent
     // byte (sizeof unchanged). FLIPS MID-TURN: folded wherever sac_at_end_step is. Never set for any
     // other card -> byte-identical.
     bool      destroy_at_end_if_attacked : 1 = false;
+    // Ilharg, the Raze-Boar's put (CardParams::attack_put_return_at_end_step, Boars I5a): "Return that creature
+    // to your hand at the beginning of the next end step." Set on the put body by FireAttackPutFromHand, swept at
+    // BOTH end-step sites (PerformEndStepDelayedReturns, lockstep). A fourth bit of this second byte (sizeof
+    // unchanged). FLIPS MID-TURN: folded wherever destroy_at_end_if_attacked is. Never set for any other card.
+    bool      return_at_end_step   : 1 = false;
     // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
     // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
     // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel

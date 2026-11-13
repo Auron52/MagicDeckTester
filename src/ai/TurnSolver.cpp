@@ -687,6 +687,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     if (p.sac_at_end_step) { Mix(h, 0x5AC0E5D5ull); }
     // Berserk's delayed destroy (Permanent::destroy_at_end_if_attacked): same reasoning. Set-gated.
     if (p.destroy_at_end_if_attacked) { Mix(h, 0xBE55E5Cull); }
+    // Ilharg's put body (Permanent::return_at_end_step, I5a): returns to hand tonight. Set-gated.
+    if (p.return_at_end_step) { Mix(h, 0x12E7A2Bull); }
     // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
     // what decides who double-strikes, so two otherwise-identical Paladins paired to different
     // bodies are NOT fungible.
@@ -949,6 +951,7 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
         || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
+        || p.attack_put_choice != -1           // Ilharg's attack put (I5a)
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
         || p.fb_hold_choice >= 0               // the searched banked hold: read at THIS combat's pump only
         || PlanHasAttackTriggerPin(p);        // Tectonic mode / keep, Flinger victim (the *_PIN_FOLD levers)
@@ -1607,6 +1610,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
     pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
+    pl("attackput", first.attack_put_choice != dup.attack_put_choice);
     pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
@@ -3571,6 +3575,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         if (p.sac_at_end_step) { e += "/xs"; } // Soulstoke put, sacrificed at end step
         if (p.destroy_at_end_if_attacked) { e += "/xb"; } // Berserked: destroyed at end step if it attacked
+        if (p.return_at_end_step) { e += "/xr"; } // Ilharg put body, returned to hand at end step
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -13123,20 +13128,60 @@ static int PendingAttackDamageImpl(const GameState& state);
 // the trigger is simply APPLIED on a scratch copy with the same provider pick the combat will take
 // (`live=false`: no chooser, no play event) and the ordinary projection runs on it. Gated on the
 // source being present: every other deck takes the no-copy path and is byte-identical.
+// Ilharg, the Raze-Boar's attack put (Boars I5a) in the projection. The put body is in HAND when the projection
+// reads the board, so without this every Ilharg attack is under-rated by the put body's power, and a put End-Raze
+// Forerunners' ETB team pump is missed. Information-adding and exact: the put is APPLIED on the scratch copy through
+// the same shared FireAttackPutFromHand (`live=false`) with the state's pin or the provider default, over the
+// attackers the projection itself would declare; the declared attackers' tap state is then restored (the put taps
+// them, CR 508.1f, which would hide them from the projection) and the put body is made attack-eligible (untapped +
+// temp haste) so the ordinary projection prices it with every lord / anthem / temp bonus -- including End-Raze's
+// +2/+2 on the rest of the team. Gated on an attack-put source on our battlefield.
+static void ApplyAttackPutProjection(GameState& pre, int active)
+{
+    std::vector<int> atk;
+    for (int i = 0; i < static_cast<int>(pre.battlefield.size()); ++i)
+    {
+        const Permanent& p = pre.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != active) { continue; }
+        if (!CanAttackFull(p, pre.battlefield, active) || !WantsToAttack(pre, p)) { continue; }
+        atk.push_back(i);
+    }
+    if (atk.empty()) { return; }
+    std::vector<std::pair<int, bool>> tapped_before;   // (m_number, tapped) of every own permanent
+    for (const Permanent& p : pre.battlefield)
+    { if (p.controller_index == active) { tapped_before.emplace_back(p.card.m_number, p.tapped); } }
+    std::vector<int> hand_before;
+    for (const Card& c : pre.players[active].hand) { hand_before.push_back(c.m_number); }
+    int dn = static_cast<int>(atk.size());
+    FireAttackPutFromHand(pre, active, atk, dn, /*live=*/false);
+    for (Permanent& p : pre.battlefield)
+    {
+        if (p.controller_index != active) { continue; }
+        bool known = false;
+        for (const auto& [num, tp] : tapped_before)
+        { if (num == p.card.m_number) { p.tapped = tp; known = true; break; } }
+        if (known) { continue; }
+        if (std::find(hand_before.begin(), hand_before.end(), p.card.m_number) != hand_before.end())
+        { p.tapped = false; p.temp_haste = true; }   // the put body: priced as an attacker
+    }
+}
+
 static int PendingAttackDamage(const GameState& state)
 {
     const int active = state.active_player_index;
-    bool xenagos = false;
+    bool xenagos = false, attack_put = false;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && d->params.xenagos_combat_pump) { xenagos = true; break; }
+        if (d && d->params.xenagos_combat_pump) { xenagos = true; }
+        if (d && d->params.attack_put_creature_from_hand) { attack_put = true; }
     }
-    if (!xenagos && !HasBeginCombatAttachSource(state, active)) { return PendingAttackDamageImpl(state); }
+    if (!xenagos && !attack_put && !HasBeginCombatAttachSource(state, active)) { return PendingAttackDamageImpl(state); }
     GameState pre = state;
     FireBeginCombatAttach(pre, active, /*live=*/false);
     if (xenagos) { FireXenagosCombat(pre, active, /*live=*/false); }
+    if (attack_put) { ApplyAttackPutProjection(pre, active); }
     return PendingAttackDamageImpl(pre);
 }
 
@@ -19058,7 +19103,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked) { return false; }
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
@@ -28520,6 +28565,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
     if (p.militia_pride_pay_choice != -1)
     { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
+    if (p.attack_put_choice != -1)
+    { fold(0x1A630000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_put_choice + 3))); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -28828,6 +28875,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1
+        && p.attack_put_choice == -1
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
@@ -28882,6 +28930,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
+        || p.attack_put_choice != -1
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -29829,6 +29878,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     for (int x : extra) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
     if (p.early_ondemand_crack >= 0)
     { h = Mix(h, 0xEA4CCA11ull + static_cast<std::uint64_t>(p.early_ondemand_crack)); }
+    if (p.attack_put_choice != -1)   // Ilharg's attack put (value-gated)
+    { h = Mix(h, 0x1A630000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.attack_put_choice + 3))); }
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.athreos_coin_choice >= 0)
     { h = Mix(h, 0xA7E05C01ull + static_cast<std::uint64_t>(p.athreos_coin_choice)); }
@@ -41905,6 +41956,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + (p.temp_double_strike ? "D" : "")
                           + (p.temp_vigilance ? "V" : "")
                           + (p.destroy_at_end_if_attacked ? "B" : "")   // Berserked: dies if it attacks
+                          + (p.return_at_end_step ? "R" : "")           // Ilharg put body: back to hand tonight
                           + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
@@ -56157,6 +56209,7 @@ namespace solvememo
             || a.combat_crack_choice != b.combat_crack_choice
             || a.combat_transform_choice != b.combat_transform_choice
             || a.militia_pride_pay_choice != b.militia_pride_pay_choice
+            || a.attack_put_choice != b.attack_put_choice
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
@@ -74940,13 +74993,15 @@ static void SimulateOneCombat(GameState& state, bool additional)
 static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vector<int>& atk_idx)
 {
 
-    const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
+    int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join (Ilharg's put may shrink it)
     // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
     // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
     // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, active, atk_idx);
     FireMilitiaPrideTokens(state, active, atk_idx);
+    // Ilharg's attack put (Boars I5a) -- lockstep twin of GameEngine::CombatPhase, same point, ONE shared helper.
+    FireAttackPutFromHand(state, active, atk_idx, declared_n);
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
     if (!atk_idx.empty())
     {
@@ -75250,6 +75305,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Incandescent Soulstoke's delayed sacrifice (Permanent::sac_at_end_step) -- lockstep twin of
     // GameEngine::EndStep, same position, same shared helper. No-op without the flag.
     PerformEndStepDelayedSacrifices(state);
+    // Ilharg's end-step return (Permanent::return_at_end_step) -- lockstep twin of GameEngine::EndStep.
+    PerformEndStepDelayedReturns(state);
     // Berserk's delayed destroy (Permanent::destroy_at_end_if_attacked) -- lockstep twin of
     // GameEngine::EndStep, same position, same shared helper. No-op without the bit.
     DestroyAttackedAtEndStep(state);
@@ -75504,6 +75561,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
+    state.scripted_attack_put = -1;                // Ilharg's searched attack put (same lockstep)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -92003,6 +92061,119 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
     }
 
+    // Ilharg, the Raze-Boar's attack put (Boars I5a): WHICH creature card from hand to put tapped and attacking, or
+    // DECLINE -- an attack-trigger choice, so it is searched (the attack DECLARATION exemption does not cover it).
+    // A combat pin (Plan::attack_put_choice -> GameState::scripted_attack_put, consumed by the first trigger in
+    // FireAttackPutFromHand). Fanned when an attack-put source can attack this turn: one on the battlefield that can
+    // attack now or gets haste from a haste-granting permanent / this plan's cast, or one THIS plan casts with such a
+    // haste source (Lightning Greaves). Candidates: the creature cards still in hand after this plan's casts,
+    // FOLDED by NAME (two copies of one card are the same put -- a sound identity fold). Variants: DECLINE plus one
+    // EXPLICIT pin per name -- INCLUDING the name the unpinned base plan would resolve to. The only fold is the
+    // inherited state pin (the base plan carries it to combat unchanged: provably the same put). The default is NOT
+    // folded: the unpinned base resolves AttackPutDefault at COMBAT time, and that can differ from the plan-time
+    // front (this plan's casts change the creature count End-Raze's pump scales with, or put a legend on the
+    // battlefield; a mid-main draw changes the hand), so skipping the plan-time front lost that put (I5a fix). The
+    // unpinned base therefore never stands in for a branch; it is one more line. Base plans only
+    // (PlanIsAxisVariantExceptOrder / PlanHasCombatPin), so the cost stays additive. AttackPutDefault is consulted
+    // only beyond the horizon (the playout -- the permitted greedy), by the unpinned base at combat, on a pin miss,
+    // and as the human chooser's pre-selection.
+    if (!HumanPlayActive() && !cont_axes_only && is_pre_combat)
+    {
+        const int me = state.active_player_index;
+        const Player& hp = state.players[me];
+        bool src_ready = false, src_on_bf = false, haste_bf = state.floating_haste_c > 0, src_in_hand = false;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d == nullptr) { continue; }
+            if (GrantsHasteToOther(d)) { haste_bf = true; }
+            if (!d->params.attack_put_creature_from_hand) { continue; }
+            src_on_bf = true;
+            if (CanAttackFull(q, state.battlefield, me)) { src_ready = true; }
+        }
+        for (const Card& c : hp.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.attack_put_creature_from_hand) { src_in_hand = true; break; }
+        }
+        if (src_on_bf || src_in_hand)
+        {
+            std::vector<TurnSolver::Plan> extra;
+            bool have_pass = idle_pass;
+            std::size_t n_fanned = 0;
+            auto fan = [&](const TurnSolver::Plan& p, bool base_in_list)
+            {
+                bool c_haste = false, c_src = false;
+                std::vector<int> cast_hidx;
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand) { continue; }
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if (a.hand_index >= 0 && a.hand_index < static_cast<int>(hp.hand.size())
+                        && hp.hand[static_cast<std::size_t>(a.hand_index)].m_name == a.card_name)
+                    { cast_hidx.push_back(a.hand_index); }
+                    if (d == nullptr) { continue; }
+                    if (GrantsHasteToOther(d)) { c_haste = true; }
+                    if (d->params.attack_put_creature_from_hand && (d->card.HasKeyword(Keyword::Haste) || haste_bf))
+                    { c_src = true; }
+                }
+                if (c_haste && src_in_hand) { c_src = true; }
+                if (!(src_ready || ((haste_bf || c_haste) && src_on_bf) || c_src)) { return; }
+                std::vector<Card> cands;
+                for (int h = 0; h < static_cast<int>(hp.hand.size()); ++h)
+                {
+                    if (std::find(cast_hidx.begin(), cast_hidx.end(), h) != cast_hidx.end()) { continue; }
+                    const Card& c = hp.hand[static_cast<std::size_t>(h)];
+                    if (c.m_is_staged) { continue; }
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d == nullptr || !d->card.IsCreature()) { continue; }
+                    bool dup = false;
+                    for (const Card& o : cands) { if (o.m_name == c.m_name) { dup = true; break; } }
+                    if (!dup) { cands.push_back(c); }
+                }
+                if (cands.empty()) { return; }
+                ++n_fanned;
+                // A base plan NOT in the list (the synthesised idle pass) has no twin carrying the inherited pin: emit all.
+                const int inherited = base_in_list ? state.scripted_attack_put : -3;
+                if (inherited != -2)
+                {
+                    TurnSolver::Plan v = p;
+                    v.attack_put_choice = -2;
+                    extra.push_back(std::move(v));
+                }
+                const Card* inh_card = nullptr;   // the inherited pin's card: its NAME is the put the base already makes
+                if (inherited > 0)
+                { for (const Card& h : hp.hand) { if (h.m_number == inherited) { inh_card = &h; break; } } }
+                for (const Card& c : cands)
+                {
+                    if (inherited == c.m_number || (inh_card != nullptr && inh_card->m_name == c.m_name)) { continue; }
+                    TurnSolver::Plan v = p;
+                    v.attack_put_choice = static_cast<std::int16_t>(c.m_number);
+                    extra.push_back(std::move(v));
+                }
+            };
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.actions.empty() && p.land_to_play.empty()) { have_pass = true; }
+                if (PlanIsAxisVariantExceptOrder(p) || PlanHasCombatPin(p)) { continue; }
+                fan(p, true);
+            }
+            if (!have_pass && src_on_bf)
+            {
+                TurnSolver::Plan idle;
+                idle.land_decided = true;
+                fan(idle, false);
+            }
+            if (n_fanned > 0)
+            {
+                TRACE("attackputaxis", "T%d %zu plan(s) (%zu fanned) -> %zu variant(s)",
+                      state.turn_number, all.size(), n_fanned, extra.size());
+                all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+            }
+        }
+    }
+
     // Xenagos's beginning-of-combat target uses the existing combat target rank.
     // The Gods deck has no targeted landfall watcher; each rank resolves against
     // the creatures actually present after this plan's main-phase casts.
@@ -92241,7 +92412,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
                 && p.combat_crack_choice == -1 && p.combat_transform_choice == -1
-                && p.militia_pride_pay_choice == -1;
+                && p.militia_pride_pay_choice == -1 && p.attack_put_choice == -1;
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -93830,7 +94001,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 656;   // Integrated size; checked by static_assert below.
+static constexpr std::size_t kPlanDomAssertedSize = 664;   // Integrated size; checked by static_assert below. 656 -> 664: Plan::attack_put_choice (Boars I5a, in the Xaxes key).
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -94033,6 +94204,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
             add(pl.militia_pride_pay_choice);
+            add(pl.attack_put_choice);
             add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
@@ -94231,6 +94403,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
+    if (!(a.attack_put_choice == b.attack_put_choice)) { d += " attack_put_choice"; }
     if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
@@ -94268,6 +94441,14 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.dig_group == b.dig_group)) { d += " dig_group"; }
     return d;
 }
+// Test hook (Boars I5a): see TurnSolver.h.
+std::vector<TurnSolver::Plan> TurnSolver::SubdecisionAxesForTest(const GameState& state, bool is_pre_combat,
+                                                                 std::vector<Plan> plans)
+{
+    AppendSubdecisionAxes(state, is_pre_combat, plans);
+    return plans;
+}
+
 static std::size_t PbAxesAndTwins(const GameState& state, bool is_pre_combat,
                                   std::vector<TurnSolver::Plan>& all, PbLazyLayout* pb_lazy)
 {
@@ -94474,6 +94655,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.bp_choice >= 0) { s += " | bp" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
             if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
             if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
+            if (p.attack_put_choice != -1) { s += " | aput" + std::to_string((int)p.attack_put_choice); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -96390,7 +96572,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.enduring_noncreature) << 38)
             | (static_cast<std::uint64_t>(pm.destroy_at_end_if_attacked) << 39)
             | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40)
-            | (static_cast<std::uint64_t>(pm.temp_vigilance) << 41));   // End-Raze until-EOT grant (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.temp_vigilance) << 41)     // End-Raze until-EOT grant (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.return_at_end_step) << 42));   // Ilharg put body (0 elsewhere)
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
         mix(static_cast<std::uint64_t>(pm.paired_with));
@@ -96446,6 +96629,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
         if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
         if (state.scripted_early_ondemand_crack) { mix(0xEA4CCA11ull); }
+        if (state.scripted_attack_put != -1)   // Ilharg's attack put (value-gated: every other deck's key unchanged)
+        { mix(0x1A630000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_attack_put + 3))); }
         for (int v : state.scripted_boundary_dredge) { mix(0xD0ED6E12ull); mix(static_cast<std::uint64_t>(v + 1)); }
         for (int id : state.athreos_coin_ids) { mix(0xA7E05C02ull); mix(static_cast<std::uint64_t>(id)); }
         if (state.boundary_dredge_active) { mix(0xD0ED6E13ull + state.scripted_boundary_dredge_cursor); }
@@ -98647,6 +98832,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.exile_at_end) { Fold(tk, 0xE71E); }
         if (perm.sac_at_end_step) { Fold(tk, 0x5AC0E5D5ull); }   // Soulstoke put (nonzero-gated)
         if (perm.destroy_at_end_if_attacked) { Fold(tk, 0xBE55E5Cull); }   // Berserk (nonzero-gated)
+        if (perm.return_at_end_step) { Fold(tk, 0x12E7A2Bull); }   // Ilharg put body (nonzero-gated)
         // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
@@ -100837,7 +101023,7 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
         const int cpins[] = { state.scripted_bruna_gather, state.scripted_combat_aura_swap,
                               state.scripted_combat_aura_swap_in, state.scripted_attack_attach,
                               state.scripted_fb_hold, state.scripted_combat_transform,
-                              state.scripted_militia_pride_pay };
+                              state.scripted_militia_pride_pay, state.scripted_attack_put };
         for (int i = 0; i < static_cast<int>(sizeof(cpins) / sizeof(cpins[0])); ++i)
         {
             if (cpins[i] != -1)
@@ -120477,6 +120663,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.scripted_combat_land_search_crack != now.scripted_combat_land_search_crack) { d += " scripted_combat_land_search_crack=" + std::to_string(static_cast<long long>(stored.scripted_combat_land_search_crack)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_land_search_crack)); }
     if (stored.scripted_combat_landfall_target != now.scripted_combat_landfall_target) { d += " scripted_combat_landfall_target=" + std::to_string(static_cast<long long>(stored.scripted_combat_landfall_target)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_landfall_target)); }
     if (stored.scripted_combat_transform != now.scripted_combat_transform) { d += " scripted_combat_transform=" + std::to_string(static_cast<long long>(stored.scripted_combat_transform)) + "/" + std::to_string(static_cast<long long>(now.scripted_combat_transform)); }
+    if (stored.scripted_attack_put != now.scripted_attack_put) { d += " scripted_attack_put=" + std::to_string(static_cast<long long>(stored.scripted_attack_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_attack_put)); }
     if (stored.scripted_militia_pride_pay != now.scripted_militia_pride_pay) { d += " scripted_militia_pride_pay=" + std::to_string(static_cast<long long>(stored.scripted_militia_pride_pay)) + "/" + std::to_string(static_cast<long long>(now.scripted_militia_pride_pay)); }
     if (stored.scripted_discard_choice != now.scripted_discard_choice) { d += " scripted_discard_choice=" + std::to_string(static_cast<long long>(stored.scripted_discard_choice)) + "/" + std::to_string(static_cast<long long>(now.scripted_discard_choice)); }
     if (stored.scripted_doth_put != now.scripted_doth_put) { d += " scripted_doth_put=" + std::to_string(static_cast<long long>(stored.scripted_doth_put)) + "/" + std::to_string(static_cast<long long>(now.scripted_doth_put)); }
@@ -126630,6 +126817,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Bloodline Keeper's in-combat transform mask (Vampires B), read at THIS turn's declare-attackers.
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
+    if (p.attack_put_choice != -1)         { s.scripted_attack_put = p.attack_put_choice; }   // Ilharg (I5a)
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)

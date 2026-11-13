@@ -3237,6 +3237,17 @@
     "toughness": "1",
     "type_line": "Creature — Goblin Shaman"
   },
+  "Ilharg, the Raze-Boar": {
+    "cmc": 5.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Trample\nWhenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking. Return that creature to your hand at the beginning of the next end step.\nWhen Ilharg dies or is put into exile from the battlefield, you may put it into its owner's library third from the top.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Boar God"
+  },
   "Impolite Entrance": {
     "cmc": 1.0,
     "keywords": [],

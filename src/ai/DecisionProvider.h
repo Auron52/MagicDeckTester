@@ -782,6 +782,15 @@ public:
     // discard buckets gets a put-back default that agrees with them.
     virtual std::vector<int> PutBackRanking(const GameState& s, int controller) const;
 
+    // Ilharg, the Raze-Boar's attack put (CardParams::attack_put_creature_from_hand, Boars I5a): the DEFAULT
+    // pick among `cands` (creature cards in `controller`'s hand), as an index into `cands`. ONLY the playout
+    // policy beyond the horizon / the d0 runner and the base plan's unpinned resolution read it -- inside the
+    // search window the card (or decline) is the searched Plan::attack_put_choice pin, every distinct name
+    // branched, so this ORDERS and never narrows. Default (DecisionProviders.cpp): the most power the put adds
+    // this combat (printed power + its ETB team pump per other creature we control), a legendary we already
+    // control last (the legend rule), then higher mana value, then lower card number. `cands` is non-empty.
+    virtual int AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const;
+
     // Search-only dredge menu. Entries are physical graveyard card numbers;
     // zero means take the ordinary draw. The default keeps the complete menu.
     // Human play and the full-search oracle bypass provider restrictions.

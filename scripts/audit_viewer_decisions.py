@@ -543,6 +543,11 @@ MANIFEST = {
     # (WriteLackeyDecisionJson / lackeyPanelHtml), a resolution-time chooser (g_play_lackey_chooser in
     # FireCombatDamageCheatIntoPlay). Heuristic default = highest-MV matching hand card.
     "combat_damage_puts_subtype_from_hand": ("lackey_put", truthy),
+    # Ilharg, the Raze-Boar (Boars I5a): "whenever Ilharg attacks, you MAY put a creature card from your hand onto
+    # the battlefield tapped and attacking" -- WHICH card (or decline) reuses `lackey_put` (g_play_lackey_chooser in
+    # the shared FireAttackPutFromHand, both combats; the JSON carries "trigger": "attack" and generic wording).
+    # The end-step return is mandatory -- no decision.
+    "attack_put_creature_from_hand": ("lackey_put", truthy),
     # Maelstrom Archangel: "you MAY cast a spell from your hand without paying its mana cost" on
     # combat damage. Was modelled as #FREE plan variants inside the ordinary main-phase menu, which
     # made a one-time TRIGGER behave like a standing option (castable at any moment in the phase) and
@@ -1597,6 +1602,7 @@ INERT_PARAMS = {
     "cast_trigger_team_pump_power": "Decimator of the Provinces' MANDATORY untargeted cast trigger (creatures you control +2/+2 until end of turn), no choice; Boars I4",
     "cast_trigger_team_pump_tough": "Decimator of the Provinces' cast-trigger pump amount, no choice; Boars I4",
     "cast_trigger_team_pump_trample": "Decimator's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
+    "attack_put_return_at_end_step": "Ilharg, the Raze-Boar's MANDATORY delayed return of the put creature at the beginning of the end step, no choice; Boars I5a",
     "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
     "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",

@@ -1127,6 +1127,33 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
 // goldfish, and the only player whose Brainstorm resolves -- so it is read only when `controller` is
 // active; otherwise (never reached today) the hand order stands. Indices are de-duplicated and every
 // hand index the shed order omits is appended in hand order, so the ranking is always total.
+int DecisionProvider::AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const
+{
+    int others = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)) { ++others; } }
+    int best = 0;
+    long long best_key = 0;
+    for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+    {
+        const Card& c = cands[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const int pw = d ? d->card.m_power.value_or(0) + d->params.etb_other_creatures_pump_power * others : 0;
+        bool dup_legend = false;
+        if (d && d->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& q : s.battlefield)
+            { if (q.controller_index == controller && q.card.m_name == c.m_name) { dup_legend = true; break; } }
+        }
+        const int mv = d ? d->card.m_mana_cost.ManaValue() : 0;
+        // Lexicographic: not a doomed legend, power, mana value, then the LOWER card number.
+        const long long key = (dup_legend ? 0LL : 1LL) * 1000000000000LL + static_cast<long long>(pw + 1000) * 1000000LL
+                            + static_cast<long long>(mv) * 10000LL + (9999 - std::min(c.m_number, 9999));
+        if (i == 0 || key > best_key) { best = i; best_key = key; }
+    }
+    return best;
+}
+
 std::vector<int> DecisionProvider::PutBackRanking(const GameState& s, int controller) const
 {
     const int n = static_cast<int>(s.players[controller].hand.size());
@@ -25906,7 +25933,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.etb_other_creatures_grant_vigilance    // End-Raze Forerunners (I3a)
             || p.lord_affects_mana_ability_creatures || p.attack_untap_mana_ability_attackers
             || p.cast_trigger_untap_pump_target_min_spent > 0    // Raggadragga (I3b)
-            || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0)   // Decimator (I4)
+            || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0   // Decimator (I4)
+            || p.attack_put_creature_from_hand)   // Ilharg, the Raze-Boar (I5a)
         { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())

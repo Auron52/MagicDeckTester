@@ -3783,6 +3783,17 @@ struct CardParams
     int  cast_trigger_team_pump_power = 0;
     int  cast_trigger_team_pump_tough = 0;
     bool cast_trigger_team_pump_trample = false;
+    // Ilharg, the Raze-Boar (Boars I5a). Two clauses, split on purpose (a Sneak Attack-style card would put
+    // without the return):
+    //   * attack_put_creature_from_hand: "Whenever [this] attacks, you may put a creature card from your hand
+    //     onto the battlefield tapped and attacking." CREATURE-SCOPED (the source must be a DECLARED attacker).
+    //     ONE shared body, FireAttackPutFromHand (SpellEffects.h), at the same point in both combats. The card
+    //     to put (or decline) is the searched GameState::scripted_attack_put pin (Plan::attack_put_choice).
+    //   * attack_put_return_at_end_step: "Return that creature to your hand at the beginning of the next end
+    //     step." -> Permanent::return_at_end_step on the put body, swept by PerformEndStepDelayedReturns at both
+    //     end-step sites. Requires attack_put_creature_from_hand (the loader throws otherwise).
+    bool attack_put_creature_from_hand = false;
+    bool attack_put_return_at_end_step = false;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the

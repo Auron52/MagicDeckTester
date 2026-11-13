@@ -1236,6 +1236,12 @@ struct GameState
     std::int8_t              scripted_combat_transform = -1;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
+    // Ilharg, the Raze-Boar's attack put (Plan::attack_put_choice, Boars I5a): a per-turn COMBAT PIN.
+    // -1 = unpinned (the provider's AttackPutDefault -- the playout policy), -2 = decline, > 0 = the CARD NUMBER
+    // of the hand card to put. Consumed by the FIRST attack-put trigger (FireAttackPutFromHand); written by
+    // WritePostApplyStatePins, cleared with the combat pins at both turn starts, folded value-gated into the
+    // dominance and dedup keys.
+    std::int16_t             scripted_attack_put = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.

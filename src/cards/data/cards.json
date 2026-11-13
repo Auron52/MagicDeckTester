@@ -16416,6 +16416,31 @@
    }
   },
   {
+   "name": "Ilharg, the Raze-Boar",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Boar",
+    "God"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nWhenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking. Return that creature to your hand at the beginning of the next end step.\nWhen Ilharg dies or is put into exile from the battlefield, you may put it into its owner's library third from the top. [attack_put_creature_from_hand: a CREATURE-SCOPED attack trigger (Ilharg must be a DECLARED attacker), resolved at declare-attackers in BOTH combats through one shared body (FireAttackPutFromHand) after the declared count is taken and before anything reads power: the put card enters TAPPED and ATTACKING (the declared non-vigilant attackers are tapped first, CR 508.1f), joins this combat's attacker list but was never declared (CR 508.4), so its own attack triggers do not fire for it, and it is NOT cast (no Herald of Ilharg counters, no Decimator cast pump). It enters through the shared enter cascade, so End-Raze Forerunners' team +2/+2 lands before combat damage; then the legend rule. WHICH card (or none) is SEARCHED (Plan::attack_put_choice -> GameState::scripted_attack_put, a card number or decline); human play asks through the lackey_put decision. attack_put_return_at_end_step: Permanent::return_at_end_step, swept at the beginning of the end step in both worlds -- the creature returns to its owner's hand (attachments fall off); a body that already left the battlefield (emerge victim, legend rule) is not found (CR 603.7c).] [PARTIAL/PENDING (Boars I5b): the dies -> library third from the top trigger is not modelled yet; the card stays in the graveyard.] [PARTIAL/PROVISIONAL (user sign-off, D3): EXILE half -- 'or is put into exile from the battlefield' is not wired: no card in Boars exiles a permanent we control and the goldfish opponent never acts, so the exile event cannot occur in this list.] [Trample: inert -- no blocker path in the goldfish engine (D2 PROVISIONAL).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_put_creature_from_hand": true,
+    "attack_put_return_at_end_step": true
+   }
+  },
+  {
    "name": "Herald of Ilharg",
    "mana_cost": "{2}{R}{G}",
    "types": [

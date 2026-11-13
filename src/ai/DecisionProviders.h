@@ -455,7 +455,7 @@ public:
 // creature_cast_trigger_plus_counters (I2b), End-Raze Forerunners' etb_other_creatures_grant_vigilance (I3a),
 // Raggadragga's lord_affects_mana_ability_creatures / attack_untap_mana_ability_attackers /
 // cast_trigger_untap_pump_target_min_spent (I3b), Decimator of the Provinces' emerge_cost /
-// cast_trigger_team_pump_power (I4).
+// cast_trigger_team_pump_power (I4), Ilharg, the Raze-Boar's attack_put_creature_from_hand (I5a).
 // Herald's Horn's
 // upkeep_look_top_chosen_type_to_hand is deliberately EXCLUDED: the Horn is a colourless tribal staple any tribal
 // deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I3-I5): OR in each new Boars-only param
