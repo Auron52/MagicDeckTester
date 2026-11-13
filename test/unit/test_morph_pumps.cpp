@@ -1199,6 +1199,18 @@ TEST_CASE("morph INT-15 (P4): the same-turn face-down-and-up Firecat yields to a
     Seen two = scan(t);
     CHECK(two.hard == 0);
     CHECK(two.fd2_alone >= 1);
+    // Gruul Turf ({R}{G} in one tap) + Birds + Forests: the flat pool reads the Karoo as two wild, i.e. three red, but
+    // the real payer finds only two -- so the hard cast is NOT payable and the face-down-and-up cast stays (regression
+    // d0 gi537, where the flat read cost a turn).
+    GameState k = BaseM();
+    k.m_provider = &mp;
+    k.deck_has_morph = true;
+    PutM(k, "Gruul Turf", 39);
+    PutM(k, "Birds of Paradise", 12);
+    for (int i = 0; i < 3; ++i) { PutM(k, "Forest", 50 + i); }
+    k.players[0].hand.push_back(CardM("Blistering Firecat", 101));
+    Seen karoo = scan(k);
+    CHECK(karoo.fd2_alone >= 1);
     // Generic, param-driven: Den Protector (megamorph + a turned-face-up trigger) is never a candidate.
     CHECK(mp.SameTurnFaceUpPrefersHardCast(s, DefM("Blistering Firecat")));
     CHECK_FALSE(mp.SameTurnFaceUpPrefersHardCast(s, DefM("Den Protector")));

@@ -9108,7 +9108,7 @@ bool MorphProvider::SameTurnFaceUpPrefersHardCast(const GameState& s, const Card
 }
 
 // INT-15 -- R12's dead grant removed at enumeration (USER 2026-11-13, verbatim: "I would prune it. No point in wasting
-// the spell or making additional plans that are worse."). A SOUND identity fold under R12 (the proof is at
+// the spell or making additional plans that are worse."). A SOUND dominance fold under R12 (the proof is at
 // TurnSolver SubsetHasDeadDoubleStrikeGrant). Premises this list keeps: nothing reads a spell being cast or a card in
 // the graveyard except Den Protector's regrowth (which can at best return the card the subset without the cast still
 // holds), and the only target payoffs are a target watcher (Wild Defiance) and a redirect twin (Spellskite) -- both

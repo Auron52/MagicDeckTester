@@ -2951,7 +2951,7 @@ public:
     // human play or MTG_UNPRUNED (the provider checks).
     virtual bool SameTurnFaceUpPrefersHardCast(const GameState& s, const CardDefinition& real) const
     { (void)s; (void)real; return false; }
-    // DeadDoubleStrikeGrantFold (SOUND identity fold under R12) -- a subset whose cast-time double-strike grants
+    // DeadDoubleStrikeGrantFold (SOUND dominance fold under R12) -- a subset whose cast-time double-strike grants
     // provably include one with no R12 recipient (SubsetHasDeadDoubleStrikeGrant states the proof) is rejected:
     // that grant resolves on a creature that already has double strike, a no-op the subset without it dominates.
     // The provider that answers true STATES the premises (no other payoff for targeting / casting it).

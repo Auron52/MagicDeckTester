@@ -21801,14 +21801,16 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
-// MORPH INT-15 -- R12's DEAD double-strike grant, removed at enumeration (SOUND identity fold; MorphProvider::
+// MORPH INT-15 -- R12's DEAD double-strike grant, removed at enumeration (SOUND dominance fold; MorphProvider::
 // DeadDoubleStrikeGrantFold states the deck premises; USER 2026-11-13: "I would prune it. No point in wasting the spell
 // or making additional plans that are worse."). Under R12 (DoubleStrikeGrantAvoidsDoubleStrikers) a cast-time
 // double-strike grant (Temur Battle Rage) goes on the best-ranked attacker WITHOUT double strike whose combat score is
 // > 0; with none it falls back to the plain pick (FindBestOwnAttackerForTrick). Rejected here: a subset in which that
 // fallback provably happens AND lands on a creature that already has double strike -- a no-op that only spends mana
 // and moves the card to the graveyard, so the same subset without that copy (enumerated: the copies are one group)
-// dominates it.
+// dominates it. NOT play-identical: on a value tie (two lethal plans, or two lines the horizon cannot tell apart) the
+// search used to commit the dominated plan when it was verified first -- INT-15's held-out check found 2 of 1,300
+// games (morph s90109, 2HG s92228) whose line changed, each at the same win turn, the old line casting the dead copy.
 // THE PROOF (k = the subset's cast-time DS grants, all to the plain cast-time target, none redirected):
 //   (1) No target watcher (Wild Defiance's +3/+3 on becoming a target) on our battlefield or cast in the subset, no
 //       redirect twin, and every selected trick takes the cast-time target. Otherwise stand down: a watcher makes the
@@ -21874,9 +21876,9 @@ static bool SubsetHasDeadDoubleStrikeGrant(const GameState& state,
 // MORPH INT-15 P4 -- the USER's same-turn rule (MorphProvider::SameTurnFaceUpPrefersHardCast quotes it; a HEURISTIC
 // prune, not a sound fold): a subset casting a morph card face down AND turning it face up at once (face_down 2) is
 // rejected when the SAME subset with that card's hard cast in its place is jointly payable -- "if you have the red".
-// Joint = the whole subset's bill (every selected cost, the hard cast substituted) against the plain pre-cast pool +
-// floating, the strongest payability read (no credits, no reserves -- SubsetPhyrexianDominated's test), so the variant
-// goes only where the hard-cast twin is unambiguously affordable. The twin is the same hand slot's plain cast in
+// Joint = the whole subset's bill (every selected cost, the hard cast substituted) paid by the REAL payer
+// (TapForCostDirect) on a scratch copy of the pre-cast board + floating -- exact sources, no credits, no reserves -- so
+// the variant goes only where the hard-cast twin is unambiguously affordable (the flat pool is only a cheap pre-test). The twin is the same hand slot's plain cast in
 // `cands` (no twin enumerated -> nothing is rejected), so the survivor is always on the menu. Only face_down 2 is
 // touched: a face-down cast (face_down 1) -- the two-turn line, flipped on a later turn -- is never dropped.
 static bool SubsetSameTurnFaceUpHardPayable(const GameState& state,
@@ -21907,7 +21909,13 @@ static bool SubsetSameTurnFaceUpHardPayable(const GameState& state,
         }
         ManaPool pool = AvailableManaPool(state);
         pool.AddPool(state.floating_mana);
-        if (pool.CanPay(combined)) { return true; }
+        if (!pool.CanPay(combined)) { continue; }   // the flat pool over-states colours: a cheap NO only
+        // ...then the REAL payer on a scratch copy (the backtracker's exact sources): the flat pool books a Karoo's
+        // fixed {R}{G} as two wild, so Gruul Turf + Birds read as three red for {1}{R}{R}{R} (measured: regression
+        // d0 gi537 then dropped the face-down-and-up Firecat for a hard cast it could not pay, and cast it face
+        // down instead -- a turn slower).
+        GameState scratch = state;
+        if (TapForCostDirect(scratch, combined, /*for_creature=*/true)) { return true; }
     }
     return false;
 }
