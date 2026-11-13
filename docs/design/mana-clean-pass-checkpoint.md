@@ -1245,6 +1245,8 @@ fungus 1,880, gods 4,300 (first run).
     the mana floating (CR 500.4) and let each Tamanoa trigger resolve between taps, so with a Tamanoa out only the
     largest single tap must fit under life. Fix in progress: MTG_PD_FLOAT_FLUSH (FlushDamageEvents re-sequences a
     batch that would be lethal, smallest tap first; PaymentPainSafe uses the largest single tap under a Tamanoa).
+    **FIXED c628093e1** (default ON): A/B seeds 7450001+, 3000/arm: 114 diffs, 11 faster, 1 slower (gi717, recovers
+    at d8 b0), net -10; smoke accepted 1310be5b1. OWED: regression accept, PGO, re-gate 27000-31999 (handoff #3).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
