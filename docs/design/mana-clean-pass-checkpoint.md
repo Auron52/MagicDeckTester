@@ -1079,6 +1079,34 @@ fungus 1,880, gods 4,300 (first run).
     ComputePlanTraits list the prepay's PlanTraitsScope is built from (casts only? a cast-prefix?) and include the plan's
     FadeSaproling actions. Repro: `MTG_PREPAY_HOLD_TRACE=1 MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg
     decks/Fungus/Fungus.cod --profile decks/Fungus/Fungus.profile.json --games 1 --seed 30075725 --game-index 75725`.
+* **Round 17 (seventeenth item-6 agent, 2026-11-13).**
+  * **Integration push 1de3db6fe at 00:55:22 UTC** (10 local commits rebased onto origin 714f955bc; the
+    regression_gt.txt conflict was header comments only; units 2917/2917, smoke 199/199 + regression 316/316 with 0
+    changed games, nothing accepted, check_gt_logs 1146 clean, viewer protocol 0 drift). CI 43340902942 green (Linux,
+    Windows, determinism parity).
+  * **Round 16's NEXT LEAD was misdiagnosed; the real mechanism is PARKED (design needed, USER input).** The prepay's
+    traits DO include the Burst activation: on s30075725 T4 every `{Utopia Mycon, Doubling Season, act:Saproling Burst
+    (x1)}` apply computes ComputePlanTraits over the full plan.actions (Mycon, DS, FadeSaproling m11 s39 x1), with the
+    Burst at **3** fade counters. x1 leaves 2, so `fade_exhaust_count == 0` is CORRECT for the plan. The tokens die
+    because a **site-9 breakpoint continuation** (ApplyPlanDirect's re-open loop, `apply_trailing_activations
+    (extra.actions)`) activates the Burst again, 2 -> 1 -> 0, AFTER the whole-turn prepay has paid Mycon + DS off
+    Ancient Tomb and the lasting 1/1s (backtraces: activation 1 at fc=3 from the plan's own trailing pass, TurnSolver
+    ~73481; activation 2 at fc=2 from the continuation's trailing pass, ~73601). The pre-float (57cc178e4) then floats
+    the doomed bodies' {G}, which empties unused. At prepay time the continuation has not been searched, so no traits
+    change can see it. The root menu at 3 counters (FadeKLandmarks) offers only k=1, so the exhausting k=3 is reachable
+    only as x1 plus continuations.
+    Two routes, neither started:
+    (a) ENGINE: a same-turn doomed-body RE-PAY at the killing activation, extending the PayRollback ledger: before the
+    counter removal kills bodies that can tap for mana, swap earlier same-turn creature-tap pips (lasting attackers) onto
+    the doomed bodies, colour-exact, in executor and rollout lockstep. A pain tap (Ancient Tomb's 2 damage) cannot be
+    undone, so (a) recovers the creature half of the flag only. This is a payment change, so it is exempt from
+    NO-GREEDY, but it pays with hindsight inside one planned line.
+    (b) USER-OWNED (the Burst menu is user-shaped): offer the exhausting k at the root when the line will reach it,
+    so that x3 is one plan whose traits see the exhaustion.
+    Repro: `MTG_PREPAY_HOLD_TRACE=1 MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg decks/Fungus/Fungus.cod
+    --profile decks/Fungus/Fungus.profile.json --games 1 --seed 30075725 --game-index 75725` (DOMINATED-CREATURE on
+    the `{Forest|Ancient Tomb + Utopia Mycon + Doubling Season + act x1}` candidates). We have not yet counted what
+    share of the gate's 119 DOMINATED-CREATURE flags have this shape.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
