@@ -259,3 +259,10 @@ where the refusal is not routed exact. Details and the next arm: `logs/hydras-re
   margin factor F, else run heur's own rollout ladder for that decision (exact parity there); sweep F. (b) root-cause
   the deeper divergences that lost in S1.
 - Handoff: `logs/hydras-research/P18-handoff.md` (primary checkout).
+
+## USER ruling 2026-11-13 (after P18d): continuous sampling, not a hand-off
+"I would rather it doesn't do exactly that. My preferred vision would be that it uses less rollouts when more certain
+and more when less certain. So, it would be closer to the heuristic rollout, but would still bank savings."
+So `_prx2` / `_pfr` (hand the refusal to heur's real-cost check) are NOT the design. The sample count must grow
+continuously with the verdict's uncertainty, up to the whole pass (heur's exact cost) in the limit. Next: make the
+price's uncertainty honest (the 2-SE stop under-states it on heavy-tailed passes; no fixed sample cap), then re-screen.
