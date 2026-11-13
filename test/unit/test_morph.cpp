@@ -633,3 +633,52 @@ TEST_CASE("morph line: face_up= names the REAL card of a face-down permanent")
     { flipped = flipped || (a.kind == Action::Kind::ActivatePermAbility && a.sac_source_id == 9 && IsTurnFaceUpMode(a.ability_mode)); }
     CHECK(flipped);
 }
+
+// Morph seed 1 gi0 T4 (the USER's viewer rejection, 2026-11-13): Gruul Turf ({R}{G} in one tap), Stomping
+// Ground, a Forest, a face-down Blistering Firecat ({R}{R} to flip), Might of Old Krosa {G} + Berserk {G}.
+// The board pays all three -- the Turf for {G} with its {R} floating, the Forest for {G}, then the floating
+// {R} + the Ground's {R} -- but the activation hold counted the Turf as a whole {R} provider, held both red
+// sources, and when that failed the unrestricted prepay paid {G}{G} with the Ground and the Forest: the flip
+// found one {R} and was dropped. ActLineHoldSurplusBits releases the Turf first.
+TEST_CASE("morph: a trailing flip after two {G} casts pays off a Karoo's floating {R} (ActLineHoldSurplusBits)")
+{
+    EnsureCardsFd();
+    GameState s = BaseF();
+    s.turn_number = 4;
+    PutF(s, "Blistering Firecat (Face-down)", 10);
+    PutF(s, "Gruul Turf", 26);
+    PutF(s, "Stomping Ground", 49);
+    PutF(s, "Forest", 18);
+    s.players[0].hand.push_back(CardF("Might of Old Krosa", 39));
+    s.players[0].hand.push_back(CardF("Berserk", 3));
+    // The flip LAST (a TRAIL flip): the casts pay first, through the whole-turn prepay.
+    TurnSolver::ApplyPlan(s, PlanF({ TrickCast("Might of Old Krosa", 10), TrickCast("Berserk", 10),
+                                     FaceUp("Blistering Firecat", 10, /*lead=*/false) }),
+                          /*is_pre_combat=*/true);
+    const Permanent* p = ByNum(s, 10);
+    REQUIRE(p != nullptr);
+    CHECK(p->card.m_name.str() == "Blistering Firecat");   // the flip was paid
+    CHECK(s.players[0].hand.empty());                       // both casts were paid
+    for (const Permanent& q : s.battlefield) { if (q.card.IsLand()) { CHECK(q.tapped); } }
+}
+
+TEST_CASE("morph: the LEAD flip before two {G} casts on the Karoo board -- Berserk doubles the face-up 11")
+{
+    EnsureCardsFd();
+    GameState s = BaseF();
+    s.turn_number = 4;
+    PutF(s, "Blistering Firecat (Face-down)", 10);
+    PutF(s, "Gruul Turf", 26);
+    PutF(s, "Stomping Ground", 49);
+    PutF(s, "Forest", 18);
+    s.players[0].hand.push_back(CardF("Might of Old Krosa", 39));
+    s.players[0].hand.push_back(CardF("Berserk", 3));
+    TurnSolver::ApplyPlan(s, PlanF({ FaceUp("Blistering Firecat", 10, /*lead=*/true),
+                                     TrickCast("Might of Old Krosa", 10), TrickCast("Berserk", 10) }),
+                          /*is_pre_combat=*/true);
+    const Permanent* p = ByNum(s, 10);
+    REQUIRE(p != nullptr);
+    CHECK(p->card.m_name.str() == "Blistering Firecat");
+    CHECK(s.players[0].hand.empty());
+    CHECK(CombatPowerOf(*p, s) == 22);   // (7 + 4) doubled: Berserk resolved after the flip and Might
+}

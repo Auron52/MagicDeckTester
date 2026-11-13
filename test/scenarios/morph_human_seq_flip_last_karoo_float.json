@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 18,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Might of Old Krosa",
+    "Berserk",
+    "Berserk"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "land=Forest;cast=Might of Old Krosa;cast=Berserk;face_up=Blistering Firecat;seq=land=Forest|cast=Might of Old Krosa|cast=Berserk|face_up=Blistering Firecat",
+  "expect_verdict": "accept",
+  "comment": "Twin of morph_human_seq_flip_first_karoo_float with the flip queued LAST (a poor line -- Berserk then doubles the face's 2 -- but a legal, payable one; the viewer rejected it too, and its message falsely named this very order as the one that 'pays every spell'). Might off the Forest... or the Turf, the {R} floating either way; the flip pays off the floating {R} + Stomping Ground's {R}."
+}

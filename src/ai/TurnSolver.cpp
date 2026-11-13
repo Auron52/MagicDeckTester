@@ -63030,7 +63030,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // Emitted only when the mask is non-empty, so with the lever off the ladder below is the shipped
     // one, in the shipped order -- byte-identical by construction.
     if (reserved_a)
-    { push(reserved | reserved_c | reserved_a); push(reserved | reserved_a); push(reserved_a); }
+    {
+        push(reserved | reserved_c | reserved_a); push(reserved | reserved_a); push(reserved_a);
+        // ...and the same three without the activation hold's multi-mana colour providers
+        // (ActLineHoldSurplusBits): the joint solve may tap a Karoo for a cast's {G}, its {R} floats into
+        // the surplus this prepay leaves, and the trailing activation spends it. Emitted only when the
+        // mask holds such a source, so every other board's ladder is the shipped one.
+        const std::uint64_t ra_s = reserved_a & ~ActLineHoldSurplusBits(state, reserved_a);
+        if (ra_s != reserved_a) { push(reserved | reserved_c | ra_s); push(reserved | ra_s); push(ra_s); }
+    }
     if (reserved_c) { push(reserved | reserved_c); push(reserved_c); }   // line {C} hold rungs
     push(reserved);                                    // hold everything reservable
     // PARTIAL DEPLETION RUNG (MTG_PAY_DEPLETION_HOLD, default OFF; USER 2026-10-22 "hold the depletion land
@@ -72188,7 +72196,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         // The line-order note for every board activation, at the point it is DISPATCHED (in the
         // provider's order, or as one step of the human's sequence) -- one site for every route.
-        if (TurnSolver::IsTrailingActivation(a.kind)) { line_order_trace("activate", a); }
+        // A LEAD flip off the human sequence that already ran (and was noted) before the casts
+        // (ApplyFaceUpLeadActs): its source is face up, so this pass skips it. One it could not pay there
+        // is retried here and noted here.
+        const bool lead_flip_done = !human_v2 && a.kind == Action::Kind::ActivatePermAbility
+                                 && a.ability_mode == Action::AbilityMode::TurnFaceUp && state.deck_has_morph
+                                 && !PermAbilitySourceLive(state, state.active_player_index, a.sac_source_id, a.ability_mode);
+        if (TurnSolver::IsTrailingActivation(a.kind) && !lead_flip_done) { line_order_trace("activate", a); }
         if (a.kind == Action::Kind::SacCreatureOutlet)
         {
             // A reveal outlet that already ran at its position (Martyr of Sands; TurnSolver::
@@ -73317,7 +73331,33 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Executor twin: the same TurnSolver::ApplyFaceUpLeadActs at AIEngine::TakeTurn's pre-cast pass. A
     // flip already done is face up by the trailing pass, whose liveness check then skips it. No-op for a
     // plan without one (every deck without a morph card). A human sequence orders its own steps.
-    if (!human_v2) { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions); }
+    if (!human_v2)
+    {
+        // The realised-order note (line_order_note) for each LEAD flip that fires HERE, where it happens. The
+        // trailing dispatcher's "activate" note skips a lead flip off the human sequence (below), so it is
+        // not listed after the casts: the commit preview's "the order ... pays every spell" message read
+        // the capture and told the USER to queue the flip LAST (Morph seed 1 gi0 T4) -- the order the
+        // engine never played. Only when somebody listens (a capture, a trace or a scenario record).
+        const bool note_lead = state.deck_has_morph && g_apd_depth == 1
+            && (g_line_order_capture != nullptr || s_line_order_trace || g_line_order_record != nullptr);
+        std::vector<char> lead_live;
+        if (note_lead)
+        {
+            for (const Action& a : plan.actions)
+            {
+                lead_live.push_back(a.kind == Action::Kind::ActivatePermAbility
+                                    && a.ability_mode == Action::AbilityMode::TurnFaceUp
+                                    && PermAbilitySourceLive(state, state.active_player_index, a.sac_source_id, a.ability_mode));
+            }
+        }
+        TurnSolver::ApplyFaceUpLeadActs(state, plan.actions);
+        for (std::size_t i = 0; i < lead_live.size(); ++i)
+        {
+            const Action& a = plan.actions[i];
+            if (lead_live[i] && !PermAbilitySourceLive(state, state.active_player_index, a.sac_source_id, a.ability_mode))
+            { line_order_trace("activate", a); }
+        }
+    }
     if (human_v2) { ls_act_done = true; }
     else if (plan.land_search_act_slot == 0)
     {

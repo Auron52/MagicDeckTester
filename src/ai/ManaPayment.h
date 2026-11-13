@@ -663,6 +663,14 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
 // pre-payment as well as the per-cast greedy. See ActLineHoldEnabled for the measured drop rates.
 std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost);
 
+// The bits of an ActLineHoldMask that are COLOUR providers whose one tap adds SEVERAL mana (a Karoo's
+// {R}{G}, a depletion land's two) -- never an activation's own {T} source. The mask counts one provider
+// per owed pip, so it holds such a source whole; but tapping it for a cast's OTHER colour leaves the owed
+// colour floating, and floating mana lasts the whole phase, so the activation can still spend it. Both
+// payers try the hold without these bits once the full hold has failed (ManaPayment.cpp
+// TapForCostSharedImpl, BatchPrepayMainCasts' ladder) before they fall to the unrestricted solve.
+std::uint64_t ActLineHoldSurplusBits(const GameState& state, std::uint64_t act_mask);
+
 // A DOOMED BODY (MTG_PAY_DOOMED_BODY_FIRST): a token whose fading maker the current plan's own activations
 // empty and that no toughness lord keeps alive -- it dies inside this line, so its mana is free. Defined in
 // ManaPayment.cpp; read by the per-pip payer and BatchPrepayMainCasts' doomed-first rungs.

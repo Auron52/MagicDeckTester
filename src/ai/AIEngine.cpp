@@ -407,11 +407,15 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // form (no "**"), so saved references replay as recorded.
     if (pv.sequence)
     {
-        std::vector<std::string> drops_v, seen_ok, why_v;
-        trial(pinned, &drops_v, nullptr, nullptr, &why_v);
+        std::vector<std::string> drops_v, seen_ok, seen_pin, why_v;
+        trial(pinned, &drops_v, &seen_pin, nullptr, &why_v);
         if (!drops_v.empty())
         {
-            const bool engine_pays = trial(chosen, nullptr, &seen_ok, nullptr) == 0;
+            // ...and only an order that DIFFERS from the queued one is offered: the engine's own apply pays
+            // some steps on another route (a LEAD flip runs ahead of the whole-turn prepay, the "**" walk
+            // pays it at its step), so "the order <your order> pays every spell: queue it that way" was
+            // possible -- and told the USER to queue what was already queued (Morph seed 1 gi0 T4).
+            const bool engine_pays = trial(chosen, nullptr, &seen_ok, nullptr) == 0 && seen_ok != seen_pin;
             std::string pays;
             for (const std::string& x : seen_ok) { pays += (pays.empty() ? "" : ", ") + x; }
             for (std::size_t k = 0; k < drops_v.size(); ++k)

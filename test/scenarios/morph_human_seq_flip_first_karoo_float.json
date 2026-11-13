@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 18,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Might of Old Krosa",
+    "Berserk",
+    "Berserk"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "land=Forest;cast=Might of Old Krosa;cast=Berserk;face_up=Blistering Firecat;seq=land=Forest|face_up=Blistering Firecat|cast=Might of Old Krosa|cast=Berserk",
+  "expect_verdict": "accept",
+  "comment": "USER viewer rejection 2026-11-13 (logs/play/rejections/Morph_cod_s1_gi0_t4.json, seed 1 gi0 T4). Face-down Blistering Firecat ({R}{R} to turn face up), Gruul Turf ({R}{G} in ONE tap), Stomping Ground, Forest played; the human queues 'flip, Might of Old Krosa {G}, Berserk {G}' -- the right order, Berserk doubles the face-up power. The board pays it: the flip off the Turf's {R} (its {G} floats) + the Ground's {R}, Might off the floating {G}, Berserk off the Forest. It was rejected 'cannot be paid at its position': the whole-turn prepay pays the casts ahead of the walk, the activation hold (ActLineHoldMask) counted the Turf as a whole {R} provider and held both red sources, that hold failed, and the unrestricted solve paid {G}{G} with the Ground + Forest -- one {R} left for the flip. ActLineHoldSurplusBits releases the Karoo first (its {R} floats to the flip)."
+}

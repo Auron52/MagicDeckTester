@@ -9990,6 +9990,35 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     return mask;
 }
 
+// See ManaPayment.h. Morph seed 1 gi0 T4 (the USER's viewer line, 2026-11-13): Gruul Turf ({R}{G} in one
+// tap), Stomping Ground and a Forest up, Blistering Firecat face down ({R}{R} to turn face up), Might of Old
+// Krosa {G} and Berserk {G} in the line. The hold asks for two {R} providers -- the Turf AND the Ground --
+// which leaves the casts only the Forest, so the held attempt fails and the unrestricted solve paid {G}{G}
+// with the Ground and the Forest: one {R} left on the board and the flip dropped, though the board pays all
+// three (Turf for {G} with its {R} floating, Forest {G}, then the floating {R} + the Ground's {R}). Releasing
+// the Turf alone keeps the Ground held and lets the Turf's {R} float to the flip.
+std::uint64_t ActLineHoldSurplusBits(const GameState& state, std::uint64_t act_mask)
+{
+    if (act_mask == 0) { return 0; }
+    const PlanTraits* pt = CurrentPlanTraits();
+    if (!pt) { return 0; }
+    const int n = std::min<int>(static_cast<int>(state.battlefield.size()), 64);
+    std::uint64_t out = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        if (!(act_mask & (1ull << i))) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        bool tap_src = false;   // an activation's own {T}: never released here
+        for (int k = 0; k < pt->act_src_count; ++k)
+        { if (p.card.m_number == pt->act_src_nums[k]) { tap_src = true; break; } }
+        if (tap_src) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.storage_land) { continue; }   // storage: counters, not one fixed tap
+        if (ManaProducedPerTap(*d) > 1) { out |= 1ull << i; }
+    }
+    return out;
+}
+
 // ---- MTG_LINE_FLOAT_TAP_FIRST (the autonomous line-aware float rung) -------------------------------------
 //
 // The payer spends the turn-scoped reserve before it taps anything (SpendFloatingTowardCost), generic
@@ -10417,12 +10446,13 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     // The value folded in is identical, and with the audit off nothing below it executes.
     const std::uint64_t act_hold = ActLineHoldMask(state, cost_in);
     const std::uint64_t scarce   = ScarceColorHoldMask(state, cost_in);
-    const std::uint64_t rmask = ReservableSpecialMask(state) | PlanReserveMask(state)
-                              | OneShotHoldMask(state) | PayloadReserveMask(state)
-                              | scarce
-                              | LineColorlessHoldMask(state, cost_in)
-                              | act_hold
-                              | g_seed_pay_hold;   // THE SEED PAYMENT SPLIT (SeedPaySplitScope; 0 unless a seed pins one)
+    // Every mask but the activation hold (kept apart for the surplus rung below; same value folded in).
+    const std::uint64_t rmask_rest = ReservableSpecialMask(state) | PlanReserveMask(state)
+                                   | OneShotHoldMask(state) | PayloadReserveMask(state)
+                                   | scarce
+                                   | LineColorlessHoldMask(state, cost_in)
+                                   | g_seed_pay_hold;   // THE SEED PAYMENT SPLIT (SeedPaySplitScope; 0 unless a seed pins one)
+    const std::uint64_t rmask = rmask_rest | act_hold;
     if (ActDropAuditOn())
     {
         g_act_pay_calls.fetch_add(1, std::memory_order_relaxed);
@@ -10487,6 +10517,14 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     if (rmask != 0)
     {
         if (held_attempt(rmask, "impl.rmask")) { return true; }
+        // ...then the activation hold WITHOUT its multi-mana colour providers (ActLineHoldSurplusBits): a
+        // Karoo tapped for this cast's other colour floats the colour the activation owes. Still held-first;
+        // the unrestricted solve below is unchanged when this fails too.
+        if (act_hold != 0)
+        {
+            const std::uint64_t surplus = ActLineHoldSurplusBits(state, act_hold);
+            if (surplus != 0 && held_attempt(rmask_rest | (act_hold & ~surplus), "impl.act-surplus")) { return true; }
+        }
         // A land Aura's host is held by the caller (ScarceHeldOnlyScope): let it release the host before the
         // scarce providers are spent.
         if (t_scarce_held_only && scarce != 0) { return false; }
