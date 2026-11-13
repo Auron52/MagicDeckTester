@@ -440,3 +440,16 @@ Added 2026-11-13 with §5A/§5B (activations and Saprolings as a cost):
 * **Q18** Your unbuilt *"(or 1 P/T larger in the second main)"* clause (§5B.2 row 3b): rank a Burst token as
   fodder in main 2 by its Burst's remaining counters, so a 0-counter, lord-held token goes first. [build only
   if Q6 opens main-2 casts; until then main 2 casts nothing, so it is inert]
+
+## USER answers, 2026-11-13 (verbatim)
+- **Q1:** "This is a difficult one. As with many other things it should be put as early as possible relatively to anything that generates tokens while still affording the line." -> Doubling Season is placed at the EARLIEST position ahead of every token/counter event at which the line still pays (a payability walk, not a fixed slot 6).
+- **Q2:** "Beastmaster last is perfectly fine. It doesn't impact anything else and only needs to be out before the attack."
+- **Q3:** "Sure."
+- **Q4:** "Yes."
+- **Q5:** "I don't think we need this. Wild Growth can go early."
+- **Q6:** "We could check this. Unfortunately the budget cost might make it worse, but maybe with a very restrictive "saprolings produce mana" + "saprolings created by Shroofus this turn"?" -> measure a main-2 cast window opened ONLY when Saprolings produce mana (Badger grant / Mycon) AND Shroofus created Saprolings this turn.
+- **Q7:** "If you want, sure. I don't really like using the generic order for anything except as a stopgap, so I'm not too worried either way."
+- **Q8:** "Yes."
+- **Q9:** "Yes, we need this for sure when we have haste. It's weird because I'm pretty sure I created an order previously that handled this. Was that for a previous version of the deck?"
+  Owner note: the capability the USER remembers is engine-side, not a cast order: breakpoint site 9 (post-entry activation) lets the search pop a Burst in main 1 on the turn it lands; docs/design/fungus-v2-fd-diverge-7021.md (v2 list, Oct) shows a T4 `Badger[adventure] + Saproling Burst x3` continuation hasted by Crossroads. §5A's "a Burst cast in main 1 is popped only in main 2" (TurnSolver.cpp:7220-7266) must be re-checked against site 9 on v3 before building anything.
+- Q10-Q18: not yet answered.
