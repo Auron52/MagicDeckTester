@@ -105925,19 +105925,26 @@ namespace gamelc
     inline thread_local std::unordered_map<TranspositionTable::Key, FSLineEntry, TranspositionTable::KeyHash> t_map;
     inline thread_local std::size_t t_bytes = 0;
     inline std::atomic<long long> g_win_hits{0}, g_nowin_hits{0}, g_stores{0}, g_full{0};
+    inline std::atomic<long long> g_lr_hits{0};          // MTG_LEAFLESS_READS_LEAFED reads (also in the two above)
+    inline thread_local long long t_lr_hits = 0;         // ...this thread's, for the test seam
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_unreached{0};
     inline std::atomic<long long> g_ver_kind[5]{}, g_ver_printed{0}, g_ver_material{0};
     struct StoreCtx { int turn, depth, cutoff, nest; long long used; };   // verify-only diagnostics
     inline thread_local std::unordered_map<TranspositionTable::Key, StoreCtx, TranspositionTable::KeyHash> t_ctx;
     inline thread_local TranspositionTable::Key t_hit_key{};
     inline void Clear() { t_map.clear(); t_ctx.clear(); t_bytes = 0; tier1::Set(tier1::kGameLc, 0); }
-    // The node's answer context (see the block comment). `vm` mirrors the leaf code in FSLineWin exactly.
-    inline TranspositionTable::Key Tag(TranspositionTable::Key k, const GameState& state)
+    // The leaf a node at `state` scores its depth-0 leaves with: 0 the heuristic rollout, 1 the value model, 2 NO
+    // leaf (a forced constant leaf, or the no-leaf stand-in model). `vm` mirrors the leaf code in FSLineWin exactly.
+    inline unsigned LeafCode(const GameState& state)
     {
         const MidGameEvaluator* vm = (!g_force_heuristic_leaf && (UseValueModel() || g_force_value_leaf)
                                       && state.m_value_model && !state.m_value_model->empty())
                                    ? state.m_value_model : nullptr;
-        const unsigned leaf = (g_force_constant_leaf || (vm && vm->constant)) ? 2u : (vm ? 1u : 0u);
+        return (g_force_constant_leaf || (vm && vm->constant)) ? 2u : (vm ? 1u : 0u);
+    }
+    // The answer context with an explicit leaf code: what Tag folds for a node whose leaf is `leaf`.
+    inline TranspositionTable::Key TagLeaf(TranspositionTable::Key k, unsigned leaf)
+    {
         Fold(k, 0x6A3E0001ULL);
         Fold(k, leaf);
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_width)));
@@ -105946,6 +105953,27 @@ namespace gamelc
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
         Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
         return k;
+    }
+    // The node's answer context (see the block comment).
+    inline TranspositionTable::Key Tag(TranspositionTable::Key k, const GameState& state) { return TagLeaf(k, LeafCode(state)); }
+    // MTG_LEAFLESS_READS_LEAFED (default ON; =0 off). ENGINE IDENTITY FOLD, not a heuristic: a LEAFLESS node (leaf
+    // code 2) at turn T with remaining depth k scores every depth-0 leaf "no win", and a depth-0 leaf sits at turn
+    // T+k, so its answer is a property of the in-window lines alone (turns T..T+k-1 = we): the earliest win there,
+    // else no win. A LEAFED node (rollout or value leaf) of the same (state, depth) searches the same in-window menu
+    // and only ADDS leaf estimates, every one at or after T+k. So the leafed entry answers the leafless node exactly:
+    //   * a stored WIN w is that node's true minimum (stored only within its cutoff); w <= we is an in-window win and
+    //     so the in-window minimum too, and w > we proves there is no in-window win at all;
+    //   * a stored NO-WIN bound b proves no win at or before b, in particular none in-window at or before min(b, we);
+    //     a leafless query under cutoff c asks exactly "no in-window win at or before min(c, we)".
+    // Before this the game line cache's leaf-kind key kept a leafless pass from reading the rollout pass of the
+    // previous decision for the same state and depth (decision j's pass p <-> decision j+1's pass p-1), so it
+    // re-searched it cold: Hydras T2's leafless pass K-1 cost 576k nodes against 15k (logs/hydras-research/P17-audit.md).
+    // The reverse read (a leafed node from a leafless entry) is NOT sound -- a leafless no-win refutes no leaf -- and
+    // is not done. Per-job lever heurarm::LEAFLESS_READS_LEAFED.
+    inline bool LeaflessReadsLeafed()
+    {
+        static const bool env = EnvOn("MTG_LEAFLESS_READS_LEAFED", true);
+        return heurarm::Flag(heurarm::LEAFLESS_READS_LEAFED, env);
     }
     // MTG_BP_DEV_SEQ's first pass (see TurnSolver::FullSearchLine): a node whose walk met a latent occurrence answered
     // for the one-deviation tree only. It is kept under this second tag, which only a first pass reads, and a hit on it
@@ -105958,7 +105986,8 @@ namespace gamelc
         {
             if (!On()) { return; }
             std::cerr << "[game-line-cache] win_hits=" << g_win_hits.load() << " nowin_hits=" << g_nowin_hits.load()
-                      << " stores=" << g_stores.load() << " full_refusals=" << g_full.load();
+                      << " stores=" << g_stores.load() << " full_refusals=" << g_full.load()
+                      << " leafless_reads=" << g_lr_hits.load();
             if (Verify())
             {
                 std::cerr << " verified=" << g_ver_n.load() << " DISAGREE=" << g_ver_bad.load()
@@ -106020,6 +106049,15 @@ namespace inwin
     inline void Clear() { t_map.clear(); t_bytes = 0; }
     inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
     inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
+    // The key context: gamelc::Tag (leaf, beam, second-main, labeller), and under MTG_LEAFLESS_READS_LEAFED the same
+    // context WITHOUT the leaf kind. An in-window proof reads no leaf: a win at w <= T+k-1 lies inside the window, where
+    // every leaf estimate (at or after T+k) is later, and a no-win is served only to a query whose cutoff is inside both
+    // windows. So a rollout pass's proof answers a leafless pass and vice versa.
+    inline TranspositionTable::Key Ctx(TranspositionTable::Key k, const GameState& state)
+    {
+        if (!gamelc::LeaflessReadsLeafed()) { return gamelc::Tag(k, state); }
+        return gamelc::TagLeaf(k, 0x5EAFF7EEu);   // "any leaf"
+    }
     struct Reporter
     {
         ~Reporter()
@@ -106275,6 +106313,43 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             }
         }
+        // MTG_LEAFLESS_READS_LEAFED: a leafless node answered from a LEAFED entry, restricted to its window (see gamelc).
+        // Under MTG_GAME_LINE_CACHE_VERIFY the hit is re-searched and checked like any game-line-cache hit.
+        const bool leafless_node = gamelc::LeafCode(state) == 2u;
+        if (gamelc::On() && g_fsline_nest > 0 && !gamelc_hit && leafless_node && g_devseq_suppress == 0
+            && gamelc::LeaflessReadsLeafed())
+        {
+            const int we = state.turn_number + depth - 1;
+            const std::uint64_t gsig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
+            for (unsigned leaf = 0; leaf <= 1u && !gamelc_hit; ++leaf)
+            {
+                auto gw = gamelc::t_map.find(gamelc::TagLeaf(key_win, leaf));
+                if (gw != gamelc::t_map.end() && gw->second.nowin_bound == std::numeric_limits<int>::max()
+                    && (gw->second.order_sig == 0 || gw->second.order_sig == gsig))
+                {
+                    const int w = gw->second.line.win_turn;
+                    const bool in_win = w <= we && w <= cutoff;
+                    gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                    gamelc::g_lr_hits.fetch_add(1, std::memory_order_relaxed); ++gamelc::t_lr_hits;
+                    if (!gamelc::Verify())
+                    {
+                        if (in_win) { ++g_fs_memo_win_hits; return gw->second.line; }
+                        ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} };
+                    }
+                    gamelc_hit = true; gamelc_hit_win = in_win ? w : max_turns + 1; gamelc::t_hit_key = gw->first;
+                    break;
+                }
+                auto gn = gamelc::t_map.find(gamelc::TagLeaf(key, leaf));
+                if (gn != gamelc::t_map.end() && gn->second.nowin_bound != std::numeric_limits<int>::max()
+                    && std::min(cutoff, we) <= gn->second.nowin_bound)
+                {
+                    gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    gamelc::g_lr_hits.fetch_add(1, std::memory_order_relaxed); ++gamelc::t_lr_hits;
+                    if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
+                    gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
+                }
+            }
+        }
         // MTG_INWIN_CACHE: an in-window proof of this state from ANY remaining depth (see inwin).
         if (inwin::On() && g_fsline_nest > 0 && !gamelc_hit)
         {
@@ -106282,7 +106357,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TranspositionTable::Key kw = key_base;
             const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
             if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-            auto iw = inwin::t_map.find(inwin::WinKey(gamelc::Tag(kw, state)));
+            auto iw = inwin::t_map.find(inwin::WinKey(inwin::Ctx(kw, state)));
             if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
             {
                 inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
@@ -106291,12 +106366,15 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             else
             {
-                auto in = inwin::t_map.find(inwin::NowinKey(gamelc::Tag(key_base, state)));
+                auto in = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
                 // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
                 // this node's window would also count wins its leaf finds there, and the rollout plays lines a
                 // provider prunes from the menu (verify, 2026-11-10: FiveColour 2HG, turn 5 depth 1 cutoff 6 -- a
                 // depth-2 proof of "no win by 6" against a depth-1 rollout's turn-6 win).
-                if (in != inwin::t_map.end() && cutoff <= std::min(in->second.nowin_bound, we))
+                // A LEAFLESS query sees nothing past its window, so it asks only up to min(cutoff, we)
+                // (MTG_LEAFLESS_READS_LEAFED).
+                const int q_cut = (leafless_node && gamelc::LeaflessReadsLeafed()) ? std::min(cutoff, we) : cutoff;
+                if (in != inwin::t_map.end() && q_cut <= std::min(in->second.nowin_bound, we))
                 {
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
                     if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
@@ -109308,7 +109386,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 TranspositionTable::Key kw = key_base;
                 const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
                 if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-                const TranspositionTable::Key k = inwin::WinKey(gamelc::Tag(kw, state));
+                const TranspositionTable::Key k = inwin::WinKey(inwin::Ctx(kw, state));
                 if (inwin::t_map.find(k) == inwin::t_map.end() && admit(ApproxFslBytes(best) + 64))
                 {
                     inwin::t_map.emplace(k, inwin::Entry{ best, best.win_turn, std::numeric_limits<int>::max(), osig });
@@ -109319,7 +109397,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const int b = std::min(win ? best.win_turn - 1 : std::min(cutoff, max_turns + 1), we);
             if (b >= state.turn_number)
             {
-                const TranspositionTable::Key k = inwin::NowinKey(gamelc::Tag(key_base, state));
+                const TranspositionTable::Key k = inwin::NowinKey(inwin::Ctx(key_base, state));
                 auto it = inwin::t_map.find(k);
                 if (it == inwin::t_map.end())
                 {
@@ -126592,4 +126670,37 @@ std::uint64_t TurnSolver::PerGameCacheDigestForTest()
     mix(static_cast<std::uint64_t>(gamework::t_used)); mix(static_cast<std::uint64_t>(workctr::t_priced));
     mix(static_cast<std::uint64_t>(g_single_R_n)); mix(g_emul_key.size());
     return h;
+}
+
+// Test seam for MTG_LEAFLESS_READS_LEAFED (see gamelc::LeaflessReadsLeafed): one rollout pass at `depth` fills the
+// game line cache, then the leafless pass runs twice from that same cache state -- the read pinned OFF, then ON.
+TurnSolver::LeaflessReadProbe TurnSolver::LeaflessReadProbeForTest(const GameState& state, int depth, int max_turns,
+                                                                  bool second_main)
+{
+    LeaflessReadProbe r;
+    ClearPerGameCaches();
+    {
+        ForceHeuristicLeafGuard _h(true);
+        FSLineCache c;
+        r.leafed_win = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, nullptr, &c, nullptr).win_turn;
+    }
+    const auto glc = gamelc::t_map;  const std::size_t glb = gamelc::t_bytes;
+    const auto iwm = inwin::t_map;   const std::size_t iwb = inwin::t_bytes;
+    auto leafless = [&](int arm, long long& leaves, long long& reads) -> int
+    {
+        const std::int8_t prev = heurarm::t_arm[heurarm::LEAFLESS_READS_LEAFED];
+        heurarm::t_arm[heurarm::LEAFLESS_READS_LEAFED] = static_cast<std::int8_t>(arm);
+        gamelc::t_map = glc; gamelc::t_bytes = glb; inwin::t_map = iwm; inwin::t_bytes = iwb;
+        ForceConstantLeafGuard _c(true);
+        FSLineCache c;
+        const long long l0 = g_fs_leaf_evals, h0 = gamelc::t_lr_hits;
+        const int w = FSLineWin(state, depth, max_turns, max_turns + 1, second_main, nullptr, &c, nullptr).win_turn;
+        leaves = g_fs_leaf_evals - l0; reads = gamelc::t_lr_hits - h0;
+        heurarm::t_arm[heurarm::LEAFLESS_READS_LEAFED] = prev;
+        return w;
+    };
+    r.cold_win = leafless(0, r.cold_leaves, r.cold_reads);
+    r.read_win = leafless(1, r.read_leaves, r.read_reads);
+    ClearPerGameCaches();
+    return r;
 }

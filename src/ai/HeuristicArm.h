@@ -902,6 +902,7 @@ enum Slot : int
     FADE_PREFLOAT_DOOMED,     // MTG_FADE_PREFLOAT_DOOMED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE lead 1): a Saproling Burst activation whose counter removal kills this Burst's tokens first taps each UNTAPPED token that will die and can tap for mana (Brightcap Badger's grant) into the float (CR 605.3a; the body dies either way, mana empties without burn, so it only adds mana and decides no colour). SpellEffects.h, g_fade_prefloat_hook. Default ON; =0 -> the token dies untapped as before
     PREPAY_COUNTER_C,         // MTG_PREPAY_COUNTER_C  item 6 (mana-clean, Gods s30014741 T4 ORACLE-GAP): the whole-turn prepay books a {C} out of a counter-gated colour source (Tendo Ice Bridge) whose tap removed no counter as physical `colorless`, never `wild` (CR 106.1b). TurnSolver.cpp pure_c_tapped. Default ON; =0 -> it rides `wild` and can pay a colour pip outside the bill
     PREPAY_COSTLY_C,          // MTG_PREPAY_COSTLY_C  item 6 (mana-clean, the `wild` {C} class after PREPAY_COUNTER_C): the whole-turn prepay books a {C} out of a source whose any-colour mode COSTS something (Aether Hub {E}, Tarnished Citadel / Grand Coliseum damage, Voldaren Estate life) as physical `colorless`, never `wild` (CR 106.1b). TurnSolver.cpp pure_c_tapped. Default ON; =0 -> it rides `wild` and can pay a colour pip with the cost never paid
+    LEAFLESS_READS_LEAFED,    // MTG_LEAFLESS_READS_LEAFED  ENGINE IDENTITY FOLD (P17/P19, 2026-11-13): a LEAFLESS (constant-leaf) node at turn T, depth k answers from a LEAFED (rollout or value-leaf) pass's game-line-cache entry for the same (state, depth), restricted to its window T..T+k-1 (an in-window win is its answer; a win past the window, or a no-win bound covering min(cutoff, T+k-1), is its no-win); its in-window cache lookups clamp the cutoff to T+k-1; and the in-window cache key drops the leaf kind (an in-window proof reads no leaf). A leaf sits at turn T+k, so a leafless node sees nothing past its window and every read is exact. See logs/hydras-research/P19-leafless-read.md
     COUNT
 };
 
@@ -1748,6 +1749,7 @@ inline const char* Name(int slot)
         "MTG_FADE_PREFLOAT_DOOMED",
         "MTG_PREPAY_COUNTER_C",
         "MTG_PREPAY_COSTLY_C",
+        "MTG_LEAFLESS_READS_LEAFED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

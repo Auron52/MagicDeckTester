@@ -403,6 +403,7 @@ add_executable(mtg-test
     test/unit/test_vampires_order_discard.cpp
     test/unit/test_vampires_perf.cpp
     test/unit/test_leaf_kill_only.cpp
+    test/unit/test_leafless_reads_leafed.cpp
     test/unit/test_vampires_perf_p.cpp
     test/unit/test_po_w0_fold.cpp
     test/unit/test_vampires_madness_arms.cpp

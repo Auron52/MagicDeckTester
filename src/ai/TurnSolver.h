@@ -2679,6 +2679,14 @@ public:
     // Test seam: a digest of the per-game cache state the scope above protects (sizes, byte counts,
     // epochs) -- equal before and after anything that must leave play untouched.
     static std::uint64_t PerGameCacheDigestForTest();
+    // Test seam for MTG_LEAFLESS_READS_LEAFED: a rollout pass at `depth` fills the game line cache, then a leafless
+    // pass runs from that cache with the read pinned OFF (cold) and ON. Per-game caches are cleared before and after.
+    struct LeaflessReadProbe
+    {
+        int leafed_win = 0, cold_win = 0, read_win = 0;
+        long long cold_leaves = 0, read_leaves = 0, cold_reads = 0, read_reads = 0;
+    };
+    static LeaflessReadProbe LeaflessReadProbeForTest(const GameState& state, int depth, int max_turns, bool second_main);
     // Test seam for the plan caches' READ GUARD (cachecharge, MTG_CACHE_READ_GUARD_KIND): a computation counts 5
     // odometer visits after reading the priced ceiling (and, with `searchbudget_read`, also a finite SearchBudget) and
     // is stored; then it is looked up -- by CacheHitCharge (the real caches) and by pledger::WouldServe / WouldReplay
