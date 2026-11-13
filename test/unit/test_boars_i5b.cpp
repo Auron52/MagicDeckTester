@@ -1,6 +1,9 @@
 // Boars I5b (2026-11-13): rules-correctness fixes the Ilharg put exposed, plus Ilharg's dies clause and the general
 // legend-rule keep choice.
 //   (1) exalted's "attacks ALONE" counts the DECLARED attackers (CR 506.5 / 702.83), in both combats + the projection;
+//   (2) every per-attacker "whenever <this / a> creature attacks" helper takes its SOURCES from the DECLARED prefix of
+//       the attacker list only (CR 508.4: a creature put onto the battlefield attacking never attacked); recipients of
+//       the effect and the player-level "whenever you attack" (Adeline) are unchanged;
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
@@ -125,4 +128,82 @@ TEST_CASE("I5b exalted: executor end to end and the projection credit exalted be
     GameEngine ge(eng);
     ge.PlayOutFrom(ex, ex.turn_number, GameEngine::ResumeAt::Combat);
     CHECK(ex.players[1].life == 20 - 16);
+}
+
+// ---- (2) per-attacker attack triggers: SOURCES = the declared prefix (CR 508.4) ----------------------------------
+
+TEST_CASE("I5b attack triggers: a creature-scoped token maker put/joined undeclared makes nothing; declared, it does")
+{
+    GameState s = IBase();
+    s.phase = Phase::Combat;
+    const int pal  = IPut(s, "Accorder Paladin", 10);
+    const int hero = IPut(s, "Hero of Bladehold", 11);   // undeclared: joined the attack (put / token)
+    std::vector<int> atk = { pal, hero };
+    {
+        GameState t = s;
+        const int before = static_cast<int>(t.battlefield.size());
+        FireAttackCreateTokens(t, 0, &atk, /*declared_n=*/1);
+        CHECK(static_cast<int>(t.battlefield.size()) == before);   // "whenever THIS attacks" never fired
+    }
+    {
+        GameState t = s;
+        const int before = static_cast<int>(t.battlefield.size());
+        FireAttackCreateTokens(t, 0, &atk, /*declared_n=*/2);
+        CHECK(static_cast<int>(t.battlefield.size()) == before + 2);   // declared Hero: two Soldiers
+    }
+}
+
+TEST_CASE("I5b attack triggers: player-level 'whenever you attack' (Adeline) still fires with an undeclared body")
+{
+    GameState s = IBase();
+    s.phase = Phase::Combat;
+    IPut(s, "Adeline, Resplendent Cathar", 12);           // not attacking: the trigger is the PLAYER's
+    const int pal  = IPut(s, "Accorder Paladin", 10);
+    const int hero = IPut(s, "Hero of Bladehold", 11);
+    std::vector<int> atk = { pal, hero };
+    const int before = static_cast<int>(s.battlefield.size());
+    FireAttackCreateTokens(s, 0, &atk, /*declared_n=*/1);
+    REQUIRE(static_cast<int>(s.battlefield.size()) == before + 1);   // Adeline's Human only (one opponent)
+    CHECK(s.battlefield.back().tapped);
+}
+
+TEST_CASE("I5b attack triggers: battle cry and a self-pump fire only for DECLARED sources; recipients are everyone")
+{
+    GameState s = IBase();
+    s.phase = Phase::Combat;
+    const int pal1 = IPut(s, "Accorder Paladin", 10);     // declared
+    const int pal2 = IPut(s, "Accorder Paladin", 11);     // undeclared (put onto the battlefield attacking)
+    const int cac  = IPut(s, "Jumbo Cactuar", 12);        // undeclared
+    std::vector<int> atk = { pal1, pal2, cac };
+    {
+        GameState t = s;
+        ApplyAttackSelfPumps(t, 0, atk, /*declared_n=*/1);
+        ApplyBattleCry(t, 0, atk, /*declared_n=*/1);
+        CHECK(t.battlefield[static_cast<std::size_t>(pal1)].temp_power_bonus == 0);   // its own cry excludes itself
+        CHECK(t.battlefield[static_cast<std::size_t>(pal2)].temp_power_bonus == 1);   // gets pal1's; its own never fired
+        CHECK(t.battlefield[static_cast<std::size_t>(cac)].temp_power_bonus == 1);    // no +9999: it never attacked
+    }
+    {
+        GameState t = s;   // all declared: the historical whole-list behaviour
+        ApplyAttackSelfPumps(t, 0, atk, /*declared_n=*/3);
+        ApplyBattleCry(t, 0, atk, /*declared_n=*/3);
+        CHECK(t.battlefield[static_cast<std::size_t>(pal1)].temp_power_bonus == 1);
+        CHECK(t.battlefield[static_cast<std::size_t>(pal2)].temp_power_bonus == 1);
+        CHECK(t.battlefield[static_cast<std::size_t>(cac)].temp_power_bonus == 9999 + 2);
+    }
+}
+
+TEST_CASE("I5b attack triggers: RecountDeclared keeps the declared prefix across a by-number rebuild")
+{
+    GameState s = IBase();
+    const int a = IPut(s, "Accorder Paladin", 10);
+    const int b = IPut(s, "Accorder Paladin", 11);
+    const int c = IPut(s, "Hero of Bladehold", 12);
+    const std::vector<int> atk = { a, b, c };
+    const std::vector<int> nums = DeclaredNumbers(s, atk, 2);
+    CHECK(nums == std::vector<int>{ 10, 11 });
+    CHECK(RecountDeclared(s, std::vector<int>{ b, c }, nums) == 1);   // a declared body left; c stays undeclared
+    CHECK(RecountDeclared(s, atk, nums) == 2);
+    CHECK(DeclaredSpan(atk, -1) == 3);
+    CHECK(DeclaredSpan(atk, 5) == 3);
 }

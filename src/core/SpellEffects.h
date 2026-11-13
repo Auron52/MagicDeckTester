@@ -5537,6 +5537,45 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
     return best;
 }
 
+// The DECLARED prefix of an attacker list (CR 508.1 / 508.4). Both combats keep atk_idx as the declared attackers
+// first, then the bodies put onto the battlefield attacking (attack-trigger tokens, Militia's Pride, Ilharg's put),
+// and carry `declared_n` = the prefix length. A "whenever <this / a> creature attacks" trigger is a DECLARATION
+// trigger: only the prefix can be its SOURCE (a creature put onto the battlefield attacking "never attacked").
+// Recipients of the resulting effect ("each other attacking creature", "each other attacking Goblin") still read the
+// whole list. -1 = the whole list (projection / unit-test callers that pass only declared attackers). Boars I5b.
+inline int DeclaredSpan(const std::vector<int>& atk, int declared_n)
+{
+    const int n = static_cast<int>(atk.size());
+    return declared_n < 0 ? n : std::min(declared_n, n);
+}
+
+// After a helper rebuilt atk_idx by card number (order kept, departed bodies dropped), the new declared prefix =
+// how many of the old prefix's card numbers are still in it. `nums` = the old prefix's numbers, taken before.
+inline std::vector<int> DeclaredNumbers(const GameState& state, const std::vector<int>& atk, int declared_n)
+{
+    std::vector<int> nums;
+    const int n = declared_n < 0 ? static_cast<int>(atk.size()) : std::min<int>(declared_n, static_cast<int>(atk.size()));
+    for (int k = 0; k < n; ++k)
+    {
+        const int i = atk[static_cast<std::size_t>(k)];
+        if (i >= 0 && i < static_cast<int>(state.battlefield.size()))
+        { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    }
+    return nums;
+}
+inline int RecountDeclared(const GameState& state, const std::vector<int>& atk, const std::vector<int>& nums)
+{
+    int n = 0;
+    for (const int i : atk)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { break; }
+        if (std::find(nums.begin(), nums.end(), state.battlefield[static_cast<std::size_t>(i)].card.m_number)
+            == nums.end()) { break; }
+        ++n;
+    }
+    return n;
+}
+
 // FireAttackDigAttach -- body in SpellEffects.cpp. Armored Skyhunter's attack trigger ("look at
 // the top six... you may put an Aura or Equipment card... onto the battlefield... attach it to a
 // creature you control; rest on the bottom"). Called from GameEngine::CombatPhase AND the
@@ -5546,7 +5585,7 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // shared enter cascade (Puresteel's equipment-ETB draw fires). WHICH card and WHICH host are
 // provider-owned (AttackDigPutCandidates / AttackDigAttachHost, human-overridable via the dig /
 // attach-host choosers). Rest bottomed in examined order (approved deterministic collapse).
-void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 // FireAttackAttachEquipment -- body in SpellEffects.cpp. Raubahn, Bull of Ala Mhigo's attack trigger
 // (CardParams::attack_attach_equipment): "whenever Raubahn attacks, attach up to one target Equipment
 // you control to target attacking creature". Called from GameEngine::CombatPhase AND the rollout's
@@ -5563,12 +5602,13 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
 // afterwards: re-found by card number (a Wargear re-host sacrifice shifts indices) and filtered to
 // creatures (an attacking Lizard Blades attached this way is removed from combat, CR 506.4). `live`
 // = a real resolution: the human chooser (two attach_host board-clicks) and the play event.
-void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live);
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live,
+                               int* declared_n = nullptr);
 // Bruna, Light of Alabaster's attack trigger (attack_gather_auras). Fired at declare-attackers in
 // BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat) after the attack pumps and
 // BEFORE the damage loop reads power, so the gathered Auras swing THIS combat. Only APPENDS to the
 // battlefield (put Auras), so `atk_idx` stays valid. See the definition for the full rules note.
-void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 // Arcanum Wings' Aura swap (aura_swap_cost): exchange the Aura-swap permanent `wings_number` with
 // the hand Aura at `hand_index` -- simultaneous, on resolution; the hand Aura is PUT (not cast, does
 // not target, CR 303.4f) onto the same host and ENTERS (its ETB fires: Colossification taps the
@@ -5601,7 +5641,7 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // so the type filter, the provider ranking, the human dig chooser (with -1 as the printed "may")
 // and the rest-to-bottom all come for free. Needs no attack-damage projection addend: a card
 // entering hand adds no power to a declared attacker.
-void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
@@ -18334,11 +18374,12 @@ inline std::vector<int> FlingVictimCandidates(const GameState& state, int contro
 // find_by_id): snapshot card numbers, re-derive indices by id. It also gives the
 // "a sacrificed attacker stops dealing combat damage" rule for free -- the dead id is simply not
 // found and drops out of the vector.
-inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices);
+inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices,
+                                   int declared_n);
 inline void FireAttackSacFling(GameState& state, int controller,
-                               std::vector<int>& attacker_indices)
+                               std::vector<int>& attacker_indices, int declared_n = -1)
 {
-    FireAttackSacFlingImpl(state, controller, attacker_indices);
+    FireAttackSacFlingImpl(state, controller, attacker_indices, declared_n);
     // THIS combat's pin, spent whether or not a fling fired (no Flinger attacked, nothing to sacrifice): a
     // pinned variant whose fling never fired then leaves combat in its base plan's state, which is what
     // MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp PlanHasCombatPin). MTG_FLING_PIN_FOLD=0: it rides on to the
@@ -18346,15 +18387,17 @@ inline void FireAttackSacFling(GameState& state, int controller,
     if (FlingPinFoldOn()) { state.scripted_fling_victim = -1; }
 }
 inline void FireAttackSacFlingImpl(GameState& state, int controller,
-                                   std::vector<int>& attacker_indices)
+                                   std::vector<int>& attacker_indices, int declared_n)
 {
     if (attacker_indices.empty()) { return; }
     const int bf0 = static_cast<int>(state.battlefield.size());
 
-    // Collect the fling SOURCES by card number (indices will move under us).
+    // Collect the fling SOURCES by card number (indices will move under us) -- DECLARED attackers only.
     std::vector<int> src_ids;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf0) { continue; }
         const Permanent& s = state.battlefield[idx];
         if (s.controller_index != controller) { continue; }
@@ -22060,12 +22103,14 @@ inline void ApplyAttackQuestCounters(GameState& state, int controller,
 }
 
 inline void ApplyAttackSelfPumps(GameState& state, int controller,
-                                 const std::vector<int>& attacker_indices)
+                                 const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // sources: declared only (CR 508.4)
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -22129,8 +22174,9 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
             if (src.controller_index != controller) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || sd->params.attack_pump_matching_power <= 0) { continue; }
-            for (int idx : attacker_indices)
+            for (int k = 0; k < nsrc; ++k)   // the triggering attacker must have been DECLARED
             {
+                const int idx = attacker_indices[static_cast<std::size_t>(k)];
                 if (idx < 0 || idx >= bf_all) { continue; }
                 Permanent& a = state.battlefield[idx];
                 if (a.controller_index != controller) { continue; }
@@ -22161,16 +22207,18 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
 // triggers, and putting the tokens in first is strictly dominant against an opponent that never
 // blocks). Duration is free: temp_power_bonus is already zeroed by the CR 514.2 cleanup.
 inline void ApplyBattleCry(GameState& state, int controller,
-                           const std::vector<int>& attacker_indices)
+                           const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
 
     // Pass 1: total battle cry among the controller's ATTACKING creatures. Early-out keeps every
-    // non-battle-cry deck at one cheap scan of the attacker list.
+    // non-battle-cry deck at one cheap scan of the attacker list. SOURCES: the DECLARED prefix only.
     int bc_total = 0;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // battle cry triggers on DECLARATION
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& src = state.battlefield[idx];
         if (src.controller_index != controller) { continue; }
@@ -22180,15 +22228,18 @@ inline void ApplyBattleCry(GameState& state, int controller,
     }
     if (bc_total <= 0) { return; }
 
-    // Pass 2: each attacker gets the total MINUS its own contribution ("each other").
-    for (int idx : attacker_indices)
+    // Pass 2: each attacker gets the total MINUS its own contribution ("each other"). A body put onto the
+    // battlefield attacking never triggered its own battle cry, so it gets every declared source's bonus.
+    for (int k = 0; k < static_cast<int>(attacker_indices.size()); ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         Permanent& a = state.battlefield[idx];
         if (a.controller_index != controller) { continue; }
         int own = 0;
+        const bool declared = k < nsrc;
         if (const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card))
-        { own = d->params.battle_cry_power; }
+        { own = declared ? d->params.battle_cry_power : 0; }
         a.temp_power_bonus += bc_total - own;
     }
 }
@@ -22204,13 +22255,16 @@ inline void ApplyBattleCry(GameState& state, int controller,
 // through SacrificePermanentAt (graveyard, death watchers) + FireOppCreatureDies. `attacker_indices` is
 // REMAPPED in place across the erases (a spawn sits at a lower battlefield index than a creature we
 // cast later). Gated on GameState::deck_has_annihilator: one bool test per combat elsewhere.
-inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices)
+inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices,
+                             int declared_n = -1)
 {
     if (!state.deck_has_annihilator || attacker_indices.empty()) { return; }
     int total = 0;
     std::string names;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
         if (a.controller_index != controller) { continue; }
@@ -22253,11 +22307,13 @@ inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>&
 // are absent from attacker_indices, as required by CR 508.4. The goldfish opponent never
 // attacks; its library is dealt whenever a deck contains this parameter.
 inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
-                                       const std::vector<int>& attacker_indices)
+                                       const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (controller != 0 || !state.opponent_library_dealt || attacker_indices.empty()) { return; }
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
         if (attacker.controller_index != controller) { continue; }
@@ -22282,14 +22338,16 @@ inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
 // Gated: an attacker whose def leaves attack_draw_cards at 0 is untouched -> other decks
 // byte-identical.
 inline void ApplyAttackDrawTriggers(GameState& state, int controller,
-                                    const std::vector<int>& attacker_indices)
+                                    const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
     Player& pl = state.players[controller];
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -22310,12 +22368,14 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
 // into that player's hand, not drawn; a nonland stays on top. The passive opponent has one
 // modelled library, shared by the two-headed abstraction.
 inline void ApplyGoblinGuideAttackTriggers(GameState& state, int controller,
-                                           const std::vector<int>& attacker_indices)
+                                           const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (!state.opponent_library_dealt) { return; }
     Player& defender = state.players[1 - controller];
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
         if (attacker.controller_index != controller) { continue; }
@@ -22397,12 +22457,14 @@ inline void ApplyBorosCharm(GameState& state, int controller, int mode, int targ
 // would need it.
 // Gated: an attacker leaving both params at 0/false is untouched -> other decks byte-identical.
 inline void ApplyAttackLifegainTeamPump(GameState& state, int controller,
-                                        const std::vector<int>& attacker_indices)
+                                        const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         if (state.battlefield[idx].controller_index != controller) { continue; }
         const CardDefinition* d =
@@ -24697,11 +24759,13 @@ inline int SnowPermanentCount(const GameState& state, int controller_index)
 // SnowPermanentCount uses. Gated: no attacker with the param -> untouched, every other deck
 // byte-identical.
 inline bool AttackUntapSnowFires(const GameState& state, int controller,
-                                 const std::vector<int>& attacker_indices)
+                                 const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -26949,7 +27013,7 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
 // restores the old unconditional behaviour and is only legal for a board with no creature-scoped
 // source -- callers in the two combat worlds must always pass the real list.
 inline int FireAttackCreateTokens(GameState& state, int controller_index,
-                                 const std::vector<int>* attacker_indices = nullptr)
+                                 const std::vector<int>* attacker_indices = nullptr, int declared_n = -1)
 {
     int start = static_cast<int>(state.battlefield.size());
 
@@ -26969,8 +27033,10 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
         if (def->params.attack_tokens_require_self_attacking)
         {
             if (attacker_indices == nullptr) { continue; }   // no attacker list => cannot be declared
-            bool declared = false;
-            for (int ai : *attacker_indices) { if (ai == i) { declared = true; break; } }
+            bool declared = false;   // DECLARED prefix only: a put Hero never attacked (CR 508.4)
+            const int nsrc = DeclaredSpan(*attacker_indices, declared_n);
+            for (int k = 0; k < nsrc; ++k)
+            { if ((*attacker_indices)[static_cast<std::size_t>(k)] == i) { declared = true; break; } }
             if (!declared) { continue; }
         }
         // Adeline: "for each opponent, create a ... token ... attacking that player" -- one per

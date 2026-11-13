@@ -75013,7 +75013,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     if (!atk_idx.empty())
     {
         // atk_idx passed for the creature-scoped gate -- mirrors GameEngine::CombatPhase (lockstep).
-        int tok_start = FireAttackCreateTokens(state, active, &atk_idx);
+        int tok_start = FireAttackCreateTokens(state, active, &atk_idx, declared_n);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -75027,25 +75027,25 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors GameEngine::CombatPhase (executor). Gated inert.
-    ApplyAttackSelfPumps(state, active, atk_idx);
+    ApplyAttackSelfPumps(state, active, atk_idx, declared_n);
 
     // Battle cry (Accorder Paladin, Hero of Bladehold): each OTHER attacking creature gets +1/+0
     // per attacking battle-cry source. AFTER the token block above so the new tokens are pumped.
     // Mirrors GameEngine::CombatPhase (executor) -- lockstep. Gated inert.
-    ApplyBattleCry(state, active, atk_idx);
+    ApplyBattleCry(state, active, atk_idx, declared_n);
     // Annihilator. Mirrors GameEngine::CombatPhase (lockstep, ONE shared helper). Deck-gated inert.
-    ApplyAnnihilator(state, active, atk_idx);
-    ApplyAttackExileDefenderTop(state, active, atk_idx);
+    ApplyAnnihilator(state, active, atk_idx, declared_n);
+    ApplyAttackExileDefenderTop(state, active, atk_idx, declared_n);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors GameEngine::CombatPhase.
-    ApplyAttackDrawTriggers(state, active, atk_idx);
-    ApplyGoblinGuideAttackTriggers(state, active, atk_idx);
+    ApplyAttackDrawTriggers(state, active, atk_idx, declared_n);
+    ApplyGoblinGuideAttackTriggers(state, active, atk_idx, declared_n);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
     // Mirrors GameEngine::CombatPhase (same two shared helpers, same two points).
-    const bool jorn_untap = AttackUntapSnowFires(state, active, atk_idx);
+    const bool jorn_untap = AttackUntapSnowFires(state, active, atk_idx, declared_n);
     // Raggadragga (attack_untap_mana_ability_attackers, Boars I3b): the DECLARED attackers with a mana ability (the
     // first declared_n slots), by m_number; untapped right after ResolveCombatDamage, beside Jorn's untap.
     const std::vector<int> ragga_untap = AttackUntapManaAttackers(state, active, atk_idx, declared_n);
@@ -75053,13 +75053,13 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
     // Mirrors GameEngine::CombatPhase (executor) -- lockstep, ONE shared helper. Gated inert.
-    ApplyAttackLifegainTeamPump(state, active, atk_idx);
+    ApplyAttackLifegainTeamPump(state, active, atk_idx, declared_n);
     // Harbin's attack-threshold pump. Mirrors GameEngine::CombatPhase (lockstep, ONE shared helper).
     ApplyAttackThresholdTeamPump(state, active, atk_idx, declared_n);
 
     // Bruna's gather, then Arcanum Wings' in-combat aura swap. Mirrors GameEngine::CombatPhase
     // (lockstep, same position relative to every power read; see the note there).
-    FireAttackGatherAuras(state, active, atk_idx);
+    FireAttackGatherAuras(state, active, atk_idx, declared_n);
     ApplyCombatAuraSwap(state, active, atk_idx);
     // Bloodline Keeper's IN-COMBAT transform (Vampires B). Mirrors GameEngine::CombatPhase (lockstep,
     // ONE shared helper, same position: after every attack trigger, before any power read).
@@ -75106,24 +75106,26 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
 
     // Raubahn's attack attach (the searched pin; repairs atk_idx). Mirrors GameEngine::CombatPhase
     // (lockstep, ONE shared body, same position); the human chooser inside is nulled by RevealLogPause.
-    FireAttackAttachEquipment(state, active, atk_idx, /*live=*/true);
+    FireAttackAttachEquipment(state, active, atk_idx, /*live=*/true, &declared_n);
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power. Mirrors GameEngine::CombatPhase (lockstep); the human choosers
     // inside are nulled by RevealLogPause, so rollouts always take the provider picks.
-    FireAttackDigAttach(state, active, atk_idx);
+    FireAttackDigAttach(state, active, atk_idx, declared_n);
 
     // Adaptive Omnitool's attack dig-to-HAND. Mirrors GameEngine::CombatPhase (lockstep); the human
     // dig chooser inside is nulled by RevealLogPause, so rollouts always take the provider pick.
-    FireAttackEquipDigHand(state, active, atk_idx);
+    FireAttackEquipDigHand(state, active, atk_idx, declared_n);
 
     // Surtland Flinger's attack-trigger fling. Mirrors GameEngine::CombatPhase (lockstep);
     // mutates atk_idx, since the sacrifice shifts battlefield indices.
-    FireAttackSacFling(state, active, atk_idx);
+    { const std::vector<int> decl_nums = DeclaredNumbers(state, atk_idx, declared_n);
+      FireAttackSacFling(state, active, atk_idx, declared_n);
+      declared_n = RecountDeclared(state, atk_idx, decl_nums); }
 
     // Damage, attack triggers, Utvara tokens and the Goblin Lackey cheat are shared with the
     // executor (ResolveCombatDamage, Combat.cpp). The rollout wants no play-viewer descriptions.
-    ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false);
+    ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/false, declared_n);
     // Walking Ballista's post-combat-damage lethal finish (shared; executor twin: GameEngine::CombatPhase).
     CounterPingFinish(state, active);
     if (jorn_untap) { UntapSnowPermanents(state, active); }   // Jorn, see above

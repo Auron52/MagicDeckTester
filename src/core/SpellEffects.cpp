@@ -1786,13 +1786,15 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
 // order (approved collapse of the controller's trigger-order choice; each dig sees the library
 // as the previous one left it). Snapshots the triggering card numbers first: the puts below
 // push_back onto the battlefield, and stale indices are the classic reallocation bug.
-void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     if (atk_idx.empty()) { return; }
     Player& ap = state.players[controller];
     std::vector<int> trigger_nums;
-    for (int idx : atk_idx)
+    const int nsrc = DeclaredSpan(atk_idx, declared_n);   // DECLARED attackers only (CR 508.4)
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = atk_idx[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[idx];
         if (p.controller_index != controller) { continue; }
@@ -1943,12 +1945,17 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
 // ORDERS (AttackAttachCandidates), and the search branches over every entry (Plan::attack_attach_choice).
 // Legendary, so at most one trigger per combat; several would resolve in attacker order (the approved
 // battlefield-order collapse), the pin consumed by the first.
-void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live)
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live,
+                               int* declared_n)
 {
     if (!state.deck_has_attack_attach || atk_idx.empty()) { state.scripted_attack_attach = -1; return; }
     std::vector<int> sources;
-    for (const int ai : atk_idx)
+    // Sources: the DECLARED attackers only (CR 508.4). The repair below may drop a declared body (an attached Lizard
+    // Blades leaves combat), so the caller's declared count is recounted by number at the end.
+    const std::vector<int> decl_nums = DeclaredNumbers(state, atk_idx, declared_n ? *declared_n : -1);
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n ? *declared_n : -1); ++k)
     {
+        const int ai = atk_idx[static_cast<std::size_t>(k)];
         if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
         if (p.controller_index != controller || p.def_absent) { continue; }
@@ -2112,6 +2119,7 @@ void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int
             else if (!q.card.HasKeyword(Keyword::Vigilance)) { q.tapped = true; }
         }
         atk_idx.swap(repaired);
+        if (declared_n != nullptr) { *declared_n = RecountDeclared(state, atk_idx, decl_nums); }
         if (live && !was_there && EquipmentAttachedTo(state, controller, ch.equip_num, ch.host_num)
             && g_play_event_sink && !g_tap_speculating)
         {
@@ -2142,13 +2150,14 @@ void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int
 // searched pin GameState::scripted_bruna_gather (Plan::bruna_gather_choice), consumed by the first
 // gather. A human at the viewer picks each zone's subset with the reused `dragon` multi-pick.
 // The "or blocks" half is goldfish-inert (the opponent never attacks) -- signed off 2026-10-05.
-void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     // Snapshot the gathering attackers by card number first: the puts below append to the
-    // battlefield (indices stay valid) but a watcher cascade could reorder nothing else.
+    // battlefield (indices stay valid) but a watcher cascade could reorder nothing else. DECLARED only (CR 508.4).
     std::vector<int> brunas;
-    for (int ai : atk_idx)
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n); ++k)
     {
+        const int ai = atk_idx[static_cast<std::size_t>(k)];
         if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
         if (p.controller_index != controller || p.def_absent) { continue; }
@@ -2644,15 +2653,16 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // NO projection addend is needed, and the reason is the mirror image of Dwalin's: a card entering
 // HAND adds no power to any declared attacker, so PendingAttackDamage is already exact. (Dwalin's
 // hone counters DO change this combat's damage, which is why they needed CountAttackHonePump.)
-void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     if (atk_idx.empty()) { return; }
     // SNAPSHOT the (host, equipment) pairs before resolving any of them -- the FireAttackDigAttach
     // precedent. Each dig mutates the library and the hand, and a dug card entering hand can fire
     // further watchers, so the battlefield must not be walked lazily underneath the resolution.
     std::vector<int> equip_nums;
-    for (int idx : atk_idx)
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n); ++k)   // "equipped creature attacks": DECLARED only
     {
+        const int idx = atk_idx[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& host = state.battlefield[idx];
         if (host.controller_index != controller) { continue; }

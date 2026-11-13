@@ -1146,7 +1146,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     {
         // atk_idx is passed, not omitted: a creature-scoped token trigger (Hero of Bladehold's
         // "whenever THIS CREATURE attacks") must fire only when its own source is in that list.
-        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx);
+        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx, declared_n);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -1161,27 +1161,27 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
-    ApplyAttackSelfPumps(state, state.active_player_index, atk_idx);
+    ApplyAttackSelfPumps(state, state.active_player_index, atk_idx, declared_n);
 
     // Battle cry (Accorder Paladin, Hero of Bladehold): each OTHER attacking creature gets +1/+0
     // per attacking battle-cry source. AFTER the token block above, so Hero's own Soldiers and
     // Adeline's Human are pumped too (CR 603.3b -- the player orders simultaneous attack triggers,
     // and tokens-first is strictly dominant here). Mirrors TurnSolver::SimulateCombat. Gated inert.
-    ApplyBattleCry(state, state.active_player_index, atk_idx);
+    ApplyBattleCry(state, state.active_player_index, atk_idx, declared_n);
     // Annihilator (Emrakul, Ulamog the Infinite Gyre): the defending player sacrifices N permanents.
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Deck-gated inert.
-    ApplyAnnihilator(state, state.active_player_index, atk_idx);
-    ApplyAttackExileDefenderTop(state, state.active_player_index, atk_idx);
+    ApplyAnnihilator(state, state.active_player_index, atk_idx, declared_n);
+    ApplyAttackExileDefenderTop(state, state.active_player_index, atk_idx, declared_n);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
-    ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
-    ApplyGoblinGuideAttackTriggers(state, state.active_player_index, atk_idx);
+    ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx, declared_n);
+    ApplyGoblinGuideAttackTriggers(state, state.active_player_index, atk_idx, declared_n);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
     // Mirrors TurnSolver::SimulateCombat (same two shared helpers, same two points).
-    const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx);
+    const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx, declared_n);
     // Raggadragga (attack_untap_mana_ability_attackers, Boars I3b): the DECLARED attackers with a mana ability (the
     // first declared_n slots), by m_number; untapped right after ResolveCombatDamage, beside Jorn's untap.
     const std::vector<int> ragga_untap = AttackUntapManaAttackers(state, state.active_player_index, atk_idx, declared_n);
@@ -1192,7 +1192,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // an opponent that never blocks -- the ApplyBattleCry precedent), and BEFORE the damage loop
     // reads power, so the counters the gain triggers grow this very swing. Mirrors
     // TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
-    ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx);
+    ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx, declared_n);
     // Harbin, Vanguard Aviator: "whenever you attack with five or more Soldiers" -- counted over the
     // DECLARED attackers (declared_n, captured before the token block), pump applied after it.
     // Mirrors TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
@@ -1205,7 +1205,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // they have). BEFORE Firebreathe so a greedy leftover-mana sink can never eat the swap's mana.
     // Mirrors TurnSolver::SimulateCombat (lockstep; ONE shared helper each). Both inert unless a
     // Bruna / an Aura-swap pin is present.
-    FireAttackGatherAuras(state, state.active_player_index, atk_idx);
+    FireAttackGatherAuras(state, state.active_player_index, atk_idx, declared_n);
     ApplyCombatAuraSwap(state, state.active_player_index, atk_idx);
     // Bloodline Keeper's IN-COMBAT transform (Vampires B): after every attack trigger (Mavren Fein's
     // token may be the fifth Vampire) and before anything reads power, so Lord of Lineage's +2/+2
@@ -1230,25 +1230,27 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // picks through two attach_host board-clicks). Repairs atk_idx (an attached Lizard Blades leaves
     // combat, CR 506.4). Immediately before the Skyhunter dig so the trigger order is one place in both
     // worlds. Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared body). Param-gated inert.
-    FireAttackAttachEquipment(state, state.active_player_index, atk_idx, /*live=*/true);
+    FireAttackAttachEquipment(state, state.active_player_index, atk_idx, /*live=*/true, &declared_n);
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.
     // Mirrors TurnSolver::SimulateCombat (lockstep). Param-gated inert for every other deck.
-    FireAttackDigAttach(state, state.active_player_index, atk_idx);
+    FireAttackDigAttach(state, state.active_player_index, atk_idx, declared_n);
 
     // Adaptive Omnitool's attack dig-to-HAND. Same two-world lockstep contract, immediately after
     // its dig-and-attach sibling so the trigger order is one place in both worlds. Ordering against
     // the Skyhunter put is unobservable here (this one only moves a card to hand, which cannot
     // change what the put may legally attach to), but keeping them adjacent is what makes that
     // checkable. Param-gated inert for every other deck.
-    FireAttackEquipDigHand(state, state.active_player_index, atk_idx);
+    FireAttackEquipDigHand(state, state.active_player_index, atk_idx, declared_n);
 
     // Surtland Flinger's attack-trigger fling: sacrifice another creature, deal its power (doubled
     // for a Giant) to the opponent's face. AFTER the pumps so the victim's power is read buffed,
     // BEFORE ResolveCombatDamage so a sacrificed attacker deals no combat damage. Mutates atk_idx
     // (the sacrifice shifts battlefield indices) -- see the contract note on the function.
-    FireAttackSacFling(state, state.active_player_index, atk_idx);
+    { const std::vector<int> decl_nums = DeclaredNumbers(state, atk_idx, declared_n);
+      FireAttackSacFling(state, state.active_player_index, atk_idx, declared_n);
+      declared_n = RecountDeclared(state, atk_idx, decl_nums); }
 
     // Captured HERE, after every declare-attackers trigger has resolved, so the combat-damage
     // event's "(before->after)" range reports COMBAT DAMAGE ONLY. It used to be captured before
@@ -1261,7 +1263,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // rollout (ResolveCombatDamage, Combat.cpp) so the two can never disagree on what an attack
     // does. Only the real game collects the per-attacker descriptions for the play viewer.
     const CombatDamageResult combat =
-        ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+        ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr, declared_n);
     // Walking Ballista's post-combat-damage lethal finish (shared; rollout twin: SimulateOneCombat). Runs
     // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
     CounterPingFinish(state, state.active_player_index);
