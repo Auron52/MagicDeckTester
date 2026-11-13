@@ -382,6 +382,12 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
             } dredge_trial_guard;
             ComboOffApplyPause co_quiet;
             RevealLogPause quiet;
+            // The commit applies under TakeTurn's ConcreteDeferScope (the human-play float keeps its `wild` units
+            // until the decision boundary), so the trial must too. A validation reached OUTSIDE TakeTurn (the
+            // viewer's validate_line) otherwise concretised each payment's leftover mid-line: a joint pay's wild
+            // generic was committed to the demand model's colour after the first step and a later step's pip
+            // came up short (Morph INT-14 g0007). Nested inside TakeTurn this is a no-op count.
+            ConcreteDeferScope concrete_defer(g, g.active_player_index);
             // The trial's OWN (casts, reasons) pair: the harness's logs never see a trial's drops.
             PlayDropSinkScope drop_scope(&drops, &reasons);
             g_line_order_capture     = seen;
@@ -7451,7 +7457,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 else
                 {
                     _act_line_pay.Paid();
-                    if (sac_named) { SubManaCost(g_line_unpaid_cost, act_cost); }
+                    // A joint payment's act hold (g_line_hold_has_acts; lockstep twin of ApplyPlanDirect's).
+                    if (sac_named || g_line_hold_has_acts) { SubManaCost(g_line_unpaid_cost, act_cost); }
                     if (ActDropAuditOn()) { g_act_fired.fetch_add(1, std::memory_order_relaxed); }
                     // Site-8 detection input (lockstep twin of the rollout's): did the gated
                     // look-at-top (Scrying Sheets / Frost Augur) move a card into hand?
@@ -8360,6 +8367,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // after in both); the trailing pass skips them.
     // MTG_LINE_PAY_AUDIT (Morph INT-14): measurement only -- arms a frame over the rest of this apply.
     LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout);
+    // PLAN JOINT PAY (MTG_PLAN_JOINT_PAY) -- lockstep twin of ApplyPlanDirect's call: same point (after the
+    // pre-pass, before the lead flips), same actions, same human-line exclusions (human_action_order covers every
+    // human pin, the "**" sequence included). true -> the casts-only prepay below is skipped.
+    const bool plan_joint_paid = !plan.human_action_order && plan.human_pre_taps.empty()
+                              && TurnSolver::PlanJointPayFallback(state, plan.actions);
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
     { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
@@ -8418,7 +8430,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
     });
-    if (!loam_target_plan)
+    if (!loam_target_plan && !plan_joint_paid)
     { TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false, /*hand_demand=*/false,
                                       /*allow_partial=*/true); }
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);

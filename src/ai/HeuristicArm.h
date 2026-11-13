@@ -927,6 +927,7 @@ enum Slot : int
     PAY_HAND_SURPLUS_FIRST,   // MTG_PAY_HAND_SURPLUS_FIRST  item D, mana-clean: under PAY_HAND_GENERIC each float colour pays generic out of its SURPLUS over the hand's pips first (in hand-surplus order), then the demanded remainder. Shadowborn s30053678 T4 (Sire {4}{B}{R} ate four {B}, Demonic Tutor's {B} stranded on {R}{R}). Default ON; =0 -> the single drain
     SPIRITS_CAST_ORDER,       // MTG_SPIRITS_CAST_ORDER  the USER's full Spirits cast order (2026-11-14; SpiritsProvider::CastOrderRank). Default ON; =0 -> the generic tiers
     SPIRITS_BUCKET_DISCARD,   // MTG_SPIRITS_BUCKET_DISCARD  the USER's Spirits cleanup-discard buckets (2026-11-14; SpiritsShed): 3-4 threats of varying costs, at most 3 lands (4-5 while 4 threats are kept), one Vial. Default ON; =0 -> the generic ranking
+    PLAN_JOINT_PAY,           // MTG_PLAN_JOINT_PAY  Morph INT-14 (USER 2026-11-13: "our mana handling should be smart enough to address shortfalls in part of the plan"): when an AI plan's as-queued payments (lead flips, the casts' prepay, each trailing activation) come up short on a step and the WHOLE bill pays in one solve on the plan-start board, both appliers pay it jointly and pre-load the float (TurnSolver::PlanJointPayFallback). Default ON; =0 -> the as-queued payment
     COUNT
 };
 
@@ -1798,6 +1799,7 @@ inline const char* Name(int slot)
         "MTG_PAY_HAND_SURPLUS_FIRST",
         "MTG_SPIRITS_CAST_ORDER",
         "MTG_SPIRITS_BUCKET_DISCARD",
+        "MTG_PLAN_JOINT_PAY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
