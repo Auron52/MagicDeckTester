@@ -21801,6 +21801,117 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     return false;
 }
 
+// MORPH INT-15 -- R12's DEAD double-strike grant, removed at enumeration (SOUND identity fold; MorphProvider::
+// DeadDoubleStrikeGrantFold states the deck premises; USER 2026-11-13: "I would prune it. No point in wasting the spell
+// or making additional plans that are worse."). Under R12 (DoubleStrikeGrantAvoidsDoubleStrikers) a cast-time
+// double-strike grant (Temur Battle Rage) goes on the best-ranked attacker WITHOUT double strike whose combat score is
+// > 0; with none it falls back to the plain pick (FindBestOwnAttackerForTrick). Rejected here: a subset in which that
+// fallback provably happens AND lands on a creature that already has double strike -- a no-op that only spends mana
+// and moves the card to the graveyard, so the same subset without that copy (enumerated: the copies are one group)
+// dominates it.
+// THE PROOF (k = the subset's cast-time DS grants, all to the plain cast-time target, none redirected):
+//   (1) No target watcher (Wild Defiance's +3/+3 on becoming a target) on our battlefield or cast in the subset, no
+//       redirect twin, and every selected trick takes the cast-time target. Otherwise stand down: a watcher makes the
+//       fallback grant real value, and an explicit target could pump a body this proof counts out.
+//   (2) A STABLE body exists now: an own creature that can attack, has combat power > 0 (or is face down: a 2/2),
+//       produces no mana (a payment never taps it) and is not a redirector. Power never falls in this list, so it
+//       keeps a score > 0 through the plan; hence at any grant with no R12 recipient every score > 0 attacker
+//       already has double strike, and the plain pick (the LARGEST score) is such a creature -> a no-op.
+//   (3) k > E, E = the bodies that could ever BE an R12 recipient: own creatures without double strike now that have
+//       power > 0 or are face down, plus every creature the subset casts. A power-0 body never becomes one: every
+//       pump takes the cast-time pick, which (2) keeps on a score > 0 body. Each recipient gains double strike and is
+//       spent, so at most E grants find one, and the (E+1)-th falls back by (2).
+//   Any other selected action (a non-trick, non-creature cast; an activation other than a turn-face-up flip) makes
+//   the proof stand down -- an unknown effect could add a body or a pump.
+static bool SubsetHasDeadDoubleStrikeGrant(const GameState& state,
+                                           const std::vector<Action>& cands,
+                                           const std::vector<int>& sel)
+{
+    int k = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.enchant_target != kTrickBestOwnTarget || a.trick_redirect != 0)
+        { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && d->params.grants_temp_double_strike) { ++k; }
+    }
+    if (k == 0) { return false; }
+    if (!ResolveProvider(state).DeadDoubleStrikeGrantFold()) { return false; }
+    auto watcher = [](const CardDefinition* d)
+    { return d != nullptr && (d->params.spell_target_watch_pump_power != 0 || d->params.spell_target_watch_pump_tough != 0); };
+    int casts = 0;
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode)) { continue; }
+        if (a.kind != Action::Kind::CastFromHand || a.trick_redirect != 0) { return false; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || watcher(d)) { return false; }
+        if (d->card.IsCreature()) { ++casts; continue; }
+        if (!d->params.solo_target_trick || a.enchant_target != kTrickBestOwnTarget) { return false; }
+    }
+    const int me = state.active_player_index;
+    bool stable = false;
+    int  E = casts;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me) { continue; }
+        const CardDefinition* d = p.def_absent ? nullptr : CardDatabase::Instance().LookupCached(p.card);
+        if (watcher(d)) { return false; }
+        if (!p.card.IsCreature() && !p.is_animated) { continue; }
+        const bool face_down = FaceDownRealDef(p) != nullptr;
+        const bool positive  = face_down || CombatPowerOf(p, state) > 0;
+        const bool ds        = CreatureHasDoubleStrike(p, state);
+        if (!ds && positive) { ++E; }
+        if (!stable && positive && d != nullptr && d->tmpl != CardTemplate::ManaDork && d->params.produces.empty()
+            && !d->params.redirects_spell_target_to_self && TrickRecipientCanAttackThisTurn(state, p))
+        { stable = true; }
+    }
+    return stable && k > E;
+}
+
+// MORPH INT-15 P4 -- the USER's same-turn rule (MorphProvider::SameTurnFaceUpPrefersHardCast quotes it; a HEURISTIC
+// prune, not a sound fold): a subset casting a morph card face down AND turning it face up at once (face_down 2) is
+// rejected when the SAME subset with that card's hard cast in its place is jointly payable -- "if you have the red".
+// Joint = the whole subset's bill (every selected cost, the hard cast substituted) against the plain pre-cast pool +
+// floating, the strongest payability read (no credits, no reserves -- SubsetPhyrexianDominated's test), so the variant
+// goes only where the hard-cast twin is unambiguously affordable. The twin is the same hand slot's plain cast in
+// `cands` (no twin enumerated -> nothing is rejected), so the survivor is always on the menu. Only face_down 2 is
+// touched: a face-down cast (face_down 1) -- the two-turn line, flipped on a later turn -- is never dropped.
+static bool SubsetSameTurnFaceUpHardPayable(const GameState& state,
+                                            const std::vector<Action>& cands,
+                                            const std::vector<int>& sel)
+{
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.kind != Action::Kind::CastFromHand || a.face_down != 2 || a.def == nullptr) { continue; }
+        if (!ResolveProvider(state).SameTurnFaceUpPrefersHardCast(state, *a.def)) { continue; }
+        int twin = -1;
+        for (int h = 0; h < static_cast<int>(cands.size()); ++h)
+        {
+            const Action& b = cands[static_cast<std::size_t>(h)];
+            if (b.kind == Action::Kind::CastFromHand && b.hand_index == a.hand_index && b.face_down == 0
+                && b.card_name == a.card_name && !b.free_cast && !b.kicked && b.trick_redirect == 0
+                && b.phyrexian_life == 0)
+            { twin = h; break; }
+        }
+        if (twin < 0) { continue; }
+        ManaCost combined;
+        for (int i : sel)
+        {
+            const Action& c = cands[i == j ? twin : i];
+            if (c.free_cast) { continue; }
+            AddManaCost(combined, c.cost);
+        }
+        ManaPool pool = AvailableManaPool(state);
+        pool.AddPool(state.floating_mana);
+        if (pool.CanPay(combined)) { return true; }
+    }
+    return false;
+}
+
 // A VICTIM IS CLAIMED ONCE (USER 2026-11-10: "If we have issues with 2 spells wanting the same sacrifice that
 // seems like a real bug to fix. We cannot choose something already marked as a sacrifice." / "That doesn't seem
 // like an order problem, but a more general issue with the system.")
@@ -22599,6 +22710,9 @@ struct SubsetFilterPre
     // cost (sac_additional_creature: Culling the Weak, Diabolic Intent) -- the filter needs two of them in one
     // selection. Same placement / lowering contract as attach_spell.
     bool sac_cost_claims = true;
+    // SubsetSameTurnFaceUpHardPayable (Morph INT-15 P4): some candidate is a face-down-and-up cast (face_down 2) --
+    // the filter's exact necessary condition. Same placement / lowering contract as attach_spell.
+    bool morph_fdup = true;
     // ...and that filter's frozen-board facts (VampRulePre; built only when vamp_outlet is raised on the
     // unarmed path -- EMPTY MEANS NOT BUILT, the original per-subset rules run).
     VampRulePre vamp;
@@ -23375,6 +23489,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p.equip_onto_piece = false;
     p.vamp_outlet = false;
     p.sac_cost_claims = false;
+    p.morph_fdup = false;
     int sac_actions = 0;   // sac_fodder needs TWO: `outlets` there counts a subset of these
     bool best_target = false;   // a kTrickBestOwnTarget cand (MTG_MINT_CREDIT_EXACT, Mirrorwing)
     for (const Action& a : cands)
@@ -23418,6 +23533,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
                 if (a.attach_equip_id != 0)                   { p.attach_spell = true; }
                 if (d != nullptr && d->params.splice_onto_arcane) { p.splice = true; }
                 if (d != nullptr && SacCreatureCostFoldsByReadiness(d->params)) { p.sac_cost_claims = true; }
+                if (a.face_down == 2)                         { p.morph_fdup = true; }
                 break;
             default: break;
         }
@@ -37727,6 +37843,28 @@ static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actio
     // A hand-source trail flip keeps it (it flips right after its own face-down cast). The provider then ORDERS the
     // names (FaceUpRegrowOrder: emission order = trial order among value-tied plans); nothing else is dropped.
     const bool trail_inline = decision_space && ResolveProvider(state).FaceUpTrailFlipAfterTargetCast();
+    // INT-15 P2 IDENTITY FOLD (MTG_FACEUP_TRAIL_STALE_PIN_FOLD, DEFAULT ON; =0 keeps them): a TRAIL variant naming a HAND
+    // card is meant for "cast it, then flip and regrow it". Once this turn's combat is over (no additional combat) a
+    // solo-target trick the provider no longer offers (TrickTargetCandidates answers the "no recipient" sentinel alone:
+    // MorphProvider's INT-10 (a)) cannot be cast by this section or any later section of the turn, and no action here
+    // names it (no cast, no pitch), so it cannot reach the graveyard before the flip: the pin is stale and the flip
+    // resolves exactly as the TRAIL base (ResolveEtbReturnGyToHand: an unmatched pin takes the provider's pick). A name
+    // that IS (or can be) in the graveyard by then keeps its variant -- returning a spell to cast next turn stays
+    // searched, as does flipping earlier (USER 2026-11-13: "But returned spells can be cast next turn? The main thing
+    // it compares unfavourably to instead is flipping the Protector earlier I would think.").
+    static const bool s_trail_stale_env = EnvOn("MTG_FACEUP_TRAIL_STALE_PIN_FOLD", true);
+    const bool trail_stale_fold = decision_space && heurarm::Flag(heurarm::FACEUP_TRAIL_STALE_PIN_FOLD, s_trail_stale_env)
+        && StealCombatOver(state) && !state.deck_has_extra_combat && state.pending_extra_combats == 0;
+    auto hand_pin_stale = [&](const Card& hc, const CardDefinition& hd) -> bool
+    {
+        if (!trail_stale_fold || !hd.params.solo_target_trick) { return false; }
+        std::vector<int> narrow;
+        ResolveProvider(state).TrickTargetCandidates(state, hd, narrow);
+        if (narrow.size() != 1 || narrow[0] != 0) { return false; }
+        for (const Action& x : actions)
+        { if (x.card_name == hc.m_name || x.pitch_name == hc.m_name) { return false; } }
+        return true;
+    };
     auto regrow_names = [&](bool trail, bool hand_src)
     {
         std::vector<std::string> names;
@@ -37744,6 +37882,12 @@ static void EmitFaceUpActions(const GameState& state, std::vector<Action>& actio
                     bool in_gy = false;
                     for (const Card& gc : ap.graveyard) { if (gc.m_name == hc.m_name) { in_gy = true; break; } }
                     if (in_gy) { continue; }
+                }
+                if (hand_pin_stale(hc, *hd))
+                {
+                    bool in_gy = false;
+                    for (const Card& gc : ap.graveyard) { if (gc.m_name == hc.m_name) { in_gy = true; break; } }
+                    if (!in_gy) { continue; }
                 }
                 add(hc.m_name.str());
             }
@@ -58109,6 +58253,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Morph INT-15: R12's dead double-strike grant (a sound fold) and the USER's same-turn hard-cast rule (P4, a
+        // heuristic prune). Both provider-gated; see the helpers. Lockstep twins in the other walker.
+        if (pre.trick_target && SubsetHasDeadDoubleStrikeGrant(state, cands, sel)) { return; }
+        if (pre.morph_fdup && SubsetSameTurnFaceUpHardPayable(state, cands, sel)) { return; }
         // Reject a subset whose "sacrifice a creature" costs claim more victims than the plan can have
         // when they are cast (USER 2026-11-10; see the helper). Lockstep twin in the other walker.
         if (pre.sac_cost_claims && SubsetOverclaimsSacCostVictims(state, cands, sel)) { return; }
@@ -79298,6 +79446,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a targeted trick whose target is neither on the battlefield nor cast by this
         // same subset (CR 601.2c). Inert without a targeted trick -> byte-identical.
         if (pre.trick_target && SubsetHasMissingTrickTarget(state, cands, sel, pre.best_needs_body)) { return; }
+        // Morph INT-15: R12's dead double-strike grant (a sound fold) and the USER's same-turn hard-cast rule (P4, a
+        // heuristic prune). Both provider-gated; see the helpers. Lockstep twins in the other walker.
+        if (pre.trick_target && SubsetHasDeadDoubleStrikeGrant(state, cands, sel)) { return; }
+        if (pre.morph_fdup && SubsetSameTurnFaceUpHardPayable(state, cands, sel)) { return; }
         // Reject a subset whose "sacrifice a creature" costs claim more victims than the plan can have
         // when they are cast (USER 2026-11-10; see the helper). Lockstep twin in the other walker.
         if (pre.sac_cost_claims && SubsetOverclaimsSacCostVictims(state, cands, sel)) { return; }

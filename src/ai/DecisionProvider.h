@@ -2943,6 +2943,19 @@ public:
     // TrickTargetTieAvoidsManaProducers (R13) -- among equally large recipients, prefer one that does not produce
     // mana at combat, then the oldest (the playout credit; a provider's own OwnPumpTargetCandidates applies it too).
     virtual bool TrickTargetTieAvoidsManaProducers() const { return false; }
+    // ---- Morph INT-15 (2026-11-13). Defaults: no opinion (byte-identical for every other deck).
+    // SameTurnFaceUpPrefersHardCast (USER P4 ruling, a HEURISTIC prune) -- for a morph card `real` whose face-down
+    // cast turned face up at once (Action::face_down 2) makes the SAME face-up permanent as its hard cast (no
+    // megamorph counter, no turned-face-up trigger), a subset holding that variant is rejected when the same subset
+    // with the hard cast in its place is jointly payable (SubsetSameTurnFaceUpHardPayable). Never consulted under
+    // human play or MTG_UNPRUNED (the provider checks).
+    virtual bool SameTurnFaceUpPrefersHardCast(const GameState& s, const CardDefinition& real) const
+    { (void)s; (void)real; return false; }
+    // DeadDoubleStrikeGrantFold (SOUND identity fold under R12) -- a subset whose cast-time double-strike grants
+    // provably include one with no R12 recipient (SubsetHasDeadDoubleStrikeGrant states the proof) is rejected:
+    // that grant resolves on a creature that already has double strike, a no-op the subset without it dominates.
+    // The provider that answers true STATES the premises (no other payoff for targeting / casting it).
+    virtual bool DeadDoubleStrikeGrantFold() const { return false; }
 
     // AttachSpellPairCandidates -- narrow Magnetic Theft's ("Attach target Equipment to target
     // creature", attach_target_equipment) enumerated (Equipment m_number, creature m_number) pairs.

@@ -9085,6 +9085,40 @@ bool MorphProvider::TrickTargetTieAvoidsManaProducers() const
     return MorphTieNonManaOn() && MorphLargestTrickTargetOn() && !MorphInt8Open();
 }
 
+// INT-15 P4 -- USER ruling (verbatim, 2026-11-13), answering "Firecat hard cast vs face-down-then-flip in main 1 when
+// both are payable": "I see. Yeah, if doing it all the same turn I would usually try to keep it face-up, if you have
+// the red. The flip side is that I usually do it over 2 turns instead to allow for maximum pumping on the turn it
+// attacks. The big morph advantage is splitting it up so you can hit lethal in the one attack."
+// A HEURISTIC prune (not a sound fold: the hard cast {1}{R}{R}{R} and the face-down-and-up {3} + {R}{R} leave
+// incomparable pools). Only the SAME-TURN shape is touched -- the face_down 2 variant (cast face down and turned face
+// up at once); the two-turn line (face down now, flipped on a later turn) and a face-down cast this turn are not.
+// Generic: any morph card whose face-up permanent is the same either way -- a plain morph cost (a megamorph flip adds
+// a +1/+1 counter the hard cast lacks) and no turned-face-up trigger (Den Protector's regrowth). In this list that is
+// Blistering Firecat (Hystrodon's face-down-and-up is already folded at emission; Den Protector is excluded).
+// "If you have the red" = the same subset with the hard cast in its place is jointly payable
+// (TurnSolver SubsetSameTurnFaceUpHardPayable). Off under human play and MTG_UNPRUNED / tricktarget;
+// MTG_MORPH_SAMETURN_HARD_CAST=0 restores the variant.
+bool MorphProvider::SameTurnFaceUpPrefersHardCast(const GameState& s, const CardDefinition& real) const
+{
+    (void)s;
+    static const bool on_env = EnvOn("MTG_MORPH_SAMETURN_HARD_CAST", true);   // DEFAULT ON; =0 -> variant kept
+    return heurarm::Flag(heurarm::MORPH_SAMETURN_HARD_CAST, on_env) && !MorphInt8Open()
+        && real.params.morph_cost.has_value() && !real.params.megamorph_cost.has_value()
+        && !real.params.turned_face_up_return_gy_to_hand;
+}
+
+// INT-15 -- R12's dead grant removed at enumeration (USER 2026-11-13, verbatim: "I would prune it. No point in wasting
+// the spell or making additional plans that are worse."). A SOUND identity fold under R12 (the proof is at
+// TurnSolver SubsetHasDeadDoubleStrikeGrant). Premises this list keeps: nothing reads a spell being cast or a card in
+// the graveyard except Den Protector's regrowth (which can at best return the card the subset without the cast still
+// holds), and the only target payoffs are a target watcher (Wild Defiance) and a redirect twin (Spellskite) -- both
+// make the filter stand down. MTG_MORPH_TBR_DEAD_FOLD=0 keeps the cast.
+bool MorphProvider::DeadDoubleStrikeGrantFold() const
+{
+    static const bool on_env = EnvOn("MTG_MORPH_TBR_DEAD_FOLD", true);   // DEFAULT ON; =0 -> the dead cast is kept
+    return heurarm::Flag(heurarm::MORPH_TBR_DEAD_FOLD, on_env) && DoubleStrikeGrantAvoidsDoubleStrikers();
+}
+
 // INT-9 fetch rule (USER 2026-11-12, verbatim: "Let's look for other prunes as needed, including for the fetchland
 // Wooded Foothills. That should be relatively straightforward as goldfish can just always get stomping ground.").
 // (1) No hold: the zero-mana, one-life fetch resolves on play. Holding it buys nothing in this list -- no landfall, no

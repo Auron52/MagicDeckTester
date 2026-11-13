@@ -1136,3 +1136,158 @@ TEST_CASE("morph viewer: plan summaries list turn-face-up flips where they reall
     q.actions = { trick("Berserk", 10), trick("Might of Old Krosa", 10) };
     CHECK(TurnSolver::FaceUpDisplayOrder(&s, q) == V{ 0, 1 });
 }
+
+// ---- INT-15 (2026-11-13) --------------------------------------------------------------------------------------------
+// P4 (USER, verbatim: "I see. Yeah, if doing it all the same turn I would usually try to keep it face-up, if you have the
+// red. The flip side is that I usually do it over 2 turns instead to allow for maximum pumping on the turn it attacks. The
+// big morph advantage is splitting it up so you can hit lethal in the one attack."): a subset casting Blistering Firecat
+// face down and turning it face up at once (face_down 2) is dropped when the same subset with the HARD cast in its place
+// is jointly payable. The face-down cast (the two-turn line) always stays. "Payable" is the whole subset's bill.
+TEST_CASE("morph INT-15 (P4): the same-turn face-down-and-up Firecat yields to a jointly payable hard cast")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    struct Seen { int hard = 0, fd1 = 0, fd2_alone = 0, fd2_tbr = 0; };
+    auto scan = [](const GameState& s)
+    {
+        Seen r;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int fd = -1, tbr = 0, other = 0;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand) { ++other; continue; }
+                if (a.card_name.str() == "Blistering Firecat") { fd = a.face_down; }
+                else if (a.card_name.str() == "Temur Battle Rage") { ++tbr; }
+                else { ++other; }
+            }
+            if (fd == 0) { ++r.hard; }
+            if (fd == 1) { ++r.fd1; }
+            if (fd == 2 && tbr == 0 && other == 0) { ++r.fd2_alone; }
+            if (fd == 2 && tbr == 1 && other == 0) { ++r.fd2_tbr; }
+        }
+        return r;
+    };
+    // Three red + four green: the hard cast ({1}{R}{R}{R}) is payable alone, so the face-down-and-up cast alone goes; but
+    // hard cast + Temur Battle Rage needs four red, while face-down-and-up + TBR ({3}{R}{R} + {1}{R}) needs three -- the
+    // joint bill keeps that subset.
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    for (int k = 0; k < 3; ++k) { PutM(s, "Mountain", 40 + k); }
+    for (int k = 0; k < 4; ++k) { PutM(s, "Forest", 50 + k); }
+    PutBear(s, 10);
+    s.players[0].hand.push_back(CardM("Blistering Firecat", 101));
+    s.players[0].hand.push_back(CardM("Temur Battle Rage", 102));
+    Seen on = scan(s);
+    CHECK(on.hard >= 1);
+    CHECK(on.fd1 >= 1);                                   // the two-turn line: never touched
+    CHECK(on.fd2_alone == 0);
+    CHECK(on.fd2_tbr >= 1);
+    heurarm::t_arm[heurarm::MORPH_SAMETURN_HARD_CAST] = 0;
+    Seen off = scan(s);
+    CHECK(off.fd2_alone >= 1);
+    CHECK(off.fd2_tbr >= 1);
+    heurarm::t_arm[heurarm::MORPH_SAMETURN_HARD_CAST] = -1;
+    // Two red only: no hard cast is payable, so the face-down-and-up cast stays.
+    GameState t = BaseM();
+    t.m_provider = &mp;
+    t.deck_has_morph = true;
+    for (int k = 0; k < 2; ++k) { PutM(t, "Mountain", 40 + k); }
+    for (int k = 0; k < 4; ++k) { PutM(t, "Forest", 50 + k); }
+    t.players[0].hand.push_back(CardM("Blistering Firecat", 101));
+    Seen two = scan(t);
+    CHECK(two.hard == 0);
+    CHECK(two.fd2_alone >= 1);
+    // Generic, param-driven: Den Protector (megamorph + a turned-face-up trigger) is never a candidate.
+    CHECK(mp.SameTurnFaceUpPrefersHardCast(s, DefM("Blistering Firecat")));
+    CHECK_FALSE(mp.SameTurnFaceUpPrefersHardCast(s, DefM("Den Protector")));
+}
+
+// R12's dead grant at enumeration (USER: "I would prune it. No point in wasting the spell or making additional plans
+// that are worse."): with Firecat the only creature that can take double strike, a second Temur Battle Rage has no R12
+// recipient and would land on the double-striking Firecat -- the two-TBR subset is not offered. A second eligible body,
+// or Wild Defiance (whose +3/+3 makes the fallback grant real), keeps it.
+TEST_CASE("morph INT-15: a provably dead Temur Battle Rage is not offered (R12 at enumeration)")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    auto max_tbr = [](const GameState& s)
+    {
+        int best = 0;
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            int n = 0;
+            for (const Action& a : p.actions)
+            { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Temur Battle Rage") { ++n; } }
+            best = std::max(best, n);
+        }
+        return best;
+    };
+    auto board = [&](GameState& s)
+    {
+        s = BaseM();
+        s.m_provider = &mp;
+        for (int k = 0; k < 4; ++k) { PutM(s, "Mountain", 40 + k); }
+        PutM(s, "Blistering Firecat", 7);
+        PutM(s, "Birds of Paradise", 12);                // 0 power: never an R12 recipient
+        s.players[0].hand.push_back(CardM("Temur Battle Rage", 101));
+        s.players[0].hand.push_back(CardM("Temur Battle Rage", 102));
+    };
+    GameState s;
+    board(s);
+    CHECK(max_tbr(s) == 1);
+    heurarm::t_arm[heurarm::MORPH_TBR_DEAD_FOLD] = 0;
+    CHECK(max_tbr(s) == 2);
+    heurarm::t_arm[heurarm::MORPH_TBR_DEAD_FOLD] = -1;
+    board(s);
+    PutBear(s, 10);                                      // a second recipient: both grants are live
+    CHECK(max_tbr(s) == 2);
+    board(s);
+    PutM(s, "Wild Defiance", 20);                        // the fallback grant still triggers +3/+3
+    CHECK(max_tbr(s) == 2);
+    // Already double-striking (an earlier section's TBR): even ONE more grant is dead.
+    board(s);
+    s.battlefield[4].temp_double_strike = true;          // the Firecat
+    CHECK(max_tbr(s) == 0);
+}
+
+// P2 identity fold (MTG_FACEUP_TRAIL_STALE_PIN_FOLD): after combat a hand solo-target trick is no longer offered
+// (INT-10 (a)), so a Den Protector TRAIL variant naming it can never find it in the graveyard -- the pin is stale and
+// resolves as the TRAIL base. It is not emitted. A name the graveyard already holds keeps its variant (returning a
+// spell to cast next turn stays searched), and the pre-combat main keeps every name.
+TEST_CASE("morph INT-15 (P2): after combat, no Den Protector TRAIL variant names an uncastable hand trick")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    PutM(s, "Den Protector (Face-down)", 31);
+    for (int k = 0; k < 5; ++k) { PutM(s, "Forest", 40 + k); }
+    s.players[0].hand.push_back(CardM("Might of Old Krosa", 101));
+    s.players[0].hand.push_back(CardM("Den Protector", 102));
+    s.players[0].graveyard.push_back(CardM("Berserk", 90));
+    auto trail = [&](int src, const std::string& pin)
+    {
+        int n = 0;
+        for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/s.phase != Phase::PostCombatMain))
+        {
+            if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUpLate) { continue; }
+            if (a.sac_source_id != src || a.tutor_target.str() != pin) { continue; }
+            ++n;
+        }
+        return n;
+    };
+    CHECK(trail(31, "Might of Old Krosa") == 1);         // pre-combat: cast it, then flip and regrow it
+    CHECK(trail(102, "Might of Old Krosa") == 1);        // the hand-source (face-down cast, then flip) twin
+    s.phase = Phase::PostCombatMain;
+    CHECK(trail(31, "Might of Old Krosa") == 0);
+    CHECK(trail(102, "Might of Old Krosa") == 0);
+    CHECK(trail(31, "") == 1);                           // the TRAIL base stays
+    CHECK(trail(102, "Berserk") == 1);                   // a graveyard name stays
+    heurarm::t_arm[heurarm::FACEUP_TRAIL_STALE_PIN_FOLD] = 0;
+    CHECK(trail(31, "Might of Old Krosa") == 1);
+    CHECK(trail(102, "Might of Old Krosa") == 1);
+    heurarm::t_arm[heurarm::FACEUP_TRAIL_STALE_PIN_FOLD] = -1;
+}

@@ -421,6 +421,9 @@ public:
     bool TrickWatcherVariantsNeedWatcherInPlan() const override;
     bool DoubleStrikeGrantAvoidsDoubleStrikers() const override;
     bool TrickTargetTieAvoidsManaProducers() const override;
+    // INT-15: MTG_MORPH_SAMETURN_HARD_CAST (USER P4, heuristic) + MTG_MORPH_TBR_DEAD_FOLD (sound fold), DEFAULT ON.
+    bool SameTurnFaceUpPrefersHardCast(const GameState& s, const CardDefinition& real) const override;
+    bool DeadDoubleStrikeGrantFold() const override;
     // Morph INT-2d: the playout / d0 pump policy (beyond the horizon only; see the base declaration).
     // MTG_MORPH_GREEDY_TRICK_HOLD=0 restores the cast-every-trick greedy for an A/B.
     bool GreedyHoldsCombatTricksForLethal() const override

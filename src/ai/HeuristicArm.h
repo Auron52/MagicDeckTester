@@ -910,6 +910,9 @@ enum Slot : int
     PD_FLOAT_FLUSH,           // MTG_PD_FLOAT_FLUSH  item 10 (mana-clean, Prevent Damage APPLY-DROP-ORDER s30026406 T5 {Beseech + Rolling Earthquake X=1}): with a Tamanoa out, a payment's pain taps are realised as mana abilities activated ONE AT A TIME BEFORE the cast (CR 605.3a, mana stays floating, CR 500.4), each Tamanoa trigger resolving before the next tap -- so only the largest SINGLE tap has to fit under our life, not the sum. DamageEvents.h FlushDamageEvents (sequential realisation when the batch would be lethal) + PaymentPainSafe (max single tap). Default ON; =0 -> a payment's pain is one batch, checked as a sum
     PD_LINE_HOLD_SEARCH,      // MTG_PD_LINE_HOLD_SEARCH  item 10 (mana-clean, Prevent Damage APPLY-DROP s30027719 T6 {Dina + Beseech BBB} harmful, s30029561 T6 {Tamanoa + Beseech BBB} useful): when every SINGLE-source hold of a line repair still strands a later cast, search hold SETS breadth-first (a child holds one more source its stranding parent tapped; depth <= 4, <= 48 retries; dmgev::PainAwarePay, both modes; same acceptance as the single pass). Default ON; =0 -> single holds only
     PREPAY_WILD_TRUE,         // MTG_PREPAY_WILD_TRUE  item A (mana-clean, Gods s30018016/s30018089 ORACLE-GAP; USER 2026-11-13 "we should fix this 'wild' mana issue"): the whole-turn prepay's generic funding booked `wild` keeps its TRUE colour (GameState::prepay_wild_true) unless the source could make any colour, so a pip OUTSIDE the bill can no longer pay {R} with a {U}-only source's mana (CR 106.1b). Default ON; =0 -> any `wild` pays any colour pip
+    MORPH_SAMETURN_HARD_CAST, // MTG_MORPH_SAMETURN_HARD_CAST  Morph INT-15 P4 (USER 2026-11-13, "if doing it all the same turn I would usually try to keep it face-up, if you have the red"): a morph card whose face-up permanent is the same either way (Blistering Firecat) loses its same-turn face-down-and-up variant (face_down 2) in a subset where the hard cast in its place is jointly payable. HEURISTIC prune. Default ON; =0 -> the variant is kept
+    MORPH_TBR_DEAD_FOLD,      // MTG_MORPH_TBR_DEAD_FOLD  Morph INT-15 (SOUND fold under R12; USER "I would prune it"): a subset whose double-strike grants provably include one with no R12 recipient (it would land on a creature that already has double strike) is rejected. Default ON; =0 -> kept
+    FACEUP_TRAIL_STALE_PIN_FOLD, // MTG_FACEUP_TRAIL_STALE_PIN_FOLD  Morph INT-15 P2 (engine identity fold): after combat, a regrowth TRAIL flip (Den Protector) emits no variant naming a hand solo-target trick the provider no longer offers -- it cannot reach the graveyard, so the pin is stale and resolves as the TRAIL base. Default ON; =0 -> kept
     COUNT
 };
 
@@ -1764,6 +1767,9 @@ inline const char* Name(int slot)
         "MTG_PD_FLOAT_FLUSH",
         "MTG_PD_LINE_HOLD_SEARCH",
         "MTG_PREPAY_WILD_TRUE",
+        "MTG_MORPH_SAMETURN_HARD_CAST",
+        "MTG_MORPH_TBR_DEAD_FOLD",
+        "MTG_FACEUP_TRAIL_STALE_PIN_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
