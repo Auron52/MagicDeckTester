@@ -27,7 +27,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | card | tier | model | viewer bucket | status |
 |---|---|---|---|---|
 | Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED 87078b215 |
-| Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit; per-connecting-nontoken-Spirit combat-damage token; `dies_watch_nontoken` | none | drafted |
+| Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit + generic AFFINITY cast-order tier 25 + same-turn credit for Vial puts / token-making hand casts / a Spirit-named Mimic (`AffinityFeedCount`); new `combat_damage_tokens_per_trigger` + `combat_damage_watch_nontoken` (shared FireCombatDamageTokens); new `dies_watch_nontoken` (OnCreatureDies both walks, DeathOfWouldPay) | none (legend_keep for a 2nd copy) | IMPLEMENTED (C1, hash in the note below) |
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
 | Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
@@ -245,6 +245,66 @@ unchanged (only `#BB`). **Smoke** (alone on the box): 191 pass, 4 FAIL -- exactl
 B's numbers (`gods_smoke_d0` 8.7830, `d3` 5.4000, `d5` 5.2000, `gods2hg_smoke_d5` 5.3200; searched slower 1 /
 faster 3 / play-changed 79, d0 9/12 -- identical counts): integrator B's Hole A/B movement, GT not yet accepted.
 Every other deck byte-identical; play-changed attributable to B2: 0. `check_gt_logs.py` consistent.
+
+### Integrator C1 (2026-11-13): Millicent, Restless Revenant
+
+**Card (Tier 2).** Cost/oracle re-verified against live Scryfall (`logs/spirits/drafts/scry/millicent/`; the
+collection JSON had no Millicent row): `{5}{W}{U}`, cmc 7, Legendary Creature -- Spirit Soldier 4/4, keywords
+Flying + Affinity, both trigger clauses verbatim ("Millicent or another nontoken Spirit you control dies or deals
+combat damage to a player"). Snapshot row added to `scryfall_reference.json`. `vanilla_creature` template.
+- **Affinity** on the existing `affinity_for_subtype` (kept: it is the `spirits` routing term). EffectiveSpellCost's
+  walk is template-agnostic; unit-pinned on a CREATURE spell: Spirit tokens and a Mimic that named Spirit count,
+  opponents' do not, generic only (floor `{W}{U}`).
+- **SAME-TURN HOLE, found and fixed (completeness).** The same-turn credit (`SameTurnAffinityDiscountFor`) credits
+  only casts ranked STRICTLY before the affinity card. On the generic order Millicent was a tier-10 creature, so she
+  TIED every Spirit creature (a tie falls back to plan order, so no credit) and was cast BEFORE Lingering Souls (20).
+  A line payable only with the discount was unenumerable at every budget. Two changes:
+  1. **NEW generic cast-order tier 25 = AFFINITY** (`GenericProvider::CastOrderRank`, card data only:
+     `affinity_for_subtype`), after every creature, Vial put and token sorcery. This is the enabler-before-payoff
+     rule the reducer (16) and verse (19) tiers already encode. **[USER, PROVISIONAL] the deck's cast order is
+     yours.** This is a generic tier, not a Spirits order: inert for every shipped deck (SliversProvider ranks
+     Hivepool 13 itself; only its `MTG_SLIVERS_ORDER=0` A/B arm moves, Hivepool 20 -> 25). Cost: a second Geist of
+     Saint Traft cast in the SAME main as Millicent now dies to the legend rule before she is out, so that death
+     makes no token. Narrow (both cards in one main) and disclosed.
+  2. **`AffinityFeedCount`** (TurnSolver.cpp), shared by the enumeration credit and the executor's line prepay
+     (`MTG_PREPAY_LINE_AFFINITY`). It now also counts a VIAL PUT (no def: looked up by name; the prepay already
+     counted it, the enumerator did not), a token-making HAND cast (`cast_creates_tokens` with matching token
+     subtypes: Souls = 2), and a Mimic by its predicted chosen type (`ChosenCreatureSubtypeId`, the ETB's own
+     provider call). It does NOT count a graveyard (flashback) cast: graveyard casts trail every hand cast in both
+     worlds. **OPEN hole, disclosed:** "flashback Souls, then Millicent cheaper" in one main.
+     `docs/design/graveyard-cast-search-holes-deferred.md` section 3.
+  - The other gates already step aside for an affinity cand, so nothing else was needed: ManaPruneBound bails,
+    `ManaGateWouldHelp` / selection gate `block` hard, the cost-reframe `interacts`, the ritual-drop bail.
+  - Proof: units (Souls + Millicent on 5 lands, Wanderer + Millicent on 4, Vial(2) Shacklegeist + Millicent on 3,
+    Mimic + Millicent on 6) are enumerated and paid identically by ApplyPlan and AIEngine::TakeTurn. All four FAIL
+    with `MTG_NO_COST_TRICKS=1`. The not-a-free-lunch case: 4 lands admit no Souls + Millicent plan. Scenario
+    `spirits_millicent_cast_after_souls_same_main.json` at `--depth 3 --budget-ms 0`: T6. It reads **T7** with the
+    credit off.
+- **Combat-damage trigger:** NEW `combat_damage_tokens_per_trigger` (flat, ONE token per connecting matching
+  creature per damage step, `damaging_pw > 0`) + NEW `combat_damage_watch_nontoken`, inside the shared
+  FireCombatDamageTokens. Both worlds reach it through ResolveCombatDamage (GameEngine::CombatPhase,
+  TurnSolver's rollout combat). Shroofus is byte-identical: `n = dealt*per_damage + connectors*per_trigger`, and
+  the dealt sum is unchanged. The tokens arrive after damage and are summoning-sick. No projection change: draft
+  4 is right that they matter only from the next state on, and the leaf / next turn sees them. 2HG: one
+  `damaging_idx` entry per attacker, so one trigger per connector (correct). `WolfRunNoCombatDamageWatcher`
+  gained the term (conservative). NOT added to DeckUsesSecondMain: post-combat Spirits cheapen nothing, since
+  Millicent is already out (draft agrees). Unit: Millicent + Phantom + Shacklegeist + a non-Spirit + two Souls
+  tokens connecting = 3 tokens. Geist + its Angel = 1. Scenario `spirits_millicent_combat_tokens.json`: T6 at
+  24 life exactly; without the trigger the kill is T7.
+- **Dies trigger:** NEW `dies_watch_nontoken`, applied in OnCreatureDies' watcher walk and self block and in
+  DeathOfWouldPay (exact: a token victim no longer reads as paying). Unit: a second Geist under the legend rule
+  makes 1 token, a Souls token dying makes 0, a nontoken Spirit makes 1, Millicent's own death makes 1 (self
+  block), and with her gone, 0.
+- **Viewer:** no new decision (affinity is static; both triggers are mandatory and untargeted; a second
+  Millicent is the existing legend_keep). INERT_PARAMS += the three new params.
+  `audit_viewer_decisions.py --no-sweep decks/Spirits/Spirits.cod` rc 0.
+- Routing: the cut-one-card test now also cuts Millicent, and the "none" list drops her too. Without that
+  change she alone still routes Spirits, which is correct.
+
+**Verification (2026-11-13, integrator C1).** New `test/unit/test_spirits_millicent.cpp` (13 cases); units
+2898/2898 after the routing-test update; scenarios 501/501 (two new); `audit_card_fields.py` rc 0;
+`provider_audit.py --check` rc 0; `check_plan_sig_lockstep.py` unchanged (only `#BB`).
+**Smoke** (alone on the box): 190 pass, 5 FAIL. Four are the Gods keys at integrator B's numbers (`gods_smoke_d0` 8.7830, `d3` 5.4000, `d5` 5.2000, `gods2hg_smoke_d5` 5.3200; the Hole A/B movement, not yet accepted). The fifth is `extraturns2hg_smoke_d5_s1001`: same score 4.6000, gi19's digest moved. That is NOT this change: re-running the deck alone with the same binary (`--smoke --deck=extraturns2hg`) reproduces the GT digest cc399f1a95984da0 exactly (units 162410 alone vs 220591 in the full run). It is the same budget-timing churn integrator A saw on `extraturns_smoke_d3`. Searched slower 1 / faster 3 / play-changed 80 (B2's 79 + that game); d0 slower 9 / faster 12. Every other deck is byte-identical, Slivers included, so the Vial-put credit moved nothing there. Play changes attributable to C1: 0.
 
 ## Approved deferrals
 

@@ -16327,6 +16327,60 @@
      "Spirit"
     ]
    }
+  },
+  {
+   "name": "Millicent, Restless Revenant",
+   "mana_cost": "{5}{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Soldier"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Affinity for Spirits (This spell costs {1} less to cast for each Spirit you control.)\nFlying\nWhenever Millicent or another nontoken Spirit you control dies or deals combat damage to a player, create a 1/1 white Spirit creature token with flying. [AFFINITY MODELLED: affinity_for_subtype + subtypes_affected [\"Spirit\"] (Thrumming Hivepool's param; CR 702.41a 'costs {1} less for each Spirit you control') in the shared EffectiveSpellCost -- GENERIC only, so the floor is {W}{U} at five or more Spirits; counted off OUR battlefield at cast time, tokens included (Lingering Souls, her own Spirits), a Metallic Mimic that chose Spirit included (its chosen type is appended to the battlefield permanent). SAME TURN: as an affinity card she casts in the generic AFFINITY tier (25), after every Spirit creature cast or Vial put (10) and token-making sorcery (Lingering Souls, 20) in the plan, and the enumerator credits each of them (SameTurnAffinityDiscountFor / AffinityFeedCount, a Mimic by its chosen type), so 'Souls, then Millicent cheaper' is a plan at every budget. A FLASHBACK Souls is NOT credited: graveyard casts resolve after every hand cast in both apply worlds, so 'flashback Souls, then Millicent' is not reachable in one main [OPEN ordering hole, disclosed]. An Aether Vial put ignores cost entirely (MV 7 = seven counters). THE TRIGGER, both halves, ONE token per EVENT: (a) COMBAT DAMAGE -- combat_damage_tokens_per_trigger 1 in the shared FireCombatDamageTokens (ResolveCombatDamage, both worlds): one token per connecting nontoken Spirit per combat-damage step, NOT per point of damage (Shroofus' per-damage param is the different card); combat_damage_watch_nontoken excludes Lingering Souls' Spirits and her own tokens; Geist of Saint Traft's Angel is neither nontoken nor a Spirit. The tokens enter after damage, summoning-sick, and do not join that combat. (b) DIES -- dies_watch_subtype Spirit + dies_watch_includes_self + dies_watch_nontoken through the shared OnCreatureDies (watcher walk and self block). In this list the live death is the LEGEND RULE (CR 704.5j: the loser goes to the graveyard, which is dying): a second Geist of Saint Traft. Exile (Geist's Angel, an Apparition leaving) is not dying. Every token is a 1/1 white Spirit with flying, so the Spirit lords, Mausoleum Wanderer, a Spirit-naming Metallic Mimic and the next affinity count all see it. Mandatory and untargeted: no viewer decision. LEGENDARY (a second copy is the legend_keep decision). FLYING is carried in keywords and is inert: the opponent never blocks.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "affinity_for_subtype": true,
+    "subtypes_affected": [
+     "Spirit"
+    ],
+    "combat_damage_tokens_per_trigger": 1,
+    "combat_damage_watch_subtypes": [
+     "Spirit"
+    ],
+    "combat_damage_watch_nontoken": true,
+    "combat_damage_token_power": 1,
+    "combat_damage_token_toughness": 1,
+    "combat_damage_token_subtypes": [
+     "Spirit"
+    ],
+    "combat_damage_token_keywords": [
+     "Flying"
+    ],
+    "combat_damage_token_color": "W",
+    "dies_watch_subtype": "Spirit",
+    "dies_watch_includes_self": true,
+    "dies_watch_nontoken": true,
+    "dies_trigger_creates_tokens": 1,
+    "dies_token_power": 1,
+    "dies_token_toughness": 1,
+    "dies_token_subtypes": [
+     "Spirit"
+    ],
+    "dies_token_keywords": [
+     "Flying"
+    ],
+    "created_token_color": "W"
+   }
   }
  ]
 }

@@ -4374,7 +4374,8 @@ bool WolfRunNoCombatDamageWatcher(const GameState& s, int me)
         const CardParams& p = d->params;
         if (p.combat_damage_free_cast || p.combat_damage_counters_each_attacker > 0
             || p.combat_damage_tokens_per_damage > 0 || !p.combat_damage_puts_subtype_from_hand.empty()
-            || p.combat_damage_each_discards > 0)
+            || p.combat_damage_each_discards > 0
+            || p.combat_damage_tokens_per_trigger > 0)   // Millicent: a 0-power attacker pumped to 1 connects
         { return false; }
     }
     return true;
@@ -5904,6 +5905,19 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
     // is also VialProvider's want-subtype tier; the two can never be live in the same deck, and no
     // comparator keys on the number alone.)
     if (DorkGrowthEnabled() && def.card.IsCreature() && FeedsLiveScaledDork(s, def)) { return 9; }
+    // AFFINITY tier (25): an "affinity for <subtype>" spell (Millicent, Restless Revenant; Thrumming Hivepool
+    // off its deck order) costs {1} less per matching permanent we control AT CAST TIME, so it is the PAYOFF
+    // of every cast this turn that adds one -- a Spirit creature (10), a Vial put at that creature's rank, a
+    // token-making sorcery (Lingering Souls, 20). It therefore goes after all of them: the enabler-before-
+    // payoff principle the reducer (16) and verse (19) tiers already encode, read off card data alone. This
+    // is what makes the same-turn affinity credit (SameTurnAffinityDiscountFor, which credits only casts
+    // ranked STRICTLY earlier) able to see "cast a Spirit, then Millicent cheaper" at all: as a tier-10
+    // creature she TIED every Spirit, a tie is plan order, and the credit -- correctly -- gave nothing, so
+    // a line payable only with the discount was unenumerable at every budget. A deck order that ranks an
+    // affinity card itself (SliversProvider: Hivepool 13, last) is unaffected. Before the self-damage
+    // tier (30), which is about this turn's other casts, not the affinity count. Byte-identical for every
+    // deck without an affinity card on the generic order (Spirits is the first).
+    if (def.params.affinity_for_subtype)         { return 25; }
     // ENTER-TRIGGER WATCHER tier (MTG_WATCHER_ORDER, default OFF -- measurement lever pending the
     // USER's per-deck cast-order review): a permanent whose trigger fires when CREATURES ENTER
     // (Dragon Tempest / Scourge of Valkas: dragon_ping_on_enter pings per entry scaling with the

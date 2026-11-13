@@ -1,0 +1,27 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 28,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 9,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator C1), Millicent's AFFINITY FOR SPIRITS fed IN THE SAME MAIN by Lingering Souls: five lands, three Spirits out (Phantom, Wanderer, Shacklegeist). Souls {2}{W} makes two Spirit tokens, then Millicent costs {W}{U} (7 - 5): 3 + 2 = 5. Priced at the plan's start she is {2}{W}{U}, so 3 + 4 = 7 > 5: the line needs (a) the generic AFFINITY cast-order tier (25), which casts her after Souls (20) -- as a tier-10 creature she was cast BEFORE it -- and (b) the token credit in SameTurnAffinityDiscountFor (AffinityFeedCount). Opponent 28: only Souls + Millicent on T5 (Wanderer pumped by three entering Spirits, Millicent's combat tokens off the three connecting Spirits) kills T6. With MTG_NO_COST_TRICKS=1 (credit off: the pre-fix enumeration) this fixture reads win T7.",
+  "battlefield": [
+    { "name": "Hallowed Fountain" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Island" },
+    { "name": "Plains" },
+    { "name": "Supreme Phantom", "sick": false },
+    { "name": "Mausoleum Wanderer", "sick": false },
+    { "name": "Shacklegeist", "sick": false }
+  ],
+  "hand": [ "Lingering Souls", "Millicent, Restless Revenant" ],
+  "expect_win_turn": 6
+}

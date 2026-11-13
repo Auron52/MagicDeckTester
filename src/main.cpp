@@ -10528,6 +10528,7 @@ static int RunCastOrderReport(const Decklist& deck, const std::string& deck_path
             case 20: return "other noncreature spell";
             case 21: return "POWER-PAYOFF (Swords): after the pumps that raise the power it pays";
             case 24: return "GIFT BODY: an alt-cost gift wearing a creature's clothes -- with the m2 group";
+            case 25: return "AFFINITY: after every cast that adds a permanent it counts";
             case 22: return "SCALING AURA: later, so earlier fetches can still take one";
             case 23: return "AURA WITH ENCHANT REQUIREMENT: last (legality, not preference)";
             case 30: return "LAST: on-cast self-damage / destroy-all-enchantments";

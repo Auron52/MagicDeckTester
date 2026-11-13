@@ -1519,6 +1519,11 @@ INERT_PARAMS = {
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
     "reduces_graveyard_cast_generic": "static graveyard-spell cost reducer (Patrician Geist, {1} less), no choice",
+    # Millicent, Restless Revenant (integrator C1): the FLAT sibling of combat_damage_tokens_per_damage and
+    # two token filters on her mandatory, untargeted triggers -- no target, mode, 'may' or division.
+    "combat_damage_tokens_per_trigger": "automatic combat-damage token trigger (Millicent: one 1/1 Spirit per connecting nontoken Spirit), mandatory and untargeted; simultaneous copies only ADD tokens, so their CR 603.3b order is inert",
+    "combat_damage_watch_nontoken": "combat-damage watch filter detail (connecting tokens do not trigger), no choice",
+    "dies_watch_nontoken": "death-watch filter detail (a dying token does not trigger), no choice",
     # The three riders below are MAGNITUDE/SCOPE on that same static reduction (Dragonspeaker Shaman
     # and Urza's Incubator read "{2} less"; the Incubator's applies to creature spells only). A cost
     # reduction is applied by the engine at payment time -- the player never chooses whether or how
