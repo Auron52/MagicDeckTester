@@ -69183,6 +69183,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.adventure          = adventure;
             rec.kicked             = kicked;
             rec.face_down          = riders.face_down;
+            // EMERGE (Decimator, Boars I4) must ride the record too: replay_recorded hands the record to
+            // CastRiders::Of, which reads Action::emerge. Without it a continuation's emerge cast replayed
+            // as the HARD cast (full {6}{R}{G}{G}, no sacrifice) -- an fd-diverge of the bestow/adventure
+            // class above. The victim already rides soulfire_own_targets (own_targets = em_victim above),
+            // which the executor's emerge path reads as the pinned victim.
+            rec.emerge             = riders.emerge;
             rec.devour_count       = cast_devour;
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
             rec.dies_tuck          = riders.dies_tuck;   // Ilharg's death "may" (I5b): the replay pins the same answer

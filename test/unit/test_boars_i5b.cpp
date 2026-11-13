@@ -459,3 +459,72 @@ TEST_CASE("I5b dies clause: an attack put of a second Ilharg carries the tuck an
     }
 }
 
+// I4 lockstep (found in I5b item 3): the rollout's breakpoint-continuation cast RECORD must carry Action::emerge. Without
+// it, the executor's replay_recorded handed CastRiders::Of a record with emerge == false and replayed Decimator as the
+// HARD cast ({10}, unaffordable) -- no sacrifice, no Decimator: an fd-diverge. The victim rides soulfire_own_targets.
+TEST_CASE("I5b emerge record: a breakpoint continuation's emerge cast replays as emerge, sacrificing the same victim")
+{
+    // Gitaxian Probe (Island) draws Decimator #60 off the top; the continuation emerges it off Ilharg #10 (4 Forests).
+    GameState initial = IBase();
+    IPut(initial, kIlharg, 10);
+    IPut(initial, "Island", 49);
+    for (int k = 0; k < 4; ++k) { IPut(initial, "Forest", 50 + k); }
+    initial.players[0].library.insert(initial.players[0].library.begin(), ICard("Decimator of the Provinces", 60));
+    initial.players[0].hand.push_back(ICard("Gitaxian Probe", 70));
+
+    TurnSolver::Plan prefix = IPlan({ ICast("Gitaxian Probe", 0) });
+    prefix.bp_choice = TurnSolver::kBpEmptyChoice;
+    prefix.bp_all    = true;
+    GameState reached = initial;
+    TurnSolver::ApplyPlan(reached, prefix, true);
+    REQUIRE(std::any_of(reached.players[0].hand.begin(), reached.players[0].hand.end(),
+                        [](const Card& c) { return c.m_number == 60; }));
+    const std::vector<TurnSolver::Plan> cands = TurnSolver::EnumerateBreakpointPlans(reached, true);
+    const auto chosen = std::find_if(cands.begin(), cands.end(), [](const TurnSolver::Plan& p) {
+        return p.actions.size() == 1 && p.actions[0].kind == Action::Kind::CastFromHand
+            && p.actions[0].card_name.str() == "Decimator of the Provinces" && p.actions[0].emerge
+            && p.actions[0].soulfire_own_targets == 10 && p.actions[0].dies_tuck == 1;
+    });
+    REQUIRE(chosen != cands.end());
+
+    TurnSolver::Plan recorded = IPlan({ ICast("Gitaxian Probe", 0) });
+    recorded.bp_at     = 0;
+    recorded.bp_choice = static_cast<int>(chosen - cands.begin());
+    GameState roll = initial;
+    TurnSolver::ApplyPlanWithRecordsForTest(roll, recorded, true);
+    // A main-level breakpoint's re-solve records its casts straight into Plan::breakpoint_actions (the
+    // top-level sink); a nested one would nest under Action::breakpoint_casts. Either way the same record.
+    const std::vector<Action>& recs = recorded.breakpoint_actions;
+    const auto rec = std::find_if(recs.begin(), recs.end(), [](const Action& a) {
+        return a.card_name.str() == "Decimator of the Provinces";
+    });
+    REQUIRE(rec != recs.end());
+    CHECK(rec->emerge);
+    CHECK(rec->soulfire_own_targets == 10);
+    CHECK(rec->dies_tuck == 1);
+    CHECK(IFind(roll, 60) != nullptr);
+    CHECK(IFind(roll, 10) == nullptr);
+
+    {   // the rollout tucked Ilharg third from the top of the post-draw library
+        const auto& lib = roll.players[0].library;
+        REQUIRE(lib.size() >= 3u);
+        CHECK(lib[2].m_number == 10);
+    }
+
+    GameState exec = initial;
+    AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+    MtgTestSeam::CommitPhasePlan(eng, recorded, true);
+    eng.TakeTurn(exec, true, IResolveStack);
+    CHECK(IFind(exec, 60) != nullptr);   // Decimator resolved: the emerge cost was paid
+    CHECK(IFind(exec, 10) == nullptr);   // ...by sacrificing the same victim
+    REQUIRE(exec.players[0].library.size() == roll.players[0].library.size());
+    for (std::size_t i = 0; i < roll.players[0].library.size(); ++i)
+    { CHECK(exec.players[0].library[i].m_number == roll.players[0].library[i].m_number); }
+    REQUIRE(exec.battlefield.size() == roll.battlefield.size());
+    for (std::size_t i = 0; i < roll.battlefield.size(); ++i)
+    {
+        INFO("permanent ", roll.battlefield[i].card.m_number);
+        CHECK(exec.battlefield[i].card.m_number == roll.battlefield[i].card.m_number);
+        CHECK(exec.battlefield[i].tapped == roll.battlefield[i].tapped);
+    }
+}
