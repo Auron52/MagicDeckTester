@@ -4262,13 +4262,14 @@ public:
 //
 // Hooks held (everything else inherits the root byte-for-byte):
 //   * Certificate -- NotAssessed (see the body for what a sound one must model).
-//   * FetchCandidates / FetchSearchCandidates -- LOSSLESS: every distinct legal Flooded Strand target,
-//     and the search fans over all of them. No colour-need ranking (that is a judgement hook that
-//     needs a measurement and the USER's call). ConsiderFetchHold is NOT overridden: the root
-//     default (true) keeps the battlefield hold and the later searched activation, whose pick is
-//     itself searched (LandSearchPicks). Note FetchSearchCandidates is consulted only on the
-//     collapse-on-play path (FetchResolvesOnPlay), which the hold-true default never takes for a
-//     modern fetch; the override keeps the provider lossless if a hold POLICY is ever adopted.
+//   * FETCH TARGETS -- the USER's priority rule (2026-11-13), MTG_SPIRITS_FETCH_PRIORITY (default ON;
+//     =0 restores the lossless every-target fan). FetchCandidates / LandSearchPickOrder ORDER every
+//     legal Flooded Strand target with the rule's pick first; FetchSearchCandidates (crack on play) and
+//     FetchLandSearchPickWidth (the held crack, d0, rollouts) keep that pick plus, for each of W/U/B the
+//     pick does not make, the best target that does (a shockland, else a basic) -- "if the line requires
+//     a different colour ... change it to another shockland preferably or a basic if not". The rule
+//     itself is at SpiritsFetchRule (DecisionProviders.cpp). ConsiderFetchHold keeps the root default
+//     (hold offered) pending the USER's call on the fetch-hold review.
 class SpiritsProvider : public DeckProvider
 {
 public:
@@ -4286,6 +4287,12 @@ public:
     std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller,
                                                    const CardParams& fetch_pp,
                                                    const std::vector<std::string>& ranked) const override;
+    void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                             bool share_land_type, std::uint16_t subtype,
+                             std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    int  FetchLandSearchPickWidth(const GameState& s, int controller,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
     // White Orchid Phantom on OUR OWN nonbasic land: offered to the search only while a basic land
     // card remains in our library (a SOUND prune: with none, the trade loses a land and finds
     // nothing, and no card in the Spirits 60 reads a land in the graveyard or a land dying).

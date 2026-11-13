@@ -22273,17 +22273,216 @@ bool VampiresProvider::CleanupDiscardShedStable() const
 // of Plains / Island / Hallowed Fountain / Godless Shrine / Watery Grave a Flooded Strand should find
 // is exactly the judgement the search makes; a colour-need order would be a provider narrowing that
 // needs a measurement and the USER's adoption first (analyze-deck Stage 1 fetch_hold_review).
+// ---- SpiritsProvider: the Flooded Strand target rule (USER 2026-11-13) ----------------------------------
+//
+// USER, verbatim: "If we are missing blue or have everything we need we get Hallowed Fountain, if we have blue,
+// but are missing black on a non-creature producing land we get Godless Shrine. So the priority order would be
+// something like 1 White -> 1 Blue -> 2 White -> 1 Black (that can cast lingering souls) -> 3 White -> 2 Blue.
+// The only case I would say we may need to adjust what we search from a fixed order is if the line requires a
+// different colour, in which case we can change it to another shockland preferably or a basic if not. What we
+// get should reflect what we need. But, because we have shocklands as the priority we attempt to fill in the top
+// 2 in priority order otherwise. Once we have all of the shocklands we can start taking the basics of course
+// starting with a plains followed by the island and then the last plains."
+//
+// THE COUNTS. Per colour, the lands we control that can make it (a dual counts for both; Azorius Chancery for
+// W and U). Black counts only an UNRESTRICTED source ("can cast Lingering Souls"): Unclaimed Territory /
+// Secluded Courtyard (colored_creature_only) do not count for B. They DO count for W and U -- every W/U
+// creature in the 60 is a Spirit they can pay for (PROVISIONAL reading, surfaced to the USER).
+// THE PICK. The slots {W1,U1,W2,B1,W3,U2} our counts leave unmet, in that order; a dual (two or more of W/U/B)
+// is scored by WHICH unmet slots its colours fill, earlier slots dominating (so the first two unmet slots decide
+// whenever a dual fills either), ties broken by the same coverage over all six slots (Fountain > Godless >
+// Watery Grave: "have everything we need -> Hallowed Fountain"), then by name. Duals always come before basics.
+// With no dual left: a Plains while the library holds more Plains than Islands, else the Island, else a Plains
+// (= Plains, Island, last Plains for this 2+1 basic split).
+// THE SEARCHED SET. The pick, plus -- for each of W, U, B the pick does not make -- the best target that makes
+// it (duals by the key above, then a basic). The search branches over that set (at most three targets); the
+// rest of the legal targets follow in the ORDER (never searched under the prune; human play and
+// MTG_UNPRUNE=fetch / =landpick see every target).
+namespace
+{
+bool SpiritsFetchPriorityOn()
+{
+    static const bool env = EnvOn("MTG_SPIRITS_FETCH_PRIORITY", true);   // DEFAULT ON; =0 restores the lossless fan
+    return heurarm::Flag(heurarm::SPIRITS_FETCH_PRIORITY, env);           // per-job in a pooled --batch A/B
+}
+// The rule's state inputs: counts of W/U/B(unrestricted) lands we control, and basic Plains-/Island-makers in
+// our library, each capped at 3 (the rule never distinguishes beyond). The ONE reader for the order and its key.
+struct SpiritsFetchInputs { int w = 0, u = 0, b = 0, lib_w = 0, lib_u = 0; };
+SpiritsFetchInputs SpiritsFetchInputsOf(const GameState& s, int controller)
+{
+    SpiritsFetchInputs in;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->card.IsLand()) { continue; }
+        bool w = false, u = false, b = false;
+        for (Color c : d->params.produces)
+        { w |= c == Color::White; u |= c == Color::Blue; b |= c == Color::Black; }
+        in.w += w ? 1 : 0;
+        in.u += u ? 1 : 0;
+        in.b += (b && !d->params.colored_creature_only) ? 1 : 0;
+    }
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !IsBasicLandCard(*d)) { continue; }
+        for (Color col : d->params.produces)
+        { if (col == Color::White) { ++in.lib_w; } else if (col == Color::Blue) { ++in.lib_u; } }
+    }
+    in.w = std::min(in.w, 3); in.u = std::min(in.u, 3); in.b = std::min(in.b, 3);
+    in.lib_w = std::min(in.lib_w, 3); in.lib_u = std::min(in.lib_u, 3);
+    return in;
+}
+unsigned SpiritsColourMask(const std::string& name)   // bit 0 W, 1 U, 2 B
+{
+    const CardDefinition* d = CardDatabase::Instance().Lookup(name);
+    unsigned m = 0;
+    if (d == nullptr) { return m; }
+    for (Color c : d->params.produces)
+    {
+        if (c == Color::White) { m |= 1u; } else if (c == Color::Blue) { m |= 2u; } else if (c == Color::Black) { m |= 4u; }
+    }
+    return m;
+}
+int SpiritsPopcount3(unsigned m) { return static_cast<int>((m & 1u) + ((m >> 1) & 1u) + ((m >> 2) & 1u)); }
+// Returns the legal targets ORDERED by the rule and the searched width (leading entries).
+std::vector<std::string> SpiritsFetchRule(const SpiritsFetchInputs& in, std::vector<std::string> names, int& width)
+{
+    width = static_cast<int>(names.size());
+    if (names.size() <= 1) { return names; }
+    static const int kSlotCol[6] = { 0, 1, 0, 2, 0, 1 };   // W1 U1 W2 B1 W3 U2 (colour bit index)
+    static const int kSlotN[6]   = { 1, 1, 2, 1, 3, 2 };
+    const int have[3] = { in.w, in.u, in.b };
+    auto cover = [&](unsigned m, bool unmet_only)
+    {
+        unsigned bits = 0;
+        for (int i = 0; i < 6; ++i)
+        {
+            if (unmet_only && have[kSlotCol[i]] >= kSlotN[i]) { continue; }
+            if ((m >> kSlotCol[i]) & 1u) { bits |= 1u << (5 - i); }
+        }
+        return bits;
+    };
+    // The basic preference: W while the library holds more W basics than U basics, else U, else W.
+    const int basic_pref_col = in.lib_w > in.lib_u ? 0 : (in.lib_u > 0 ? 1 : 0);
+    struct Ranked { std::string name; unsigned mask; bool dual; unsigned need, all; };
+    std::vector<Ranked> r;
+    r.reserve(names.size());
+    for (std::string& n : names)
+    {
+        const unsigned m = SpiritsColourMask(n);
+        r.push_back({ std::move(n), m, SpiritsPopcount3(m) >= 2, cover(m, true), cover(m, false) });
+    }
+    auto better = [&](const Ranked& a, const Ranked& b)
+    {
+        if (a.dual != b.dual) { return a.dual; }
+        if (a.dual)
+        {
+            if (a.need != b.need) { return a.need > b.need; }
+            if (a.all != b.all) { return a.all > b.all; }
+        }
+        else
+        {
+            const bool ap = (a.mask >> basic_pref_col) & 1u, bp = (b.mask >> basic_pref_col) & 1u;
+            if (ap != bp) { return ap; }
+            if (a.all != b.all) { return a.all > b.all; }
+        }
+        return a.name < b.name;
+    };
+    std::stable_sort(r.begin(), r.end(), better);
+    // The searched set: the pick, then per missing colour the best target that makes it (r is already in
+    // preference order, duals first, so the first maker found is the best one).
+    std::vector<std::size_t> lead{ 0 };
+    for (int col = 0; col < 3; ++col)
+    {
+        if ((r[0].mask >> col) & 1u) { continue; }
+        bool covered = false;
+        for (std::size_t li : lead) { if ((r[li].mask >> col) & 1u) { covered = true; break; } }
+        if (covered) { continue; }
+        for (std::size_t i = 1; i < r.size(); ++i)
+        { if ((r[i].mask >> col) & 1u) { lead.push_back(i); break; } }
+    }
+    std::vector<std::string> out;
+    out.reserve(r.size());
+    std::vector<char> used(r.size(), 0);
+    for (std::size_t li : lead) { out.push_back(r[li].name); used[li] = 1; }
+    for (std::size_t i = 0; i < r.size(); ++i) { if (!used[i]) { out.push_back(std::move(r[i].name)); } }
+    width = static_cast<int>(lead.size());
+    return out;
+}
+// A Flooded Strand-shaped pick list: one land per pick, to the battlefield, any land of the fetch's types.
+bool SpiritsSingleLandPicks(int count, int to_hand, bool basic_only,
+                            const std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || to_hand != 0 || basic_only) { return false; }
+    for (const auto& p : picks) { if (p.size() != 1) { return false; } }
+    return true;
+}
+}   // namespace
+
 std::vector<std::string> SpiritsProvider::FetchCandidates(const GameState& s, int controller,
                                                           const CardParams& fetch_pp) const
 {
-    return GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    if (!SpiritsFetchPriorityOn() || all.size() <= 1) { return all; }
+    int width = 0;
+    return SpiritsFetchRule(SpiritsFetchInputsOf(s, controller), std::move(all), width);
 }
 
-std::vector<std::string> SpiritsProvider::FetchSearchCandidates(const GameState&, int,
+std::vector<std::string> SpiritsProvider::FetchSearchCandidates(const GameState& s, int controller,
                                                                 const CardParams&,
                                                                 const std::vector<std::string>& ranked) const
 {
-    return ranked;   // the full set -- never DecisionProvider's top-1 default (an arbitrary library-order pick here)
+    // OFF: the full set -- never DecisionProvider's top-1 default (an arbitrary library-order pick here).
+    if (!SpiritsFetchPriorityOn() || ranked.size() <= 1) { return ranked; }
+    int width = 0;
+    std::vector<std::string> out = SpiritsFetchRule(SpiritsFetchInputsOf(s, controller), ranked, width);
+    out.resize(static_cast<std::size_t>(width));
+    return out;
+}
+
+bool SpiritsProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    DecisionProvider::LandSearchPickOrderKey(s, controller, key);   // the base lack mask (5 bits)
+    if (!SpiritsFetchPriorityOn()) { return true; }
+    const SpiritsFetchInputs in = SpiritsFetchInputsOf(s, controller);
+    key |= (static_cast<std::uint64_t>(1) << 5)
+         | (static_cast<std::uint64_t>(in.w) << 6) | (static_cast<std::uint64_t>(in.u) << 8)
+         | (static_cast<std::uint64_t>(in.b) << 10) | (static_cast<std::uint64_t>(in.lib_w) << 12)
+         | (static_cast<std::uint64_t>(in.lib_u) << 14);
+    return true;
+}
+
+void SpiritsProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                          std::vector<std::vector<std::string>>& picks) const
+{
+    if (!SpiritsFetchPriorityOn() || !SpiritsSingleLandPicks(count, to_hand, basic_only, picks) || picks.size() < 2)
+    {
+        DecisionProvider::LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, subtype,
+                                              picks);
+        return;
+    }
+    std::vector<std::string> names;
+    names.reserve(picks.size());
+    for (const auto& p : picks) { names.push_back(p.front()); }
+    int width = 0;
+    names = SpiritsFetchRule(SpiritsFetchInputsOf(s, controller), std::move(names), width);
+    for (std::size_t i = 0; i < names.size(); ++i) { picks[i] = { std::move(names[i]) }; }
+}
+
+int SpiritsProvider::FetchLandSearchPickWidth(const GameState& s, int controller,
+                                              const std::vector<std::vector<std::string>>& picks) const
+{
+    if (!SpiritsFetchPriorityOn() || picks.size() < 2) { return static_cast<int>(picks.size()); }
+    for (const auto& p : picks) { if (p.size() != 1) { return static_cast<int>(picks.size()); } }
+    std::vector<std::string> names;
+    names.reserve(picks.size());
+    for (const auto& p : picks) { names.push_back(p.front()); }
+    int width = 0;
+    SpiritsFetchRule(SpiritsFetchInputsOf(s, controller), std::move(names), width);
+    return width;
 }
 
 bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const

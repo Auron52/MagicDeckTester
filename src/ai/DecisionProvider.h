@@ -3912,6 +3912,17 @@ public:
                                     const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
       (void)subtype; return static_cast<int>(picks.size()); }
+    // FetchLandSearchPickWidth -- LandSearchPickWidth's twin for a FETCHLAND's land search (a two-subtype
+    // spec, e.g. Flooded Strand's "a Plains or Island card": the held activation, the crack-then-cast
+    // enumeration, the d0 runner and rollouts). LandSearchPickWidth / LandSearchAdmitsLand are deliberately
+    // NOT consulted for such a spec (25261417f: hooks written for one-subtype searches must not narrow a
+    // fetch), so a deck that wants its held cracks narrowed like its crack-on-play fan
+    // (FetchSearchCandidates) says so here. Same contract as LandSearchPickWidth: keep the LEADING entries
+    // of the ordered list; autonomous play only (human play and MTG_UNPRUNE=landpick never narrow); read
+    // ONLY what LandSearchPickOrderKey keys plus the list itself (the result is memoized). Base: none.
+    virtual int FetchLandSearchPickWidth(const GameState& s, int controller,
+                                         const std::vector<std::vector<std::string>>& picks) const
+    { (void)s; (void)controller; return static_cast<int>(picks.size()); }
     // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
     // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
     // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds

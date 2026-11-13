@@ -135,7 +135,7 @@ TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards,
 
 // ---- the lossless fetch surface -----------------------------------------------------------------
 
-TEST_CASE("SpiritsProvider: Flooded Strand's fetch fan is EVERY distinct legal target, hold kept")
+TEST_CASE("SpiritsProvider: Flooded Strand offers every distinct legal target, hold kept")
 {
     GameState s = SpFresh();
     // Library: two Plains, an Island, Hallowed Fountain, Godless Shrine, Watery Grave, a creature.
@@ -149,8 +149,10 @@ TEST_CASE("SpiritsProvider: Flooded Strand's fetch fan is EVERY distinct legal t
     std::sort(c.begin(), c.end());
     CHECK(c == std::vector<std::string>{"Godless Shrine", "Hallowed Fountain", "Island", "Plains",
                                         "Watery Grave"});
-    // The searched set is the whole list -- never the DecisionProvider top-1 default.
-    CHECK(prov.FetchSearchCandidates(s, 0, strand.params, c) == c);
+    // The searched set is the USER's fetch rule (test_spirits_fetch_rule.cpp): with no land out, Hallowed
+    // Fountain plus the best black maker -- never the DecisionProvider top-1 default.
+    CHECK(prov.FetchSearchCandidates(s, 0, strand.params, prov.FetchCandidates(s, 0, strand.params))
+          == std::vector<std::string>{"Hallowed Fountain", "Godless Shrine"});
     // The battlefield hold stays offered (root default), so the Strand is never collapsed on play.
     CHECK(prov.ConsiderFetchHold(s, strand));
     s.m_provider = &prov;
