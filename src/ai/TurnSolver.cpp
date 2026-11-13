@@ -102189,7 +102189,7 @@ namespace p18
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false; };
+                         nocredit = false, asym = false, rx = false; double lean = 1.0, mr = 2.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102200,6 +102200,14 @@ namespace p18
         num("_pz", o.z); num("_pcv", o.cvf);
         num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
         o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
+        // _pfa<10F>: ASYMMETRIC band (thr, thr*F] -- a price that fits admits as is (a deeper commit measured harmless), only
+        // a refusal must clear the margin. _pd<10F>: lean deeper -- admit at F x the threshold, no fallback.
+        if (k.find("_pfa") != std::string::npos) { o.asym = true; num("_pfa", o.f); }
+        num("_pd", o.lean);
+        // _prx: REFUSE-EXACT -- the ladder stops pricing at the first pass that does not fit, runs the pass below on
+        // rollouts (it commits there anyway) and from there on the heuristic ladder's own gate decides, on real costs.
+        o.rx = k.find("_prx") != std::string::npos;
+        num("_pmr", o.mr);   // _pmr<10m>: a REFUSAL (a shallower commit, the side that measured lossy) needs m samples
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -110935,6 +110943,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                      && depth >= 1;
     int  p18_K = 0;                     // the pass the ladder below runs on rollouts (0 = off)
     double p18_credit = 0.0;            // ROBUST-OR-EXACT fallback: the pricing spend the heuristic ladder's gate gives back
+    bool p18_rx = false;                // REFUSE-EXACT: the ladder below continues past p18_K on its own gate
+    double p18_c2 = 0.0;                // REFUSE-EXACT: the priced cost of pass p18_K-1 (the heuristic gate's c_{k-1})
     int  p18_wb = 0;                    // the best win a sampled rollout of pass p18_K reached (0 = none)
     bool p18_done = false;              // a leafless pass proved an in-window win: committed, no rollout pass at all
     if (p18_on)
@@ -110953,6 +110963,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         p18_K = 1;
         const long long p18_u0 = pb ? pb->Used() : 0;
         bool p18_fb = false;            // ROBUST-OR-EXACT: a verdict inside the margin band -> the heuristic ladder decides
+        std::vector<double> p18_est(static_cast<std::size_t>(depth) + 2, 0.0);   // priced cost by pass
         for (int k = 1; k <= depth; ++k)
         {
             // (1) LEAFLESS pass k, cut where the rollout pass's incumbent would cut it (never inside the window).
@@ -110980,7 +110991,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // (2) PRICE rollout pass k from sampled rollouts, one at a time, until the gate's question is decided.
             // The heuristic ladder's admit line: alpha x its remaining budget (less the priced passes below) -- and never
             // more than what this decision really has left, since the committing pass is paid in real units.
-            const double thr = kStartGateAlpha * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
+            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
             const long long su0 = pb->Used();
             double x_pv = 0.0, sx = 0.0, sxx = 0.0; int m = 0; int best = 0;
             double est = static_cast<double>(lu), se = 0.0; int fit = -1; std::string ck;
@@ -111023,13 +111034,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     const double hi = est + kn.z * se, lo = est - kn.z * se;
                     // ROBUST-OR-EXACT (_pf<10F>): decided once the price clears the threshold by the factor F either way,
                     // or sits wholly inside the band (thr/F, thr*F]; at the end of the sample the point price decides.
+                    const double fa = kn.asym ? 1.0 : kn.f;   // admit-side margin
+                    const bool mref = static_cast<double>(m) >= std::min(kn.mr, rest);   // enough samples to refuse
                     const bool decided = (kn.f > 0.0)
-                        ? (hi * kn.f <= thr || lo > thr * kn.f || (lo * kn.f > thr && hi <= thr * kn.f))
-                        : (hi <= thr || lo > thr);
+                        ? (hi * fa <= thr || (mref && lo > thr * kn.f) || (lo * fa > thr && hi <= thr * kn.f))
+                        : (hi <= thr || (mref && lo > thr));
                     if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest) && decided))
                     {
                         fit = (thr > 0.0 && est <= thr) ? 1 : 0;
-                        if (kn.f > 0.0 && thr > 0.0 && est * kn.f > thr && est <= thr * kn.f) { fit = 2; }
+                        if (kn.f > 0.0 && thr > 0.0 && est * (kn.asym ? 1.0 : kn.f) > thr && est <= thr * kn.f) { fit = 2; }
                         break;
                     }
                     const int cutoff = std::min(smp.cuts[i], best > 0 ? best - 1 : smp.cuts[i]);   // the incumbent's cut
@@ -111047,6 +111060,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             p18_K = k;
             if (best > 0) { p18_wb = best; wb_prev = best; }   // the best sampled win so far: a real line reaches it
             priced += kn.actual_rem ? static_cast<double>(lu + su) : est;
+            p18_est[static_cast<std::size_t>(k)] = kn.actual_rem ? static_cast<double>(lu + su) : est;
         }
         if (kn.noasp) { p18_wb = 0; }
         if (kn.verify) { p18_K = 0; p18_wb = 0; }
@@ -111056,6 +111070,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // its start gate credited with the pricing spend unless _pfnc, so its depth matches the ladder's own.
             p18_K = 0; p18_wb = 0;
             if (!kn.nocredit && pb) { p18_credit = static_cast<double>(pb->Used() - p18_u0); }
+        }
+        else if (kn.rx && !kn.verify && !unl && !p18_done && p18_K >= 1)
+        {
+            // REFUSE-EXACT: the heuristic ladder's remaining at its next check is the decision's budget less ITS spend
+            // (the priced passes below p18_K stand in for its superseded rollout passes) -- not less the pricing spend.
+            p18_rx = true;
+            double below = 0.0;
+            for (int j = 1; j < p18_K; ++j) { below += p18_est[static_cast<std::size_t>(j)]; }
+            p18_credit = static_cast<double>(pb->Used() - p18_u0) - below;
+            p18_c2 = p18_K >= 2 ? p18_est[static_cast<std::size_t>(p18_K - 1)] : 0.0;
         }
     }
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
@@ -111277,6 +111301,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; }
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
 
         // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
@@ -111311,7 +111336,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // keep deepening to verify or beat it (until the start gate / `depth` stops).
         if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
         if (p16K > 0 && pass_depth >= p16K) { break; }   // MTG_P16_ORACLE: the recorded committing pass
-        if (p18_K > 0) { break; }                         // sampled gate: the priced committing pass is the only one
+        if (p18_K > 0 && !p18_rx) { break; }              // sampled gate: the priced committing pass is the only one
     }
     if (vl_constant && !emul_done && !lazy_done && depth >= 1 && (budget == nullptr || budget->Unlimited())
         && committed_depth == depth && !line.truncated && line.win_turn > state.turn_number + depth - 1)
