@@ -1,0 +1,367 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [14] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 18, "name": "Forest" }, { "num": 29, "name": "Hystrodon" }, { "num": 50, "name": "Temur Battle Rage" }, { "num": 35, "name": "Legion Leadership" }, { "num": 1, "name": "Berserk" }, { "num": 17, "name": "Fire-Lit Thicket" }, { "num": 43, "name": "Mountain" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 10, "name": "Blistering Firecat" }, { "num": 14, "name": "Den Protector" }, { "num": 3, "name": "Berserk" }, { "num": 1, "name": "Berserk" }, { "num": 26, "name": "Gruul Turf" }, { "num": 49, "name": "Stomping Ground" }, { "num": 18, "name": "Forest" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 10, "name": "Blistering Firecat", "win_optimal": true }, { "num": 14, "name": "Den Protector", "win_optimal": true }, { "num": 3, "name": "Berserk", "win_optimal": true }, { "num": 1, "name": "Berserk", "win_optimal": true }, { "num": 26, "name": "Gruul Turf", "win_optimal": true }, { "num": 49, "name": "Stomping Ground", "win_optimal": true }, { "num": 18, "name": "Forest", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 26, "name": "Gruul Turf" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Wild Defiance" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 26, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 3, "num": 18, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 3, "num": 18, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Might of Old Krosa" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 3, "num": 18, "is_land": true, "taps": "G" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 26, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "type": "bounce",
+  "source": "Gruul Turf",
+  "turn": 2,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 3, "num": 18, "is_land": true, "taps": "G" }, { "name": "Gruul Turf", "idx": 4, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 3, "tapped": false, "name": "Forest", "label": "Forest" }, { "index": 1, "perm_index": 4, "tapped": true, "name": "Gruul Turf", "label": "Gruul Turf" }],
+  "note": "reply an option index -- the land to return to your hand. Default = the AI's pick. An UNTAPPED land you return is first tapped for mana in response (it floats until the phase ends), unless tapping it has a cost or side effect (pain, energy, a depletion counter) or its mana is spend-restricted."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "ability", "text": "Forest -- tapped for {G} in response to the bounce (floating until the phase ends)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Stomping Ground", "cast=Blistering Firecat+facedown"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Forest" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 26, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Stomping Ground; cast: Blistering Firecat (face down)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat", "face_down": 1 }] },
+    { "index": 1, "summary": "land=Forest; cast: Blistering Firecat (face down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat", "face_down": 1 }] },
+    { "index": 2, "summary": "land=Stomping Ground; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 3, "summary": "land=Forest; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 4, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 11,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 3,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 26, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 10, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 49, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "sick": true, "face_down": true, "megamorph": false, "face_up_cost": "{R}{R}", "is_land": false, "power": 2, "toughness": 2 }, { "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 4, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "sick": true, "face_down": true, "megamorph": false, "face_up_cost": "{R}{R}", "is_land": false, "power": 2, "toughness": 2 }, { "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 4, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Forest", "face_up=Blistering Firecat#10", "cast=Berserk", "cast=Berserk"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Legion Leadership" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "face_down": true, "megamorph": false, "face_up_cost": "{R}{R}", "is_land": false, "power": 2, "toughness": 2 }, { "name": "Gruul Turf", "idx": 3, "num": 26, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 4, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 18, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Might of Old Krosa", "Blistering Firecat (Face-down)"], "cast_order_canonical": ["Berserk", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 1, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Berserk", "Blistering Firecat (Face-down)"], "cast_order_canonical": ["Might of Old Krosa", "Berserk"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 2, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Berserk", "Blistering Firecat (Face-down)"], "cast_order_canonical": ["Berserk", "Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 3, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 4, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Might of Old Krosa → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Might of Old Krosa", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 5, "summary": "land=none; cast: Might of Old Krosa → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": null, "casts": ["Might of Old Krosa", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 6, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 7, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Berserk → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Berserk", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 8, "summary": "land=none; cast: Berserk → Blistering Firecat (Face-down), Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": null, "casts": ["Berserk", "Blistering Firecat (Face-down)"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 9, "summary": "land=Forest; cast: Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Blistering Firecat (Face-down)"], "actions": [{ "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 10, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Blistering Firecat (Face-down)"], "actions": [{ "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 11, "summary": "land=none; cast: Blistering Firecat (Face-down): turn it face up", "declared_order_payability": "not_verified", "land": null, "casts": ["Blistering Firecat (Face-down)"], "actions": [{ "card": "Blistering Firecat (Face-down)", "src_num": 10, "activate": true, "cost_pips": "RR", "activation_cost": "{R}{R}", "act_label": "turn it face up", "verb": "face_up", "face_up_pos": "first", "activate_source": "Blistering Firecat", "x": 1 }] },
+    { "index": 12, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Berserk", "Might of Old Krosa"], "cast_order_canonical": ["Berserk", "Berserk", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 13, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Might of Old Krosa", "Berserk"], "cast_order_canonical": ["Berserk", "Might of Old Krosa", "Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 14, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Berserk", "Berserk"], "cast_order_canonical": ["Might of Old Krosa", "Berserk", "Berserk"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 15, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Legion Leadership", "Might of Old Krosa"], "cast_order_canonical": ["Berserk", "Legion Leadership", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 16, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Might of Old Krosa", "Legion Leadership"], "cast_order_canonical": ["Berserk", "Might of Old Krosa", "Legion Leadership"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 17, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Berserk", "Legion Leadership"], "cast_order_canonical": ["Might of Old Krosa", "Berserk", "Legion Leadership"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 18, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Might of Old Krosa"], "cast_order_canonical": ["Berserk", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 19, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Berserk"], "cast_order_canonical": ["Might of Old Krosa", "Berserk"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 20, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Berserk", "Legion Leadership"], "cast_order_canonical": ["Berserk", "Berserk", "Legion Leadership"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 21, "summary": "land=Forest; cast: Legion Leadership → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Legion Leadership", "Might of Old Krosa"], "cast_order_canonical": ["Legion Leadership", "Might of Old Krosa"], "actions": [{ "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 22, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Legion Leadership"], "cast_order_canonical": ["Might of Old Krosa", "Legion Leadership"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 23, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Berserk", "Might of Old Krosa"], "cast_order_canonical": ["Berserk", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 24, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Might of Old Krosa", "Berserk"], "cast_order_canonical": ["Might of Old Krosa", "Berserk"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 25, "summary": "land=none; cast: Berserk → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Berserk", "Might of Old Krosa"], "cast_order_canonical": ["Berserk", "Might of Old Krosa"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 26, "summary": "land=none; cast: Might of Old Krosa → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Might of Old Krosa", "Berserk"], "cast_order_canonical": ["Might of Old Krosa", "Berserk"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 27, "summary": "land=none; cast: Legion Leadership → Blistering Firecat (Face-down), Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership", "Might of Old Krosa"], "cast_order_canonical": ["Legion Leadership", "Might of Old Krosa"], "actions": [{ "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 28, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down), Wild Defiance", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa", "Wild Defiance"], "cast_order_canonical": ["Might of Old Krosa", "Wild Defiance"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Wild Defiance" }] },
+    { "index": 29, "summary": "land=Forest; cast: Wild Defiance, Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Defiance", "Might of Old Krosa"], "cast_order_canonical": ["Wild Defiance", "Might of Old Krosa"], "actions": [{ "card": "Wild Defiance" }, { "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 30, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Berserk"], "cast_order_canonical": ["Berserk", "Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 31, "summary": "land=Forest; cast: Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Might of Old Krosa"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 32, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Legion Leadership"], "cast_order_canonical": ["Berserk", "Legion Leadership"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 33, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Berserk", "Berserk"], "cast_order_canonical": ["Berserk", "Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 34, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Might of Old Krosa"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 35, "summary": "land=none; cast: Berserk → Blistering Firecat (Face-down), Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Berserk", "Berserk"], "cast_order_canonical": ["Berserk", "Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 36, "summary": "land=none; cast: Might of Old Krosa → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Might of Old Krosa"], "actions": [{ "card": "Might of Old Krosa", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 37, "summary": "land=none; cast: Berserk → Blistering Firecat (Face-down), Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Berserk", "Legion Leadership"], "cast_order_canonical": ["Berserk", "Legion Leadership"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 38, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down), Wild Defiance", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk", "Wild Defiance"], "cast_order_canonical": ["Berserk", "Wild Defiance"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }, { "card": "Wild Defiance" }] },
+    { "index": 39, "summary": "land=Forest; cast: Wild Defiance, Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Defiance", "Berserk"], "cast_order_canonical": ["Wild Defiance", "Berserk"], "actions": [{ "card": "Wild Defiance" }, { "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 40, "summary": "land=Forest; cast: Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 41, "summary": "land=Forest; cast: Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 42, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 43, "summary": "land=none; cast: Berserk → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Berserk"], "actions": [{ "card": "Berserk", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 44, "summary": "land=none; cast: Legion Leadership → Blistering Firecat (Face-down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 10, "enchant_target_name": "Blistering Firecat (Face-down)", "trick": true }] },
+    { "index": 45, "summary": "land=Forest; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 46, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 47, "summary": "land=none; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 48, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 49, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 50, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Berserk",
+  "turn": 4,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "is_land": false, "power": 7, "toughness": 1 }, { "name": "Forest", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 4, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Berserk", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 50, "land_drops_left": 0, "floating_mana": {"G": 1} },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "Blistering Firecat (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Blistering Firecat (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Berserk",
+  "turn": 4,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "is_land": false, "power": 14, "toughness": 1 }, { "name": "Forest", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 4, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Berserk"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "Blistering Firecat (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Blistering Firecat (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "ability", "text": "🔄 Blistering Firecat is turned face up" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Blistering Firecat", "idx": 5, "num": 10, "is_land": false, "power": 28, "toughness": 1 }, { "name": "Forest", "idx": 6, "num": 18, "tapped": true, "is_land": true }, { "name": "Gruul Turf", "idx": 3, "num": 26, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 4, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 39, "name": "Might of Old Krosa", "cost": "{G}", "mv": 1, "kind": "nonpermanent" }, { "num": 58, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Berserk", "Berserk"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Blistering Firecat (28) — 28 to opponent (20→-8)" }
+  ]
+}
