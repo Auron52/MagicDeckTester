@@ -1229,6 +1229,12 @@ fungus 1,880, gods 4,300 (first run).
     engine's life is HIGHER; Spellshock / Manabarbs + Dina s30017653; Manabarbs + Living Wish s30020554 / 30020523,
     engine life higher). APPLY-DROP: the {Rolling Earthquake X + Dina} first cast leaves no {R} (payer). APPLY-DROP-ORDER:
     "Quake first pays". Quake sits at USER cast-order rank 25, so any reorder is a USER question.
+  * **Agent #2 (2026-11-13):** gate 22000-26999 (6b17e6e01): **384 issues** (AD 13, ADO 36, GAP 145, UNMOD 10,
+    CAPPED 180), oracle-off play identical. **FIXED (engine, validation OWED) 0b9562f5e: MTG_PD_HARM_LINE_REPAIR**,
+    the harmful-mode twin of the useful mode's hold repair; clears the {Quake X + Dina} / {Living Wish + Quake} APPLY-DROP
+    repros. ADO is not a payer defect: the plan-order assignment that would pay is LETHAL in both the oracle and the
+    engine's model (s30026406). **USER DECISION pending** (cast order), after checking whether that lethality is real.
+    Owed: held-out A/B, smoke + regression, re-gate. Details: logs/mana-clean-chain/10-handoff.md (#2).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
