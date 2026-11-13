@@ -1,4 +1,5 @@
 {
+  "value_play": { "expected_buckets": 18, "mull_gen_depth": 1, "mull_gen_budget_ms": 3 },
   "card_scores": {
     "Berserk": [
       0.17233029801324484,
