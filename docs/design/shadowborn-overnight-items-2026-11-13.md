@@ -1,7 +1,7 @@
 # Shadowborn: two same-draws slowdowns from the 2026-11-12 overnight (checkpoint)
 
-Status: OPEN, investigation not started. Owner: whichever session picks this up (the USER asked on
-2026-11-13: "look into the Shadowborn items").
+Status: CLOSED 2026-11-13. Item 1 = draw variance (no change); item 2 = executor hold-order fix + GT, pushed
+f2c354727 (CI green on Linux, Windows, determinism parity).
 
 Source: the periodic overnight accept `fec16d7d2` (pushed `7723fa1b3`). Both games kept the same hand and
 saw the same draws in old and new, and neither recovers at 4x or 16x budget (`classify_turn_later.sh`).
