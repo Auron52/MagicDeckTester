@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Spirits (2026-11-13), Lingering Souls HOLE B1: cast it from HAND, then FLASH IT BACK in the SAME main ({2}{W} + {1}{B} = 5 mana; {B} from Godless Shrine / Watery Grave). Supreme Phantom (not sick) lords every Spirit token to 2/2. Opponent 10. The only T5 kill: T4 Souls + flashback -> four 2/2 fliers, Phantom swings for 1 (9); T5 Phantom 1 + tokens 8 = 9. Casting it T4 and flashing back T5 makes the second pair summoning-sick on T5 -> 1 + (1 + 4) = 6 by T5, kill T6. Single-main deck (no profile). Before the fix the flashback was enumerated only against the graveyard the plan STARTED from, so this line was unfindable at any budget (this fixture at budget 0 read win T6).",
+  "battlefield": [
+    { "name": "Godless Shrine" },
+    { "name": "Watery Grave" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Supreme Phantom", "sick": false }
+  ],
+  "hand": [ "Lingering Souls" ],
+  "expect_win_turn": 5
+}

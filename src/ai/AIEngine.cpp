@@ -5419,10 +5419,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
         // Pay the mana cost first; abort cleanly (graveyard untouched) if unpayable.
         ManaPool available = AvailableManaPool(state);
-        CardDefinition pay_def = *def;
         const bool flashback = def->params.flashback_cost.has_value();
-        if (flashback) { pay_def.card.m_mana_cost = *def->params.flashback_cost; }
-        ManaCost effective = EffectiveCost(pay_def, state);
+        // THE shared graveyard-cast price (the rollout's apply_one and the enumeration read it too).
+        ManaCost effective = GraveyardCastSpellCost(*def, state);
         if (AffordAuditOn()) { g_afford_real_attempts.fetch_add(1, std::memory_order_relaxed); }
         if (!available.CanPay(effective))
         { if (AffordAuditOn()) { g_afford_real_fails.fetch_add(1, std::memory_order_relaxed); } return; }
@@ -5483,7 +5482,14 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // Retrace cards in this set (Throes of Chaos) target nothing; if a future
         // retrace card needs targets, mirror CastSpellFromHand's targeting switch here.
 
-        if (m_logger) { m_logger->LogCastSpell(number, name, effective.ToString() + " (retrace)"); }
+        if (m_logger) { m_logger->LogCastSpell(number, name, effective.ToString() + (flashback ? " (flashback)" : " (retrace)")); }
+        // A graveyard cast IS a cast: the storm / mana-value counters and the main-2 stager stamp, exactly as
+        // CastSpellFromHand books them. The rollout's apply_one always did (its graveyard casts share the
+        // hand cast's per-cast block), so this site under-counted against it -- an executor/rollout drift
+        // for every retrace / flashback cast, found by test_spirits_souls (Spirits integrator B, 2026-11-13).
+        ++state.spells_cast_this_turn;
+        state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();
+        if (m_exec_post_combat) { NoteMain2StagerCast(state, *def); }
         state.stack.push_back(std::move(entry));
         FireOnCastTriggers(state, *def);
         FireProwess(state, *def);

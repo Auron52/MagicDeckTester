@@ -43748,6 +43748,17 @@ inline bool HasReanimateTarget(const GameState& state, int controller, int max_m
 // tutor filters every zone tutor applies (empty tutor_types = any card; colour; TutorNumericFilterOk,
 // which carries Reborn Hope's multicolored conjunct), read off each card's DEFINITION. true for every
 // non-regrowth card, so the cast gates that call it are byte-identical elsewhere.
+// One card's legality as a regrowth target (the filters above), read off its definition (ZoneCard).
+inline bool GraveyardTutorTargetOk(const Card& zone_card, const CardParams& pp)
+{
+    const Card& card = ZoneCard(zone_card);
+    bool type_ok = pp.tutor_types.empty();
+    for (const std::string& t : pp.tutor_types)
+    { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
+    if (!type_ok || !CardHasColorNamed(card, pp.tutor_color)) { return false; }
+    return TutorNumericFilterOk(card, pp);
+}
+
 inline bool HasGraveyardTutorTarget(const GameState& state, int controller, const CardParams& pp,
                                    int excluded_card_number = 0)
 {
@@ -43755,13 +43766,7 @@ inline bool HasGraveyardTutorTarget(const GameState& state, int controller, cons
     for (const Card& gc : state.players[static_cast<std::size_t>(controller)].graveyard)
     {
         if (excluded_card_number != 0 && gc.m_number == excluded_card_number) { continue; }
-        const Card& card = ZoneCard(gc);
-        bool type_ok = pp.tutor_types.empty();
-        for (const std::string& t : pp.tutor_types)
-        { if (CardMatchesTypeName(card, t)) { type_ok = true; break; } }
-        if (!type_ok || !CardHasColorNamed(card, pp.tutor_color)) { continue; }
-        if (!TutorNumericFilterOk(card, pp)) { continue; }
-        return true;
+        if (GraveyardTutorTargetOk(gc, pp)) { return true; }
     }
     return false;
 }

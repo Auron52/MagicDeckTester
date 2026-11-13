@@ -4372,6 +4372,14 @@ ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& 
                                     const ManaCost& alternate_base)
 { return EffectiveSpellCostImpl(def, state, 1, &alternate_base); }
 
+ManaCost GraveyardCastSpellCost(const CardDefinition& def, const GameState& state, int copies)
+{
+    if (!def.params.flashback_cost.has_value()) { return EffectiveSpellCostImpl(def, state, copies, nullptr); }
+    CardDefinition pay_def = def;
+    pay_def.card.m_mana_cost = *def.params.flashback_cost;
+    return EffectiveSpellCostImpl(pay_def, state, copies, nullptr);
+}
+
 int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)
 {
     if (!def.card.m_mana_cost.has_x) { return 0; }

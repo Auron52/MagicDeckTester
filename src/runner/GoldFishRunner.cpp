@@ -734,7 +734,10 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         if (!def) { return 0xFFFFFFFFu; }          // unknown card -> observe everything (fail closed)
         const CardParams& p = def->params;
 
-        if (p.retrace)                      { m |= GyR_RetraceNames; }   // castable from the graveyard
+        // Castable from the graveyard: retrace, and FLASHBACK (Lingering Souls, Faithless Looting,
+        // Mystic Retrieval) -- missing until 2026-11-13 (Spirits integrator B), so a state holding a
+        // flashback card in the graveyard shared its key with one where it was already exiled.
+        if (p.retrace || p.flashback_cost)  { m |= GyR_RetraceNames; }
         if (p.gy_self_power_bonus > 0
             || p.ritual_float_gy_self_bonus) { m |= GyR_SelfCopyNames; } // per-copy-of-this-name counts
         // Deathrite Shaman: all three abilities are fungible WITHIN a type filter (deterministic
