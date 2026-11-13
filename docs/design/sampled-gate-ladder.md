@@ -328,3 +328,24 @@ No arm passes: Landfall and Melira (the two held-out failures of H1) stay net wo
 Lean-admit at the ceiling changes almost nothing now (the ceiling is rarely reached). `_pact` (the deeper pass's
 threshold on the decision's REAL remaining budget instead of `rem0 - sum of priced lower passes`, and no `_prr`
 cap) cuts Landfall's loss by two thirds at a CPU cost (Landfall 0.73 -> 0.86x, MB 0.92 -> 0.99x, Snow 1.00 -> 1.02x).
+
+### Why Landfall / Melira lose: the DOUBLE WALK, not the sampling (traced replay L2 of all 37 `_pact` losers)
+Every Landfall loser inspected is a T1 pass the heuristic ladder commits and the gate refuses on its REAL remaining
+budget, and the gap is the leafless walk: 727043 heur pass 4 = 13,268 (interior ~7.9k, leaves 5.3k) on a 18k budget,
+heur's total spend 14.1k. The gate walks pass 4 leafless (7,934 real units), so its admit line falls to
+1.1 x (18k - 8.8k) = 10.8k against a commit price 15.7k (the commit re-walks the same ~7.9k interior: measured, the
+committing pass's interior equals the leafless l on every committed pass inspected -- the in-window proofs it
+shares do not cover no-win interior). On interior-heavy passes the gate pays the interior twice; no sampling or
+interval change can recover that. 23 of 23 Landfall `_pact` losers are this shape (T1, pass 4 or 5).
+
+### S13 (S12 seeds; 13,800 games, one pooled batch; `build/scratch/p18e/S13`, binary `mtg_e3` = 6b0be9766)
+`_pnr`: the admit line and the leafless cap read the heuristic ladder's remaining (rem0 less the priced passes below),
+with no clamp to the decision's real remaining (overspend bounded by the overrun ceiling, like heur's).
+| arm | Hydras | Alchemist | EDF | Snow | MB | Landfall | Melira |
+|---|---|---|---|---|---|---|---|
+| `g_pb1_plc_pus25_pbk8_pnr` | 0.984 u0.969 -0.0020 (4/2) | 0.755 u0.797 **+0.0050 (1/3)** | 0.847 u0.938 0 | 0.889 u0.854 +0.0025 (0/1) | 0.915 u1.039 -0.0025 (2/1) | **1.268** u1.277 -0.0010 (17/16) | **1.051** u1.114 -0.0020 (10/8) |
+| `g_pb1_plc_pus12_pbk8_pnr` | 0.974 -0.0020 (4/2) | 0.754 +0.0050 (1/3) | 0.837 0 | 0.880 +0.0025 (0/1) | 0.899 -0.0025 (2/1) | 1.269 -0.0010 | 1.056 -0.0020 |
+Dropping the clamp recovers Landfall and Melira quality (net better) but pays the double walk in CPU there
+(1.27x / 1.05x); Snow drops to 0.88-0.89x. The clamp (S12) and no clamp (S13) bracket the answer: the next arm,
+`_pcr`, credits back only the committing candidate's own leafless walk (the one duplicated cost), so a decision
+overspends by at most the interior it walks twice.
