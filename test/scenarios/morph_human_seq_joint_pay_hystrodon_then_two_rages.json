@@ -1,0 +1,65 @@
+{
+ "_comment": [
+  "HUMAN LINE JOINT PAY (Morph INT-14). Hystrodon's flip {1}{G}{G} queued first, then Temur Battle Rage x2 ({1}{R}",
+  "each): seven mana from Forest x2, Gruul Turf, Rootbound Crag, Mountain, Ignoble Hierarch, exactly the bill. The flip",
+  "paid at its step spent a red source; jointly the line is legal. MTG_HUMAN_LINE_JOINT_PAY=0 gives verdict illegal."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 40,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Hystrodon (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Rootbound Crag",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Temur Battle Rage",
+  "Temur Battle Rage"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 4,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "validate_line": "face_up=Hystrodon;cast=Temur Battle Rage;cast=Temur Battle Rage;seq=face_up=Hystrodon|cast=Temur Battle Rage|cast=Temur Battle Rage",
+ "expect_verdict": "accept"
+}

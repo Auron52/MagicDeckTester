@@ -819,6 +819,81 @@ Accepted with `--deck=mirrorwing,mirrorwing2hg` (smoke) and `--deck=mirrorwing,e
 `check_gt_logs.py` reports 1146 consistent, 0 stale. Against origin, `regression_gt.txt` differs only in the morph keys,
 these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not run.
 
+### INT-14 (2026-11-13) -- plan-wide payment shortfalls
+- USER (verbatim): "The payment order doesn't matter that much to me but our mana handling should be smart enough to
+  address shortfalls in part of the plan. Maybe that means we need adjustments." (Context: the viewer prepays a "**"
+  line's CASTS up front -- BatchPrepayMainCasts -- then pays each queued activation when it is reached; commit
+  055be8792 fixed only the Karoo shape of `logs/play/rejections/Morph_cod_s1_gi0_t4.json`.) Work in worktree
+  `morph-payer`, branch `morph-payer` (local).
+- **(a) Which paths pay piecewise** (code read, not inferred):
+  * human "**" line (viewer; TurnSolver::ApplyPlanDirect with human_v2): no lead pass; the casts' whole-turn prepay
+    (BatchPrepayMainCasts; declines on < 2 casts) runs before the walk; every activation pays at its queued step from
+    what is left. Activation costs are NOT in the joint solve -- only soft-held by the ActLineHoldMask rung
+    (held-first, then UNRESTRICTED retry; generic capacity is never held).
+  * AI executor (AIEngine::TakeTurn) and its rollout twin (ApplyPlanDirect): LEAD flips (TurnFaceUp) pay FIRST with
+    the plain payer and no plan traits (installed after them), so they know nothing of the casts; then the casts'
+    prepay with the same soft activation hold; then the trailing activations (TurnFaceUpLate, perm abilities,
+    untaps) one by one.
+  * breakpoint continuations: their own traits only; the outer plan's trailing activations are not held
+    (MTG_ACT_HOLD_OUTER, default OFF, would hold their {T} sources only).
+  * enumeration: aggregate-pool admission, which is optimistic -- so every shortfall below is a plan the search
+    OFFERED and SCORED with the step missing (both worlds drop it in lockstep), not a line it refused.
+- **(b) How often** -- instrument `MTG_LINE_PAY_AUDIT` (new, measurement only; GameLogger.h): the executor arms a
+  frame per REAL plan apply, records each payment-short step of that plan (a cast whose own cost the board no longer
+  pays at its turn, an activation dropped `tapped`/`unpaid`, a lead flip whose cost failed), and prices the plan's
+  WHOLE bill jointly on the plan-start board (AIEngine.cpp LineJointPayOracle: activations' {T} sources set aside,
+  mid-line mana NOT counted, creature-only mana refused -- so a YES is a joint payment that really exists).
+  One pooled batch, d5 b20 (play depth from each profile), seed 61000, 24 threads, binary at 68bff0515 + the audit,
+  output `build/scratch/payer/p1b.err`:
+
+  | deck | games | real short plans | jointly payable (DEFECT) | not jointly payable |
+  |---|---|---|---|---|
+  | morph | 400 | **0** | **0** | 0 |
+  | snow | 120 | 43 | **7** (Scrying Sheets / Frost Augur / Rimefeather Owl {S} activations competing) | 36 |
+  | selesnyav2 | 200 | 27 | **2** (Nykthos Paragon cast-short; Wirewood Lodge tapped) | 25 |
+  | edf | 200 | 44 | **1** (Cloud of Faeries + Trace of Abundance) | 43 |
+  | pd | 150 | 0 | 0 | 0 |
+
+  Whole batch: 4,323 real plan applies, 1,515 paying >= 2 steps, 114 with a short step, **10 jointly payable**. So
+  in AUTONOMOUS play the weakness costs **nothing measurable on Morph** and ~0.7% of multi-step paying plans
+  elsewhere, concentrated on Snow (7 of 120 games). The "not jointly payable" rows are mostly single-cast plans the
+  board cannot pay at execution (an enumeration-vs-apply disagreement of a different kind, out of scope here). The
+  search-internal AIEngine applies (not real, not m_in_rollout) carry far more activation drops
+  (MTG_ACT_DROP_AUDIT over the same batch: tapped 377,210 + unpaid 877,086 of 6,152,631 fired); those are not
+  classified by the oracle (the frame arms only on real applies; the rollout applier has no hooks).
+- **(c) Repros.** The HUMAN path is where it bites: 300 random TIGHT Morph boards (every source needed; Python
+  brute-force says the line's bill is payable), each a "**" line in random step order, validated by the engine
+  (`build/scratch/payer/tools/gen_lines.py`, `run_gen.sh`): **8 of 300 (2.7%) rejected as unpayable** though a joint
+  payment exists. Three are now scenarios (each `illegal` before the fix, `accept` after; `=0` restores `illegal`):
+  `morph_human_seq_joint_pay_flip_first_strands_might` (Den flip queued first spends a green source on its {1}),
+  `..._two_flips_then_cast`, `..._hystrodon_then_two_rages`. AI-plan repros (no scenario -- the AI path is not changed, see below):
+  `--seed 61066 --game-index 66` (snow T5: Scrying Sheets + Rimefeather Owl) and `--seed 61042 --game-index 42`
+  (snow T3/T6), Snow profile, d5 b20, `MTG_LINE_PAY_AUDIT=2`.
+- **Fix (viewer path): `MTG_HUMAN_LINE_JOINT_PAY`, DEFAULT ON** (`=0` -> the as-queued payment only).
+  TurnSolver::HumanLineJointPrepay pays the mana of EVERY step of the line -- each hand cast's stamped cost and each
+  activation's own cost -- in ONE solve on the board as it stands, with the steps' {T} sources set aside, and
+  pre-loads the float with exactly that bill (pips pinned, generic as wild), so each step drains its own share
+  whatever order the steps come in. PrepareHumanCommit engages it (Plan::human_joint_pay) ONLY when the as-queued
+  trial drops a cast or fails a step AND a trial with it set pays and performs every step; the ORDER is never
+  changed. A line the as-queued payment already pays is untouched (saved references replay as recorded), and
+  autonomous play / rollouts never set the flag (byte-identical by construction). Declines (falls back to the old
+  path) for X, snow, twobrid, dynamic activation costs, pumps paid K times and mana-making steps.
+- **Result:** 6 of the 8 rejected generated lines now validate (`accept`). **Residual (open): 2 of 8 still rejected**
+  -- g0007 and g0171, both "Might of Old Krosa {G} FIRST, then Den Protector's flip {1}{G}, then Blistering Firecat's
+  flip {R}{R}" with a Gruul Turf in play. `MTG_HUMAN_LINE_JOINT_PAY_TRACE=1` shows the joint solve SUCCEEDS (bill
+  {1}{R}{R}{G}{G}); the loss is in the DRAIN -- a step's generic is paid from a pinned colour the Firecat still needs.
+  Likely cause: the payer's line-aware generic order reads g_line_unpaid_cost, which carries the casts only, so the
+  flips' pips look like surplus. Proposed next step: while the joint float is live, add the line's activation pips to
+  g_line_unpaid_cost (decremented as each is paid). Boards: `build/scratch/payer/gen/g0007.json`, `g0171.json` (a
+  scenario for g0007 was written and removed again because it still fails).
+- Tests: `mtg-test -tc="human line joint pay*"` 3/3 (75 assertions); full unit + scenarios in the commit message.
+- **Not done (handoff `logs/morph/payer-handoff.md`):** the AI-path fix (a play change; the 10 real cases above;
+  needs the parent's A/B), the residual above, the reference corpus replay (`test/viewer_protocol_check.py --strict`
+  -- required before landing, because a reference whose commit DROPPED an activation step would now perform it), and
+  Phase 2b (NoteDoublerDeferPayable's three approximations: (i) a split across decisions probes each part alone,
+  (ii) trailing activations' costs are not in pay_main -- lead flips are, since they run before the probe, (iii) the
+  post-combat state keeps main's taps). No scenario repros for 2b were built yet.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18

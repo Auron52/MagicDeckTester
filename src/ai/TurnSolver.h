@@ -1458,6 +1458,15 @@ public:
         bool         human_sequence  = false;
         std::int8_t  human_land_step = -1;
         std::uint8_t human_seq_len   = 0;
+        // HUMAN LINE JOINT PAY (viewer only; MTG_HUMAN_LINE_JOINT_PAY, Morph INT-14). Set ONLY by
+        // PrepareHumanCommit (AIEngine.cpp) on a "**" sequence whose as-queued apply comes up SHORT on some
+        // step (a cast drop or a failed activation payment) while the same apply with this set pays every
+        // step: ApplyPlanDirect then pays the WHOLE line -- every cast's and every activation's mana --
+        // in ONE joint solve before the walk (TurnSolver::HumanLineJointPrepay) and each step drains its own
+        // share of the float. USER 2026-11-13: "our mana handling should be smart enough to address
+        // shortfalls in part of the plan". Absent from PlanSignature / PlansEqual (not in the search's plan
+        // space; a payment instruction like human_pre_taps).
+        bool         human_joint_pay = false;
 
         // HUMAN PRE-TAPS (viewer only; MTG_HUMAN_PRE_TAP) -- see TurnSolver::PreTap. Applied by
         // ApplyPlanDirect at each entry's declared `position` in the ordered walk, so the mana is
@@ -3167,6 +3176,13 @@ public:
     // result and cast from whatever floats). Only then may a land-Aura batch be prepaid for its held
     // Auras alone and return false with that share pre-loaded (MTG_PREPAY_AURA_STAGE); every probe
     // keeps "false = state untouched".
+    // HUMAN LINE JOINT PAY (Plan::human_joint_pay): pay the mana of EVERY step of `plan` (each hand cast's
+    // stamped cost, each activation's own cost) in ONE solve on the board as it stands -- the steps' {T}
+    // sources set aside, so no step's mana taps another step's {T} -- and pre-load the float with exactly
+    // that bill (pips pinned to their colours, generic as wild), so each step drains its own share whatever
+    // order the steps come in. false with `state` untouched when the bill cannot be summed exactly (X, snow,
+    // twobrid, a dynamic activation cost, a mana-making step) or the board cannot pay it jointly.
+    static bool HumanLineJointPrepay(GameState& state, const Plan& plan);
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);

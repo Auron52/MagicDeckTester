@@ -1,0 +1,58 @@
+{
+ "_comment": [
+  "HUMAN LINE JOINT PAY (MTG_HUMAN_LINE_JOINT_PAY; Morph INT-14; USER 2026-11-13: \"our mana handling should be smart",
+  "enough to address shortfalls in part of the plan\"). Den Protector's flip {1}{G} queued FIRST, then Might of Old Krosa x2",
+  "({G} each). Board: Mountain, Forest, Rootbound Crag, Birds of Paradise -- {G}x3 + one generic is exactly the bill",
+  "(Mountain pays the flip's {1}). Paid piecewise, the flip's generic went to a green source and the second Might was",
+  "unpayable ('the 1 mana available cannot make its colours'), so the line was rejected. Paid jointly it is legal.",
+  "MTG_HUMAN_LINE_JOINT_PAY=0 gives verdict illegal."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 40,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Rootbound Crag",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Birds of Paradise",
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Might of Old Krosa",
+  "Might of Old Krosa"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 4,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "validate_line": "face_up=Den Protector;cast=Might of Old Krosa;cast=Might of Old Krosa;seq=face_up=Den Protector|cast=Might of Old Krosa|cast=Might of Old Krosa",
+ "expect_verdict": "accept"
+}

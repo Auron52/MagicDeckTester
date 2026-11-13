@@ -1681,6 +1681,30 @@ extern thread_local std::vector<std::string>* g_act_drop_sink;
 //   hold_retry a held attempt failed while the lever was holding -> one extra solve
 //   solo_retry ...and the lever was rmask's sole contributor: an extra solve it is wholly answerable
 //              for. solo_retry / pay_calls is the lever's added-solve rate.
+// ---- PLAN-WIDE PAYMENT SHORTFALL audit (MEASUREMENT ONLY; MTG_LINE_PAY_AUDIT, Morph INT-14) ---------------
+// A committed main-phase plan is paid PIECEWISE: lead flips first, the casts' joint prepay, then each queued
+// activation / cast at its step. A step can come up short because an EARLIER step's payment tapped the source
+// it needed, although one joint payment pays the whole line. This audit names those: the executor arms a
+// frame per REAL plan apply (g_real_resolution, never a rollout), every payment-short step of that plan
+// (a cast whose own cost the board no longer pays at its turn; an activation dropped `tapped` / `unpaid`; a lead
+// flip whose cost failed) is recorded, and at the end of the apply the plan's WHOLE bill is priced jointly on
+// the plan-start board (AIEngine.cpp LineJointPayOracle). Counters print at exit (LINE_PAY_AUDIT ...); level 2
+// adds one line per short plan. Implies MTG_ACT_DROP_AUDIT's hooks. Purely additive.
+bool LinePayAuditOn();
+int  LinePayAuditLevel();
+struct LinePayAuditFrame
+{
+    bool rollout = false;                   // a rollout engine's apply (MTG_LINE_PAY_AUDIT_ROLLOUT=1), else REAL
+    std::vector<std::string> short_steps;   // "<kind> <card>"
+};
+extern thread_local LinePayAuditFrame* g_line_pay_frame;
+void NoteLinePayShort(const char* kind, const char* card);
+bool LinePayAuditRolloutOn();
+// [0] = REAL plan applies, [1] = rollout applies. Indices: plans audited, plans paying >= 2 steps, plans with
+// >= 1 payment-short step, short steps, short plans jointly payable (THE DEFECT), not jointly payable
+// (rules-correct), not priceable by the oracle.
+enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_N };
+extern std::atomic<long> g_lpa[2][LPA_N];
 extern std::atomic<long> g_act_pay_calls;
 extern std::atomic<long> g_act_hold_mask;
 extern std::atomic<long> g_act_hold_solo;

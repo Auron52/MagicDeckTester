@@ -12796,7 +12796,11 @@ void TurnSolver::ApplyFaceUpLeadActs(GameState& state, const std::vector<Action>
         if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUp)
         { continue; }
         if (!PermAbilitySourceLive(state, me, a.sac_source_id, a.ability_mode)) { continue; }
-        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false)) { continue; }
+        if (!TapForCostDirect(state, a.cost, /*for_creature=*/false))
+        {
+            if (ActDropAuditOn()) { NoteActDrop(3, a.card_name.str().c_str(), state.turn_number, a.cost.ManaValue()); }
+            continue;
+        }
         const FaceUpRegrowPinScope _fu_pin(a.tutor_target.empty() ? nullptr : &a.tutor_target.str());
         ApplyPermAbility(state, me, a.sac_source_id, a.ability_mode);
         if (log != nullptr)
@@ -65596,6 +65600,98 @@ static bool HumanLinePaysAsItGoes(const TurnSolver::Plan& plan, bool human_v2, b
     return false;
 }
 
+// HUMAN LINE JOINT PAY (MTG_HUMAN_LINE_JOINT_PAY, DEFAULT ON; =0 -> the as-queued payment only). See
+// Plan::human_joint_pay and the declaration. USER 2026-11-13 (verbatim): "The payment order doesn't matter that
+// much to me but our mana handling should be smart enough to address shortfalls in part of the plan. Maybe that
+// means we need adjustments." The as-queued apply pays piecewise -- the casts' whole-turn prepay first, then each
+// activation at its step -- and a step can find its mana spent by an earlier one although one joint payment pays
+// the line (Morph: a Den Protector flip queued first spent a Forest on its generic and stranded a Might's {G}).
+// This pays the WHOLE line jointly instead. Engaged only by PrepareHumanCommit, and only after a trial apply with
+// it set paid every step, so it can never lose a step the as-queued apply made.
+bool TurnSolver::HumanLineJointPrepay(GameState& state, const Plan& plan)
+{
+    static const bool s_on = EnvOn("MTG_HUMAN_LINE_JOINT_PAY", true);
+    if (!s_on) { return false; }
+    static const bool s_trace_decl = EnvOn("MTG_HUMAN_LINE_JOINT_PAY_TRACE");
+    ManaCost bill{};
+    std::vector<int> tap_src;
+    auto add = [&](const ManaCost& c) -> bool
+    {
+        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0 || c.snow_pips != 0)
+        { return false; }
+        if (bill.hybrid_count + c.hybrid_count > 6) { return false; }
+        for (int i = 0; i < c.hybrid_count; ++i) { bill.hybrid_pair[bill.hybrid_count++] = c.hybrid_pair[i]; }
+        bill.generic += c.generic; bill.white += c.white; bill.blue += c.blue; bill.black += c.black;
+        bill.red += c.red; bill.green += c.green; bill.colorless += c.colorless;
+        return true;
+    };
+    for (const Action& a : plan.actions)
+    {
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:
+                if (a.sacrifice_land || a.alt_cost || a.free_cast) { break; }
+                if (a.convoke_green > 0 || a.convoke_other > 0 || a.ritual_float > 0) { return false; }
+                if (!add(a.cost)) { return false; }
+                break;
+            case Action::Kind::ActivatePermAbility:
+                // A cost the dispatcher re-prices at its step (TapBlood, PingLoop, a max-X pump) is not this sum.
+                if (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::PingLoop
+                    || a.chosen_x > 1 || IsLandSearchActivation(a)) { return false; }   // chosen_x = activation count
+                if (PermAbilityTaps(a.ability_mode)) { tap_src.push_back(a.sac_source_id); }
+                if (!add(OutletOwnCost(a))) { return false; }
+                break;
+            case Action::Kind::Equip: case Action::Kind::ActivateBlink:
+                if (!add(a.cost)) { return false; }
+                break;
+            default:
+                // Any other kind that pays mana (a pump paid K times, an untapper, a mana source) is not
+                // summed here: decline rather than guess.
+                if (a.cost.ManaValue() > 0 || a.ritual_float > 0)
+                {
+                    if (s_trace_decl) { std::fprintf(stderr, "[joint-pay] declined: kind %d (%s)\n", static_cast<int>(a.kind), a.card_name.c_str()); }
+                    return false;
+                }
+                break;
+        }
+    }
+    static const bool s_trace = EnvOn("MTG_HUMAN_LINE_JOINT_PAY_TRACE");   // diagnostic only
+    if (s_trace)
+    {
+        std::fprintf(stderr, "[joint-pay] bill g%d W%d U%d B%d R%d G%d C%d hyb%d tsrc=%zu float=%d\n", bill.generic,
+                     bill.white, bill.blue, bill.black, bill.red, bill.green, bill.colorless, bill.hybrid_count,
+                     tap_src.size(), state.floating_mana.Total());
+    }
+    if (bill.ManaValue() == 0) { return false; }
+    const int me = state.active_player_index;
+    const GameState saved = state;
+    for (const int id : tap_src)
+    {
+        for (Permanent& p : state.battlefield)
+        { if (p.card.m_number == id && p.controller_index == me && !p.tapped) { p.tapped = true; } }
+    }
+    if (!TapForCostDirect(state, bill, /*for_creature=*/false))
+    {
+        if (s_trace) { std::fprintf(stderr, "[joint-pay] the board cannot pay the bill jointly\n"); }
+        state = saved;
+        return false;
+    }
+    for (const int id : tap_src)
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            Permanent& p = state.battlefield[i];
+            if (p.card.m_number != id || p.controller_index != me) { continue; }
+            // Untap only what WE set aside (it was untapped before the solve).
+            for (const Permanent& q : saved.battlefield) { if (q.card.m_number == id && !q.tapped) { p.tapped = false; } }
+        }
+    }
+    ManaPool& f = state.floating_mana;
+    f.white += bill.white; f.blue += bill.blue; f.black += bill.black; f.red += bill.red; f.green += bill.green;
+    f.colorless += bill.colorless; f.wild += bill.generic;
+    return true;
+}
+
 void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
 {
     if (q >= plan.actions.size()) { return; }
@@ -73612,6 +73708,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan), /*mint_prefix=*/false,
                                          /*hand_demand=*/false, /*allow_partial=*/true);
     }
+    // HUMAN LINE JOINT PAY (Plan::human_joint_pay, set only by PrepareHumanCommit after a trial proved it pays
+    // every step the as-queued payment could not): the whole line's mana in one joint solve, replacing the
+    // casts-only prepay below. Falls through to it when the joint solve declines.
+    else if (!loam_target_plan && human_v2 && plan.human_joint_pay && HumanPlayActive()
+             && !HumanLinePaysAsItGoes(plan, human_v2, !pre_taps.empty())
+             && TurnSolver::HumanLineJointPrepay(state, plan)) {}
     else if (!loam_target_plan && !HumanLinePaysAsItGoes(plan, human_v2, !pre_taps.empty()))
     {
         // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
@@ -93771,6 +93873,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (const std::string& w : pl.would_drop)    { adds(w); }
             add(pl.human_action_order);   // human-play only; present so the list is exhaustive
             add(pl.human_sequence); add(pl.human_land_step); add(pl.human_seq_len);   // ...likewise
+            add(pl.human_joint_pay);   // ...likewise
             add(pl.soulbond_decline);
             add(static_cast<long long>(pl.human_pre_taps.size()));
             add(pl.human_untap_need);

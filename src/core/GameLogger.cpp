@@ -131,7 +131,7 @@ bool ActDropAuditOn()
     // loses, and both the sink below and g_act_fired are gated here -- so without this the dump
     // would print a menu with no drop lines and read as "this plan loses nothing".
     static const bool on = EnvOn("MTG_ACT_DROP_AUDIT") || EnvPath("MTG_TURN_CENSUS") != nullptr
-                        || EnvInt("MTG_PLAN_DUMP", 0) != 0;
+                        || EnvInt("MTG_PLAN_DUMP", 0) != 0 || EnvOn("MTG_LINE_PAY_AUDIT");
     return on;
 }
 int  ActDropAuditLevel()
@@ -151,6 +151,8 @@ void NoteActDrop(int reason, const char* card, int turn, int cost_mv)
         case 2:  g_act_drop_notap .fetch_add(1, std::memory_order_relaxed); break;
         default: g_act_drop_unpaid.fetch_add(1, std::memory_order_relaxed); break;
     }
+    if ((reason == 1 || reason == 3) && g_line_pay_frame != nullptr)
+    { NoteLinePayShort(reason == 1 ? "act-tapped" : "act-unpaid", card); }
     if (g_act_drop_sink != nullptr)
     {
         g_act_drop_sink->push_back(std::string(card ? card : "?") + " "
@@ -163,6 +165,35 @@ void NoteActDrop(int reason, const char* card, int turn, int cost_mv)
     }
 }
 thread_local std::vector<std::string>* g_act_drop_sink = nullptr;
+bool LinePayAuditOn() { static const bool on = EnvOn("MTG_LINE_PAY_AUDIT"); return on; }
+int  LinePayAuditLevel() { static const int l = LinePayAuditOn() ? EnvInt("MTG_LINE_PAY_AUDIT", 1) : 0; return l; }
+thread_local LinePayAuditFrame* g_line_pay_frame = nullptr;
+std::atomic<long> g_lpa[2][LPA_N] = {};
+bool LinePayAuditRolloutOn() { static const bool on = EnvOn("MTG_LINE_PAY_AUDIT_ROLLOUT"); return on; }
+void NoteLinePayShort(const char* kind, const char* card)
+{
+    if (g_line_pay_frame == nullptr || (!g_line_pay_frame->rollout && !g_real_resolution)) { return; }
+    g_line_pay_frame->short_steps.push_back(std::string(kind ? kind : "?") + " " + (card ? card : "?"));
+}
+namespace {
+struct LinePayDump
+{
+    ~LinePayDump()
+    {
+        if (!LinePayAuditOn()) { return; }
+        for (int w = 0; w < 2; ++w)
+        {
+            if (w == 1 && !LinePayAuditRolloutOn()) { continue; }
+            std::fprintf(stderr,
+                "LINE_PAY_AUDIT %s plans=%ld paying>=2=%ld short_plans=%ld short_steps=%ld | joint_yes=%ld (DEFECT) "
+                "joint_no=%ld unknown=%ld\n", w ? "ROLLOUT" : "REAL",
+                g_lpa[w][LPA_PLANS].load(), g_lpa[w][LPA_PAYING].load(), g_lpa[w][LPA_SHORT_PLANS].load(),
+                g_lpa[w][LPA_SHORT_STEPS].load(), g_lpa[w][LPA_YES].load(), g_lpa[w][LPA_NO].load(),
+                g_lpa[w][LPA_UNKNOWN].load());
+        }
+    }
+} g_line_pay_dump;
+}   // namespace
 std::atomic<long> g_act_pay_calls{0};
 std::atomic<long> g_act_hold_mask{0};
 std::atomic<long> g_act_hold_solo{0};

@@ -407,8 +407,27 @@ HumanCommitPreview PrepareHumanCommit(const GameState& state, const TurnSolver::
     // form (no "**"), so saved references replay as recorded.
     if (pv.sequence)
     {
-        std::vector<std::string> drops_v, seen_ok, seen_pin, why_v;
-        trial(pinned, &drops_v, &seen_pin, nullptr, &why_v);
+        std::vector<std::string> drops_v, seen_ok, seen_pin, why_v, fails_v;
+        trial(pinned, &drops_v, &seen_pin, &fails_v, &why_v);
+        // HUMAN LINE JOINT PAY (Morph INT-14; USER 2026-11-13: "our mana handling should be smart enough to address
+        // shortfalls in part of the plan"). The as-queued payment is piecewise -- the casts' prepay, then each
+        // activation at its step -- so a step can come up short although one joint payment pays the whole line.
+        // When this order drops a cast or fails a step, try the same order with the line paid jointly
+        // (Plan::human_joint_pay -> TurnSolver::HumanLineJointPrepay) and keep it ONLY if its trial pays and
+        // performs every step. The ORDER is never changed. A line the as-queued payment already pays is untouched,
+        // so every saved reference replays as recorded.
+        if (!drops_v.empty() || !fails_v.empty())
+        {
+            TurnSolver::Plan joint = pinned;
+            joint.human_joint_pay = true;
+            std::vector<std::string> jd, jseen, jf, jwhy;
+            trial(joint, &jd, &jseen, &jf, &jwhy);
+            if (jd.empty() && jf.empty())
+            {
+                pinned = std::move(joint);
+                drops_v.clear(); why_v.clear(); seen_pin = std::move(jseen);
+            }
+        }
         if (!drops_v.empty())
         {
             // ...and only an order that DIFFERS from the queued one is offered: the engine's own apply pays
@@ -3300,6 +3319,133 @@ void AIEngine::DecideAttackLand(GameState& state, const std::vector<int>& attack
 }
 
 
+// ---- MTG_LINE_PAY_AUDIT (Morph INT-14; measurement only, see GameLogger.h) --------------------------------
+// The plan's WHOLE bill priced jointly on the plan-start board: every hand cast's stamped cost plus every
+// activation's, the activations' {T} sources set aside first, paid as ONE cost by the shipped payer for a
+// non-creature spell. CONSERVATIVE in the direction that matters: mana the line makes mid-line (a dork or rock
+// cast, a ritual, a land played or fetched, an untapper, a Lotus) is NOT counted as supply and creature-only
+// mana is refused, so a YES is a joint payment that really exists; a "no" may still be payable. -1 = a cost the
+// sum cannot carry (X, twobrid, convoke, more than six hybrid pips).
+static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& acts, int* steps_out)
+{
+    int steps = 0;
+    if (steps_out) { *steps_out = 0; }
+    ManaCost bill{};
+    std::vector<int> tap_src;
+    auto add = [&](const ManaCost& c) -> bool
+    {
+        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0) { return false; }
+        if (bill.hybrid_count + c.hybrid_count > 6) { return false; }
+        for (int i = 0; i < c.hybrid_count; ++i) { bill.hybrid_pair[bill.hybrid_count++] = c.hybrid_pair[i]; }
+        bill.generic += c.generic; bill.white += c.white; bill.blue += c.blue; bill.black += c.black;
+        bill.red += c.red; bill.green += c.green; bill.colorless += c.colorless;
+        bill.snow_pips = static_cast<std::uint8_t>(bill.snow_pips + c.snow_pips);
+        return true;
+    };
+    for (const Action& a : acts)
+    {
+        switch (a.kind)
+        {
+            case Action::Kind::CastFromHand:
+            {
+                if (a.sacrifice_land) { break; }
+                if (a.convoke_green > 0 || a.convoke_other > 0) { return -1; }
+                ++steps;
+                if (a.alt_cost || a.free_cast) { break; }
+                if (!add(a.cost)) { return -1; }
+                break;
+            }
+            case Action::Kind::ActivatePermAbility:
+            case Action::Kind::UntapCreature:
+            {
+                if (a.kind == Action::Kind::UntapCreature || PermAbilityTaps(a.ability_mode))
+                { tap_src.push_back(a.sac_source_id); }
+                ++steps;
+                if (!add(a.cost)) { return -1; }
+                break;
+            }
+            case Action::Kind::SacForMana: case Action::Kind::Suspend:
+                break;
+            default:
+                if (a.cost.ManaValue() > 0) { ++steps; if (!add(a.cost)) { return -1; } }
+                break;
+        }
+    }
+    if (steps_out) { *steps_out = steps; }
+    GameState c = s0;
+    RevealLogPause quiet;
+    for (const int id : tap_src)
+    {
+        for (Permanent& p : c.battlefield)
+        { if (p.card.m_number == id && p.controller_index == c.active_player_index) { if (p.tapped) { return 0; } p.tapped = true; } }
+    }
+    if (bill.ManaValue() == 0) { return 1; }
+    return TapForCostDirect(c, bill, /*for_creature=*/false) ? 1 : 0;
+}
+thread_local const std::vector<Action>* t_lpa_acts = nullptr;   // the audited plan (cast-drop classification)
+struct LinePayAuditGuard
+{
+    bool armed = false;
+    LinePayAuditFrame frame;
+    LinePayAuditFrame* prev = nullptr;
+    const std::vector<Action>* prev_acts = nullptr;
+    GameState s0;
+    const std::vector<Action>* acts = nullptr;
+    int turn = 0;
+    LinePayAuditGuard(const GameState& state, const std::vector<Action>& a, bool in_rollout)
+    {
+        if (!LinePayAuditOn() || a.empty()) { return; }
+        if (in_rollout ? !LinePayAuditRolloutOn() : !g_real_resolution) { return; }
+        armed = true; s0 = state; acts = &a; turn = state.turn_number; frame.rollout = in_rollout;
+        prev = g_line_pay_frame; g_line_pay_frame = &frame;
+        prev_acts = t_lpa_acts; t_lpa_acts = &a;
+    }
+    ~LinePayAuditGuard()
+    {
+        if (!armed) { return; }
+        g_line_pay_frame = prev; t_lpa_acts = prev_acts;
+        const int w = frame.rollout ? 1 : 0;
+        g_lpa[w][LPA_PLANS].fetch_add(1, std::memory_order_relaxed);
+        // Only steps the TOP-LEVEL plan names (a breakpoint continuation's own drops are its own plan's).
+        std::vector<std::string> mine;
+        for (const std::string& st : frame.short_steps)
+        {
+            const std::size_t sp = st.find(' ');
+            const std::string card = sp == std::string::npos ? st : st.substr(sp + 1);
+            for (const Action& x : *acts) { if (x.card_name.str() == card) { mine.push_back(st); break; } }
+        }
+        int steps = 0;
+        for (const Action& x : *acts)
+        {
+            if (x.kind == Action::Kind::CastFromHand ? !x.sacrifice_land : x.cost.ManaValue() > 0) { ++steps; }
+        }
+        if (steps >= 2) { g_lpa[w][LPA_PAYING].fetch_add(1, std::memory_order_relaxed); }
+        if (LinePayAuditLevel() >= 3 && !frame.rollout)
+        {
+            std::fprintf(stderr, "LINE_PAY_PLAN job=%s gi=%d t%d steps=%d short=%zu\n",
+                         escstats::t_job ? escstats::t_job : "-", escstats::t_gi, turn, steps, mine.size());
+        }
+        if (mine.empty()) { return; }
+        const int v = LineJointPayOracle(s0, *acts, nullptr);
+        g_lpa[w][LPA_SHORT_PLANS].fetch_add(1, std::memory_order_relaxed);
+        g_lpa[w][LPA_SHORT_STEPS].fetch_add(static_cast<long>(mine.size()), std::memory_order_relaxed);
+        g_lpa[w][v > 0 ? LPA_YES : v == 0 ? LPA_NO : LPA_UNKNOWN].fetch_add(1, std::memory_order_relaxed);
+        if (LinePayAuditLevel() >= 2 && (!frame.rollout || v > 0))
+        {
+            std::string line, plan;
+            for (const std::string& st : mine) { line += (line.empty() ? "" : "; ") + st; }
+            for (const Action& x : *acts)
+            {
+                plan += (plan.empty() ? "" : ", ") + x.card_name.str();
+                if (x.kind != Action::Kind::CastFromHand) { plan += "(act)"; }
+            }
+            std::fprintf(stderr, "LINE_PAY_SHORT %s job=%s gi=%d t%d joint=%s short=[%s] plan=[%s]\n",
+                         frame.rollout ? "rollout" : "real", escstats::t_job ? escstats::t_job : "-",
+                         escstats::t_gi, turn, v > 0 ? "YES" : v == 0 ? "no" : "?", line.c_str(), plan.c_str());
+        }
+    }
+};
+
 bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         const std::function<void(GameState&)>& resolve_stack)
 {
@@ -5340,6 +5486,24 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         last_cast_paid = cast_num <= 0 || m_last_cast_remanded
             || std::none_of(zone.begin(), zone.end(),
                             [&](const Card& c) { return c.m_number == cast_num; });
+        // MTG_LINE_PAY_AUDIT: a cast of the audited plan that did not happen BECAUSE ITS OWN COST no longer pays
+        // on this board (a probe on a copy) -- a payment shortfall, not a legality refusal.
+        if (!last_cast_paid && g_line_pay_frame != nullptr && t_lpa_acts)
+        {
+            for (const Action& x : *t_lpa_acts)
+            {
+                if (x.kind != Action::Kind::CastFromHand || x.card_name.str() != cast_name) { continue; }
+                bool short_now = false;
+                {
+                    GameState probe = state;
+                    RevealLogPause quiet_probe;
+                    const CardDefinition* xd = x.def ? x.def : CardDatabase::Instance().Lookup(x.card_name);
+                    short_now = !TapForCostDirect(probe, x.cost, xd != nullptr && xd->card.IsCreature());
+                }
+                if (short_now) { NoteLinePayShort("cast-short", cast_name.c_str()); }
+                break;
+            }
+        }
         // MTG_USER_ORDER_TRACE (diagnostic, default off): every REAL cast, in the order it happened.
         if (UserOrderTraceOn() && !m_in_rollout)
         {
@@ -8158,6 +8322,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
     // after in both); the trailing pass skips them.
+    // MTG_LINE_PAY_AUDIT (Morph INT-14): measurement only -- arms a frame over the rest of this apply.
+    LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout);
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
     { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
