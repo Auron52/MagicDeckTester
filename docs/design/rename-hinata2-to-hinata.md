@@ -41,14 +41,45 @@ ledger governs a landed claim, and a missing claim does not queue a regeneration
 6. The artifact-queue tool baselines staleness on the commit that last touched the artifact PATH, so a
    rename resets the drift clock to the rename commit (under-reports staleness; never triggers a regen).
 
-**QUEUED (USER, not yet scheduled): fully consistent deck names, Capitals and spaces.** Once this rename has
-run a while without trouble, rename the rest to the `Mirrorwing Dragon` / `Creature Giving` shape. Candidates
-on 2026-11-13: `burn` -> `Burn`, `treasure_hunt` -> `Treasure Hunt`, and the CamelCase names
-(`AccomplishedAlchemist`, `BreachingDragonstorm`, `CritterLifegain`, `EldraziDisplacerFlicker`,
-`FiveColour`, `KittyEquipment`, `LandfallElementals`, `LifegainHeliodCombo`, `NivMizzetCombo`,
-`SelesnyaLifegain`, `StompySurprise`, `WhiteKnights`) into spaced words -- the exact spellings are the
-USER's call. `Anti-Lifegain` has a hyphen to decide on. Archived `v<N>-<slug>/` folders and their
-reference folders move with their decks.
+**QUEUED (USER, not yet scheduled): fully consistent deck names, Capitals and spaces.** USER 2026-11-13:
+*"words separated by spaces and words starting with capital letters ... words that are one word in the card
+should not change, so Dragonstorm remains as-is."* Agent recommendation (2026-11-13, spellings are the USER's
+call; "live files" = tracked files outside docs/src/attic/logs naming the old folder, a rough size):
+
+| now | proposed | slug now -> new | live files |
+|---|---|---|---|
+| AccomplishedAlchemist | Accomplished Alchemist | accomplishedalchemist -> accomplished_alchemist | 64 |
+| BreachingDragonstorm | Breaching Dragonstorm | -> breaching_dragonstorm | 17 |
+| CritterLifegain (+ v1) | Critter Lifegain | -> critter_lifegain | 36 |
+| EldraziDisplacerFlicker | Eldrazi Displacer Flicker | -> eldrazi_displacer_flicker | 126 |
+| FiveColour | Five Colour | -> five_colour | 73 |
+| KittyEquipment (+ v1, v2) | Kitty Equipment | -> kitty_equipment | 106 |
+| LandfallElementals | Landfall Elementals | -> landfall_elementals | 22 |
+| LifegainHeliodCombo | Lifegain Heliod Combo | -> lifegain_heliod_combo | 32 |
+| NivMizzetCombo | Niv-Mizzet Combo (the card's own hyphen) or Niv Mizzet Combo | -> niv_mizzet_combo | 45 |
+| SelesnyaLifegain (+ v1) | Selesnya Lifegain | -> selesnya_lifegain | 36 |
+| StompySurprise (+ v1) | Stompy Surprise | -> stompy_surprise | 75 |
+| WhiteKnights (+ v1, v2) | White Knights | -> white_knights | 39 |
+| burn | Burn | burn (unchanged) | many (substring) |
+| treasure_hunt | Treasure Hunt | treasure_hunt (unchanged) | 79 |
+
+Stems that do not match their folder (same class of inconsistency): `decks/Soldiers/soldiers.cod` and
+`decks/Vampires/Vampire.cod` (the latter is the USER's own name -- ask). Already consistent and unchanged:
+Angels, Auras, Bruna, Colossus Hammer, Creature Giving, Dragons, Dragonstorm, Extra Turns, Fluctuator, Fungus,
+Galadriel, Giants, Goblins, Gods, Hinata, Hydras, Jumbo Cactuar, Kithkin, Knights, Landfall, Martyr Lifegain,
+Melira Pod, Merfolk, Midrange Burn, Mill, Minotaur, Mirrorwing Dragon, Modern RW Burn, Morph, Pirates, Prevent
+Damage, Shadowborn Apostle, Slivers, Snow, Soldiers, Unpredictable Cyclone, Vampires. Open for the USER:
+`Anti-Lifegain` (keep the prefix hyphen, recommended), "Lifegain" as one word (recommended; Martyr Lifegain
+already does), and the archived `v<N>-<slug>/` folders (recommended: leave -- they are version labels).
+
+Hazards specific to this batch: (a) `burn` -> `Burn` and `treasure_hunt` -> `Treasure Hunt` are the
+cheapest (slugs unchanged) but `burn` is a CASE-ONLY rename, and the checkout sits on a case-insensitive
+Windows mount: do it as two moves (`burn` -> `burn.tmp` -> `Burn`) and expect every Windows clone to need
+care; (b) the seed-base re-hash of the full batch moves ONE unrenamed key,
+`fungus_v1_sporesower_shelldweller` (collision probing), so either accept that archived variant's new base or
+pin it; (c) archived version folders and their reference folders (`references/<Deck_With_Underscores>/v1-...`)
+move with their decks; (d) providers route by card signature, so no play change is expected, but
+`test_pirates_provider.cpp` pins every folder name.
 
 ---
 
