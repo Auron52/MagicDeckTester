@@ -1579,6 +1579,18 @@ inline bool PrepayWildTrueOn()
 // DETECTOR (MTG_PREPAY_WILD_AUDIT=1; =2 also prints one line per event): counts colour pips paid from a `wild`
 // unit whose true colour is another one -- with the lever OFF that is the violation itself, with it ON it must read
 // 0 (the drain refuses them). Tracking runs only under the lever or the audit, so with both off nothing is recorded.
+// ROUTE (a), LITERAL (MTG_PREPAY_WILD_LITERAL; USER 2026-11-13: "Does this wild-mana fix avoid floating wild mana?
+// That shouldn't show up in anything."): the prepay books a generic-funding unit whose source could make only ONE
+// colour as THAT colour (never `wild`), with a per-pool subset count (GameState::PrepayWildTrue::gfund / cfund) that
+// makes the drain pay the bill's generic pips from it before any pinned colour; only a multi-colour source's unit
+// (a dual: either of its colours, committed at spend) stays `wild` + recorded, and the record packs (mask, count)
+// so no unit is released as any-colour. Rides on MTG_PREPAY_WILD_TRUE (off with it). Default ON; =0 -> the
+// tag version (every colour-funded unit `wild` + its colour mask).
+inline bool PrepayWildLiteralOn()
+{
+    static const bool env = EnvOn("MTG_PREPAY_WILD_LITERAL", true);
+    return PrepayWildTrueOn() && heurarm::Flag(heurarm::PREPAY_WILD_LITERAL, env);
+}
 inline int PrepayWildAuditLevel() { static const int v = EnvInt("MTG_PREPAY_WILD_AUDIT", 0); return v; }
 inline bool PrepayWildTrack() { return PrepayWildTrueOn() || PrepayWildAuditLevel() > 0; }
 inline std::atomic<long long> g_pwt_violation_units{0};   // colour pips a wrong-colour unit paid (lever off)
@@ -1588,18 +1600,22 @@ inline std::atomic<long long> g_pwt_inconsistent{0};      // a record larger tha
 inline std::atomic<long long> g_pwt_overflow{0};          // restricted units beyond the record's slots (released)
 inline std::atomic<long long> g_pwt_violation_real{0};    // ...of the violations, in the REAL game (g_real_resolution)
 inline std::atomic<long long> g_pwt_refused_real{0};      // ...of the refusals, in the REAL game
+inline std::atomic<long long> g_pwt_single_wild{0};       // SINGLE-colour units booked `wild` (literal: must be 0)
+inline std::atomic<long long> g_pwt_fund_units{0};        // single-colour units booked as their colour (literal)
 // Per-game twins on the playing thread (reset by the batch runner at game start; MTG_PREPAY_WILD_AUDIT prints them
 // as a `[pwt-game] job= gi=` line, so one pooled batch attributes every event to its deck and game).
 inline thread_local long long t_pwt_game_viol = 0;
 inline thread_local long long t_pwt_game_refused = 0;
+inline thread_local long long t_pwt_game_single = 0;    // single-colour units booked `wild` (real game)
 struct PrepayWildAuditDump
 {
     ~PrepayWildAuditDump()
     {
         if (PrepayWildAuditLevel() <= 0) { return; }
-        std::fprintf(stderr, "PREPAY_WILD_AUDIT lever=%d booked=%lld violations=%lld (real %lld) refused=%lld (real %lld) "
-                     "inconsistent=%lld overflow=%lld %s\n",
-                     PrepayWildTrueOn() ? 1 : 0, g_pwt_booked_units.load(), g_pwt_violation_units.load(),
+        std::fprintf(stderr, "PREPAY_WILD_AUDIT lever=%d literal=%d booked=%lld single_wild=%lld fund=%lld violations=%lld "
+                     "(real %lld) refused=%lld (real %lld) inconsistent=%lld overflow=%lld %s\n",
+                     PrepayWildTrueOn() ? 1 : 0, PrepayWildLiteralOn() ? 1 : 0, g_pwt_booked_units.load(),
+                     g_pwt_single_wild.load(), g_pwt_fund_units.load(), g_pwt_violation_units.load(),
                      g_pwt_violation_real.load(), g_pwt_refused_units.load(), g_pwt_refused_real.load(),
                      g_pwt_inconsistent.load(), g_pwt_overflow.load(),
                      g_pwt_violation_units.load() == 0 ? "(CLEAN)" : "<-- a pip outside the bill paid with another colour's mana");
@@ -1636,14 +1652,19 @@ struct WildTrueScope
 // colour c (a Forest, Vivid Creek's free {U}, a bundle's {U}); a unit of mask {U,R} came from a source whose tap
 // could have made either (a dual, an Ignoble Hierarch, a tri-land) and is committed at spend to ONE of them (USER:
 // any-colour mana is committed at spend). A unit of every colour is not restricted and is never recorded.
+// `fund[c]` (literal only, MTG_PREPAY_WILD_LITERAL): how many of the pool's colour-c units are the bill's generic
+// funding -- the drain pays a generic pip from them first, before `wild` and before any pinned colour.
 struct WildTrueRec
 {
-    static constexpr int kCap = 16;
+    static constexpr int kCap = 32;
     std::uint8_t m[kCap] = {};
     int n = 0;
+    int lim = 16;            // the tag version's capacity (byte-identity of =0); literal raises it to kCap
+    int fund[5] = {};
     int Count(unsigned mask) const { int k = 0; for (int i = 0; i < n; ++i) { k += m[i] == mask; } return k; }
     void Erase(int i) { for (int j = i; j + 1 < n; ++j) { m[j] = m[j + 1]; } --n; }
-    void Push(unsigned mask) { if (n < kCap) { m[n++] = static_cast<std::uint8_t>(mask & 0x1Fu); } }
+    void Push(unsigned mask) { if (n < lim && n < kCap) { m[n++] = static_cast<std::uint8_t>(mask & 0x1Fu); } }
+    int FundTotal() const { return fund[0] + fund[1] + fund[2] + fund[3] + fund[4]; }
 };
 inline int PwtPop(unsigned m) { return std::popcount(m & 0x1Fu); }
 // Canonical order: fewest colours first, then the mask; so equal records compare and key equal.
@@ -1656,20 +1677,44 @@ inline void PwtCanon(WildTrueRec& r)
 // when there is none (stale stamp, nothing restricted, or tracking off). Clamped to the pool's wild: a record larger
 // than the wild means some path outside the scoped drains spent restricted units without saying which; the most
 // flexible units are released first (counted, MTG_PREPAY_WILD_AUDIT).
+// Append the units of one pool's slots to `out` (a slot packs mask + count-1 in bits 5-7; the lever off writes
+// count 1 everywhere, the historical one-unit-per-slot encoding).
+inline void PwtDecodeSlots(const std::uint8_t* r, WildTrueRec& out)
+{
+    for (int i = 0; i < GameState::PrepayWildTrue::kSlots; ++i)
+    {
+        if (r[i] == 0) { continue; }
+        const int k = (r[i] >> 5) + 1;
+        for (int j = 0; j < k; ++j) { out.Push(r[i] & 0x1Fu); }
+    }
+}
+// The pool's colour counts, W..G (the fund clamp).
+inline void PwtPoolColours(const ManaPool& p, int* col)
+{ col[0] = p.white; col[1] = p.blue; col[2] = p.black; col[3] = p.red; col[4] = p.green; }
 inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
 {
     out.n = 0;
+    for (int c = 0; c < 5; ++c) { out.fund[c] = 0; }
     if (s.prepay_wild_true.stamp != PrepayCStampNow(s) || !PrepayWildTrack()) { return false; }
+    const bool literal = PrepayWildLiteralOn();
+    if (literal) { out.lim = WildTrueRec::kCap; }
     const std::uint8_t* r = which == 0 ? s.prepay_wild_true.gen : s.prepay_wild_true.cre;
-    const int wild = which == 0 ? s.floating_mana.wild : s.floating_creature_mana.wild;
-    for (int i = 0; i < GameState::PrepayWildTrue::kSlots; ++i) { if (r[i] != 0) { out.Push(r[i]); } }
-    if (out.n == 0) { return false; }
+    const ManaPool& pool = which == 0 ? s.floating_mana : s.floating_creature_mana;
+    const int wild = pool.wild;
+    PwtDecodeSlots(r, out);
+    if (literal)
+    {
+        const std::uint8_t* f = which == 0 ? s.prepay_wild_true.gfund : s.prepay_wild_true.cfund;
+        int col[5]; PwtPoolColours(pool, col);
+        for (int c = 0; c < 5; ++c) { out.fund[c] = std::min<int>(f[c], std::max(0, col[c])); }
+    }
+    if (out.n == 0 && out.FundTotal() == 0) { return false; }
     if (out.n > wild)
     {
         g_pwt_inconsistent.fetch_add(1, std::memory_order_relaxed);
         out.n = std::max(0, wild);   // canonical order: the tail is the most flexible
     }
-    return out.n > 0;
+    return out.n > 0 || out.FundTotal() > 0;
 }
 inline void PrepayWildTrueStore(GameState& s, int which, WildTrueRec in)
 {
@@ -1678,8 +1723,27 @@ inline void PrepayWildTrueStore(GameState& s, int which, WildTrueRec in)
     for (int i = 0; i < in.n; ) { if ((in.m[i] & 0x1Fu) == 0x1Fu || in.m[i] == 0) { in.Erase(i); } else { ++i; } }
     PwtCanon(in);
     constexpr int kS = GameState::PrepayWildTrue::kSlots;
-    if (in.n > kS) { g_pwt_overflow.fetch_add(in.n - kS, std::memory_order_relaxed); }
-    for (int i = 0; i < kS; ++i) { r[i] = i < in.n ? in.m[i] : std::uint8_t{0}; }
+    if (!PrepayWildLiteralOn())
+    {
+        if (in.n > kS) { g_pwt_overflow.fetch_add(in.n - kS, std::memory_order_relaxed); }
+        for (int i = 0; i < kS; ++i) { r[i] = i < in.n ? in.m[i] : std::uint8_t{0}; }
+        return;
+    }
+    // Literal: runs of one mask share a slot (up to 8 units each); canonical order keeps equal records byte-equal.
+    int slot = 0, i = 0;
+    while (i < in.n && slot < kS)
+    {
+        int k = 1;
+        while (i + k < in.n && in.m[i + k] == in.m[i] && k < 8) { ++k; }
+        r[slot++] = static_cast<std::uint8_t>((in.m[i] & 0x1Fu) | ((k - 1) << 5));
+        i += k;
+    }
+    if (i < in.n) { g_pwt_overflow.fetch_add(in.n - i, std::memory_order_relaxed); }
+    for (; slot < kS; ++slot) { r[slot] = 0; }
+    std::uint8_t* f = which == 0 ? s.prepay_wild_true.gfund : s.prepay_wild_true.cfund;
+    int col[5]; PwtPoolColours(which == 0 ? s.floating_mana : s.floating_creature_mana, col);
+    for (int c = 0; c < 5; ++c)
+    { f[c] = static_cast<std::uint8_t>(std::clamp(std::min(in.fund[c], col[c]), 0, 255)); }
 }
 // Restricted units still live in both pools (0 when stale): the main-phase key folds it (value-gated).
 inline std::uint64_t PrepayWildTrueKey(const GameState& s)
@@ -1692,6 +1756,8 @@ inline std::uint64_t PrepayWildTrueKey(const GameState& s)
     auto mix = [&k](std::uint64_t v) { k ^= v + 0x9E3779B97F4A7C15ull + (k << 6) + (k >> 2); };
     mix(static_cast<std::uint64_t>(g.n)); for (int i = 0; i < g.n; ++i) { mix(g.m[i]); }
     mix(0xC5ull + static_cast<std::uint64_t>(c.n)); for (int i = 0; i < c.n; ++i) { mix(c.m[i]); }
+    if (g.FundTotal() + c.FundTotal() > 0)   // literal only (0 with the lever off: the tag version's key)
+    { for (int x = 0; x < 5; ++x) { mix(0xF0ull + static_cast<std::uint64_t>(g.fund[x]) * 64u + static_cast<std::uint64_t>(c.fund[x])); } }
     return k | 1ull;
 }
 
@@ -43273,6 +43339,25 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             // t_generic_c_first counts DOWN, so the payer can read how many it took (floating_prepay_c).
             while (cost.generic > 0 && t_generic_c_first > 0 && reserve.colorless > 0)
             { --cost.generic; --reserve.colorless; --t_generic_c_first; }
+        }
+    }
+    // LITERAL BOOKING's generic funding (MTG_PREPAY_WILD_LITERAL; WildTrueRec::fund): the prepay booked a
+    // single-colour source's funding unit as its colour, and these units are what the bill's generic pips were
+    // funded with -- so a generic pip spends them first (the colour with the most funding left first), exactly
+    // where the tag version's `wild` funding drained, and never a colour the bill pinned for a later cast.
+    if (wt != nullptr && cost.generic > 0 && wt->FundTotal() > 0)
+    {
+        int* colp[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
+        while (cost.generic > 0)
+        {
+            int best = -1, best_n = 0;
+            for (int x = 0; x < 5; ++x)
+            {
+                const int avail = std::min(wt->fund[x], *colp[x]);
+                if (avail > best_n) { best = x; best_n = avail; }
+            }
+            if (best < 0) { break; }
+            --cost.generic; --*colp[best]; --wt->fund[best];
         }
     }
     drain_wild_generic(cost.generic);

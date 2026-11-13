@@ -621,7 +621,10 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-13, mana-clean item A round 2; 1424 -> 1432 on its own): `prepay_wild_true` grows to 17 bytes (8 one-byte colour MASKS
 // per pool instead of 5 per-colour counts: a dual's unit is {U,R}, committed at spend -- the approved route (a)).
 // Same classification and the same value-gated fold (PrepayWildTrueKey now mixes the canonical masks).
-static_assert(sizeof(GameState) == 1456,   // verify combined current fields in the integrated build
+// +8 bytes (2026-11-13, mana-clean item A round 3; 1456 -> 1464): `prepay_wild_true` grows to 27 bytes (gfund[5] /
+// cfund[5]: the literal booking's per-pool generic-funding subset counts, MTG_PREPAY_WILD_LITERAL; slots now pack
+// mask + count). Same classification and the same value-gated fold (PrepayWildTrueKey mixes the clamped counts).
+static_assert(sizeof(GameState) == 1464,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

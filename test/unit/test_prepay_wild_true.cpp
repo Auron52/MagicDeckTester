@@ -298,3 +298,107 @@ TEST_CASE("prepay wild-true: the flex label round-trips (mask, colour, count)")
         CHECK(BtFlexPack(1, col, 1u << col) == 0);   // one colour: fixed, no label
     }
 }
+
+// ---- ROUTE (a), LITERAL (MTG_PREPAY_WILD_LITERAL; USER 2026-11-13: "Does this wild-mana fix avoid floating wild
+// mana? That shouldn't show up in anything.") -- a single-colour source's funding unit floats as ITS colour, never
+// `wild`; only a multi-colour source's unit stays `wild` (its colours, committed at spend). ----
+
+TEST_CASE("prepay wild-literal: a Forest's funding floats as {G}, not `wild`")
+{
+    GameState s = SliverPrepaid("Forest");
+    CHECK(s.floating_mana.wild + s.floating_creature_mana.wild == 0);
+    CHECK(FloatWt(s).green == 1);
+    CHECK(FloatWt(s).white == 2);
+}
+
+TEST_CASE("prepay wild-literal: Vivid Creek's free {U} floats as {U}")
+{
+    GameState s = LootingPrepaid(0);
+    CHECK(FloatWt(s).wild == 0);
+    CHECK(FloatWt(s).blue == 2);
+    CHECK(FloatWt(s).red == 1);
+}
+
+TEST_CASE("prepay wild-literal: a dual's funding unit stays `wild` (either of its colours)")
+{
+    GameState s = SliverPrepaid("Razorverge Thicket");
+    CHECK(FloatWt(s).wild == 1);
+}
+
+TEST_CASE("prepay wild-literal: =0 restores the tag version's booking (funding `wild` + its colour record)")
+{
+    struct ArmOff
+    {
+        ArmOff()  { heurarm::t_arm[heurarm::PREPAY_WILD_LITERAL] = 0; }
+        ~ArmOff() { heurarm::Clear(); }
+    } _off;
+    GameState s = SliverPrepaid("Forest");
+    CHECK(FloatWt(s).wild == 1);
+    CHECK(FloatWt(s).green == 0);
+    // ...and the record still refuses the third {W}.
+    REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+    REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+    CHECK_FALSE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+}
+
+// The bill's PINNED colours are protected by the fund count: a generic pip spends the funding colour first, so the
+// colour a later cast pinned survives -- in every order.
+TEST_CASE("prepay wild-literal: a generic pip spends the funding colour before a pinned colour")
+{
+    {
+        ManaPool r; r.white = 1; r.green = 1;
+        WildTrueRec wt; wt.fund[4] = 1;                  // the {G} is the bill's generic funding
+        ManaCost c; c.generic = 1;
+        WildTrueScope _s(&wt, /*enforce=*/true);
+        SpendFloatingTowardCost(r, c);
+        CHECK(c.generic == 0);
+        CHECK(r.white == 1);
+        CHECK(r.green == 0);
+        CHECK(wt.fund[4] == 0);
+    }
+    {
+        ManaPool r; r.white = 1; r.green = 1;            // no record: the W..G order eats the {W}
+        ManaCost c; c.generic = 1;
+        SpendFloatingTowardCost(r, c);
+        CHECK(r.white == 0);
+    }
+}
+
+// Bill: Plated Sliver {W} + Sinew Sliver {1}{W} off Plains, Plains, Forest -- the Forest's {G} funds the {1} and floats
+// as {G}. Every order pays in full.
+TEST_CASE("prepay wild-literal: pinned colours still pay in every order")
+{
+    for (int order = 0; order < 2; ++order)
+    {
+        GameState s = SliverPrepaid("Forest");
+        if (order == 0)
+        {
+            REQUIRE(TapForCostDirect(s, CostWt("Sinew Sliver"), /*for_creature=*/true));
+            REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        }
+        else
+        {
+            REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+            REQUIRE(TapForCostDirect(s, CostWt("Sinew Sliver"), /*for_creature=*/true));
+        }
+        CHECK(FloatWt(s).Total() == 0);
+    }
+}
+
+// More than 8 units of one dual mask round-trip without release (a slot packs mask + count).
+TEST_CASE("prepay wild-literal: the record packs runs of one mask (no overflow release)")
+{
+    GameState s = BaseWt(3);
+    s.prepay_wild_true.stamp = PrepayCStampNow(s);
+    s.floating_mana.wild = 12;
+    WildTrueRec in; in.lim = WildTrueRec::kCap;
+    const unsigned GW = (1u << 0) | (1u << 4);
+    for (int k = 0; k < 12; ++k) { in.Push(GW); }
+    const long long ov0 = g_pwt_overflow.load();
+    PrepayWildTrueStore(s, 0, in);
+    CHECK(g_pwt_overflow.load() == ov0);
+    WildTrueRec out;
+    REQUIRE(PrepayWildTrueLoad(s, 0, out));
+    CHECK(out.n == 12);
+    CHECK(out.Count(GW) == 12);
+}

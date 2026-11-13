@@ -582,8 +582,16 @@ struct GameState
     // phase stamped. A subset of the pool's wild, never larger. Units beyond kSlots are released (any colour:
     // counted, MTG_PREPAY_WILD_AUDIT). FUTURE-DETERMINING within the phase: value-gated into the main-phase key
     // (TurnSolver, beside floating_prepay_c).
+    // LITERAL BOOKING (MTG_PREPAY_WILD_LITERAL, route (a); USER 2026-11-13 "Does this wild-mana fix avoid floating
+    // wild mana? That shouldn't show up in anything."): a unit whose source could make only ONE colour is never
+    // booked `wild` at all -- it floats as that colour (floating_mana.<c>), and gfund[c] / cfund[c] count how many of
+    // the pool's colour-c units are the bill's GENERIC funding (a subset count, clamped to the pool's colour), so the
+    // drain pays a generic pip from them before any pinned colour (SpendFloatingTowardCost). Only multi-colour masks
+    // stay in gen[] / cre[], and a slot packs (mask, count): bits 0-4 the mask, bits 5-7 count-1 (so a slot holds up
+    // to 8 units of one mask; the lever off writes one unit per slot, the historical encoding).
     struct PrepayWildTrue { static constexpr int kSlots = 8;
                             std::uint8_t gen[kSlots] = {}; std::uint8_t cre[kSlots] = {};
+                            std::uint8_t gfund[5] = {}; std::uint8_t cfund[5] = {};
                             std::uint8_t stamp = 0xFF; };
     PrepayWildTrue           prepay_wild_true;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):

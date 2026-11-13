@@ -2436,7 +2436,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
                 engine->SetLogger(&dlog);
                 const auto g_t0 = std::chrono::steady_clock::now();
-                t_pwt_game_viol = 0; t_pwt_game_refused = 0;   // MTG_PREPAY_WILD_AUDIT per-game counts
+                t_pwt_game_viol = 0; t_pwt_game_refused = 0; t_pwt_game_single = 0;   // MTG_PREPAY_WILD_AUDIT per-game counts
                 // Arm the per-game work ceiling (see ai/GameWorkMeter.h). Paired with End() below so
                 // a pooled worker thread can never carry one game's meter into the next; Begin also
                 // resets, so the pairing is belt-and-braces rather than load-bearing.
@@ -2822,11 +2822,11 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                     std::fprintf(stderr, "[win] job=%s gi=%d wt=%d\n",
                                  job.name.c_str(), global_gi, win_turns[wi.job][wi.game]);
                 }
-                if (PrepayWildAuditLevel() > 0 && (t_pwt_game_viol != 0 || t_pwt_game_refused != 0))
+                if (PrepayWildAuditLevel() > 0 && (t_pwt_game_viol != 0 || t_pwt_game_refused != 0 || t_pwt_game_single != 0))
                 {
-                    std::fprintf(stderr, "[pwt-game] job=%s gi=%d wt=%d viol=%lld refused=%lld\n",
+                    std::fprintf(stderr, "[pwt-game] job=%s gi=%d wt=%d viol=%lld refused=%lld single=%lld\n",
                                  job.name.c_str(), global_gi, win_turns[wi.job][wi.game],
-                                 t_pwt_game_viol, t_pwt_game_refused);
+                                 t_pwt_game_viol, t_pwt_game_refused, t_pwt_game_single);
                 }
                 // MTG_DUMP_CARDS -- the compact per-game card summary (see GameLogger::CardSummaryOn).
                 // Emitted as CARD NUMBERS, not names: numbers are short, and because every arm of a

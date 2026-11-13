@@ -64622,6 +64622,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             const int prod_c[5] = { produced.white, produced.blue, produced.black, produced.red, produced.green };
             const int pin_c[5]  = { combined.white, combined.blue, combined.black, combined.red, combined.green };
             WildTrueRec rec;
+            const bool literal = PrepayWildLiteralOn();
+            if (literal) { rec.lim = WildTrueRec::kCap; }
             int rsum = 0;
             for (int c = 0; c < 5; ++c)
             {
@@ -64657,9 +64659,30 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 }
                 for (int k = 0; k < fund_left; ++k) { rec.Push(1u << c); ++rsum; }
             }
+            // ROUTE (a), LITERAL (MTG_PREPAY_WILD_LITERAL; USER 2026-11-13: "Does this wild-mana fix avoid floating
+            // wild mana? That shouldn't show up in anything."): a unit whose source could make only colour c is c --
+            // it floats as c, never `wild`, and rec.fund[c] marks it as the bill's generic funding so the drain
+            // spends it on a generic pip before any pinned colour (SpendFloatingTowardCost). Only a multi-colour
+            // source's unit stays `wild` (recorded by its mask).
+            if (literal)
+            {
+                for (int u = rec.n - 1; u >= 0; --u)
+                {
+                    if (PwtPop(rec.m[u]) != 1 || pool.wild <= 0) { continue; }
+                    const int c = std::countr_zero(static_cast<unsigned>(rec.m[u]));
+                    --pool.wild; ++*dst[c]; ++rec.fund[c];
+                    g_pwt_fund_units.fetch_add(1, std::memory_order_relaxed);
+                    rec.Erase(u);
+                }
+            }
             // Never more restricted units than the pool's wild (the most flexible are released first).
             PwtCanon(rec);
             rec.n = std::min(rec.n, std::max(0, pool.wild));
+            // DETECTOR (MTG_PREPAY_WILD_AUDIT): single-colour units left riding `wild` (the tag version books every
+            // one there; the literal booking must leave none).
+            { int sw = 0; for (int u = 0; u < rec.n; ++u) { sw += PwtPop(rec.m[u]) == 1; }
+              if (sw > 0) { g_pwt_single_wild.fetch_add(sw, std::memory_order_relaxed);
+                            if (g_real_resolution) { t_pwt_game_single += sw; } } }
             pwt_restricted = rec;
             if (rec.n > 0) { g_pwt_booked_units.fetch_add(rec.n, std::memory_order_relaxed); }
             (void)rsum;
@@ -64700,8 +64723,10 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                         &big_moved.red, &big_moved.colorless };
         // The generic-funding {C} kept as `colorless` (a physical {C}, above) is owed to this batch exactly
         // like the `wild` it replaces, so it is pinned here too: never moved out as surplus.
-        const int pin[6] = { combined.green, combined.blue, combined.white, combined.black,
-                             combined.red, combined.colorless + c_funded_kept };
+        // The literal booking's generic funding (pwt_restricted.fund, MTG_PREPAY_WILD_LITERAL) is owed the same way.
+        const int* fu = pwt_restricted.fund;
+        const int pin[6] = { combined.green + fu[4], combined.blue + fu[1], combined.white + fu[0], combined.black + fu[2],
+                             combined.red + fu[3], combined.colorless + c_funded_kept };
         for (int k = 0; k < 6 && drop > 0; ++k)
         {
             const int t = std::min(drop, std::max(0, *col[k] - pin[k]));
@@ -64762,10 +64787,15 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // colour-funded unit is booked as its own colour only -- a legal subset of the real choices, which may
             // refuse a pip the dual could have paid (KNOWN CONSERVATIVE CORNER: the creature-only-source mixed batch,
             // Somberwald Sage; the single pre-load above does the exact split).
+            // LITERAL (MTG_PREPAY_WILD_LITERAL): the stage books its colour-funded units as their colour with a fund
+            // count instead (still one colour per unit here: the per-stage flex split is not kept -- a legal subset).
             WildTrueRec stage_restricted;
-            auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept, &stage_restricted](const ManaCost& c, const ManaPool& prod) -> ManaPool
+            const bool stage_literal = PrepayWildLiteralOn();
+            auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept, &stage_restricted, stage_literal](const ManaCost& c, const ManaPool& prod) -> ManaPool
             {
                 stage_restricted.n = 0;
+                for (int x = 0; x < 5; ++x) { stage_restricted.fund[x] = 0; }
+                if (stage_literal) { stage_restricted.lim = WildTrueRec::kCap; }
                 ManaPool pl;
                 pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
                 pl.red = c.red; pl.green = c.green; pl.colorless = c.colorless;
@@ -64781,9 +64811,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     int best = -1;
                     for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
                     if (best < 0) { break; }
-                    --free_[best]; --need; stage_restricted.Push(1u << best);
+                    --free_[best]; --need;
+                    if (stage_literal) { ++stage_restricted.fund[best]; }
+                    else
+                    {
+                        stage_restricted.Push(1u << best);
+                        if (PrepayWildTrack())
+                        {
+                            g_pwt_single_wild.fetch_add(1, std::memory_order_relaxed);
+                            if (g_real_resolution) { ++t_pwt_game_single; }
+                        }
+                    }
                 }
-                pl.wild = c.generic - need;
+                pl.wild = c.generic - need - stage_restricted.FundTotal();
                 {
                     const int stay = c_must_stay(c_fund, std::max(0, prod.colorless - c.colorless),
                                                  c.colorless, pure_left);
@@ -64792,6 +64832,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     prepay_c_kept += stay;
                 }
                 for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
+                for (int i = 0; i < 5; ++i) { *dst[i] += stage_restricted.fund[i]; }
+                if (stage_literal && stage_restricted.FundTotal() > 0)
+                { g_pwt_fund_units.fetch_add(stage_restricted.FundTotal(), std::memory_order_relaxed); }
                 pl.wild += prod.Total() - pl.Total();   // preserve the stage total exactly
                 return pl;
             };
@@ -64802,8 +64845,8 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (PrepayWildTrack())
             {
                 WildTrueRec cre = stage_restricted;
-                for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k)
-                { if (state.prepay_wild_true.cre[k] != 0) { cre.Push(state.prepay_wild_true.cre[k]); } }
+                PwtDecodeSlots(state.prepay_wild_true.cre, cre);
+                for (int x = 0; x < 5; ++x) { cre.fund[x] += state.prepay_wild_true.cfund[x]; }
                 PrepayWildTrueStore(state, 1, cre);
             }
         }
@@ -64827,11 +64870,26 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (PrepayWildTrack())
             {
                 WildTrueRec cre;
-                for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k)
+                if (PrepayWildLiteralOn())
                 {
-                    if (state.prepay_wild_true.cre[k] != 0) { cre.Push(state.prepay_wild_true.cre[k]); }
-                    if (state.prepay_wild_true.gen[k] != 0) { cre.Push(state.prepay_wild_true.gen[k]); }
-                    state.prepay_wild_true.gen[k] = 0;
+                    cre.lim = WildTrueRec::kCap;
+                    PwtDecodeSlots(state.prepay_wild_true.cre, cre);
+                    PwtDecodeSlots(state.prepay_wild_true.gen, cre);
+                    for (int x = 0; x < 5; ++x)
+                    {
+                        cre.fund[x] = state.prepay_wild_true.cfund[x] + state.prepay_wild_true.gfund[x];
+                        state.prepay_wild_true.gfund[x] = 0;
+                    }
+                    for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k) { state.prepay_wild_true.gen[k] = 0; }
+                }
+                else
+                {
+                    for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k)
+                    {
+                        if (state.prepay_wild_true.cre[k] != 0) { cre.Push(state.prepay_wild_true.cre[k]); }
+                        if (state.prepay_wild_true.gen[k] != 0) { cre.Push(state.prepay_wild_true.gen[k]); }
+                        state.prepay_wild_true.gen[k] = 0;
+                    }
                 }
                 PrepayWildTrueStore(state, 1, cre);
             }
