@@ -949,11 +949,22 @@ TEST_CASE("Line-spare generic: a colour-short line pays a generic pip with the s
             CHECK(TapForCostDirect(s, rite, /*for_creature=*/false) == on);
         }
         {
-            // No live line: the historical tap on both arms (the Needle pays both pips, the Territory stays up).
-            GameState s = s0;
-            REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
-            CHECK_FALSE(PermFu(s, "Unclaimed Territory").tapped);
-            CHECK(s.floating_mana.red == 0);
+            // No live line: this lever stands down. With MTG_CCO_HAND_DEMAND off it is the historical tap (the
+            // Needle pays both pips, the Territory stays up, and the castable Rite of Flame in hand is left with
+            // only the Territory's noncreature {C}, which cannot pay its {R}). MTG_CCO_HAND_DEMAND (items C+I,
+            // default ON) reads that same hand demand without a line: a wide colored_creature_only land takes the
+            // generic while a castable noncreature hand card has a coloured pip, so the Territory's {C} pays and the
+            // Needle's second {R} floats for Rite -- the same payment the line-spare rule makes above.
+            for (const bool hd : { false, true })
+            {
+                CAPTURE(hd);
+                ArmFu hand(heurarm::CCO_HAND_DEMAND, hd);
+                GameState s = s0;
+                REQUIRE(TapForCostDirect(s, med, /*for_creature=*/false));
+                CHECK(PermFu(s, "Unclaimed Territory").tapped == hd);
+                CHECK(s.floating_mana.red == (hd ? 1 : 0));
+                CHECK(TapForCostDirect(s, rite, /*for_creature=*/false) == hd);
+            }
         }
     }
     {

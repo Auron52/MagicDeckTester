@@ -455,20 +455,53 @@ void BlueInHand(GameState& s)
 
 // EDF seed 3353 T8 (an ORACLE-GAP): a tap set that makes more than its bill floats ANY of its units on, not
 // the float-only payer's fixed pick. Forest + Wild Growth ({G}{G}) and Plains + Fertile Ground ({W} + any)
-// make four for {3}; the payer's generic order spends {W} and the bonus before {G}, so without a set-aside
+// make four for {3}; the WUBRG generic order spends {W} and the bonus before {G}, so without a set-aside
 // of the new units the one left over is always a {G} -- never the {U} a later Training Grounds wants.
+//
+// Two arms. MTG_PAY_HAND_GENERIC (items C+I, default ON) makes the payer itself spend the colour the castable hand
+// needs least, so its natural leftover from {G}{G}{W}{U} paying {3} is already the {U}: that payment is recorded with
+// no set-aside (ExtendSurplus skips the split equal to the payer's own leftover, and the result key folds the two
+// into one option). The property under test -- SOME two-tap payment leaves the {U} floating -- is checked on the
+// paid result in both arms; the set-aside path itself (stash.blue == 1) is pinned in the lever-off arm, where the
+// payer's leftover is still a {G} and only the set-aside can produce the {U}.
 TEST_CASE("mana oracle: a payment that makes more than its bill can float any one of its units")
 {
     EnsureOracleCards();
-    GameState s = Board({ "Forest", "Wild Growth", "Plains", "Fertile Ground" });
-    s.battlefield[1].aura_attached_to = 1;
-    s.battlefield[3].aura_attached_to = 3;
-    s.deck_has_land_aura = true;
-    BlueInHand(s);
-    const auto opts = manaoracle::MinimalPayments(s, Cost(3), /*for_creature=*/false, nullptr);
-    bool keeps_u = false;
-    for (const manaoracle::PayOption& o : opts) { if (o.taps.size() == 2 && o.stash.blue == 1) { keeps_u = true; } }
-    CHECK(keeps_u);
+    for (const int lever : { 0, 1 })
+    {
+        CAPTURE(lever);
+        const std::int8_t saved = heurarm::t_arm[heurarm::PAY_HAND_GENERIC];
+        heurarm::t_arm[heurarm::PAY_HAND_GENERIC] = static_cast<std::int8_t>(lever);
+        GameState s = Board({ "Forest", "Wild Growth", "Plains", "Fertile Ground" });
+        s.battlefield[1].aura_attached_to = 1;
+        s.battlefield[3].aura_attached_to = 3;
+        s.deck_has_land_aura = true;
+        BlueInHand(s);
+        const auto opts = manaoracle::MinimalPayments(s, Cost(3), /*for_creature=*/false, nullptr);
+        bool stashes_u = false;
+        bool floats_u  = false;
+        for (const manaoracle::PayOption& o : opts)
+        {
+            if (o.taps.size() != 2) { continue; }
+            if (o.stash.blue == 1) { stashes_u = true; }
+            // Pay it for real: the taps, the set-aside held out, the bill from what floats, the set-aside back.
+            GameState paid = s;
+            if (!manaoracle::PerformPayTaps(paid, o)) { continue; }
+            ManaPool& f = paid.floating_mana;
+            if (f.white < o.stash.white || f.blue < o.stash.blue || f.black < o.stash.black || f.red < o.stash.red
+                || f.green < o.stash.green || f.colorless < o.stash.colorless)
+            { continue; }
+            f.white -= o.stash.white; f.blue -= o.stash.blue; f.black -= o.stash.black;
+            f.red -= o.stash.red; f.green -= o.stash.green; f.colorless -= o.stash.colorless;
+            if (!TapForCostDirect(paid, Cost(3), /*for_creature=*/false)) { continue; }
+            f.white += o.stash.white; f.blue += o.stash.blue; f.black += o.stash.black;
+            f.red += o.stash.red; f.green += o.stash.green; f.colorless += o.stash.colorless;
+            if (f.blue == 1 && f.Total() == 1) { floats_u = true; }
+        }
+        CHECK(floats_u);
+        if (lever == 0) { CHECK(stashes_u); }
+        heurarm::t_arm[heurarm::PAY_HAND_GENERIC] = saved;
+    }
 }
 
 TEST_CASE("mana oracle: Lake's on-demand crack is distinct from its ordinary black tap")
