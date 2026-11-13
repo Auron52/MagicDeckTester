@@ -38,6 +38,21 @@ any budget. 8097213a2 fixed the flashback version of this:
 
 ## 3. A graveyard cast can never precede a hand cast (completeness; found by integrator C1, Millicent)
 
+**STATUS: FIXED in 507049f75 (2026-11-13).** Graveyard casts (flashback, Lurrus permission) now resolve at their
+card's `CastOrderRank` in both worlds; `MTG_GY_CAST_IN_SEQUENCE=0` restores the trailing pass (A/B only). Proof:
+`test/scenarios/spirits_flashback_souls_then_millicent_same_main.json` (d3 b0) wins T6; the old order wins T7.
+Smoke: only Martyr Lifegain moved (Lurrus casts at rank), d0 and d5 digests at an UNCHANGED score; no searched game slower.
+Residuals, kept by design:
+- Breakpoint-class graveyard casts (Faithless Looting's flashback, Throes of Chaos retrace) and graveyard
+  readers (Mystic Retrieval) still TRAIL: their draw or target set depends on what resolved before them.
+- The line-prepay credit does not count a PENDING flashback (B1's same-main flashback of a card cast from
+  hand). That credit only helps payment; it does not affect what the enumerator can find.
+- A rare executor continuation can order the graveyard cast differently from the rollout. This happens when a Vial put of an
+  OrderingOpaque card makes the executor's opaque test differ from the rollout's hand-only test (a
+  pre-existing class).
+
+The original write-up follows.
+
 **The hole.** Both apply worlds resolve every graveyard cast (flashback, retrace) in the TRAILING pass, after
 every hand cast and Vial put (ApplyPlanDirect's trailing pass; AIEngine::TakeTurn). So a line whose hand
 cast needs something the graveyard cast produces cannot be realised in one main. Spirits example: Lingering

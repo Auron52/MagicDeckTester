@@ -492,3 +492,17 @@ ability / block restriction; White Orchid flying). The two disclosed OPEN notes 
 this run, not deferrals: Flooded Strand held-fetch crack-then-cast (integrator E1) and Millicent's
 flashback-before-hand-cast ordering (E2, `graveyard-cast-search-holes-deferred.md` §3). Every other note reads
 FULLY MODELLED. `fetch_hold_review.required = true` (Flooded Strand, hold modelled) — measured after E1.
+
+## Integrators E1 / E2 — search-hole repairs (2026-11-13)
+- **E1, held-fetch crack-then-cast:** FIXED ea8d143e9 (ledger f76649649).
+  - A Flooded Strand held from an earlier turn now pays for same-turn casts, at every target (`AppendHeldFetchCrackFirstPlans`).
+  - Smoke unchanged.
+  - Viewer: already expressible, no menu change.
+  - Residual: a breakpoint continuation cannot crack a held fetch to cast a card drawn mid-turn. It is inert for Spirits (no mid-turn draws) and recorded in `held-fetch-crack-then-cast-hole.md`.
+- **E2, graveyard cast ordering:** FIXED 507049f75 (`graveyard-cast-search-holes-deferred.md` §3). This closes C1's "OPEN ordering hole" for Millicent.
+  - Units 2927/2927; scenarios 510/510.
+  - Smoke (orchestrator, on a binary rebuilt after an OOM-aborted parallel compile, 19:07): 189 passed, 6 failed.
+    - The four gods keys failed, unchanged from B.
+    - `martyr_smoke_d0` and `martyr_smoke_d5` changed digest at an UNCHANGED score (6.0680, 5.2500): Lurrus casts now happen at their rank.
+    - Searched: slower 1 (the known gods gi19), faster 3, play-changed 80 (+1 vs B). d0 play-changed 920 (+20, martyr).
+    - No searched game is slower because of E2.
