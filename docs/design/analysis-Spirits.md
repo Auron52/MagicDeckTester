@@ -764,3 +764,29 @@ recovers T6 at d8 b0 (budget churn). NOT accepted: `extraturns_regression_d5_s20
 moved in ONE game, gi66). Re-played in its own batch, gi66 gives the GT per-game hash 9eb685ab on BOTH the
 pre-change binary (PGO, src b3928644 = 861cfac7b) and HEAD; the tier run's f79a24d2 is pooled-run churn, not a
 code change from this work (kept GT; flag if it recurs -- cf. the thread-dependent batch digest note).
+
+## Suite admission (integrator G, 2026-11-13, on b53b321f1, build/Release)
+- **Cost gate** (`suite_gate.py --cost`, one pooled regression run of spirits + hinata + hinata2hg, 32 threads):
+  spirits worst searched shape = d5 b20, **1380.8 ms/game** (d3 b10: 806 ms/game); Hinata (pinned yardstick) worst =
+  hinata2hg d5 b30, **4449.9 ms/game** -> **0.31x** (limit 3x) -> PASS. Spirits total 502.0 core-s over 6 jobs.
+- **Rows** (Merfolk template; no value_play block, so play = d5 b20): smoke d0 1001x1000, d3 1001x50 b10, d5 1001x100
+  b20, spirits2hg d3 1001x50 b10; regression d0 2002x1000, d3 2002x75 b10, d5 2002/3003 x150 b20; overnight ENTRY
+  d0 4004/6006/8008/10010 x2000, d3 4004-7007 x400 b10, d5 4004-7007 x425 b20. `DECK_FILE`/`DECK_PROF` `[spirits]` only
+  (the `2hg` suffix is stripped by regression.sh; no alias entry, per the skill and the merfolk2hg precedent).
+- **Unbudgeted backstop**: screened 12 twenty-game blocks (30001..30221 step 20, d3+d5, budget 0, abandon_units 2e6,
+  MTG_SLOW_GAME_MS=5000): 10 of 469 games hit the cap (blocks 30001/30021/30041/30101/30161/30221). Regression half
+  `spirits 3|5 30181 x20` (no game over 5 s at either depth); overnight half `spirits 3|5 30081 x10` (seeds
+  30081..30090, all under 5 s; the block's one ~13 s game, gi14 at d3, is outside the row). Note the deck's unbudgeted
+  tail (~2% abandoned) is similar to the "1 in 20" decks.
+- **Accepted GT** (all NEW keys, every game played, no abandonment; `--accept --deck=spirits[,spirits2hg]`; the GT
+  diff showed only these keys + the regression header):
+  smoke d0 5.1240, d3 4.5600, d5 4.6500, 2hg d3 5.1600;
+  regression d0 5.0770, d3 4.6533, d5 s2002 4.6733, d5 s3003 4.6933, backstop d3/d5 s30181 4.5500;
+  overnight d0 5.1225/5.1330/5.1275/5.1135, d3 4.6500/4.6475/4.6225/4.6850, d5 4.6400/4.6565/4.6306/4.6659,
+  backstop d3/d5 s30081 4.5000. The regression run also re-measured hinata/hinata2hg: all 7 keys PASS; the reference
+  gate (VPC --strict) 0 play-drift / 0 board-diverged / 0 enum-gap; suboptimal refs all beaten.
+  The overnight rows ran `MTG_PGO=0` (Release; PGO stamp was stale and builds are byte-identical by contract).
+- `check_gt_logs.py`: 1147 consistent, 0 stale, 0 missing. `suite_gate.py --require decks/Spirits`: ok.
+- `verify_deck.py decks/Spirits/Spirits.cod`: **GATE PASS** -- coverage, card_costs, card_fields, regression_tiers
+  ("in all 3 suite tiers with GT"), viewer, viewer_wiring, mismatch, play_invariants, claude_sweep, suite all PASS;
+  clause_ledger SKIP (standing). Note: it says the claude_sweep was recorded at 35b021047 (re-run only if play changed).
