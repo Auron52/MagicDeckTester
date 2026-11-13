@@ -26491,12 +26491,20 @@ inline void FireMilitiaPrideTokens(GameState& state, int controller, std::vector
 // ("whenever THIS CREATURE attacks") and a summoning-sick Hero must make nothing. Passing nullptr
 // restores the old unconditional behaviour and is only legal for a board with no creature-scoped
 // source -- callers in the two combat worlds must always pass the real list.
+//
+// `exile_eoc_nums` (Geist of Saint Traft, 2026-11-13): when non-null, receives the m_number of every
+// token made for a source with attack_token_exile_end_of_combat ("exile that token at end of combat"),
+// for the caller to hand to ExileEndOfCombatTokens after combat damage. Both combat worlds pass it.
 inline int FireAttackCreateTokens(GameState& state, int controller_index,
-                                 const std::vector<int>* attacker_indices = nullptr)
+                                 const std::vector<int>* attacker_indices = nullptr,
+                                 std::vector<int>* exile_eoc_nums = nullptr)
 {
     int start = static_cast<int>(state.battlefield.size());
 
-    struct TokenSpec { int n, p, t; std::vector<std::string> subs; };
+    // color / kws: Geist's "white Angel ... with flying" (empty for Adeline and Hero -> the historical
+    // colourless keyword-less token, byte-identical). exile_eoc: the end-of-combat exile clause.
+    struct TokenSpec { int n, p, t; std::vector<std::string> subs; std::string color;
+                       std::vector<std::string> kws; bool exile_eoc; };
     std::vector<TokenSpec> to_create;
     for (int i = 0; i < start; ++i)
     {
@@ -26526,7 +26534,10 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
                                         ? gamesetup::OpponentHeads() : 1),
                              def->params.attack_token_power,
                              def->params.attack_token_toughness,
-                             def->params.attack_token_subtypes});
+                             def->params.attack_token_subtypes,
+                             def->params.created_token_color,
+                             def->params.attack_token_keywords,
+                             def->params.attack_token_exile_end_of_combat});
     }
     for (const TokenSpec& s : to_create)
     {
@@ -26535,11 +26546,54 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
         // this site's existing -- and separately questionable -- behaviour under doubling).
         for (int k = 0; k < s.n; ++k)
         {
-            CreateToken(state, controller_index, s.p, s.t, s.subs);
+            const std::size_t first = state.battlefield.size();
+            CreateToken(state, controller_index, s.p, s.t, s.subs, s.color, s.kws);
             state.battlefield.back().tapped = true;   // tapped and attacking
+            if (s.exile_eoc && exile_eoc_nums != nullptr && first < state.battlefield.size())
+            {
+                // Every replica this CreateToken made (a token doubler makes 2^N): the new tokens
+                // carrying THIS spec's token name. An enter watcher may append an unrelated token in
+                // between (the FireMilitiaPrideTokens note), which the name test excludes.
+                const InternedName want = state.battlefield[first].card.m_name;
+                for (std::size_t j = first; j < state.battlefield.size(); ++j)
+                {
+                    const Permanent& t = state.battlefield[j];
+                    if (t.is_token && t.card.m_name == want) { exile_eoc_nums->push_back(t.card.m_number); }
+                }
+            }
         }
     }
     return start;
+}
+
+// "Exile that token at end of combat" (Geist of Saint Traft's Angel; CR 511.2 -- a delayed trigger at
+// the beginning of the end of combat step). Called in BOTH worlds after combat damage has resolved
+// and before anything post-combat reads the board: GameEngine::CombatPhase (Step::EndCombat) and
+// TurnSolver's SimulateOneCombatAfterTitan (before the PostCombatMain stamp). A token that already
+// left the battlefield is skipped (re-found by number every time; battlefield indices shift).
+// Exile is not dying (CR 700.4): no dies trigger. A token in exile ceases to exist (CR 111.7), so
+// nothing is appended to the exile zone. Nothing can be attached to the Angel in this pool; the
+// detach below is defensive (CR 301.5c / 303.4c state-based results of the host leaving).
+inline void ExileEndOfCombatTokens(GameState& state, const std::vector<int>& nums)
+{
+    for (const int num : nums)
+    {
+        for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+        {
+            const Permanent& t = state.battlefield[i];
+            if (!t.is_token || t.card.m_number != num) { continue; }
+            const std::string name = t.card.m_name.str();
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            for (Permanent& o : state.battlefield)
+            {
+                if (o.equipped_to      == num) { o.equipped_to      = 0; }
+                if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
+            }
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "exile", name + " -- exiled at end of combat"); }
+            break;
+        }
+    }
 }
 
 // Mavren Fein, Dusk Apostle (Vampires, 2026-10-18): "Whenever one or more nontoken Vampires you

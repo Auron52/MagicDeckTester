@@ -22251,6 +22251,25 @@ bool VampiresProvider::CleanupDiscardShedStable() const
     return false;
 }
 
+// ---- SpiritsProvider: the lossless fetch surface ---------------------------------------------
+// Every distinct legal target (GenericProvider's scan: each library land whose subtypes match the
+// fetchland, once per name), and the search branches on ALL of them. Deliberately no ranking: which
+// of Plains / Island / Hallowed Fountain / Godless Shrine / Watery Grave a Flooded Strand should find
+// is exactly the judgement the search makes; a colour-need order would be a provider narrowing that
+// needs a measurement and the USER's adoption first (analyze-deck Stage 1 fetch_hold_review).
+std::vector<std::string> SpiritsProvider::FetchCandidates(const GameState& s, int controller,
+                                                          const CardParams& fetch_pp) const
+{
+    return GenericProvider::FetchCandidates(s, controller, fetch_pp);
+}
+
+std::vector<std::string> SpiritsProvider::FetchSearchCandidates(const GameState&, int,
+                                                                const CardParams&,
+                                                                const std::vector<std::string>& ranked) const
+{
+    return ranked;   // the full set -- never DecisionProvider's top-1 default (an arbitrary library-order pick here)
+}
+
 // The paired baseline is the AntiLifegain route this deck used before onboarding.
 // Ordered opaque casts make a burn spell's damage available before a later
 // spectacle cast, so the enumerator can price that cast at its legal live cost.
@@ -22292,18 +22311,54 @@ std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
     return all;
 }
 
+// The modern zero-mana, one-life, sacrifice-self, find-one fetch template (Arid Mesa / Wooded Foothills /
+// Flooded Strand) at a life total where the collapse is safe. Only this shape may be collapsed through
+// PerformFetch; other activated searches keep their full cost path.
+static bool ModernFetchCollapsible(const GameState& state, const CardParams& p)
+{
+    return !p.fetch_land_types.empty() && p.land_search_activation_cost.has_value()
+        && p.land_search_activation_cost->ManaValue() == 0 && p.land_search_activation_life_cost == 1
+        && p.land_search_activation_sacrifice_self && p.land_search_count == 1
+        && state.players[state.active_player_index].life > 3;
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
     if (p.fetch_land_types.empty()) { return false; }
     if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
-    // Only the modern zero-mana, one-life fetch template is safe to collapse
-    // through PerformFetch; other activated searches keep their full cost path.
-    if (p.land_search_activation_cost->ManaValue() != 0 || p.land_search_activation_life_cost != 1
-        || !p.land_search_activation_sacrifice_self || p.land_search_count != 1
-        || state.players[state.active_player_index].life <= 3) { return false; }
+    if (!ModernFetchCollapsible(state, p)) { return false; }
     if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
     return !ResolveProvider(state).ConsiderFetchHold(state, land);
+}
+
+// THE CRACK-ON-PLAY OPTION BESIDE THE HOLD (Spirits, 2026-11-13). When the provider keeps the
+// battlefield hold (ConsiderFetchHold true -- the root default), FetchResolvesOnPlay is false and the land
+// is played as a permanent; its activation is then a plan action that the apply runs in the TRAILING pass,
+// after every cast. So "play Flooded Strand, crack it for an untapped Island, cast Drogskol Captain with
+// that Island" was not ONE plan at any budget: the casts are enumerated against the board BEFORE the crack
+// (the fetch makes no mana), and the land-search position twins (Plan::land_search_act_slot) fire only
+// for landfall watchers / land counters / library-top readers, never for MANA. Measured on
+// test/scenarios/spirits_strand_fetches_the_blue_source.json at --budget-ms 0 --depth 5: win T5, the
+// crack-and-cast T4 line unfindable. Full timing therefore means BOTH: the hold (land_to_play with no
+// fetch_target) AND the immediate crack, one variant per FetchSearchCandidates target, pinned by a
+// non-empty fetch_target that PlayLandCore collapses (FetchCrackOnPlayPinned). Byte-identical for every
+// deck that does not offer the hold with a modern fetch: Modern RW Burn / FiveColour / Anti-Lifegain
+// decline the hold (FetchResolvesOnPlay is already true there), and the legacy fetch shape is immediate.
+// Not in HUMAN PLAY: the viewer's menu indices are what saved references replay by, so its menu is left
+// exactly as it was (a viewer surface for the same line is an open item in docs/design/analysis-Spirits.md).
+bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    if (LegacyFetchImmediateOn() || !ModernFetchCollapsible(state, p) || HumanPlayActive()) { return false; }
+    return DecisionUnpruned(UnprunedGate::Fetch) || ResolveProvider(state).ConsiderFetchHold(state, land);
+}
+
+// The apply's half: a modern fetch played WITH a pinned target is the crack-on-play variant above.
+// (A hold variant always carries an empty target; human play never emits a pinned one.)
+bool FetchCrackOnPlayPinned(const GameState& state, const CardDefinition& land, const std::string& target)
+{
+    return !target.empty() && !HumanPlayActive() && ModernFetchCollapsible(state, land.params);
 }
 
 int ModernRwBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
@@ -23153,6 +23208,7 @@ namespace
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
     const MerfolkProvider        g_merfolk;
+    const SpiritsProvider        g_spirits;
     const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
 }
@@ -25837,6 +25893,26 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // black staples), Lotus Bloom (Dragonstorm). Must beat `anti` (the tutors' tutor_to_hand), so it
     // routes FIRST; the signature is carried by no other deck, so the position is free.
     bool shadowborn = false;
+    // SPIRITS (W/U(/b) Spirit tribal on Aether Vial; onboarding 2026-11-13). MUST return ABOVE `anti`
+    // (Flooded Strand's fetch_land_types), `goblin` (a Spirit dies-watcher such as Millicent's) and
+    // `vial && slivers` (Millicent's affinity_for_subtype) -- the archetype-neutral misroute class
+    // again; it rode `vial` before its own cards landed. Signature = Spirit-KEYED gated params OR'd
+    // across FOUR different cards, so one deckbuilding swap cannot lose it:
+    //   * a lord whose subtypes_affected names "Spirit" -- Drogskol Captain, Supreme Phantom and
+    //     Patrician Geist (keyed on the SUBTYPE, the Knights discipline: subtypes_affected is
+    //     archetype-neutral on its own, every tribal lord sets it);
+    //   * Geist of Saint Traft's attack_token_exile_end_of_combat (new 2026-11-13, carried by no other
+    //     card) -- conjoined with the card BEING a Spirit, so a future non-Spirit card reusing the
+    //     param cannot pull its deck here;
+    //   * affinity for Spirits (Millicent, Restless Revenant) -- affinity_for_subtype on a SPIRIT card
+    //     (Thrumming Hivepool, the Slivers carrier, is a Sliver).
+    // EXCLUDED, with reasons: Aether Vial / Metallic Mimic / Unclaimed Territory / Secluded Courtyard
+    // (colourless or tribal-land staples every Vial tribal deck runs -- Kithkin, Pirates, Soldiers);
+    // Spirit of the Labyrinth's each_player_draw_cap_per_turn (a white hatebear any W list may add);
+    // the fetch / shock lands; Lingering Souls' token / flashback params (a generic W/B token card).
+    // Later integrators: Mausoleum Wanderer's enter watcher keyed on enters_watch_subtypes "Spirit"
+    // would make a fifth term; add it with its param.
+    bool spirits = false;
     for (const Card& c : deck.mainboard)
     {
         // Midrange Burn's three independent signature cards, conjuncted with the
@@ -25878,6 +25954,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // creature-type lands, or a generic lord: other tribal decks use those too.
         if (p.enter_as_copy_of_creature || p.kicked_etb_target_land_island
             || p.land_aura_sets_island) { merfolk = true; }
+        // Spirits -- see the flag's declaration for the terms and the exclusions.
+        {
+            const bool spirit_lord = std::find(p.subtypes_affected.begin(), p.subtypes_affected.end(),
+                                               std::string("Spirit")) != p.subtypes_affected.end();
+            const bool is_spirit = CardHasSubtype(def->card, "Spirit");
+            if (spirit_lord || (is_spirit && p.attack_token_exile_end_of_combat)
+                || (is_spirit && p.affinity_for_subtype))
+            { spirits = true; }
+        }
         // + A1: Falkenrath Gorger's madness grant KEYED ON THE VAMPIRE SUBTYPE (a madness-granter for
         // another type would be another archetype). madness_cost alone is deliberately NOT a term: it is
         // archetype-NEUTRAL (any madness card -- a Fiery Temper burn list -- carries it), so it would
@@ -26415,6 +26500,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (morph)       { return g_morph; }
     if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
+    // Spirits: above `anti`, `goblin` and `vial && slivers` (see the flag). Its signature is carried by
+    // no other deck (pinned by test_pirates_provider's routing table), so the position is free.
+    if (spirits)     { return g_spirits; }
     if (kithkin)     { return g_kithkin; }
     // Several resolved-turn spells plus Walk's buyback or Mastery's miracle distinguish
     // this list from Cyclone's Emrakul cast trigger and from generic blue staples.

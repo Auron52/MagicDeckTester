@@ -16289,6 +16289,174 @@
          ],
          "is_filter": true
       }
+   },
+  {
+   "name": "Drogskol Captain",
+   "mana_cost": "{1}{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Soldier"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying\nOther Spirit creatures you control get +1/+1 and have hexproof. (They can't be the targets of spells or abilities your opponents control.) [Lord MODELLED: lord_effect, subtypes_affected [\"Spirit\"], +1/+1, lord_excludes_self -- resolved in ComputeLordBonus (shared by executor combat, rollout combat, SBA and the attack projection), matched against each creature's LIVE subtypes, so Lingering Souls / Millicent Spirit tokens and a Metallic Mimic that chose Spirit all get it; 'Other' is by permanent address, so two Captains buff each other. [PARTIAL, PROVISIONAL (user sign-off owed): the HEXPROOF grant is not modelled. WHY inert: hexproof only stops spells/abilities an OPPONENT controls from targeting, and the passive goldfish opponent casts and activates nothing, so nothing can ever target our creatures; our own targeting is unaffected by hexproof (the Lord of Atlantis islandwalk precedent, USER-approved 2026-11-01). FLYING is carried in keywords and is inert: the opponent never blocks.]]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Spirit"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
    }
+  },
+  {
+   "name": "Supreme Phantom",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 3,
+   "oracle_text": "Flying\nOther Spirits you control get +1/+1. [Lord MODELLED: lord_effect, subtypes_affected [\"Spirit\"], +1/+1, lord_excludes_self -- ComputeLordBonus on LIVE subtypes, so Spirit tokens and a Metallic Mimic that chose Spirit count; 'Other' by permanent address (copies buff each other). On the battlefield only creatures are Spirits, so 'Spirits' = 'Spirit creatures'. Nothing deferred. FLYING is carried in keywords and is inert: the opponent never blocks.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Spirit"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true
+   }
+  },
+  {
+   "name": "Shacklegeist",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying\nThis creature can block only creatures with flying.\nTap two untapped Spirits you control: Tap target creature you don't control. [BODY MODELLED: a 2/2 Creature -- Spirit for {1}{U}; the Spirit subtype is what the deck reads (the Spirit lords, Millicent's affinity, Unclaimed Territory / Secluded Courtyard creature-type mana, Aether Vial on 2). FLYING is carried in keywords and is inert: the opponent never blocks. [PARTIAL, PROVISIONAL (user sign-off owed): 'can block only creatures with flying' is not modelled -- inert, we never block (the passive opponent never attacks). [PARTIAL, PROVISIONAL (user sign-off owed; the Rimescale Dragon tap-deferral precedent, USER-approved 2026-10-04 for that card): 'Tap two untapped Spirits you control: Tap target creature you don't control' is not modelled. WHY inert: its only legal targets are the opponent's PopulateOpponentSpawns bodies, which never attack or block, and no engine path reads an opponent permanent's tapped state, so the effect changes nothing; the cost taps two of our Spirits (no {T} symbol, so summoning-sick ones may pay), which can only remove attackers, and nothing in this list rewards a creature becoming tapped. Optional, so declining is always legal and weakly dominant. Viewer cost, disclosed: a human cannot choose this dominated activation.]]]",
+   "template": "vanilla_creature",
+   "parameters": {}
+  },
+  {
+   "name": "Spirit of the Labyrinth",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Each player can't draw more than one card each turn. [BODY MODELLED: a 3/1 Enchantment Creature -- Spirit for {1}{W}; lorded by the Spirit lords, counted by Millicent's affinity. [PARTIAL, PROVISIONAL (user sign-off owed): the draw cap is NOT applied. WHY inert in the Spirits 60: no card in the list draws -- the only draws in a game are our one draw-step card and the passive opponent's one notional-turn draw (Azorius Chancery's return is a bounce, Flooded Strand's find is a search, Aether Vial is a put), so 'no more than one card each turn' can never bind for either player. GUARDED fail-closed: each_player_draw_cap_per_turn sets the deck constant deck_has_draw_cap, and a second draw-step/draw hand entry by one player in one turn while a cap permanent is on the battlefield ABORTS the engine (handentry::NoteFirstDraw), so a list edit that adds a draw cannot silently over-draw.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "each_player_draw_cap_per_turn": 1
+   }
+  },
+  {
+   "name": "Flooded Strand",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Island card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland (the Arid Mesa / Wooded Foothills model): its entry and its searched activation are separate decisions -- it may be held on the battlefield and cracked in a later main, and (SpiritsProvider keeps the hold) the crack-on-play variants are offered BESIDE the hold, one per target, so a Strand played this turn can find a land that pays for this main's casts (FetchCrackOnPlayOffered). [KNOWN ENGINE HOLE, OPEN: a Strand already HELD on the battlefield cannot be cracked to pay for a cast in the same main -- the casts are priced before the trailing crack; docs/design/held-fetch-crack-then-cast-hole.md.] The activation pays 1 life and sacrifices this land as costs, then searches a Plains or Island card (in the Spirits list: Plains, Island, Hallowed Fountain, Godless Shrine = Plains Swamp, Watery Grave = Island Swamp; the pick is searched, LandSearchPicks) and shuffles. The fetched shock land resolves its own pay-2-or-tapped choice as it enters. It cannot tap for mana. Instant-speed activation is collapsed to our searched main-phase activation slots (against the passive opponent a crack at the opponent's end step is equivalent to one in our next main before anything is cast, minus the draw information, so the main-phase slot weakly dominates).]",
+   "template": "custom",
+   "parameters": {
+    "produces": [],
+    "fetch_land_types": [
+     "Plains",
+     "Island"
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1
+   }
+  },
+  {
+   "name": "Hallowed Fountain",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Plains",
+    "Island"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {W} or {U}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "W",
+     "U"
+    ],
+    "etb_pay_life_to_untap": 2
+   }
+  },
+  {
+   "name": "Geist of Saint Traft",
+   "mana_cost": "{1}{W}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Cleric"
+   ],
+   "keywords": [
+    "Hexproof"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.)\nWhenever Geist of Saint Traft attacks, create a 4/4 white Angel creature token with flying that's tapped and attacking. Exile that token at end of combat. [FULLY MODELLED. Hexproof is carried as the keyword and is inert here: the passive goldfish opponent never targets anything. The attack trigger rides Hero of Bladehold's attack_creates_tokens family: CREATURE-scoped (attack_tokens_require_self_attacking -- a summoning-sick Geist makes nothing) and a FLAT count of one (attack_tokens_per_opponent false -- no 'for each opponent', so 2HG does not double it). The token is a 4/4 white Angel with flying (attack_token_keywords + created_token_color), created tapped and appended to the attacker list so it deals 4 this combat, and projected by TurnSolver's PendingAttackDamage through the same creature-scoped gate. 'EXILE THAT TOKEN AT END OF COMBAT' is attack_token_exile_end_of_combat: FireAttackCreateTokens reports the number of every token it made for such a source, and the shared ExileEndOfCombatTokens removes the ones still on the battlefield at the end of combat step (CR 511.2) in BOTH worlds (GameEngine::CombatPhase at Step::EndCombat; TurnSolver's SimulateOneCombatAfterTitan after combat damage, before the post-combat main), so no post-combat main, end step, leaf or later turn ever sees it. Deliberately NOT Twinflame's exile_at_end (swept at the END STEP). Exile is not dying (CR 700.4): no dies trigger fires. The Angel is not a Spirit, so no Spirit lord pumps it. LEGENDARY: a second copy goes through the existing legend_keep decision (EnforceLegendRule).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_creates_tokens": 1,
+    "attack_tokens_per_opponent": false,
+    "attack_tokens_require_self_attacking": true,
+    "attack_token_power": 4,
+    "attack_token_toughness": 4,
+    "attack_token_subtypes": [
+     "Angel"
+    ],
+    "attack_token_keywords": [
+     "Flying"
+    ],
+    "created_token_color": "W",
+    "attack_token_exile_end_of_combat": true
+   }
+  }
  ]
 }

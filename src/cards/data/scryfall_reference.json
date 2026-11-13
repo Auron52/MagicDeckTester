@@ -1811,6 +1811,17 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Drogskol Captain": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{W}{U}",
+    "oracle_text": "Flying\nOther Spirit creatures you control get +1/+1 and have hexproof. (They can't be the targets of spells or abilities your opponents control.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit Soldier"
+  },
   "Dwalin, Weaponmaster": {
     "cmc": 2.0,
     "keywords": [
@@ -2299,6 +2310,15 @@
     "toughness": "1",
     "type_line": "Creature — Elemental Shaman"
   },
+  "Flooded Strand": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Plains or Island card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
   "Fluctuator": {
     "cmc": 2.0,
     "keywords": [],
@@ -2557,6 +2577,17 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Geist of Saint Traft": {
+    "cmc": 3.0,
+    "keywords": [
+      "Hexproof"
+    ],
+    "mana_cost": "{1}{W}{U}",
+    "oracle_text": "Hexproof (This creature can't be the target of spells or abilities your opponents control.)\nWhenever Geist of Saint Traft attacks, create a 4/4 white Angel creature token with flying that's tapped and attacking. Exile that token at end of combat.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Legendary Creature — Spirit Cleric"
   },
   "Gemstone Mine": {
     "cmc": 0.0,
@@ -2916,6 +2947,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Hallowed Fountain": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {W} or {U}.)\nAs this land enters, you may pay 2 life. If you don't, it enters tapped.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Plains Island"
   },
   "Hamletback Goliath": {
     "cmc": 7.0,
@@ -5726,6 +5766,17 @@
     "toughness": "3",
     "type_line": "Creature — Djinn Cleric"
   },
+  "Shacklegeist": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Flying\nThis creature can block only creatures with flying.\nTap two untapped Spirits you control: Tap target creature you don't control.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit"
+  },
   "Shadowborn Apostle": {
     "cmc": 1.0,
     "keywords": [],
@@ -6193,6 +6244,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Spirit of the Labyrinth": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}",
+    "oracle_text": "Each player can't draw more than one card each turn.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Enchantment Creature — Spirit"
+  },
   "Spore Swarm": {
     "cmc": 4.0,
     "keywords": [],
@@ -6435,6 +6495,17 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Creature — Giant Warrior"
+  },
+  "Supreme Phantom": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Flying\nOther Spirits you control get +1/+1.",
+    "power": "1",
+    "toughness": "3",
+    "type_line": "Creature — Spirit"
   },
   "Surrak and Goreclaw": {
     "cmc": 6.0,

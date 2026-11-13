@@ -1134,11 +1134,14 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     FireMilitiaPrideTokens(state, state.active_player_index, atk_idx);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
+    // Geist of Saint Traft's Angel: "exile that token at end of combat" -- the numbers collected here are
+    // exiled at Step::EndCombat below (ExileEndOfCombatTokens; rollout twin SimulateOneCombatAfterTitan).
+    std::vector<int> eoc_exile_nums;
     if (!atk_idx.empty())
     {
         // atk_idx is passed, not omitted: a creature-scoped token trigger (Hero of Bladehold's
         // "whenever THIS CREATURE attacks") must fire only when its own source is in that list.
-        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx);
+        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx, &eoc_exile_nums);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -1310,6 +1313,9 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     ResolveStack(state);
 
     state.step = Step::EndCombat;
+    // "Exile that token at end of combat" (Geist of Saint Traft; CR 511.2). Lockstep twin in
+    // TurnSolver's SimulateOneCombatAfterTitan. Empty for every deck without such a source.
+    if (!eoc_exile_nums.empty()) { ExileEndOfCombatTokens(state, eoc_exile_nums); }
     ResolveStack(state);
 
     if (m_logger)

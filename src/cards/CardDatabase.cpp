@@ -1323,6 +1323,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // creature-scoped "whenever THIS CREATURE attacks". See the CardParams comment.
     p.attack_tokens_require_self_attacking =
         params.value("attack_tokens_require_self_attacking", false);
+    // Geist of Saint Traft: the token's keywords and the end-of-combat exile -- see CardParams.
+    for (const std::string& s : params.value("attack_token_keywords", json::array()))
+        p.attack_token_keywords.push_back(s);
+    p.attack_token_exile_end_of_combat = params.value("attack_token_exile_end_of_combat", false);
+    // Spirit of the Labyrinth's draw cap (guarded, not modelled) -- see CardParams.
+    p.each_player_draw_cap_per_turn    = params.value("each_player_draw_cap_per_turn", 0);
     // Mavren Fein, Dusk Apostle (Vampires 2026-10-18): "whenever one or more <matching> creatures you
     // control attack, create <token>" -- see CardParams.
     p.attack_one_or_more_tokens          = params.value("attack_one_or_more_tokens", 0);

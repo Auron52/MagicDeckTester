@@ -1,0 +1,23 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Spirits (2026-11-13), Drogskol Captain + Supreme Phantom: 'Other Spirit(s) you control get +1/+1'. Board: Captain 2/2, Phantom 1/3, Spirit of the Labyrinth 3/1, none sick. Each lord pumps the other and the Labyrinth: 3 + 2 + 5 = 10 = the opponent's life -> win T4. Without the lords 2 + 1 + 3 = 6 -> T5; with a lord pumping itself 4 + 3 + 5 = 12 (still T4, so the unit test pins the self-exclusion).",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Island" },
+    { "name": "Drogskol Captain" },
+    { "name": "Supreme Phantom" },
+    { "name": "Spirit of the Labyrinth" }
+  ],
+  "hand": [],
+  "expect_win_turn": 4
+}

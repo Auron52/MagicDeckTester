@@ -29,7 +29,9 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
 
     // Fetchland: the land drop sacrifices the fetchland to search out a real land. fetch_target
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
-    if (FetchResolvesOnPlay(state, def))
+    // ...or the crack-on-play variant offered beside a kept hold (FetchCrackOnPlayOffered): the plan pinned
+    // a target, so the fetch resolves now and its land pays for this plan's casts.
+    if (FetchResolvesOnPlay(state, def) || FetchCrackOnPlayPinned(state, def, opts.fetch_target))
     {
         Card fetchland = card;
         leave_zone();

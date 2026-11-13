@@ -75040,11 +75040,13 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // GameEngine::CombatPhase (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, active, atk_idx);
     FireMilitiaPrideTokens(state, active, atk_idx);
-    // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist.
+    // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist -- except Geist of
+    // Saint Traft's Angel, exiled at end of combat (eoc_exile_nums; swept after the damage below).
+    std::vector<int> eoc_exile_nums;
     if (!atk_idx.empty())
     {
         // atk_idx passed for the creature-scoped gate -- mirrors GameEngine::CombatPhase (lockstep).
-        int tok_start = FireAttackCreateTokens(state, active, &atk_idx);
+        int tok_start = FireAttackCreateTokens(state, active, &atk_idx, &eoc_exile_nums);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -75160,6 +75162,9 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Walking Ballista's post-combat-damage lethal finish (shared; executor twin: GameEngine::CombatPhase).
     CounterPingFinish(state, active);
     if (jorn_untap) { UntapSnowPermanents(state, active); }   // Jorn, see above
+    // "Exile that token at end of combat" (Geist of Saint Traft; CR 511.2): the end of combat step,
+    // before the post-combat main below. Executor twin: GameEngine::CombatPhase at Step::EndCombat.
+    if (!eoc_exile_nums.empty()) { ExileEndOfCombatTokens(state, eoc_exile_nums); }
 
     // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
     // post-combat main. The rollout historically never maintained GameState::phase (the executor
@@ -95239,7 +95244,24 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 continue;
             }
         }
-        add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic)
+        // A modern fetch whose battlefield hold the provider KEEPS: the hold (below, no target) AND the
+        // crack-on-play variants, one per searched target, each a pinned fetch_target (even a single
+        // candidate -- the pin is what makes PlayLandCore crack). See FetchCrackOnPlayOffered.
+        if (ld && FetchCrackOnPlayOffered(state, *ld))
+        {
+            std::vector<std::string> cands =
+                ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
+            if (cands.size() > 1 && !DecisionUnpruned(UnprunedGate::Fetch))
+            {
+                cands = ResolveProvider(state).FetchSearchCandidates(
+                    state, state.active_player_index, ld->params, cands);
+            }
+            static const int s_fetch_fan_cap_hold = EnvInt("MTG_FETCH_FAN_CAP", 0);
+            if (s_fetch_fan_cap_hold > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_hold)
+            { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_hold)); }
+            for (const std::string& c : cands) { add_for_land(ln, c); }
+        }
+        add_for_land(ln, "");   // ordinary land, or fetchland with <=1 candidate (heuristic), or the hold
     }
 
     // ---- THE LIBRARY TOP AS ITS OWN LAND OPTION (Courser of Kruphix, 2026-10-15) ----------------
@@ -95292,7 +95314,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
                 else { add_for_land(tn, "", "", true); }
             }
-            else { add_for_land(tn, "", "", true); }
+            else
+            {
+                // The crack-on-play variants beside a kept hold -- the hand fetchland's block above.
+                if (tl && FetchCrackOnPlayOffered(state, *tl))
+                {
+                    std::vector<std::string> cands =
+                        ResolveProvider(state).FetchCandidates(state, state.active_player_index, tl->params);
+                    if (cands.size() > 1 && !DecisionUnpruned(UnprunedGate::Fetch))
+                    {
+                        cands = ResolveProvider(state).FetchSearchCandidates(
+                            state, state.active_player_index, tl->params, cands);
+                    }
+                    for (const std::string& c : cands) { add_for_land(tn, c, "", true); }
+                }
+                add_for_land(tn, "", "", true);
+            }
         }
         TRACE("landtop", "T%d top land option %s (barred=%d)", state.turn_number,
               top_card.m_name.c_str(), m2_barred ? 1 : 0);
