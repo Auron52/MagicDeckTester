@@ -510,6 +510,14 @@ struct Permanent
                                             // elsewhere. Placed beside temp_lifelink in the 2026-09-25
                                             // cache layout (a bool in the cold bool run), not in the
                                             // scan-hot first 192 bytes.
+    bool      temp_vigilance       = false; // "gain vigilance until end of turn" (End-Raze Forerunners'
+                                            // ETB team grant, etb_other_creatures_grant_vigilance).
+                                            // Read ONLY by CreatureHasVigilance (the attack-tap
+                                            // sites + the dork attack/hold providers). Reset at BOTH
+                                            // cleanup sites in lockstep; folded into the sim key only
+                                            // when set; a BOUNDARY ASSERTION in Dominance (refused in
+                                            // AtCleanBoundary beside temp_double_strike). Never set
+                                            // outside that payload -> byte-identical elsewhere.
     bool      temp_indestructible  = false; // Boros Charm; battlefield-only until cleanup
     // EXERT (CR 701.38, Amonkhet): "it doesn't untap during your next untap step". Set when an
     // ability whose cost includes exerting this permanent is activated (CardParams::tap_token_exerts

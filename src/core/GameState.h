@@ -1184,6 +1184,8 @@ struct GameState
     // silently narrows nothing beats one that silently deletes casts).
     bool                     uses_second_main      = false;
     // Does the deck run an attack-untap card (Jorn, God of Winter: attack_untap_snow_permanents)?
+    // (Also stamped for a COMBAT-KEPT-MANA card -- End-Raze Forerunners' team vigilance grant, Boars I3a --
+    // whose clause lives in the same predicate; the name is historical.)
     // DECK CONSTANT, stamped by StampDeckTraits. Short-circuits UntapSecondMainLive -- read at every
     // post-combat site of every deck -- so a deck without one never pays its battlefield scan.
     // Lives in the padding after the two bools above, so sizeof(GameState) does not move.

@@ -5300,7 +5300,7 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     // A vigilant dork does not tap to attack, so its mana survives combat and the hold buys
     // nothing (USER 2026-08-21: vigilance -> freely attack). Gated with the feature so the
     // default path stays byte-identical.
-    if (DorkAtkSearchEnabled() && p.card.HasKeyword(Keyword::Vigilance)) { return false; }
+    if (DorkAtkSearchEnabled() && (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance)) { return false; }   // + End-Raze grant
     if (p.EffectivePower() > 0)                             { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)            { return false; }
@@ -5532,7 +5532,7 @@ static bool ProviderHeldDorkReleasable(const GameState& s, const Permanent& p)
     if (!DorkAtkSearchEnabled() || !DorkAtkProviderHoldEnabled())   { return false; }
     if (p.tapped || !p.card.IsCreature())                          { return false; }
     if (p.controller_index != s.active_player_index)               { return false; }
-    if (p.card.HasKeyword(Keyword::Vigilance))                     { return false; }
+    if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return false; }   // + End-Raze until-EOT grant
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)                   { return false; }
     if (!CanTapNow(p, s.battlefield))                              { return false; }
@@ -5647,7 +5647,7 @@ int DorkAtkContestedKind(const GameState& s)
             // VIGILANCE IS EXEMPT (USER: "vigilance dorks like Faeburrow Elder ... can and should
             // freely attack"): a vigilant dork does not tap to attack, so its mana survives combat
             // and there is nothing to contest. Same exemption the tower applies on the release side.
-            if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance)
+            if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance) && !p.temp_vigilance
                 && CanTapNow(p, s.battlefield))
             {
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
@@ -20371,7 +20371,7 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
     if (!taps_for_mana && !gy_abilities) { return true; }        // a real attacker -> swing
 
     // Vigilance: attacking costs it nothing, so never hold it back.
-    if (p.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return true; }   // + End-Raze grant
     if (AttackHasNonPowerValue(s, p))          { return true; }  // attack-trigger value
 
     // Never forfeit a kill: if everything that CAN attack already adds up to lethal, swing with all
@@ -25866,7 +25866,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Boars: Flinthoof Boar's self haste, Zhur-Taa Druid's tap-for-mana ping, Herald of Ilharg's creature-cast
         // counters (the class note lists what later integrators OR in).
         if (p.self_haste_cost.has_value() || p.tap_mana_damage_each_opponent > 0
-            || p.creature_cast_trigger_plus_counters > 0)
+            || p.creature_cast_trigger_plus_counters > 0
+            || p.etb_other_creatures_grant_vigilance)   // End-Raze Forerunners (I3a)
         { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
@@ -41323,7 +41324,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.is_token); v.push_back(p.entered_this_turn); v.push_back(p.fresh_hold_exempt);
         v.push_back(p.gained_control_this_turn); v.push_back(p.marked_for_destruction); v.push_back(p.is_animated);
         v.push_back(p.animated_printed_types); v.push_back(p.temp_haste); v.push_back(p.temp_lifelink);
-        v.push_back(p.temp_double_strike); v.push_back(p.skip_next_untap); v.push_back(p.etb_tap_pending);
+        v.push_back(p.temp_double_strike); v.push_back(p.temp_vigilance); v.push_back(p.skip_next_untap); v.push_back(p.etb_tap_pending);
         v.push_back(p.exile_at_end); v.push_back(p.pay_sac_eaten); v.push_back(p.mana_tap_mark); v.push_back(p.echo_resolved);
         v.push_back(p.storage_hold_this_turn); v.push_back(p.loyalty_activated_this_turn);
         v.push_back(p.colored_cast_lifegain_used_this_turn); v.push_back(p.storied_draw_used_this_turn);

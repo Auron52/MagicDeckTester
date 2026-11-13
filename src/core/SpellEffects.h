@@ -5320,6 +5320,9 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
                                  const std::vector<int>* granter_idx = nullptr)
 {
     if (creature.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    // End-Raze Forerunners' ETB "other creatures you control ... gain vigilance ... until end of
+    // turn" (Permanent::temp_vigilance; cleared at both cleanup sites). Never set elsewhere.
+    if (creature.temp_vigilance) { return true; }
     auto grants = [&](const Permanent& a)
     {
         if (a.controller_index != creature.controller_index) { return false; }
@@ -9744,7 +9747,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.damage != 0 || p.pending_death_trigger != 0 || p.marked_for_destruction) { return false; }
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
-    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
         || p.sac_at_end_step || p.destroy_at_end_if_attacked
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
@@ -12208,6 +12211,41 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                 if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated))
                 { q.temp_power_bonus += x; q.temp_tough_bonus += x; }
             }
+        }
+    }
+
+    // End-Raze Forerunners (Boars I3a): "When this creature enters, OTHER creatures you control get +2/+2
+    // and gain vigilance and trample until end of turn." Recipients read at RESOLUTION (CR 608.2h), so a
+    // creature entering later this turn gets nothing (CR 611.2c). Shared by every enter route in both
+    // worlds (cast, put, Ilharg's tapped-and-attacking put), so executor and rollout pump identically.
+    // VIGILANCE (temp_vigilance) is NOT inert: an untapped vigilant attacker -- a Zhur-Taa Druid or any
+    // mana dork -- still taps for mana after combat. It spares only creatures whose attack tap has not
+    // happened yet (the deferred tap in ResolveCombatDamage); a grant that lands after attackers are
+    // declared (Ilharg's put) must not spare a declared attacker -- the Ilharg put helper applies the
+    // declaration tap first (owed by Boars I5, CR 508.1f). TRAMPLE is not modelled (D2: nothing blocks).
+    // Param-gated -> byte-identical for every deck without the card.
+    if (p.etb_other_creatures_pump_power != 0 || p.etb_other_creatures_pump_tough != 0
+        || p.etb_other_creatures_grant_vigilance)
+    {
+        int hit = 0;
+        for (int qi = 0; qi < static_cast<int>(state.battlefield.size()); ++qi)
+        {
+            if (qi == entered_index) { continue; }
+            Permanent& q = state.battlefield[qi];
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            q.temp_power_bonus += p.etb_other_creatures_pump_power;
+            q.temp_tough_bonus += p.etb_other_creatures_pump_tough;
+            if (p.etb_other_creatures_grant_vigilance) { q.temp_vigilance = true; }
+            ++hit;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb",
+                          def->card.m_name.str() + ": " + std::to_string(hit) + " other creature(s) get +"
+                          + std::to_string(p.etb_other_creatures_pump_power) + "/+"
+                          + std::to_string(p.etb_other_creatures_pump_tough)
+                          + (p.etb_other_creatures_grant_vigilance ? " and vigilance" : "")
+                          + " until end of turn");
         }
     }
 
@@ -15375,6 +15413,7 @@ inline std::string AttachHostClassKey(const GameState& state, const Permanent& p
     k += p.tapped ? "T" : "u";
     k += "/" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus)
        + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "") + (p.temp_double_strike ? "D" : "")
+       + (p.temp_vigilance ? "V" : "")
        + "/c" + p.counters.KeyFragment();
     std::vector<std::string> worn;
     for (const Permanent& q : state.battlefield)
@@ -24474,6 +24513,24 @@ inline void NoteAttacksDeclared(GameState& state, int controller, const std::vec
 // "Fired" == a Jorn we control that could attack this turn: the goldfish always attacks with it (it is
 // no mana source, so no provider holds it back), and attacking untaps it, so it is untapped here
 // either way. A Jorn cast this turn is summoning-sick, did not attack, and does not open main 2.
+//
+// SECOND CLAUSE (Boars I3a, D6): COMBAT-KEPT MANA. End-Raze Forerunners' ETB grants the team vigilance
+// until end of turn (Permanent::temp_vigilance), so an attacking mana creature does not tap and still
+// has its mana after combat -- mana main 1 could only have used by NOT attacking with it. The phase
+// is live when an own creature with a mana ability carries the grant and is untapped post-combat.
+// Also a pure function of the post-combat board (temp_vigilance is board state, cleared at cleanup).
+// "Attacked" is not checked: the attack count is only tracked for extra-combat decks, and an untapped
+// granted dork that stayed home opens a main that holds a superset of main 1's remaining options --
+// opening main 2 never removes a line, it only costs search, so the slightly wider condition is sound.
+// Printed vigilance is deliberately NOT read here (Faeburrow-style decks have their own second-main
+// classification; reading it would move their play). EXTENSIBLE: Raggadragga's "untap each creature
+// with a mana ability after combat" (Boars I3b) belongs in this same predicate -- add its clause
+// beside this one and stamp deck_has_attack_untap for it in StampDeckTraits.
+inline bool CombatKeptManaCreature(const Permanent& p, const CardDefinition* d)
+{
+    return d != nullptr && p.temp_vigilance && !p.tapped && (p.card.IsCreature() || p.is_animated)
+        && !d->params.produces.empty();
+}
 inline bool UntapSecondMainLive(const GameState& state)
 {
     if (!state.deck_has_attack_untap) { return false; }   // deck constant: no scan for other decks
@@ -24484,6 +24541,7 @@ inline bool UntapSecondMainLive(const GameState& state)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.attack_untap_snow_permanents && CanAttackFull(p, state.battlefield, me))
         { return true; }
+        if (CombatKeptManaCreature(p, d)) { return true; }   // End-Raze's vigilance grant (Boars I3a)
     }
     return false;
 }
@@ -31936,6 +31994,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     c.temp_haste = false;
     c.temp_lifelink = false;
     c.temp_double_strike = false;
+    c.temp_vigilance = false;
     c.temp_indestructible = false;
     c.once_per_turn_used = false;
     std::uint64_t k = 0;
@@ -31945,7 +32004,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_power_bonus + 4096)));
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_tough_bonus + 4096)));
     mix((q.temp_haste ? 1u : 0u) | (q.temp_lifelink ? 2u : 0u) | (q.temp_double_strike ? 4u : 0u)
-        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u));
+        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u) | (q.temp_vigilance ? 32u : 0u));
     return k;
 }
 
@@ -50283,6 +50342,7 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.destroy_at_end_if_attacked ? 67108864 : 0));   // Berserk's delayed destroy
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
+    if (p.temp_vigilance) { k += "|vig"; }   // End-Raze Forerunners' until-EOT vigilance (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

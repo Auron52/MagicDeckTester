@@ -452,7 +452,8 @@ public:
 //
 // SIGNATURE (DetectDecisionProvider's `boars`): params carried by no other deck. TODAY: Flinthoof Boar's
 // self_haste_cost (I1), Zhur-Taa Druid's tap_mana_damage_each_opponent (I2a), Herald of Ilharg's
-// creature_cast_trigger_plus_counters (I2b). Herald's Horn's
+// creature_cast_trigger_plus_counters (I2b), End-Raze Forerunners' etb_other_creatures_grant_vigilance (I3a).
+// Herald's Horn's
 // upkeep_look_top_chosen_type_to_hand is deliberately EXCLUDED: the Horn is a colourless tribal staple any tribal
 // deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I3-I5): OR in each new Boars-only param
 // -- Raggadragga's, Decimator's emerge/cast pump, Ilharg's attack put -- so one deckbuilding swap cannot lose the

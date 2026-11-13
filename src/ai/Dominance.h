@@ -209,6 +209,10 @@
 // bytes to every Card/Permanent but no mutable Permanent field; existing card and state folds apply.
 // Extraplanar Lens adds an interned imprinted land name (8 bytes). It is exact-match state:
 // two otherwise identical Lenses can double different named lands. Folded below when set.
+// 328 -> 328 (2026-11-13, Boars I3a): Permanent gained `temp_vigilance` (End-Raze Forerunners' until-EOT
+// team grant), a bool in existing padding -- THE TRIPWIRE DID NOT FIRE. Classification: BOUNDARY
+// ASSERTION, the verbatim temp_double_strike argument (until-EOT, cleared at cleanup; refused in
+// AtCleanBoundary, never compared). Also folded into the sim keys, gated on set.
 static_assert(sizeof(Permanent) == 328,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -831,6 +835,7 @@ inline bool AtCleanBoundary(const GameState& s)
             || p.sac_at_end_step || p.destroy_at_end_if_attacked)   { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
+        if (p.temp_vigilance)                                       { return false; }   // End-Raze Forerunners until-EOT grant
         if (p.temp_indestructible)                                  { return false; }   // Boros Charm until-EOT grant
         if (p.etb_tap_pending)                                      { return false; }   // Colossification deferral (mid-turn only)
         if (p.marked_for_destruction)                               { return false; }

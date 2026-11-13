@@ -3742,6 +3742,14 @@ struct CardParams
     // battlefield at resolution (later arrivals correctly excluded, CR 611.2c). The trample
     // grant is inert (passive opponent never blocks) and not modelled -- disclosed.
     bool etb_team_pump_per_creature = false;
+    // End-Raze Forerunners ETB (Boars I3a): "other creatures you control get +P/+T and gain vigilance and
+    // trample until end of turn". Temp bonuses on every OTHER own creature / animated permanent at
+    // RESOLUTION (CR 608.2h; later arrivals get nothing, CR 611.2c), in the shared FireOwnEtbTriggersBody
+    // beside Craterhoof (both worlds, every entry route). The vigilance grant sets Permanent::temp_vigilance
+    // (read by CreatureHasVigilance). The trample grant is inert (nothing blocks; D2, PROVISIONAL).
+    int  etb_other_creatures_pump_power = 0;
+    int  etb_other_creatures_pump_tough = 0;
+    bool etb_other_creatures_grant_vigilance = false;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the

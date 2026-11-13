@@ -677,7 +677,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
          | (p.landfall_resolved_once ? 1048576ull : 0ull)           // Scythecat Cub resolved once this turn (1<<20)
          | (p.landfall_resolved_twice ? 2097152ull : 0ull)          // ... and twice (1<<21)
          | (static_cast<uint64_t>(p.AttacksThisTurn()) << 22)       // Moraug's per-turn attack count (bits 22-24)
-         | (p.enduring_noncreature ? 33554432ull : 0ull));          // Enduring Innocence's noncreature return (1<<25)
+         | (p.enduring_noncreature ? 33554432ull : 0ull)            // Enduring Innocence's noncreature return (1<<25)
+         | (p.temp_vigilance ? 67108864ull : 0ull));                // End-Raze Forerunners' until-EOT grant (1<<26)
     // Fresh-hold exemption (MTG_ETB_TREASURE_SPEND): an exempt fresh Treasure pays this turn, a
     // held one does not, so they are not fungible. Mixed only when set -> every other key unchanged.
     if (p.fresh_hold_exempt) { Mix(h, 0xF4E5F4E5ull); }
@@ -3565,6 +3566,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.temp_haste)   { e += "/h"; }    // Expedite until-EOT haste
         if (p.temp_lifelink){ e += "/ll"; }   // Heliod until-EOT lifelink grant
         if (p.temp_double_strike) { e += "/ds"; }   // Valiant Knight until-EOT team grant
+        if (p.temp_vigilance) { e += "/vg"; }   // End-Raze Forerunners until-EOT grant
         if (p.paired_with != 0) { e += "/sb" + std::to_string(p.paired_with); }   // soulbond pair
         if (p.exile_at_end) { e += "/x"; }    // Twinflame token, exiled at end step
         if (p.sac_at_end_step) { e += "/xs"; } // Soulstoke put, sacrificed at end step
@@ -13629,6 +13631,20 @@ static int ProjectPlanWalk(GameState& t, const GameState& state, const std::vect
                 { q.temp_power_bonus += x; q.temp_tough_bonus += x; }
             }
         }
+        if (pump && d->params.etb_other_creatures_pump_power != 0)
+        {
+            // End-Raze Forerunners' resolution (FireOwnEtbTriggersBody): +P/+T on every OTHER own creature.
+            for (int qi = 0; qi < static_cast<int>(t.battlefield.size()); ++qi)
+            {
+                if (qi == ei) { continue; }
+                Permanent& q = t.battlefield[static_cast<std::size_t>(qi)];
+                if (q.controller_index == active && (q.card.IsCreature() || q.is_animated))
+                {
+                    q.temp_power_bonus += d->params.etb_other_creatures_pump_power;
+                    q.temp_tough_bonus += d->params.etb_other_creatures_pump_tough;
+                }
+            }
+        }
     }
     if (life)
     {
@@ -13953,7 +13969,8 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
         {
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d == nullptr) { continue; }
-            if (pump && d->params.etb_team_pump_per_creature && d->card.IsCreature()) { f |= kWalkPump; }
+            if (pump && (d->params.etb_team_pump_per_creature || d->params.etb_other_creatures_pump_power != 0)
+                && d->card.IsCreature()) { f |= kWalkPump; }   // + End-Raze Forerunners (Boars I3a)
             if (life && d->params.cast_lifegain > 0 && !d->params.solo_target_trick
                 && (d->card.IsInstant() || d->card.IsSorcery())) { f |= kWalkLife; }
             if (life && enter_lg && d->card.IsCreature()) { f |= kWalkLife; }
@@ -18910,7 +18927,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
                                     || p.fade_counters != 0))
     { return false; }
     why = foldcensus::kTempHasteEtc;
-    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
         || p.sac_at_end_step || p.destroy_at_end_if_attacked) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
@@ -41721,6 +41738,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + std::to_string(p.temp_tough_bonus)
                           + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "")
                           + (p.temp_double_strike ? "D" : "")
+                          + (p.temp_vigilance ? "V" : "")
                           + (p.destroy_at_end_if_attacked ? "B" : "")   // Berserked: dies if it attacks
                           + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
@@ -65185,6 +65203,7 @@ static bool HumanTwinPermanents(const GameState* state, int x, int y)
         && a.marked_for_destruction == b.marked_for_destruction && a.is_animated == b.is_animated
         && a.animated_printed_types == b.animated_printed_types && a.temp_haste == b.temp_haste
         && a.temp_lifelink == b.temp_lifelink && a.temp_double_strike == b.temp_double_strike
+        && a.temp_vigilance == b.temp_vigilance
         && a.skip_next_untap == b.skip_next_untap && a.etb_tap_pending == b.etb_tap_pending
         && a.exile_at_end == b.exile_at_end && a.pay_sac_eaten == b.pay_sac_eaten
         && a.mana_tap_mark == b.mana_tap_mark && a.echo_resolved == b.echo_resolved
@@ -75154,6 +75173,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_haste            = false;   // Expedite until-EOT haste expires (lockstep w/ CleanupStep)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
+        p.temp_vigilance        = false;   // End-Raze Forerunners' until-EOT grant (lockstep w/ CleanupStep)
         p.temp_indestructible   = false;
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it (lockstep)
@@ -96126,7 +96146,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.lifegain_counters_used_this_turn) << 37)
             | (static_cast<std::uint64_t>(pm.enduring_noncreature) << 38)
             | (static_cast<std::uint64_t>(pm.destroy_at_end_if_attacked) << 39)
-            | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40));
+            | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40)
+            | (static_cast<std::uint64_t>(pm.temp_vigilance) << 41));   // End-Raze until-EOT grant (0 elsewhere)
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
         mix(static_cast<std::uint64_t>(pm.paired_with));
@@ -98372,6 +98393,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.temp_haste)   { Fold(tk, 0x7A57E); }
         if (perm.temp_lifelink){ Fold(tk, 0x11FE11); }   // Heliod's until-EOT lifelink grant
         if (perm.temp_double_strike) { Fold(tk, 0x2D5D5); }   // Valiant Knight's until-EOT grant
+        if (perm.temp_vigilance) { Fold(tk, 0x7161A); }   // End-Raze Forerunners' until-EOT grant
         if (perm.temp_indestructible) { Fold(tk, 0x1D357); }  // Boros Charm until-EOT grant
         // Soulbond pair (Silverblade Paladin). NONZERO-gated, so every deck without soulbond keeps
         // its exact prior key. Future-determining: which creature is paired decides which body

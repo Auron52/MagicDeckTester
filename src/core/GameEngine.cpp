@@ -1431,6 +1431,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
+        p.temp_vigilance        = false;   // End-Raze Forerunners' team "gain vigilance until EOT"
         p.temp_indestructible   = false;
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it

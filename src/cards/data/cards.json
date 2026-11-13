@@ -16338,6 +16338,30 @@
    }
   },
   {
+   "name": "End-Raze Forerunners",
+   "mana_cost": "{5}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Trample",
+    "Haste"
+   ],
+   "power": 7,
+   "toughness": 7,
+   "oracle_text": "Vigilance, trample, haste\nWhen this creature enters, other creatures you control get +2/+2 and gain vigilance and trample until end of turn. [etb_other_creatures_pump_power 2 / etb_other_creatures_pump_tough 2: until-EOT temp bonuses on every OTHER creature (and animated permanent) you control at RESOLUTION (CR 608.2h); a creature entering later gets nothing (CR 611.2c). Applied in the shared FireOwnEtbTriggersBody beside Craterhoof Behemoth, so a cast, an Ilharg put and every other enter route pump identically in executor and rollout; a simultaneous mass put pumps the other entrants too (the late own-ETB pass). etb_other_creatures_grant_vigilance: sets Permanent::temp_vigilance, read by CreatureHasVigilance at the attack-tap sites -- NOT inert here: a vigilant attacking Zhur-Taa Druid or mana dork stays untapped and still taps for mana (and the Druid's ping) after combat, and that combat-kept mana opens this turn's second main (UntapSecondMainLive's combat-kept-mana clause). The printed vigilance and haste are live keywords. The toughness half is applied for fidelity and is inert in effect (the opponent deals no damage). A grant arriving after attackers are declared (an Ilharg put) must not spare an already-declared attacker from its tap (CR 508.1f) -- owed by the Ilharg put helper. [PARTIAL, PROVISIONAL (D2): the TRAMPLE grant and the printed trample are not modelled -- provably inert: trample only matters when assigning combat damage through blockers (CR 702.19b) and the goldfish opponent never blocks; Keyword::Trample has no reader in Combat.cpp. The accepted Craterhoof Behemoth collapse.]]",
+   "template": "custom",
+   "parameters": {
+    "etb_other_creatures_pump_power": 2,
+    "etb_other_creatures_pump_tough": 2,
+    "etb_other_creatures_grant_vigilance": true
+   }
+  },
+  {
    "name": "Herald of Ilharg",
    "mana_cost": "{2}{R}{G}",
    "types": [

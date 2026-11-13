@@ -411,6 +411,7 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // only turn a silent divergence into a loud one.
         if (a.temp_lifelink != b.temp_lifelink)       { fail(i, "temp_lifelink"); }
         if (a.temp_double_strike != b.temp_double_strike) { fail(i, "temp_double_strike"); }
+        if (a.temp_vigilance != b.temp_vigilance)     { fail(i, "temp_vigilance"); }
         if (a.paired_with != b.paired_with)           { fail(i, "paired_with"); }
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
         if (a.sac_at_end_step != b.sac_at_end_step)   { fail(i, "sac_at_end_step"); }

@@ -9749,6 +9749,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // staged with the features that read them (LifegainHeliodCombo, 2026-10-27).
             if (const int pc = e.value("plus_counters", 0); pc > 0) { p.counters.Add(Counter::Type::PlusOnePlusOne, pc); }
             p.temp_lifelink     = e.value("temp_lifelink", false);
+            p.temp_vigilance    = e.value("temp_vigilance", false);   // End-Raze until-EOT grant (Boars I3a)
             p.hone_counters     = e.value("hone_counters", 0);
             // A staged planeswalker's loyalty (Permanent::loyalty is the source of truth; the Loyalty counter
             // mirrors it for the viewer). Only when the fixture names it, so every existing fixture is unchanged.

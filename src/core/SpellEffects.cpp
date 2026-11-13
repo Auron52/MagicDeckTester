@@ -1130,7 +1130,9 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         auto late_own_etb = [](const CardParams& pp)
         {
             return pp.etb_destroy_own_noncreature_max > 0 || pp.etb_destroy_artifact_enchantment_land
-                || pp.etb_destroy_nonartifact_nonblack || pp.etb_team_pump_per_creature;
+                || pp.etb_destroy_nonartifact_nonblack || pp.etb_team_pump_per_creature
+                || pp.etb_other_creatures_pump_power != 0 || pp.etb_other_creatures_pump_tough != 0
+                || pp.etb_other_creatures_grant_vigilance;   // End-Raze: pumps the simultaneous entrants too
         };
 
         // ---- PASS 2a: enter-watchers for every entrant, then the early own ETBs ---------------

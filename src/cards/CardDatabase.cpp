@@ -193,6 +193,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         //   * Lightning Greaves' equip keys, Flinthoof Boar's static pump and self haste;
         //   * Zhur-Taa Druid's tap_mana_damage_each_opponent (Boars I2a): its ping deals damage, it never moves a card;
         //   * Herald of Ilharg's cast trigger (Boars I2b): +1/+1 counters and damage, it never moves a card;
+        //   * End-Raze Forerunners' ETB (Boars I3a): until-EOT +2/+2 and vigilance on the team, it never moves a card;
         //   * Herald's Horn's own keys: its upkeep take is COUNTED explicitly by the fold (one card per trigger).
         // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
         {
@@ -207,6 +208,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "upkeep_look_top_chosen_type_to_hand",
                 "tap_mana_damage_each_opponent",   // Zhur-Taa Druid: damage only, never a card
                 "creature_cast_trigger_plus_counters", "creature_cast_counter_damage_min_mv",   // Herald of Ilharg: counters + damage
+                "etb_other_creatures_pump_power", "etb_other_creatures_pump_tough",              // End-Raze Forerunners (I3a):
+                "etb_other_creatures_grant_vigilance",                                           //   a temp pump + vigilance, never a card
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -2013,6 +2016,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
     p.untap_target_land = params.value("untap_target_land", false);
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
+    p.etb_other_creatures_pump_power = params.value("etb_other_creatures_pump_power", 0);   // End-Raze Forerunners
+    p.etb_other_creatures_pump_tough = params.value("etb_other_creatures_pump_tough", 0);
+    p.etb_other_creatures_grant_vigilance = params.value("etb_other_creatures_grant_vigilance", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.
