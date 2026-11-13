@@ -1,0 +1,60 @@
+{
+ "_comment": [
+  "HUMAN LINE JOINT PAY (Morph INT-14). Two activations before the cast: Blistering Firecat's flip {R}{R}, Den",
+  "Protector's flip {1}{G}, then Might of Old Krosa {G}. Board: Forest, Gruul Turf, Mountain, Mountain -- {R}{R}{G}{G}",
+  "plus one generic, exactly the board. The flips paid at their steps left no {G} for the Might. Jointly legal.",
+  "MTG_HUMAN_LINE_JOINT_PAY=0 gives verdict illegal."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 40,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Blistering Firecat (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Might of Old Krosa"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 4,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "validate_line": "face_up=Blistering Firecat;face_up=Den Protector;cast=Might of Old Krosa;seq=face_up=Blistering Firecat|face_up=Den Protector|cast=Might of Old Krosa",
+ "expect_verdict": "accept"
+}
