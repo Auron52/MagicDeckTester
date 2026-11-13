@@ -64,7 +64,7 @@ GameState FreshVp(int turn = 5)
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = DefVp("Swamp").card;
@@ -778,7 +778,7 @@ GameState FreshEdf()
     s.players[0].lands_played_this_turn = 1;
     s.players[0].energy_counters        = 1;   // Aether Hub's ETB energy
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod")));
+        ResolveHeuristicDefaultsPath("decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = DefVp("Brushland").card;

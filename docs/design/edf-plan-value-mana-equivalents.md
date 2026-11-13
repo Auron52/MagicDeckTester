@@ -237,7 +237,7 @@ reference corpus disagree, which is the objective?** This pass assumed neither a
 ## Update 2026-09-15: COMBO adopted alone, RAMP rejected
 
 The Status above stood until the loop's draw-sink guard shipped (`MTG_EDF_DRAW_SINK_HONEST`,
-Sessions 28-29 of `analysis-EldraziDisplacerFlicker.md`). Every bench in this doc scored rollout tails
+Sessions 28-29 of `analysis-Eldrazi Displacer Flicker.md`). Every bench in this doc scored rollout tails
 through a loop that died at crank three on any dig, so the 2x2 was re-run on the repaired default,
 one pooled batch per table, d5 / 20 ms:
 

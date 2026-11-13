@@ -67,7 +67,7 @@ decks/CritterLifegain/v1-thune4-basilica/
 | **v2** | **−0.3274** | **−0.4685** |
 
 Full evidence and every caveat: `docs/design/critter-lifegain-format-breakdown.md` (3.5M games). The
-running ledger is `docs/design/analysis-CritterLifegain.md`.
+running ledger is `docs/design/analysis-Critter Lifegain.md`.
 
 **One number to expect to MOVE at adoption.** Those deltas were measured on v1's apparatus via the
 alias route — v1's keep table with Ocelot Pride and Remote Farm aliased into existing buckets, and

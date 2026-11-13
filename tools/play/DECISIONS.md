@@ -1131,7 +1131,7 @@ the engine applies it in human play, search and rollouts alike (`src/ai/Combat.c
 **Replay of OLD recordings.** The reference writer stamps `"combat_damage_steps": 1`;
 `test/viewer_protocol_check.py`'s `recording_rule_args` passes `--legacy-single-damage-step` for a
 reference without it, so a game recorded under the one summed step replays exactly as played. The gate is
-load-bearing on `references/CritterLifegain/claude_s6_gi5` (recorded T5): two Ocelot Prides' first-step
+load-bearing on `references/Critter_Lifegain/claude_s6_gi5` (recorded T5): two Ocelot Prides' first-step
 lifelink take life past 30, Serra Ascendant connects as a 6/6, and the same picks win T4 under the rule.
 
 ### Grim Lavamancer (Midrange Burn)

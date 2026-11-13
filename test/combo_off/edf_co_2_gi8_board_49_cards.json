@@ -10,7 +10,7 @@
     "The user's float of {G:86} is deliberately NOT staged: the scenario harness cannot, and the",
     "point is that the board funds the finish on its own. Passing without it is the stronger claim."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

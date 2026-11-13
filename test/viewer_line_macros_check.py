@@ -68,9 +68,9 @@ sys.path.insert(0, HERE)
 import viewer_protocol_check as V   # flatten_choices / force_arg / side_channel_args  # noqa: E402
 
 MTG  = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
-DECK = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.cod")
-PROF = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.profile.json")
-REF  = os.path.join("references", "EldraziDisplacerFlicker", "claude_s1_gi0.json")
+DECK = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.cod")
+PROF = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.profile.json")
+REF  = os.path.join("references", "Eldrazi_Displacer_Flicker", "claude_s1_gi0.json")
 
 UPTO = 21   # -> the turn-6 pre-combat main
 
@@ -280,7 +280,7 @@ else:
 # lines) at the frame where Kitchen, an Eldrazi Displacer and two Peregrine Drakes are all live.
 # Nothing is hardcoded: the Investigate source, the blink outlet and its target are all discovered
 # from the enumerated actions, and the arm SKIPS if that board is no longer reachable.
-LOOP_REF = os.path.join("references", "EldraziDisplacerFlicker", "claude_s6_gi5.json")
+LOOP_REF = os.path.join("references", "Eldrazi_Displacer_Flicker", "claude_s6_gi5.json")
 LOOP_UPTO = 60      # -> the turn-4 main in the middle of the user's own Kitchen loop
 LOOP_N = 3          # iterations to run; 4 are reachable on this board, 3 keeps the arm quick
 LINEBUILD = os.path.join(ROOT, "tools", "play", "linebuild.js")

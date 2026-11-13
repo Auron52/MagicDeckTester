@@ -7,7 +7,7 @@ FiveColour (`MTG_5C_PHASE`, USER 2026-08-19) and AntiLifegain (`MTG_AL_PHASE`, a
 **Status: USER-designed architecture (2026-08-14); ENGINE MACHINERY BUILT (same day, see
 "Implementation (as built)" below), measurement in flight, NOT yet adopted — every gate
 default-off, suite byte-identical (smoke 36/36 post-build).** Origin: the
-KittyEquipment branching work (`analysis-KittyEquipment.md`) — the residual search cost is
+KittyEquipment branching work (`analysis-Kitty Equipment.md`) — the residual search cost is
 tree volume, and the USER rejected lossy truncation (see `heuristic-optimization.md` Rule 0b);
 this is the heuristic answer for the two-main share of that volume. The USER named the greedy
 second main's existence as one of the REASONS for this design — killing it is a design goal

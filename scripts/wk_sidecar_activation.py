@@ -30,9 +30,9 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECK = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.cod")
-PROF = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.profile.json")
-SIDE = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.value.json")
+DECK = os.path.join(ROOT, "decks/White Knights/White Knights.cod")
+PROF = os.path.join(ROOT, "decks/White Knights/White Knights.profile.json")
+SIDE = os.path.join(ROOT, "decks/White Knights/White Knights.value.json")
 OUT = os.path.join(ROOT, "logs/wk_shape/activation")
 
 spec = importlib.util.spec_from_file_location("shape_probe", os.path.join(ROOT, "scripts/shape_probe.py"))

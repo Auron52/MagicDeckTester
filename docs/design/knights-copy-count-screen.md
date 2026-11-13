@@ -69,7 +69,7 @@ win-turn contribution. They are used here only to *choose what to measure*.
 
 ### WhiteKnights (`logs/wk_screen/cr_whiteknights.json`)
 
-The ledger (`analysis-WhiteKnights.md` §2, reading 3) already names this screen as the required
+The ledger (`analysis-White Knights.md` §2, reading 3) already names this screen as the required
 follow-up: *"Several second copies price negative (Dauntless Bodyguard −0.202, Worthy Knight −0.125,
 Venerable Knight −0.080) … the right follow-up is `deck-screening.md`, not a hand edit — and per the
 cut-ladder lesson it should test **adding** a third/fourth copy of an expensive-to-cut card too, not

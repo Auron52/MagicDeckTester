@@ -36,7 +36,7 @@
     "Deliberately avoids hybrid costs: Vexing Shusher ({R/G}{R/G}) was the first choice here and it",
     "turned out to be uncastable off green, which is a SEPARATE open bug -- see the ledger."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

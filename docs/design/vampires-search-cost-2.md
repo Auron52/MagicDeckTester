@@ -710,7 +710,7 @@ climbed pass costs 20x its billed budget because in-playout scoring is not bille
 From `1a1cf9b9e`: R `470a4b530` + `7bd2fc462`, P squashed `a3edf8293`, B `b3a6115c1` (SolveWithLookahead's two
 pre-plan apply sites merged as `PrePlanShareArm` then B's `pofold::ApplyMeasured`), the census + the USER's rules +
 the 60-card list `643335481`, the A/B 3 doc `b7317dbe9`, the Vampires suite rows `7c65b60c5`
-(`analysis-Vampire.suite-rows.patch` as-is). Build + `mtg-test` 1,683/1,683. Scratch `build/scratch/vampires/int/`.
+(`analysis-Vampires.suite-rows.patch` as-is). Build + `mtg-test` 1,683/1,683. Scratch `build/scratch/vampires/int/`.
 
 ### Validation against the 60-card base (A/B 1's `off` arm = `1a1cf9b9e` play, the USER's rules off; same seeds, per game)
 

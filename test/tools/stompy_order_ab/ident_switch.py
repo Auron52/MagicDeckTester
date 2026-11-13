@@ -8,8 +8,8 @@ import sys
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 S0 = 10900001
-D = os.path.join(WT, "decks/StompySurprise/StompySurprise.cod")
-P = os.path.join(WT, "decks/StompySurprise/StompySurprise.profile.json")
+D = os.path.join(WT, "decks/Stompy Surprise/Stompy Surprise.cod")
+P = os.path.join(WT, "decks/Stompy Surprise/Stompy Surprise.profile.json")
 F = {"MTG_HOLD_RELEASE_YIELD": True, "MTG_STOMPY_ORDER": True}
 jobs = [
     {"name": "s.ship", "deck": D, "profile": P, "games": 25, "seed": S0, "flags": F},

@@ -89,7 +89,7 @@ Two things worth flagging explicitly because they matter to recognition:
   costs). That is what converts unbounded mana into an unbounded number of activations, per the deck's
   own design doc, [`flicker-combo.md`](flicker-combo.md).
 - **Aether Hub's "any color" mode is gated on a player-level energy counter**, and per
-  [`analysis-EldraziDisplacerFlicker.md`](analysis-EldraziDisplacerFlicker.md), the pool *projection*
+  [`analysis-Eldrazi Displacer Flicker.md`](analysis-Eldrazi%20Displacer%20Flicker.md), the pool *projection*
   currently over-credits multiple Hubs sharing one energy pool (each Hub's coloured mode is credited
   independently even though the energy is a shared, single-player resource) — a known, disclosed,
   over-credit-only gap. Any recognizer that reasons about "how much of which color is available" should
@@ -438,7 +438,7 @@ mana, not by mana value alone.
 ## 8. Risks and open questions
 
 - **A recognizer that steers incorrectly is worse than none at all, and this is not a hypothetical
-  concern — it already happened once on this exact axis.** `analysis-EldraziDisplacerFlicker.md` records
+  concern — it already happened once on this exact axis.** `analysis-Eldrazi Displacer Flicker.md` records
   that the *first* version of the wish-ranking (mode 1, ungated) took a sink on turn 2, "several turns
   before there is any mana to pour into it," while the plain unranked engine correctly prioritized ramp.
   The fix (mode 2, gating the kill tier on `have_outlet && have_payload`) is exactly the "gate the steer
@@ -459,7 +459,7 @@ mana, not by mana value alone.
   it can never produce a false win report.
 - **Whether the plan enumerator can represent a same-turn "cast Wish A, play what it fetched, cast Wish
   B" sequence at all, and at what enumeration cost, is not established by this document.** The existing
-  wish mechanic (`docs/design/analysis-EldraziDisplacerFlicker.md`, Stage 5's "sideboard zone + wish
+  wish mechanic (`docs/design/analysis-Eldrazi Displacer Flicker.md`, Stage 5's "sideboard zone + wish
   mechanic" section) confirms a single wish's fetch is available to later casts within the same plan; a
   *second*, later wish depending on mana the first wish's fetch helped generate was not traced through
   the enumerator's code as part of this research and should be verified before any implementation begins.

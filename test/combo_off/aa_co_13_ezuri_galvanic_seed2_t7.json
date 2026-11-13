@@ -7,7 +7,7 @@
     "Galvanic grant, Ezuri +3/+3 x2 -> Alchemist 8, Arbor Elf 7, Harbinger 7, Galvanic 1 = 23 >= 17 in the attack.",
     "The verdict is a COMBAT-LETHAL board (MTG_AA_COMBO_COMBAT): the kill lands in the combat after main 1."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

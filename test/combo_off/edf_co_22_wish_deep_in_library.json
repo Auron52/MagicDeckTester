@@ -13,7 +13,7 @@
     { "controller": 0, "name": "Training Grounds", "tapped": false }
   ],
   "budget_ms": 20,
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "depth": 3,
   "hand": [],
   "library_filler": "Forest",
@@ -75,7 +75,7 @@
   "_comment": [
     "THE WISH IS TWENTY-FIVE CARDS DOWN, AND THAT USED TO BE THE SAME AS NOT HAVING ONE.",
     "",
-    "This is the user's own `references/EldraziDisplacerFlicker/claude_s6_gi5` (saved 2026-09-11,",
+    "This is the user's own `references/Eldrazi_Displacer_Flicker/claude_s6_gi5` (saved 2026-09-11,",
     "won T4, 71 decisions) at main ordinal 8 -- the FIRST frame of that game at which the mana",
     "engine is on the battlefield. Eldrazi Displacer under Training Grounds (blink = {C}), two",
     "Peregrine Drakes and a Cloud of Faeries as payloads, three lands worth six on an untap:",

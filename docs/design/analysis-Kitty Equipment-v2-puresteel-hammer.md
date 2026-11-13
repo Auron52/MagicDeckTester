@@ -1,6 +1,6 @@
 # Analysis ledger — KittyEquipment **v2-puresteel-hammer** (opened 2026-10-01)
 
-Parent ledger: [analysis-KittyEquipment.md](analysis-KittyEquipment.md) (the v1 Stoneforge/Balan list —
+Parent ledger: [analysis-Kitty Equipment.md](analysis-Kitty%20Equipment.md) (the v1 Stoneforge/Balan list —
 1350 lines of heuristic doctrine, approved deferrals and cost work that still applies to the engine,
 but **not** to this list's card pool).
 

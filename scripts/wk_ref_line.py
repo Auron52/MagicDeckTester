@@ -28,7 +28,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REFDIR = os.path.join(ROOT, "references/WhiteKnights")
+REFDIR = os.path.join(ROOT, "references/White_Knights")
 BENCH = os.path.join(ROOT, "logs/wk_refbench")
 
 

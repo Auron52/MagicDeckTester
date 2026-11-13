@@ -9,9 +9,9 @@ Genesis Wave / Craterhoof. No draw, cantrip or opaque card in the 60, so every s
 ## 1. Status: **(D) generic tiers only**
 * `SelesnyaLifegainProvider` (src/ai/DecisionProviders.h:2681) overrides only the cleanup-discard hooks.
   It has no `CastOrderRank`, no `MainPhaseOverride`, and no order flag (no `MTG_SELESNYA_*ORDER` / `MTG_SL_*ORDER`).
-* docs/design/analysis-SelesnyaLifegain.md:279 (deferral 7) parks "a `CastOrderRank` putting the
+* docs/design/analysis-Selesnya Lifegain.md:279 (deferral 7) parks "a `CastOrderRank` putting the
   lifegain ENGINE before the PAYOFFS" as unmeasured. It was never proposed to you.
-* Binding USER input: the dork-growth rule (2026-08-20, analysis-StompySurprise.md:154: *"play every elf
+* Binding USER input: the dork-growth rule (2026-08-20, analysis-Stompy Surprise.md:154: *"play every elf
   we can ... without tapping scaling dorks or Wirewood Lodge. Then ... every elf remaining with scaled
   mana"*). It ships generically as `MTG_DORK_GROWTH`, default ON (DecisionProviders.cpp:3167, tier 9).
   Your card views are in selesnyalifegain-discard-policy.md. **No USER order exists for this deck, and none is OFF.**
@@ -84,7 +84,7 @@ per-game seed s = 2002+i; traced with `MTG_USER_ORDER_TRACE=1`.
    (hold for the plan's biggest gain) as its own heuristic sweep, rather than bend the order around it?
    *Default: yes.*
 5. **One main.** An agent switched `MTG_SL_SECOND_MAIN` OFF on 2026-09-30: 120/120 identical win turns at 2.15x
-   CPU (analysis-SelesnyaLifegain.md "Second main"). Keep it off, so every cast is m1? *Default: yes.* If it is ever
+   CPU (analysis-Selesnya Lifegain.md "Second main"). Keep it off, so every cast is m1? *Default: yes.* If it is ever
    re-armed, the Elves and the Avatar must stay m1: they are this turn's growth and Bogbeast's X, so the report's
    m2 labels would be wrong.
 

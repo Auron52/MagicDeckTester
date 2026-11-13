@@ -12,7 +12,7 @@ recorded win turn (or it does not win inside the horizon). The last frame of the
 executor test: can the engine finish the human's own go-off from one decision before the end?
 
     python3 scripts/ref_handoff_sweep.py --deck EldraziDisplacerFlicker --log-root logs/ref_sweep/edf
-    python3 scripts/ref_handoff_sweep.py references/EldraziDisplacerFlicker/claude_s6_gi5.json \\
+    python3 scripts/ref_handoff_sweep.py references/Eldrazi_Displacer_Flicker/claude_s6_gi5.json \\
         --env MTG_HOLD_C_FOR_LINE=1 --jobs 6 --log-root logs/ref_sweep/edf_holdc
 
 Each hand-off is ONE single-threaded engine game; --jobs runs that many at once (the search's budget

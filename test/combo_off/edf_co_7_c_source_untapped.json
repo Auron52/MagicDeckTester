@@ -6,7 +6,7 @@
     "appear on both boards. Pinning the pair is what says the promotion is about which lands the",
     "loop RECOVERS, not about the accident of which are tapped when the human opens the menu."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

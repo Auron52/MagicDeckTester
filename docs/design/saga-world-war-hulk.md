@@ -165,7 +165,7 @@ wwh4_no4_altisaur  (the same, with Apex Altisaur -- -0.1927 over 40,000 games)
 > ≥ 1**. Under those, the recommended lists are `alt_wwh4_wurm1` (**−0.1879**) with the Altisaur and
 > `noalt_wwh3_wurm3` (**−0.2139**) without it; both are confirmed over 40,000 games. The slot ladder,
 > the count evidence and the reasoning are in
-> **`docs/design/analysis-StompySurprise.md` → "Constrained re-screen"**. The two lists below remain
+> **`docs/design/analysis-Stompy Surprise.md` → "Constrained re-screen"**. The two lists below remain
 > the correct *unconstrained* answer and the anchor every later screen reproduced (five independent
 > seed blocks: −0.2255 / −0.2276 / −0.2308 / −0.2323 / −0.2339).
 

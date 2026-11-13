@@ -1,6 +1,6 @@
 {
   "comment": "USER 2026-10-22: an order that cannot pay is REJECTED at validation, naming the step and why -- never reordered. The validation line of burn_human_seq_fallback_reports_what_changed: `seq=cast=Sol Ring|land=Mountain` on an empty T1 board is Illegal, the reason naming Sol Ring's position and the order that pays.",
-  "deck": "decks/burn/burn.txt",
+  "deck": "decks/Burn/Burn.txt",
   "turn": 1,
   "on_the_play": true,
   "active_life": 20,

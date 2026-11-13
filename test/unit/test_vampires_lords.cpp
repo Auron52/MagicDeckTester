@@ -62,7 +62,7 @@ GameState Fresh()
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;   // land drop spent unless a test opens it
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = Def("Swamp").card;
@@ -699,7 +699,7 @@ TEST_CASE("Lockstep: every steal / transform / token plan realises the same boar
 TEST_CASE("Routing: Vampires stays VampiresProvider with the cluster B cards in -- and on them alone")
 {
     EnsureCardsLoaded();
-    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod"));
+    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod"));
     CHECK(std::string(DetectDecisionProvider(full).Name()) == "Vampires");
     // Cut EVERY A1/A2 signature card: Captivating Vampire's steal and Bloodline Keeper's transform
     // (both keyed on the Vampire subtype) still carry the route.

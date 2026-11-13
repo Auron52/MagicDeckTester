@@ -24,7 +24,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-REAL = os.path.join(ROOT, "decks/WhiteKnights")
+REAL = os.path.join(ROOT, "decks/White Knights")
 SCRATCH = os.path.join(ROOT, "logs/wk_leafcmp_lad/decks/leaf")
 OUT = os.path.join(ROOT, "logs/wk_ladiso")
 

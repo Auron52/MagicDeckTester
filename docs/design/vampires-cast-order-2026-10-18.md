@@ -10,7 +10,7 @@ additional feedback ... Major bonus points if that can largely be constructed by
 | `MTG_VAMPIRES_ORDER=1` | `VAMPIRES_ORDER` | OFF | the total cast order (section 2) + the main-phase view in `--cast-order-report` (section 2.3; display only) |
 | `MTG_VAMPIRES_BUCKET_DISCARD=1` | `VAMPIRES_BUCKET_DISCARD` | OFF | the cleanup-discard buckets (section 3) + the order of the searched outlet discard pins (section 3.4) |
 
-Deck: `decks/Vampires/Vampire.cod` (ledger `docs/design/analysis-Vampire.md`). Provider `VampiresProvider :
+Deck: `decks/Vampires/Vampire.cod` (ledger `docs/design/analysis-Vampires.md`). Provider `VampiresProvider :
 VialProvider` (`src/ai/DecisionProviders.{h,cpp}`). Every card below was read from
 `src/cards/data/cards.json` (mana cost, P/T, oracle text, params), not from memory.
 

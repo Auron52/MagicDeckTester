@@ -947,7 +947,7 @@ INERT_PARAMS = {
     "tap_target_pump_tough": "Kessig Wolf Run's +0 toughness -- a printed magnitude",
     "tap_target_pump_grants_trample": "Kessig Wolf Run's trample rider -- a printed grant, structurally inert (no blocker path); no choice",
     # ---- Vampires A1 (2026-10-18). Classified inert by the integrator; PENDING USER OK per the self-guard
-    #      (recorded in docs/design/analysis-Vampire.md -- surfaced, not blocking).
+    #      (recorded in docs/design/analysis-Vampires.md -- surfaced, not blocking).
     "hellbent_upkeep_draw": "Asylum Visitor's upkeep trigger -- MANDATORY (draw a card and lose 1 life), an intervening-if on the hand being empty; no choice",
     "hellbent_upkeep_life_loss": "Asylum Visitor's life-loss magnitude -- a printed constant",
     "hellbent_upkeep_each_player": "Asylum Visitor also watches the opponent's upkeep -- a printed scope, no choice",
@@ -1325,7 +1325,7 @@ INERT_PARAMS = {
     # Gorge unreachable, which is why the loop carries a priority. A human cannot currently
     # override it. Wiring it needs a NEW multi-pick decision type (the Dragonstorm `dragon` shape,
     # "choose up to N of these lands"), which is a bucket-B build, not a mapping.
-    # PROVISIONAL -- surfaced for user sign-off; see docs/design/analysis-EldraziDisplacerFlicker.md.
+    # PROVISIONAL -- surfaced for user sign-off; see docs/design/analysis-Eldrazi Displacer Flicker.md.
     "etb_untap_lands": "DISCLOSED VIEWER GAP (not inert): which lands to untap is auto-resolved by yield order; needs a new multi-pick type. PROVISIONAL",
     # self-declared
     "goldfish_inert": "self-declared inert marker",
@@ -1760,7 +1760,7 @@ INERT_PARAMS = {
     # ---- Prevent Damage (2026-09-27, phase I3) -- creatures + sideboard ----
     "activate_min_life": "Bilbo: 'Activate only if you have 111 or more life' -- an activation RESTRICTION (legality gate), no choice; the activation rides life_gated_put_creatures_cost -> main_phase",
     # ---- Soldiers (2026-10-04). Classified inert by the integrator; PENDING USER OK per the self-guard
-    #      (recorded in docs/design/analysis-soldiers.md -- surfaced, not blocking).
+    #      (recorded in docs/design/analysis-Soldiers.md -- surfaced, not blocking).
     "etb_each_other_own_creature_counters": "Thalia's Lieutenant ETB: a +1/+1 counter on EACH other Human you control -- mandatory, untargeted, exhaustive; no choice",
     "etb_counters_subtypes": "recipient subtype filter on the Lieutenant ETB above -- narrows WHO, adds no choice",
     # ---- Vampires cluster C (2026-10-18). Classified inert by the integrator; PENDING USER OK per the
@@ -1974,18 +1974,18 @@ STATE_GATED_TYPES = {
         "at declare-attackers -- in this list only via Mavren Fein's attack token -- with {B} still open; a "
         "forward sweep rarely builds that board. Pinned by test/unit/test_vampires_lords.cpp 'Combat window: "
         "Mavren Fein's token makes the fifth Vampire ...' and the hand-built --claude-play repro in "
-        "docs/design/analysis-Vampire.md (cluster B).",
+        "docs/design/analysis-Vampires.md (cluster B).",
     ("landfall_return_self_from_gy", "revive"):
         "Bloodghast's `revive` is asked only when a land enters while a Bloodghast is IN THE GRAVEYARD; a "
         "forward driver that casts the card puts it on the battlefield, and only a discard / sacrifice choice it "
         "does not make stocks the graveyard. Pinned by test/unit/test_vampires_outlets.cpp 'Bloodghast (human): "
         "the `revive` decision can decline -- it stays in the graveyard' and the hand-built repro "
         "`--claude-play --seed 91011 --choices 0,1,1,0,-1,-1,0,0,1,-1,-1,38` (Stromkirk Condemned discards "
-        "Bloodghast on T2; the T3 land drop asks `revive`; docs/design/analysis-Vampire.md).",
+        "Bloodghast on T2; the T3 land drop asks `revive`; docs/design/analysis-Vampires.md).",
     ("steal_tap_count", "target"):
         "Captivating Vampire's steal needs five untapped Vampires AND an opponent creature at once (a "
         "late-game, spawn-pattern-dependent board); its target + five-body prompts are pinned by the "
-        "hand-built --claude-play repro in docs/design/analysis-Vampire.md (cluster B) and "
+        "hand-built --claude-play repro in docs/design/analysis-Vampires.md (cluster B) and "
         "test/unit/test_vampires_lords.cpp 'Steal effect ...'.",
     ("etb_return_equipment_from_gy", "dig"):
         "Forge Anew asks only with TWO OR MORE Equipment in the graveyard (one is a forced pick, none has no "

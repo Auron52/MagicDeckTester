@@ -1,7 +1,7 @@
 # CritterLifegain — a card-by-card breakdown of both formats
 
 **Date:** 2026-09-15. **Engine:** `065fec8a` (+ the `deck_compare.py` format-axis change this work
-needed). **Companion to** `docs/design/analysis-CritterLifegain.md`, which is the deck's running
+needed). **Companion to** `docs/design/analysis-Critter Lifegain.md`, which is the deck's running
 ledger; this file is the format comparison it did not have.
 
 Everything here comes from **five pooled batches on ONE frozen binary** (verified: every run's
@@ -598,7 +598,7 @@ python3 scripts/screen_marginals.py logs/deckcmp/critter_breakdown.json --ref fi
 
 **`logs/` is gitignored scratch, so those specs are not in the repo** — the tables above are the
 durable record. Each is reconstructible without them: take the settled list from
-`analysis-CritterLifegain.md`, express it as counts relative to the shipped `.cod`
+`analysis-Critter Lifegain.md`, express it as counts relative to the shipped `.cod`
 (`Archangel of Thune 2, Ajani Strength of the Pride 2, Auriok Champion 3, Ocelot Pride 4,
 Orzhov Basilica 0, Plains 20, Remote Farm 4`), and make each arm that list with **one** count moved —
 `m_*` takes a copy out and adds a Plains, `p_*` puts a copy in and removes one. Every arm needs

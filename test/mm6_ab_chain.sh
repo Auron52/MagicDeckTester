@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 LOG=logs/mm6_ab_chain.out
 say(){ echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
 declare -A DECKF=(
-  [treasure_hunt]=decks/treasure_hunt/treasure_hunt.txt
+  [treasure_hunt]="decks/Treasure Hunt/Treasure Hunt.txt"
   [Slivers]=decks/Slivers/Slivers.txt
   [Knights]=decks/Knights/Knights.cod
 )

@@ -19,9 +19,9 @@
 set -euo pipefail
 cd /workspaces/MagicDeckTester
 OUT=$PWD/logs/wk_h5; mkdir -p "$OUT"
-DECK=$PWD/decks/WhiteKnights/WhiteKnights.cod
-PROF=$PWD/decks/WhiteKnights/WhiteKnights.profile.json
-SIDE=$PWD/decks/WhiteKnights/WhiteKnights.value.json
+DECK="$PWD/decks/White Knights/White Knights.cod"
+PROF="$PWD/decks/White Knights/White Knights.profile.json"
+SIDE="$PWD/decks/White Knights/White Knights.value.json"
 STASH=$SIDE.H5_STASH
 GAMES=${GAMES:-8}
 

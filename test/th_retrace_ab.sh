@@ -24,8 +24,8 @@ BIN=$(harness_bin) || exit 1
 OUT=logs/th_retrace
 mkdir -p "$OUT"
 
-DECK=$(h_deck treasure_hunt) || exit 1
-PROF=$(h_profile treasure_hunt) || exit 1
+DECK=$(h_deck "Treasure Hunt") || exit 1
+PROF=$(h_profile "Treasure Hunt") || exit 1
 SEEDS="32032 33033 34034 35035 36036 37037 38038 39039"   # fresh: unused by any suite mode or prior sweep
 
 {

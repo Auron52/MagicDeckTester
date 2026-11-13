@@ -355,7 +355,7 @@ and that interleave is not reproducible.
 that seed in the re-measurement. A d5 run landing precisely on the d3 play is not a coincidence at
 32 bits of prefix; it means **the depth actually reached varied**, which is the known starvation
 story (this deck's first iterative-deepening pass can consume the whole decision budget, so d3 and
-d5 collapse to the same computation — see `analysis-EldraziDisplacerFlicker.md`).
+d5 collapse to the same computation — see `analysis-Eldrazi Displacer Flicker.md`).
 
 That yields a concrete, testable mechanism:
 

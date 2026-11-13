@@ -23,9 +23,9 @@ import json
 
 DECKS = {
     "hinata": ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
-    "th": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
-    "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
-              "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"),
+    "th": ("decks/Treasure Hunt/Treasure Hunt.txt", "decks/Treasure Hunt/Treasure Hunt.profile.json"),
+    "kitty": ("decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod",
+              "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"),
     "mirrorwing": ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
                    "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
     "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json"),

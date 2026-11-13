@@ -9,7 +9,7 @@ Deck: `decks/SelesnyaLifegain/v1-avatar-alchemist/SelesnyaLifegain.cod` (60 card
 > with its own profile, keep table and value sidecar, and its hand-played references moved to
 > `references/SelesnyaLifegain/v1-avatar-alchemist/`. Every repro command below was repointed at the
 > archive (identical file, identical card numbering), so it still reproduces the game it describes.
-> The shipped list's ledger is `analysis-SelesnyaLifegain-v2-bogbeast-heroes.md`; the promotion is
+> The shipped list's ledger is `analysis-Selesnya Lifegain-v2-bogbeast-heroes.md`; the promotion is
 > `selesnya-v2-promotion-2026-10-22.md`.
 
 Started 2026-09-29.

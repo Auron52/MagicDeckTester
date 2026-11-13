@@ -26,7 +26,7 @@ BIN_B=${BIN_B:-./build/Release/mtg}
 N_SEEDS=${N_SEEDS:-20}
 GAMES=${GAMES:-5000}
 SPACING=${SPACING:-10000}
-DECK=${DECK:-decks/burn/burn.txt}
+DECK=${DECK:-decks/Burn/Burn.txt}
 OUT=logs/sv_hold_ab/$LABEL
 mkdir -p "$OUT"
 

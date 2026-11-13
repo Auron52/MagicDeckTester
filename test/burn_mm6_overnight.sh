@@ -25,11 +25,11 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BIN=./build/Release/mtg
-DECK=decks/burn/burn.txt
+DECK=decks/Burn/Burn.txt
 STEM=burn
 CARDS=src/cards/data/cards.json
-VALJSON=decks/burn/burn.value.json
-OLDGZ=decks/burn/burn.keepmodel.exhaustive.profile.json.gz
+VALJSON=decks/Burn/Burn.value.json
+OLDGZ=decks/Burn/Burn.keepmodel.exhaustive.profile.json.gz
 TARGET_R=${BURN_TARGET_R:-60}
 
 OUT=logs/burn_mm6_overnight

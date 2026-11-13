@@ -122,8 +122,8 @@ def main():
     ap.add_argument("--out", default=os.path.join(ROOT, "logs/wk_shape/screen"))
     args = ap.parse_args()
 
-    deck = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.cod")
-    prof = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.profile.json")
+    deck = os.path.join(ROOT, "decks/White Knights/White Knights.cod")
+    prof = os.path.join(ROOT, "decks/White Knights/White Knights.profile.json")
     if not os.path.exists(prof):
         raise SystemExit("no profile -- a shape screen without the deck's profile measures a deck we do not ship")
     os.makedirs(args.out, exist_ok=True)

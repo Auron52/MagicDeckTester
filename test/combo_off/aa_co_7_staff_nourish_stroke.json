@@ -3,7 +3,7 @@
     "LOOP-STAFF: Staff of Domination's {3},{T}: untap target creature + {1}: untap Staff = 4 per iteration, so",
     "X = 6 from Nourish nets 2. Stroke finishes."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

@@ -49,7 +49,7 @@
     { "controller": 0, "name": "Essence Depleter", "tapped": false }
   ],
   "budget_ms": 20,
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "depth": 3,
   "env": { "MTG_HUMAN_PLAY": "1" },
   "expect_combo_off": true,

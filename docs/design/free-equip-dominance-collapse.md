@@ -41,7 +41,7 @@ win when they go through this process... This deck might be able to win, but it 
 all. Instead it might attack for a lot and win next turn. Or even not be able to attack at all this
 turn. But pile a bunch of artifacts on. And finish things next turn."*
 
-Companion docs: `analysis-KittyEquipment-v2-puresteel-hammer.md` (the deck),
+Companion docs: `analysis-Kitty Equipment-v2-puresteel-hammer.md` (the deck),
 `label-goff-tractability.md` (the EDF go-off cuts), `per-decision-work-census.md` (the instrument).
 
 ---

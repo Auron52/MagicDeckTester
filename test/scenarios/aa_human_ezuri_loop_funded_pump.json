@@ -6,7 +6,7 @@
     "directly -- ActivatePump mode 5 (mode 4 is Stromkirk Condemned), the untap loop pays -- once per count 1..lethal (2 here). Committing the x2",
     "variant runs the Galvanic loop to fund {4}{G}{G}{G}{G}{G}{G} and pumps the Elves twice."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

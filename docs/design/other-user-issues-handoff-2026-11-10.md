@@ -19,7 +19,7 @@ Updated 2026-11-11 (CLOSED). Branch `phase-1-2-deck-analyzer`. The fixes were co
 A replay of every original report found 23739, 23743 and the Cyclone decline text fixed, but 23742 (both Wish
 suggestions) and Cyclone 23746 (no Remand on a free-cast Ulamog) still broken. Fixed in the follow-up commit:
 the two Living Wish amendments (`MTG_AA_WISH_COMBO_FIRST`, `MTG_AA_WISH_UNTAP_NET`; ledger
-`analysis-AccomplishedAlchemist.md`, "Other player's reports on seed 23742"), and human play now skips
+`analysis-Accomplished Alchemist.md`, "Other player's reports on seed 23742"), and human play now skips
 `CycloneProvider::AdmitRemandOnFreeCast` (a search prune), so the viewer offers Remand on the Ulamog
 (`analysis-Unpredictable Cyclone.md`, Remand rulings). Replayed on the seeds: T2 suggests Brindle Boar, T5 Galvanic
 Alchemist, and 23746 offers Remand on Ulamog, the Infinite Gyre (it returns to hand, Remand draws).
@@ -33,7 +33,7 @@ Nothing open for the USER on this thread. The alchemist OVERNIGHT GT moves with 
 periodic overnight run.
 
 Committed and pushed: `cd0368564`, the AT2 / SPARE levers DEFAULT OFF, measured (ledger
-`analysis-AccomplishedAlchemist.md`, "Two follow-up Wish levers"). Rebased onto origin `01a3adbc1` (clean).
+`analysis-Accomplished Alchemist.md`, "Two follow-up Wish levers"). Rebased onto origin `01a3adbc1` (clean).
 UNCOMMITTED in the primary checkout (all USER-requested, all DEFAULT ON):
 
 * `MTG_AA_WISH_ALCH_FIRST_AT2` flipped ON. USER: "Let's enable 1, either way." SPARE_MANA_FIRST stays off (neutral).
@@ -75,7 +75,7 @@ drop, so it was the `used` case twice). `ExpectWishAa` now logs the list it got.
 n=300, 0 slower / 5 faster (-0.0167/game); d0 -2 turns.
 
 DONE 06:20 UTC: overnight held-out searched n=2535 net -26 (2 slower / 24 faster); both slower games recover at
-b100/b400. Smoke + regression GT accepted, full units 2842/2842, ledger entry in `analysis-AccomplishedAlchemist.md`
+b100/b400. Smoke + regression GT accepted, full units 2842/2842, ledger entry in `analysis-Accomplished Alchemist.md`
 ("The Living Wish land rules (2026-11-12)"). Committed locally; shared-branch push held to >= 09:26 UTC (4-hour
 rule), backup branch pushed meanwhile. Remaining: push + CI watch; open USER question below.
 Then MTG_AA_WISH_LAND_FIRST_AT2 (USER 2026-11-12: land before the Elf at 2 mana unless a land Aura is held): A/B vs
@@ -84,7 +84,7 @@ The open question below is ANSWERED. All six of the other player's reports re-ve
 
 (Old) Next: `python3 logs/aa_alch2/compare_land.py` (A = AT2 only, B = + land rules; paired, loss = 9; weigh overnight). Accept alchemist smoke (`--deck=alchemist,alchemist2hg`) + regression
 (`--deck=alchemist`) GT with a note naming AT2 + the three land rules; `python3 test/check_gt_logs.py`; ledger entry
-in `analysis-AccomplishedAlchemist.md`; commit, `git pull --rebase`, push, watch CI in the background. Report the
+in `analysis-Accomplished Alchemist.md`; commit, `git pull --rebase`, push, watch CI in the background. Report the
 numbers to the USER. Open USER question: should LAND_FIRST apply at 2 mana too (now 3 only)?
 Lessons this round: never `pgrep -f` / `pkill -f` with a pattern that appears in the waiter's own command line (it
 hung a waiter overnight on 11-11 and killed a shell on 11-12); wait on a PID with `kill -0`.

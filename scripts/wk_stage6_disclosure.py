@@ -8,7 +8,7 @@ so this prints the three machine-readable sources verbatim:
   2. every non-default CardParams field the deck's cards set (what actually shapes play),
   3. the deck's profile settings the numbers were produced at (depth / budget / scores).
 
-Usage: python3 scripts/wk_stage6_disclosure.py [decks/WhiteKnights/WhiteKnights.cod]
+Usage: python3 scripts/wk_stage6_disclosure.py [decks/White Knights/White Knights.cod]
 """
 import json
 import re
@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DECK = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "decks/WhiteKnights/WhiteKnights.cod"
+DECK = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "decks/White Knights/White Knights.cod"
 
 
 def decklist_names(path: Path):

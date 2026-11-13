@@ -12,8 +12,8 @@ import json, os, sys
 d, key, gi, seed, depth, bud, wt = sys.argv[1:8]
 jobs = []
 for arm, fl in (("new", None), ("old", {"MTG_CRITTER_ORDER": False})):
-    j = {"name": "%s_%s" % (key, arm), "deck": os.path.join(wt, "decks/CritterLifegain/CritterLifegain.cod"),
-         "profile": os.path.join(wt, "decks/CritterLifegain/CritterLifegain.profile.json"), "games": 1,
+    j = {"name": "%s_%s" % (key, arm), "deck": os.path.join(wt, "decks/Critter Lifegain/Critter Lifegain.cod"),
+         "profile": os.path.join(wt, "decks/Critter Lifegain/Critter Lifegain.profile.json"), "games": 1,
          "seed": int(seed), "game_index": int(gi)}
     if depth != "ship":
         j.update({"depth": int(depth), "budget_ms": int(bud), "ignore_play_profile": True})

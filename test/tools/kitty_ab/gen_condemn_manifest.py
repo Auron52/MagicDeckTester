@@ -24,8 +24,8 @@ cost.py (deterministic GameWorkMeter units); wall clock cannot answer it on this
 import json
 import sys
 
-DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+DECK = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod"
+PROF = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
 
 ARMS = {
     "base":    {},

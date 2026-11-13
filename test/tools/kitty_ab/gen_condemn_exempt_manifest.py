@@ -43,7 +43,7 @@ import sys
 
 HINATA = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 AL     = ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.profile.json")
-KITTY  = ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod", "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json")
+KITTY  = ("decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod", "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json")
 GAMES = 3000
 
 FULL = {"MTG_HINATA_ORDER_FULL": True}

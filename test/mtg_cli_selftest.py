@@ -19,7 +19,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "build/Release/mtg"))
-DECK = os.path.join(ROOT, "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod")
+DECK = os.path.join(ROOT, "decks/Accomplished Alchemist/Accomplished Alchemist.cod")
 fails = []
 
 

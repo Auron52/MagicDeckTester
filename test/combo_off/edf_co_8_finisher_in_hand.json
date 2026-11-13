@@ -10,7 +10,7 @@
     "guards is that the two agree: the count is sized for the deploy route AND the deploy really",
     "happens, so the promise the button makes is the line the apply runs."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

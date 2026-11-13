@@ -17,7 +17,7 @@
     "MTG_UNPRUNED is required (the cast-ORDERING search is gated on it, exactly as the viewer runs).",
     "energy_counters 0: the real line spent Aether Hub's ETB energy on turn 1."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 3,
   "on_the_play": false,
   "active_life": 20,

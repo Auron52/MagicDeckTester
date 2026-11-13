@@ -31,8 +31,8 @@ if [ "${#CARDS[@]}" -eq 0 ]; then
   CARDS=("Hero of Bladehold" "Silverblade Paladin" "Valiant Knight" "Acclaimed Contender")
 fi
 
-DECK=decks/WhiteKnights/WhiteKnights.cod
-PROF=decks/WhiteKnights/WhiteKnights.profile.json
+DECK="decks/White Knights/White Knights.cod"
+PROF="decks/White Knights/White Knights.profile.json"
 BIN=./build/Release/mtg
 
 # --reveal 8 so the scan sees the opening hand AND the next 8 draws; a card on draw 3 is reachable

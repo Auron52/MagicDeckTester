@@ -9,11 +9,11 @@
   max_mull        : 6   max_turns: 8
   bucket probes   : 400   threshold: 0.01
   seed            : 1000000
-  out profile     : decks/FiveColour/FiveColour.keepmodel.exhaustive.profile.json
-  out raw         : decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json
-  gen cache       : decks/FiveColour/FiveColour.keepmodel.gencache.json
-  slow-rollout log: decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.slow.log  (stream >= 30000ms; cannot be disabled)
-  probe chunk out : decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json.probe
+  out profile     : decks/Five Colour/Five Colour.keepmodel.exhaustive.profile.json
+  out raw         : decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json
+  gen cache       : decks/Five Colour/Five Colour.keepmodel.gencache.json
+  slow-rollout log: decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json.slow.log  (stream >= 30000ms; cannot be disabled)
+  probe chunk out : decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json.probe
 =====================================
 rollout-config play digest (d3/b3, 64-game battery): 5e49b86c98c8cbb0
 [keepgen] play digest: 5e49b86c98c8cbb0 (3s)
@@ -35,7 +35,7 @@ rollout-config play digest (d3/b3, 64-game battery): 5e49b86c98c8cbb0
 [keepgen]   discovery 58%  (7264/12400 rollouts, 121/s, 60s)
 [keepgen]   discovery 89%  (11094/12400 rollouts, 122/s, 90s)
 [keepgen] equivalence discovery done: 31 raw buckets (106s)
-[keepgen] equivalence cache WROTE decks/FiveColour/FiveColour.keepmodel.gencache.json
+[keepgen] equivalence cache WROTE decks/Five Colour/Five Colour.keepmodel.gencache.json
   slowest rollouts after equivalence discovery (top 12; watch for degenerate cells):
     21640ms  discovery  probe=194 candidate=Jared Carthalion
     18738ms  discovery  probe=194 candidate=Oko, Thief of Crowns

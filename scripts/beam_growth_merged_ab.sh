@@ -9,11 +9,11 @@
 set -uo pipefail
 COMB=build/Release/mtg; LAD=/tmp/mtg_origin
 declare -A F=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod [hinata]=decks/Hinata/Hinata.cod \
-  [th]=decks/treasure_hunt/treasure_hunt.txt [slivers]=decks/Slivers/Slivers.txt \
-  [knights]=decks/Knights/Knights.cod [burn]=decks/burn/burn.txt )
+  [th]="decks/Treasure Hunt/Treasure Hunt.txt" [slivers]=decks/Slivers/Slivers.txt \
+  [knights]=decks/Knights/Knights.cod [burn]=decks/Burn/Burn.txt )
 declare -A P=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json [hinata]=decks/Hinata/Hinata.profile.json \
-  [th]=decks/treasure_hunt/treasure_hunt.profile.json [slivers]=decks/Slivers/Slivers.profile.json \
-  [knights]=decks/Knights/Knights.profile.json [burn]=decks/burn/burn.profile.json )
+  [th]="decks/Treasure Hunt/Treasure Hunt.profile.json" [slivers]=decks/Slivers/Slivers.profile.json \
+  [knights]=decks/Knights/Knights.profile.json [burn]=decks/Burn/Burn.profile.json )
 G=${GAMES:-200}; DECKS=${DECKS:-"hinata burn"}; SEEDS=${SEEDS:-"2002 3003 4004 5005 6006 7007"}; DEPTH=${DEPTH:-5}; BUD=${BUD:-20}
 run() { # $1 bin  $2 deck  $3 seed  $4 env
   # NB: omit --depth -- value_play drives depth (hinata=5, burn=6); passing --depth conflicts with the profile lock.

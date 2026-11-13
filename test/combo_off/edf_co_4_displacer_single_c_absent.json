@@ -8,7 +8,7 @@
     "outlet eats it), and the projection is right to refuse. Fixture 6 is the same board plus an",
     "Emiel, which IS winnable and must offer the button."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

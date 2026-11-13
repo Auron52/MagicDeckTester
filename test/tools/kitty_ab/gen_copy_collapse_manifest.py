@@ -26,8 +26,8 @@ games-per-job or jobs replay each other's games. 500 games/job, bases 500 apart.
 import json
 import sys
 
-DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+DECK = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod"
+PROF = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
 GAMES = 500
 BASE = 700000
 

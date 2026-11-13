@@ -1,6 +1,6 @@
 {
  "_comment": "The USER's rejected T3 frame (seed 1 gi 0, main_ordinal 9), reduced to the mechanism: 11 loose Equipment, BOTH lands tapped, {W}1 floating, and Colossus Hammer in hand. Plains removed from hand so no land drop can mask the floating-mana payment. cast=Colossus Hammer is rules-legal ({W} pays {1}) and MUST be enumerated.",
- "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+ "deck": "decks/Kitty Equipment/v2-puresteel-hammer/Kitty Equipment.cod",
  "turn": 3, "on_the_play": false, "max_turns": 3,
  "active_life": 20, "opponent_life": 20,
  "floating_mana": { "W": 1 },

@@ -105,8 +105,8 @@ jobs:
       - name: Determinism sample
         shell: bash
         run: |
-          ${{ matrix.bin }} decks/burn/burn.txt \
-            --profile decks/burn/burn.profile.json \
+          ${{ matrix.bin }} decks/Burn/Burn.txt \
+            --profile decks/Burn/Burn.profile.json \
             --cards-json src/cards/data/cards.json \
             --games 200 --seed 1001 --threads 1 \
             | grep 'avg (turns)' | tr -d '\r' > determinism-${{ runner.os }}.txt

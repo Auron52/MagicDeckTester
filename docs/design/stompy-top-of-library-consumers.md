@@ -261,7 +261,7 @@ across the three pairs. `ms=` is a SUM of per-game wall times, so it tracks mach
 delta off sequential runs; interleave, and look at whether the sign is stable.**
 
 **Why this number mattered beyond the card.** The same evening's deck screening
-(`analysis-StompySurprise.md`) cut Call of the Wild 4 -> 2 in favour of World War Hulk, which is a
+(`analysis-Stompy Surprise.md`) cut Call of the Wild 4 -> 2 in favour of World War Hulk, which is a
 comparison where the engine modelled one side less completely — exactly the judgement the
 deck-screening skill says no guard can make. The bias is **0.0005 turns** (the one-axis ladder
 above; the cross-deck difference of the two rows, 0.0014, was confounded), against a measured

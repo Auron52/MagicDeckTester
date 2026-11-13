@@ -3,8 +3,8 @@
 # Prints one line per cell: cell, win turn.
 BIN=$1; shift
 WT=/workspaces/MagicDeckTester/.claude/worktrees/agent-ac800b84e49fb7cf6
-D=decks/FiveColour/FiveColour.cod
-P=decks/FiveColour/FiveColour.profile.json
+D="decks/Five Colour/Five Colour.cod"
+P="decks/Five Colour/Five Colour.profile.json"
 run() {
   local name=$1; shift
   local out

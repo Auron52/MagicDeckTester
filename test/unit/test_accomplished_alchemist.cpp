@@ -589,7 +589,7 @@ TEST_CASE("Stroke of Genius: draw_target_player deals the opponent a library; Br
     CHECK_FALSE(GoldFishRunner::DeckTouchesOpponentZones(without));
     // The real deck file: dealt.
     Decklist aa = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
-        "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"));
+        "decks/Accomplished Alchemist/Accomplished Alchemist.cod"));
     CHECK(GoldFishRunner::DeckTouchesOpponentZones(aa));
 }
 

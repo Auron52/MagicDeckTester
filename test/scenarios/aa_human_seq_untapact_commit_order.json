@@ -4,7 +4,7 @@
     "Arbor Elf cast, it runs before it (an ActivateUntap otherwise applies in the trailing pass, after the casts);",
     "nothing is reported as NOT applied."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

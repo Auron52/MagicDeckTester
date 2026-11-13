@@ -78,7 +78,7 @@
     }
   ],
   "budget_ms": 20,
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "depth": 3,
   "hand": [
     "Living Wish",
@@ -145,7 +145,7 @@
     "A LAND AURA'S WILD MANA IS A BLUE SOURCE -- the user's own reference board, and the button",
     "did not appear on it.",
     "",
-    "This is `references/EldraziDisplacerFlicker/claude_s1_gi0` at turn 3, reconstructed by",
+    "This is `references/Eldrazi_Displacer_Flicker/claude_s1_gi0` at turn 3, reconstructed by",
     "test/combo_off_sweep.py: Emiel, two Peregrine Drakes, two Clouds, an Aether Hub and a",
     "Conservatory each carrying Trace of Abundance + Wild Growth, a Wild-Growth'd Mariposa, and a",
     "LIVING WISH IN HAND. The turn the user WON. `offered=0`.",

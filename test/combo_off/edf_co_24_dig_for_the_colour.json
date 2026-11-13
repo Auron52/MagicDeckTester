@@ -9,7 +9,7 @@
     { "controller": 0, "name": "Peregrine Drake", "tapped": false }
   ],
   "budget_ms": 20,
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "depth": 3,
   "hand": [],
   "library_filler": "Forest",

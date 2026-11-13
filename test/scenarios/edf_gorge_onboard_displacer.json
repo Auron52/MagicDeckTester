@@ -3,7 +3,7 @@
   "Shivan Gorge ON the battlefield as the only finisher; Displacer + Drake loop; red only from Trace of Abundance (any colour). Per finish iteration: blink {2}{C} + ping {2}{R} against five untaps (Gorge's own untap is the ping's), so the route must BANK first, then finish.",
   "AUTONOMOUS half: the shipped search must win this turn."
  ],
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 4,
  "on_the_play": false,
  "active_life": 20,

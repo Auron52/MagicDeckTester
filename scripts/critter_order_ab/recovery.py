@@ -12,8 +12,8 @@ stage wins at or before the base arm's turn.
 import json, os, re, sys
 
 WT = "/workspaces/MagicDeckTester/.claude/worktrees/agent-a239469ed898c5c26"
-DECK = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.cod")
-PROF = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.profile.json")
+DECK = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.cod")
+PROF = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.profile.json")
 
 
 def stage_jobs(key, cell, gi, base_wt, seed, tag="new", flags=None):

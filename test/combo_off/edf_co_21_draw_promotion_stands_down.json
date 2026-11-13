@@ -37,7 +37,7 @@
     "what the 50-card version still cannot do is pay fifty {C} pips at one per untap, which is why",
     "fixture 10 stays absent."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

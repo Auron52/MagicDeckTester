@@ -23,7 +23,7 @@
   "sources (a 0-energy Aether Hub is a colourless source; Mariposa Military Base makes {C}), so the",
   "drain is payable from the pool and the fixture passes with MTG_REFLOAT_WILD_C=0 too. It guards",
   "the affordance, NOT the wild_c repair -- that one is covered by the A/B in",
-  "docs/design/analysis-EldraziDisplacerFlicker.md section 14. Said plainly so nobody later reads a",
+  "docs/design/analysis-Eldrazi Displacer Flicker.md section 14. Said plainly so nobody later reads a",
   "green run here as proof the credit bug is fixed.",
   "",
   "2026-09-08: expect_variants 4 -> 2. MTG_EDF_SINK_KMAX was ADOPTED (default ON) after a",
@@ -35,7 +35,7 @@
   "MTG_HUMAN_PLAY never consults ManaSinkActivationCounts; the human keeps one-at-a-time plus",
   "the finish count)."
  ],
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 4,
  "on_the_play": false,
  "active_life": 20,

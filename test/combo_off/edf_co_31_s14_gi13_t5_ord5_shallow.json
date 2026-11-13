@@ -18,7 +18,7 @@
     "fixture rather than a line in a report: whatever a search shortcut does to this position, the",
     "viewer's answer on it must not move."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

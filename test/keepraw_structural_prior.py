@@ -36,7 +36,7 @@ import sys
 from collections import defaultdict
 
 RAW = sys.argv[1] if len(sys.argv) > 1 else \
-    'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json'
+    'decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json'
 SAMPLE = int(sys.argv[2]) if len(sys.argv) > 2 else 3000
 TRIALS = int(sys.argv[3]) if len(sys.argv) > 3 else 200
 BOTTOM_FLOOR = 2

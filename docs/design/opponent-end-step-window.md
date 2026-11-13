@@ -39,7 +39,7 @@ Real play activates it at the end of the **opponent's** turn:
   opponent's turn N, but it can from turn N+1 on.
 
 The same window would serve other cards the repo already discloses as collapsed to the main phase:
-* Aether Vial's instant-speed put (`analysis-WhiteKnights.md`, `knights-copy-count-screen.md`).
+* Aether Vial's instant-speed put (`analysis-White Knights.md`, `knights-copy-count-screen.md`).
 * Flash creatures (the "disclosed Flash gap", `DecisionProviders.cpp`).
 * Remand's end-step/opponent-turn windows (`remand-self-target.md`).
 * Enlightened Tutor's upkeep window (`upkeep-instant-tutor-window.md`, the closest precedent).

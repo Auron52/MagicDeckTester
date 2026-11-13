@@ -32,13 +32,13 @@ declare -A DECK_FILE=(
   # own fitted artifacts, so either can be restored to the suite as its own key if ever needed.
   [fungusv3]=decks/Fungus/Fungus.cod
   [slivers]=decks/Slivers/Slivers.txt
-  [burn]=decks/burn/burn.txt
+  [burn]=decks/Burn/Burn.txt
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
   [merfolk]=decks/Merfolk/Merfolk.cod
-  [th]=decks/treasure_hunt/treasure_hunt.txt
+  [th]="decks/Treasure Hunt/Treasure Hunt.txt"
   [knights]=decks/Knights/Knights.cod
-  [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
+  [whiteknights]="decks/White Knights/White Knights.cod"
   [kithkin]=decks/Kithkin/Kithkin.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
   [hinata]=decks/Hinata/Hinata.cod
@@ -49,8 +49,8 @@ declare -A DECK_FILE=(
   [goblins]=decks/Goblins/Goblins.cod
   [creature_giving]="decks/Creature Giving/Creature Giving.cod"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
-  [fivecolour]=decks/FiveColour/FiveColour.cod
-  [stompy]=decks/StompySurprise/StompySurprise.cod
+  [fivecolour]="decks/Five Colour/Five Colour.cod"
+  [stompy]="decks/Stompy Surprise/Stompy Surprise.cod"
   [jumbo]="decks/Jumbo Cactuar/Jumbo Cactuar.cod"
   [minotaur]=decks/Minotaur/Minotaur.cod
   # kittyv3 IS the shipped KittyEquipment list (promoted 2026-10-14). The KEY keeps its `v3`
@@ -58,11 +58,11 @@ declare -A DECK_FILE=(
   # moves to a different list. Renaming it to `kitty` would have had to reuse the names v1's GT
   # already occupies -- exactly the repoint that made a stale baseline read as +2.2620. v1 and v2
   # are archived with NO suite rows, per the mirrorwing/angels/critter convention.
-  [kittyv3]=decks/KittyEquipment/KittyEquipment.cod
+  [kittyv3]="decks/Kitty Equipment/Kitty Equipment.cod"
   [dragons]=decks/Dragons/Dragons.cod
-  [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.cod
-  [critter]=decks/CritterLifegain/CritterLifegain.cod
-  [lhc]=decks/LifegainHeliodCombo/LifegainHeliodCombo.cod
+  [breaching]="decks/Breaching Dragonstorm/Breaching Dragonstorm.cod"
+  [critter]="decks/Critter Lifegain/Critter Lifegain.cod"
+  [lhc]="decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod"
   [melira]="decks/Melira Pod/Melira Pod.cod"
   [angels]=decks/Angels/Angels.cod
   [fluctuator]=decks/Fluctuator/Fluctuator.cod
@@ -74,8 +74,8 @@ declare -A DECK_FILE=(
   # top-level shipped path 2026-10-22. Its OWN key -- ONE KEY PER DECKLIST: it keeps the v2 suffix (as
   # kittyv3 did). The original list (key `selesnya`, archived as v1-avatar-alchemist) LEFT the suite 2026-10-22
   # (USER, once the v1-vs-current summary was approved); its references are still replayed on that list.
-  [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.cod
-  [soldiers]=decks/Soldiers/soldiers.cod
+  [selesnyav2]="decks/Selesnya Lifegain/Selesnya Lifegain.cod"
+  [soldiers]=decks/Soldiers/Soldiers.cod
   [pd]="decks/Prevent Damage/Prevent Damage.cod"
   [bruna]=decks/Bruna/Bruna.cod
   [landfall]=decks/Landfall/Landfall.cod
@@ -83,10 +83,10 @@ declare -A DECK_FILE=(
   [niv]=decks/NivMizzetCombo/NivMizzetCombo.cod
   [gods]=decks/Gods/Gods.cod
   [colossus]="decks/Colossus Hammer/Colossus Hammer.cod"
-  [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
-  [vampires]=decks/Vampires/Vampire.cod
-  [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.cod
-  [elementals]=decks/LandfallElementals/LandfallElementals.cod
+  [edf]="decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod"
+  [vampires]=decks/Vampires/Vampires.cod
+  [alchemist]="decks/Accomplished Alchemist/Accomplished Alchemist.cod"
+  [elementals]="decks/Landfall Elementals/Landfall Elementals.cod"
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
   [hydras]=decks/Hydras/Hydras.cod
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
@@ -95,13 +95,13 @@ declare -A DECK_FILE=(
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
   [slivers]=decks/Slivers/Slivers.profile.json
-  [burn]=decks/burn/burn.profile.json
+  [burn]=decks/Burn/Burn.profile.json
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
   [merfolk]=decks/Merfolk/Merfolk.profile.json
-  [th]=decks/treasure_hunt/treasure_hunt.profile.json
+  [th]="decks/Treasure Hunt/Treasure Hunt.profile.json"
   [knights]=decks/Knights/Knights.profile.json
-  [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
+  [whiteknights]="decks/White Knights/White Knights.profile.json"
   [kithkin]=decks/Kithkin/Kithkin.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
   [hinata]=decks/Hinata/Hinata.profile.json
@@ -112,23 +112,23 @@ declare -A DECK_PROF=(
   [goblins]=decks/Goblins/Goblins.profile.json
   [creature_giving]="decks/Creature Giving/Creature Giving.profile.json"
   [mirrorwing]="decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
-  [fivecolour]=decks/FiveColour/FiveColour.profile.json
-  [stompy]=decks/StompySurprise/StompySurprise.profile.json
+  [fivecolour]="decks/Five Colour/Five Colour.profile.json"
+  [stompy]="decks/Stompy Surprise/Stompy Surprise.profile.json"
   [jumbo]="decks/Jumbo Cactuar/Jumbo Cactuar.profile.json"
   [minotaur]=decks/Minotaur/Minotaur.profile.json
-  [kittyv3]=decks/KittyEquipment/KittyEquipment.profile.json
+  [kittyv3]="decks/Kitty Equipment/Kitty Equipment.profile.json"
   [dragons]=decks/Dragons/Dragons.profile.json
-  [breaching]=decks/BreachingDragonstorm/BreachingDragonstorm.profile.json
-  [critter]=decks/CritterLifegain/CritterLifegain.profile.json
-  [lhc]=decks/LifegainHeliodCombo/LifegainHeliodCombo.profile.json
+  [breaching]="decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json"
+  [critter]="decks/Critter Lifegain/Critter Lifegain.profile.json"
+  [lhc]="decks/Lifegain Heliod Combo/Lifegain Heliod Combo.profile.json"
   [melira]="decks/Melira Pod/Melira Pod.profile.json"
   [angels]=decks/Angels/Angels.profile.json
   [fluctuator]=decks/Fluctuator/Fluctuator.profile.json
   [snow]=decks/Snow/Snow.profile.json
   [giants]=decks/Giants/Giants.profile.json
   [pirates]=decks/Pirates/Pirates.profile.json
-  [selesnyav2]=decks/SelesnyaLifegain/SelesnyaLifegain.profile.json
-  [soldiers]=decks/Soldiers/soldiers.profile.json
+  [selesnyav2]="decks/Selesnya Lifegain/Selesnya Lifegain.profile.json"
+  [soldiers]=decks/Soldiers/Soldiers.profile.json
   [pd]="decks/Prevent Damage/Prevent Damage.profile.json"
   [bruna]=decks/Bruna/Bruna.profile.json
   [landfall]=decks/Landfall/Landfall.profile.json
@@ -136,10 +136,10 @@ declare -A DECK_PROF=(
   [niv]=decks/NivMizzetCombo/NivMizzetCombo.profile.json
   [gods]=decks/Gods/Gods.profile.json
   [colossus]="decks/Colossus Hammer/Colossus Hammer.profile.json"
-  [edf]=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
-  [vampires]=decks/Vampires/Vampire.profile.json
-  [alchemist]=decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json
-  [elementals]=decks/LandfallElementals/LandfallElementals.profile.json
+  [edf]="decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json"
+  [vampires]=decks/Vampires/Vampires.profile.json
+  [alchemist]="decks/Accomplished Alchemist/Accomplished Alchemist.profile.json"
+  [elementals]="decks/Landfall Elementals/Landfall Elementals.profile.json"
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
   [hydras]=decks/Hydras/Hydras.profile.json
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
@@ -423,7 +423,7 @@ SMOKE_CASES=(
   "critter 0 1001 1000 0"
   "critter    3  1001    50 10"
   "critter    5  1001   175 80"
-  # lhc: LifegainHeliodCombo -- ADDED 2026-10-27 (analysis-LifegainHeliodCombo.md). The CritterLifegain
+  # lhc: LifegainHeliodCombo -- ADDED 2026-10-27 (analysis-Lifegain Heliod Combo.md). The CritterLifegain
   # shell plus the Heliod + Walking Ballista loop, Martyr of Sands, Abiding Grace, Emeria. Own provider
   # (LifegainHeliodComboProvider, derived from CritterLifegainProvider). No keep table / value leaf yet:
   # critter's shape (similar per-game cost), overnight on the ENTRY set. Play rows = d5 b20 (no value_play).
@@ -547,7 +547,7 @@ SMOKE_CASES=(
   "pirates 0 1001 1000 0"
   "pirates    3  1001    50 10"
   "pirates    5  1001   175 20"
-  # selesnyav2: the NEW list (decks/SelesnyaLifegain/, promoted from v2-bogbeast-heroes 2026-10-22: 18 Elves,
+  # selesnyav2: the NEW list ("decks/Selesnya Lifegain/," promoted from v2-bogbeast-heroes 2026-10-22: 18 Elves,
   # 4 Bogbeast, 2 Heroes' Reunion, 2 Genesis Wave; Alchemist / Wellwisher / Verdant Sun's Avatar / Sanctuary
   # out). ENTERED at the original list's gate shape (pirates' counts) and the overnight ENTRY set; no keep table and no
   # value leaf yet, so GT WILL move when they land (the overnight rows expand to the FULL set just before the
@@ -561,7 +561,7 @@ SMOKE_CASES=(
   "selesnyav22hg 5  1001    50 20"
   # soldiers: W/x Human Soldier tribal on Aether Vial (Champion / Thalia's Lieutenant counters, Field
   # Marshal / Kudro / Coppercoat / Darien / Rick lords, Harbin's 5-attacker pump, Beachhead's team
-  # pump, Thalia's symmetric noncreature tax). ADDED 2026-10-04 (analysis-soldiers.md) at PIRATES'
+  # pump, Thalia's symmetric noncreature tax). ADDED 2026-10-04 (analysis-Soldiers.md) at PIRATES'
   # counts. Measured on an idle 24-core box at seed 777000, 600 games/cell: d3 b10 0.57 s/game,
   # d5 b20 1.04 s/game, d5 b40 1.49 s/game, no game over 30 s -- pirates' class, so the same counts.
   # 2HG: smoke canary only (soldiers2hg below) -- nothing in the 60 reads opponent heads or starting
@@ -671,7 +671,7 @@ SMOKE_CASES=(
   "colossus 0 1001 1000 0"
   "colossus   3  1001    50 10"
   "colossus   5  1001   175 20"
-  # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampire.md), all three tiers at
+  # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampires.md), all three tiers at
   # once (the all-or-none rule), at the colossus / pirates gate shape and the overnight ENTRY set. B/R/W
   # Vampire tribal on Aether Vial: madness (Falkenrath Gorger), discard / sacrifice outlets, Bloodghast
   # recursion, Drana's first-strike-step counters, Bloodline Keeper's transform. No value leaf and no
@@ -682,7 +682,7 @@ SMOKE_CASES=(
   "vampires   3  1001    50 10"
   "vampires   5  1001   175 20"
   "vampires2hg 5  1001    50 20"
-  # alchemist: ADDED 2026-10-20 by the analysis (docs/design/analysis-AccomplishedAlchemist.md), all three tiers
+  # alchemist: ADDED 2026-10-20 by the analysis (docs/design/analysis-Accomplished Alchemist.md), all three tiers
   # at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set. Accomplished
   # Alchemist + an untapper is unbounded mana; the kill is Stroke of Genius at the opponent (deck-out) or a
   # wished Scholar. No keep table / value leaf yet, so GT WILL move when they land; the overnight ENTRY set
@@ -692,7 +692,7 @@ SMOKE_CASES=(
   "alchemist  3  1001    50 10"
   "alchemist  5  1001   150 20"
   "alchemist2hg 5  1001    50 20"
-  # elementals (LandfallElementals): ADDED 2026-10-19 by the analysis (docs/design/analysis-LandfallElementals.md),
+  # elementals (LandfallElementals): ADDED 2026-10-19 by the analysis (docs/design/analysis-Landfall Elementals.md),
   # all three tiers at once (the all-or-none rule), at the colossus gate shape and the overnight ENTRY set:
   # its worst searched case measured ~1.6 s/game (0.55x galadriel) before a keep table -- most of it
   # mulligan-bottoming trial games, which the keep table replaces; the overnight rows grow to the FULL set

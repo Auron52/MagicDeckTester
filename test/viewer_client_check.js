@@ -59,9 +59,9 @@ const SCENARIOS = argVal('deck', null)
   ? [{ deck: argVal('deck', ''), seed: parseInt(argVal('seed', '4'), 10),
        turns: parseInt(argVal('turns', '8'), 10), main: argVal('main', 'pass') }]
   : [
-      { deck: 'treasure_hunt', seed: 4, turns: 8, main: 'pass' },
+      { deck: 'Treasure Hunt', seed: 4, turns: 8, main: 'pass' },
       { deck: 'Dragonstorm',   seed: 1, turns: 8, main: 'pass' },
-      { deck: 'burn',          seed: 2, turns: 8, main: 'pass' },
+      { deck: 'Burn',          seed: 2, turns: 8, main: 'pass' },
       // Goblins on the model's own line: develops a board and connects with Goblin Lackey, so this is
       // the scenario that drives a lackey_put modal through the client's history/undo bookkeeping.
       { deck: 'Goblins',       seed: 1, turns: 8, main: 'ai' },
@@ -1097,7 +1097,7 @@ async function testPassGuard() {
   const sleep = (ms) => new Promise(r => setTimeout(r, ms));
   const win = buildDom(); await settle(win);
   const $ = (id) => win.document.getElementById(id);
-  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'EldraziDisplacerFlicker');
+  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'Eldrazi Displacer Flicker');
   if (!opt) { console.log('  SKIP pass guard: EldraziDisplacerFlicker not listed'); return fails; }
   $('deck').value = opt.value; $('seed').value = '16'; win.fillVersions();
   const st = S(win);
@@ -1243,7 +1243,7 @@ async function testPastCapOrderPin() {
   const chk = (c, m) => { if (!c) fails.push(m); };
   const win = buildDom(); await settle(win);
   const $ = (id) => win.document.getElementById(id);
-  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'EldraziDisplacerFlicker');
+  const opt = Array.from($('deck').options).find(o => o.value.replace(/\.[^.]+$/, '') === 'Eldrazi Displacer Flicker');
   if (!opt) { console.log('  SKIP past-cap order pin: EldraziDisplacerFlicker not listed'); return fails; }
   $('deck').value = opt.value; $('seed').value = '16'; win.fillVersions();
   const st = S(win);
@@ -1756,7 +1756,7 @@ async function testEquip() {
   // Pinned to the v1 list: the seed-2 board (Shadowspear in play beside a creature at T3) is v1's.
   // On the shipped v3 list (34cfa9050) seed 2 reaches T3 with NO creature in play, so the only host
   // is a Puresteel Paladin still in hand and the drop never becomes an attachment.
-  await startGame(win, { deck: 'KittyEquipment', version: 'v1-kemba-balan', seed: 2, turns: 8 });
+  await startGame(win, { deck: 'Kitty Equipment', version: 'v1-kemba-balan', seed: 2, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 3)) {
@@ -1843,7 +1843,7 @@ async function testEquipQueuedHost() {
   const fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
   const win = buildDom(); await settle(win);
-  await startGame(win, { deck: 'KittyEquipment', seed: 2, turns: 8 });
+  await startGame(win, { deck: 'Kitty Equipment', seed: 2, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 3)) {
@@ -1898,7 +1898,7 @@ async function testEquipFromHand() {
   const win = buildDom(); await settle(win);
   // Pinned to the v1 list: v3 (shipped since 34cfa9050) plays no Kor Duelist and holds Bonesplitter
   // only in the sideboard, so this board does not exist on it.
-  await startGame(win, { deck: 'KittyEquipment', version: 'v1-kemba-balan', seed: 6, turns: 8 });
+  await startGame(win, { deck: 'Kitty Equipment', version: 'v1-kemba-balan', seed: 6, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 40 && !(st().decision && st().decision.type === 'main_phase' && st().decision.turn === 2)) {
@@ -2250,7 +2250,7 @@ async function testColorlessFirstTapOrder() {
   // on the shipping list this game has no Lodge to play and the check failed on its own setup rather
   // than on the payment it exists to guard. The reported game belongs to the list it was reported on,
   // which is archived and still selectable -- so pin it (2026-09-25).
-  await startGame(win, { deck: 'StompySurprise', version: 'v1-arborelf-worldspine4', seed: 9, turns: 8 });
+  await startGame(win, { deck: 'Stompy Surprise', version: 'v1-arborelf-worldspine4', seed: 9, turns: 8 });
   const st = () => S(win);
   let guard = 0;
   while (guard++ < 10 && st().decision && st().decision.type === 'mulligan') {

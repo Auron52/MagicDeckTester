@@ -31,9 +31,9 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECK = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.cod")
-PROF = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.profile.json")
-SIDE = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.value.json")
+DECK = os.path.join(ROOT, "decks/White Knights/White Knights.cod")
+PROF = os.path.join(ROOT, "decks/White Knights/White Knights.profile.json")
+SIDE = os.path.join(ROOT, "decks/White Knights/White Knights.value.json")
 STASH = SIDE + ".MATRIXCOST_STASH"
 
 HDEPTHS = [1, 2, 3, 4, 5]

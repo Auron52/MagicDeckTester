@@ -23,16 +23,16 @@ DECKS = {
     # key: (decklist, profile, d3 games, play games)
     "niv":          ("decks/NivMizzetCombo/NivMizzetCombo.cod", "decks/NivMizzetCombo/NivMizzetCombo.profile.json", 1500, 1000),
     "bruna":        ("decks/Bruna/Bruna.cod", "decks/Bruna/Bruna.profile.json", 2000, 1200),
-    "th":           ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json", 25000, 20000),
+    "th":           ("decks/Treasure Hunt/Treasure Hunt.txt", "decks/Treasure Hunt/Treasure Hunt.profile.json", 25000, 20000),
     "dragonstorm":  ("decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json", 25000, 20000),
     "mirrorwing":   ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod", "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json", 20000, 20000),
-    "breaching":    ("decks/BreachingDragonstorm/BreachingDragonstorm.cod", "decks/BreachingDragonstorm/BreachingDragonstorm.profile.json", 10000, 10000),
+    "breaching":    ("decks/Breaching Dragonstorm/Breaching Dragonstorm.cod", "decks/Breaching Dragonstorm/Breaching Dragonstorm.profile.json", 10000, 10000),
     "galadriel":    ("decks/Galadriel/Galadriel.cod", "decks/Galadriel/Galadriel.profile.json", 25000, 20000),
     "fungusv3":     ("decks/Fungus/Fungus.cod", "decks/Fungus/Fungus.profile.json", 10000, 10000),
     "angels":       ("decks/Angels/Angels.cod", "decks/Angels/Angels.profile.json", 10000, 10000),
-    "critter":      ("decks/CritterLifegain/CritterLifegain.cod", "decks/CritterLifegain/CritterLifegain.profile.json", 10000, 10000),
-    "kittyv3":      ("decks/KittyEquipment/KittyEquipment.cod", "decks/KittyEquipment/KittyEquipment.profile.json", 6000, 4000),
-    "whiteknights": ("decks/WhiteKnights/WhiteKnights.cod", "decks/WhiteKnights/WhiteKnights.profile.json", 10000, 10000),
+    "critter":      ("decks/Critter Lifegain/Critter Lifegain.cod", "decks/Critter Lifegain/Critter Lifegain.profile.json", 10000, 10000),
+    "kittyv3":      ("decks/Kitty Equipment/Kitty Equipment.cod", "decks/Kitty Equipment/Kitty Equipment.profile.json", 6000, 4000),
+    "whiteknights": ("decks/White Knights/White Knights.cod", "decks/White Knights/White Knights.profile.json", 10000, 10000),
 }
 SEED_D3, SEED_PLAY = 500000, 600000
 ARMS = {"off": {"MTG_PAY_DEPLETION_HOLD": False}, "on": {"MTG_PAY_DEPLETION_HOLD": True}}

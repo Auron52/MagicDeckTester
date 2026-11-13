@@ -222,24 +222,24 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
     EnsureCardsPp();
     const std::map<std::string, std::string> expected = {
         {"Angels", "Angels"},                 {"Anti-Lifegain", "AntiLifegain"},
-        {"Auras", "Auras"},                   {"BreachingDragonstorm", "BreachingDragonstorm"},
+        {"Auras", "Auras"},                   {"Breaching Dragonstorm", "BreachingDragonstorm"},
         {"Extra Turns", "ExtraTurns"},       {"Kithkin", "Kithkin"},
-        {"Creature Giving", "CreatureGiving"}, {"CritterLifegain", "CritterLifegain"}, {"LifegainHeliodCombo", "LifegainHeliodCombo"},
+        {"Creature Giving", "CreatureGiving"}, {"Critter Lifegain", "CritterLifegain"}, {"Lifegain Heliod Combo", "LifegainHeliodCombo"},
         {"Dragons", "Dragons"},               {"Dragonstorm", "Dragonstorm"},
         {"Gods", "Gods"},
-        {"EldraziDisplacerFlicker", "EldraziFlicker"}, {"FiveColour", "FiveColour"},
+        {"Eldrazi Displacer Flicker", "EldraziFlicker"}, {"Five Colour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
         {"Giants", "Giants"},                 {"Goblins", "Goblins"},
-        {"Hinata", "Hinata"},                {"KittyEquipment", "Equipment"},
+        {"Hinata", "Hinata"},                {"Kitty Equipment", "Equipment"},
         {"Knights", "Knights"},               {"Melira Pod", "MeliraPod"},
         {"Minotaur", "Minotaur"},             {"Mirrorwing Dragon", "Mirrorwing"},
-        {"Snow", "Snow"},                     {"StompySurprise", "Stompy"},
-        {"burn", "Burn"},                     {"Slivers", "Vial"},
-        {"treasure_hunt", "TreasureHunt"},
+        {"Snow", "Snow"},                     {"Stompy Surprise", "Stompy"},
+        {"Burn", "Burn"},                     {"Slivers", "Vial"},
+        {"Treasure Hunt", "TreasureHunt"},
         // WhiteKnights (adopted 2026-09-26 on the other machine; met this table at the 2026-09-27
         // rebase): the second shipping Knight list, routed by its own signature ABOVE Knights --
         // see the WhiteKnightsProvider note in DecisionProviders.cpp.
-        {"WhiteKnights", "WhiteKnights"},
+        {"White Knights", "WhiteKnights"},
         // Unprofiled lists (no .profile.json): pinned from a direct --batch probe of the pre-change
         // binary so a future signature cannot capture them unnoticed either.
         // Unpredictable Cyclone: CycloneProvider since phase 3 (2026-10-27) -- the Cyclone / Curator entries
@@ -266,7 +266,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // SelesnyaLifegainProvider is an EMPTY DeckProvider derivation -- play-neutral by
         // construction -- so this change of routing is a change of NAME and of future extension
         // point, not of play. See its declaration in DecisionProviders.h.
-        {"SelesnyaLifegain", "SelesnyaLifegain"},
+        {"Selesnya Lifegain", "SelesnyaLifegain"},
         // Soldiers (onboarding 2026-10-04): its own `soldiers` signature (Harbin / Thalia / Thalia's
         // Lieutenant / Recruitment Officer / Rick params) routes ABOVE goblin (three sac
         // outlets) and anti (two creature tutors) -- and the Angels term it used to trip (Champion of
@@ -313,12 +313,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // pin read "SelesnyaLifegain" until then -- a MEASURED capture (Accomplished Alchemist's
         // mana_per_life_gained) -- and AccomplishedAlchemistProvider DERIVES from SelesnyaLifegainProvider,
         // so the move is play-neutral by construction (it inherits the Selesnya discard buckets).
-        {"AccomplishedAlchemist", "AccomplishedAlchemist"},
+        {"Accomplished Alchemist", "AccomplishedAlchemist"},
         // LandfallElementals (onboarded 2026-10-18): its own `lfe` signature (Risen Reef's
         // enters_look_top_land_or_hand). Would otherwise
         // ride AntiLifegainProvider (Flamekin Harbinger's tutor_to_top) or VialProvider (Aether Vial);
         // LandfallElementalsProvider is an empty DeckProvider derivation.
-        {"LandfallElementals", "LandfallElementals"},
+        {"Landfall Elementals", "LandfallElementals"},
         // Midrange Burn is intentionally separate from the low-curve Burn provider:
         // Chandra and Incinerator need their own cast/legend ordering.
         {"Midrange Burn", "MidrangeBurn"},
@@ -398,7 +398,7 @@ TEST_CASE("Pirates routing: the signature survives cutting any ONE of its five c
 TEST_CASE("Vampires routing: the signature survives cutting any ONE of its four A2 cards")
 {
     EnsureCardsPp();
-    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod"));
+    const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod"));
     for (const char* cut : {"Falkenrath Pit Fighter", "Stromkirk Condemned", "Voldaren Estate", "Bloodghast"})
     {
         Decklist d = full;
@@ -595,7 +595,7 @@ TEST_CASE("AccomplishedAlchemist routing: the signature survives cutting any of 
 {
     EnsureCardsPp();
     const Decklist full = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath(
-        "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"));
+        "decks/Accomplished Alchemist/Accomplished Alchemist.cod"));
     CHECK(std::string(DetectDecisionProvider(full).Name()) == "AccomplishedAlchemist");
     for (const char* cut : { "Stroke of Genius", "Weather the Storm" })
     {

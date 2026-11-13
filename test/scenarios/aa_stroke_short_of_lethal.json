@@ -5,7 +5,7 @@
     "no damage clock exists -- so the engine must NOT win on turn 4. Guards against a spurious deck-out",
     "(e.g. a ForcedDraw that flagged a partial draw, or an empty-is-not-absent regression)."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

@@ -30,7 +30,7 @@
   "MTG_UNPRUNED=1 is not decoration: the cast-ORDERING search is gated on UnprunedGate::SearchOrder,",
   "so without it this fixture would not exercise the path the viewer runs on."
  ],
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 3,
  "on_the_play": false,
  "active_life": 20,

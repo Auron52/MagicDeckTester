@@ -19,7 +19,7 @@ No USER order exists, and none is OFF.
 * **Ranks 5 / 6 / 7 are agent-built.** Untappers are at 5, Training Grounds at 6, outlets at 7. The report
   prints them as "(unclassified)", and it labels 5 "MANA ROCK", which is wrong. Payload-before-reducer
   (`MTG_EDF_PAYLOAD_FIRST`, ON, 2026-09-15) comes from the USER's own played lines (s12_gi11 T4 and
-  s6_gi5 T4; analysis-EldraziDisplacerFlicker.md:7663). It was adopted under the "references first" brief
+  s6_gi5 T4; analysis-Eldrazi Displacer Flicker.md:7663). It was adopted under the "references first" brief
   and was never shown to the USER as an order.
 * **Main phase is USER-ruled: single main.** USER 2026-09-08 (analysis-EDF.md:3913): *"There should be no
   need to use multiple mains"* and *"The more important thing is that we don't have extra mains to

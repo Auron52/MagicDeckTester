@@ -19,8 +19,8 @@ import argparse, json, os, re, sys
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the checkout
-DECK = "decks/burn/burn.txt"
-PROF = "decks/burn/burn.profile.json"
+DECK = "decks/Burn/Burn.txt"
+PROF = "decks/Burn/Burn.profile.json"
 
 K1, K2, FL = "MTG_BURN_VOLLEY_KEEP1", "MTG_BURN_VOLLEY_KEEP2", "MTG_BURN_VOLLEY_KEEP_FLOOR"
 RANK, LATE = "MTG_BURN_VOLLEY_NOLAND_RANK", "MTG_BURN_VOLLEY_NOLAND_LATE"

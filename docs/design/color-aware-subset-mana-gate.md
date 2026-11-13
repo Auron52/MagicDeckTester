@@ -1,7 +1,7 @@
 # Color-aware subset mana gate (deferred)
 
 **Status: deferred improvement (2026-08-14).** Surfaced by the KittyEquipment Stage 5d
-claude-play sweep (ledger `analysis-KittyEquipment.md`, gi=6 confirmed flag + gi=10/15
+claude-play sweep (ledger `analysis-Kitty Equipment.md`, gi=6 confirmed flag + gi=10/15
 uncertain repeats), but the mechanism is engine-wide and pre-existing.
 
 ## The behavior

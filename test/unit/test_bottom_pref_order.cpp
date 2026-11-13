@@ -47,8 +47,8 @@ GameState OpeningState(const Decklist& deck, std::uint64_t seed)
     return s;
 }
 
-const char* kAaDeck  = "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod";
-const char* kAaProf  = "decks/AccomplishedAlchemist/AccomplishedAlchemist.profile.json";
+const char* kAaDeck  = "decks/Accomplished Alchemist/Accomplished Alchemist.cod";
+const char* kAaProf  = "decks/Accomplished Alchemist/Accomplished Alchemist.profile.json";
 }   // namespace
 
 TEST_CASE("BottomPreferenceOrder: HeuristicBottomPick is the order's first allowed card on every set")

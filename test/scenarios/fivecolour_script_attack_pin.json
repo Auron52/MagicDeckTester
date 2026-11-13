@@ -1,6 +1,6 @@
 {
-  "deck": "decks/FiveColour/FiveColour.cod",
-  "profile": "decks/FiveColour/FiveColour.profile.json",
+  "deck": "decks/Five Colour/Five Colour.cod",
+  "profile": "decks/Five Colour/Five Colour.profile.json",
   "turn": 5,
   "on_the_play": true,
   "max_turns": 7,

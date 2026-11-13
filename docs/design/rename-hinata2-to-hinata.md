@@ -41,6 +41,42 @@ ledger governs a landed claim, and a missing claim does not queue a regeneration
 6. The artifact-queue tool baselines staleness on the commit that last touched the artifact PATH, so a
    rename resets the drift clock to the rename commit (under-reports staleness; never triggers a regen).
 
+### BATCH DONE 2026-11-13 (all but Niv-Mizzet Combo)
+
+USER: *"Let's pull work through the actual changes and I will give special dispensation to push it without
+waiting for the window. Getting the names through quickly is important."* -- *"Except, naturally, we need to
+make sure nothing is broken by the change (via tests and such)."*
+
+Renamed (folder + every stem, archived `v<N>-*` subfolders, untracked journals/gencaches, `references/` +
+`suboptimal/` + `review/replaced/` folders, artifact ledgers, `docs/design/analysis-<stem>.md` ledgers that
+`verify_deck.py` finds by STEM): the twelve CamelCase/lowercase decks in the table below, plus the stems
+`Soldiers/soldiers.cod` -> `Soldiers.cod` and `Vampires/Vampire.cod` -> `Vampires.cod`. Tooling:
+`logs/rename-decks/rename2.py`, `ledgers.py`, `pass2.py` (scratch, not committed).
+
+* **HELD: `NivMizzetCombo` -> `Niv-Mizzet Combo`.** A USER-paused mulligan generation holds it (claim
+  `nivmizzetcombo`, worker `artifact-queue-d7d6a5`, paused 2026-11-13T00:54Z). Rename it once that run has
+  landed or been released: same three scripts with Niv added, same checks.
+* **Shell quoting:** a rewritten shell token that gained a space was double-quoted (the
+  `[creature_giving]="decks/Creature Giving/..."` form), e.g. every `DECK_FILE`/`DECK_PROF` row.
+* **NOT updated -- legacy one-off scripts whose deck lists are WHITESPACE-delimited and so cannot hold a
+  spaced name at all** (already true of Creature Giving): the `DECKS="a:a b:b"` lists in `test/label_*`,
+  `test/nowin_*`, `test/ladder_value_leaf_check.sh`, `test/keepmodel_*`, `test/d5_budget_sweep.sh`,
+  `scripts/beam_growth_merged_ab.sh`; the data lines of `scripts/dig_choice_ab/census*.sh` and
+  `scripts/hand_entry_census.sh`; `test/patch_reference_mulligans.py` (pre-folder flat paths, already
+  dead). Revive one by switching it to a `|`-delimited list if it is ever needed again.
+* **Left as history:** `src/` (comments + `cards.json` notes: editing them moves `HEAD:src`, which stales
+  PGO and flags card-data drift on every affected artifact), `docs/design/` prose, provider names
+  (`DecisionProvider::Name()` -- "WhiteKnights", "SelesnyaLifegain"... are identifiers, not folders),
+  regression CASE keys and GT, recorded result files, dated cast-order drafts.
+* **Seed bases:** every renamed key gets a new row-dump base, and ONE un-renamed key moves by collision
+  probing: `fungus_v1_sporesower_shelldweller` (an archived list; only a future value-leaf row dump on that
+  list would see it).
+* **Found while testing, NOT caused by the rename** (identical on a HEAD worktree with the same binary):
+  `test/pay_line_color_check.py` FAILS (`MTG_PAY_PAIN_LAST=0` no longer restores the reported Adarkar
+  payment), and `test/human_line_order_check.py` / `test/viewer_line_macros_check.py` SKIP (their reference
+  decision is no longer reachable from its prefix). The reference bench of all 21 renamed lists replays 286 games with ONE shortfall,
+  Selesnya Lifegain `claude_s2_gi1` (search 5.4 vs human 5.2 on the deck), identical on the pre-rename tree.
+
 **QUEUED (USER, not yet scheduled): fully consistent deck names, Capitals and spaces.** USER 2026-11-13:
 *"words separated by spaces and words starting with capital letters ... words that are one word in the card
 should not change, so Dragonstorm remains as-is."* Agent recommendation (2026-11-13, spellings are the USER's

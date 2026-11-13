@@ -33,8 +33,8 @@
 set -euo pipefail
 cd /workspaces/MagicDeckTester
 OUT=$PWD/logs/wk_m2; mkdir -p "$OUT"
-DECK=$PWD/decks/WhiteKnights/WhiteKnights.cod
-PROF=$PWD/decks/WhiteKnights/WhiteKnights.profile.json
+DECK="$PWD/decks/White Knights/White Knights.cod"
+PROF="$PWD/decks/White Knights/White Knights.profile.json"
 
 python3 - "$OUT" "$DECK" "$PROF" <<'PY'
 import json, sys

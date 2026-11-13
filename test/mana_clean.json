@@ -1,7 +1,7 @@
 {
  "_note": "The mana-clean gate (scripts/mana_clean.py): one record per mana-oracle run per deck. A deck leaves beta only when its latest run is clean on >= games_required games of its current list.",
  "decks": {
-  "accomplishedalchemist": {
+  "accomplished_alchemist": {
    "runs": [
     {
      "binary": "PGO",
@@ -25,7 +25,7 @@
      "commit": "45f8909379ea1e8f20fcd2b14bf95f0d4e12d729",
      "date": "2026-11-07T13:37:52Z",
      "decisions": 44492,
-     "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+     "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
      "deck_sha": "2e8b95bbd70dcbf5cd750b46bde4b40febdc26e7",
      "game_index": 0,
      "games": 5000,
@@ -75,7 +75,7 @@
      "commit": "87a029e0cc522a0000a94d5695430ecda320d073",
      "date": "2026-11-09T10:56:54Z",
      "decisions": 44214,
-     "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+     "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
      "deck_sha": "2e8b95bbd70dcbf5cd750b46bde4b40febdc26e7",
      "game_index": 5000,
      "games": 5000,
@@ -644,7 +644,7 @@
     }
    ]
   },
-  "breachingdragonstorm": {
+  "breaching_dragonstorm": {
    "runs": [
     {
      "binary": "PGO",
@@ -658,7 +658,7 @@
      "commit": "2deee1725714feb7871c5e222cd3767bc7019e0f",
      "date": "2026-11-03T00:47:25Z",
      "decisions": 520558,
-     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
      "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
      "game_index": 0,
      "games": 100000,
@@ -696,7 +696,7 @@
      "commit": "28c83c562a76269e6c4b14cf3d5d0c374f6bf9a2",
      "date": "2026-11-08T07:39:58Z",
      "decisions": 26057,
-     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
      "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
      "game_index": 100000,
      "games": 5000,
@@ -734,7 +734,7 @@
      "commit": "23c21933cc66184702696e42ab9e519656e8f01d",
      "date": "2026-11-08T08:39:53Z",
      "decisions": 26013,
-     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
      "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
      "game_index": 105000,
      "games": 5000,
@@ -774,7 +774,7 @@
      "commit": "3abfb1eae288b90c7630c16ef98ab1bc388f04e7",
      "date": "2026-11-08T10:39:38Z",
      "decisions": 520903,
-     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
      "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
      "game_index": 110000,
      "games": 100000,
@@ -812,7 +812,7 @@
      "commit": "b827b1fcc78e91228d924014c94f028bf0f92e84",
      "date": "2026-11-11T02:19:19Z",
      "decisions": 26043,
-     "deck": "decks/BreachingDragonstorm/BreachingDragonstorm.cod",
+     "deck": "decks/Breaching Dragonstorm/Breaching Dragonstorm.cod",
      "deck_sha": "2ed89a6d3c452b73650700fdf538d68f59d51d5f",
      "game_index": 210000,
      "games": 5000,
@@ -998,7 +998,7 @@
      "commit": "2deee1725714feb7871c5e222cd3767bc7019e0f",
      "date": "2026-11-03T00:56:28Z",
      "decisions": 762627,
-     "deck": "decks/burn/burn.txt",
+     "deck": "decks/Burn/Burn.txt",
      "deck_sha": "a9aa829fdc85d0413dbff31f58ac2af3d51d1648",
      "game_index": 0,
      "games": 100000,
@@ -1034,7 +1034,7 @@
      "commit": "c29860b1c88ccfb258128a3bd5c822a12959360f",
      "date": "2026-11-08T07:42:03Z",
      "decisions": 37980,
-     "deck": "decks/burn/burn.txt",
+     "deck": "decks/Burn/Burn.txt",
      "deck_sha": "a9aa829fdc85d0413dbff31f58ac2af3d51d1648",
      "game_index": 100000,
      "games": 5000,
@@ -1071,7 +1071,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 38329,
-     "deck": "decks/burn/burn.txt",
+     "deck": "decks/Burn/Burn.txt",
      "deck_sha": "a9aa829fdc85d0413dbff31f58ac2af3d51d1648",
      "game_index": 105000,
      "games": 5000,
@@ -1109,7 +1109,7 @@
      "commit": "3abfb1eae288b90c7630c16ef98ab1bc388f04e7",
      "date": "2026-11-08T10:39:38Z",
      "decisions": 762959,
-     "deck": "decks/burn/burn.txt",
+     "deck": "decks/Burn/Burn.txt",
      "deck_sha": "a9aa829fdc85d0413dbff31f58ac2af3d51d1648",
      "game_index": 110000,
      "games": 100000,
@@ -1146,7 +1146,7 @@
      "commit": "b827b1fcc78e91228d924014c94f028bf0f92e84",
      "date": "2026-11-11T02:19:19Z",
      "decisions": 38183,
-     "deck": "decks/burn/burn.txt",
+     "deck": "decks/Burn/Burn.txt",
      "deck_sha": "a9aa829fdc85d0413dbff31f58ac2af3d51d1648",
      "game_index": 210000,
      "games": 5000,
@@ -1507,7 +1507,7 @@
     }
    ]
   },
-  "critterlifegain": {
+  "critter_lifegain": {
    "runs": [
     {
      "binary": "PGO",
@@ -1517,7 +1517,7 @@
      "commit": "2deee1725714feb7871c5e222cd3767bc7019e0f",
      "date": "2026-11-03T01:40:36Z",
      "decisions": 763063,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 0,
      "games": 100000,
@@ -1555,7 +1555,7 @@
      "commit": "c70d1cf68753935fc508e2466b3b8e459f75ab9e",
      "date": "2026-11-08T06:59:13Z",
      "decisions": 763021,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 100000,
      "games": 100000,
@@ -1594,7 +1594,7 @@
      "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
      "date": "2026-11-08T07:37:54Z",
      "decisions": 38114,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 200000,
      "games": 5000,
@@ -1633,7 +1633,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 38050,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 205000,
      "games": 5000,
@@ -1672,7 +1672,7 @@
      "commit": "3b7f9b2d5fe37396a4f67e3e26926545a0186177",
      "date": "2026-11-08T12:04:27Z",
      "decisions": 762096,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 210000,
      "games": 100000,
@@ -1711,7 +1711,7 @@
      "commit": "9a00ad8845ffaffd3728e2ad8ac97f7250f1987a",
      "date": "2026-11-10T00:37:25Z",
      "decisions": 762389,
-     "deck": "decks/CritterLifegain/CritterLifegain.cod",
+     "deck": "decks/Critter Lifegain/Critter Lifegain.cod",
      "deck_sha": "680d8e3bcc6c9f441d585b5e1e65828212584df5",
      "game_index": 310000,
      "games": 100000,
@@ -1924,7 +1924,7 @@
     }
    ]
   },
-  "eldrazidisplacerflicker": {
+  "eldrazi_displacer_flicker": {
    "runs": [
     {
      "binary": "PGO",
@@ -1947,7 +1947,7 @@
      "commit": "0883da66d8a39e0410b7b596568875c98a8c3290",
      "date": "2026-11-07T06:18:56Z",
      "decisions": 35613,
-     "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+     "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
      "deck_sha": "c53ea47915848ee6c2857569adccbeb7ff95c477",
      "game_index": 0,
      "games": 5000,
@@ -1996,7 +1996,7 @@
      "commit": "87a029e0cc522a0000a94d5695430ecda320d073",
      "date": "2026-11-09T10:56:54Z",
      "decisions": 35494,
-     "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+     "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
      "deck_sha": "c53ea47915848ee6c2857569adccbeb7ff95c477",
      "game_index": 5000,
      "games": 5000,
@@ -2026,7 +2026,7 @@
     }
    ]
   },
-  "fivecolour": {
+  "five_colour": {
    "runs": [
     {
      "binary": "PGO",
@@ -2046,7 +2046,7 @@
      "commit": "9ec4732d652c7ab1ace3d6d0e300035bbf20dae4",
      "date": "2026-11-04T20:03:47Z",
      "decisions": 107944,
-     "deck": "decks/FiveColour/FiveColour.cod",
+     "deck": "decks/Five Colour/Five Colour.cod",
      "deck_sha": "ad91ef5ce4e2c97058ad37a547902976734621f9",
      "game_index": 0,
      "games": 12000,
@@ -2093,7 +2093,7 @@
      "commit": "b5d2a6ef0a7f99d57f45dee77c1a3cb7c0eca258",
      "date": "2026-11-08T20:50:01Z",
      "decisions": 45129,
-     "deck": "decks/FiveColour/FiveColour.cod",
+     "deck": "decks/Five Colour/Five Colour.cod",
      "deck_sha": "ad91ef5ce4e2c97058ad37a547902976734621f9",
      "game_index": 12000,
      "games": 5000,
@@ -4519,7 +4519,7 @@
     }
    ]
   },
-  "kittyequipment": {
+  "kitty_equipment": {
    "runs": [
     {
      "binary": "PGO",
@@ -4531,7 +4531,7 @@
      "commit": "98949cc9eaed756203dde01f91dbc0fa04a4dcdf",
      "date": "2026-11-04T05:48:05Z",
      "decisions": 277968,
-     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck": "decks/Kitty Equipment/Kitty Equipment.cod",
      "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
      "game_index": 0,
      "games": 42000,
@@ -4566,7 +4566,7 @@
      "commit": "b0fc607bb9e5d4c8bd8b2d37ad10191d475a1cd2",
      "date": "2026-11-04T07:45:54Z",
      "decisions": 32989,
-     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck": "decks/Kitty Equipment/Kitty Equipment.cod",
      "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
      "game_index": 42000,
      "games": 5000,
@@ -4601,7 +4601,7 @@
      "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
      "date": "2026-11-08T07:37:54Z",
      "decisions": 33265,
-     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck": "decks/Kitty Equipment/Kitty Equipment.cod",
      "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
      "game_index": 47000,
      "games": 5000,
@@ -4639,7 +4639,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 32722,
-     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck": "decks/Kitty Equipment/Kitty Equipment.cod",
      "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
      "game_index": 52000,
      "games": 5000,
@@ -4677,7 +4677,7 @@
      "commit": "ea5c0e638d0eb56cfc130da635e6d50430083026",
      "date": "2026-11-08T14:08:41Z",
      "decisions": 661452,
-     "deck": "decks/KittyEquipment/KittyEquipment.cod",
+     "deck": "decks/Kitty Equipment/Kitty Equipment.cod",
      "deck_sha": "8f27616cefc34bc1fd7cf21aacee55b5af9ac1db",
      "game_index": 57000,
      "games": 100000,
@@ -4989,7 +4989,7 @@
     }
    ]
   },
-  "landfallelementals": {
+  "landfall_elementals": {
    "runs": [
     {
      "binary": "PGO",
@@ -5010,7 +5010,7 @@
      "commit": "3fbb52daa350140e6247b6ba9ec7a47064d65d87",
      "date": "2026-11-04T00:51:40Z",
      "decisions": 53638,
-     "deck": "decks/LandfallElementals/LandfallElementals.cod",
+     "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
      "deck_sha": "4665da0a41f43ecffbb530bb3f5259079a10e6c2",
      "game_index": 0,
      "games": 7000,
@@ -5057,7 +5057,7 @@
      "commit": "45f8909379ea1e8f20fcd2b14bf95f0d4e12d729",
      "date": "2026-11-07T14:53:03Z",
      "decisions": 38340,
-     "deck": "decks/LandfallElementals/LandfallElementals.cod",
+     "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
      "deck_sha": "4665da0a41f43ecffbb530bb3f5259079a10e6c2",
      "game_index": 7000,
      "games": 5000,
@@ -5104,7 +5104,7 @@
      "commit": "b5d2a6ef0a7f99d57f45dee77c1a3cb7c0eca258",
      "date": "2026-11-08T20:50:01Z",
      "decisions": 38378,
-     "deck": "decks/LandfallElementals/LandfallElementals.cod",
+     "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
      "deck_sha": "4665da0a41f43ecffbb530bb3f5259079a10e6c2",
      "game_index": 12000,
      "games": 5000,
@@ -5134,7 +5134,7 @@
     }
    ]
   },
-  "lifegainheliodcombo": {
+  "lifegain_heliod_combo": {
    "runs": [
     {
      "binary": "PGO",
@@ -5145,7 +5145,7 @@
      "commit": "9ec4732d652c7ab1ace3d6d0e300035bbf20dae4",
      "date": "2026-11-04T21:12:47Z",
      "decisions": 823507,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 0,
      "games": 100000,
@@ -5184,7 +5184,7 @@
      "commit": "c70d1cf68753935fc508e2466b3b8e459f75ab9e",
      "date": "2026-11-08T06:59:13Z",
      "decisions": 823285,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 100000,
      "games": 100000,
@@ -5221,7 +5221,7 @@
      "commit": "875d359ee280983bde3721d1aa84e61fcc64cedf",
      "date": "2026-11-08T07:37:54Z",
      "decisions": 41077,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 200000,
      "games": 5000,
@@ -5260,7 +5260,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 41265,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 205000,
      "games": 5000,
@@ -5300,7 +5300,7 @@
      "commit": "3b7f9b2d5fe37396a4f67e3e26926545a0186177",
      "date": "2026-11-08T12:04:27Z",
      "decisions": 822982,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 210000,
      "games": 100000,
@@ -5340,7 +5340,7 @@
      "commit": "9a00ad8845ffaffd3728e2ad8ac97f7250f1987a",
      "date": "2026-11-10T00:37:25Z",
      "decisions": 822960,
-     "deck": "decks/LifegainHeliodCombo/LifegainHeliodCombo.cod",
+     "deck": "decks/Lifegain Heliod Combo/Lifegain Heliod Combo.cod",
      "deck_sha": "abe7a6d72f0b87dd3655037026b236f1098bcc3b",
      "game_index": 310000,
      "games": 100000,
@@ -7006,7 +7006,7 @@
     }
    ]
   },
-  "selesnyalifegain": {
+  "selesnya_lifegain": {
    "runs": [
     {
      "binary": "PGO",
@@ -7028,7 +7028,7 @@
      "commit": "d43cb523366b47b4875a3e8ab1da6e3ca197d22c",
      "date": "2026-11-06T07:16:11Z",
      "decisions": 791934,
-     "deck": "decks/SelesnyaLifegain/SelesnyaLifegain.cod",
+     "deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
      "deck_sha": "197a034b067bb6cf192b16ae0ba266e359c004e8",
      "game_index": 0,
      "games": 97000,
@@ -7075,7 +7075,7 @@
      "commit": "b5d2a6ef0a7f99d57f45dee77c1a3cb7c0eca258",
      "date": "2026-11-08T15:42:02Z",
      "decisions": 40856,
-     "deck": "decks/SelesnyaLifegain/SelesnyaLifegain.cod",
+     "deck": "decks/Selesnya Lifegain/Selesnya Lifegain.cod",
      "deck_sha": "197a034b067bb6cf192b16ae0ba266e359c004e8",
      "game_index": 97000,
      "games": 5000,
@@ -7892,7 +7892,7 @@
      "commit": "17b0950ff4bdc36d2aeaae66caa57631fae6190b",
      "date": "2026-11-03T05:29:38Z",
      "decisions": 568604,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 0,
      "games": 76000,
@@ -7929,7 +7929,7 @@
      "commit": "2ca8bcfbc1333788ad3372e462917a3fd84a26cf",
      "date": "2026-11-08T05:40:49Z",
      "decisions": 37308,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 76000,
      "games": 5000,
@@ -7967,7 +7967,7 @@
      "commit": "7cd3154033064c413000240b98c261cceb4a5822",
      "date": "2026-11-08T06:40:05Z",
      "decisions": 37435,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 81000,
      "games": 5000,
@@ -8004,7 +8004,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 37237,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 86000,
      "games": 5000,
@@ -8043,7 +8043,7 @@
      "commit": "3b7f9b2d5fe37396a4f67e3e26926545a0186177",
      "date": "2026-11-08T12:42:34Z",
      "decisions": 748500,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 91000,
      "games": 100000,
@@ -8081,7 +8081,7 @@
      "commit": "b827b1fcc78e91228d924014c94f028bf0f92e84",
      "date": "2026-11-11T02:19:19Z",
      "decisions": 37330,
-     "deck": "decks/Soldiers/soldiers.cod",
+     "deck": "decks/Soldiers/Soldiers.cod",
      "deck_sha": "a98c057cb566d0dc84075d28e0a3d20a5dfefc3f",
      "game_index": 191000,
      "games": 5000,
@@ -8111,7 +8111,7 @@
     }
    ]
   },
-  "stompysurprise": {
+  "stompy_surprise": {
    "runs": [
     {
      "binary": "PGO",
@@ -8132,7 +8132,7 @@
      "commit": "3fbb52daa350140e6247b6ba9ec7a47064d65d87",
      "date": "2026-11-04T02:15:51Z",
      "decisions": 223356,
-     "deck": "decks/StompySurprise/StompySurprise.cod",
+     "deck": "decks/Stompy Surprise/Stompy Surprise.cod",
      "deck_sha": "dda8e187e418cde5899599d851d08d6a98800dd8",
      "game_index": 0,
      "games": 31000,
@@ -8176,7 +8176,7 @@
      "commit": "b5d2a6ef0a7f99d57f45dee77c1a3cb7c0eca258",
      "date": "2026-11-08T15:42:02Z",
      "decisions": 35594,
-     "deck": "decks/StompySurprise/StompySurprise.cod",
+     "deck": "decks/Stompy Surprise/Stompy Surprise.cod",
      "deck_sha": "dda8e187e418cde5899599d851d08d6a98800dd8",
      "game_index": 31000,
      "games": 5000,
@@ -8227,7 +8227,7 @@
      "commit": "c52f3ea7b203b476b0ac1364a80925f23e9d446c",
      "date": "2026-11-03T02:43:28Z",
      "decisions": 355909,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 0,
      "games": 50000,
@@ -8270,7 +8270,7 @@
      "commit": "97dc0982fc3f4708ba3bd032306f7db3879b0a28",
      "date": "2026-11-08T07:53:35Z",
      "decisions": 35590,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 50000,
      "games": 5000,
@@ -8316,7 +8316,7 @@
      "commit": "d56f9b6aed2f7ac97e0b3236385d058af07f6a5b",
      "date": "2026-11-08T14:13:14Z",
      "decisions": 35686,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 55000,
      "games": 5000,
@@ -8361,7 +8361,7 @@
      "commit": "e1d4ef4f5305cd220691bb4c17c6a342bc4955b4",
      "date": "2026-11-12T04:11:26Z",
      "decisions": 35366,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 60000,
      "games": 5000,
@@ -8406,7 +8406,7 @@
      "commit": "30bf98ef4f210f3163a9703ff84c4ea1a7233dd7",
      "date": "2026-11-12T10:08:16Z",
      "decisions": 35512,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 65000,
      "games": 5000,
@@ -8450,7 +8450,7 @@
      "commit": "637df85db017694a6ae1de7fb837c8b0b70e696e",
      "date": "2026-11-12T10:29:08Z",
      "decisions": 35542,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 70000,
      "games": 5000,
@@ -8494,7 +8494,7 @@
      "commit": "bd1a8f9d4e090caea048d0e011bd82f7ce201776",
      "date": "2026-11-12T13:06:49Z",
      "decisions": 35484,
-     "deck": "decks/treasure_hunt/treasure_hunt.txt",
+     "deck": "decks/Treasure Hunt/Treasure Hunt.txt",
      "deck_sha": "484793063a628b48ddafcdef071d68beadc6f2a8",
      "game_index": 75000,
      "games": 5000,
@@ -8638,7 +8638,7 @@
      "commit": "2deee1725714feb7871c5e222cd3767bc7019e0f",
      "date": "2026-11-03T02:03:11Z",
      "decisions": 750647,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 0,
      "games": 100000,
@@ -8678,7 +8678,7 @@
      "commit": "1427f72910f7e63dc181b45d01e95282bd59c11b",
      "date": "2026-11-08T07:48:46Z",
      "decisions": 37468,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 100000,
      "games": 5000,
@@ -8719,7 +8719,7 @@
      "commit": "ba84ab37b0661036ed5f58a465d8f414cdb888a6",
      "date": "2026-11-08T10:17:04Z",
      "decisions": 37552,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 105000,
      "games": 5000,
@@ -8761,7 +8761,7 @@
      "commit": "9358b0e14eb3d3eabfed77fceec3c9cddee39f17",
      "date": "2026-11-08T14:57:21Z",
      "decisions": 750746,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 110000,
      "games": 100000,
@@ -8802,7 +8802,7 @@
      "commit": "b827b1fcc78e91228d924014c94f028bf0f92e84",
      "date": "2026-11-11T02:19:19Z",
      "decisions": 37484,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 210000,
      "games": 5000,
@@ -8842,7 +8842,7 @@
      "commit": "e1d4ef4f5305cd220691bb4c17c6a342bc4955b4",
      "date": "2026-11-12T04:11:26Z",
      "decisions": 37646,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 215000,
      "games": 5000,
@@ -8882,7 +8882,7 @@
      "commit": "1e3a6761a81fe69c9e64ed6a0321d07427cd746c",
      "date": "2026-11-13T05:04:54Z",
      "decisions": 37388,
-     "deck": "decks/Vampires/Vampire.cod",
+     "deck": "decks/Vampires/Vampires.cod",
      "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
      "game_index": 220000,
      "games": 5000,
@@ -8912,7 +8912,7 @@
     }
    ]
   },
-  "whiteknights": {
+  "white_knights": {
    "runs": [
     {
      "binary": "PGO",
@@ -8925,7 +8925,7 @@
      "commit": "2deee1725714feb7871c5e222cd3767bc7019e0f",
      "date": "2026-11-03T00:50:33Z",
      "decisions": 730554,
-     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck": "decks/White Knights/White Knights.cod",
      "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
      "game_index": 0,
      "games": 100000,
@@ -8961,7 +8961,7 @@
      "commit": "82352abb23985a498f8eb141a367ddf425440c6c",
      "date": "2026-11-08T06:41:40Z",
      "decisions": 36490,
-     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck": "decks/White Knights/White Knights.cod",
      "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
      "game_index": 100000,
      "games": 5000,
@@ -8998,7 +8998,7 @@
      "commit": "2edc93f804560bd4a6becd99f7bac5a3bda29f63",
      "date": "2026-11-08T08:55:18Z",
      "decisions": 36550,
-     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck": "decks/White Knights/White Knights.cod",
      "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
      "game_index": 105000,
      "games": 5000,
@@ -9035,7 +9035,7 @@
      "commit": "3b7f9b2d5fe37396a4f67e3e26926545a0186177",
      "date": "2026-11-08T12:42:34Z",
      "decisions": 730658,
-     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck": "decks/White Knights/White Knights.cod",
      "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
      "game_index": 110000,
      "games": 100000,
@@ -9072,7 +9072,7 @@
      "commit": "9a00ad8845ffaffd3728e2ad8ac97f7250f1987a",
      "date": "2026-11-10T00:37:25Z",
      "decisions": 731204,
-     "deck": "decks/WhiteKnights/WhiteKnights.cod",
+     "deck": "decks/White Knights/White Knights.cod",
      "deck_sha": "378155ff9c7ff85c4474ab4554befd4c3f924414",
      "game_index": 210000,
      "games": 100000,

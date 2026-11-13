@@ -8,7 +8,7 @@
     "MTG_BP_DEV_SEQ=0: the breakpoint deviation SEQUENCES step off the cast list (Weather ahead of Galvanic) and find",
     "that same T4 kill, so they are out of this fixture's scope (2026-10-30)."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

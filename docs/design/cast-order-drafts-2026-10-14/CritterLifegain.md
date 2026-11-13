@@ -9,7 +9,7 @@ Deck: `decks/CritterLifegain/CritterLifegain.cod` (v2: 4 Soul Warden, 4 Soul's A
 
 `CritterLifegainProvider::CastOrderRank` (DecisionProviders.cpp:19115-19125) behind `MTG_CRITTER_WATCHER_ORDER`
 (default ON; `=0` falls back to Generic). It was mined by an agent in the 2026-09-08 Stage 5g pass and adopted under
-the no-drawback rule (A/B +7/-0 at d0 on 400 games, +11/-0 at d3 on 300; analysis-CritterLifegain.md:89-98).
+the no-drawback rule (A/B +7/-0 at d0 on 400 games, +11/-0 at d3 on 300; analysis-Critter Lifegain.md:89-98).
 No USER review of the cast order is on record. The "watcher order is the USER's explicit order" line in
 critterlifegain-discard-policy-proposal.md:126 is about the DISCARD keep ladder, not this order. The mining ran on the
 **v1 list** (4 Thune, no Ocelot Pride, Orzhov Basilica). So where it puts Ocelot, Thune and Heliod is a gap in the

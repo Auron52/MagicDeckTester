@@ -25,7 +25,7 @@ holding a card the arm cut has zero probability under the arm and never arises, 
 draw but the base table never enumerated is the separate `fallback_rate` case the reweight gate
 already measures.
 
-    python3 scripts/keep_delta.py decks/burn --arm "Skullcrack=0,Lightning Bolt=8" --cells 200 --R 200
+    python3 scripts/keep_delta.py decks/Burn --arm "Skullcrack=0,Lightning Bolt=8" --cells 200 --R 200
 
 Writes <out>/delta.json. Two `mtg` invocations (base, arm), each internally threaded across all cores
 over the whole cell list -- one pool per deck, not a loop over cells.

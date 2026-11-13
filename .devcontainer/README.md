@@ -60,8 +60,8 @@ engine when idle and produces the same error.
 
 ```bash
 ./build.sh                                    # always optimized; see CLAUDE.md
-./build/Release/mtg decks/burn/burn.txt --games 500 --seed 1001
-./build/Release/mtg-analyze decks/burn/burn.txt --cards-json src/cards/data/cards.json
+./build/Release/mtg decks/Burn/Burn.txt --games 500 --seed 1001
+./build/Release/mtg-analyze decks/Burn/Burn.txt --cards-json src/cards/data/cards.json
 ```
 
 There is deliberately **no Debug (`-O0`) mode** — `Debug` is removed from the generator's
@@ -75,7 +75,7 @@ The tooling scripts work unchanged inside the container — they auto-detect the
 Linux binary names:
 
 ```bash
-python scripts/analyze_deck.py decks/treasure_hunt/treasure_hunt.txt --coverage-only
+python scripts/analyze_deck.py decks/Treasure Hunt/Treasure Hunt.txt --coverage-only
 bash   test/regression.sh --smoke
 ```
 

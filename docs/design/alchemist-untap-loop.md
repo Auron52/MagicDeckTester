@@ -1,6 +1,6 @@
 # Accomplished Alchemist untap loop — design (AccomplishedAlchemist deck)
 
-Status: IMPLEMENTATION IN PROGRESS (2026-10-19) -- chunks A, B, C1, C2a, C2b, P, E1 landed; Stage 5 verification run (E1 = its engine fixes). 2026-10-20: COMBO OFF (rule table + the mechanical untap-loop route + the search query) -- see the ledger. Per-deck ledger: `analysis-AccomplishedAlchemist.md`.
+Status: IMPLEMENTATION IN PROGRESS (2026-10-19) -- chunks A, B, C1, C2a, C2b, P, E1 landed; Stage 5 verification run (E1 = its engine fixes). 2026-10-20: COMBO OFF (rule table + the mechanical untap-loop route + the search query) -- see the ledger. Per-deck ledger: `analysis-Accomplished Alchemist.md`.
 Card drafts (research fan-out, gitignored): `logs/aa_drafts/*.md|json` in the worktree.
 
 ## What the engine could not do (verified 2026-10-18, file:line at fork 2176032d)
@@ -56,7 +56,7 @@ SEARCHED (one Action variant per payoff K). Ceiling = safety cap only, never a l
   self/opponent target; rollout DrawX branch; `opponentdeck::ForcedDraw` (deck-out when n > library, and
   when the library empties — TakeFromTop reasoning); self over-draw sets `player_lost_on_draw`;
   `DeckTouchesOpponentZones`; self-draw breakpoint class.
-  **LANDED 2026-10-18** (see analysis-AccomplishedAlchemist.md "Chunk B"). For chunk C: the enumerator
+  **LANDED 2026-10-18** (see analysis-Accomplished Alchemist.md "Chunk B"). For chunk C: the enumerator
   sizes Stroke's X from the PRE-PLAN flat pool, so X funded by mana the same plan creates (the loop's
   untaps, an Alchemist yield raised by a same-main lifegain) is not offered -- the loop's resolution must
   either size the finisher itself (the SpendSurplusOnExile shape) or re-solve after the mana exists.

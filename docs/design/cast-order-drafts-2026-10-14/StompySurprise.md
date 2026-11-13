@@ -23,7 +23,7 @@ No card in the list is ORDER-OPAQUE (Vaultborn's `own_creature_enters_draw` and 
      The rank is a hard PRUNE of the cast sequence. `MTG_UNPRUNE=searchorder` recovered 8 of 8.
   2. That verdict was then **voided**: it was measured without `MTG_TOP_RESOLVE`, the reset the order was built
      around. It was never re-derived.
-  3. Nothing has been re-measured on the value leaf (analysis-StompySurprise.md:551) or on the 09-17 list. That
+  3. Nothing has been re-measured on the value leaf (analysis-Stompy Surprise.md:551) or on the 09-17 list. That
      list adds Ghalta, World War Hulk, Apex Altisaur and Fyndhorn Elves, and drops Arbor Elf and Mirri's Guile.
 * **Related USER intent that is also OFF:**
   * `MTG_TOP_RESOLVE`, the USER's "Worldly Tutor resets Call/Turntimber" loop (EngineFlags.h:979).

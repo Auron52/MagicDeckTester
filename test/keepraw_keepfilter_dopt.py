@@ -22,8 +22,8 @@ usage: KEEPRAW_PATH=<raw.json> KEEPCOD_PATH=<deck.cod> keepraw_keepfilter_dopt.p
 import os, random, re, sys
 from collections import Counter
 
-RAW = os.environ.get('KEEPRAW_PATH', 'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json')
-COD = os.environ.get('KEEPCOD_PATH', 'decks/FiveColour/FiveColour.cod')
+RAW = os.environ.get('KEEPRAW_PATH', 'decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json')
+COD = os.environ.get('KEEPCOD_PATH', 'decks/Five Colour/Five Colour.cod')
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 60000
 FLOOR = int(sys.argv[2]) if len(sys.argv) > 2 else 2
 HAND = 7

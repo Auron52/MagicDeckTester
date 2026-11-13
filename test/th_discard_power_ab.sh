@@ -23,8 +23,8 @@ BIN=$(harness_bin) || exit 1
 OUT=logs/th_discard_power
 mkdir -p "$OUT"
 
-DECK=decks/treasure_hunt/treasure_hunt.txt
-PROF=decks/treasure_hunt/treasure_hunt.profile.json
+DECK="decks/Treasure Hunt/Treasure Hunt.txt"
+PROF="decks/Treasure Hunt/Treasure Hunt.profile.json"
 SEEDS="8008 9009 10010 11011 12012 13013 14014 15015"
 
 build_manifest() {

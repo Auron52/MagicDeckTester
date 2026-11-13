@@ -37,7 +37,7 @@ import json
 import sys
 
 H  = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
-KT = ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod", "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json")
+KT = ("decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod", "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json")
 MW = ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
       "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json")
 

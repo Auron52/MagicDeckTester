@@ -8,8 +8,8 @@
     "observable: 20 when the order holds. The opponent is out of reach, so nothing ends the turn early."
   ],
   "env": { "MTG_BURN_ORDER": "1" },
-  "deck": "decks/burn/burn.txt",
-  "profile": "decks/burn/burn.profile.json",
+  "deck": "decks/Burn/Burn.txt",
+  "profile": "decks/Burn/Burn.profile.json",
   "turn": 4, "on_the_play": true, "max_turns": 4,
   "active_life": 20, "opponent_life": 40,
   "battlefield": [

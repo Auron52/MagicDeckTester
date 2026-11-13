@@ -2,7 +2,7 @@
 
 Reference for the engine additions that make an **infinite-mana blink loop** work
 (`EldraziDisplacerFlicker`). Per-deck findings and the run's open items live in
-[analysis-EldraziDisplacerFlicker.md](analysis-EldraziDisplacerFlicker.md); this file is the
+[analysis-Eldrazi Displacer Flicker.md](analysis-Eldrazi%20Displacer%20Flicker.md); this file is the
 mechanic-level design, for anyone adding another card that touches one of these axes.
 
 ## The loop

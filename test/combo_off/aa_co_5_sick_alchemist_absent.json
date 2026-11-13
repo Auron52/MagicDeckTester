@@ -3,7 +3,7 @@
     "NEGATIVE: the Alchemist came down this turn (summoning-sick: it cannot tap for mana), so no loop exists",
     "however much life is gained. Everything else is the canonical board."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

@@ -37,7 +37,7 @@
     "",
     "This fixture must be OFFERED and VERIFIED, and it must FAIL with the lever at 0."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

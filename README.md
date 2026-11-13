@@ -55,7 +55,7 @@ build.cmd           # Windows      -> build\Release\mtg.exe
 ## Run the simulator
 
 ```bash
-./build/Release/mtg decks/burn/burn.txt --games 1000 --seed 1001
+./build/Release/mtg decks/Burn/Burn.txt --games 1000 --seed 1001
 ```
 
 ```

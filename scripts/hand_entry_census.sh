@@ -39,8 +39,8 @@ SEED=${SEED:-1001}
 DECKS=(
   "goblins    decks/Goblins/Goblins.cod"
   "fungus     decks/Fungus/Fungus.cod"
-  "kitty      decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
-  "th         decks/treasure_hunt/treasure_hunt.txt"
+  "kitty      decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod"
+  "th         decks/Treasure Hunt/Treasure Hunt.txt"
   "hinata     decks/Hinata/Hinata.cod"
   "melira     decks/Melira Pod/Melira Pod.cod"
   "mirrorwing decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"

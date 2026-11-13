@@ -4,7 +4,7 @@ Compiled at `f15b8a493` (branch `vampires-analysis`), UPDATED 2026-10-19 for eve
 5c2 / 5i measured, the viewer sweep run). Deck `decks/Vampires/Vampire.cod`,
 profile `decks/Vampires/Vampire.profile.json`, provider **Vampires** (`VampiresProvider : VialProvider`), play
 settings **d5 b20** (source=default; no value sidecar, no keep table). "Q<n>" = open question n in
-`docs/design/analysis-Vampire.md`; "S5f-Q<n>" = `docs/design/vampires-search-cost.md` §4. Paths: TS =
+`docs/design/analysis-Vampires.md`; "S5f-Q<n>" = `docs/design/vampires-search-cost.md` §4. Paths: TS =
 `src/ai/TurnSolver.cpp`, SE = `src/core/SpellEffects.h`, DP = `src/ai/DecisionProviders.cpp`, DPh =
 `src/ai/DecisionProviders.h`, AI = `src/ai/AIEngine.cpp`, GFR = `src/runner/GoldFishRunner.cpp`.
 Compiled read-only from the code (an Opus agent; verified against the code by the orchestrator where it mattered).

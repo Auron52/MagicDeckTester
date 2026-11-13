@@ -42,8 +42,8 @@ import re
 import sys
 from math import sqrt
 
-DECK = "decks/Vampires/Vampire.cod"
-PROFILE = "decks/Vampires/Vampire.profile.json"
+DECK = "decks/Vampires/Vampires.cod"
+PROFILE = "decks/Vampires/Vampires.profile.json"
 
 ARMS = {
     "off":     {"MTG_VAMPIRES_ORDER": False, "MTG_VAMPIRES_BUCKET_DISCARD": False},

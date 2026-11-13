@@ -375,7 +375,7 @@ def sibling_keys(deck_path):
     parts = rel.split(os.sep)
     if len(parts) < 2:
         return []
-    family = os.sep.join(parts[:2]) + os.sep          # e.g. "decks/WhiteKnights/"
+    family = os.sep.join(parts[:2]) + os.sep          # e.g. "decks/White Knights/"
     return sorted((k, v) for k, v in _read_map("DECK_FILE").items() if v.startswith(family))
 
 

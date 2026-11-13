@@ -10,8 +10,8 @@
     "spectacle plan credit."
   ],
   "env": { "MTG_BURN_ORDER": "1", "MTG_SPECTACLE_PLAN_CREDIT": "1" },
-  "deck": "decks/burn/burn.txt",
-  "profile": "decks/burn/burn.profile.json",
+  "deck": "decks/Burn/Burn.txt",
+  "profile": "decks/Burn/Burn.profile.json",
   "turn": 3, "on_the_play": true, "max_turns": 3,
   "active_life": 20, "opponent_life": 13,
   "battlefield": [

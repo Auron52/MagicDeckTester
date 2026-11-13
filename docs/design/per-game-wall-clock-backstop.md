@@ -551,7 +551,7 @@ cost shape, and because **most of it is already built and measured elsewhere in 
 
 ### It is NOT speculative -- EDF already shipped the restricted form, at 2.57x-13.4x
 
-`docs/design/analysis-EldraziDisplacerFlicker.md` (~L4084-4117), the `MTG_LABEL_GOFF` cuts:
+`docs/design/analysis-Eldrazi Displacer Flicker.md` (~L4084-4117), the `MTG_LABEL_GOFF` cuts:
 
 * **Cut 2 -- FLOOR SHORT-CIRCUIT**: a combat-pre-pass win at the floor skips the ladder outright.
 * **Cut 3 -- IN-PASS FIRST-WIN BREAK**: every pass-dd win sits at one shared horizon edge, so the
@@ -1037,7 +1037,7 @@ off naturally"*.
    worst) charge NO unit, and they sit between consecutive charges. The greedy subset walk polled the
    abandon FLAG, but nothing uncharged ever set it. Note WHERE the hours are: in the unbounded label
    search (`EnumerateEarliestWins`, K=3, refuting late or no-win positions), not in the walk (0-8% of
-   those games' time per the route root-cause analysis in analysis-AccomplishedAlchemist.md). The label
+   those games' time per the route root-cause analysis in analysis-Accomplished Alchemist.md). The label
    search does charge units, so HEAD read the clock there -- but only every 4096 units, and on this
    deck 4096 units can take a minute and more solo (table below), ~7x that in the 32-worker batch.
 2. **Unwinding after it.** Once the flag is set, `SearchBudget::Overrun` makes every search frame

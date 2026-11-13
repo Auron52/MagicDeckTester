@@ -58,8 +58,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
-DECK = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.cod")
-PROF = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.profile.json")
+DECK = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.cod")
+PROF = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.profile.json")
 DEC_B, DEC_E = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 
 SEED, GI = 6, 5

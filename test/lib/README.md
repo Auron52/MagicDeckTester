@@ -9,7 +9,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 . test/lib/harness.sh
 
 BIN=$(harness_bin) || exit 1
-DECK=$(h_deck burn); PROF=$(h_profile burn)
+DECK=$(h_deck "Burn"); PROF=$(h_profile "Burn")
 h_require "$DECK" "$PROF" || exit 1
 
 OUT=test/logs/my_ab

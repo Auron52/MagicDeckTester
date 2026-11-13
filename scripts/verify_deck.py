@@ -628,7 +628,7 @@ def ledger_path(deck_path):
     resolution), so a stem-keyed ledger made a candidate list read its parent's ledger: the
     claude_sweep gate passed on a sweep played on a DIFFERENT decklist, and the parent's sign-offs
     applied to cards the variant may not even hold. Same naming as the existing
-    analysis-KittyEquipment-v2-puresteel-hammer.md. (2026-10-22, SelesnyaLifegain v2.)"""
+    analysis-Kitty Equipment-v2-puresteel-hammer.md. (2026-10-22, SelesnyaLifegain v2.)"""
     p = Path(deck_path).resolve()
     stem = deck_stem(deck_path)
     decks = (ROOT / "decks").resolve()

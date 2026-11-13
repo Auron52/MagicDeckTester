@@ -45,7 +45,7 @@ independent actions):
 
 ## Pointers
 
-- FiveColour atom autopsy + fix details: `docs/design/analysis-FiveColour.md` (Stage 5
+- FiveColour atom autopsy + fix details: `docs/design/analysis-Five Colour.md` (Stage 5
   verdicts, "Stage 4 DEGENERATE ATOM").
 - Dragonstorm precedent for targeted collapses: `docs/design/dragonstorm-mulligan-tractability.md`.
 - Repro method: `MTG_DUMP_WINS` straggler sweep -> single-game `--seed <base+gi> --game-index

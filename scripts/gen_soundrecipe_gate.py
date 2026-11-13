@@ -27,13 +27,13 @@ import json
 
 DECKS = {
     "hinata": ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
-    "burn": ("decks/burn/burn.txt", "decks/burn/burn.profile.json"),
-    "th": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
+    "burn": ("decks/Burn/Burn.txt", "decks/Burn/Burn.profile.json"),
+    "th": ("decks/Treasure Hunt/Treasure Hunt.txt", "decks/Treasure Hunt/Treasure Hunt.profile.json"),
     "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json"),
     "mirrorwing": ("decks/Mirrorwing Dragon/Mirrorwing Dragon.cod",
                    "decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"),
-    "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
-              "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"),
+    "kitty": ("decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod",
+              "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"),
 }
 
 RECIPE = {"MTG_BP_SITE3": True, "MTG_BP_SITE3_DEFER": True, "MTG_BP_NODE": True,

@@ -11,7 +11,7 @@
     "board) and, independently, by MTG_AA_ROUTE_MAIN_FIRST (the main-phase pass: Stroke). With both =0 the button is",
     "unproven and the click fails."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

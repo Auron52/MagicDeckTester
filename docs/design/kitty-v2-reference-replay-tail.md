@@ -27,7 +27,7 @@ same reference within minutes of starting the stage.
   enumeration of legal options that the viewer protocol dumps at each decision, which would grow with
   the number of equipment-host pairs.
 * **This is separate from** the documented d3 search slowness in
-  `analysis-KittyEquipment-v2-puresteel-hammer.md`.
+  `analysis-Kitty Equipment-v2-puresteel-hammer.md`.
 
 ## Repro
 

@@ -14,7 +14,7 @@
     "board's last colourless source for a generic pip -- `STOP at k=4: pay-failed`, four blinks of",
     "twenty. It now TRIALS the payment on a copy of the state (MTG_COMBO_OFF_SINK_TRIAL)."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

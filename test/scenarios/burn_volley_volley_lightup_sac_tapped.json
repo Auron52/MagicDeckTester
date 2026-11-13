@@ -9,8 +9,8 @@
     "Light Up the Stage; the search still won through the base variant, so this fixture pins the line and the",
     "kill, and the variant itself is pinned in test/unit/test_sac_land_class_pin.cpp."
   ],
-  "deck": "decks/burn/burn.txt",
-  "profile": "decks/burn/burn.profile.json",
+  "deck": "decks/Burn/Burn.txt",
+  "profile": "decks/Burn/Burn.profile.json",
   "turn": 3, "on_the_play": true, "max_turns": 3,
   "active_life": 20, "opponent_life": 12,
   "battlefield": [

@@ -44,8 +44,8 @@ BIN=$(harness_bin) || exit 1
 OUT=logs/le_pitch_power
 mkdir -p "$OUT"
 
-DECK=$(h_deck treasure_hunt) || exit 1
-PROF=$(h_profile treasure_hunt) || exit 1
+DECK=$(h_deck "Treasure Hunt") || exit 1
+PROF=$(h_profile "Treasure Hunt") || exit 1
 SEEDS="16016 17017 18018 19019 20020 21021 22022 23023"
 
 {

@@ -8,8 +8,8 @@ import json, os, re, sys
 from collections import Counter, defaultdict
 
 WT = "/workspaces/MagicDeckTester/.claude/worktrees/agent-a239469ed898c5c26"
-DECK = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.cod")
-PROF = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.profile.json")
+DECK = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.cod")
+PROF = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.profile.json")
 CELLS = [("ship", None, None), ("d3", 3, 10), ("d0", 0, 0)]
 N = {"critter": {"ship": 2000, "d3": 2000, "d0": 6000}, "critter2hg": {"ship": 1000, "d3": 1000, "d0": 3000}}
 CHUNK = 50

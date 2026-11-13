@@ -17,7 +17,7 @@
     "recognizer models the same set, FlickerGoOffCount sizes the count by the PIPS as well as the",
     "mana, and the finish is real -- which combo_off_verify re-derives by applying the plan."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

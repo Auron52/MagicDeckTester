@@ -67,7 +67,7 @@ forced on (36/36 digests identical to GT).** Battery (classify levers, 100 games
 (42M hits / 24M misses), RSS +235 MB. Adoption proposal: default-ON + `MTG_NO_SOLVE_MEMO`
 hatch, no GT rebaseline needed — awaiting the user's call.
 
-**ADOPTED 2026-08-19 — TRANSITIONALLY** (KittyEquipment cost work, `analysis-KittyEquipment.md`
+**ADOPTED 2026-08-19 — TRANSITIONALLY** (KittyEquipment cost work, `analysis-Kitty Equipment.md`
 "Cost re-baseline at HEAD"). The USER's call, verbatim: *"not the end of the world to adopt
 temporarily, but the goal is to drop greedy entirely"* — everything this memo caches is a greedy
 Solve inside the search, i.e. precisely the path `main-phase-classification.md` exists to delete.

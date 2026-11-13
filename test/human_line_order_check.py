@@ -12,7 +12,7 @@ which this feature is gated out of by construction. So a regression here -- the 
 the pin, a kind falling out of TurnSolver::IsTrailingActivation, the trailing pass running twice --
 would be silent in every green gate while the player's line quietly ran in enumerator order again.
 
-WHAT IT DRIVES. references/EldraziDisplacerFlicker/claude_s1_gi0.json replayed to its turn-6
+WHAT IT DRIVES. references/Eldrazi_Displacer_Flicker/claude_s1_gi0.json replayed to its turn-6
 pre-combat main (Emiel the Blessed, a Clue Token, a Cloud of Faeries and two Investigate lands all
 in play), then ONE plan committed under several --cast-order pins, reading the realised sequence off
 MTG_LINE_ORDER_TRACE. Every arm commits the SAME plan index and the enumerator emits that plan in
@@ -42,10 +42,10 @@ sys.path.insert(0, HERE)
 import viewer_protocol_check as V   # flatten_choices / force_arg / side_channel_args
 
 MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
-DECK = os.path.join(ROOT, "decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.cod")
-PROF = os.path.join(ROOT, "decks", "EldraziDisplacerFlicker",
-                    "EldraziDisplacerFlicker.profile.json")
-REF = os.path.join(ROOT, "references", "EldraziDisplacerFlicker", "claude_s1_gi0.json")
+DECK = os.path.join(ROOT, "decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.cod")
+PROF = os.path.join(ROOT, "decks", "Eldrazi Displacer Flicker",
+                    "Eldrazi Displacer Flicker.profile.json")
+REF = os.path.join(ROOT, "references", "Eldrazi_Displacer_Flicker", "claude_s1_gi0.json")
 UPTO = 21                      # -> turn 6 pre-combat main
 LINE = "cast=Clue Token;blink=Emiel the Blessed@10*1"
 TURN = 6

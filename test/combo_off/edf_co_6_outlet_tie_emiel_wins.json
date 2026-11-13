@@ -13,7 +13,7 @@
     "",
     "With MTG_EDF_OUTLET_NETC=0 this board goes back to ABSENT -- the one-binary A/B for the lever."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

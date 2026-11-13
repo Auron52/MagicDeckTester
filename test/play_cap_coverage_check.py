@@ -38,9 +38,9 @@ RES_E = "<<<END_RESULT>>>"
 
 ARTIFACT = os.path.join(ROOT, "logs", "play", "rejections",
                         "EldraziDisplacerFlicker_cod_s9_gi8_t4.json")
-DECK = os.path.join(ROOT, "decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.cod")
-PROF = os.path.join(ROOT, "decks", "EldraziDisplacerFlicker",
-                    "EldraziDisplacerFlicker.profile.json")
+DECK = os.path.join(ROOT, "decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.cod")
+PROF = os.path.join(ROOT, "decks", "Eldrazi Displacer Flicker",
+                    "Eldrazi Displacer Flicker.profile.json")
 
 
 def walk(choices, env_extra, cap):

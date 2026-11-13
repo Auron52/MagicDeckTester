@@ -1,6 +1,6 @@
 # EldraziDisplacerFlicker: classification of the four +1 search-vs-human shortfalls
 
-Companion to `docs/design/analysis-EldraziDisplacerFlicker.md` (the deck ledger). Read-only
+Companion to `docs/design/analysis-Eldrazi Displacer Flicker.md` (the deck ledger). Read-only
 analysis, 2026-09-10, branch `phase-1-2-deck-analyzer`.
 
 **Provenance.** All numbers below were taken on the pre-existing `build/Release/mtg`, which

@@ -28,7 +28,7 @@ straight under `perf`:
 MTG_EQUIV_CACHE=<unpacked gencache> \
 MTG_KEEP_REPLAY="Jetmir's Garden x1; Jared Carthalion x2; Garth One-Eye x1; Faeburrow Elder x3" \
 MTG_KEEP_REPLAY_R=0 MTG_KEEP_REPLAY_PD=0 \
-  ./build/Profile/mtg-analyze decks/FiveColour/FiveColour.cod \
+  ./build/Profile/mtg-analyze decks/Five Colour/Five Colour.cod \
     --cards-json src/cards/data/cards.json --gen-mulligan recommend --seed 1000000
 ```
 

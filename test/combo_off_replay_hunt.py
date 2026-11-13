@@ -18,7 +18,7 @@ stopped, leaving no mana up"; seed 9 T4), which are re-prompt frames reached wit
 
 WHAT IT DOES
 
-  1. REFERENCE POPULATION.  Each references/EldraziDisplacerFlicker/claude_s*_gi*.json is replayed
+  1. REFERENCE POPULATION.  Each references/Eldrazi_Displacer_Flicker/claude_s*_gi*.json is replayed
      BY INTENT using test/viewer_protocol_check.py's own walk (check_reference(collect=...) hands
      back the content-resolved pick stream plus, per aligned main-phase frame, the prefix length
      that lands the engine on it).  At every such frame the decision dump is read; whenever it
@@ -79,7 +79,7 @@ import combo_off_sweep as sw                 # noqa: E402  -- arith / mechanism 
 
 MTG = sw.MTG
 DECK = sw.DECK
-PROF = "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json"
+PROF = "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json"
 REFDIR = sw.REFDIR
 OUTDIR = os.path.join(ROOT, "logs/combo_off_hunt")
 

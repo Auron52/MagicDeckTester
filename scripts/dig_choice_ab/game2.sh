@@ -6,8 +6,8 @@ B=/workspaces/MagicDeckTester/build/scratch/dig_agent
 WT=/workspaces/MagicDeckTester/.claude/worktrees/agent-ac800b84e49fb7cf6
 P=/workspaces/MagicDeckTester
 case $KEY in
-  fivecolour) D=decks/FiveColour/FiveColour.cod; PR=decks/FiveColour/FiveColour.profile.json;;
-  th) D=decks/treasure_hunt/treasure_hunt.txt; PR=decks/treasure_hunt/treasure_hunt.profile.json;;
+  fivecolour) D="decks/Five Colour/Five Colour.cod"; PR="decks/Five Colour/Five Colour.profile.json";;
+  th) D="decks/Treasure Hunt/Treasure Hunt.txt"; PR="decks/Treasure Hunt/Treasure Hunt.profile.json";;
   fluctuator) D=decks/Fluctuator/Fluctuator.cod; PR=decks/Fluctuator/Fluctuator.profile.json;;
   pirates) D=decks/Pirates/Pirates.cod; PR=decks/Pirates/Pirates.profile.json;;
   *) echo "unknown deck"; exit 1;;

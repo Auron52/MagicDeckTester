@@ -75,7 +75,7 @@ GameState PitFighterBoard(bool extra_red)
     s.opponent_lost_life_this_turn       = true;
     s.players[0].lands_played_this_turn = 1;   // land drop spent
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     s.deck_has_madness = true;
     int n = 1;
     auto put = [&](const std::string& name)

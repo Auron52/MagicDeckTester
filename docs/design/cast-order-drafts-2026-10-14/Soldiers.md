@@ -8,7 +8,7 @@ Provider: `SoldiersProvider : VialProvider`. Single main phase (`uses_second_mai
 - `MTG_SOLDIERS_ORDER` is an agent-authored total order (commit aab6e343, 2026-10-04). Its default is OFF:
   `EnvOn("MTG_SOLDIERS_ORDER")` at `src/ai/DecisionProviders.cpp:8968`.
 - It was put to the USER as a question in `docs/design/cast-order-rankings.md:1208` and
-  `docs/design/analysis-soldiers.md:1431` (question A, "Default taken: OFF"). No USER answer is recorded anywhere.
+  `docs/design/analysis-Soldiers.md:1431` (question A, "Default taken: OFF"). No USER answer is recorded anywhere.
 - Two places call it the "user-proposed Soldiers order": `docs/design/vial-put-interleaving.md:42` and the comment in
   `test/scenarios/soldiers_vial_after_tutor_continuation.json`. That label is wrong. The USER never authored or reviewed it.
 - No USER order exists for this deck, so nothing is OFF that the USER asked for.

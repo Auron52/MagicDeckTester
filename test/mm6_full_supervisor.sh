@@ -11,7 +11,7 @@ say(){ echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
 say "SUPERVISOR start (HEAD=$(git rev-parse --short HEAD), PID=$$)"
 
 say "=== [1/3] TH R=40 (resumes from banked base chunk chunk_s30001000 = the R=1 probe) ==="
-KM_DECK=decks/treasure_hunt/treasure_hunt.txt KM_CHUNK_R=1 KM_ROUND_R=5 \
+KM_DECK="decks/Treasure Hunt/Treasure Hunt.txt" KM_CHUNK_R=1 KM_ROUND_R=5 \
   KM_ROUND_SEED_BASE=30002000 KM_TARGET_R=40 bash test/exhaustive_chunked_gen.sh
 say "TH exit=$?"
 

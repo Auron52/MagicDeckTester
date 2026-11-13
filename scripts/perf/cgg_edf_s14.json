@@ -2,8 +2,8 @@
  "jobs": [
   {
    "name": "cg_edf_s14_b60",
-   "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-   "profile": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json",
+   "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+   "profile": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json",
    "games": 1,
    "seed": 14,
    "game_index": 13,

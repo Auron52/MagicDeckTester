@@ -53,7 +53,7 @@ Card Ph(const std::string& name, int number)
     return c;
 }
 
-// The deck's sideboard (decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod).
+// The deck's sideboard (decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod).
 const std::vector<std::string> kSideboard = {
     "Azorius Chancery", "Adarkar Wastes", "Cloud of Faeries", "Eldrazi Displacer",
     "Mariposa Military Base", "Vexing Shusher", "Essence Depleter", "Dimensional Infiltrator",

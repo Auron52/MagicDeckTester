@@ -10,8 +10,8 @@ import json, os, sys
 dk, gi, out, dep, bud = sys.argv[1], int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
 WT = "/workspaces/MagicDeckTester/.claude/worktrees/agent-a9d0a1cbf3361f164"
 for arm, fl in (("new", None), ("off", {"MTG_STOMPY_ORDER": False})):
-    j = {"name": "%s.%s.g%d" % (dk, arm, gi), "deck": WT + "/decks/StompySurprise/StompySurprise.cod",
-         "profile": WT + "/decks/StompySurprise/StompySurprise.profile.json", "games": 1,
+    j = {"name": "%s.%s.g%d" % (dk, arm, gi), "deck": WT + "/decks/Stompy Surprise/Stompy Surprise.cod",
+         "profile": WT + "/decks/Stompy Surprise/Stompy Surprise.profile.json", "games": 1,
          "seed": 10900001 + gi, "game_index": gi}
     if dep:
         j.update({"depth": int(dep), "budget_ms": int(bud), "ignore_play_profile": True})

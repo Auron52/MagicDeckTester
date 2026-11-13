@@ -3,7 +3,7 @@
   "Shivan Gorge in HAND with the land drop open, no other finisher anywhere: the route must play it as the land drop and ping it out. Red from Trace of Abundance.",
   "AUTONOMOUS half: the shipped search must win this turn."
  ],
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 4,
  "on_the_play": false,
  "active_life": 20,

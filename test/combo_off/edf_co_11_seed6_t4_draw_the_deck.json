@@ -14,7 +14,7 @@
     "with a 60-iteration request and ~30 cards still in the library. See Session 15d for the two",
     "causes; this fixture is the frame, and it must be OFFERED and VERIFIED."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

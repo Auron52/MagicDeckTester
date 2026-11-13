@@ -35,8 +35,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECK = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.cod")
-PROF = os.path.join(ROOT, "decks/WhiteKnights/WhiteKnights.profile.json")
+DECK = os.path.join(ROOT, "decks/White Knights/White Knights.cod")
+PROF = os.path.join(ROOT, "decks/White Knights/White Knights.profile.json")
 
 HDEPTHS = [1, 2, 3, 4, 5]
 MATRIX_TARGET, MATRIX_SEEDS = 400, 4

@@ -298,7 +298,7 @@ TEST_CASE("LandfallElementals' tutor width admits every distinct Elemental name"
 {
     EnsureCardsLfx();
     const Decklist deck = DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/LandfallElementals/LandfallElementals.cod"));
+        ResolveHeuristicDefaultsPath("decks/Landfall Elementals/Landfall Elementals.cod"));
     const DecisionProvider& p = SelectDecisionProvider(deck);
     CHECK(std::string(p.Name()) == "LandfallElementals");
     CHECK(p.TutorSearchWidth() >= 10);

@@ -10,7 +10,7 @@
     "for exactly 4. Land-first is 1 -> 2: 2 damage on T5, the win slips to T6. The Hydra is summoning sick",
     "on T4, so the T5 win also proves the counters were not cleared at cleanup."
   ],
-  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

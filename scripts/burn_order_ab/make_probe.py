@@ -23,8 +23,8 @@ def build(out):
     jobs = []
     for c in range(0, N, CH):
         for arm, fl in ARMS:
-            jobs.append({"name": "probe.%s.c%d" % (arm, c), "deck": os.path.join(ROOT, "decks/burn/burn.txt"),
-                         "profile": os.path.join(ROOT, "decks/burn/burn.profile.json"), "games": CH,
+            jobs.append({"name": "probe.%s.c%d" % (arm, c), "deck": os.path.join(ROOT, "decks/Burn/Burn.txt"),
+                         "profile": os.path.join(ROOT, "decks/Burn/Burn.profile.json"), "games": CH,
                          "seed": 9001 + c, "game_index": c, "budget_ms": 20, "flags": fl})
     os.makedirs(out, exist_ok=True)
     json.dump({"jobs": jobs}, open(os.path.join(out, "manifest.json"), "w"), indent=1)

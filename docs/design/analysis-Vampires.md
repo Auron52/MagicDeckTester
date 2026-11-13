@@ -178,7 +178,7 @@ code lands anyway, provided no other deck breaks.** See "Landing (2026-10-20)".
   convoke's reduction applies to X's own cost before Remand's rider joins the bill; GameState 1136 -> 1152
   (both sides' padding fields together, every field already classified).
 - **Out of the suite:** the 29 entries (DECK_FILE / DECK_PROF + smoke 4, regression 7, overnight 16) are removed
-  and kept as `docs/design/analysis-Vampire.suite-rows.patch` (`git apply` it to re-admit; it applies cleanly
+  and kept as `docs/design/analysis-Vampires.suite-rows.patch` (`git apply` it to re-admit; it applies cleanly
   to `test/regression_cases.sh` as of this landing), with every `vampires*` GT key / `.wins` file and its
   `test/suite_cost.json` entry. The suite cannot see this deck's play again until it is re-admitted.
 - **Other decks** (smoke + regression on the rebased binary against origin's ground truth, both GT halves
@@ -1032,7 +1032,7 @@ rules; gi1565's least-flexible pick).
     reason. It means the deck needs more work. However, that doesn't prevent us from pushing the code so it is
     somewhere rather than local, as long as the changes don't break another deck."* No `MTG_ALLOW_UNTESTED_DECK`.
     The code is landed on the shared branch WITHOUT the suite rows (they are kept as
-    `docs/design/analysis-Vampire.suite-rows.patch`; see "Landing" below); getting under 3x is the first goal,
+    `docs/design/analysis-Vampires.suite-rows.patch`; see "Landing" below); getting under 3x is the first goal,
     ahead of both generators. Original question: **COST GATE: Vampires is over 3x** (see "Stage 5 measurements + the 3x COST GATE"). Options: (a) land the rows
     (an over-3x entry, USER override) and generate the mulligan profile, whose keep table removes the 68-76% of units
     that are bottoming rollouts (measured: then ~1.6x Snow); (b) keep the deck out of the suite until a perf route

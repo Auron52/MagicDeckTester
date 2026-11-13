@@ -203,8 +203,8 @@ function resolveAlignment(files) {
 // an aspirational known-slow game"; the folder NAME is. Recursing makes the enumeration
 // depth-proof, so a reference cannot silently leave the gate by being filed one level deeper.
 //
-// `deck` is the dir RELATIVE to references/ ("KittyEquipment", or
-// "KittyEquipment/v2-puresteel-hammer"), which is the key viewer_protocol_check.py's resolver uses.
+// `deck` is the dir RELATIVE to references/ ("Kitty_Equipment", or
+// "Kitty_Equipment/v2-puresteel-hammer"), which is the key viewer_protocol_check.py's resolver uses.
 function collectRefs() {
   const out = [];
   const walk = (dir, rel) => {

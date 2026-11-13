@@ -1,6 +1,6 @@
 {
   "_comment": ["Shivan Gorge with CLOUD OF FAERIES as the only untapper (two lands per blink). Two Aura'd lands make the Cloud loop mana-positive by one; the finish set must hand the Gorge one of the two untaps, so every ping costs four from the bank. ~100 iterations, well inside the route's cap. Red from Trace of Abundance."],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 20, "energy_counters": 0,
   "library_filler": "Forest", "library_size": 40, "depth": 5, "budget_ms": 20, "max_turns": 8,
   "battlefield": [

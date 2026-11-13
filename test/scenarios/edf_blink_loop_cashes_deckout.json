@@ -24,7 +24,7 @@
     "DISCRIMINATING: at opponent_library_size 20 the mana genuinely does not reach and the engine",
     "correctly falls back to win_turn 5. The threshold is where it should be, not at infinity."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 4,
   "on_the_play": false,
   "active_life": 20,

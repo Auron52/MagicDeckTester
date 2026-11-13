@@ -7,7 +7,7 @@
     "top-5), which is exactly the control the starved form needs: it changes nothing on a board that",
     "was never starved."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 5,
   "on_the_play": false,

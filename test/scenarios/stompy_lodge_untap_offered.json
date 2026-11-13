@@ -1,6 +1,6 @@
 {
  "_comment": "Wirewood Lodge's '{G}, {T}: Untap target Elf' must be OFFERED to a human when its {G} is really payable (2026-08-23). Board: untapped Lodge, a TAPPED Elvish Archdruid to untap, and an untapped non-sick Elvish Mystic to pay with. Pairs with stompy_lodge_untap_hidden.json, which pins the other half of the rule -- the option must vanish when the {G} is NOT payable. Together they pin the two things that DO gate this emission: the source must be untapped, and in human play a matching Elf must already be tapped (the s9101 gi2/gi3 re-prompt hang). (stompy_lodge_burst.json already covers the AUTONOMOUS side: the untap-for-mana burst is what pays Worldspine Wurm's 11th mana.)",
- "deck": "decks/StompySurprise/StompySurprise.cod",
+ "deck": "decks/Stompy Surprise/Stompy Surprise.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,

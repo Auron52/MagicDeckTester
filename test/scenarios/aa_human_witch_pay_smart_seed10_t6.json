@@ -10,7 +10,7 @@
     "payer (MTG_UNTAP_PAY_SMART) each tap floats the pip the untap lacks and generic comes out of the surplus colour,",
     "so all five activations pay and the Alchemist attacks for 17. (Before: the fixed white tap stranded the green.)"
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

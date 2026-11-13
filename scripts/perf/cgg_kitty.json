@@ -2,8 +2,8 @@
  "jobs": [
   {
    "name": "cg_kitty",
-   "deck": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
-   "profile": "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json",
+   "deck": "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod",
+   "profile": "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json",
    "games": 6,
    "seed": 1001,
    "budget_ms": 20

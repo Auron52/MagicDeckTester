@@ -69,9 +69,9 @@ sys.path.insert(0, HERE)
 import viewer_protocol_check as V   # flatten_choices / force_arg / side_channel_args  # noqa: E402
 
 MTG  = os.environ.get("MTG_BIN", os.path.join(ROOT, "build", "Release", "mtg"))
-DECK = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.cod")
-PROF = os.path.join("decks", "EldraziDisplacerFlicker", "EldraziDisplacerFlicker.profile.json")
-REF  = os.path.join("references", "EldraziDisplacerFlicker", "claude_s1_gi0.json")
+DECK = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.cod")
+PROF = os.path.join("decks", "Eldrazi Displacer Flicker", "Eldrazi Displacer Flicker.profile.json")
+REF  = os.path.join("references", "Eldrazi_Displacer_Flicker", "claude_s1_gi0.json")
 
 UPTO = 7    # prefix decisions -> the turn-3 pre-combat main that plays Mariposa + Trace
 UPTO6 = 21  # ...and the turn-6 main human_line_order_check.py drives (Clue crack + Emiel blink)
@@ -377,7 +377,7 @@ else:
 # Driven off a SECOND reference because claude_s1_gi0's board has no Fertile Ground on it:
 # claude_s6_gi5's turn-4 frame has Brushland (GWC) carrying a Fertile Ground AND Kitchen (GU)
 # carrying an Overgrowth -- the fixed-colour control sitting right beside the choice, on one board.
-REF6 = os.path.join("references", "EldraziDisplacerFlicker", "claude_s6_gi5.json")
+REF6 = os.path.join("references", "Eldrazi_Displacer_Flicker", "claude_s6_gi5.json")
 UPTO_AURA = 10
 
 

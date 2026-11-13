@@ -4,7 +4,7 @@ The USER-approved list from the 2026-10-22 screen (rounds 1-15, `logs/selesnya_s
 `decks/SelesnyaLifegain/v2-bogbeast-heroes/` while its artifacts were generated, and **PROMOTED to the
 shipped path `decks/SelesnyaLifegain/` on 2026-10-22** once every v2 resource existed (USER 2026-10-22).
 The original list is archived at `decks/SelesnyaLifegain/v1-avatar-alchemist/` (suite key `selesnya`,
-ledger `analysis-SelesnyaLifegain.md`); this list keeps its own suite keys `selesnyav2` / `selesnyav22hg`.
+ledger `analysis-Selesnya Lifegain.md`); this list keeps its own suite keys `selesnyav2` / `selesnyav22hg`.
 Paths below that name `v2-bogbeast-heroes/` describe where the work was done on the day; the files now
 live at the top level. Promotion record: `selesnya-v2-promotion-2026-10-22.md`.
 

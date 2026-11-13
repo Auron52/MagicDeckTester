@@ -52,8 +52,8 @@ root = os.path.abspath('.')
 DECKS = [
     ("knights",     "Knights",        "Knights",        400, False),  # Adeline + Acclaimed Contender
     ("knights2hg",  "Knights",        "Knights",        200, True),   # the ONLY heads-gate observer
-    ("kitty",       "KittyEquipment", "KittyEquipment", 300, False),  # STAGE B: both Equipment paths
-    ("kitty2hg",    "KittyEquipment", "KittyEquipment", 150, True),
+    ("kitty",       "Kitty Equipment", "Kitty Equipment", 300, False),  # STAGE B: both Equipment paths
+    ("kitty2hg",    "Kitty Equipment", "Kitty Equipment", 150, True),
     ("slivers",     "Slivers",   "Slivers",   300, False),  # STAGE B: the ds LORD + bs.ds
     ("slivers2hg",  "Slivers",   "Slivers",   150, True),
     ("angels",      "Angels",         "Angels",         300, False),  # quest counters/attack triggers

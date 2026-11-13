@@ -8,7 +8,7 @@
     "attacked for 3 and won T8. Depth 0 (the runner IS the greedy policy, the same Solve every playout runs). With",
     "MTG_GREEDY_PUMP_LETHAL=0 there is no T6 win."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 6,
   "on_the_play": true,
   "active_life": 20,

@@ -9,8 +9,8 @@ cd "$WT" || exit 1
 S=$((10900001 + GI))
 for arm in new off; do
   if [ "$arm" = off ]; then export MTG_STOMPY_ORDER=0; else unset MTG_STOMPY_ORDER; fi
-  MTG_FD_TRACE=1 nice -n 10 "$SC/bin/mtg.new" decks/StompySurprise/StompySurprise.cod \
-      --profile decks/StompySurprise/StompySurprise.profile.json --cards-json src/cards/data/cards.json \
+  MTG_FD_TRACE=1 nice -n 10 "$SC/bin/mtg.new" "decks/Stompy Surprise/Stompy Surprise.cod" \
+      --profile "decks/Stompy Surprise/Stompy Surprise.profile.json" --cards-json src/cards/data/cards.json \
       --seed "$S" --game-index "$GI" --games 1 --threads 1 --trace "$@" > "$OUT/$arm.out" 2> "$OUT/$arm.err"
   grep "avg (turns)" "$OUT/$arm.out"
 done

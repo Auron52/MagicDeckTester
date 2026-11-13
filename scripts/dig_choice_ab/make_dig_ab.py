@@ -17,13 +17,13 @@ from collections import defaultdict
 
 PRIMARY = "/workspaces/MagicDeckTester"
 ALL_DECKS = [
-    ("fivecolour",   "decks/FiveColour/FiveColour.cod", "decks/FiveColour/FiveColour.profile.json"),
+    ("fivecolour",   "decks/Five Colour/Five Colour.cod", "decks/Five Colour/Five Colour.profile.json"),
     ("pirates",      "decks/Pirates/Pirates.cod", "decks/Pirates/Pirates.profile.json"),
-    ("edf",          "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-                     "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json"),
-    ("soldiers",     "decks/Soldiers/soldiers.cod", "decks/Soldiers/soldiers.profile.json"),
-    ("whiteknights", "decks/WhiteKnights/WhiteKnights.cod", "decks/WhiteKnights/WhiteKnights.profile.json"),
-    ("th",           "decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
+    ("edf",          "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+                     "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json"),
+    ("soldiers",     "decks/Soldiers/Soldiers.cod", "decks/Soldiers/Soldiers.profile.json"),
+    ("whiteknights", "decks/White Knights/White Knights.cod", "decks/White Knights/White Knights.profile.json"),
+    ("th",           "decks/Treasure Hunt/Treasure Hunt.txt", "decks/Treasure Hunt/Treasure Hunt.profile.json"),
     ("auras",        "decks/Auras/Auras.cod", "decks/Auras/Auras.profile.json"),
     ("fluctuator",   "decks/Fluctuator/Fluctuator.cod", "decks/Fluctuator/Fluctuator.profile.json"),
     ("dragons",      "decks/Dragons/Dragons.cod", "decks/Dragons/Dragons.profile.json"),

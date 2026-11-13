@@ -938,7 +938,7 @@ TEST_CASE("a {C}-pip cost pays its generic from a COLOUR, sparing colourless for
 // ("fix(mana): a COLOURLESS-only source must tap before a mono-coloured one") shipped with exactly
 // one check: `testColorlessFirstTapOrder` in test/viewer_client_check.js, which walks a REAL game of
 // StompySurprise seed 9 and hard-codes `queueCard('Wirewood Lodge', 'land')`. StompySurprise was
-// later revised and its predecessor archived to decks/StompySurprise/v1-arborelf-worldspine4/ --
+// later revised and its predecessor archived to decks/Stompy Surprise/v1-arborelf-worldspine4/ --
 // **Wirewood Lodge is in the archived list and absent from the shipped one**. So the card can never
 // be in hand, the line cannot be built, the commit does nothing, and the check has been failing ever
 // since on two assertions that read like an engine regression ("Sol Ring resolved", "Natural Order

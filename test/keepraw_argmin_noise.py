@@ -26,7 +26,7 @@ import sys
 from collections import defaultdict
 
 RAW = sys.argv[1] if len(sys.argv) > 1 else \
-    'decks/FiveColour/FiveColour.keepmodel.exhaustive.raw.json'
+    'decks/Five Colour/Five Colour.keepmodel.exhaustive.raw.json'
 SAMPLE = int(sys.argv[2]) if len(sys.argv) > 2 else 4000
 
 ENTRY = re.compile(

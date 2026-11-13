@@ -25,7 +25,7 @@
     "So this is no longer an unattributed failure: it is a KNOWN board waiting on one other fix,",
     "and the mechanism it exercises is separately proven green."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

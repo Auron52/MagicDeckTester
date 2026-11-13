@@ -18,8 +18,8 @@ SEEDS="4004 5005 6006 7007"
 # ever since; the binary path was likewise Windows-only. Neither script could run here.
 DECKS=(
   "slivers=$(h_deck Slivers)=$(h_profile Slivers)"
-  "burn=$(h_deck burn)=$(h_profile burn)"
-  "th=$(h_deck treasure_hunt)=$(h_profile treasure_hunt)"
+  "burn=$(h_deck "Burn")=$(h_profile "Burn")"
+  "th=$(h_deck "Treasure Hunt")=$(h_profile "Treasure Hunt")"
 )
 for _d in "${DECKS[@]}"; do _r=${_d#*=}; h_require "${_r%%=*}" "${_r#*=}" || exit 1; done
 # depth=games=budget  (d0 omitted: full-depth==baseline at depth 0)

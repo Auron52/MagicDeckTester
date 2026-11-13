@@ -51,7 +51,7 @@ GameState FreshP(Phase phase)
     s.players[1].life     = gamesetup::StartingLife() - 4;
     s.opponent_lost_life_this_turn = true;   // Falkenrath Pit Fighter's activation condition
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     s.deck_has_madness = true;
     for (int k = 0; k < 20; ++k)
     {

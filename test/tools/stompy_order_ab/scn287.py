@@ -15,8 +15,8 @@ for k, elves in enumerate((["Priest of Titania", "Fyndhorn Elves", "Fyndhorn Elv
                            ["Fyndhorn Elves", "Fyndhorn Elves", "Priest of Titania"])):
     bf = [{"name": "Forest", "controller": 0, "tapped": False}, {"name": "Forest", "controller": 0, "tapped": False}]
     bf += [{"name": e, "controller": 0, "tapped": False, "sick": False} for e in elves]
-    j = {"deck": "decks/StompySurprise/StompySurprise.cod",
-         "profile": "decks/StompySurprise/StompySurprise.profile.json",
+    j = {"deck": "decks/Stompy Surprise/Stompy Surprise.cod",
+         "profile": "decks/Stompy Surprise/Stompy Surprise.profile.json",
          "turn": 3, "on_the_play": True, "max_turns": 9, "active_life": 20, "opponent_life": 20,
          "battlefield": bf, "hand": ["Vaultborn Tyrant", "Turntimber Symbiosis", "Elvish Archdruid"],
          "library_top": ["Elvish Archdruid", "Sol Ring", "Call of the Wild", "Forest", "Forest"],

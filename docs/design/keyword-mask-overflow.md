@@ -108,7 +108,7 @@ cards.json, adding the keyword name to `MODELED_ELSEWHERE_KEYWORDS` in
 `scripts/audit_card_fields.py` so the field audit still reality-checks the rest of the entry.
 
 This is what **battle cry** does in the WhiteKnights work (`battle_cry_power` + `ApplyBattleCry`);
-see `docs/design/analysis-WhiteKnights.md`.
+see `docs/design/analysis-White Knights.md`.
 
 ## Correction to the record
 

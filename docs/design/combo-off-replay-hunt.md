@@ -465,7 +465,7 @@ deterministic):
 `python3 test/combo_off_replay_hunt.py --skip reference --seeds 51:51 --workers 1`.
 This is also why `--quick` pins the horizon at 6.
 
-> **ROOT-CAUSED AND FIXED 2026-09-11** — `analysis-EldraziDisplacerFlicker.md` §Session 18. The
+> **ROOT-CAUSED AND FIXED 2026-09-11** — `analysis-Eldrazi Displacer Flicker.md` §Session 18. The
 > hunch above is right in class and wrong in one detail worth recording: the frames are **turn 6**
 > (`main_ordinal` 196–260), the odometer carries **one digit per Clue token** on top of four
 > Eldrazi Displacer digits so the product *doubles every few clicks* (1.15e5 → 4.61e5 within one

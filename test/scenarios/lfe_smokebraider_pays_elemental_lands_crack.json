@@ -10,7 +10,7 @@
     "crack had one Mountain for {2}: silently skipped, Brushfire 1/1, no win. Brushfire's {G} has no other",
     "source, so Smokebraider is tapped on every line; the fix only decides WHICH of its pips it pays."
   ],
-  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

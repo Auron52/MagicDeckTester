@@ -117,7 +117,7 @@ TEST_CASE("BreachingDragonstorm discard: the deck routes to BreachingDragonstorm
 {
     EnsureCardsBds();
     const Decklist d = DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/BreachingDragonstorm/BreachingDragonstorm.cod"));
+        ResolveHeuristicDefaultsPath("decks/Breaching Dragonstorm/Breaching Dragonstorm.cod"));
     CHECK(std::string(DetectDecisionProvider(d).Name()) == "BreachingDragonstorm");
 }
 

@@ -2,7 +2,7 @@
 # Proves the Acclaimed Contender etb_dig_subtypes widening (Knight -> Knight/Aura/Equipment)
 # is PLAY-NEUTRAL for decks/Knights/ (that list holds no Aura and no Equipment, so the dig
 # candidate set is unchanged). Per-game digest equality is the proof; a sign test is not needed.
-#   docs/design/analysis-WhiteKnights.md, "Audits"
+#   docs/design/analysis-White Knights.md, "Audits"
 #
 # NOTE: Knights ships a value_play sidecar that PINS target_depth=5, so --depth is refused.
 # We therefore run the deck at its own shipped settings (the configuration that matters), and

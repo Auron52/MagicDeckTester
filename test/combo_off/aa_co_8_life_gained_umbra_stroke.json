@@ -3,7 +3,7 @@
     "LIFE-GAINED: a mid-turn frame after Nourish already resolved (life_gained_this_turn 6). Umbra on the",
     "Alchemist, Stroke in hand: the loop + Stroke is the whole go-off."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

@@ -5,7 +5,7 @@
     "can never be paid, and the button must stay hidden. This is what keeps the fix honest -- a",
     "widening that offered a button here would be promising a win that does not exist."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

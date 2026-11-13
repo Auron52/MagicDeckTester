@@ -18,7 +18,7 @@
     "Verified DISCRIMINATING: at opponent_library_size 4 (one more than the mana can reach) the",
     "engine correctly finds no win."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

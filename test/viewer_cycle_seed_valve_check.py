@@ -19,5 +19,5 @@ if len(sys.argv) != 3:
 root = Path(__file__).resolve().parent.parent
 args = [sys.executable, str(root / "test/viewer_menu_prefix_check.py"),
         str(Path(sys.argv[1]).resolve()), str(Path(sys.argv[2]).resolve()), "1",
-        str(root / "references/EldraziDisplacerFlicker/claude_s5_gi4.json")]
+        str(root / "references/Eldrazi_Displacer_Flicker/claude_s5_gi4.json")]
 sys.exit(subprocess.run(args, cwd=root).returncode)

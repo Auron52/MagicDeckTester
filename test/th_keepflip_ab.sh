@@ -12,8 +12,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 BIN=./build/Release/mtg
-D=decks/treasure_hunt/treasure_hunt.txt
-P=decks/treasure_hunt/treasure_hunt.profile.json
+D="decks/Treasure Hunt/Treasure Hunt.txt"
+P="decks/Treasure Hunt/Treasure Hunt.profile.json"
 SEED=${SEED:-7000001}
 N=${N:-16000}
 DEPTH=${DEPTH:-5}

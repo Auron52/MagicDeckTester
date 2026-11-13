@@ -58,7 +58,7 @@ GameState Fresh()
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;   // land drop spent unless a test opens it
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = Def("Swamp").card;
@@ -884,7 +884,7 @@ TEST_CASE("Vampires routes to its own provider, which derives from Vial")
 {
     EnsureCardsLoaded();
     const DecisionProvider& p = SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     CHECK(std::string(p.Name()) == "Vampires");
     CHECK(dynamic_cast<const VialProvider*>(&p) != nullptr);
 }

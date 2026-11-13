@@ -13,8 +13,8 @@ CELLS = {"ship": {}, "d3": {"depth": 3, "budget_ms": 10, "ignore_play_profile": 
          "d0": {"depth": 0, "budget_ms": 0, "ignore_play_profile": True}}
 A = {"MTG_HOLD_RELEASE_YIELD": True, "MTG_STOMPY_ORDER": True, "MTG_SAC_VICTIM_SAME_NAME": True}
 for arm, fl in (("A", A), ("B", None)):
-    j = {"name": "stompy.%s.g%d" % (arm, gi), "deck": WT + "/decks/StompySurprise/StompySurprise.cod",
-         "profile": WT + "/decks/StompySurprise/StompySurprise.profile.json", "games": 1,
+    j = {"name": "stompy.%s.g%d" % (arm, gi), "deck": WT + "/decks/Stompy Surprise/Stompy Surprise.cod",
+         "profile": WT + "/decks/Stompy Surprise/Stompy Surprise.profile.json", "games": 1,
          "seed": 10900001 + gi, "game_index": gi}
     j.update(CELLS[cell])
     if hg:

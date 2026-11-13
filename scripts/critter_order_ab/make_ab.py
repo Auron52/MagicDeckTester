@@ -18,7 +18,7 @@ import json, math, os, re, sys
 from collections import defaultdict
 
 WT = "/workspaces/MagicDeckTester/.claude/worktrees/agent-a239469ed898c5c26"
-CRITTER = ("decks/CritterLifegain/CritterLifegain.cod", "decks/CritterLifegain/CritterLifegain.profile.json")
+CRITTER = ("decks/Critter Lifegain/Critter Lifegain.cod", "decks/Critter Lifegain/Critter Lifegain.profile.json")
 CELLS = [("ship", None, None), ("d3", 3, 10), ("d0", 0, 0)]
 CELL_IX = {c[0]: i for i, c in enumerate(CELLS)}
 SIZES = {"critter": {"ship": 4000, "d3": 6000, "d0": 20000},

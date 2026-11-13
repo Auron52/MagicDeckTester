@@ -8,7 +8,7 @@
     "the gain would be a silent no-op if the gain were then skipped -- the human casts Nourish, and the",
     "re-prompt offers the loop off the real X.)"
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

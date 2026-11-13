@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The payer's pain-last + narrow-restricted-first levers, measured on every deck they move, in ONE pooled
-`mtg --batch` queue (Vampires sweep F + L, 2026-10-18; docs/design/analysis-Vampire.md "Sweep fixes").
+`mtg --batch` queue (Vampires sweep F + L, 2026-10-18; docs/design/analysis-Vampires.md "Sweep fixes").
 
 ARMS (per-job "flags", heurarm slots, so both arms share one queue and one tail):
     on   MTG_PAY_PAIN_LAST=1 MTG_PAY_NARROW_RESTRICTED_FIRST=1   (as shipped, default ON)
@@ -46,8 +46,8 @@ def deck_maps():
             m[k] = v.strip('"')
         maps[var] = m
     # Vampires is not a suite deck (the 3x cost gate, 2026-10-20), so its paths are given here.
-    maps["DECK_FILE"].setdefault("vampires", "decks/Vampires/Vampire.cod")
-    maps["DECK_PROF"].setdefault("vampires", "decks/Vampires/Vampire.profile.json")
+    maps["DECK_FILE"].setdefault("vampires", "decks/Vampires/Vampires.cod")
+    maps["DECK_PROF"].setdefault("vampires", "decks/Vampires/Vampires.profile.json")
     return maps["DECK_FILE"], maps["DECK_PROF"]
 
 

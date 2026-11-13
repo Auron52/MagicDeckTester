@@ -7,7 +7,7 @@ profile path, so `decks/<Stem>/<Stem>.profile.json` is what binds a list to its 
 
 Three things this gets right that a hand-copy would not:
 
-* **The play profile must be the POOLED one.** `decks/StompySurprise/StompySurprise.profile.json`
+* **The play profile must be the POOLED one.** `decks/Stompy Surprise/Stompy Surprise.profile.json`
   has no `card_scores` for Fyndhorn Elves / World War Hulk / Apex Altisaur -- all three are new to
   the list. An unscored card is scored as an EMPTY SLOT, and that penalty falls only on the list
   that plays it. `logs/deckcmp/.../pool/` is the profile every screen this week measured under, and
@@ -28,7 +28,7 @@ import json, os, shutil, sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 POOL_PROFILE = os.path.join(REPO, "logs/deckcmp/StompySurprise/pool/StompySurprise.profile.json")
-SRC_VALUE    = os.path.join(REPO, "decks/StompySurprise/StompySurprise.value.json")
+SRC_VALUE    = os.path.join(REPO, "decks/Stompy Surprise/Stompy Surprise.value.json")
 
 # Everything the screens settled and that is IDENTICAL in both candidates. Only the mana axis and
 # the two fat counts move, so any difference between the lists is the axis under test.

@@ -25,8 +25,8 @@ GAMES=${1:-4000}
 OUT=logs/th_mechanism
 mkdir -p "$OUT"
 
-DECK=$(h_deck treasure_hunt) || exit 1
-PROF=$(h_profile treasure_hunt) || exit 1
+DECK=$(h_deck "Treasure Hunt") || exit 1
+PROF=$(h_profile "Treasure Hunt") || exit 1
 SEED=24024        # fresh again: not in any suite mode, not in the power A/B's 16016..23023
 
 # One process per ARM -- the arms differ only by process-level MTG_* env, which is the one thing a

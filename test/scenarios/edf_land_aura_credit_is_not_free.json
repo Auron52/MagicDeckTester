@@ -18,7 +18,7 @@
   "Restore the credit as an enumeration stamp and this fixture goes green-to-red; that is the check",
   "that it DISCRIMINATES rather than merely passing."
  ],
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 2,
  "on_the_play": false,
  "active_life": 20,

@@ -42,8 +42,8 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIN = os.environ.get("MTG_BIN", os.path.join(ROOT, "build/Release/mtg"))
-DECK = "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.profile.json"
+DECK = "decks/Kitty Equipment/v2-puresteel-hammer/Kitty Equipment.cod"
+PROF = "decks/Kitty Equipment/v2-puresteel-hammer/Kitty Equipment.profile.json"
 
 # The user's own s15/gi14 prefix (from logs/play/rejections/..._s15_gi14_t5.json), plus the pinned
 # pick that frame A's override makes playable -- which is how frame B is reached.

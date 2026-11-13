@@ -69,7 +69,7 @@
     "Wish-then-Trace order rightly survives (verdict choose, 3 variants, all Wish-first). Pinned off so this",
     "fixture keeps testing the drop filter."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 3,
   "on_the_play": false,
   "active_life": 20,

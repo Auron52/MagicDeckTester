@@ -8,7 +8,7 @@
     "put's attack stamp), and that the creature is put (not cast) through the real executor. The library is",
     "a dead draw (Swords to Plowshares, no white mana) so the board stays fixed."
   ],
-  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
   "turn": 4, "on_the_play": true, "max_turns": 4,
   "active_life": 20, "opponent_life": 8,
   "battlefield": [

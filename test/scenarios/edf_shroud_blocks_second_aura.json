@@ -1,6 +1,6 @@
 {
  "_comment": "SHROUD legality (CR 303.4a + 702.18a), EldraziDisplacerFlicker. Yavimaya Coast already carries a Trace of Abundance, so it has shroud and CANNOT be the target of another Aura spell -- shroud is symmetric, so this restricts OUR OWN casts. The Overgrowth in hand must therefore land on Brushland. This fixture EXISTS because the bug was the opposite of a near-miss: the host ranking scores by yield, and the Trace bonus makes the shrouded Yavimaya the HIGHEST-yield host, so the engine steered straight into the illegal play. Verified by A/B on the card param (land_aura_grants_shroud off -> Overgrowth attaches to Yavimaya Coast; on -> Brushland). Life totals and win turn are IDENTICAL either way, which is why expect_attachment exists: no other assertion in this harness can see this class of defect. Shroud does NOT stop the land being TAPPED for mana -- all three lands still pay the {2}{G}.",
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 5,
  "on_the_play": true,
  "max_turns": 5,

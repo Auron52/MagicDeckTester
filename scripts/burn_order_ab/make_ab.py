@@ -17,8 +17,8 @@ import argparse, json, os, re, sys
 from collections import defaultdict
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # the checkout
-BURN_DECK = "decks/burn/burn.txt"
-BURN_PROF = "decks/burn/burn.profile.json"
+BURN_DECK = "decks/Burn/Burn.txt"
+BURN_PROF = "decks/Burn/Burn.profile.json"
 
 O, M2, CR, NA = "MTG_BURN_ORDER", "MTG_BURN_M2_RULE", "MTG_SPECTACLE_PLAN_CREDIT", "MTG_BURN_M2_NARROW"
 BF = "MTG_BURN_BLOOD_FIRST"   # the PROPOSED amendment (Searing Blood before Searing Blaze), a USER question

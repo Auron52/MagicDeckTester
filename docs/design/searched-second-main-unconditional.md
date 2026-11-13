@@ -574,7 +574,7 @@ remain on that surface, both defaulting conservative:
   concluded-A/B archives that emit now-deleted levers; they document past method and will not run
   against this engine.
 * The historical narrative in `second-main-greedy.md`, `searched-second-main-adoptability.md`,
-  `antilife-main-phase-split.md`, `analysis-KittyEquipment.md` — history docs; superseded on
+  `antilife-main-phase-split.md`, `analysis-Kitty Equipment.md` — history docs; superseded on
   policy by THIS file. `greedy-in-the-searched-window-status.md` and
   `searched-design-deck-rollout.md` §3b updated to point here.
 

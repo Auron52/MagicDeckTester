@@ -8,7 +8,7 @@ byte-identical without measuring it (`test/scenarios.sh` 73/73, `regression.sh s
 re-run anyway).
 
 Companion docs: `label-horizon-ladder.md` (the ladder itself), `unbudgeted-leaf-memo-and-edf-cost.md`
-(the same deck's cost under the depth-matrix regime), `analysis-EldraziDisplacerFlicker.md` (the deck).
+(the same deck's cost under the depth-matrix regime), `analysis-Eldrazi Displacer Flicker.md` (the deck).
 
 ---
 

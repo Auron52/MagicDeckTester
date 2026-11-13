@@ -172,7 +172,7 @@ fivecolour control unchanged):
 | soldiers | 57% | 53% |
 | snow | 35% | 41% (matching the 59.6%-of-charged-units finding's direction) |
 
-Soldiers' own sanity batch (`analysis-soldiers.md` 5b) shows d3 b10, d3 b20, d5 b20 and d5 b40 all
+Soldiers' own sanity batch (`analysis-Soldiers.md` 5b) shows d3 b10, d3 b20, d5 b20 and d5 b40 all
 at avg 4.3733 (or 4.3717) on 600 games. Its overnight's doubled budgets buy no measured quality.
 
 ## 3. Should the suite_cost gate have caught this? Why it didn't

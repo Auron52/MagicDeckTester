@@ -46,7 +46,7 @@
     "Shivan Gorge is not an arbitrary choice of payoff: it is EldraziDisplacerFlicker's lethal outlet,",
     "so the mana this bug threw away is damage."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 5,
   "on_the_play": true,
   "active_life": 20,

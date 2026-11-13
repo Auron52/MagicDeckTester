@@ -7,7 +7,7 @@
     "card and the human could not win. Here 9 Islands float plenty: `cast=Stroke of Genius` must resolve to",
     "EXACTLY two variants (you draw / the opponent draws), never one per X."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": true,

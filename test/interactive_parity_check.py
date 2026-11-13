@@ -353,8 +353,8 @@ def main():
         games = [(sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4]))]
         refs = []
     else:
-        edf = ("decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
-               "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json")
+        edf = ("decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
+               "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json")
         games = [(edf[0], edf[1], 1, 0), (edf[0], edf[1], 8, 7)]
         refs = refs_with_pins()
     ok = True

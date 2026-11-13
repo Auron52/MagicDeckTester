@@ -3,7 +3,7 @@
     "NEGATIVE, EXACT ARITHMETIC: Nourish costs {G}{G} and the board has one Forest besides the tapped-out",
     "rest; with no life gained the Alchemist taps for 1, the Umbra needs X >= 4. Absent."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

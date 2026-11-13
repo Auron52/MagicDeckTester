@@ -13,7 +13,7 @@
     "draw_target rider -> ResolveDrawX -> PerformDrawX); (3) the exact payer funds {U} + X off the",
     "Alchemist's single-colour burst. No other clock exists: opponent life 20, nothing that deals damage."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

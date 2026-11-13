@@ -8,7 +8,7 @@
     "COMBO OFF: rule LIFE-HAND+LOOP-WITCH+FIN-WITCH at net zero; the route casts the Boar, sacrifices it",
     "and runs the five pumps; the verdict is a combat-lethal board."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

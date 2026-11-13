@@ -61,7 +61,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build/Release/mtg"))
 if not os.path.exists(MTG) and os.path.exists(MTG + ".exe"):
     MTG += ".exe"
-DECK = "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod"
+DECK = "decks/Accomplished Alchemist/Accomplished Alchemist.cod"
 OUTDIR = os.environ.get("AA_SWEEP_OUT", os.path.join(ROOT, "logs/aa_combo_off_sweep"))
 SCRATCH = os.environ.get("AA_SWEEP_SCRATCH", OUTDIR)
 

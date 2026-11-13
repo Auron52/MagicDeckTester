@@ -1,6 +1,6 @@
 {
   "_comment": "THIRD REVIEW 2026-10-22, kind coverage: Cid's graveyard return (gyreturn=, whose LINE value names the returned card) is claimed by its \"**\" step naming the SOURCE, `gyreturn=Cid, Freeflier Pilot` -- one of the verbs whose token names the action's card rather than the line value.",
-  "deck": "decks/KittyEquipment/v2-puresteel-hammer/KittyEquipment.cod",
+  "deck": "decks/Kitty Equipment/v2-puresteel-hammer/Kitty Equipment.cod",
   "turn": 5,
   "on_the_play": true,
   "max_turns": 5,

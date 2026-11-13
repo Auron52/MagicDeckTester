@@ -30,8 +30,8 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-DECK=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod
-PROF=decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.profile.json
+DECK="decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod"
+PROF="decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.profile.json"
 OUT=${OUT:-logs/edf_valtb_ab}
 mkdir -p "$OUT"
 

@@ -18,7 +18,7 @@
     "Peregrine Drake instead of Cloud -- five untap slots, so the Gorge AND four yield lands come",
     "back -- which is offered and wins."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

@@ -5,7 +5,7 @@
 - `BreachingDragonstormProvider` (src/ai/DecisionProviders.h:626-645) overrides only the cleanup discard
   (`MTG_BREACH_BUCKET_DISCARD`). It has no `CastOrderRank`, no `MainPhaseOverride` and no `OrderOpaqueCastsByRank`.
   There is no order flag (`grep MTG_BREACH` in src finds only the discard flag). No cast-order ruling exists in
-  `analysis-BreachingDragonstorm.md`, and `cast-order-rankings.md` has no section for this deck.
+  `analysis-Breaching Dragonstorm.md`, and `cast-order-rankings.md` has no section for this deck.
 - **The report's 10/20 ranks are never read for this deck.** Every nonland card is `OrderingOpaque`
   (ManaPayment.cpp:2722: `cascade_max_mv>0` covers 5 cards, plus `shuffle_reveal_freecast` = CT and
   `etb_exile_until_nonland` = BD). The provider does not opt in (DecisionProvider.h:927, default false), so the

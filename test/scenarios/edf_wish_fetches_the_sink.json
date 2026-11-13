@@ -23,7 +23,7 @@
     "Only win_turn is asserted -- which card the wish takes and how many times it blinks are searched",
     "choices, and pinning them would break on unrelated search work."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 4,
   "on_the_play": false,
   "active_life": 20,

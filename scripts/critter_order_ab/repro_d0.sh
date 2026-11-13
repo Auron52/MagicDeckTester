@@ -11,7 +11,7 @@ for arm in new old; do
   mkdir -p "$d"
   if [ "$arm" = old ]; then ord=0; else ord=1; fi
   env -C "$WT" MTG_CRITTER_ORDER=$ord MTG_DUMP_WINS=1 MTG_USER_ORDER_TRACE=1 nice -n 10 "$S/bin/mtg.diag" \
-    decks/CritterLifegain/CritterLifegain.cod --profile decks/CritterLifegain/CritterLifegain.profile.json \
+    "decks/Critter Lifegain/Critter Lifegain.cod" --profile "decks/Critter Lifegain/Critter Lifegain.profile.json" \
     --seed "$seed" --games 1 --game-index "$gi" --depth "$depth" --budget-ms "$bud" --threads 1 $extra \
     --log-dir "$d" > "$d/out.txt" 2> "$d/err.txt"
   echo "$arm: $(grep -o 'wt=-\?[0-9]*' "$d/err.txt" | head -1)"

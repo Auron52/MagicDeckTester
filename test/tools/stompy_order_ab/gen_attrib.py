@@ -11,8 +11,8 @@ import sys
 
 WT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 S0 = 10900001
-DECK = os.path.join(WT, "decks/StompySurprise/StompySurprise.cod")
-PROF = os.path.join(WT, "decks/StompySurprise/StompySurprise.profile.json")
+DECK = os.path.join(WT, "decks/Stompy Surprise/Stompy Surprise.cod")
+PROF = os.path.join(WT, "decks/Stompy Surprise/Stompy Surprise.profile.json")
 CELLS = {"ship": {}, "d3": {"depth": 3, "budget_ms": 10, "ignore_play_profile": True},
          "d0": {"depth": 0, "budget_ms": 0, "ignore_play_profile": True}}
 ARMS = {"new": None, "notop": {"MTG_STOMPY_TOP_RESOLVE": False}, "nosearch": {"MTG_STOMPY_ORDER_SEARCH": False},

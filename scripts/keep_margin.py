@@ -29,9 +29,9 @@ pass calibration-free: d = 1 se is the movement the shipped table ALREADY has fr
 Carlo noise, so bias(1 se) is misfit we demonstrably tolerate, and an edit has to perturb values by
 more than that before its bias is worse than what we ship with.
 
-    python3 scripts/keep_margin.py decks/burn              # one deck
+    python3 scripts/keep_margin.py decks/Burn              # one deck
     python3 scripts/keep_margin.py --all                   # every deck with a committed raw
-    python3 scripts/keep_margin.py decks/burn --no-verify  # skip the shipped-table check (faster)
+    python3 scripts/keep_margin.py decks/Burn --no-verify  # skip the shipped-table check (faster)
 
 VERIFICATION IS THE POINT OF THE FIRST HALF OF THIS FILE. `BuildPolicyFromTables` is shared by the
 rollout path and the merge tool precisely so there is ONE decision rule and not two that drift; this

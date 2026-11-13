@@ -30,7 +30,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 BIN=${BIN:-./build/Release/mtg}
-DECK=${DECK:-decks/FiveColour/FiveColour.cod}
+DECK="${DECK:-decks/Five Colour/Five Colour.cod}"
 STEM=$(basename "$DECK"); STEM=${STEM%.*}
 PROF=${PROF:-$(dirname "$DECK")/$STEM.profile.json}
 GAMES=${GAMES:-1000}

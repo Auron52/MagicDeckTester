@@ -44,7 +44,7 @@
  "env": {
   "MTG_UNPRUNED": "1"
  },
- "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+ "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
  "turn": 3,
  "on_the_play": false,
  "active_life": 20,

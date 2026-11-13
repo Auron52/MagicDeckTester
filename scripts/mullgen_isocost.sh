@@ -28,10 +28,10 @@ mkdir -p "$OUT"
 # deck actually plays -- labels exist to rank hands FOR that policy, so it is the right reference.)
 # Ordered CHEAPEST-FIRST so usable numbers land early instead of all at the end.
 DECKS=(
-  "decks/burn/burn.txt|burn|6|20"
+  "decks/Burn/Burn.txt|burn|6|20"
   "decks/Slivers/Slivers.txt|slivers|5|20"
   "decks/Knights/Knights.cod|knights|5|20"
-  "decks/treasure_hunt/treasure_hunt.txt|treasure_hunt|5|20"
+  "decks/Treasure Hunt/Treasure Hunt.txt|treasure_hunt|5|20"
   "decks/Dragonstorm/Dragonstorm.cod|dragonstorm|5|20"
   "decks/Auras/Auras.cod|auras|5|20"
   "decks/Anti-Lifegain/Anti-Lifegain.cod|antilife|5|20"

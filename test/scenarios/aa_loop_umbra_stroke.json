@@ -10,7 +10,7 @@
     "loop (ActivateUntap, chosen_x = kUntapLoopToNeed) nets 6 - 3 = 3 blue per iteration until the float",
     "covers 43 -> (kActUntapLoopFunded re-plan) -> Stroke X = 40 at the opponent decks them THIS turn."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

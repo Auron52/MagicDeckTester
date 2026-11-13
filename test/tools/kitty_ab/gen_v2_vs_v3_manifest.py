@@ -11,7 +11,7 @@ Also 1.82x cheaper per game at d5; unwon 1.44% -> 1.25%. Read the whole story --
 per-cell spread came in at HALF the sampling prediction and why that was BENIGN here but fatal in
 the first attempt -- in docs/design/kitty-v3-promotion-2026-10-14.md.
 
-The `v3` arm below is now `decks/KittyEquipment` (the promoted top-level list), not the old
+The `v3` arm below is now `decks/Kitty Equipment` (the promoted top-level list), not the old
 v3-adelbert-gauntlets folder. Re-running this reproduces the comparison against whatever ships.
 
 WHY A NEW RUN. The suite's own rows gave d0 -0.0781 at t=-3.88 (8,000 games/arm) but searched only
@@ -50,8 +50,8 @@ import os
 
 ROOT = "/workspaces/MagicDeckTester"
 ARMS = {
-    "v2": "decks/KittyEquipment/v2-puresteel-hammer",
-    "v3": "decks/KittyEquipment",
+    "v2": "decks/Kitty Equipment/v2-puresteel-hammer",
+    "v3": "decks/Kitty Equipment",
 }
 # *** SEED BASES MUST BE SPACED BY MORE THAN THE GAME COUNT. ***
 # A batch job's per-game seed is `seed_base + game_index` (test/.../batch repro = --seed base+gi).

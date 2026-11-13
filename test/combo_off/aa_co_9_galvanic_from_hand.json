@@ -3,7 +3,7 @@
     "LOOP-GALVANIC-HAND: Galvanic Alchemist ({2}{U}) pairs with the Alchemist on entry and grants it '{2}{U}:",
     "untap this creature'. Nourish then the loop, then Stroke."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

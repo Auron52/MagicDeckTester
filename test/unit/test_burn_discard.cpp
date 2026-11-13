@@ -133,9 +133,9 @@ TEST_CASE("burn discard: routing, and the profile's required_pieces the waiver e
 {
     EnsureCardsBurnD();
     const DecisionProvider& p =
-        DetectDecisionProvider(DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/burn/burn.txt")));
+        DetectDecisionProvider(DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Burn/Burn.txt")));
     CHECK(std::string(p.Name()) == "Burn");
-    const MulliganProfile prof = LoadDeckProfile(ResolveHeuristicDefaultsPath("decks/burn/burn.profile.json"));
+    const MulliganProfile prof = LoadDeckProfile(ResolveHeuristicDefaultsPath("decks/Burn/Burn.profile.json"));
     std::vector<std::string> req = prof.required_pieces;
     std::vector<std::string> want = kReq;
     std::sort(req.begin(), req.end());

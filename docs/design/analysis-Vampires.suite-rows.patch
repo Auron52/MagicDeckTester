@@ -22,7 +22,7 @@ index 6a9218aa8..31c04d8d5 100644
    "colossus 0 1001 1000 0"
    "colossus 3 1001  150 10"
    "colossus 5 1001   75 20"
-+  # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampire.md), all three tiers at
++  # vampires: ADDED 2026-10-18 by the analysis (docs/design/analysis-Vampires.md), all three tiers at
 +  # once (the all-or-none rule), at the colossus / pirates gate shape and the overnight ENTRY set. B/R/W
 +  # Vampire tribal on Aether Vial: madness (Falkenrath Gorger), discard / sacrifice outlets, Bloodghast
 +  # recursion, Drana's first-strike-step counters, Bloodline Keeper's transform. No value leaf and no

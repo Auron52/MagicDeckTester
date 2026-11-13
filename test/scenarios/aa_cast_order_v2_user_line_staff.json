@@ -4,7 +4,7 @@
     "same mana ladder + the board-activation order): spell, Weather, the Alchemist's six for Staff of Domination, the",
     "Staff untaps the Alchemist, loop to Stroke's lethal X -- the kill THIS turn at --depth 8 --budget-ms 0."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

@@ -12,7 +12,7 @@ true)`; `=0` restores `GenericProvider::CleanupDiscardCandidates` (max-MV). Quot
 
 ### WhiteKnights: no proposal. WhiteKnightsProvider DERIVES FROM KnightsProvider, so it INHERITS the
 ### settled Knights curve rule unless overridden. Measured DISCARD_INERT: zero cleanup sheds from
-### EITHER caller (real + rollout) in 400 d3 games (analysis-WhiteKnights.md). Card data: mono-W
+### EITHER caller (real + rollout) in 400 d3 games (analysis-White Knights.md). Card data: mono-W
 ### Knights, 19 Plains + 4 Remote Farm, 1 Vial, 1 Sol Ring, 1 Swords, 1 Unexpectedly Absent, 3 Adeline
 ### (legendary), Basri (legendary), Silverblade (soulbond double strike), Kinsbaile Cavalier (double
 ### strike), Hero of Bladehold, Accorder Paladin (battle cry).

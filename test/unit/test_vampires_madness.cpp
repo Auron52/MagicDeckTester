@@ -61,7 +61,7 @@ GameState Fresh()
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;   // land drop spent unless a test opens it
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = Def("Swamp").card;
@@ -732,7 +732,7 @@ TEST_CASE("Routing: Vampires (now with convoke) stays VampiresProvider; Melira P
 {
     EnsureCardsLoaded();
     CHECK(std::string(DetectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod"))).Name()) == "Vampires");
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod"))).Name()) == "Vampires");
     CHECK(std::string(DetectDecisionProvider(DeckLoader::LoadFromFile(
         ResolveHeuristicDefaultsPath("decks/Melira Pod/Melira Pod.cod"))).Name()) == "MeliraPod");
 }

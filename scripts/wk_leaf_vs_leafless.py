@@ -37,8 +37,8 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECKDIR = os.path.join(ROOT, "decks/WhiteKnights")
-STEM = "WhiteKnights"
+DECKDIR = os.path.join(ROOT, "decks/White Knights")
+STEM = "White Knights"
 
 CONFIGS = [("d0b0", 0, 0), ("d3b10", 3, 10), ("d3b20", 3, 20), ("d5b20", 5, 20), ("d5b40", 5, 40)]
 

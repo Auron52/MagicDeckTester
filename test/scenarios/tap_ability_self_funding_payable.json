@@ -17,7 +17,7 @@
     "It passes on BOTH arms of MTG_TAP_ABILITY_DEBIT by design: a non-discriminating fixture is the",
     "point of a boundary pair. Its twin carries the discrimination."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "turn": 5,
   "on_the_play": true,
   "active_life": 20,

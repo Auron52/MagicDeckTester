@@ -13,7 +13,7 @@
     "does the engine see that THIS board plus THIS hand goes off, and does its line actually kill?",
     "library_top is the deck minus battlefield/hand in canonical order (48 cards, as in the game)."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

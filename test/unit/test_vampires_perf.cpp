@@ -54,7 +54,7 @@ GameState Fresh()
     s.players[1].life     = gamesetup::StartingLife();
     s.players[0].lands_played_this_turn = 1;   // land drop spent
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     s.deck_has_madness = true;
     for (int k = 0; k < 20; ++k)
     {

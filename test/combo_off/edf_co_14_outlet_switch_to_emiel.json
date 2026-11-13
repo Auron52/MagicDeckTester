@@ -20,7 +20,7 @@
     "Across the sweep, `loop.net_c <= 0` produced 42 offers and ZERO wins while `net_c > 0` won",
     "81.4% -- the pip is the whole difference (docs/design/combo-off-sweep-catalogue.md, C3)."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

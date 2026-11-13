@@ -109,7 +109,7 @@ The user also flagged the classes this generalises to: **Elves** (Priest of Tita
 **Defenders** (Overgrown Battlements) scale on creature counts rather than colours. The Elf
 class is now IMPLEMENTED (2026-08-20, `MTG_DORK_GROWTH` + the Wirewood Lodge untap-burst
 `MTG_UNTAP_BURST`; fixtures `test/scenarios/stompy_dork_growth.json` /
-`stompy_lodge_burst.json`) — see the addendum in `analysis-StompySurprise.md` for the
+`stompy_lodge_burst.json`) — see the addendum in `analysis-Stompy Surprise.md` for the
 credit/bound/order pieces and the measurement. Defenders remain unimplemented (no deck).
 The mana-relevant rule for all of them is in `fivecolour-search-cost.md`: a scaling source can only
 raise total mana when `n > c` (more scaling sources than the widener's cost) or when an untap effect

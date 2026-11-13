@@ -18,8 +18,8 @@ contains an action with verb `sfput`.
 import subprocess, sys, json, re, os, collections
 
 BIN  = os.environ.get("MTG_BIN", "./build/Release/mtg")
-DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+DECK = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod"
+PROF = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 

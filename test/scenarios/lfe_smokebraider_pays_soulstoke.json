@@ -7,7 +7,7 @@
     "the creature-only source, and the real executor must pay it under the ability-source scope): a",
     "regression here leaves Fury in hand and the opponent alive."
   ],
-  "deck": "decks/LandfallElementals/LandfallElementals.cod",
+  "deck": "decks/Landfall Elementals/Landfall Elementals.cod",
   "turn": 4, "on_the_play": true, "max_turns": 4,
   "active_life": 20, "opponent_life": 8,
   "battlefield": [

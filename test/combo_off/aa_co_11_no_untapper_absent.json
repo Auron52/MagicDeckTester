@@ -3,7 +3,7 @@
     "NEGATIVE: lifegain + Alchemist + Stroke but no untapper anywhere (none on the battlefield, none in hand, no",
     "Living Wish for a Galvanic). One tap of the Alchemist is not a loop."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

@@ -3,7 +3,7 @@
     "NEGATIVE: the loop is there (Umbra on the Alchemist, Nourish in hand) but nothing turns the mana into a",
     "kill this turn -- no Stroke, no Living Wish, no Scholar, no Staff to dig. The button must NOT appear."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

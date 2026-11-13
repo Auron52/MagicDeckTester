@@ -5,7 +5,7 @@
     "same suffix as its line token). Staff of Domination #5 untaps the tapped Arbor Elf #7 after the hand Arbor Elf is",
     "cast: the sequence validates with exactly that variant."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

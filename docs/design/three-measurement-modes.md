@@ -41,7 +41,7 @@ Its purpose is different, and that changes what counts as a defect.
 2. **Gate cells are not a mode.** The suite's d0/d3/d5 cells are a REGRESSION TRIPWIRE (cheap,
    disjoint seeds, fixed budget). d0 in particular is a determinism/behaviour check, not a
    quality measurement -- a lever that cannot bind without lookahead reads as inert there for
-   structural reasons (see the `MTG_METALCRAFT_CREDIT` d0 result in `analysis-KittyEquipment.md`).
+   structural reasons (see the `MTG_METALCRAFT_CREDIT` d0 result in `analysis-Kitty Equipment.md`).
 3. **Do not use mode 1 numbers to judge play quality.** Value-leaf trust and low depth are chosen
    for throughput; a quality delta measured there is measuring the apparatus.
 4. **A mode-3 run is expensive.** Budget it like a generation job: pooled into ONE

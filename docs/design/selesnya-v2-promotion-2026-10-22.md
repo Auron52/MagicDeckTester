@@ -7,7 +7,7 @@ Unlike Kitty, **no suite rows were dropped**: dropping the original list's rows 
 
 ## The measurement that authorized it
 
-From `analysis-SelesnyaLifegain-v2-bogbeast-heroes.md` (HEAD:src `ec2de5145`, PGO+LTO). Each arm ran its
+From `analysis-Selesnya Lifegain-v2-bogbeast-heroes.md` (HEAD:src `ec2de5145`, PGO+LTO). Each arm ran its
 OWN profile, keep table and value sidecar out of its own directory at its own play setting (shipped
 d5 b20, v2 d6 b20), `provider=SelesnyaLifegain` on all 40 jobs; one pooled batch, 10 paired blocks x
 4,000 games per arm per format, `max_turns` 8.
@@ -71,7 +71,7 @@ suffix for the reason `kittyv3` kept its suffix: renaming would reuse names the 
    | `scripts/bp_open/make_ab.py` (`selesnya` entry) | -> archive; mirrors the suite key |
    | `test/tools/intent_replay.py` (usage example) | -> archive; the example plays Alchemist + Avatar |
    | `test/unit/test_dork_growth_x.cpp` (comment naming the suboptimal reference) | -> the reference's new path |
-   | `docs/design/analysis-SelesnyaLifegain.md`, `trailing-activation-payment-hole.md`, `selesnya-keepgen-tail.md` (repro commands) | -> archive, so each still reproduces the v1 game it describes; the analysis ledger gained an ARCHIVED banner |
+   | `docs/design/analysis-Selesnya Lifegain.md`, `trailing-activation-payment-hole.md`, `selesnya-keepgen-tail.md` (repro commands) | -> archive, so each still reproduces the v1 game it describes; the analysis ledger gained an ARCHIVED banner |
    | narrative mentions of past runs (`mullgen.sh run decks/SelesnyaLifegain fast`, `suite_gate.py --cost decks/SelesnyaLifegain`, `./build.sh pgo decks/SelesnyaLifegain`) in the v1 ledger and `selesnya-keepgen-bulk-cost.md` | left: dated records of what was run that day |
    | `test/unit/test_pirates_provider.cpp` (`{"SelesnyaLifegain","SelesnyaLifegain"}` routing pin) | FOLLOWS the shipped list, deliberately: v2 must keep routing to `SelesnyaLifegainProvider`, which the unit suite now asserts on v2 |
    | `tools/mulligan/decks.js` | regenerated (`build_deck_list.js`); adds the archive entry (and picked up six decks added since it was last generated) |

@@ -5,7 +5,7 @@
     "Rule LIFE-HAND+LOOP-UMBRA+FIN-STROKE; the route casts Nourish + loops ({2}{U} per untap, X = 6), then",
     "Stroke X = the opponent's library at the opponent. The history must list each link, never a macro."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

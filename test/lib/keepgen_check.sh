@@ -55,8 +55,8 @@ ROOT=${KEEPGEN_CHECK_DIR:-/tmp/keepgen_check}
 D="$ROOT/$tag"
 SCRATCH="$ROOT/deck"
 rm -rf "$D"; mkdir -p "$D"
-rm -rf "$SCRATCH"; mkdir -p "$SCRATCH"; cp -r decks/burn "$SCRATCH/"
-DECK="$SCRATCH/burn/burn.txt"
+rm -rf "$SCRATCH"; mkdir -p "$SCRATCH"; cp -r decks/Burn "$SCRATCH/"
+DECK="$SCRATCH/Burn/Burn.txt"
 
 # Strip the build-time engine fingerprint so a pure code move does not read as a behaviour change.
 norm() { python3 -c '

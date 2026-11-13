@@ -36,8 +36,8 @@ def make():
         tag = os.path.basename(os.path.dirname(s)) + "_" + os.path.basename(s)[:-5]
         for arm in ARMS:
             k = dict(j)
-            k["deck"] = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.cod")
-            k["profile"] = os.path.join(WT, "decks/CritterLifegain/CritterLifegain.profile.json")
+            k["deck"] = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.cod")
+            k["profile"] = os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.profile.json")
             k["cards_json"] = os.path.join(WT, "src/cards/data/cards.json")
             k["log_out"] = os.path.join(OUT, arm, tag + ".log.json")
             json.dump(k, open(os.path.join(OUT, arm, tag + ".json"), "w"), indent=1)
@@ -46,8 +46,8 @@ def make():
             tag = "x_%s_d%d_b%d" % (name, depth, budget)
             for arm in ARMS:
                 bf = [{"name": "Plains"} for _ in range(lands)] + [{"name": n} for n in board]
-                k = {"deck": os.path.join(WT, "decks/CritterLifegain/CritterLifegain.cod"),
-                     "profile": os.path.join(WT, "decks/CritterLifegain/CritterLifegain.profile.json"),
+                k = {"deck": os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.cod"),
+                     "profile": os.path.join(WT, "decks/Critter Lifegain/Critter Lifegain.profile.json"),
                      "cards_json": os.path.join(WT, "src/cards/data/cards.json"),
                      "turn": 4, "on_the_play": True, "active_life": 20, "opponent_life": 30,
                      "library_filler": "Plains", "library_size": 30, "depth": depth, "budget_ms": budget,

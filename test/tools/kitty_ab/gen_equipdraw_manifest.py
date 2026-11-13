@@ -24,8 +24,8 @@ Arms are PAIRED on seed: job i of every arm is the same shuffle, so a difference
 import json
 import sys
 
-DECK = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
-PROF = "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+DECK = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod"
+PROF = "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
 
 MC = "MTG_METALCRAFT_CREDIT"
 BP = "MTG_EQUIP_DRAW_BP"

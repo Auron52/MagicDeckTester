@@ -292,7 +292,7 @@ smoke + regression keys re-accepted, since the leaf changes play (the overnight 
 periodic run) -- is the next step. (There is no phase F any more: the mulligan-generation setting is
 screened by `mullgen.sh run`, once per deck, USER 2026-10-18. A sidecar's `value_play` REPLACES the
 profile's generation keys wholesale, so that stage copies a profile-screened setting and K into a newly
-installed sidecar rather than re-screening.) Soldiers 2026-10-08 (`docs/design/analysis-soldiers.md`) is the
+installed sidecar rather than re-screening.) Soldiers 2026-10-08 (`docs/design/analysis-Soldiers.md`) is the
 hand-run precedent; Prevent Damage 2026-10-11 is the trade case (-0.036 t at 1.21x core-s).
 
 **Phase E also screens the leafless shapes, and E.5 can adopt one instead of the model** (USER 2026-10-14:

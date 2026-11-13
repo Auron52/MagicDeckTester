@@ -1008,7 +1008,7 @@ Remaining items whichever way that goes:
 ## A SIBLING defect found in the same sweep, also engine-wide, also open
 
 Recorded here so it is findable outside a per-deck ledger; the full repro and the ruled-out levers are
-in [`analysis-SelesnyaLifegain.md`](analysis-SelesnyaLifegain.md) under "a FALSE `drops` label".
+in [`analysis-Selesnya Lifegain.md`](analysis-Selesnya%20Lifegain.md) under "a FALSE `drops` label".
 
 **The rollout's payer under-realises a line whose payment depends on a scaled dork GROWING mid-turn.**
 Priest of Titania's `mana_per_creature_count_all` counts Elves on the battlefield, so on a board of

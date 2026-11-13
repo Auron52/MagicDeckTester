@@ -50,7 +50,7 @@ GameState Fresh(int opp_life)
     s.players[1].life     = opp_life;
     s.players[0].lands_played_this_turn = 1;
     s.m_provider = &SelectDecisionProvider(DeckLoader::LoadFromFile(
-        ResolveHeuristicDefaultsPath("decks/Vampires/Vampire.cod")));
+        ResolveHeuristicDefaultsPath("decks/Vampires/Vampires.cod")));
     for (int k = 0; k < 20; ++k)
     {
         Card c = Def("Swamp").card;

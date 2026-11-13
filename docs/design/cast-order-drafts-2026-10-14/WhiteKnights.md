@@ -11,7 +11,7 @@ Provider: `WhiteKnightsProvider : KnightsProvider : VialProvider`. Single main (
 - The deck runs the USER-agreed Knights order: `MTG_KNIGHTS_ORDER`, default ON (`DecisionProviders.cpp:7675`).
   - Neither Knight provider overrides `CastOrderRank`, so it comes in through `VialProvider::CastOrderRank`.
   - The USER reviewed that order for the *Knights* list (2026-08-19). It was never reviewed for this list.
-  - The planned "does it transfer" measurement (`analysis-WhiteKnights.md:245-247`, "5e") was never recorded.
+  - The planned "does it transfer" measurement (`analysis-White Knights.md:245-247`, "5e") was never recorded.
 - Live here: Worthy Knight at 8. The Contender clause is moot, because the current list has no Contender.
 - Everything Knights lacks sits on generic tiers: Silverblade, Sol Ring, Kinsbaile, Hero, Accorder, Basri, and the
   removal.
@@ -86,7 +86,7 @@ The land drop goes FIRST, because the deck has no draw. Remote Farm enters tappe
      precedent.
    - The conditional rank is the canonical first try, and the only answer at d0.
 4. **The second main is an open, un-ruled main-phase call, and its measurement is stale.**
-   - `analysis-WhiteKnights.md:818-858` forced a second main (`MTG_FORCE_USES_M2`): -0.0072 turns at d0, with 42
+   - `analysis-White Knights.md:818-858` forced a second main (`MTG_FORCE_USES_M2`): -0.0072 turns at d0, with 42
      games earlier and 0 later out of 6000, at the cost of a doubled per-turn solve.
    - It was recorded as "the decision is the user's". I can find no USER answer.
    - It was measured on 09-26 on the v1 list (3 Contender, 3 Vial, Lightning Greaves, Valiant Knight, 1

@@ -29,7 +29,7 @@ say(){ echo "[$(stamp)] $*" | tee -a "$CHAIN"; }
 # Cheap decks first so signal arrives early; TH (search-heavy) last.
 ORDER=(Slivers Knights treasure_hunt)
 declare -A DECKF=(
-  [treasure_hunt]=decks/treasure_hunt/treasure_hunt.txt
+  [treasure_hunt]="decks/Treasure Hunt/Treasure Hunt.txt"
   [Slivers]=decks/Slivers/Slivers.txt
   [Knights]=decks/Knights/Knights.cod
 )

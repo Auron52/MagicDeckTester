@@ -35,8 +35,8 @@ RECIPE="MTG_BP_SITE3=1 MTG_BP_SITE3_DEFER=1 MTG_BP_NO_GREEDY_CONT=1 MTG_BP_NODE=
 # deck key -> "decklist|profile". Mirrors test/regression_cases.sh's DECK_FILE/DECK_PROF.
 DECKS=(
  "slivers|decks/Slivers/Slivers.txt|decks/Slivers/Slivers.profile.json"
- "burn|decks/burn/burn.txt|decks/burn/burn.profile.json"
- "th|decks/treasure_hunt/treasure_hunt.txt|decks/treasure_hunt/treasure_hunt.profile.json"
+ "burn|decks/Burn/Burn.txt|decks/Burn/Burn.profile.json"
+ "th|decks/Treasure Hunt/Treasure Hunt.txt|decks/Treasure Hunt/Treasure Hunt.profile.json"
  "knights|decks/Knights/Knights.cod|decks/Knights/Knights.profile.json"
  "antilife|decks/Anti-Lifegain/Anti-Lifegain.cod|decks/Anti-Lifegain/Anti-Lifegain.profile.json"
  "hinata|decks/Hinata/Hinata.cod|decks/Hinata/Hinata.profile.json"
@@ -45,10 +45,10 @@ DECKS=(
  "goblins|decks/Goblins/Goblins.cod|decks/Goblins/Goblins.profile.json"
  "creature_giving|decks/Creature Giving/Creature Giving.cod|decks/Creature Giving/Creature Giving.profile.json"
  "mirrorwing|decks/Mirrorwing Dragon/Mirrorwing Dragon.cod|decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
- "fivecolour|decks/FiveColour/FiveColour.cod|decks/FiveColour/FiveColour.profile.json"
- "stompy|decks/StompySurprise/StompySurprise.cod|decks/StompySurprise/StompySurprise.profile.json"
+ "fivecolour|decks/Five Colour/Five Colour.cod|decks/Five Colour/Five Colour.profile.json"
+ "stompy|decks/Stompy Surprise/Stompy Surprise.cod|decks/Stompy Surprise/Stompy Surprise.profile.json"
  "minotaur|decks/Minotaur/Minotaur.cod|decks/Minotaur/Minotaur.profile.json"
- "kitty|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+ "kitty|decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod|decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
  "dragons|decks/Dragons/Dragons.cod|decks/Dragons/Dragons.profile.json"
 )
 

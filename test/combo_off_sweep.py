@@ -79,9 +79,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MTG = os.environ.get("MTG_BIN", os.path.join(ROOT, "build/Release/mtg"))
 if not os.path.exists(MTG) and os.path.exists(MTG + ".exe"):
     MTG += ".exe"
-DECK = "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod"
+DECK = "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod"
 DECK_ABS = os.path.join(ROOT, DECK)
-REFDIR = os.path.join(ROOT, "references/EldraziDisplacerFlicker")
+REFDIR = os.path.join(ROOT, "references/Eldrazi_Displacer_Flicker")
 OUTDIR = os.path.join(ROOT, "logs/combo_off_sweep")
 
 # ---------------------------------------------------------------------------------------------

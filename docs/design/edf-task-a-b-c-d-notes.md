@@ -115,7 +115,7 @@ play, exactly like B.
 ## Task D -- seed 1 T3 "Trace of Abundance on Aether Hub via Conservatory seems rejected"
 
 Answer: **not a new payment bug -- almost certainly the same C-class collapse/inexpressibility**,
-per the analysis doc's own attribution (`docs/design/analysis-EldraziDisplacerFlicker.md` items
+per the analysis doc's own attribution (`docs/design/analysis-Eldrazi Displacer Flicker.md` items
 1 and 2 are explicitly tied to the same root cause: an Aura targeting a land already in play,
 Aether Hub, is exactly the shape C fixes).
 

@@ -2255,7 +2255,7 @@ here and its Ir count is deterministic and load-immune** -- `SubsetPayableWithFi
 in TurnSolver.cpp says so explicitly ("wall clock on this host drifted ~2x within one session, which
 is enough to make a neutral change read as a 1.9x win... callgrind's Ir is deterministic and
 load-immune"), and `docs/design/accelerant-ordering-and-self-funding.md`,
-`analysis-EldraziDisplacerFlicker.md` and `code-pruning-and-refactor-backlog.md` all A/B with it.
+`analysis-Eldrazi Displacer Flicker.md` and `code-pruning-and-refactor-backlog.md` all A/B with it.
 The cost is ~90x wall, so it wants a SMALL probe, not a 14 s one. The right reading of this section
 is therefore: no PMU, wall clock untrustworthy under host load -- **so reach for callgrind Ir**, not
 for more repetitions.

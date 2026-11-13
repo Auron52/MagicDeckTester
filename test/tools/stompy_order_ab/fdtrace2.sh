@@ -10,8 +10,8 @@ import json, os, sys
 gi, out, hg = int(sys.argv[1]), sys.argv[2], sys.argv[3]
 WT = "/workspaces/MagicDeckTester/.claude/worktrees/agent-a9d0a1cbf3361f164"
 for arm, fl in (("A", {"MTG_HOLD_RELEASE_YIELD": True, "MTG_STOMPY_ORDER": True}), ("B", None)):
-    j = {"name": "stompy.%s.g%d" % (arm, gi), "deck": WT + "/decks/StompySurprise/StompySurprise.cod",
-         "profile": WT + "/decks/StompySurprise/StompySurprise.profile.json", "games": 1,
+    j = {"name": "stompy.%s.g%d" % (arm, gi), "deck": WT + "/decks/Stompy Surprise/Stompy Surprise.cod",
+         "profile": WT + "/decks/Stompy Surprise/Stompy Surprise.profile.json", "games": 1,
          "seed": 10900001 + gi, "game_index": gi}
     if hg:
         j.update({"starting_life": 30, "opponent_heads": 2})

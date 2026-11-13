@@ -26,7 +26,7 @@ for spec in "${GAMES[@]}"; do
     d="$OUT/${gi}_${arm}"
     mkdir -p "$d"
     # shellcheck disable=SC2086
-    env -C "$WT" ${ARM[$arm]} MTG_PGO=0 "$BIN" decks/burn/burn.txt --profile decks/burn/burn.profile.json \
+    env -C "$WT" ${ARM[$arm]} MTG_PGO=0 "$BIN" decks/Burn/Burn.txt --profile decks/Burn/Burn.profile.json \
       --games 1 --seed "$seed" --game-index "$gi" --depth 0 --budget-ms 0 --ignore-play-profile \
       --log-dir "$d" > "$d.out" 2>&1
   done

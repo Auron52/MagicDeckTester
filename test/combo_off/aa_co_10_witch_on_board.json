@@ -3,7 +3,7 @@
     "LOOP-WITCH: Seedcradle Witch {2}{G}{W} per untap (+3/+3), X = 6 from Nourish nets 2; the Alchemist's taps",
     "alternate green and white. Stroke finishes."
   ],
-  "deck": "decks/AccomplishedAlchemist/AccomplishedAlchemist.cod",
+  "deck": "decks/Accomplished Alchemist/Accomplished Alchemist.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

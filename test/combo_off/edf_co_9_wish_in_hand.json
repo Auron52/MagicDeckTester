@@ -9,7 +9,7 @@
     "The Emiel outlet is what makes it reachable at all: the wish costs green, the deck-out costs",
     "colourless, and the Displacer would have eaten the only pip a pass produces."
   ],
-  "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+  "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
   "env": { "MTG_HUMAN_PLAY": "1" },
   "turn": 4,
   "on_the_play": false,

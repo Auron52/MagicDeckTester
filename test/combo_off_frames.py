@@ -25,7 +25,7 @@ import json, os, re, subprocess, sys, glob, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MTG  = os.environ.get("MTG_BIN", os.path.join(ROOT, "build/Release/mtg"))
-DECK = os.path.join(ROOT, "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod")
+DECK = os.path.join(ROOT, "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod")
 # The play logs live in the MAIN checkout (logs/ is gitignored, so a worktree has none of its own).
 LOGDIRS = [os.path.join(ROOT, "logs/play"), "/workspaces/MagicDeckTester2/logs/play"]
 
@@ -77,7 +77,7 @@ def build_fixture(dec, turn_default=4):
     perms.sort(key=lambda e: 1 if "equips" in e else 0)
     hand = [c["name"] for c in (me.get("hand") or []) if c.get("name")]
     return {
-        "deck": "decks/EldraziDisplacerFlicker/EldraziDisplacerFlicker.cod",
+        "deck": "decks/Eldrazi Displacer Flicker/Eldrazi Displacer Flicker.cod",
         "env": {"MTG_HUMAN_PLAY": "1"},
         "turn": turn,
         "on_the_play": False,
@@ -123,7 +123,7 @@ def main():
         for p in sorted(glob.glob(os.path.join(d, "claude_s*.json"))):
             frames += frames_from_session(p)
         for p in sorted(glob.glob(os.path.join(d, "rejections", "*.json"))):
-            if "EldraziDisplacerFlicker" not in os.path.basename(p):
+            if not any(s in os.path.basename(p) for s in ("EldraziDisplacerFlicker", "Eldrazi_Displacer_Flicker")):
                 continue
             frames += frames_from_rejection(p)
     if want:

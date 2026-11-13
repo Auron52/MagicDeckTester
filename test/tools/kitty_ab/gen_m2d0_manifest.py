@@ -33,10 +33,10 @@ DECKS = {
     # name: (deck, profile, games per cell)
     "al":    ("decks/Anti-Lifegain/Anti-Lifegain.cod",
               "decks/Anti-Lifegain/Anti-Lifegain.profile.json", 5000),
-    "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
-              "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json", 5000),
-    "5c":    ("decks/FiveColour/FiveColour.cod",
-              "decks/FiveColour/FiveColour.profile.json", 2000),
+    "kitty": ("decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod",
+              "decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json", 5000),
+    "5c":    ("decks/Five Colour/Five Colour.cod",
+              "decks/Five Colour/Five Colour.profile.json", 2000),
 }
 
 ARMS = {

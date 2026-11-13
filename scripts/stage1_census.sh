@@ -36,11 +36,11 @@ ARM_ORDER=(base node d56 node0 d560)
 # the rest are controls that must come back byte-identical between `node` and `d56`.
 DECKS=(
  "mirrorwing|decks/Mirrorwing Dragon/Mirrorwing Dragon.cod|decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
- "kitty|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
+ "kitty|decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.cod|decks/Kitty Equipment/v1-kemba-balan/Kitty Equipment.profile.json"
  "hinata|decks/Hinata/Hinata.cod|decks/Hinata/Hinata.profile.json"
- "th|decks/treasure_hunt/treasure_hunt.txt|decks/treasure_hunt/treasure_hunt.profile.json"
+ "th|decks/Treasure Hunt/Treasure Hunt.txt|decks/Treasure Hunt/Treasure Hunt.profile.json"
  "auras|decks/Auras/Auras.cod|decks/Auras/Auras.profile.json"
- "burn|decks/burn/burn.txt|decks/burn/burn.profile.json"
+ "burn|decks/Burn/Burn.txt|decks/Burn/Burn.profile.json"
  "dragonstorm|decks/Dragonstorm/Dragonstorm.cod|decks/Dragonstorm/Dragonstorm.profile.json"
  "antilife|decks/Anti-Lifegain/Anti-Lifegain.cod|decks/Anti-Lifegain/Anti-Lifegain.profile.json"
  "creature_giving|decks/Creature Giving/Creature Giving.cod|decks/Creature Giving/Creature Giving.profile.json"

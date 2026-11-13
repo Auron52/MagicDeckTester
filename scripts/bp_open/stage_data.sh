@@ -8,7 +8,7 @@ D=/workspaces/MagicDeckTester/build/scratch/bp_open/data
 mkdir -p "$D/src/cards/data" "$D/decks"
 cp -f "$W/src/cards/data/cards.json" "$D/src/cards/data/cards.json"
 for deck in "Hinata" "Creature Giving" "Fluctuator" "Melira Pod" "Mirrorwing Dragon" "Prevent Damage" "Pirates" \
-            "treasure_hunt" "Bruna" "Auras" "CritterLifegain" "Dragonstorm" "Goblins"; do
+            "Treasure Hunt" "Bruna" "Auras" "Critter Lifegain" "Dragonstorm" "Goblins"; do
   mkdir -p "$D/decks/$deck"
   for f in "$W/decks/$deck"/*; do
     [ -f "$f" ] || continue

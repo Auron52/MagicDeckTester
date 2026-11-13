@@ -1,7 +1,7 @@
 # The passive opponent's library, hand, and draw step
 
 **Status: CLOSED 2026-09-02** (`src/core/OpponentDeck.h`). Recorded 2026-09-02 from a user
-observation while diagnosing [analysis-EldraziDisplacerFlicker.md](analysis-EldraziDisplacerFlicker.md);
+observation while diagnosing [analysis-Eldrazi Displacer Flicker.md](analysis-Eldrazi%20Displacer%20Flicker.md);
 implemented the same day. The history below is kept because the *shape* of the bug — and the two
 traps it set for whoever fixed it — is the reusable part.
 

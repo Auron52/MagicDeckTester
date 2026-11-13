@@ -349,7 +349,7 @@ and the outlet is offered in its TRAILING form (`Kind::SacCreatureOutlet`, victi
 activation of the pass (`TurnSolver::DeferSameLineSacs`). Its mana, if any, floats after the casts and
 is credited to nothing, so no phantom. The motivating line (FungusB: cast Slimefoot, `{4}` Saproling,
 Utopia Mycon eats it for Slimefoot's last point of damage) and the full diagnosis are in
-`docs/design/analysis-soldiers.md`, Rulings A, "Finding -- FIXED".
+`docs/design/analysis-Soldiers.md`, Rulings A, "Finding -- FIXED".
 
 ## OPEN — the fusion fires inside a line the human DECLARED (user ruling, 2026-09-25)
 
