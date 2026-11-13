@@ -909,6 +909,7 @@ enum Slot : int
     EXALTED_DS_PROJECTION,    // MTG_EXALTED_DS_PROJECTION  2026-11-13 modelling fix: the attack projection (PendingAttackDamageImpl) folds a lone attacker's exalted +E into its power as the combat core does, so a double striker (Temur Battle Rage) deals it in both steps and a Jitte bearer's closed form sees it. Default ON; =0 -> the old once-only +E
     PD_FLOAT_FLUSH,           // MTG_PD_FLOAT_FLUSH  item 10 (mana-clean, Prevent Damage APPLY-DROP-ORDER s30026406 T5 {Beseech + Rolling Earthquake X=1}): with a Tamanoa out, a payment's pain taps are realised as mana abilities activated ONE AT A TIME BEFORE the cast (CR 605.3a, mana stays floating, CR 500.4), each Tamanoa trigger resolving before the next tap -- so only the largest SINGLE tap has to fit under our life, not the sum. DamageEvents.h FlushDamageEvents (sequential realisation when the batch would be lethal) + PaymentPainSafe (max single tap). Default ON; =0 -> a payment's pain is one batch, checked as a sum
     PD_LINE_HOLD_SEARCH,      // MTG_PD_LINE_HOLD_SEARCH  item 10 (mana-clean, Prevent Damage APPLY-DROP s30027719 T6 {Dina + Beseech BBB} harmful, s30029561 T6 {Tamanoa + Beseech BBB} useful): when every SINGLE-source hold of a line repair still strands a later cast, search hold SETS breadth-first (a child holds one more source its stranding parent tapped; depth <= 4, <= 48 retries; dmgev::PainAwarePay, both modes; same acceptance as the single pass). Default ON; =0 -> single holds only
+    PREPAY_WILD_TRUE,         // MTG_PREPAY_WILD_TRUE  item A (mana-clean, Gods s30018016/s30018089 ORACLE-GAP; USER 2026-11-13 "we should fix this 'wild' mana issue"): the whole-turn prepay's generic funding booked `wild` keeps its TRUE colour (GameState::prepay_wild_true) unless the source could make any colour, so a pip OUTSIDE the bill can no longer pay {R} with a {U}-only source's mana (CR 106.1b). Default ON; =0 -> any `wild` pays any colour pip
     COUNT
 };
 
@@ -1762,6 +1763,7 @@ inline const char* Name(int slot)
         "MTG_EXALTED_DS_PROJECTION",
         "MTG_PD_FLOAT_FLUSH",
         "MTG_PD_LINE_HOLD_SEARCH",
+        "MTG_PREPAY_WILD_TRUE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

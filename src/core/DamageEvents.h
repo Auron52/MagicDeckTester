@@ -729,6 +729,7 @@ struct PayAttemptSnap
     std::vector<Card>      gy;
     ManaPool fm, fcm, fbm, av;   // general, creature-only and big-spell-only floats
     int  fhc = 0;                // Generator Servant's haste tag (a subset count of fm.colorless)
+    GameState::PrepayWildTrue pwt;   // MTG_PREPAY_WILD_TRUE record (restored with the float)
     int  life_a = 0, life_o = 0, energy = 0;
     bool oll = false;
     void Take(const GameState& s, const ManaPool* available)
@@ -736,6 +737,7 @@ struct PayAttemptSnap
         const int a = s.active_player_index;
         bf = s.battlefield; gy = s.players[a].graveyard; fm = s.floating_mana;
         fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana; fhc = s.floating_haste_c;
+        pwt = s.prepay_wild_true;
         if (available) { av = *available; }
         life_a = s.players[a].life; life_o = s.players[1 - a].life;
         energy = s.players[a].energy_counters; oll = s.opponent_lost_life_this_turn;
@@ -745,6 +747,7 @@ struct PayAttemptSnap
         const int a = s.active_player_index;
         s.battlefield = bf; s.players[a].graveyard = gy; s.floating_mana = fm;
         s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm; s.floating_haste_c = fhc;
+        s.prepay_wild_true = pwt;
         if (available) { *available = av; }
         s.players[a].life = life_a; s.players[1 - a].life = life_o;
         s.players[a].energy_counters = energy; s.opponent_lost_life_this_turn = oll;

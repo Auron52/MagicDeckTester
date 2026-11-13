@@ -4787,6 +4787,31 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             } _restricted_big_path(BigSpellOnlySource(def->params));
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
+            // ANY-COLOUR LABEL (Permanent::mana_flex; the whole-turn prepay's MTG_PREPAY_WILD_TRUE booking): this
+            // tap's OWN units (`next` minus `floating`, before any land Aura's bonus) are any-colour mana iff the
+            // mode offered every colour -- `produces` here is already stripped of what this payment may not use
+            // (a Cavern's colours for a noncreature spell, a spent-out Aether Hub) -- and a counter-gated source
+            // (Vivid Creek, Tendo Ice Bridge) paid its counter for it. One colour only (a domain / bundle /
+            // any-combination source's units are each fixed, so they are not labelled).
+            if (t_bt_flex_collect && out_full_pool != nullptr)
+            {
+                std::uint8_t lab = 0;
+                unsigned have = 0;
+                for (Color pc : produces) { if (static_cast<int>(pc) < 5) { have |= 1u << static_cast<int>(pc); } }
+                const bool counter_gated = def->params.enters_with_mana_counters > 0
+                                        && !def->params.mana_counters_are_mining;
+                if (have == 0x1Fu && (!counter_gated || mana_counter_spend)
+                    && !def->params.produces_any_combination && !def->params.domain_mana)
+                {
+                    const int d[5] = { next.white - floating.white, next.blue - floating.blue,
+                                       next.black - floating.black, next.red - floating.red,
+                                       next.green - floating.green };
+                    int k = 0, col = -1, n = 0;
+                    for (int c = 0; c < 5; ++c) { if (d[c] > 0) { ++k; col = c; n = d[c]; } }
+                    if (k == 1) { lab = BtFlexPack(n, col); }
+                }
+                state.battlefield[i].mana_flex = lab;
+            }
             // CRACK FLAG on the BACKTRACKER path (see CommitPaySacSacrifices). A pay-sac source is
             // one of this DFS's candidates -- the two candidate-collection loops above admit it
             // explicitly (`|| IsPaySacSource(*d)`, §2a) -- so the solver cracks Treasures here,
@@ -5488,6 +5513,8 @@ struct ManaCacheTap
     // events are per tap (Dina drains per event). Always 0 on an unarmed board. The pain it records
     // depends on Purity and on the pay-with-pain mode, both hashed into the key when armed.
     std::uint8_t dmg_mark;
+    // The tap's any-colour label (Permanent::mana_flex), replayed onto the hit (0 unless the prepay collects).
+    std::uint8_t flex = 0;
 };
 // SCALING sources -- domain (Faeburrow Elder / Bloom Tender: one mana of each colour among ALL your
 // permanents) and scaled (Three Tree City: N of one colour, N = creatures you control). Both read
@@ -6619,6 +6646,10 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                                              out_leftover != nullptr, out_full_pool != nullptr, floating,
                                              mk1, mk2, mc_canon ? &mc_desc : nullptr,
                                              &mc_ord, &mc_nsrc);
+    // An entry carries each tap's any-colour label (Permanent::mana_flex) only if it was solved while the prepay was
+    // collecting them (t_bt_flex_collect): key the two apart, so a collecting hit always replays a real label.
+    if (mc_keyed && t_bt_flex_collect && out_full_pool != nullptr)
+    { mk1 ^= 0x5F1E7A6B3C2D4E91ull; mk2 ^= 0xA3C59E1D7B6F2804ull; }
     const bool mc_fits = s_mc_bf_gate ? (state.battlefield.size() <= 64) : (mc_nsrc <= 64);
     const bool mc = mc_shape && mc_fits;
     if (!mc_fits) { mc_keyed = false; }
@@ -6794,6 +6825,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 Permanent& p = state.battlefield[idx];
                 p.tapped = true;
                 p.mana_tap_mark |= t.dmg_mark;   // Prevent Damage (0 unless armed)
+                if (t_bt_flex_collect && out_full_pool != nullptr) { p.mana_flex = t.flex; }   // the prepay's label
                 const CardDefinition* td = CardDatabase::Instance().LookupCached(p.card);
                 if (!td) { continue; }
                 // CRACK FLAG on the REPLAY path. A cache hit re-taps the stored tap-set here rather
@@ -7083,7 +7115,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                         slot = 0;                                        // ORDINAL position in the source list
                         for (int q = 0; q < i; ++q) { if (mc_desc[q] != 0ull) { ++slot; } }
                     }
-                    e.taps.push_back({ desc, slot, burn, p.mana_tap_mark });
+                    e.taps.push_back({ desc, slot, burn, p.mana_tap_mark, t_bt_flex_collect ? p.mana_flex : std::uint8_t{0} });
                 }
             }
         }

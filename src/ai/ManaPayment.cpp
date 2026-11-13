@@ -1789,6 +1789,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     const ManaPool big_reserve_pre = state.floating_bigspell_mana;
     const int      haste_reserve_pre = state.floating_haste_c;   // Generator Servant's tag (restored with the float)
     const std::uint8_t prepay_c_pre = state.floating_prepay_c;   // the prepay's kept {C} (restored with the float)
+    // The prepay's colour-restricted `wild` (GameState::prepay_wild_true; MTG_PREPAY_WILD_TRUE): each float drain
+    // below reads and maintains its pool's record, so a pip outside the bill cannot spend another colour's unit.
+    const GameState::PrepayWildTrue pwt_pre = state.prepay_wild_true;   // restored with the float
+    int pwt_gen[5], pwt_cre[5];
+    const bool pwt_gen_live = PrepayWildTrueLoad(state, 0, pwt_gen);
+    const bool pwt_cre_live = PrepayWildTrueLoad(state, 1, pwt_cre);
+    const bool pwt_enforce  = PrepayWildTrueOn();
+    const int  pwt_audit0   = PrepayWildAuditLevel() >= 2
+        ? static_cast<int>(g_pwt_violation_units.load(std::memory_order_relaxed) + g_pwt_refused_units.load(std::memory_order_relaxed)) : 0;
     ManaCost cost = cost_in;
     // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
     // first is never worse); a noncreature payment never touches it. Empty for every deck without a
@@ -1806,7 +1815,11 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         const int cap = cpip_deck ? std::min(prepay_c, state.floating_creature_mana.colorless)
                                   : state.floating_creature_mana.colorless;
         GenericCFirstScope _gcf(cap);
-        SpendFloatingTowardCost(state.floating_creature_mana, cost);
+        {
+            WildTrueScope _wt(pwt_cre_live ? pwt_cre : nullptr, pwt_enforce);
+            SpendFloatingTowardCost(state.floating_creature_mana, cost);
+        }
+        if (pwt_cre_live) { PrepayWildTrueStore(state, 1, pwt_cre); }
         prepay_c -= cap - t_generic_c_first;
     }
     // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
@@ -1833,8 +1846,26 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         const int cap = cpip_deck ? std::min(prepay_c, untagged_c) : untagged_c;
         {
             GenericCFirstScope _gcf(cap);
-            SpendFloatingTowardCost(state.floating_mana, cost);
+            {
+                WildTrueScope _wt(pwt_gen_live ? pwt_gen : nullptr, pwt_enforce);
+                SpendFloatingTowardCost(state.floating_mana, cost);
+            }
+            if (pwt_gen_live) { PrepayWildTrueStore(state, 0, pwt_gen); }
             prepay_c -= cap - t_generic_c_first;
+        }
+        // MTG_PREPAY_WILD_AUDIT=2: one line per payment that met a wrong-colour unit (violation or refusal).
+        if (PrepayWildAuditLevel() >= 2 && g_real_resolution && (pwt_gen_live || pwt_cre_live))
+        {
+            const int now = static_cast<int>(g_pwt_violation_units.load(std::memory_order_relaxed)
+                                           + g_pwt_refused_units.load(std::memory_order_relaxed));
+            if (now != pwt_audit0)
+            {
+                std::fprintf(stderr, "[pwt] T%d phase=%d cost=W%dU%dB%dR%dG%dC%d+%d creature=%d units=%d %s gen=%d%d%d%d%d\n",
+                             state.turn_number, static_cast<int>(state.phase), cost_in.white, cost_in.blue,
+                             cost_in.black, cost_in.red, cost_in.green, cost_in.colorless, cost_in.generic,
+                             for_creature ? 1 : 0, now - pwt_audit0, pwt_enforce ? "REFUSED" : "ILLEGAL",
+                             pwt_gen[0], pwt_gen[1], pwt_gen[2], pwt_gen[3], pwt_gen[4]);
+            }
         }
         if (cpip_deck && state.floating_prepay_c != 0) { SetPrepayKeptC(state, prepay_c); }
         cost.generic += fgh;
@@ -1860,6 +1891,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         state.floating_bigspell_mana = big_reserve_pre;
         state.floating_haste_c       = haste_reserve_pre;
         state.floating_prepay_c      = prepay_c_pre;
+        state.prepay_wild_true       = pwt_pre;
         return false;
     }
     // Publish this payment's coloured need (net of floating) for the sole-colour-provider rank
@@ -4039,6 +4071,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.floating_bigspell_mana       = big_reserve_pre;
     state.floating_haste_c             = haste_reserve_pre;
     state.floating_prepay_c            = prepay_c_pre;
+    state.prepay_wild_true             = pwt_pre;
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
@@ -8983,6 +9016,7 @@ struct PayRefineSnap
     std::vector<int>         charge;
     ManaPool                 fm, fcm, fbm;
     int                      fhc = 0;
+    GameState::PrepayWildTrue pwt;   // MTG_PREPAY_WILD_TRUE record (restored with the float)
     ManaPool                 av;
     int                      life = 0, opp_life = 0, energy = 0;
     bool                     oll = false;
@@ -8997,6 +9031,7 @@ struct PayRefineSnap
         for (std::size_t i = 0; i < s.battlefield.size(); ++i) { charge[i] = s.battlefield[i].charge_counters; }
         fm = s.floating_mana; fcm = s.floating_creature_mana; fbm = s.floating_bigspell_mana;
         fhc = s.floating_haste_c;
+        pwt = s.prepay_wild_true;
         av = available != nullptr ? *available : ManaPool{};
         life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
         oll = s.opponent_lost_life_this_turn;
@@ -9012,6 +9047,7 @@ struct PayRefineSnap
         for (std::size_t i = 0; i < s.battlefield.size() && i < charge.size(); ++i) { s.battlefield[i].charge_counters = charge[i]; }
         s.floating_mana = fm; s.floating_creature_mana = fcm; s.floating_bigspell_mana = fbm;
         s.floating_haste_c = fhc;
+        s.prepay_wild_true = pwt;
         if (available != nullptr) { *available = av; }
         s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
         s.opponent_lost_life_this_turn = oll;
@@ -10276,6 +10312,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               fbm_snap = state.floating_bigspell_mana;
         const int                    fhc_snap = state.floating_haste_c;
+        const GameState::PrepayWildTrue pwt_snap = state.prepay_wild_true;   // MTG_PREPAY_WILD_TRUE record
         const ManaPool               av_snap = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -10293,6 +10330,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.floating_creature_mana       = fcm_snap;
             state.floating_bigspell_mana       = fbm_snap;
             state.floating_haste_c             = fhc_snap;
+            state.prepay_wild_true             = pwt_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
@@ -10339,6 +10377,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
                                  [&](unsigned x, unsigned y) { return score[x] < score[y]; });
             }
         }
+        WildTrueHybridScope _wth(&cost_in);   // MTG_PREPAY_WILD_TRUE: the drain reads the pairs (see the scope)
         for (unsigned i = 0; i < n_assign; ++i)
         {
             if (i > 0) { restore(); }
@@ -10383,6 +10422,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               fbm_snap = state.floating_bigspell_mana;
         const int                    fhc_snap = state.floating_haste_c;
+        const GameState::PrepayWildTrue pwt_snap = state.prepay_wild_true;   // MTG_PREPAY_WILD_TRUE record
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();
@@ -10398,6 +10438,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.floating_creature_mana       = fcm_snap;
             state.floating_bigspell_mana       = fbm_snap;
             state.floating_haste_c             = fhc_snap;
+            state.prepay_wild_true             = pwt_snap;
             if (available) { *available = av_snap; }
             state.players[a].graveyard         = gy_snap;
             state.players[a].life              = la;
@@ -10477,6 +10518,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const ManaPool               fcm_snap = state.floating_creature_mana;
         const ManaPool               fbm_snap = state.floating_bigspell_mana;
         const int                    fhc_snap = state.floating_haste_c;
+        const GameState::PrepayWildTrue pwt_snap = state.prepay_wild_true;   // MTG_PREPAY_WILD_TRUE record
         const ManaPool               av_snap  = available ? *available : ManaPool{};
         PaySnapScratch<Card>         _gy_snap_scratch;
         std::vector<Card>&           gy_snap = _gy_snap_scratch.Buf();       // Deathrite exile
@@ -10494,6 +10536,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         state.floating_creature_mana       = fcm_snap;
         state.floating_bigspell_mana       = fbm_snap;
         state.floating_haste_c             = fhc_snap;
+        state.prepay_wild_true             = pwt_snap;
         if (available) { *available = av_snap; }
         state.players[a].graveyard         = gy_snap;
         state.players[a].life              = la;

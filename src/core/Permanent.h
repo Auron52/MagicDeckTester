@@ -557,7 +557,13 @@ struct Permanent
     // battlefield snapshot, and ZERO at every decision boundary (a flush clears it;
     // MTG_DMG_EVENT_VERIFY asserts it). Never written while dmg_events_armed is false.
     uint8_t   mana_tap_mark          = 0;
-    bool      echo_resolved        = false; // Echo (Mogg War Marshal, Stingscourger; CardParams::echo_cost).
+    // ANY-COLOUR LABEL of this permanent's last tap inside a whole-turn prepay solve (MTG_PREPAY_WILD_TRUE;
+    // BtFlexPack, SpellEffects.h): how many of the units it made, and in which colour the solve booked them, are
+    // mana of ANY colour (the tapped mode could make every colour). SCRATCH: written only while the prepay collects
+    // (t_bt_flex_collect) and read only by that same call, for the permanents it newly tapped -- whose label its
+    // own solve (or the mana cache's replay of it) has just written. Never read anywhere else, so never folded.
+    uint8_t   mana_flex              = 0;
+    bool      echo_resolved       = false; // Echo (Mogg War Marshal, Stingscourger; CardParams::echo_cost).
                                             // "At the beginning of your upkeep, if this came under your
                                             // control since your last upkeep, sacrifice it unless you pay
                                             // its echo cost." Instead of flagging it at every enter site,

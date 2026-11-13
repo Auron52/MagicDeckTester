@@ -1564,6 +1564,133 @@ inline void SetPrepayKeptC(GameState& s, int n)
     s.floating_prepay_c_stamp = n > 0 ? PrepayCStampNow(s) : std::uint8_t{0xFF};
 }
 
+// ---- THE PREPAY'S COLOUR-RESTRICTED `wild` (GameState::prepay_wild_true; MTG_PREPAY_WILD_TRUE, CR 106.1b) ----
+// The prepay funds the bill's generic out of the solve's surplus colours and books it `wild`; a unit whose source
+// could NOT make any colour keeps its TRUE colour here, so it pays a generic pip or a pip of that colour only. The
+// bill itself is unchanged: its generic pips still drain `wild` first (the funding), exactly as before. Only a pip
+// OUTSIDE the bill that reached for a funding unit of another colour is refused (it pays from a tap instead) --
+// which is the CR 106.1b violation (Gods s30018016: Faithless Looting's flashback {R} paid with Vivid Creek's free
+// {U}). Default ON; =0 -> any `wild` pays any colour pip.
+inline bool PrepayWildTrueOn()
+{
+    static const bool env = EnvOn("MTG_PREPAY_WILD_TRUE", true);
+    return heurarm::Flag(heurarm::PREPAY_WILD_TRUE, env);
+}
+// DETECTOR (MTG_PREPAY_WILD_AUDIT=1; =2 also prints one line per event): counts colour pips paid from a `wild`
+// unit whose true colour is another one -- with the lever OFF that is the violation itself, with it ON it must read
+// 0 (the drain refuses them). Tracking runs only under the lever or the audit, so with both off nothing is recorded.
+inline int PrepayWildAuditLevel() { static const int v = EnvInt("MTG_PREPAY_WILD_AUDIT", 0); return v; }
+inline bool PrepayWildTrack() { return PrepayWildTrueOn() || PrepayWildAuditLevel() > 0; }
+inline std::atomic<long long> g_pwt_violation_units{0};   // colour pips a wrong-colour unit paid (lever off)
+inline std::atomic<long long> g_pwt_refused_units{0};     // colour pips the drain refused (lever on)
+inline std::atomic<long long> g_pwt_booked_units{0};      // restricted units the prepay booked
+inline std::atomic<long long> g_pwt_inconsistent{0};      // a record larger than its pool's wild at load
+inline std::atomic<long long> g_pwt_violation_real{0};    // ...of the violations, in the REAL game (g_real_resolution)
+inline std::atomic<long long> g_pwt_refused_real{0};      // ...of the refusals, in the REAL game
+// Per-game twins on the playing thread (reset by the batch runner at game start; MTG_PREPAY_WILD_AUDIT prints them
+// as a `[pwt-game] job= gi=` line, so one pooled batch attributes every event to its deck and game).
+inline thread_local long long t_pwt_game_viol = 0;
+inline thread_local long long t_pwt_game_refused = 0;
+struct PrepayWildAuditDump
+{
+    ~PrepayWildAuditDump()
+    {
+        if (PrepayWildAuditLevel() <= 0) { return; }
+        std::fprintf(stderr, "PREPAY_WILD_AUDIT lever=%d booked=%lld violations=%lld (real %lld) refused=%lld (real %lld) "
+                     "inconsistent=%lld %s\n",
+                     PrepayWildTrueOn() ? 1 : 0, g_pwt_booked_units.load(), g_pwt_violation_units.load(),
+                     g_pwt_violation_real.load(), g_pwt_refused_units.load(), g_pwt_refused_real.load(),
+                     g_pwt_inconsistent.load(),
+                     g_pwt_violation_units.load() == 0 ? "(CLEAN)" : "<-- a pip outside the bill paid with another colour's mana");
+    }
+};
+inline PrepayWildAuditDump g_prepay_wild_audit_dump;
+// The drain's view of the record for the reserve it is draining (5 ints, W,U,B,R,G): null = no record (every
+// caller but the shared payer and PayCostFromFloat). `t_wild_true_enforce` false = count only (lever off).
+inline thread_local int* t_wild_true = nullptr;
+// The payment's ORIGINAL cost while the payer tries its hybrid assignments one flat expansion at a time
+// (ExpandHybrids drops the pairs): the drain reads its pairs, so a {W} unit still pays an {R/W} pip expanded as {R}.
+inline thread_local const ManaCost* t_wild_true_hybrid = nullptr;
+struct WildTrueHybridScope
+{
+    const ManaCost* prev;
+    explicit WildTrueHybridScope(const ManaCost* c) : prev(t_wild_true_hybrid) { t_wild_true_hybrid = c; }
+    ~WildTrueHybridScope() { t_wild_true_hybrid = prev; }
+    WildTrueHybridScope(const WildTrueHybridScope&) = delete;
+    WildTrueHybridScope& operator=(const WildTrueHybridScope&) = delete;
+};
+inline thread_local bool t_wild_true_enforce = false;
+struct WildTrueScope
+{
+    int* prev_p; bool prev_e;
+    WildTrueScope(int* p, bool enforce) : prev_p(t_wild_true), prev_e(t_wild_true_enforce)
+    { t_wild_true = p; t_wild_true_enforce = enforce; }
+    ~WildTrueScope() { t_wild_true = prev_p; t_wild_true_enforce = prev_e; }
+    WildTrueScope(const WildTrueScope&) = delete;
+    WildTrueScope& operator=(const WildTrueScope&) = delete;
+};
+// Load the live record of one pool (0 = floating_mana, 1 = floating_creature_mana) into out[5]; false (out zeroed)
+// when there is none (stale stamp, nothing restricted, or tracking off). Clamped to the pool's wild: a record larger
+// than the wild means some path outside the scoped drains spent restricted units without saying which; the
+// largest colours are dropped first (counted, MTG_PREPAY_WILD_AUDIT).
+inline bool PrepayWildTrueLoad(const GameState& s, int which, int out[5])
+{
+    for (int i = 0; i < 5; ++i) { out[i] = 0; }
+    if (s.prepay_wild_true.stamp != PrepayCStampNow(s) || !PrepayWildTrack()) { return false; }
+    const std::uint8_t* r = which == 0 ? s.prepay_wild_true.gen : s.prepay_wild_true.cre;
+    const int wild = which == 0 ? s.floating_mana.wild : s.floating_creature_mana.wild;
+    int sum = 0;
+    for (int i = 0; i < 5; ++i) { out[i] = r[i]; sum += r[i]; }
+    if (sum == 0) { return false; }
+    if (sum > wild)
+    {
+        g_pwt_inconsistent.fetch_add(1, std::memory_order_relaxed);
+        while (sum > wild)
+        {
+            int best = 0;
+            for (int i = 1; i < 5; ++i) { if (out[i] > out[best]) { best = i; } }
+            --out[best]; --sum;
+        }
+    }
+    return sum > 0;
+}
+inline void PrepayWildTrueStore(GameState& s, int which, const int in[5])
+{
+    std::uint8_t* r = which == 0 ? s.prepay_wild_true.gen : s.prepay_wild_true.cre;
+    for (int i = 0; i < 5; ++i) { r[i] = static_cast<std::uint8_t>(std::max(0, std::min(255, in[i]))); }
+}
+// Restricted units still live in both pools (0 when stale): the main-phase key folds it (value-gated).
+inline std::uint64_t PrepayWildTrueKey(const GameState& s)
+{
+    if (!PrepayWildTrueOn()) { return 0; }
+    int g[5], c[5];
+    const bool a = PrepayWildTrueLoad(s, 0, g), b = PrepayWildTrueLoad(s, 1, c);
+    if (!a && !b) { return 0; }
+    std::uint64_t k = 0;
+    for (int i = 0; i < 5; ++i) { k = (k << 6) | static_cast<std::uint64_t>(g[i] & 63); }
+    for (int i = 0; i < 5; ++i) { k = (k << 6) | static_cast<std::uint64_t>(c[i] & 63); }
+    return k + 1;
+}
+
+// BACKTRACKER FLEX LABELS (Permanent::mana_flex; written by TapForCostBacktrackWorker's activate() and the mana
+// cache's replay while the whole-turn prepay collects them, read by that prepay for the permanents its solve tapped).
+// Every battlefield snapshot carries the label with `tapped`, so a rolled-back rung restores both together.
+inline thread_local bool t_bt_flex_collect = false;
+struct BtFlexCollectScope
+{
+    bool prev;
+    explicit BtFlexCollectScope(bool on) : prev(t_bt_flex_collect) { t_bt_flex_collect = on; }
+    ~BtFlexCollectScope() { t_bt_flex_collect = prev; }
+    BtFlexCollectScope(const BtFlexCollectScope&) = delete;
+    BtFlexCollectScope& operator=(const BtFlexCollectScope&) = delete;
+};
+// Pack: 0 = no any-colour unit; else (n << 3) | col, n in 1..31 units of colour col (0..4 = W,U,B,R,G).
+inline std::uint8_t BtFlexPack(int n, int col)
+{
+    if (n <= 0 || col < 0 || col > 4) { return 0; }
+    return static_cast<std::uint8_t>((std::min(n, 31) << 3) | col);
+}
+
 // HOLD BACK {C} INSIDE THE PAYMENT'S OWN LOCAL POOL (human play only).
 //
 // `g_hold_colorless_for_pips` above reorders SpendFloatingTowardCost, i.e. the mana that was already
@@ -7628,7 +7755,22 @@ inline bool PayCostFromFloat(GameState& state, const ManaCost& cost)
 {
     if (!state.floating_mana.CanPay(cost)) { return false; }
     ManaCost remaining = cost;
-    SpendFloatingTowardCost(state.floating_mana, remaining);
+    // The prepay's colour-restricted `wild` (GameState::prepay_wild_true): an activation paid from the float may
+    // not spend another colour's unit on a colour pip either. A refusal leaves the pip unpaid -> false, with the
+    // float restored (CanPay above is colour-blind to the record).
+    int pwt[5];
+    const bool pwt_live = PrepayWildTrueLoad(state, 0, pwt);
+    const ManaPool fm_pre = state.floating_mana;
+    const GameState::PrepayWildTrue pwt_pre = state.prepay_wild_true;
+    {
+        WildTrueScope _wt(pwt_live ? pwt : nullptr, PrepayWildTrueOn());
+        SpendFloatingTowardCost(state.floating_mana, remaining);
+    }
+    if (pwt_live)
+    {
+        PrepayWildTrueStore(state, 0, pwt);
+        if (remaining.ManaValue() != 0) { state.floating_mana = fm_pre; state.prepay_wild_true = pwt_pre; return false; }
+    }
     ClampHasteFloat(state);   // an activation spends the UNTAGGED {C} first (Generator Servant)
     return remaining.ManaValue() == 0;
 }
@@ -42948,11 +43090,78 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // with no ritual_float_color; BatchPrepayMainCasts dumping a Sol Ring's {C}{C} in). Counting
     // wild->colour payments here is therefore useless as an assertion: it reads ~1M per 200 healthy
     // Hinata games. The audit lives at the two producers instead (MTG_WILD_PIP_AUDIT).
-    drain(cost.white, reserve.wild);
-    drain(cost.blue,  reserve.wild);
-    drain(cost.black, reserve.wild);
-    drain(cost.red,   reserve.wild);
-    drain(cost.green, reserve.wild);
+    //    ...EXCEPT the prepay's colour-restricted units (t_wild_true, GameState::prepay_wild_true): a unit whose
+    //    true colour is X pays a pip of X (taken first, so the any-colour units are kept), never another colour's
+    //    (CR 106.1b). Lever off (t_wild_true_enforce false) the units still pay -- counted as the violation.
+    int* const wt = t_wild_true;
+    if (wt == nullptr)
+    {
+        drain(cost.white, reserve.wild);
+        drain(cost.blue,  reserve.wild);
+        drain(cost.black, reserve.wild);
+        drain(cost.red,   reserve.wild);
+        drain(cost.green, reserve.wild);
+    }
+    else
+    {
+        int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };
+        // A HYBRID pip ({R/W}: Figure of Destiny) rides the flat ints as ONE of its colours (Card.h), so a unit of
+        // the pair's OTHER colour pays it too -- once per pair.
+        bool hyb_used[6] = { false, false, false, false, false, false };
+        const ManaCost& hsrc = (cost.hybrid_count == 0 && t_wild_true_hybrid != nullptr) ? *t_wild_true_hybrid : cost;
+        auto hybrid_alt = [&hsrc, &hyb_used, wt](int x) -> int
+        {
+            for (int h = 0; h < hsrc.hybrid_count && h < 6; ++h)
+            {
+                if (hyb_used[h]) { continue; }
+                const int a = hsrc.hybrid_pair[h] >> 4, b = hsrc.hybrid_pair[h] & 0xF;
+                const int y = a == x ? b : (b == x ? a : -1);
+                if (y >= 0 && y < 5 && wt[y] > 0) { hyb_used[h] = true; return y; }
+            }
+            return -1;
+        };
+        for (int x = 0; x < 5; ++x)
+        {
+            while (*pips[x] > 0 && reserve.wild > 0)
+            {
+                const int restricted = wt[0] + wt[1] + wt[2] + wt[3] + wt[4];
+                int alt = -1;
+                if (wt[x] > 0) { --wt[x]; }
+                else if (reserve.wild > restricted) { /* an any-colour unit */ }
+                else if ((alt = hybrid_alt(x)) >= 0) { --wt[alt]; }
+                else if (t_wild_true_enforce)
+                {
+                    g_pwt_refused_units.fetch_add(1, std::memory_order_relaxed);
+                    if (g_real_resolution) { g_pwt_refused_real.fetch_add(1, std::memory_order_relaxed); ++t_pwt_game_refused; }
+                    break;
+                }
+                else
+                {
+                    g_pwt_violation_units.fetch_add(1, std::memory_order_relaxed);
+                    if (g_real_resolution) { g_pwt_violation_real.fetch_add(1, std::memory_order_relaxed); ++t_pwt_game_viol; }
+                    int best = 0;
+                    for (int k = 1; k < 5; ++k) { if (wt[k] > wt[best]) { best = k; } }
+                    --wt[best];
+                }
+                --*pips[x]; --reserve.wild;
+            }
+        }
+    }
+    // A generic pip paid from `wild` spends a restricted unit before an any-colour one (the most flexible mana
+    // survives); the largest restricted colour first. Same unit count either way -- only the record differs.
+    auto drain_wild_generic = [&reserve, wt](int& pip)
+    {
+        while (pip > 0 && reserve.wild > 0)
+        {
+            if (wt != nullptr)
+            {
+                int best = -1;
+                for (int k = 0; k < 5; ++k) { if (wt[k] > 0 && (best < 0 || wt[k] > wt[best])) { best = k; } }
+                if (best >= 0) { --wt[best]; }
+            }
+            --pip; --reserve.wild;
+        }
+    };
     // 3) Generic pips: WILD first, then colourless, then each colour. Wild-first matters for the
     //    whole-turn batch pre-payment (BatchPrepayMainCasts), which pre-loads floating as the turn's
     //    combined cost with COLOURED pips pinned to their colours and the generic portion as `wild`:
@@ -42972,7 +43181,7 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         drain(cost.generic, reserve.black);
         drain(cost.generic, reserve.red);
         drain(cost.generic, reserve.green);
-        drain(cost.generic, reserve.wild);
+        drain_wild_generic(cost.generic);
         return;
     }
     // {C} BEFORE `wild` on a generic pip, capped by the payer (t_generic_c_first: see GenericCFirstScope).
@@ -42990,7 +43199,7 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
             { --cost.generic; --reserve.colorless; --t_generic_c_first; }
         }
     }
-    drain(cost.generic, reserve.wild);
+    drain_wild_generic(cost.generic);
     // g_hold_colorless_for_pips moves colourless to the BACK of the generic order, so a bank being
     // assembled for a later {C} pip survives this cost. Off everywhere but the exile sink inside
     // ApplyBlinkLoop, and a no-op even there whenever the reserve holds no colourless.

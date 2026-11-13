@@ -2524,6 +2524,7 @@ std::uint64_t PayFieldsDigest(const GameState& s)
                          ^ static_cast<std::uint64_t>(f->wild_conv & 0xFFFF));
     }
     h = RefineMix(h, static_cast<std::uint32_t>(s.floating_haste_c));
+    if (const std::uint64_t pw = PrepayWildTrueKey(s); pw != 0) { h = RefineMix(h, pw); }   // MTG_PREPAY_WILD_TRUE
     for (const Player& pl : s.players)
     {
         h = RefineMix(h, static_cast<std::uint32_t>(pl.life));

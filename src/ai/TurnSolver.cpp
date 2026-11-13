@@ -62787,6 +62787,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // The batch's land-Aura hosts sit out every solve below (PrepayAuraHostHold). Taken BEFORE the
     // snapshot, so each rollback keeps them held; the destructor frees them on every exit.
     PrepayAuraHostHold _aura_host_hold(state, acts);
+    // MTG_PREPAY_WILD_TRUE: every solve below labels its any-colour taps (Permanent::mana_flex), so the pre-load
+    // can tell a Birds' / Cavern's unit (any colour, committed at spend) from a Forest's (green only).
+    BtFlexCollectScope _flex_collect(PrepayWildTrack());
     // Snapshot exactly what a tap can touch so a declined solve (wild output) rolls back cleanly.
     const std::vector<Permanent> bf_snap = state.battlefield;
     const ManaPool               fm_snap = state.floating_mana;
@@ -64345,6 +64348,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                      + combined.red + combined.green + combined.colorless;
     static const bool s_true_colours = EnvOn("MTG_PREPAY_TRUE_COLOURS", true);
     int c_funded_kept = 0;   // generic-funding {C} kept as `colorless` (a physical {C}, below)
+    int pwt_restricted[5] = { 0, 0, 0, 0, 0 };   // the pre-load's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE)
     if (!s_true_colours)
     {
         pool.wild = produced.Total() - pinned;
@@ -64364,13 +64368,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // Fund the generic requirement out of `free`, colourless first, then the largest surplus.
         int need = combined.generic;
         int c_funded = 0;   // free {C} units laundered into the generic `wild` (the haste note below)
+        int fund_col[5] = { 0, 0, 0, 0, 0 };   // the colour-funded part of the `wild`, by TRUE colour
         while (need > 0 && free_[5] > 0) { --free_[5]; --need; ++c_funded; }
         while (need > 0)
         {
             int best = -1;
             for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
             if (best < 0) { break; }        // nothing left to attribute -- the remainder rides `wild`
-            --free_[best]; --need;
+            --free_[best]; --need; ++fund_col[best];
         }
         pool.wild = combined.generic;
         for (int i = 0; i < 6; ++i) { *dst[i] += free_[i]; }
@@ -64431,6 +64436,48 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             pool.colorless += keep;
             pool.wild      -= keep;
         }
+        // THE COLOUR-FUNDED `wild` KEEPS ITS TRUE COLOUR (MTG_PREPAY_WILD_TRUE, CR 106.1b; USER 2026-11-13: "we
+        // should fix this 'wild' mana issue"). The generic above was funded out of the surplus colours and booked
+        // `wild`, which keeps the bill's pins safe (its generic pips drain `wild` first) but also lets a pip OUTSIDE
+        // the bill spend it as ANY colour: Gods s30018016 / s30018089, Faithless Looting's flashback {R} paid with the
+        // {U} of Vivid Creek (no counter removed) / Reflecting Pool. So the record (GameState::prepay_wild_true) says
+        // how many of those units are really which colour; the drain lets one pay a generic pip or its own colour's
+        // pip only (SpendFloatingTowardCost). The bill pays exactly as before.
+        // A unit out of a source whose tapped mode could make ANY colour (Birds, Cavern of Souls, Sliver Hive,
+        // Mana Confluence, a Vivid land that removed its counter: Permanent::mana_flex, labelled by the solve) is
+        // any-colour mana committed at spend (USER: no per-colour branching) and stays unrestricted. Within one
+        // colour the pins take the labelled-fixed units first, so the any-colour units are what is left to fund.
+        if (PrepayWildTrack())
+        {
+            int flex_b[5] = { 0, 0, 0, 0, 0 };
+            const int nbf = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
+            for (int bi = 0; bi < nbf; ++bi)
+            {
+                const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+                if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.mana_flex == 0) { continue; }
+                if (bp.card.m_number != bf_snap[static_cast<std::size_t>(bi)].card.m_number) { continue; }
+                flex_b[bp.mana_flex & 7] += bp.mana_flex >> 3;
+            }
+            const int prod_c[5] = { produced.white, produced.blue, produced.black, produced.red, produced.green };
+            const int pin_c[5]  = { combined.white, combined.blue, combined.black, combined.red, combined.green };
+            int restricted[5], rsum = 0;
+            for (int c = 0; c < 5; ++c)
+            {
+                const int nonflex   = std::max(0, prod_c[c] - flex_b[c]);
+                const int flex_pins = std::max(0, pin_c[c] - nonflex);
+                const int free_flex = std::max(0, flex_b[c] - flex_pins);
+                restricted[c] = fund_col[c] - std::min(fund_col[c], free_flex);
+                rsum += restricted[c];
+            }
+            while (rsum > pool.wild)
+            {
+                int best = 0;
+                for (int c = 1; c < 5; ++c) { if (restricted[c] > restricted[best]) { best = c; } }
+                --restricted[best]; --rsum;
+            }
+            for (int c = 0; c < 5; ++c) { pwt_restricted[c] = restricted[c]; }
+            if (rsum > 0) { g_pwt_booked_units.fetch_add(rsum, std::memory_order_relaxed); }
+        }
         // AUDIT (MTG_WILD_PIP_AUDIT): the invariant this fix establishes is that prepaid `wild`
         // covers the batch's GENERIC requirement and nothing else -- generic pips are colour-blind,
         // so that wild can never launder a colour. Anything beyond it is production whose colour
@@ -64476,6 +64523,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
     state.floating_mana = pool;
+    // The pre-load REPLACES the general float, so its record replaces the old one (the creature float's is kept
+    // only if it is this phase's).
+    if (PrepayWildTrack())
+    {
+        if (state.prepay_wild_true.stamp != PrepayCStampNow(state)) { state.prepay_wild_true = GameState::PrepayWildTrue{}; }
+        PrepayWildTrueStore(state, 0, pwt_restricted);
+        state.prepay_wild_true.stamp = PrepayCStampNow(state);
+    }
     // The haste tag never outgrows the {C} it marks (see the retention above; a no-op without a tag).
     if (float_in) { ClampHasteFloat(state); }
     if (big_pp != nullptr && FloatLeftoverManaEnabled()) { AddBigSpellFloat(state, big_moved, *big_pp); }
@@ -64516,8 +64571,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // generic, draw on it (the noncreature stage is booked first, as called below).
             int pure_left = pure_c_tapped();
             prepay_c_kept = 0;   // the staged pools replace the pre-load above
-            auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept](const ManaCost& c, const ManaPool& prod) -> ManaPool
+            // MTG_PREPAY_WILD_TRUE: the stage's colour-funded `wild` keeps its true colour too (stage_restricted).
+            // Which stage tapped which labelled any-colour source is not kept, so here every colour-funded unit is
+            // booked as its own colour -- a legal subset of the real choices (the creature-only-source mixed batch
+            // is rare; the single pre-load above does the exact split).
+            int stage_restricted[5] = { 0, 0, 0, 0, 0 };
+            auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept, &stage_restricted](const ManaCost& c, const ManaPool& prod) -> ManaPool
             {
+                for (int k = 0; k < 5; ++k) { stage_restricted[k] = 0; }
                 ManaPool pl;
                 pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
                 pl.red = c.red; pl.green = c.green; pl.colorless = c.colorless;
@@ -64533,7 +64594,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     int best = -1;
                     for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
                     if (best < 0) { break; }
-                    --free_[best]; --need;
+                    --free_[best]; --need; ++stage_restricted[best];
                 }
                 pl.wild = c.generic - need;
                 {
@@ -64549,7 +64610,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             };
             state.floating_mana = fm_snap;
             state.floating_mana.AddPool(stage_pool(c_nonc, mixed_p_nonc));
+            if (PrepayWildTrack()) { PrepayWildTrueStore(state, 0, stage_restricted); }
             state.floating_creature_mana.AddPool(stage_pool(c_crea, mixed_p_crea));
+            if (PrepayWildTrack())
+            {
+                int cre[5];
+                for (int k = 0; k < 5; ++k) { cre[k] = state.prepay_wild_true.cre[k] + stage_restricted[k]; }
+                PrepayWildTrueStore(state, 1, cre);
+            }
         }
     }
     if (all_creatures)
@@ -64567,6 +64635,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         {
             state.floating_creature_mana.AddPool(state.floating_mana);
             state.floating_mana = ManaPool{};
+            // ...and the general float's colour-restricted `wild` moves with it (MTG_PREPAY_WILD_TRUE).
+            if (PrepayWildTrack())
+            {
+                int cre[5];
+                for (int k = 0; k < 5; ++k)
+                { cre[k] = state.prepay_wild_true.cre[k] + state.prepay_wild_true.gen[k]; state.prepay_wild_true.gen[k] = 0; }
+                PrepayWildTrueStore(state, 1, cre);
+            }
         }
     }
     // The kept {C} rides into the float as a subset count, for a {C}-pip deck's payer (GameState::floating_prepay_c).
@@ -96167,6 +96243,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
         if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
+        // The prepay's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE): which colour pips the float can still pay.
+        if (const std::uint64_t pw = PrepayWildTrueKey(state); pw != 0) { mix(0x9A7D1E5Bull); mix(pw); }
         if (state.scripted_early_ondemand_crack) { mix(0xEA4CCA11ull); }
         for (int v : state.scripted_boundary_dredge) { mix(0xD0ED6E12ull); mix(static_cast<std::uint64_t>(v + 1)); }
         for (int id : state.athreos_coin_ids) { mix(0xA7E05C02ull); mix(static_cast<std::uint64_t>(id)); }

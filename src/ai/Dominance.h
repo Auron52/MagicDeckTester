@@ -612,7 +612,13 @@ static_assert(sizeof(Player) == 216,
 // +24 bytes (2026-11-13, MTG_DOUBLER_AFTER_EXALTED): the dbl_defer_* run and the dbl_pay_* probe verdict.
 // Classification: FUTURE-DETERMINING within the turn (the run decides this turn's combat damage), FOLDED in Build()
 // value-gated through GameState::DoublerDeferKey (and in BuildDedupKey); the probe verdict only gates marking.
-static_assert(sizeof(GameState) == 1432,   // verify combined current fields in the integrated build
+// +16 bytes (2026-11-13, mana-clean item A; 1408 -> 1424 on its own): `prepay_wild_true` (GameState::PrepayWildTrue, 11 bytes: the prepay's
+// colour-restricted `wild` per pool + its turn/phase stamp; MTG_PREPAY_WILD_TRUE). Same classification as
+// floating_prepay_c: MID-TURN state that rides a non-empty float (dead once the float empties at a boundary, which
+// this Build() never keys across), FUTURE-DETERMINING within the phase -> value-gated into the main-phase key
+// (TurnSolver, PrepayWildTrueKey) and the mana oracle's refine hash. Permanent::mana_flex (in padding, size
+// unchanged) is SCRATCH read only inside the BatchPrepayMainCasts call that wrote it: never folded.
+static_assert(sizeof(GameState) == 1448,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

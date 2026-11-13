@@ -568,6 +568,20 @@ struct GameState
     // through min(colorless). FUTURE-DETERMINING: mixed value-gated into the main-phase key (TurnSolver).
     std::uint8_t             floating_prepay_c = 0;
     std::uint8_t             floating_prepay_c_stamp = 0xFF;   // (TurnSeq*5 + phase) & 0xFF; 0xFF = never
+    // THE PREPAY'S COLOUR-RESTRICTED `wild` (MTG_PREPAY_WILD_TRUE, CR 106.1b; 2026-11-13). The whole-turn prepay
+    // books the bill's GENERIC requirement as `wild` (so the bill's generic pips drain it first and never eat a
+    // later cast's pinned colour), funding it out of the solve's surplus colours. A unit funded from a source that
+    // could make ANY colour (Cavern, Sliver Hive, Birds, a counter-paid Vivid land) really is any-colour mana; one
+    // funded from a Forest / a dual / Vivid Creek's free {U} is NOT, yet `wild` pays any colour pip -- so a spend
+    // OUTSIDE the bill (a replicate copy, a response cast, a flashback after a breakpoint draw) could pay {R} with
+    // a {U} (Gods s30018016 / s30018089). gen[c] / cre[c] = how many of floating_mana.wild /
+    // floating_creature_mana.wild are such units of TRUE colour c (W,U,B,R,G): they pay a generic pip or a pip of
+    // colour c only (SpendFloatingTowardCost via t_wild_true). Honoured only in the turn + phase stamped. A subset
+    // count, never larger than the pool's wild. FUTURE-DETERMINING within the phase: value-gated into the
+    // main-phase key (TurnSolver, beside floating_prepay_c).
+    struct PrepayWildTrue { std::uint8_t gen[5] = {0,0,0,0,0}; std::uint8_t cre[5] = {0,0,0,0,0};
+                            std::uint8_t stamp = 0xFF; };
+    PrepayWildTrue           prepay_wild_true;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
     // a trigger fired inside one simultaneous event (the cleanup discard, a legend-rule SBA batch) waits
     // until the event completes, so its shuffle takes EVERY card that moved with it (CR 603.2 / 603.3:
