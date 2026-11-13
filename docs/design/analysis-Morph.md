@@ -1122,6 +1122,11 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     breakpoint continuation the outer line's still-owed trailing activations -- their mana in its line hold AND in
     its enumeration's admission -- so a new card is cast only from mana the rest of the line can spare (or the
     search chooses it over the activation knowingly). That is a search change, not a payer one.
+  * **Smoke on e4264949f (NOT accepted; parent accepts once):** 7 rows move, every one equal or better --
+    morph d0 4.738 -> 4.736, kithkin d0 4.986 -> 4.985, kithkin d3 4.5067 (digest only), kithkin d5 4.4923 ->
+    4.4862, selesnyav2 d0 5.081 -> 5.080, bruna d0 5.938 (digest only), edf d0 5.303 (digest only). Mostly d0:
+    the depth-0 runner applies through the same appliers, so the fallback fires there too. Log
+    `build/scratch/payer2/smoke.log`.
   * **Recommendation (USER decision):** the AI fallback is correct, lockstep and default ON as briefed, but on
     this evidence it buys nothing measurable and costs ~9% wall on Snow. Keep it ON only if the continuation fix
     above is built on top of it; otherwise set it OFF (or delete it) rather than pay the dry walk for nothing.
