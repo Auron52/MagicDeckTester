@@ -1263,8 +1263,12 @@ fungus 1,880, gods 4,300 (first run).
     succeeds, so the reservation is never released. Candidate fix in handoff #4 (rank providers by whether the line
     demands their other colours). **ENGINE WIP (committed, NOT validated): MTG_PD_LINE_HOLD_SEARCH** (default ON) --
     both PainAwarePay line repairs search hold SETS breadth-first when every single hold strands (depth <= 4, <= 48
-    retries). s30029561: AD 16 -> 0 (=0 -> 16). Units 2934/2934. OWED: held-out A/B (manifest build/scratch/item10/ab4),
-    smoke + regression accept, re-gate 32000-36999 (handoff #4).
+    retries). s30029561: AD 16 -> 0 (=0 -> 16). Units 2934/2934.
+    **VALIDATED (agent #5, 2026-11-13):** held-out A/B seeds 7460001+, 3000 games/arm, one pooled batch
+    (build/scratch/item10/ab4): **0 digest diffs** (net 0, 0 slower; the lever fires only on a stranding payment that
+    no single hold repairs, which play never reached on that block). Smoke 199/199 and regression 316/316
+    byte-identical (0 play-changed, refs 0 drift), so no GT to accept; check_gt_logs 1146 clean. Stays default ON.
+    OWED (handoff #5): (3) the ActLineHoldMask fix for s30027719 T6, (4) `./build.sh pgo` + re-gate on 32000-36999.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
