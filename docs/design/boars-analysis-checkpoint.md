@@ -59,15 +59,18 @@ run stands and what to do next.
     byte-identical. No movers. Remaining in-window provider picks (land play, puts, nested free casts, token copies):
     `docs/design/legend-rule-keep-remaining-greedy.md`. USER Q: the beyond-horizon keep default.
   * **I5b INTEGRATION COMPLETE (2026-11-13): items 1-4 done, all local commits, nothing pushed.**
-  * **LK (legend-keep greedy purge, NO-GREEDY rule)**: LK WIP `204cedbe6` (turn-level keep twin); LK2 DONE `b48089aa9`
-    (legend rule after every land play / resolution / end step, both worlds), `c58f8b75a` (land-put routes incl.
-    Galadriel's scry-reveal put), `aa1450512` (executor pins the keep before its main-1 land), docs `979616d91`. 3016/3016.
-    Identity vs mtg.i5b4: Boars 0/40 (5.225), Goblins / Jumbo Cactuar / Stompy 0/20, Galadriel 15/20 + Unpredictable
-    Cyclone 2/20 moved (no result change, none slower). **LK3 RUNNING** (Opus, fresh): upkeep-only routes (Snow Marit
-    Lage's Slumber, Emeria), nested-resolution SBA parity verdict, full duplicate-legend identity, ledger "LK done".
-    Handoff: `logs/boars-research/LK-handoff.md`. Post-integration (2026-11-13, pre-LK3): Stage 3 coverage 19/19 full,
-    0 missing; cost audit 616/616 match; field audit clean; provider_audit --check rc 0 (Boars unaudited until Stage 4
-    writes its profile). THEN Stage 4 and the rest below (one pooled smoke covers Heath + LK movers).
+  * **LK DONE**: `204cedbe6`, LK2 `b48089aa9` `c58f8b75a` `aa1450512`, LK3 `c8b303062` (upkeep routes; rollout legend-checks
+    nested free casts), docs `b570e1ac9`. 3018/3018. 31-deck identity vs mtg.i5b4: no result change, none slower; logs
+    moved Galadriel 15/20, Unpredictable Cyclone 2/20, Melira Pod 1/20, Prevent Damage 1/20; Boars 5.225 identical.
+  * **Stage 3 DONE** (19/19 full; cost 616/616; fields clean). **Stage 4 DONE** `d16666093` (profile; BoarsProvider;
+    NO_COST_INTERACTIONS; discard NO_RULE_CONSIDER_SEARCH on only 9 decisions in 400 games).
+  * **4-bis IN FLIGHT** (first attempt died with the 9p mount, 22:31 UTC 11-13; USER restarted WSL). Backstop screen done
+    (build/scratch/boars/bs_*): clean 5-game blocks regression `boars 3/5 30261 5 0`, overnight `boars 3/5 30101 5 0`
+    (spares 30041, 30021). USER Q: d5 unbudgeted tail heavy (~16% of d5 budget-0 games hit the 2e6 abandon cap).
+    Rows (martyr pre-keep-table shape): SMOKE d0 1000 / d3 50 b10 / d5 100 b20 / boars2hg d5 25 b20; REGRESSION d0 1000 /
+    d3 50 b10 / d5 150 b20 on 2002+3003 / boars2hg 75; OVERNIGHT d0 4x2000 / d3 4004 125 b10 / d5 4x300 / boars2hg 4x75.
+    Then cost gate, pooled smoke + regression accept (movers: Anti-Lifegain, Creature Giving, Five Colour [Heath];
+    Galadriel, Cyclone, Melira, PD [legend SBA]), overnight boars-only accept, check_gt_logs.
   * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
