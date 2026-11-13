@@ -900,6 +900,7 @@ enum Slot : int
     GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one unit of the grant colour (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
     GRANT_CAP_SKIP_RESERVED,  // MTG_GRANT_CAP_SKIP_RESERVED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE): the backtrack's granted-Saproling cap skips tokens in the caller's reserved (hold) mask before counting, so a held body never takes the slot of a tappable one. Default ON; =0 -> the old count
     FADE_PREFLOAT_DOOMED,     // MTG_FADE_PREFLOAT_DOOMED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE lead 1): a Saproling Burst activation whose counter removal kills this Burst's tokens first taps each UNTAPPED token that will die and can tap for mana (Brightcap Badger's grant) into the float (CR 605.3a; the body dies either way, mana empties without burn, so it only adds mana and decides no colour). SpellEffects.h, g_fade_prefloat_hook. Default ON; =0 -> the token dies untapped as before
+    PREPAY_COUNTER_C,         // MTG_PREPAY_COUNTER_C  item 6 (mana-clean, Gods s30014741 T4 ORACLE-GAP): the whole-turn prepay books a {C} out of a counter-gated colour source (Tendo Ice Bridge) whose tap removed no counter as physical `colorless`, never `wild` (CR 106.1b). TurnSolver.cpp pure_c_tapped. Default ON; =0 -> it rides `wild` and can pay a colour pip outside the bill
     COUNT
 };
 
@@ -1744,6 +1745,7 @@ inline const char* Name(int slot)
         "MTG_GRANT_HASTE_CAST_CREDIT",
         "MTG_GRANT_CAP_SKIP_RESERVED",
         "MTG_FADE_PREFLOAT_DOOMED",
+        "MTG_PREPAY_COUNTER_C",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

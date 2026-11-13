@@ -60451,9 +60451,25 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
 // Public payment entry. Delegates to the UNIFIED TapForCostShared (ManaPayment.cpp) -- formerly a
 // twin of AIEngine::TapForCost kept in lockstep by comment discipline. The rollout keeps no
 // accounting pool and carries the MTG_LEGACY_CCO_PAY measurement hatch.
+extern thread_local int g_tapdbg_oracle_apply;   // TEMP DIAG (claude1119): MTG_TAPDBG cost trace inside oracle applies
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature)
 {
-    return TapForCostShared(state, cost_in, for_creature, nullptr, /*honor_legacy_cco=*/true);
+    if (g_tapdbg_oracle_apply > 0 && std::getenv("MTG_TAPDBG"))
+    {
+        const ManaPool& f = state.floating_mana;
+        std::fprintf(stderr, "[tapdbg] TFCD cost g%d W%d U%d B%d R%d G%d C%d fl=%d/%d/%d/%d/%d/%d w%d\n",
+                     cost_in.generic, cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green,
+                     cost_in.colorless, f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild);
+    }
+    const bool ok = TapForCostShared(state, cost_in, for_creature, nullptr, /*honor_legacy_cco=*/true);
+    if (g_tapdbg_oracle_apply > 0 && std::getenv("MTG_TAPDBG"))
+    {
+        std::fprintf(stderr, "[tapdbg] TFCD -> %d tapped:", ok ? 1 : 0);
+        for (const Permanent& p : state.battlefield)
+        { if (p.tapped && p.controller_index == state.active_player_index) { std::fprintf(stderr, " #%d", p.card.m_number); } }
+        std::fprintf(stderr, "\n");
+    }
+    return ok;
 }
 
 // THE ROLLOUT'S MADNESS PAYER (Vampires A1): a madness cast is a CREATURE SPELL payment. Installed by the
@@ -62653,7 +62669,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (c == Color::Colorless) { has_c = true; }
                 else if (static_cast<int>(c) < 5) { colours |= 1u << static_cast<int>(c); }
             }
-            if (!has_c || colours == 0x1Fu) { continue; }
+            // A COUNTER-GATED colour mode (Tendo Ice Bridge: "{T}: Add {C}" / "{T}, Remove a charge counter:
+            // Add one mana of any color") lists every colour, but a tap that removed NO counter used the {C}
+            // mode (TapSourceIntoFloat removes one exactly when it makes a colour; with none left the colours
+            // are not even offered -- EffectiveProducesFor). That {C} is physical: riding `wild` it later paid a
+            // flashback {R} with no red source and the counter still on the land (gods s30014741 T4, Looting +
+            // Magus prepaid, the continuation flashed Looting back with Tendo #53's {C} as the {R}; CR 106.1b).
+            // MTG_PREPAY_COUNTER_C (default ON; =0 restores the laundering, A/B only).
+            static const bool s_counter_c = EnvOn("MTG_PREPAY_COUNTER_C", true);
+            const bool counter_gated_c = heurarm::Flag(heurarm::PREPAY_COUNTER_C, s_counter_c)
+                                      && has_c && bd->params.enters_with_mana_counters > 0
+                                      && !bd->params.mana_counters_are_mining
+                                      && bp.charge_counters >= bf_snap[static_cast<std::size_t>(bi)].charge_counters;
+            if (!counter_gated_c && (!has_c || colours == 0x1Fu)) { continue; }
             const int y = LandAuraColorMask(state, bp) != 0 ? ManaProducedPerTap(*bd)
                                                             : PermanentManaYield(state, bp, *bd);
             pure += (y >= 0 ? y : ManaProducedPerTap(*bd));

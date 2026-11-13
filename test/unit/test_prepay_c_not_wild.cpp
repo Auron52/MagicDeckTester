@@ -228,3 +228,68 @@ TEST_CASE("payer: in a {C}-pip deck the prepay's kept {C} still drains before th
     CHECK(s.floating_mana.wild == 1);
     CHECK(PrepayKeptC(s) == 0);
 }
+
+// A COUNTER-GATED colour mode (Tendo Ice Bridge: "{T}: Add {C}" / "{T}, Remove a charge counter: Add one mana
+// of any color"). Its `produces` lists every colour, so the "could have made every colour" exemption booked its
+// {C} as `wild` even when no counter was removed -- Gods s30014741 T4: Looting {R} + Magus {1}{U} prepaid off
+// Vivid Creek, Reflecting Pool and a counterless Tendo; the post-draw continuation then flashed Looting back
+// ({2}{R}) with the Tendo {C} as its {R}, the counter never spent. CR 106.1b: {R} needs red mana.
+namespace
+{
+GameState TendoBoard(int counters)
+{
+    static const VialProvider vp;
+    EnsureCardsCw();
+    GameState s;
+    s.m_provider          = &vp;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].lands_played_this_turn = 1;
+    PutCw(s, "Mountain", 40);
+    PutCw(s, "Island", 41);
+    PutCw(s, "Tendo Ice Bridge", 42);
+    s.battlefield.back().charge_counters = counters;
+    s.players[0].hand.push_back(CardCw("Faithless Looting", 100));
+    s.players[0].hand.push_back(CardCw("Magus of the Bazaar", 101));
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(CardCw("Island", 900 + k)); }
+    return s;
+}
+GameState TendoPrepaid(int counters)
+{
+    GameState s = TendoBoard(counters);
+    const std::vector<Action> line = { CastCw(s, "Faithless Looting"), CastCw(s, "Magus of the Bazaar") };
+    REQUIRE(TurnSolver::BatchPrepayMainCasts(s, line));
+    for (const Permanent& p : s.battlefield) { CHECK(p.tapped); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("prepay: a counterless Tendo Ice Bridge's {C} stays {C} and cannot pay an {R} outside the bill")
+{
+    GameState s = TendoPrepaid(0);
+    const ManaPool f = FloatCw(s);
+    CHECK(f.Total() == 3);
+    CHECK(f.colorless == 1);
+    CHECK(f.wild == 0);
+    REQUIRE(TapForCostDirect(s, CostCw("Faithless Looting"), /*for_creature=*/false));
+    // Only Island's {U} and Tendo's {C} are left: a second {R} (a flashback's) is not payable.
+    CHECK_FALSE(TapForCostDirect(s, CostCw("Faithless Looting"), /*for_creature=*/false));
+    REQUIRE(TapForCostDirect(s, CostCw("Magus of the Bazaar"), /*for_creature=*/true));
+    CHECK(FloatCw(s).Total() == 0);
+}
+
+TEST_CASE("prepay: a Tendo tapped for {C} with its counter kept books physical {C}")
+{
+    GameState s = TendoPrepaid(1);
+    const Permanent& tendo = s.battlefield.back();
+    if (tendo.charge_counters == 1)
+    {
+        CHECK(FloatCw(s).colorless == 1);
+        CHECK(FloatCw(s).wild == 0);
+    }
+    REQUIRE(TapForCostDirect(s, CostCw("Faithless Looting"), /*for_creature=*/false));
+    REQUIRE(TapForCostDirect(s, CostCw("Magus of the Bazaar"), /*for_creature=*/true));
+    CHECK(FloatCw(s).Total() == 0);
+}

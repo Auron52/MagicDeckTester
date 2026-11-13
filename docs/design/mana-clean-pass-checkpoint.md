@@ -1146,6 +1146,22 @@ fungus 1,880, gods 4,300 (first run).
     FSL tier-1 refusals (per-thread, so history-only). Next: when it recurs, rerun the exact pooled manifest with
     `MTG_PLAN_POOL_STATS=1` and record which worker played gi66 and what it played before (the batch's per-slot order),
     then replay that worker's sequence at `--threads 1`.
+* **Round 19 (nineteenth agent, 2026-11-13): gods ORACLE-GAP 63 FIXED -- the whole-turn prepay laundered a counterless
+  Tendo Ice Bridge's {C} into `wild`.** Traced with a TEMP `MTG_TAPDBG` line in `TapForCostDirect` (`[tapdbg] TFCD cost
+  ...`, oracle applies only). At s30014741 T4 every apply of `{no land + Looting + Magus}` first runs
+  BatchPrepayMainCasts for the bill {R} + {1}{U}: Creek {U}, Pool {R}, Tendo #53 (no counter) {C}, booked as float
+  U1 R1 **wild1**. The good apply casts Looting then Magus. The 3 gap applies' post-draw continuation flashes Looting
+  back instead ({2}{R}, outside the bill): {R} paid by the `wild` (= Tendo #53's {C}), the generic by {U} + the new Tendo
+  #54 tapped for {C} -- one red source for two {R} pips, so no oracle realisation matched. Cause: `pure_c_tapped`
+  (TurnSolver.cpp, the 2026-11-03 "a physical {C} never becomes `wild`" fix) exempts a source whose `produces` lists
+  every colour (meant for Cavern / Sliver Hive / Courtyard), and Tendo lists every colour although each colour costs
+  a counter. Fix: a counter-gated source (`enters_with_mana_counters`, not mining) whose tap removed no counter made
+  physical {C}; it stays `colorless` (CR 106.1b). Lever `MTG_PREPAY_COUNTER_C` (heurarm, default ON). Units: 2 new
+  cases in test_prepay_c_not_wild.cpp (fail with the lever off). Repro: ORACLE-GAP 5 -> 0 (CONTINUATION-DIFFERS 4 and the
+  gap rows become DOMINATED-LAND, a non-failing class); game digest unchanged. Gods is the only deck holding Tendo.
+  Possible same-shape leads NOT verified (no repro): Aether Hub (colours cost {E}) and Tarnished Citadel / Grand
+  Coliseum (colours cost damage) also list C + every colour, so a {C} tap of theirs booked `wild` could later pay a
+  colour without the {E} / damage.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
