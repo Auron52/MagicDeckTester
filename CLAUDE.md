@@ -65,8 +65,10 @@ a session automation tool exposed by the Codex host.
 
 **Use the maximum concurrency the machine supports by default** (USER,
 2026-10-31). Respect the available CPU affinity and machine limits; do not reserve
-cores or carry forward an arbitrary smaller worker cap. On this machine that is
-32 logical CPUs. Smaller counts are for rare, explicit purposes such as debugging
+cores or carry forward an arbitrary smaller worker cap. Read the count from the machine
+you are on (`nproc`, which honours the affinity); never take it from a doc or a previous run.
+The project runs on several machines with different core counts, so no doc states one (USER
+2026-11-13: *"any one number is going to be wrong somewhere"*). Smaller counts are for rare, explicit purposes such as debugging
 memory behavior, verifying thread invariance, or investigating a race. Record the
 reason and actual worker count for those exceptions. A question about CPU use is
 not permission to cancel an existing run; fixed worker settings change on the next

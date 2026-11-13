@@ -23,8 +23,12 @@
 
   // Node.js (for the Claude Code and Codex CLIs, installed in postCreateCommand below) and
   // the GitHub CLI (so `gh auth login` can authenticate git as the dtippett-bot
-  // account inside the container -- the repo-local credential helper already
-  // points at `gh`, so once it's authed, commits/pushes go through as the bot).
+  // account inside the container). postStartCommand runs `gh auth setup-git` on EVERY start: it
+  // writes a github.com-scoped `gh auth git-credential` helper into ~/.gitconfig, which outranks the
+  // generic helper VS Code injects on attach (that one forwards to the HOST's credential manager,
+  // so pushes went out as the user's personal account -- found 2026-11-12). ~/.gitconfig is on the
+  // container overlay and is lost on a rebuild, hence every start. `|| true`: before the first
+  // `gh auth login` it has no token, and that must not fail the start.
   "features": {
     "ghcr.io/devcontainers/features/node:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {}
@@ -136,7 +140,7 @@
   // Apply the egress firewall on every start (a restart clears the container's
   // iptables rules). It runs AFTER postCreate, so the first dependency fetch is
   // unaffected. Edit the allowlist at the top of init-firewall.sh.
-  "postStartCommand": "sudo bash .devcontainer/init-firewall.sh && python3 .devcontainer/configure-codex.py && python3 scripts/sync_codex_skills.py",
+  "postStartCommand": "(gh auth setup-git || true) && sudo bash .devcontainer/init-firewall.sh && python3 .devcontainer/configure-codex.py && python3 scripts/sync_codex_skills.py",
 
   "remoteUser": "vscode"
 }
