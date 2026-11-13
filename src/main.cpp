@@ -5713,6 +5713,8 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             TurnSolver::PreTap pt;
             ParseHumanPreTapToken(tok, pt);
             ls.pre_taps.push_back(std::move(pt));
+            // Where it stands among the line's board activations (CheckPreTapsPositional, item B (c)).
+            ls.pre_tap_acts_before.push_back(static_cast<int>(ls.board_acts.size()));
         }
         // "blink=<outlet>[@<target num>]": Emiel / Eldrazi Displacer exile-and-return. Same '@'
         // convention as equip= (no MTG name contains it), and a bare "blink=<outlet>" is the

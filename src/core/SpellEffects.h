@@ -16934,6 +16934,27 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n,
 // no-phantom-float guard, floating mana for a sacrifice that never happened.
 inline constexpr int kSameLineSacVictim = std::numeric_limits<int>::max();
 
+// The toughness a FRESH token of these subtypes gets from the board right now (lords, a live Beastmaster
+// Ascension; a fresh token carries no counters, Auras or Equipment). A fade token's own toughness is the
+// source's counters left, so `left + FreshTokenAnthemToughness(...) <= 0` is exactly "the toughness SBA
+// (CR 704.5f) kills it on arrival" -- SweepDeadFadeTokens' test evaluated before the token exists.
+inline int FreshTokenAnthemToughness(const GameState& state, int controller,
+                                     const std::vector<std::string>& subtypes,
+                                     const std::string& color = std::string())
+{
+    // The token CreateToken would make (types, subtypes, colour), so a colour- or type-keyed anthem reads it
+    // exactly as SweepDeadFadeTokens will read the real body.
+    const TokenProto proto = BuildTokenProto(0, 0, subtypes, color, {});
+    return ComputeLordBonus(proto.card, state, controller).second;
+}
+
+// MTG_FADE_FODDER_LIVE (heurarm FADE_FODDER_LIVE), item B (d). DEFAULT ON.
+inline bool FadeFodderLiveOn()
+{
+    static const bool v = EnvOn("MTG_FADE_FODDER_LIVE", true);
+    return heurarm::Flag(heurarm::FADE_FODDER_LIVE, v);
+}
+
 // Which KIND of free token maker a permanent offers. The search order below is deliberate: the
 // counter-costed makers come first, because their cost is a resource with no other use this turn,
 // while TAPPING a body forfeits whatever else that body could have done with its {T}.
@@ -16973,9 +16994,17 @@ inline int SameLineSacFodderSource(const GameState& state, int controller,
             && p.spore_counters >= d->params.spore_saproling_cost
             && yields(d->params.spore_token_subtypes))
         { return give(p.card.m_number, SameLineFodderKind::Spore); }
+        // ...and only a maker whose token LIVES (item B (d), MTG_FADE_FODDER_LIVE): at its last counter a Burst
+        // mints a 0/0 the toughness SBA kills before anything can sacrifice it (CR 704.3 / 704.5f; USER
+        // 2026-11-13: "By the rules they are straight up dead before you can do anything with them"), and the
+        // activation also kills every token it made before -- so it is no fodder at all.
         if (d->params.fade_saproling_cost > 0
             && p.fade_counters >= d->params.fade_saproling_cost
-            && yields(d->params.fade_token_subtypes))
+            && yields(d->params.fade_token_subtypes)
+            && (!FadeFodderLiveOn()
+                || p.fade_counters - d->params.fade_saproling_cost
+                   + FreshTokenAnthemToughness(state, controller, d->params.fade_token_subtypes,
+                                               d->params.fade_token_color) > 0))
         { return give(p.card.m_number, SameLineFodderKind::Fade); }
         // Krenko, Mob Boss: "{T}: Create X 1/1 Goblins, X = Goblins you control." Free of MANA, but
         // it pays {T} -- which is why it is searched last and why both tap gates are tested here: an
@@ -17023,6 +17052,53 @@ inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::s
     return CanonicalSacVictim(state, controller, outlet_id, need_sub) >= 0;
 }
 
+// ---- THE TOUGHNESS SBA AFTER A LORD LEAVES (item B (a), MTG_LORD_LEAVE_SBA; DEFAULT ON) -----------------
+// The rollout runs no SBA pass between actions, so a creature a lord was holding above 0 toughness (a Saproling
+// Burst token at zero fade counters under a Sporecrown Thallid) stayed alive in the rollout when the lord left --
+// Mycoloth devouring the Sporecrown, a sacrifice of it, a -1/-1 that kills it -- while the executor's
+// GameEngine::CheckStateBasedActions killed it at its next check. USER 2026-11-13: "By the rules they are
+// straight up dead before you can do anything with them." and "We should definitely make sure the engine is not
+// allowing this." This runs CR 704.5f at the instant the lord leaves, in BOTH worlds (every caller is a shared
+// helper), with the executor SBA's own verdict (LethalToughness, read only when the raw toughness is <= 0, the
+// executor's own fast path), the same simultaneous removal, the controller's graveyard, the Equipment detach and
+// then OnCreatureDies for each in battlefield order -- so the executor's later SBA finds nothing left to do.
+inline bool LordLeaveSbaOn()
+{
+    static const bool v = EnvOn("MTG_LORD_LEAVE_SBA", true);
+    return heurarm::Flag(heurarm::LORD_LEAVE_SBA, v);
+}
+inline bool CardIsLord(const Card& c)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+    return d != nullptr && IsLordPermanent(*d);
+}
+inline int SweepZeroToughnessSba(GameState& state)
+{
+    struct Dead { Card card; int controller; bool was_token; int minus; int total; };
+    std::vector<Dead> died;
+    for (std::size_t i = 0; i < state.battlefield.size(); )
+    {
+        const Permanent& p = state.battlefield[i];
+        if (!p.card.IsCreature() || p.EffectiveToughness() > 0 || LethalToughness(p, state) > 0) { ++i; continue; }
+        died.push_back(Dead{ p.card, p.controller_index, p.is_token, MinusCountersOn(p), TotalCountersOn(p) });
+        state.players[p.controller_index].graveyard.push_back(RevealedCard(p.card));
+        state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+    for (const Dead& d : died)
+    {
+        for (Permanent& q : state.battlefield)
+        { if (q.equipped_to == d.card.m_number) { q.equipped_to = 0; } }
+    }
+    if (!died.empty() && g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "death", "\xE2\x98\xA0 " + std::to_string(died.size())
+                      + " creature(s) die at 0 toughness (a lord left)");
+    }
+    for (const Dead& d : died)
+    { OnCreatureDies(state, d.controller, d.card, d.was_token, d.minus, nullptr, d.total); }
+    return static_cast<int>(died.size());
+}
+
 // Sacrifice the permanent at battlefield index `idx`: to the graveyard, off the battlefield, then
 // its death-watchers (Pashalik ping / Rundvelt impulse / Mogg death token). Factored out because
 // the sac-outlet paths below each open-coded it, and the human-victim override needs to sacrifice
@@ -17055,6 +17131,8 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     state.battlefield.erase(state.battlefield.begin() + idx);
     FireSacrificeWatchers(state, controller);   // Slaughter-Priest ("whenever YOU sacrifice ...")
     OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
+    // A sacrificed LORD drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
+    if (LordLeaveSbaOn() && CardIsLord(dead)) { SweepZeroToughnessSba(state); }
 }
 
 // ---- PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile a red card from your hand") ----
@@ -18777,6 +18855,15 @@ inline int ApplyDevourAsEnters(GameState& state, int controller, const CardParam
 inline void FireDeferredDevourDeaths(GameState& state, int controller,
                                      std::vector<DevourDeath>& deferred)
 {
+    // A devoured LORD drops what it held above 0 toughness (item B (a); Mycoloth eating the Sporecrown that kept
+    // a spent Saproling Burst's 0/0 tokens alive). The SBA precedes every trigger (CR 704.3), so it runs before
+    // the devoured creatures' death triggers below; it runs in both worlds because both enter sites call this.
+    if (LordLeaveSbaOn())
+    {
+        bool lord_left = false;
+        for (const DevourDeath& d : deferred) { if (CardIsLord(d.card)) { lord_left = true; break; } }
+        if (lord_left) { SweepZeroToughnessSba(state); }
+    }
     for (const DevourDeath& d : deferred)
     {
         // Same history-visibility fix as the devour itself, and this is the half that actually
@@ -20137,6 +20224,8 @@ inline void ShrinkCreatureUntilEot(GameState& state, int target_id, int dp, int 
         if (e.aura_attached_to == dead_num) { e.aura_attached_to = 0; }
     }
     OnCreatureDies(state, dead_ctrl, dead_card, dead_token, dead_minus, nullptr, dead_total);
+    // A LORD shrunk to death drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
+    if (LordLeaveSbaOn() && CardIsLord(dead_card)) { SweepZeroToughnessSba(state); }
 }
 
 // `any_color_float` (MTG_SAC_FODDER_ACT_MAKER): the CONCRETE letter an ANY-COLOUR mana outlet (Utopia
@@ -24456,10 +24545,10 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
         // Ordering is the entire fix: resolve the victim first, float only if one was found. Every
         // activation that HAS a victim is byte-identical -- same float, same victim, same order --
         // so only the failed premise changes, and it changes to nothing happening.
-        // ADOPTED 2026-09-23 (user call). DEFAULT ON; MTG_SAC_NO_PHANTOM_FLOAT=0 restores the
-        // float-first order, which is the only way to reproduce a pre-2026-09-23 ground truth.
-        static const bool s_no_phantom_float = EnvOn("MTG_SAC_NO_PHANTOM_FLOAT", true);
-        if (s_no_phantom_float && skirk && victim_id != 0)
+        // ADOPTED 2026-09-23 (user call). The MTG_SAC_NO_PHANTOM_FLOAT=0 float-first lever and its legacy
+        // skirk branch were DELETED 2026-11-13 (mana-clean item B (b), CLAUDE.md "delete, don't lever"): it
+        // floated the mana before finding the victim, i.e. paid out mana from a body that was not there.
+        if (skirk && victim_id != 0)
         {
             int      vid  = victim_id;
             int      bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
@@ -24509,37 +24598,7 @@ inline void ApplySacForMana(GameState& state, int controller, int sac_source_id,
                           + std::to_string(amount) + " " + (color.empty() ? "wild" : color)
                           + (haste_rider ? " (a creature spell it pays for gains haste)" : ""));
         }
-        if (victim_id != 0 && skirk)
-        {
-            // Skirk: the source stays; sacrifice the chosen victim Goblin. The victim was picked at
-            // ENUMERATION time (CanonicalSacVictim, baked into Action::sac_victim_id), so human play
-            // re-asks here against the real resolution board -- otherwise the human's only say in a
-            // single-sac activation would be that they made it at all.
-            const int bidx = ChooseSacOutletVictimIndex(state, controller, sac_source_id,
-                                                        need_sub, victim_id, src_name);
-            if (bidx >= 0) { SacrificePermanentAt(state, controller, bidx); return; }
-            // Stale-victim fallback (see ApplySacCreatureOutlet): an earlier action may have
-            // consumed the baked victim; TOKEN victims (id >= 1000, legacy 0) are fungible, so
-            // re-pick against the live board rather than ghosting the float. A missing REAL-card
-            // victim is a failed plan premise (the search imagined the victim into existence --
-            // goblins gi123) and must NO-OP, never substitute a live creature. Lockstep (shared
-            // helper, both worlds).
-            const bool victim_was_token = (victim_id == 0 || victim_id >= 1000);
-            for (int attempt = 0; attempt < 2; ++attempt)
-            {
-                for (int j = 0; j < static_cast<int>(state.battlefield.size()); ++j)
-                {
-                    Permanent& q = state.battlefield[j];
-                    if (q.controller_index != controller || q.card.m_number != victim_id) { continue; }
-                    SacrificePermanentAt(state, controller, j);   // Pashalik ping / death token etc.
-                    return;
-                }
-                if (attempt > 0 || !victim_was_token) { break; }
-                victim_id = CanonicalSacVictim(state, controller, sac_source_id, need_sub);
-                if (victim_id < 0) { break; }
-            }
-            return;
-        }
+        // (A skirk outlet with a named victim returned above; the float-first legacy branch is deleted.)
         // A CREATURE source (Generator Servant; an Eldrazi Spawn on the pay-sac-off route) DIES:
         // the shared sacrifice chokepoint detaches attachments and fires the death / sacrifice
         // watchers, as every other creature sacrifice does. No suite deck reaches this with a

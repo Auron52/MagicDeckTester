@@ -918,6 +918,9 @@ enum Slot : int
     SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  TEMPORARY A/B SELECTOR (Spirits Stage 1 fetch_hold_review): SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). Default OFF = the hold is offered (root default). Measurement only; the hold policy is a USER decision
     SPIRITS_FETCH_PRIORITY,   // MTG_SPIRITS_FETCH_PRIORITY  the USER's Flooded Strand target rule (2026-11-13; SpiritsFetchRule): order every target, search the pick plus one maker per missing W/U/B colour. Default ON; =0 -> the lossless every-target fan
     SPIRITS_LORD_VALUE,       // MTG_SPIRITS_LORD_VALUE  Spirits Q8 (USER 2026-11-13 'try to adjust if it seems to make sense'): EvalCard (the d0 runner and the beyond-horizon playout) credits a Spirit lord with its +N on every other Spirit we control, not just its own body (SpiritsProvider::ComboCardValue). ADOPTED default ON 2026-11-13 (seed 630000: d0 -0.068, d3/d5 0 slower, cheaper); =0 -> the own-body price
+    LORD_LEAVE_SBA,           // MTG_LORD_LEAVE_SBA  item B (a) (mana-clean audit, USER 2026-11-13: 0/0 Burst tokens "are straight up dead before you can do anything with them"): after a devour or a sacrifice of a LORD, the toughness SBA (CR 704.5f) runs in BOTH worlds at that instant (SweepZeroToughnessSba), so a creature the lord was holding above 0 dies in the rollout too (it already died at the executor's next SBA). Default ON; =0 -> the rollout keeps the 0/0 alive
+    FADE_FODDER_LIVE,         // MTG_FADE_FODDER_LIVE  item B (d): SameLineSacFodderSource never picks a Saproling Burst whose token would die on arrival (counters left + anthem toughness <= 0) as the same-line fodder maker. Default ON; =0 -> the maker may be a Burst at its last counter
+    FADE_NO_DEAD_ACT,         // MTG_FADE_NO_DEAD_ACT  item B (e), USER decision 14 (2026-11-13: "as long as the tokens don't die it makes sense to offer"): the Saproling Burst activation menu never offers a k whose tokens die on arrival (counters left + anthem toughness <= 0) unless a Saproling-death payoff (Slimefoot drain, on board or castable) exists. Autonomous search only (a human may make any legal activation). Default ON; =0 -> offered
     COUNT
 };
 
@@ -1780,6 +1783,9 @@ inline const char* Name(int slot)
         "MTG_SPIRITS_NO_FETCH_HOLD",
         "MTG_SPIRITS_FETCH_PRIORITY",
         "MTG_SPIRITS_LORD_VALUE",
+        "MTG_LORD_LEAVE_SBA",
+        "MTG_FADE_FODDER_LIVE",
+        "MTG_FADE_NO_DEAD_ACT",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -47828,8 +47828,40 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         for (int k = 1; k <= fade_max_k; ++k) { counts.push_back(k); }
                     }
                 }
+                // DECISION 14 (USER 2026-11-13, item B (e), MTG_FADE_NO_DEAD_ACT, DEFAULT ON): never offer a k whose
+                // tokens die on arrival. USER: "Yes, as long as the tokens don't die it makes sense to offer,
+                // particularly if we have a use for them, like sacrifice fodder or equivalent." and "I can't see why
+                // you would want to empty the Burst in a way that kills them. So there is no forced sacrifice. We
+                // sacrifice them when it is useful." Such an activation spends counters, mints a 0/0 the toughness
+                // SBA kills before anything can use it (CR 704.3 / 704.5f), and kills every token this Burst made
+                // -- dominated by not activating, UNLESS a Saproling death is worth something: Slimefoot's drain on
+                // the battlefield or castable this turn (FadeBoardRead::drain_per_death_opt), the one death payoff
+                // in the pool. The toughness reads the board's anthems (a Sporecrown Thallid keeps the k offered).
+                // Covers every route a Burst activation is searched through: the landmark menu, the {1} fallback,
+                // the full ladder, and every breakpoint / site-9 continuation (they enumerate through here).
+                // Autonomous search only: a human may make any legal activation.
+                static const bool s_no_dead_act = EnvOn("MTG_FADE_NO_DEAD_ACT", true);
+                const bool no_dead_act = heurarm::Flag(heurarm::FADE_NO_DEAD_ACT, s_no_dead_act)
+                                      && !HumanPlayActive();
+                int  fresh_t   = 0;
+                bool fresh_t_k = false;
                 for (int k : counts)
                 {
+                    if (no_dead_act)
+                    {
+                        const int left_k = src.fade_counters - k * sd->params.fade_saproling_cost;
+                        if (left_k <= 0)   // an anthem is never negative, so a token at left_k > 0 lives
+                        {
+                            if (!fresh_t_k)
+                            {
+                                fresh_t   = FreshTokenAnthemToughness(state, state.active_player_index,
+                                                                      sd->params.fade_token_subtypes,
+                                                                      sd->params.fade_token_color);
+                                fresh_t_k = true;
+                            }
+                            if (left_k + fresh_t <= 0 && fade_read().drain_per_death_opt <= 0) { continue; }
+                        }
+                    }
                     Action a;
                     a.kind           = Action::Kind::ActivatePermAbility;
                     a.card_name      = src.card.m_name;
@@ -123357,6 +123389,51 @@ TurnSolver::LineCheck TurnSolver::CheckLine(const GameState& state_in, bool is_p
     return exact;
 }
 
+std::string TurnSolver::CheckPreTapsPositional(const GameState& state, const LineSpec& spec)
+{
+    const std::size_t n = std::min(spec.pre_taps.size(), spec.pre_tap_acts_before.size());
+    bool late = false;
+    for (std::size_t i = 0; i < n; ++i) { if (spec.pre_tap_acts_before[i] > 0) { late = true; break; } }
+    if (!late) { return std::string(); }
+    const int me = state.active_player_index;
+    // Only a fade activation can remove a tap source ahead of a tap: it is free (counters), so the replay needs no
+    // payment model, and its counter removal is what kills this Burst's tokens. Any other queued act is skipped.
+    auto apply_act = [&](GameState& g, const std::string& name)
+    {
+        for (const Permanent& p : g.battlefield)
+        {
+            if (p.controller_index != me || p.card.m_name.str() != name) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || d->params.fade_saproling_cost <= 0
+                || p.fade_counters < d->params.fade_saproling_cost) { continue; }
+            const int num = p.card.m_number;
+            ++t_fade_prefloat_suppress;   // the human taps by hand; the replay floats nothing on its own
+            ApplyPermAbility(g, me, num, PermAbilityMode::FadeSaproling);
+            --t_fade_prefloat_suppress;
+            return;
+        }
+    };
+    bool any_fade_act = false;
+    for (const std::string& b : spec.board_acts)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(b);
+        if (d != nullptr && d->params.fade_saproling_cost > 0) { any_fade_act = true; break; }
+    }
+    if (!any_fade_act) { return std::string(); }
+    GameState probe = state;
+    std::size_t acts_done = 0;
+    for (std::size_t i = 0; i < spec.pre_taps.size(); ++i)
+    {
+        const std::size_t want = (i < n) ? std::min<std::size_t>(spec.board_acts.size(),
+                                                                 static_cast<std::size_t>(std::max(0, spec.pre_tap_acts_before[i])))
+                                         : 0;
+        while (acts_done < want) { apply_act(probe, spec.board_acts[acts_done]); ++acts_done; }
+        const std::string why = ApplyHumanPreTap(probe, spec.pre_taps[i]);
+        if (!why.empty()) { return "tap=" + spec.pre_taps[i].name + ": " + why; }
+    }
+    return std::string();
+}
+
 TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool is_pre_combat,
                                                  const LineSpec& spec,
                                                  const std::vector<Plan>* menu)
@@ -123396,6 +123473,15 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             }
         }
         state_p = &pre_tapped;
+        // ...and POSITIONALLY (item B (c)): a tap queued after a board activation that kills its source.
+        const std::string late = CheckPreTapsPositional(state_in, spec);
+        if (!late.empty())
+        {
+            out.verdict       = V::Illegal;
+            out.failed_action = late.substr(0, late.find(": "));
+            out.reason        = "can't tap as asked: " + late.substr(std::min(late.size(), late.find(": ") + 2));
+            return out;
+        }
     }
     const GameState& state = *state_p;
 

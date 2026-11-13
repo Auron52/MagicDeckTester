@@ -2199,3 +2199,230 @@ TEST_CASE("Saproling Burst pre-floats its doomed tokens (MTG_FADE_PREFLOAT_DOOME
         CHECK(s.floating_mana.Total() == want);
     }
 }
+
+// ==== item B (mana-clean, 2026-11-13): no 0-toughness Burst token survives, and none is planned for ==============
+// USER 2026-11-13: "By the rules they are straight up dead before you can do anything with them." and "We should
+// definitely make sure the engine is not allowing this." Decision 14: "Yes, as long as the tokens don't die it
+// makes sense to offer, particularly if we have a use for them, like sacrifice fodder or equivalent."
+namespace
+{
+std::vector<int> g_itemb_hook_counters;
+void ItemBRecordingHook(GameState& s, int /*controller*/, int /*num*/)
+{
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.m_number == 60) { g_itemb_hook_counters.push_back(p.fade_counters); } }
+}
+int ZeroToughnessCreatures(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (p.card.IsCreature() && LethalToughness(p, s) <= 0) { ++n; } }
+    return n;
+}
+int BurstTokens(const GameState& s, int burst)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.created_by_number == burst) { ++n; } }
+    return n;
+}
+std::vector<int> FadeActionKs(const GameState& s)
+{
+    std::vector<int> ks;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, true))
+    {
+        if (a.kind == Action::Kind::ActivatePermAbility
+            && a.ability_mode == Action::AbilityMode::FadeSaproling) { ks.push_back(a.chosen_x); }
+    }
+    return ks;
+}
+}
+
+TEST_CASE("item B: the pre-float fires BEFORE the last counter comes off, and no 0-toughness token outlives an activation")
+{
+    // SpendFadeActivations x3 off a 3-counter Burst under a Badger: activations 1 and 2 doom nothing (2/2, then two
+    // 1/1s), activation 3 dooms both 1/1s -- the hook sees the Burst still on its LAST counter (1) once per doomed
+    // body, i.e. it runs before the cost is paid. After every activation no creature at toughness <= 0 remains.
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Brightcap Badger", 0, 50);
+    const int bi = Put(s, "Saproling Burst", 0, 60);
+    s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 3;
+    auto* saved = g_fade_prefloat_hook;
+    g_fade_prefloat_hook = &ItemBRecordingHook;
+    g_itemb_hook_counters.clear();
+    const std::vector<int> want_tokens{ 1, 2, 0 };
+    for (int i = 0; i < 3; ++i)
+    {
+        CAPTURE(i);
+        CHECK(SpendFadeActivations(s, 0, 60, Def("Saproling Burst"), 1) == 1);
+        CHECK(ZeroToughnessCreatures(s) == 0);
+        CHECK(BurstTokens(s, 60) == want_tokens[static_cast<std::size_t>(i)]);
+    }
+    g_fade_prefloat_hook = saved;
+    CHECK(g_itemb_hook_counters == std::vector<int>{ 1, 1 });
+    CHECK(FadeOn(s, 60) == 0);
+}
+
+TEST_CASE("item B (d): a Burst on its last counter is never the same-line fodder maker (its token dies on arrival)")
+{
+    EnsureCardsLoaded();
+    for (bool lord : { false, true })
+    for (int arm : { 1, 0 })
+    {
+        CAPTURE(lord);
+        CAPTURE(arm);
+        GameState s = Fresh();
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+        Put(s, "Utopia Mycon", 0, 80);
+        if (lord) { Put(s, "Sporecrown Thallid", 0, 70); }
+        heurarm::t_arm[heurarm::FADE_FODDER_LIVE] = static_cast<std::int8_t>(arm);
+        const int maker = SameLineSacFodderSource(s, 0, "Saproling");
+        const bool made = MakeSameLineSacFodder(s, 0, "Saproling", 80);
+        heurarm::t_arm[heurarm::FADE_FODDER_LIVE] = -1;
+        // Lever ON: picked only when the token lives (the Sporecrown lifts a 0/0 to 1/1).
+        if (arm == 1) { CHECK(maker == (lord ? 60 : -1)); CHECK(made == lord); CHECK(FadeOn(s, 60) == (lord ? 0 : 1)); }
+        else          { CHECK(maker == 60); CHECK(made == lord); CHECK(FadeOn(s, 60) == 0); }
+        CHECK(s.floating_mana.Total() == 0);   // nothing floats either way
+        CHECK(ZeroToughnessCreatures(s) == 0);
+    }
+}
+
+TEST_CASE("item B (b): a mana outlet whose named victim is gone floats NOTHING (no mana from a dead body)")
+{
+    EnsureCardsLoaded();
+    // No Saproling at all: the cost cannot be paid, so the ability is never activated.
+    {
+        GameState s = Fresh();
+        Put(s, "Utopia Mycon", 0, 80);
+        ApplySacForMana(s, 0, 80, "G", 1, /*victim_id=*/1001);
+        CHECK(s.floating_mana.Total() == 0);
+        CHECK(OnBoard(s, 80));
+    }
+    // The named TOKEN victim is gone but another Saproling stands: tokens are fungible, the outlet re-picks it and
+    // the mana is real (one body for one {G}).
+    {
+        GameState s = Fresh();
+        Put(s, "Utopia Mycon", 0, 80);
+        PutSaprolingToken(s, 1002);
+        ApplySacForMana(s, 0, 80, "G", 1, /*victim_id=*/1001);
+        CHECK(s.floating_mana.green == 1);
+        CHECK(!OnBoard(s, 1002));
+    }
+    // A 0/0 Burst body the counter removal already swept is not a victim either.
+    {
+        GameState s = Fresh();
+        Put(s, "Utopia Mycon", 0, 80);
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+        ApplyPermAbility(s, 0, 60, PermAbilityMode::FadeSaproling);   // 1 -> 0: the minted 0/0 dies on arrival
+        CHECK(BurstTokens(s, 60) == 0);
+        ApplySacForMana(s, 0, 80, "G", 1, /*victim_id=*/1000);
+        CHECK(s.floating_mana.Total() == 0);
+    }
+}
+
+TEST_CASE("item B (a): a LORD leaving takes its 0/0 Burst tokens with it, in the shared helpers both worlds call")
+{
+    // Burst at 0 counters, two of its tokens alive only through a Sporecrown Thallid, a Slimefoot watching. Each way
+    // the lord can leave in a shared helper -- devoured (FireDeferredDevourDeaths, both enter sites), sacrificed
+    // (SacrificePermanentAt), shrunk to death (ShrinkCreatureUntilEot) -- leaves ZERO Burst tokens and drains once
+    // per token, exactly what GameEngine::CheckStateBasedActions does at its next check. Lever off: the rollout's
+    // old gap, the tokens stay.
+    EnsureCardsLoaded();
+    for (int how = 0; how < 3; ++how)
+    for (int arm : { 1, 0 })
+    {
+        CAPTURE(how);
+        CAPTURE(arm);
+        GameState s = Fresh();
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+        Put(s, "Sporecrown Thallid", 0, 70);
+        Put(s, "Slimefoot, the Stowaway", 0, 90);
+        ApplyPermAbility(s, 0, 60, PermAbilityMode::FadeSaproling);   // 1 -> 0, the token lives at 1/1 (lord)
+        REQUIRE(BurstTokens(s, 60) == 1);
+        const int life0 = s.players[1].life;
+        heurarm::t_arm[heurarm::LORD_LEAVE_SBA] = static_cast<std::int8_t>(arm);
+        int li = -1;
+        for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+        { if (s.battlefield[static_cast<std::size_t>(i)].card.m_number == 70) { li = i; } }
+        REQUIRE(li >= 0);
+        if (how == 0)
+        {
+            const Permanent v = s.battlefield[static_cast<std::size_t>(li)];
+            std::vector<DevourDeath> deferred{ DevourDeath{ v.card, false, 0, 0 } };
+            s.players[0].graveyard.push_back(RevealedCard(v.card));
+            s.battlefield.erase(s.battlefield.begin() + li);
+            FireDeferredDevourDeaths(s, 0, deferred);
+        }
+        else if (how == 1) { SacrificePermanentAt(s, 0, li); }
+        else               { ShrinkCreatureUntilEot(s, 70, -2, -2); }
+        heurarm::t_arm[heurarm::LORD_LEAVE_SBA] = -1;
+        CHECK(!OnBoard(s, 70));
+        CHECK(BurstTokens(s, 60) == (arm == 1 ? 0 : 1));
+        CHECK(ZeroToughnessCreatures(s) == (arm == 1 ? 0 : 1));
+        CHECK(s.players[1].life == life0 - (arm == 1 ? 1 : 0));   // Slimefoot drained the swept token
+    }
+}
+
+TEST_CASE("item B (c): a tap queued AFTER an exhausting act=Saproling Burst is refused where it stands")
+{
+    EnsureCardsLoaded();
+    for (bool lord : { false, true })
+    {
+        CAPTURE(lord);
+        GameState s = Fresh();
+        Put(s, "Brightcap Badger", 0, 50);
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 2;
+        if (lord) { Put(s, "Sporecrown Thallid", 0, 70); }
+        ApplyPermAbility(s, 0, 60, PermAbilityMode::FadeSaproling);   // 2 -> 1: one 1/1 (2/2 under the lord)
+        int tok = 0;
+        for (const Permanent& p : s.battlefield) { if (p.created_by_number == 60) { tok = p.card.m_number; } }
+        REQUIRE(tok > 0);
+        for (Permanent& p : s.battlefield)   // it can tap for the Badger's {G}
+        { if (p.card.m_number == tok) { p.entered_this_turn = false; } }
+        TurnSolver::LineSpec ls;
+        ls.casts      = { "Saproling Burst" };
+        ls.board_acts = { "Saproling Burst" };
+        TurnSolver::PreTap t;
+        REQUIRE(ParseHumanPreTapToken("tap=" + ByNumber(s, tok).card.m_name.str() + "#" + std::to_string(tok) + ":G", t));
+        ls.pre_taps = { t };
+        ls.pre_tap_acts_before = { 0 };   // tapped BEFORE the act: legal
+        CHECK(TurnSolver::CheckPreTapsPositional(s, ls) == "");
+        ls.pre_tap_acts_before = { 1 };   // tapped AFTER the act that takes the Burst to 0: dead unless the lord holds it
+        const std::string why = TurnSolver::CheckPreTapsPositional(s, ls);
+        if (lord) { CHECK(why == ""); }
+        else      { CHECK(why.rfind("tap=", 0) == 0); }
+        ls.pre_tap_acts_before.clear();   // a LineSpec built in code: no positions, nothing replayed
+        CHECK(TurnSolver::CheckPreTapsPositional(s, ls) == "");
+    }
+}
+
+TEST_CASE("item B (e), decision 14: a Burst activation whose tokens die is offered only with a lord or a death payoff")
+{
+    EnsureCardsLoaded();
+    for (int board = 0; board < 4; ++board)   // 0 bare, 1 Sporecrown, 2 Slimefoot, 3 bare with the lever off
+    {
+        CAPTURE(board);
+        GameState s = Fresh();
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 1;
+        if (board == 1) { Put(s, "Sporecrown Thallid", 0, 70); }
+        if (board == 2) { Put(s, "Slimefoot, the Stowaway", 0, 90); }
+        heurarm::t_arm[heurarm::FADE_NO_DEAD_ACT] = static_cast<std::int8_t>(board == 3 ? 0 : 1);
+        const std::vector<int> ks = FadeActionKs(s);
+        heurarm::t_arm[heurarm::FADE_NO_DEAD_ACT] = -1;
+        CHECK(ks.size() == (board == 0 ? 0u : 1u));
+    }
+    // A fresh 3-counter Burst: whatever the landmark menu offers, no k leaves its tokens at toughness <= 0.
+    {
+        GameState s = Fresh();
+        const int bi = Put(s, "Saproling Burst", 0, 60);
+        s.battlefield[static_cast<std::size_t>(bi)].fade_counters = 3;
+        const std::vector<int> ks = FadeActionKs(s);
+        CHECK(!ks.empty());
+        for (int k : ks) { CHECK(3 - k > 0); }
+    }
+}

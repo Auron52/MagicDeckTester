@@ -3879,6 +3879,10 @@ public:
         // monotone-accepting doctrine: a line with explicit taps is graded on the board those taps
         // actually produce, never on an optimistic model of it. EMPTY => byte-identical.
         std::vector<PreTap> pre_taps;
+        // Per pre_taps entry: how many `act=` tokens (board_acts) the line queued BEFORE that tap -- its
+        // position relative to the board activations, for CheckPreTapsPositional. Empty = all 0 (every
+        // LineSpec built in code, every line written before 2026-11-13) -> the up-front grading only.
+        std::vector<int> pre_tap_acts_before;
     };
     // One concrete plan variant the human's line matched -- when several enumerated plans
     // share the same land + cast names but differ in a per-spell sub-decision (tutor target,
@@ -3938,6 +3942,14 @@ public:
     static LineCheck CheckLineExact(const GameState& state, bool is_pre_combat,
                                     const LineSpec& spec,
                                     const std::vector<Plan>* menu);
+    // POSITIONAL PRE-TAP LEGALITY (mana-clean item B (c)). CheckLineExact performs every `tap=` up front, which
+    // grades a tap the human placed AFTER an `act=Saproling Burst` that kills the tapped token on a body that is
+    // no longer there. This replays the line's taps in order on a copy, applying before each tap the board
+    // activations the line queued ahead of it that can remove a tap source (a Saproling Burst fade activation:
+    // its counter removal shrinks/kills this Burst's tokens), and returns the first tap that fails there as
+    // "tap=<name>: <reason>" -- empty when every tap is legal where it stands. Taps with no act ahead of them,
+    // and lines without such acts, are not replayed (the up-front pass already graded them).
+    static std::string CheckPreTapsPositional(const GameState& state, const LineSpec& spec);
 
     // Returns the plan that leads to the earliest win, evaluated by simulating
     // the rest of the game for each candidate play at this turn.
