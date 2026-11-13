@@ -1,0 +1,74 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY -- split lines, the earlier doubler RE-PAID in combat off another source (Morph INT-17; USER",
+  "2026-11-13: \"Okay, let's add in the doubler fix for separated lines just to be safe.\"). Turn 3, no land played",
+  "yet: Den Protector face down (2/2) attacks alone past a sick Ignoble Hierarch (exalted); Mountain and Forest",
+  "untapped; hand Legion Leadership, Berserk, Mountain; the opponent at 20.",
+  "",
+  "Line 1 casts Leadership. Its combat payment can only be Mountain + Forest. Line 2 plays the second Mountain and",
+  "casts Berserk ({G}). On the board as it stands there is no green source, so before INT-17 line 2 was NOT OFFERED",
+  "and the game dealt (2 + 1) x 2 = 6 (opponent 14). Now the menu offers it (AppendDoublerUndoPlans). The commit's",
+  "probe undoes Leadership's combat payment, pays Berserk in combat from the Forest, and RE-PAYS Leadership in combat",
+  "from the two Mountains (the `mask` option of NoteDoublerDeferPayableExact). Both doublers resolve after exalted:",
+  "(2 + 1) x 2 x 2 = 12, the opponent at 8. Moving Leadership back to MAIN instead (the undo alone) would give",
+  "(2 x 2 + 1) x 2 = 10, the opponent at 10."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "lands_played_this_turn": 0,
+ "battlefield": [
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": true
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Legion Leadership",
+  "Berserk",
+  "Mountain"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "human_lines": [
+  "cast=Legion Leadership",
+  "land=Mountain;cast=Berserk"
+ ],
+ "human_cast_orders": [
+  [
+   "**",
+   "cast=Legion Leadership"
+  ],
+  [
+   "**",
+   "land=Mountain",
+   "cast=Berserk"
+  ]
+ ],
+ "expect_opponent_life": 8
+}

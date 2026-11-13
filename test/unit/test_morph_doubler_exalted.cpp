@@ -505,6 +505,35 @@ TEST_CASE("doubler combat pay (i): doublers of two decisions never share a sourc
     CHECK(LoneDamageDx(s, 1) == (2 + 4) * 4 + 1 + 1);
 }
 
+TEST_CASE("doubler combat pay (INT-17): a later decision RE-PAYS the earlier doubler in combat off another source")
+{
+    EnsureCardsDx();
+    // Mountain + Forest; decision 1 casts Legion Leadership (its combat payment can only be Mountain + Forest).
+    // A second Mountain then enters (the land drop of the next human line) and decision 2 casts Berserk ({G}).
+    // The undo alone would move Leadership back to MAIN (one doubling after exalted); re-paying it in combat off
+    // the two Mountains, with Berserk on the Forest, puts BOTH after exalted.
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+    const int b = PutBearDx(s, 10);
+    PutDx(s, "Mountain", 41);
+    PutDx(s, "Forest", 42);
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Legion Leadership") });
+    REQUIRE(PayCastDx(s, "Legion Leadership", 10, 71));
+    CHECK(TappedDx(s, 41));
+    CHECK(TappedDx(s, 42));
+    CHECK(s.dbl_defer_ndef[0] == 1);
+    PutDx(s, "Mountain", 43);
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Berserk") });
+    REQUIRE(PayCastDx(s, "Berserk", 10, 72));
+    CHECK(TappedDx(s, 41));
+    CHECK(TappedDx(s, 42));
+    CHECK(TappedDx(s, 43));
+    CHECK(s.dbl_defer_n[0] == 2);
+    CHECK(s.dbl_defer_ndef[0] == 2);           // both paid in combat
+    CHECK(ExtraDx(s, b) == 3);                 // E x (2^2 - 1)
+    CHECK(LoneDamageDx(s, b) == (2 + 1) * 4);
+}
+
 TEST_CASE("doubler combat pay (iii): the board after combat carries the combat schedule's taps")
 {
     EnsureCardsDx();

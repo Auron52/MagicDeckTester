@@ -1,20 +1,21 @@
 {
  "_comment": [
-  "DOUBLER COMBAT PAY (i) -- doublers of SEPARATE decisions (MTG_DOUBLER_COMBAT_PAY; Morph INT-16). Turn 3: Den",
-  "Protector face down (2/2) attacks alone past a sick Ignoble Hierarch; Gruul Turf, Mountain, Forest untapped; the",
-  "opponent at 28. Three human lines: Might of Old Krosa (the Turf tapped for it by hand: {R} floats), then Legion",
-  "Leadership, then Berserk, all on the Den Protector.",
+  "DOUBLER COMBAT PAY (i) -- doublers of SEPARATE decisions (MTG_DOUBLER_COMBAT_PAY; Morph INT-16, INT-17). Turn 3:",
+  "Den Protector face down (2/2) attacks alone past a sick Ignoble Hierarch; Gruul Turf, Mountain, Forest untapped;",
+  "the opponent at 28. Three human lines: Might of Old Krosa (the Turf tapped for it by hand: {R} floats), then",
+  "Legion Leadership, then Berserk, all on the Den Protector.",
   "",
   "Combat cannot pay both doublers ({1}{R/W} + {G} from two lands), so the best real schedule casts Leadership in",
   "main (floating R + Mountain) and Berserk in combat (Forest): (2 + 4) x 2 x 2 + 1 + 1 = 26, the opponent at 2. The",
   "old per-decision probe found each doubler payable alone (both off the Forest) and credited two doublings after",
   "exalted: 24 + 1 + 3 = 28 = a phantom kill (MTG_DOUBLER_COMBAT_PAY=0 gives opponent_life 0).",
   "",
-  "EXACT (expected 14): line 2 pays Leadership in combat (Mountain + Forest -- the only combat payment it has); line 3",
-  "is then NOT OFFERED (no untapped green source), so Berserk is never cast: 6 x 2 + 1 + 1 = 14. Never optimistic, but",
-  "MYOPIC across decisions: the best real schedule (26) needs line 2 to stay in main, which line 2 cannot know. The",
-  "probe's undo of an earlier decision's combat payment (unit test 'doubler combat pay (i)') only runs when the later",
-  "plan is offered; the menu is built on the board as it stands. Open item: Morph INT-16."
+  "EXPECTED 26 (INT-17; USER 2026-11-13: \"Okay, let's add in the doubler fix for separated lines just to be safe.\").",
+  "Line 2 pays Leadership in combat (Mountain + Forest), so on the board as it stands Berserk has no green source.",
+  "Before INT-17 line 3 was NOT OFFERED and the game dealt 14 (6 x 2 + 1 + 1). Now the human menu also enumerates",
+  "on the board with that combat payment undone and offers Berserk, because a trial commit pays it in full",
+  "(TurnSolver.cpp AppendDoublerUndoPlans). The commit's probe then moves Leadership back to main (float R +",
+  "Mountain) and pays Berserk in combat from the Forest: 26."
  ],
  "deck": "decks/Morph/Morph.cod",
  "turn": 3,
@@ -83,5 +84,5 @@
    "cast=Berserk"
   ]
  ],
- "expect_opponent_life": 14
+ "expect_opponent_life": 2
 }

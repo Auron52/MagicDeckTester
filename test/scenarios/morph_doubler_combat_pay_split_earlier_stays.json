@@ -1,0 +1,82 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY -- split lines, the EARLIER doubler stays in combat (Morph INT-17 guard). The board of",
+  "morph_doubler_combat_pay_split_decisions (Den Protector face down attacking past a sick Ignoble Hierarch; Gruul",
+  "Turf, Mountain, Forest; opponent 28) with the doublers in the other order: Might of Old Krosa (the Turf tapped",
+  "for it by hand: {R} floats), then Berserk, then Legion Leadership.",
+  "",
+  "Line 2 pays Berserk in combat from the Forest. Line 3's Leadership can no longer be paid in combat (only the",
+  "Mountain is left, and main's floating R cannot pay a combat-step cast), so it is paid in main (R + Mountain). The",
+  "earlier Berserk stays deferred: the commit's undo options must NOT move it back. Real schedule: Might and",
+  "Leadership in main, Berserk in combat after exalted: (2 + 4) x 2 x 2 + 1 + 1 = 26, the opponent at 2 -- the same",
+  "total as the other order."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 28,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": true
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Might of Old Krosa",
+  "Legion Leadership",
+  "Berserk"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "human_lines": [
+  "cast=Might of Old Krosa",
+  "cast=Berserk",
+  "cast=Legion Leadership"
+ ],
+ "human_cast_orders": [
+  [
+   "**",
+   "tap=Gruul Turf#3:G",
+   "cast=Might of Old Krosa"
+  ],
+  [
+   "**",
+   "cast=Berserk"
+  ],
+  [
+   "**",
+   "cast=Legion Leadership"
+  ]
+ ],
+ "expect_opponent_life": 2
+}

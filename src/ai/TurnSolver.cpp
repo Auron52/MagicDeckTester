@@ -62862,14 +62862,17 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
     for (std::size_t j = cast_ix.size(); j-- > 0;) { if (DblIsDoublerCast(acts[cast_ix[j]])) { ++K; } else { break; } }
     if (no_new_deferral) { K = 0; }
     K = std::min(K, 4);
-    // Undoable earlier combat payments (from the end of the ledger).
+    // Undoable earlier combat payments (from the end of the ledger). tail_credited bit j: the j-th record from the
+    // end is a credited, resolved doubler (st 3) -- the only kind an undo may RE-PAY in combat (below).
     int R = 0;
+    unsigned tail_credited = 0;
     if (const GameState::DblCombatPay* cp = DblCpLive(state))
     {
         for (std::size_t j = cp->recs.size(); j-- > 0 && R < 3;)
         {
             const GameState::DblCombatRec& r = cp->recs[j];
             if (r.revisable == 0) { break; }
+            if (r.st == 3) { tail_credited |= 1u << R; }
             ++R;
         }
     }
@@ -62887,20 +62890,53 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
     const int spells0 = state.spells_cast_this_turn;
     const int ncast = static_cast<int>(cast_ix.size());
 
-    // The plan-start part of an option (identical on a copy and on the real board): undo r, P2's payments,
-    // then the undone doublers' main payment. False = the option cannot start.
-    auto start = [&](GameState& c, int r, int k, bool p2, int& undone_credit) -> bool
+    // The plan-start part of an option (identical on a copy and on the real board): undo r, RE-PAY in combat the
+    // undone credited doublers `mask` names, P2's payments, then the other undone doublers' main payment. False =
+    // the option cannot start.
+    // THE RE-PAY (Morph INT-17; USER 2026-11-13: "Okay, let's add in the doubler fix for separated lines just to be
+    // safe."): split human lines decide the turn's combat payments one line at a time, so an earlier line's doubler
+    // can hold the very source a later line's doubler needs while another source would have paid the earlier one
+    // (Legion Leadership's combat payment on the Forest, Berserk then needing that {G}, a Mountain idle). The undo
+    // alone could only move the earlier doubler back to MAIN; re-paying it combat-style AFTER the undo (from what the
+    // board then has untapped, main's float still set aside) lets this decision assign the sources of EVERY
+    // revisable doubler of the turn jointly -- so the last line's decision is the turn's decision over all of them,
+    // made with every line known. Same rule: most steps paid, then most doublers deferred.
+    auto start = [&](GameState& c, int r, int k, bool p2, unsigned mask, int& undone_credit, int& recredit) -> bool
     {
         undone_credit = 0;
+        recredit = 0;
         std::vector<ManaCost> owed;
+        std::vector<GameState::DblCombatRec> undone;
         for (int j = 0; j < r; ++j)
         {
             GameState::DblCombatRec u;
             if (!DblCpUndoLast(c, u)) { return false; }
             if (u.st == 3 || u.st == 1) { ++undone_credit; }
-            if (u.st >= 2) { owed.push_back(u.cost); }   // its spell resolved in main: it is paid there now
+            undone.push_back(u);
         }
         GameState::DblCombatPay& cp = DblCpEnsure(c);
+        // The re-pays come BEFORE this plan's P2 payments under P1 and AFTER them under P2, so either side can have a
+        // contested source first (the ledger keeps payment order: a later revert is LIFO).
+        auto repay = [&]() -> bool
+        {
+            for (int j = static_cast<int>(undone.size()); j-- > 0;)   // oldest first
+            {
+                const GameState::DblCombatRec& u = undone[static_cast<std::size_t>(j)];
+                if ((mask >> j) & 1u)
+                {
+                    if (u.st != 3) { return false; }
+                    GameState::DblCombatRec rec = u;
+                    rec.nsrc = 0;
+                    if (!DblCombatPayInto(c, cp, rec, [&] { return TapForCostDirect(c, u.cost, false); })) { return false; }
+                    if (rec.slot >= 0 && rec.slot < 2 && c.dbl_defer_ndef[rec.slot] < 30) { ++c.dbl_defer_ndef[rec.slot]; }
+                    cp.recs.push_back(rec);
+                    ++recredit;
+                }
+                else if (u.st >= 2) { owed.push_back(u.cost); }   // its spell resolved in main: it is paid there now
+            }
+            return true;
+        };
+        if (!p2 && !repay()) { return false; }
         if (k > 0)
         {
             cp.trail_from = static_cast<std::int16_t>(spells0 + ncast - k);
@@ -62918,15 +62954,16 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
                 cp.recs.push_back(rec);
             }
         }
+        if (p2 && !repay()) { return false; }
         for (const ManaCost& oc : owed) { if (!TapForCostDirect(c, oc, false)) { return false; } }
         return true;
     };
-    auto simulate = [&](int r, int k, bool p2) -> DblCpSim
+    auto simulate = [&](int r, int k, bool p2, unsigned mask) -> DblCpSim
     {
         DblCpSim out;
         GameState c = state;
-        int undone = 0;
-        if (!start(c, r, k, p2, undone)) { return out; }
+        int undone = 0, recredit = 0;
+        if (!start(c, r, k, p2, mask, undone, recredit)) { return out; }
         std::vector<Action> pre;
         for (int j = 0; j < ncast - k; ++j) { pre.push_back(acts[cast_ix[static_cast<std::size_t>(j)]]); }
         if (pre.size() >= 2) { TurnSolver::BatchPrepayMainCasts(c, pre, false, HumanPlayActive(), true); }
@@ -63018,7 +63055,7 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
         // P2 held is then free to pay for the Firecat).
         if (deferred_ok && k > 0 && FindBestOwnAttacker(c, me) < 0) { deferred_ok = false; }
         out.valid = deferred_ok;
-        out.deferred = credited_now - undone + k;
+        out.deferred = credited_now - undone + recredit + k;
         return out;
     };
     // Every step paid is the ceiling, so the first option that reaches it with the most deferral wins outright.
@@ -63030,13 +63067,16 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
         const std::optional<ManaCost> mc = DblActCost(a);
         if (mc && mc->ManaValue() > 0) { ++total_steps; }
     }
-    int best_r = 0, best_k = 0; bool best_p2 = false;
+    int best_r = 0, best_k = 0; bool best_p2 = false; unsigned best_mask = 0;
     DblCpSim best; best.steps = -1;
-    auto better = [&](const DblCpSim& x, int r) -> bool
+    // A re-pay option (mask != 0) only ever replaces a STRICTLY better one: every board where no re-pay pays more
+    // keeps exactly the choice it had before INT-17.
+    auto better = [&](const DblCpSim& x, int r, unsigned mask) -> bool
     {
         if (!x.valid) { return false; }
         if (x.steps != best.steps) { return x.steps > best.steps; }
         if (x.deferred != best.deferred) { return x.deferred > best.deferred; }
+        if (mask != 0 || best_mask != 0) { return false; }
         return r < best_r;
     };
     bool done = false;
@@ -63044,27 +63084,31 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
     {
         for (int r = 0; r <= R && !done; ++r)
         {
+            const unsigned rmask = tail_credited & ((1u << r) - 1u);
             for (int p = 0; p < (k > 0 ? 2 : 1) && !done; ++p)
             {
-                const DblCpSim x = simulate(r, k, p == 1);
-                if (s_trace)
+                // Every subset of the undone credited doublers to re-pay in combat; 0 = all back to main (as ever).
+                for (unsigned mask = 0;; mask = (mask - rmask) & rmask)
                 {
-                    std::fprintf(stderr, "[dbl-cp] T%d r=%d k=%d %s -> valid=%d steps=%d/%d deferred=%d\n",
-                                 state.turn_number, r, k, p ? "P2" : "P1", x.valid ? 1 : 0, x.steps, total_steps,
-                                 x.deferred);
+                    const DblCpSim x = simulate(r, k, p == 1, mask);
+                    if (s_trace)
+                    {
+                        std::fprintf(stderr, "[dbl-cp] T%d r=%d k=%d %s mask=%u -> valid=%d steps=%d/%d deferred=%d\n",
+                                     state.turn_number, r, k, p ? "P2" : "P1", mask, x.valid ? 1 : 0, x.steps,
+                                     total_steps, x.deferred);
+                    }
+                    if (better(x, r, mask)) { best = x; best_r = r; best_k = k; best_p2 = p == 1; best_mask = mask; }
+                    // r = 0 and every step paid: nothing later in the order can beat it.
+                    if (x.valid && x.steps == total_steps && r == 0) { done = true; }
+                    if (done || ((mask - rmask) & rmask) == 0) { break; }
                 }
-                if (better(x, r)) { best = x; best_r = r; best_k = k; best_p2 = p == 1; }
-                // r = 0 and every step paid: nothing later in the order can beat it.
-                if (x.valid && x.steps == total_steps && r == 0) { done = true; }
             }
         }
     }
     if (best.steps < 0 || (best_r == 0 && best_k == 0)) { return; }
     // Apply the chosen option's plan-start part to the real board, exactly as on the copy.
-    int undone = 0;
-    GameState::DblCombatRec dummy;
-    (void)dummy;
-    if (!start(state, best_r, best_k, best_p2, undone))
+    int undone = 0, recredit = 0;
+    if (!start(state, best_r, best_k, best_p2, best_mask, undone, recredit))
     {
         // Unreachable on a deterministic board (the copy ran the same calls). Never leave a phantom: drop the
         // armed records so nothing more is deferred; a payment already made stays a real one.
@@ -63073,8 +63117,8 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
     }
     if (s_trace)
     {
-        std::fprintf(stderr, "[dbl-cp] T%d chose r=%d k=%d %s (steps %d/%d, deferred %d)\n", state.turn_number,
-                     best_r, best_k, best_p2 ? "P2" : "P1", best.steps, total_steps, best.deferred);
+        std::fprintf(stderr, "[dbl-cp] T%d chose r=%d k=%d %s mask=%u (steps %d/%d, deferred %d)\n", state.turn_number,
+                     best_r, best_k, best_p2 ? "P2" : "P1", best_mask, best.steps, total_steps, best.deferred);
     }
 }
 
@@ -118497,6 +118541,96 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
     return best_plan;
 }
 
+// ---- SPLIT-LINE DOUBLER MENU (MTG_DOUBLER_COMBAT_PAY; Morph INT-17) ------------------------------------------
+// USER 2026-11-13 (verbatim): "Okay, let's add in the doubler fix for separated lines just to be safe." A human line
+// that casts a power doubler after exalted pays it combat-style (GameState::dbl_cp), tapping the sources the
+// declare-attackers step would tap. A LATER line is enumerated on that board, so a spell whose only source is one of
+// those (Berserk's {G} on the Forest that Legion Leadership's combat payment took) was never OFFERED -- although
+// committing it would let the commit probe (NoteDoublerDeferPayableExact) undo the earlier combat payment, re-pay
+// that doubler in main (or in combat off another source) and pay the new line: the best real schedule
+// (morph_doubler_combat_pay_split_decisions: 26, not 14). The probe's undo only ran for a plan that was offered.
+//
+// So, while the turn's ledger has revisable combat payments at its tail, the human menu ALSO enumerates on the board
+// with the last r of them undone (r = 1..3; their taps released, nothing re-paid -- a SUPERSET board), and appends
+// each plan not already offered that a TRIAL COMMIT on a copy of the real board pays in full (the commit's own
+// apply: the probe picks the undo and the re-payment, so nothing is offered that the commit would not pay -- never a
+// phantom line). Appended after every other plan, in a fixed order (r ascending, each board's own enumeration order),
+// so the viewer's processes stay in lockstep (a pure function of the board).
+//
+// Human play only (HumanPlayActive() is false in every rollout and every autonomous game): the AI plans a whole main
+// phase in one plan, so its probe sees every doubler of the turn at once and never needs this. The AI path is
+// byte-identical by construction.
+static void AppendDoublerUndoPlans(const GameState& state, bool is_pre_combat, std::vector<TurnSolver::Plan>& plans)
+{
+    static thread_local bool t_in = false;
+    if (t_in || !is_pre_combat || !HumanPlayActive() || !DoublerAfterExaltedOn() || !DoublerCombatPayOn()) { return; }
+    if (state.phase != Phase::PreCombatMain) { return; }
+    const GameState::DblCombatPay* cp0 = DblCpLive(state);
+    if (cp0 == nullptr || cp0->recs.empty()) { return; }
+    // The board the extra menus start from: an armed record nothing cast is dropped first (the next commit's probe
+    // drops it too), then the revisable tail is counted as the probe counts it.
+    GameState b = state;
+    GameState::DblCombatPay* cp = DblCpLive(b);
+    while (!cp->recs.empty() && cp->recs.back().st == 0) { cp->recs.pop_back(); }
+    int R = 0;
+    for (std::size_t j = cp->recs.size(); j-- > 0 && R < 3;)
+    {
+        if (cp->recs[j].revisable == 0) { break; }
+        ++R;
+    }
+    if (R == 0) { return; }
+    struct Reentry { bool& f; explicit Reentry(bool& x) : f(x) { f = true; } ~Reentry() { f = false; } } reentry(t_in);
+    const viewerplancap::Trunc menu_rec = viewerplancap::Last();   // the frame's own record, not the extra boards'
+    auto sig = [](const TurnSolver::Plan& pl) -> std::string
+    {
+        std::string x = pl.land_to_play;
+        x += '|'; x += std::to_string(pl.land_slot);
+        x += '|'; x += pl.searched_order ? '1' : '0';
+        for (const Action& a : pl.actions) { x += '|'; x += PlanDomKey(a); }
+        return x;
+    };
+    std::unordered_set<std::string> seen;
+    for (const TurnSolver::Plan& pl : plans) { seen.insert(sig(pl)); }
+    // A trial commit of `pl` on a copy of the real board: quiet, choosers nulled, as PrepareHumanCommit's trial.
+    auto pays_in_full = [&](const TurnSolver::Plan& pl) -> bool
+    {
+        GameState g = state;
+        std::vector<std::string> drops, reasons, fails;
+        DredgeChooser* const saved_dredge = g_dredge_chooser;
+        g_dredge_chooser = nullptr;
+        std::vector<std::string>* const saved_fail = g_human_step_fail_sink;
+        std::vector<std::string>* const saved_capture = g_line_order_capture;
+        {
+            ComboOffApplyPause co_quiet;
+            RevealLogPause quiet;
+            ConcreteDeferScope concrete_defer(g, g.active_player_index);
+            PlayDropSinkScope drop_scope(&drops, &reasons);
+            g_human_step_fail_sink = &fails;
+            g_line_order_capture   = nullptr;
+            TurnSolver::ApplyPlan(g, pl, /*is_pre_combat=*/true);
+        }
+        g_human_step_fail_sink = saved_fail;
+        g_line_order_capture   = saved_capture;
+        g_dredge_chooser       = saved_dredge;
+        return drops.empty() && fails.empty();
+    };
+    std::vector<TurnSolver::Plan> extra;
+    for (int r = 1; r <= R; ++r)
+    {
+        GameState::DblCombatRec u;
+        if (!DblCpUndoLast(b, u)) { break; }
+        std::vector<TurnSolver::Plan> more = TurnSolver::EnumerateMainPlans(b, is_pre_combat);
+        for (TurnSolver::Plan& pl : more)
+        {
+            if (pl.actions.empty() && pl.land_to_play.empty()) { continue; }
+            if (!seen.insert(sig(pl)).second) { continue; }
+            if (pays_in_full(pl)) { extra.push_back(std::move(pl)); }
+        }
+    }
+    viewerplancap::Last() = menu_rec;
+    for (TurnSolver::Plan& pl : extra) { plans.push_back(std::move(pl)); }
+}
+
 // --- External-controller hooks (Claude-play / human-play prototype) -------------
 // Thin public wrappers around the file-static enumeration + application the solver
 // uses internally, so an external decision provider gets the exact same legal plans
@@ -118981,6 +119115,9 @@ std::vector<TurnSolver::Plan> TurnSolver::EnumerateMainPlans(const GameState& st
     // QR1: the new cycle-seed plans after EVERY older one -- the COMBO OFF plan and every other append above
     // included -- so no index a saved reference names moves.
     OrderHumanCycleSeedPlans(state, plans);
+    // INT-17 (after every other append, so no index a saved reference names moves): the lines an earlier line's
+    // combat-armed doubler hides. Human play only.
+    AppendDoublerUndoPlans(state, is_pre_combat, plans);
     return plans;
 }
 
