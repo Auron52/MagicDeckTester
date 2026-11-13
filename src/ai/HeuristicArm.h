@@ -901,6 +901,7 @@ enum Slot : int
     P17_INWIN_ANYLEAF,        // MTG_P17_INWIN_ANYLEAF  P17 (default OFF): the in-window proof cache's key does not fold the LEAF kind -- an in-window win / no-win is a property of the menu's in-window lines, which no leaf reads, so a leafless pass's proofs answer a rollout pass and vice versa
     P17_LEAFLESS_NOHINT,      // MTG_P17_LEAFLESS_NOHINT  P17 (default OFF): a constant-leaf (leafless) pass records no ID hint at a node it leaves as a no-win -- every plan there ties at "no win", so the "best" index carries no order and would only shadow a rollout pass's hint
     P17_ISOLATE,              // MTG_P17_ISOLATE  P17 MEASUREMENT ONLY (default OFF): each top-level decision starts with the game-persistent search caches empty (game line cache, in-window cache, previous-decision ID hints, E3 rollout cache) -- isolates decisions to price what crosses between them
+    P17_LEAFLESS_READ,        // MTG_P17_LEAFLESS_READ  P17 (default OFF): a LEAFLESS (constant-leaf) node reads a ROLLOUT-leaf game-line-cache entry for the same (state, depth) restricted to its window (an in-window win is its answer; a win past the window or a no-win bound covering min(cutoff, window end) is its no-win), and its in-window cache no-win lookup clamps the cutoff to the window end -- a leafless pass sees nothing past its window, so both are exact. Implies MTG_P17_INWIN_ANYLEAF
     COUNT
 };
 
@@ -1746,6 +1747,7 @@ inline const char* Name(int slot)
         "MTG_P17_INWIN_ANYLEAF",
         "MTG_P17_LEAFLESS_NOHINT",
         "MTG_P17_ISOLATE",
+        "MTG_P17_LEAFLESS_READ",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
