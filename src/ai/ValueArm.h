@@ -230,6 +230,8 @@ inline thread_local double      t_deck_fit_alpha = 0.0;
 // the same fix and climb, but the climb's gate reads the decision's TRUE Remaining (probe + R calibration +
 // FIT passes all charged), exactly the quantity FullSearchLine's ladder gates on.
 inline thread_local int         t_deck_fit_gate_ladder = -1;
+// value_play.rollout_from (P16 skip-leaves ladder): 0 = off; s >= 2 = passes 1..s-1 leafless, rollouts from s.
+inline thread_local int         t_deck_rollout_from = 0;
 // The sidecar string -> the code above. Unknown strings read as unset (-1), like a missing key.
 inline int FitGateCode(const std::string& s)
 {
