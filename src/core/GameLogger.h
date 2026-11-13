@@ -1701,14 +1701,17 @@ struct LinePayAuditFrame
     // the oracle prices the TOP-LEVEL plan's bill, so a short step after a continuation that spent mana on a
     // card the plan never named is a mid-line change of plan, not a payment-order defect.
     std::vector<std::string> cont_acts;
+    bool cont_spent = false;                // a continuation applied >= 1 action (the line changed mid-apply)
 };
 extern thread_local LinePayAuditFrame* g_line_pay_frame;
 void NoteLinePayShort(const char* kind, const char* card);
 bool LinePayAuditRolloutOn();
 // [0] = REAL plan applies, [1] = rollout applies. Indices: plans audited, plans paying >= 2 steps, plans with
 // >= 1 payment-short step, short steps, short plans jointly payable (THE DEFECT), not jointly payable
-// (rules-correct), not priceable by the oracle.
-enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_N };
+// (rules-correct), not priceable by the oracle, and short plans whose line a breakpoint continuation changed
+// mid-apply (LPA_CONT: the continuation's own spend is a re-plan, not a payment-order defect; these are NOT
+// priced and NOT in YES/NO/UNKNOWN). The oracle bills a {T}-less sink's K repeats K times (as the apply pays them).
+enum { LPA_PLANS, LPA_PAYING, LPA_SHORT_PLANS, LPA_SHORT_STEPS, LPA_YES, LPA_NO, LPA_UNKNOWN, LPA_CONT, LPA_N };
 extern std::atomic<long> g_lpa[2][LPA_N];
 extern std::atomic<long> g_act_pay_calls;
 extern std::atomic<long> g_act_hold_mask;
