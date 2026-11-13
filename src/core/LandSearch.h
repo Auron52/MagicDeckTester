@@ -265,6 +265,12 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
                                                spec.share_land_type, spec.subtype, out);
         if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
     }
+    // A fetchland's search narrows only through its own hook (DecisionProvider::FetchLandSearchPickWidth).
+    if (LandSearchPickPruned() && spec.subtype_alt != SubtypeRegistry::kNone)
+    {
+        const int w = prov.FetchLandSearchPickWidth(s, ctrl, out);
+        if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
+    }
     return out;
 }
 
