@@ -657,3 +657,32 @@ Manifest: `build/scratch/spirits/s5/manifest.json`. Per-game results via `MTG_DU
 6. Usher: the boast-only post-combat main (main 1 vs main 2 is the USER's per-deck call).
 7. The mulligan `curve_check: two_drop` loses g10's 4-land/three-3-drop keep (the keep table supersedes it).
 8. Second-main / lord EvalCard under-ranking at d0 (a cast-order hook would be a USER call).
+
+## USER rulings (2026-11-13, after the RESUME checkpoint)
+- **Q1 deferrals:** APPROVED except Spirit of the Labyrinth's draw cap. USER: *"I don't know about Spirit of the
+  Labyrinth's draw cap being treated like that. Probably best to implement to avoid getting caught off-guard later as
+  this can impact a list that has any draw in it. The rest of the deferrals in 1 are okay."* -> implement the cap
+  (executor + rollout, every draw site).
+- **Q2 (DeckProvider base):** *"2 is fine if you find that more appropriate."* -> kept.
+- **Q3 (fetch targets):** PRUNE heuristically, USER order verbatim: *"If we are missing blue or have everything we
+  need we get Hallowed Fountain, if we have blue, but are missing black on a non-creature producing land we get
+  Godless Shrine. So the priority order would be something like 1 White -> 1 Blue -> 2 White -> 1 Black (that can
+  cast lingering souls) -> 3 White -> 2 Blue. The only case I would say we may need to adjust what we search from a
+  fixed order is if the line requires a different colour, in which case we can change it to another shockland
+  preferably or a basic if not. What we get should reflect what we need. But, because we have shocklands as the
+  priority we attempt to fill in the top 2 in priority order otherwise. Once we have all of the shocklands we can
+  start taking the basics of course starting with a plains followed by the island and then the last plains."*
+- **Q6 (Usher boast-only post-combat main), Q7 (mulligan two_drop):** *"6 and 7 are fine."*
+- **Q8 (lords at d0 / rollouts):** *"8 you could try to adjust if it seems to make sense to do so, but I wouldn't
+  spend a lot of time. Completely fixing depth 0 and rollouts is a potentially huge task that I'm not too worried
+  about for the time being."*
+- **Cast order:** the USER asked for a full cast order to review; proposal posted 2026-11-13 (below), NOT adopted
+  until the USER approves.
+- Still open: Q4 (fetch hold), Q5 superseded by the full cast-order proposal.
+
+### Cast-order proposal (for USER review, not implemented)
+land -> Aether Vial -> Metallic Mimic (Spirit) -> Mausoleum Wanderer -> Patrician Geist -> Supreme Phantom,
+Drogskol Captain -> Usher, Spirit of the Labyrinth, Shacklegeist, Geist of Saint Traft, Skyclave Apparition ->
+Lingering Souls (hand, then flashback) -> White Orchid Phantom -> Millicent. All main 1 except Usher's boast.
+Why: Mimic's counter on every later Spirit incl. Souls tokens; Patrician's {1} off a same-turn flashback; Souls
+tokens feed Millicent's affinity; White Orchid late so an own nonbasic it destroys has already made its mana.
