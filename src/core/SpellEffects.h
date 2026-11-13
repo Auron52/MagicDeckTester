@@ -17721,6 +17721,29 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
     }
     SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
 }
+// "When you cast this spell, creatures you control get +P/+T and gain trample until end of turn" (Decimator of
+// the Provinces, cast_trigger_team_pump_*): resolving the trigger -- THE one resolver for both worlds (the
+// executor's TriggerKind::CastTeamPump, apply_one's inline cast-trigger block). Every creature the controller
+// controls AS IT RESOLVES (an emerge victim is already gone; the spell is still on the stack). Cleanup clears the
+// temp bonuses. Trample is recorded on the card only and inert (D2: nothing blocks).
+inline void ResolveCastTriggerTeamPump(GameState& state, int controller, int power, int tough,
+                                       const std::string& src_name)
+{
+    int hit = 0;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+        q.temp_power_bonus += power;
+        q.temp_tough_bonus += tough;
+        ++hit;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": " + std::to_string(hit) + " creature(s) get +" + std::to_string(power) + "/+"
+                      + std::to_string(tough) + " and trample until end of turn");
+    }
+}
 // "When you cast this spell, take an extra turn after this one" (Emrakul): resolving the trigger.
 inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name,
                                        int target_player = -1)
@@ -47743,6 +47766,76 @@ inline int ResolveSacReadinessVictimId(const GameState& state, int victim_id)
     }
     return victim_id;
 }
+// EMERGE victim's printed mana value (CR 702.119a; Decimator of the Provinces, Boars I4): an own
+// battlefield creature by card m_number (a token that is not a copy is 0), else a HAND card of that number
+// (the same-plan hand victim at enumeration time). X counts as 0. 0 when not found. Callers resolve the pin
+// first (ResolveSacReadinessVictimId), so the bill is priced off the creature REALLY sacrificed.
+inline int EmergeVictimMv(const GameState& state, int victim_id)
+{
+    if (victim_id <= 0) { return 0; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.card.m_number != victim_id) { continue; }
+        if (p.is_token) { return p.card.m_mana_cost.ManaValue(); }
+        return CleanupDiscardManaValue(p.card);
+    }
+    for (const Card& c : state.players[static_cast<std::size_t>(active)].hand)
+    {
+        if (c.m_number == victim_id) { return CleanupDiscardManaValue(c); }
+    }
+    return 0;
+}
+// EMERGE victim, resolved ONCE per cast at BOTH cast sites (rollout apply_one, executor CastSpellFromHand),
+// BEFORE the bill is priced -- the victim's mana value sets it (CR 702.119a, 601.2b/f), so the bill and the
+// sacrifice can never disagree. The plan's pin through ResolveSacReadinessVictimId (a same-plan hand pin maps
+// onto the copy the plan cast); a stale pin falls back to the front readiness class, exactly the fallback
+// PerformSacrificeCreatureCost itself takes. HUMAN PLAY: the `sacrifice` board click is asked HERE, before
+// payment (Diabolic Intent's prompt sits inside PerformSacrificeCreatureCost, after payment -- right for an
+// additional cost of fixed price, wrong for emerge); the caller then sacrifices with the chooser muted
+// (SacChooserMute), one prompt not two. The chooser is null in every search / rollout scope (RevealLogPause),
+// so autonomous play never reaches it. Returns the victim's card m_number, 0 = no creature (drop the cast).
+inline int EmergeResolveVictim(const GameState& state, const std::string& spell_name, int pin)
+{
+    const int active = state.active_player_index;
+    const int id = ResolveSacReadinessVictimId(state, pin);
+    int idx = -1;
+    if (id > 0)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == active && p.card.m_number == id && p.card.IsCreature()) { idx = i; break; }
+        }
+    }
+    if (idx < 0)
+    {
+        const std::vector<int> reps = SacReadinessVictimReps(state, active);
+        if (!reps.empty()) { idx = reps.front(); }
+    }
+    if (g_play_sacrifice_chooser && idx >= 0)
+    {
+        const std::vector<int> cands = SacCreatureCandidateIndices(state, active, std::string{});
+        if (cands.size() > 1)   // a single legal victim is forced -- no prompt for a non-choice
+        {
+            int def_opt = 0;
+            for (int k = 0; k < static_cast<int>(cands.size()); ++k) { if (cands[k] == idx) { def_opt = k; break; } }
+            const int chosen = (*g_play_sacrifice_chooser)(state, active, spell_name, cands, def_opt);
+            if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { idx = cands[static_cast<std::size_t>(chosen)]; }
+        }
+    }
+    return idx >= 0 ? state.battlefield[static_cast<std::size_t>(idx)].card.m_number : 0;
+}
+// Mutes the human `sacrifice` chooser for one PerformSacrificeCreatureCost call whose victim was already
+// asked (EmergeResolveVictim). Inert when no chooser is installed.
+struct SacChooserMute
+{
+    BounceChooser* saved;
+    SacChooserMute() : saved(g_play_sacrifice_chooser) { g_play_sacrifice_chooser = nullptr; }
+    ~SacChooserMute() { g_play_sacrifice_chooser = saved; }
+    SacChooserMute(const SacChooserMute&) = delete;
+    SacChooserMute& operator=(const SacChooserMute&) = delete;
+};
 // Can a readiness-route "sacrifice a creature" cost be paid on this board? (CR 601.2h: with no legal
 // victim the spell cannot be cast at all.) Checked at both cast sites BEFORE any mana is spent, so a
 // plan whose victim never arrived drops the cast instead of casting it for free.

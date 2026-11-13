@@ -10247,6 +10247,19 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
     // lockstep with the enumeration's a.cost and the rollout's apply_one).
     if (evoke && def->params.evoke_cost.has_value()) { effective = *def->params.evoke_cost; }
+    // EMERGE (Decimator, CR 702.119; Boars I4): resolve the victim FIRST (human play asks the `sacrifice` board
+    // click here, before the bill), then price the alternative cost off ITS mana value. Lockstep twin of the
+    // rollout's apply_one; the victim may tap for this cast (scope below) and is sacrificed before the cast
+    // triggers fire.
+    const bool em_cast = riders.emerge && def->params.emerge_cost.has_value() && !free_cast;
+    int em_victim = 0;
+    if (em_cast)
+    {
+        em_victim = EmergeResolveVictim(state, def->card.m_name.str(), own_targets);
+        own_targets = em_victim;
+        entry.soulfire_own_targets = em_victim;
+        effective = EmergeCastCost(*def, state, EmergeVictimMv(state, em_victim));
+    }
     if (riders.awaken && def->params.awaken_cost.has_value()) { effective = *def->params.awaken_cost; }
     // MORPH: the face-down cast pays a flat {3} (lockstep twin of the rollout's apply_one).
     if (riders.face_down != 0 && !def->params.face_down_real_name.empty())
@@ -10394,7 +10407,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // publish -- the additional-cost victim (own_targets) pays before any other source.
         // A sacrifice-a-LAND cast's predicted victim pays first too (SacLandPayVictim; the rollout
         // twin is apply_one's identical publish).
-        PaySacVictimScope _psv(HasSacCreatureAdditionalCost(def->params)
+        PaySacVictimScope _psv(em_cast ? em_victim   // the emerge victim taps for this cast, then dies
+            : HasSacCreatureAdditionalCost(def->params)
             ? SacCostPayVictimId(state, def->params, own_targets)
             : (def->params.sacrifice_land ? SacLandPayVictim(state, effective) : 0));
         // Phyrexian life gate (before the tap, which mutates): the payment must leave us alive.
@@ -10406,8 +10420,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         }
         // "Sacrifice a creature" with NO creature left (the generic route): the spell cannot be cast
         // (CR 601.2h) -- drop it before any mana moves. Twin of the rollout apply's identical gate.
-        if (SacCreatureCostFoldsByReadiness(def->params)
-            && !SacReadinessVictimAvailable(state, state.active_player_index))
+        if ((SacCreatureCostFoldsByReadiness(def->params)
+             && !SacReadinessVictimAvailable(state, state.active_player_index))
+            || (em_cast && em_victim <= 0))   // emerge with no creature to sacrifice (never the hard cast)
         {
             return;
         }
@@ -10627,6 +10642,14 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         PerformSacrificeCreatureCost(state, (*hand_card_p).m_name.str(),
                                      def->params.sac_additional_creature_color, own_targets,
                                      SacCreatureCostFoldsByReadiness(def->params));
+    }
+    // EMERGE: the resolved victim (asked already in human play -> chooser muted) dies HERE, with the mana and
+    // before FireOnCastTriggers -- a Herald of Ilharg / Raggadragga victim never sees this cast. Twin: apply_one.
+    if (em_cast && em_victim > 0)
+    {
+        SacChooserMute _mute;
+        PerformSacrificeCreatureCost(state, (*hand_card_p).m_name.str(), std::string{}, em_victim,
+                                     /*readiness_route=*/true);
     }
 
     // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.

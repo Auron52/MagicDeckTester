@@ -3767,6 +3767,22 @@ struct CardParams
     int  cast_trigger_untap_pump_power = 0;
     int  cast_trigger_untap_pump_tough = 0;
     bool cast_trigger_untap_pump_grants_trample = false;
+    // Decimator of the Provinces (Boars I4). Two clauses:
+    //   * emerge_cost "{6}{G}{G}{G}": EMERGE (CR 702.119) -- an ALTERNATIVE cost, "sacrifice a creature and pay
+    //     the emerge cost reduced by that creature's mana value". A searched cast variant (Action::emerge, one
+    //     per victim class off the SAC-ANY-CREATURE post-pass, sharing hand_index with the hard cast). Bill =
+    //     EmergeCastCost (ManaPayment.h): EffectiveSpellCostWithBase(emerge_cost) -- every reducer, so Herald's
+    //     Horn applies (CR 601.2f) -- minus the victim's printed MV off GENERIC only, floored at 0. Mana value
+    //     stays the printed one. Read the sacrifice through CastSacsCreature(params, emerge) -- NEVER fold it
+    //     into HasSacCreatureAdditionalCost (that predicate is params-only and would sacrifice on the hard cast).
+    //   * cast_trigger_team_pump_power / _tough (+ _trample, recorded, INERT -- D2): "When you cast this spell,
+    //     creatures you control get +P/+T [and gain trample] until end of turn." TriggerKind::CastTeamPump in
+    //     the executor, the inline twin in the rollout's apply_one, ONE resolver (ResolveCastTriggerTeamPump).
+    //     It resolves before the spell, so the spell itself is never pumped.
+    std::optional<ManaCost> emerge_cost;
+    int  cast_trigger_team_pump_power = 0;
+    int  cast_trigger_team_pump_tough = 0;
+    bool cast_trigger_team_pump_trample = false;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the
@@ -4977,6 +4993,14 @@ inline bool HasSacCreatureAdditionalCost(const CardParams& p)
 inline bool SacCreatureCostFoldsByReadiness(const CardParams& p)
 {
     return p.sac_additional_creature;
+}
+// The ACTION-aware form: does THIS cast sacrifice a creature as a cost? The additional-cost routes always do;
+// an EMERGE cast (Action::emerge / CastRiders::emerge, Decimator of the Provinces) does too, while the HARD cast
+// of the same card does not. Every cast-site question "is a victim paid here" reads this, never
+// HasSacCreatureAdditionalCost, whenever the emerge flag is in scope.
+inline bool CastSacsCreature(const CardParams& p, bool emerge)
+{
+    return HasSacCreatureAdditionalCost(p) || (emerge && p.emerge_cost.has_value());
 }
 // The LEGACY colour route only (Natural Order): name-folded victims, the rollout's in-branch
 // payment, the post-dedup same-plan victim axis (MTG_SAC_CREATURE_AXIS).

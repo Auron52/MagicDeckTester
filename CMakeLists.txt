@@ -367,6 +367,7 @@ add_executable(mtg-test
     test/unit/test_boars_herald.cpp
     test/unit/test_boars_endraze.cpp
     test/unit/test_boars_raggadragga.cpp
+    test/unit/test_boars_decimator.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp

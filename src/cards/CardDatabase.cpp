@@ -214,6 +214,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "lord_affects_mana_ability_creatures", "power_bonus", "tough_bonus",
                 "attack_untap_mana_ability_attackers", "cast_trigger_untap_pump_target_min_spent",
                 "cast_trigger_untap_pump_power", "cast_trigger_untap_pump_tough", "cast_trigger_untap_pump_grants_trample",
+                // Decimator of the Provinces (I4): an alternative cost and a cast-trigger team pump -- never a card.
+                "emerge_cost", "cast_trigger_team_pump_power", "cast_trigger_team_pump_tough", "cast_trigger_team_pump_trample",
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -2030,6 +2032,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_trigger_untap_pump_power = params.value("cast_trigger_untap_pump_power", 0);
     p.cast_trigger_untap_pump_tough = params.value("cast_trigger_untap_pump_tough", 0);
     p.cast_trigger_untap_pump_grants_trample = params.value("cast_trigger_untap_pump_grants_trample", false);
+    // Decimator of the Provinces (Boars I4): emerge + the cast-trigger team pump.
+    if (params.contains("emerge_cost"))
+        p.emerge_cost = ManaCostFromString(params["emerge_cost"].get<std::string>());
+    p.cast_trigger_team_pump_power   = params.value("cast_trigger_team_pump_power", 0);
+    p.cast_trigger_team_pump_tough   = params.value("cast_trigger_team_pump_tough", 0);
+    p.cast_trigger_team_pump_trample = params.value("cast_trigger_team_pump_trample", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

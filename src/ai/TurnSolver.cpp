@@ -5952,8 +5952,10 @@ static bool BpCondemnTreasureSitePositiveEnabled()
 // whole axis is behind deck_has_cast_target_trigger anyway.
 //   OWED (surfaced in the ledger): (1) the rank is a WHOLE-TURN policy -- two qualifying casts in one turn share
 // one rank, so "a different target for each" is reachable only where the shared rank happens to name both; (2)
-// the axis skips plans that already carry another axis (sac_pins, ...): I4's emerge MUST NOT ride sac_pins
-// through this skip, or every emerge plan silently takes rank 0 (a greedy pick inside the window).
+// the axis skips plans that already carry another axis (sac_pins, ...). I4 (Decimator's emerge) does NOT ride
+// sac_pins: its victim is a per-CAST variant (Action::emerge + soulfire_own_targets, the SAC-ANY-CREATURE
+// post-pass), so every emerge plan is a BASE plan and is crossed with this axis like any other (MV 10 reaches
+// CastSpendMayReach; an emerge whose real spend is < N simply clamps). Keep it that way.
 static bool CastSpendMayReach(const CardDefinition& d, int n)
 {
     const ManaCost& m = d.card.m_mana_cost;
@@ -10240,6 +10242,7 @@ inline std::uint64_t ActSig(const Action& a)
             | (static_cast<std::uint64_t>(a.face_down) << 5));   // morph face-down cast (0 elsewhere)
     MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
     if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
+    if (a.emerge) { MixA(h, 0xE3E6ull + static_cast<std::uint64_t>(a.soulfire_own_targets)); }   // emerge + its victim (set-gated)
     return h;
 }
 struct Seen { const GameState* obj; bool verdict; };
@@ -11206,6 +11209,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         if (a.awaken)    { s += "[awaken]"; }
         if (a.bestow)    { s += "[bestow]"; }
         if (a.evoke)     { s += "[evoke]"; }
+        if (a.emerge)    { s += "[emerge:" + std::to_string(a.soulfire_own_targets) + "]"; }
         if (!a.pitch_name.empty()) { s += "[pitch:" + a.pitch_name.str() + "]"; }   // Fury's exiled card
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
@@ -11569,6 +11573,9 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
             { AddManaCost(ec, *def.params.reveal_or_pay_cost); }
             // Evoke (Reveillark): the alternate cost replaces the printed one (lockstep).
             if (a.evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
+            // Emerge (Decimator): the alternative cost less the REAL victim's MV (lockstep with apply_one).
+            if (a.emerge && def.params.emerge_cost.has_value())
+            { ec = EmergeCastCost(def, cp, EmergeVictimMv(cp, ResolveSacReadinessVictimId(cp, a.soulfire_own_targets))); }
             if (a.awaken && def.params.awaken_cost.has_value()) { ec = *def.params.awaken_cost; }
             if (a.face_down != 0 && (def.params.morph_cost || def.params.megamorph_cost)) { ec = FaceDownCastCost(def, a.face_down); }
             ec.generic  = std::max(0, ec.generic
@@ -14290,7 +14297,7 @@ static bool AttackHeraldTriggerEnabled()
     static const bool env_on = EnvOn("MTG_ATTACK_HERALD_TRIGGER", true);   // DEFAULT ON; =0 not projected
     return heurarm::Flag(heurarm::ATTACK_HERALD_TRIGGER, env_on);
 }
-struct HeraldOut { int counters = 0; int add = 0; int min_mv = 0; bool attacks = false; };
+struct HeraldOut { int counters = 0; int add = 0; int min_mv = 0; bool attacks = false; int number = 0; bool cast = false; };
 struct HeraldCtx { bool live = false; int shift = 0; std::vector<HeraldOut> on_bf; };
 static HeraldCtx BuildHeraldCtx(const GameState& state, bool is_pre_combat, const std::vector<Action>& cands)
 {
@@ -14314,6 +14321,7 @@ static HeraldCtx BuildHeraldCtx(const GameState& state, bool is_pre_combat, cons
         if (d == nullptr || d->params.creature_cast_trigger_plus_counters <= 0) { continue; }
         HeraldOut h;
         h.counters = TotalCountersOn(p);
+        h.number   = p.card.m_number;
         h.add      = d->params.creature_cast_trigger_plus_counters;
         h.min_mv   = d->params.creature_cast_counter_damage_min_mv;
         h.attacks  = is_pre_combat && !p.tapped && CanAttackFull(p, state.battlefield, active)
@@ -14349,6 +14357,20 @@ static int HeraldTriggerReach(const GameState& state, const HeraldCtx& c,
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d == nullptr || !d->card.IsCreature()) { continue; }
         const int mv = d->card.m_mana_cost.ManaValue();
+        // EMERGE (Decimator, Boars I4): a Herald sacrificed as this cast's victim is gone before the cast
+        // triggers -- drop it first (a board Herald by number; a Herald this plan cast, by the hand pin's name).
+        if (a.emerge)
+        {
+            const CardDefinition* vd = a.trick_hand_target.empty() ? nullptr
+                : CardDatabase::Instance().Lookup(a.trick_hand_target);
+            for (std::size_t k = 0; k < heralds.size(); ++k)
+            {
+                const bool hit = a.trick_hand_target.empty()
+                    ? (heralds[k].number != 0 && heralds[k].number == a.soulfire_own_targets)
+                    : (heralds[k].cast && vd != nullptr && vd->params.creature_cast_trigger_plus_counters > 0);
+                if (hit) { heralds.erase(heralds.begin() + static_cast<std::ptrdiff_t>(k)); break; }
+            }
+        }
         for (HeraldOut& h : heralds)
         {
             const int put = h.add << c.shift;
@@ -14361,6 +14383,7 @@ static int HeraldTriggerReach(const GameState& state, const HeraldCtx& c,
             HeraldOut h;
             h.add    = d->params.creature_cast_trigger_plus_counters;
             h.min_mv = d->params.creature_cast_counter_damage_min_mv;
+            h.cast   = true;
             heralds.push_back(h);
         }
     }
@@ -19510,6 +19533,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.adventure ? 1u : 0u);
     FoldMix(h, a.kicked ? 1u : 0u);
     if (a.face_down != 0) { FoldMix(h, 0xFD0Dull + static_cast<std::uint64_t>(a.face_down)); }   // morph face-down cast: set-gated (else unchanged)
+    if (a.emerge) { FoldMix(h, 0xE3E6ull); }   // emerge cast (Decimator): set-gated (else unchanged)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -21924,7 +21948,7 @@ static bool SubsetOverclaimsSacCostVictims(const GameState& state,
     {
         const Action& a = cands[static_cast<std::size_t>(j)];
         if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
-            && SacCreatureCostFoldsByReadiness(a.def->params)) { ++claims; }
+            && (SacCreatureCostFoldsByReadiness(a.def->params) || a.emerge)) { ++claims; }   // + emerge (I4)
     }
     if (claims < 2) { return false; }   // one claim: the emission's own victim test already covers it
 
@@ -21961,7 +21985,7 @@ static bool SubsetOverclaimsSacCostVictims(const GameState& state,
         const Action& a = cands[static_cast<std::size_t>(j)];
         const CardDefinition* d = a.def;
         if (d == nullptr || may_add_bodies(d->params)) { return false; }
-        if (SacCreatureCostFoldsByReadiness(d->params))
+        if (SacCreatureCostFoldsByReadiness(d->params) || a.emerge)
         {
             if (bodies <= 0) { return true; }   // the victim it needs was already claimed (or never there)
             --bodies;
@@ -28578,6 +28602,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.evoke) != static_cast<long long>(y.evoke))
     { add("evoke", std::to_string(static_cast<long long>(x.evoke)),
            std::to_string(static_cast<long long>(y.evoke))); }
+    if (x.emerge != y.emerge)
+    { add("emerge", std::to_string(static_cast<int>(x.emerge)), std::to_string(static_cast<int>(y.emerge))); }
     if (x.pitch_name != y.pitch_name)
     { add("pitch_name", x.pitch_name.str(), y.pitch_name.str()); }
     if (static_cast<long long>(x.adventure) != static_cast<long long>(y.adventure))
@@ -34782,6 +34808,8 @@ void TurnSolver::StampM1Hand(GameState& state, const std::vector<Action>* m1_cas
                         if (pd != nullptr) { ec = EffectiveCost(*pd, state); }
                         if (pa.evoke && pd != nullptr && pd->params.evoke_cost.has_value())
                         { ec = *pd->params.evoke_cost; }
+                        if (pa.emerge && pd != nullptr && pd->params.emerge_cost.has_value())   // Decimator (I4)
+                        { ec = EmergeCastCost(*pd, state, EmergeVictimMv(state, ResolveSacReadinessVictimId(state, pa.soulfire_own_targets))); }
                         if (pa.awaken && pd != nullptr && pd->params.awaken_cost.has_value())
                         { ec = *pd->params.awaken_cost; }
                         if (pa.face_down != 0 && pd != nullptr
@@ -39336,6 +39364,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // MORPH: the face-down cast's {3} is an alternative cost (CR 702.37a) -- gated on its own
             // {3} below, so a 4-mana Firecat on three mana keeps its face-down cast.
             && !def.params.morph_cost.has_value() && !def.params.megamorph_cost.has_value()
+            // EMERGE (Decimator): the emerge variants are priced off the victim -- the post-pass gates them.
+            && !def.params.emerge_cost.has_value()
             && EffectiveCost(def, state).ManaValue() > mana_ceiling
             && !free_charge_live)
         { continue; }
@@ -41097,6 +41127,25 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.awaken         = true;
                 actions.push_back(std::move(a));
             }
+        }
+
+        // EMERGE (Decimator of the Provinces, CR 702.119; Boars I4): an EXTRA variant sharing hand_index
+        // (the evoke idiom -- the hard cast still emits below). This is the SEED only: the SAC-ANY-CREATURE
+        // post-pass replaces it by one variant per victim class (battlefield readiness reps + same-plan hand
+        // creatures), pricing each with EmergeCastCost off that victim's MV, and emits nothing when there is
+        // no victim (CR 601.2h). The victim is SEARCHED; nothing picks it.
+        if (def.params.emerge_cost.has_value() && def.card.IsCreature())
+        {
+            Action a;
+            a.kind           = Action::Kind::CastFromHand;
+            a.card_name      = ap.hand[i].m_name;
+            a.hand_index     = i;
+            a.cost           = EmergeCastCost(def, state, 0);
+            a.eval           = EvalCard(def, state);
+            a.is_noncreature = false;
+            a.card_mv        = def.card.m_mana_cost.ManaValue();
+            a.emerge         = true;
+            actions.push_back(std::move(a));
         }
 
         // EVOKE (Reveillark {4}{W}, evoke {5}{W} -- CR 702.75; user-directed 2026-09-05): an
@@ -49990,6 +50039,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         for (const Action& a : actions)
         {
             if (a.kind != Action::Kind::CastFromHand) { continue; }
+            if (a.emerge) { any_sac_any = true; break; }   // Decimator's emerge seed (Boars I4)
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (d != nullptr && SacCreatureCostFoldsByReadiness(d->params)) { any_sac_any = true; break; }
         }
@@ -50033,9 +50083,19 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 const CardDefinition* d = nullptr;
                 if (a.kind == Action::Kind::CastFromHand)
                 { d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name); }
-                if (d == nullptr || !SacCreatureCostFoldsByReadiness(d->params) || a.soulfire_own_targets != 0)
+                if (d == nullptr || !(SacCreatureCostFoldsByReadiness(d->params) || a.emerge)
+                    || a.soulfire_own_targets != 0)
                 { out.push_back(std::move(a)); continue; }
                 const std::size_t sv_before = out.size();
+                // EMERGE (Boars I4): each variant's bill is priced off ITS victim's printed MV (EmergeCastCost --
+                // generic only, floored at 0, reducers first). Identity on the additional-cost route.
+                const bool em = a.emerge && d->params.emerge_cost.has_value();
+                auto em_price = [&](Action& c) -> bool
+                {
+                    if (!em) { return true; }
+                    c.cost = EmergeCastCost(*d, state, EmergeVictimMv(state, c.soulfire_own_targets));
+                    return !(g_emit_prune && c.cost.ManaValue() > mana_ceiling && !free_charge_live);
+                };
                 // INT-9 (DecisionProvider::SacCostVictimFixed, a USER-ordered restriction for Shadowborn): ONE
                 // variant -- the provider's battlefield pick, or a creature in hand it names (the co-cast
                 // requirement); the payment re-picks on the live board, so the variant only gates castability.
@@ -50045,7 +50105,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         Action c = a;
                         c.soulfire_own_targets = sv_bf;
-                        out.push_back(std::move(c));
+                        if (em_price(c)) { out.push_back(std::move(c)); }
                     }
                     else if (!sv_hand.empty())
                     {
@@ -50055,7 +50115,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             Action c = a;
                             c.soulfire_own_targets = hv.number;
                             c.trick_hand_target    = hv.name;
-                            out.push_back(std::move(c));
+                            if (em_price(c)) { out.push_back(std::move(c)); }
                             break;
                         }
                     }
@@ -50066,7 +50126,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     Action c = a;
                     c.soulfire_own_targets = v;
-                    out.push_back(std::move(c));
+                    if (em_price(c)) { out.push_back(std::move(c)); }
                 }
                 for (const HandVictim& hv : hand_victims)
                 {
@@ -50074,7 +50134,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     Action c = a;
                     c.soulfire_own_targets = hv.number;
                     c.trick_hand_target    = hv.name;   // the co-cast requirement (see above)
-                    out.push_back(std::move(c));
+                    if (em_price(c)) { out.push_back(std::move(c)); }
                 }
                 ripplestats::NoteSite(ripplestats::kSiteSacVictim, static_cast<long long>(out.size() - sv_before));
                 // No victim on the battlefield or in hand: not castable -- nothing emitted.
@@ -50547,7 +50607,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (bp.counters_target_spell_to_hand) { return false; }
                 if (bp.cascade_max_mv > 0 || bp.demonstrate) { return false; }
                 if (bp.untap_x_mana_sources || bp.etb_untap_lands > 0) { return false; }
-                if (HasSacCreatureAdditionalCost(bp)) { return false; }
+                if (HasSacCreatureAdditionalCost(bp) || b.emerge) { return false; }   // + emerge (a sac cost too)
                 if (b.replicate_count >= 0
                     || (b.def->card.IsCreature()
                         && CanReplicate(*b.def, state.battlefield, state.active_player_index)))
@@ -61683,7 +61743,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
         // sacrificed as an additional cost.
         if (d->params.x_damage_each_creature_and_player || d->params.etb_destroy_nonartifact_nonblack
             || d->params.etb_destroy_artifact_enchantment_land
-            || HasSacCreatureAdditionalCost(d->params))
+            || CastSacsCreature(d->params, a.emerge))
         { t.own_board_hazard = true; }
         // Scarce-colour rank-tier gate: a mint opens the deferred breakpoint, a flood engine
         // draws new castables -- either can add a cast this plan's lists cannot see.
@@ -61762,7 +61822,7 @@ PlanTraits TurnSolver::ComputePlanTraits(const GameState& state, const std::vect
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
             if (!d) { t.pd_hazard_other = true; continue; }
             if (d->params.x_damage_each_creature_and_player || d->params.etb_destroy_nonartifact_nonblack
-                || d->params.etb_destroy_artifact_enchantment_land || HasSacCreatureAdditionalCost(d->params))
+                || d->params.etb_destroy_artifact_enchantment_land || CastSacsCreature(d->params, a.emerge))
             { t.pd_hazard_other = true; }
             // A permanent cast from hand joins the battlefield before the sweep (counted by its hand
             // copies; a graveyard cast has none, so it is left out -- an under-estimate of the growth).
@@ -62317,7 +62377,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
             const CardDefinition* d = a.def != nullptr
                 ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-            if (d != nullptr && HasSacCreatureAdditionalCost(d->params))
+            if (d != nullptr && CastSacsCreature(d->params, a.emerge))   // + an emerge victim (I4)
             { _sac_victim = a.soulfire_own_targets; break; }
         }
     }
@@ -62592,7 +62652,11 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         if (d->params.cost_less_per_opponent_noncombat_damage > 0
             || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn))
         { return Pp(PP_DYNAMIC_COST); }
-        ManaCost ec = EffectiveCost(*d, state);
+        // EMERGE (Decimator, Boars I4): the alternative base is priced HERE, before every same-line credit
+        // below, so nothing after it is overwritten (the evoke override further down runs after them).
+        ManaCost ec = (a.emerge && d->params.emerge_cost.has_value())
+            ? EmergeCastCost(*d, state, EmergeVictimMv(state, ResolveSacReadinessVictimId(state, a.soulfire_own_targets)))
+            : EffectiveCost(*d, state);
         // SAME-LINE COLOURED-PIP REDUCER (MTG_PREPAY_LINE_REDUCER, default ON; =0 -> the board-only
         // price). EffectiveCost prices this cast on the CURRENT board, but a Ragemonger the line puts
         // with Aether Vial (or casts earlier in the line) is not on it yet: Vial puts ride the cast
@@ -63011,7 +63075,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             if (a.kind != Action::Kind::CastFromHand || a.soulfire_own_targets <= 0) { continue; }
             const CardDefinition* d = a.def != nullptr
                 ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
-            if (d == nullptr || !HasSacCreatureAdditionalCost(d->params)) { continue; }
+            if (d == nullptr || !CastSacsCreature(d->params, a.emerge)) { continue; }
             int pinned = -1;
             for (int i = 0; i < nb; ++i)
             {
@@ -68206,6 +68270,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
         // lockstep with the enumeration's a.cost and the executor's CastSpellFromHand).
         if (evoke && def.params.evoke_cost.has_value()) { ec = *def.params.evoke_cost; }
+        // EMERGE (Decimator, CR 702.119; Boars I4): resolve the victim FIRST (human play asks it here, before
+        // the bill), then price the alternative cost off ITS mana value. Lockstep: the executor's
+        // CastSpellFromHand, the enumeration's a.cost and every recompute site use EmergeCastCost.
+        const bool em_cast = riders.emerge && def.params.emerge_cost.has_value() && !free_cast;
+        int em_victim = 0;
+        if (em_cast)
+        {
+            em_victim = EmergeResolveVictim(state, name, own_targets);
+            own_targets = em_victim;
+            ec = EmergeCastCost(def, state, EmergeVictimMv(state, em_victim));
+        }
         if (riders.awaken && def.params.awaken_cost.has_value()) { ec = *def.params.awaken_cost; }
         // MORPH: the face-down cast's alternative cost is a flat {3} (CR 702.37a). Cost modifiers are not
         // applied to it (none in any pool that carries a morph card -- disclosed, G7). Lockstep with the
@@ -68352,7 +68427,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             // ...and a sacrifice-a-LAND cast's predicted victim (SacLandPayVictim; executor twin in
             // CastSpellFromHand) -- the land is leaving, so its mana is free.
-            PaySacVictimScope _psv(HasSacCreatureAdditionalCost(def.params)
+            PaySacVictimScope _psv(em_cast ? em_victim   // the emerge victim taps for this cast, then dies
+                : HasSacCreatureAdditionalCost(def.params)
                 ? SacCostPayVictimId(state, def.params, own_targets)
                 : (is_sacrifice ? SacLandPayVictim(state, ec) : 0));   // the flag this apply sacrifices on
             // Phyrexian life gate (before the tap, which mutates): the payment must leave us
@@ -68377,8 +68453,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Culling the Weak): the spell cannot be cast (CR 601.2h), so drop it before any mana
             // moves -- a plan whose same-plan victim never arrived must not cast it for free.
             // Executor twin: CastSpellFromHand's identical gate.
-            if (SacCreatureCostFoldsByReadiness(def.params)
-                && !SacReadinessVictimAvailable(state, state.active_player_index))
+            if ((SacCreatureCostFoldsByReadiness(def.params)
+                 && !SacReadinessVictimAvailable(state, state.active_player_index))
+                || (em_cast && em_victim <= 0))   // emerge with no creature to sacrifice (never the hard cast)
             {
                 if (sink_stack.empty() && g_play_dropped_cast_sink)
                 {
@@ -68556,6 +68633,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             PerformSacrificeCreatureCost(state, name, def.params.sac_additional_creature_color,
                                          own_targets, /*readiness_route=*/true);
+        }
+        // EMERGE: the victim (resolved and priced above; it may have tapped for this very cast) is sacrificed
+        // HERE, with the mana, BEFORE FireOnCastTriggers -- so a Herald of Ilharg / Raggadragga victim is gone
+        // when this spell's cast triggers. The human was asked already: chooser muted. Executor twin:
+        // CastSpellFromHand.
+        if (em_cast && em_victim > 0 && !rip_precast)
+        {
+            SacChooserMute _mute;
+            PerformSacrificeCreatureCost(state, name, std::string{}, em_victim, /*readiness_route=*/true);
         }
         // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned
         // red card from hand -- any copy of that name other than the cast card. Paid here, with the
@@ -69031,6 +69117,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // and every free cast (cascade_free recursion) reaches this block. 0 for every other card.
         for (int xt = 0; xt < def.params.cast_trigger_extra_turns; ++xt)
         { ResolveCastTriggerExtraTurn(state, def.card.m_name.str()); }
+        // Decimator of the Provinces' team pump (executor twin: TriggerKind::CastTeamPump). The spell is not on
+        // the battlefield yet and an emerge victim is already gone -- both by construction, as there.
+        if (def.params.cast_trigger_team_pump_power > 0 || def.params.cast_trigger_team_pump_tough > 0)
+        {
+            ResolveCastTriggerTeamPump(state, state.active_player_index, def.params.cast_trigger_team_pump_power,
+                                       def.params.cast_trigger_team_pump_tough, def.card.m_name.str());
+        }
         if (def.params.cast_trigger_exile_target_permanents > 0
             || def.params.cast_trigger_destroy_target_permanents > 0)
         {
@@ -77067,7 +77160,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 { w.Put("#FD"); w.Int(act.chosen_x); w.Put(act.tutor_target); }
                 if (d && d->params.return_up_to_gy_lands > 0)
                 { w.Put("#LO"); w.Put(act.tutor_target); }
-                if (d && HasSacCreatureAdditionalCost(d->params)) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
+                if (d && CastSacsCreature(d->params, act.emerge)) { w.Put("#V"); w.Int(act.soulfire_own_targets); }
                 if (d && d->params.look_top_put_creature_count > 0) { w.Put("#T"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_destroy_own_noncreature_max > 0) { w.Put("#K"); w.Int(act.chosen_x); }
                 if (d && d->params.bestow_cost.has_value() && !legacy_bestow_sig) { w.Put(act.bestow ? "#B1" : "#B0"); }
@@ -77112,6 +77205,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
+                if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
                 if (!act.pitch_name.empty()) { w.Put("#EX"); w.Put(act.pitch_name); }   // PITCH EVOKE (Fury)
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
@@ -82381,7 +82475,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         { k += "#LO"; k += act.tutor_target.str(); }
                         // Natural Order: distinct sacrifice victims are DISTINCT plans (core
                         // invariant); gated on the param so no existing deck's signature moves.
-                        if (cd && HasSacCreatureAdditionalCost(cd->params))
+                        if (cd && CastSacsCreature(cd->params, act.emerge))   // + an emerge cast (Boars I4)
                         { k += "#V"; k += std::to_string(act.soulfire_own_targets); }
                         // Turntimber Symbiosis: distinct put-choices are DISTINCT plans.
                         if (cd && cd->params.look_top_put_creature_count > 0) { k += "#T"; k += act.tutor_target.str(); }
@@ -82556,6 +82650,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
                         if (cd && cd->params.evoke_cost.has_value()) { k += (act.evoke ? "#E1" : "#E0"); }
+                        if (cd && cd->params.emerge_cost.has_value()) { k += (act.emerge ? "#EM1" : "#EM0"); }
                         // PITCH EVOKE (Fury): WHICH card the evoke exiles -- distinct plans.
                         // Only a pitch variant carries it, so no existing deck moves.
                         if (!act.pitch_name.empty()) { k += "#EX" + act.pitch_name.str(); }
@@ -91046,7 +91141,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 if (a.kind == Action::Kind::SacCreatureOutlet) { kills = true; continue; }
                 if (a.kind != Action::Kind::CastFromHand || ad == nullptr) { continue; }
-                if (HasSacCreatureAdditionalCost(ad->params)) { kills = true; }
+                if (CastSacsCreature(ad->params, a.emerge)) { kills = true; }
                 note_creature(ad);
             }
             const bool r_on = reaper && kills;
@@ -123485,6 +123580,16 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                     const std::string mode = a.evoke ? "evoked (sacrificed on entry)" : "hard cast";
                     addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
                            a.card_name.str(), "evoke");
+                }
+                // EMERGE (Decimator of the Provinces, Boars I4): emerge vs hard cast share a name -- the evoke
+                // shape, BOTH modes carry the sub. WHICH creature dies is not a sub: like Diabolic Intent's victim it
+                // is the `sacrifice` BOARD CLICK, asked at the cast BEFORE payment (EmergeResolveVictim -- the
+                // victim's MV sets the bill), on the live board, defaulting to this plan's pin.
+                if (bd && bd->params.emerge_cost.has_value())
+                {
+                    const std::string mode = a.emerge ? "emerge (sacrifice a creature)" : "hard cast";
+                    addSub(a.card_name + " " + mode, a.card_name + " mode", mode,
+                           a.card_name.str(), "emerge");
                 }
                 // PITCH EVOKE (Fury "Evoke--Exile a red card from your hand"): WHICH card the evoke
                 // exiles. Only the evoked variants carry it, and the mode sub above is asked first, so

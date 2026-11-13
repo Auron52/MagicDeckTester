@@ -49,6 +49,16 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, /*evoke=*/true, false, false, riders);
     }
 
+    // The executor's hand cast in EMERGE mode (Decimator of the Provinces, Boars I4): CastRiders::emerge with the
+    // victim's card m_number in own_targets -- exactly what cast_by_name passes for an Action::emerge variant.
+    static void CastEmergeFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int victim)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.emerge = true;
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, victim, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
     // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
     // committed-line pop) instead of searching -- the only way a test can hand the real executor a
     // specific plan, e.g. to check it realises a plan exactly as the rollout's ApplyPlan does.

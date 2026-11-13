@@ -662,6 +662,16 @@ struct Action
                                        // dominated by the cheaper hard cast). Recompute sites
                                        // must swap in evoke_cost (the phyrexian/convoke lockstep
                                        // list); plan_signature carries #E.
+    bool        emerge           = false;
+                                       // EMERGE (Decimator of the Provinces, CR 702.119; Boars I4):
+                                       // this CastFromHand pays CardParams::emerge_cost reduced by the
+                                       // victim's printed MV (generic only) and SACRIFICES that victim
+                                       // as the cost -- the victim's m_number rides soulfire_own_targets
+                                       // (the sac-additional-cost carrier), a same-plan hand victim also
+                                       // rides trick_hand_target. One variant per victim class, sharing
+                                       // hand_index with the hard cast (SAC-ANY-CREATURE post-pass).
+                                       // Bill = EmergeCastCost; a victim question reads
+                                       // CastSacsCreature(params, emerge). plan_signature carries #EM.
     bool        adventure        = false;
                                        // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic):
                                        // this CastFromHand is the ADVENTURE mode -- pay the
@@ -1150,10 +1160,14 @@ struct CastRiders
     int      trick_redirect    = 0;
     // Action::face_down (morph): the FACE-DOWN cast -- {3} and the "<name> (Face-down)" face.
     std::int8_t face_down      = 0;
+    // Action::emerge (Decimator of the Provinces): pay EmergeCastCost and sacrifice the pinned victim
+    // (own_targets) BEFORE the cast triggers fire -- both worlds' cast paths read it here.
+    bool     emerge            = false;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.emerge            = a.emerge;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;

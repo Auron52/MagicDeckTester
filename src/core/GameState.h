@@ -250,9 +250,12 @@ struct StackEntry
         CastExileTargets,  // Ulamog CH's "exile two target permanents": targets chosen at PUSH
                            // (CR 603.3d), stored as m_numbers in targets[i].permanent_index
         CastDestroyTarget, // Ulamog IG's "destroy target permanent": same target storage
-        Ripple             // RIPPLE N (CR 702.60; Thrumming Stone grants 4): one per instance, pushed ABOVE
+        Ripple,            // RIPPLE N (CR 702.60; Thrumming Stone grants 4): one per instance, pushed ABOVE
                            // the spell by PushCastTriggers; N rides `enchant_target`. Resolved by
                            // EffectHandler::ResolveRippleTrigger (SpellEffects.h "RIPPLE" decides).
+        CastTeamPump       // Decimator of the Provinces' "creatures you control get +P/+T [and trample] until
+                           // end of turn" cast trigger (cast_trigger_team_pump_*), re-read off the source's
+                           // definition at resolution; ResolveCastTriggerTeamPump (both worlds).
     };
     TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
     bool                is_copy     = false;  // demonstrate copy: resolves its payload but was

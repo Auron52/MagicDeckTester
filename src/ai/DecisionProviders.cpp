@@ -25905,7 +25905,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.creature_cast_trigger_plus_counters > 0
             || p.etb_other_creatures_grant_vigilance    // End-Raze Forerunners (I3a)
             || p.lord_affects_mana_ability_creatures || p.attack_untap_mana_ability_attackers
-            || p.cast_trigger_untap_pump_target_min_spent > 0)   // Raggadragga (I3b)
+            || p.cast_trigger_untap_pump_target_min_spent > 0    // Raggadragga (I3b)
+            || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0)   // Decimator (I4)
         { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())

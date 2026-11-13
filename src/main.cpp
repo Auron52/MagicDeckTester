@@ -1386,6 +1386,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // EMERGE (Decimator): one variant per victim, each a different bill -- name the victim.
+        if (a.emerge) { tag += " (emerge, sacrificing " + EnchantTargetName(s, a.soulfire_own_targets) + ")"; }
         // MORPH (CR 702.37): the face-down cast ({3}, a nameless 2/2) shares the hard cast's name.
         if (a.face_down == 1) { tag += " (face down)"; }
         if (a.face_down == 2) { tag += " (face down, then turned face up)"; }
@@ -2250,6 +2252,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.twobrid_colored)
                      + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
+                     + (a.emerge ? "|em" + std::to_string(a.soulfire_own_targets) : std::string())
                      + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str())
                      + (a.remand_chain_by.empty() ? "" : "|rc:" + a.remand_chain_by.str())
                      + (a.pitch_name.empty() ? "" : "|px:" + a.pitch_name.str()) + ";";
@@ -3244,6 +3247,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            if (ac.emerge)                        { os << ", \"emerge\": true"; }   // Decimator (Boars I4)
             // MORPH: the face-down cast (1) / face-down cast turned face up at once (2) -- the hard cast
             // shares the name, so the flag tells them apart (human composer: cast=X+facedown / +facedownup).
             if (ac.face_down != 0)
@@ -3338,7 +3342,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 const CardDefinition* sd = ac.def ? ac.def
                                                   : CardDatabase::Instance().Lookup(ac.card_name);
-                if (sd && HasSacCreatureAdditionalCost(sd->params))
+                if (sd && CastSacsCreature(sd->params, ac.emerge))   // + an emerge victim (Boars I4)
                 {
                     os << ", \"sac_victim\": " << ac.soulfire_own_targets
                        << ", \"sac_victim_name\": ";

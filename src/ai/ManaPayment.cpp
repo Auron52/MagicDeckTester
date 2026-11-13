@@ -4326,6 +4326,13 @@ ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& 
                                     const ManaCost& alternate_base)
 { return EffectiveSpellCostImpl(def, state, 1, &alternate_base); }
 
+ManaCost EmergeCastCost(const CardDefinition& def, const GameState& state, int victim_mv)
+{
+    ManaCost c = EffectiveSpellCostWithBase(def, state, *def.params.emerge_cost);
+    c.generic = std::max(0, c.generic - std::max(0, victim_mv));
+    return c;
+}
+
 int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)
 {
     if (!def.card.m_mana_cost.has_x) { return 0; }
@@ -6241,7 +6248,7 @@ static bool IsDependentAttachSpell(const Action& a)
     // otherwise set only on attach spells, handled above).
     if (a.trick_hand_target.empty() || a.attach_equip_id != 0) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-    return d != nullptr && SacCreatureCostFoldsByReadiness(d->params);
+    return a.emerge || (d != nullptr && SacCreatureCostFoldsByReadiness(d->params));   // + emerge (Boars I4)
 }
 
 void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)

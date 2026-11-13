@@ -58,6 +58,12 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
 ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
                                     const ManaCost& alternate_base);
+// EMERGE (CR 702.119a + 601.2f; Decimator of the Provinces, Boars I4): the alternative cost
+// CardParams::emerge_cost through every reducer (EffectiveSpellCostWithBase -- Herald's Horn applies),
+// then reduced by the sacrificed creature's printed mana value off the GENERIC part only, floored at 0
+// (the coloured pips are never reduced). `victim_mv` comes from EmergeVictimMv (SpellEffects.h). THE
+// one bill every emerge site uses -- enumeration, the cost-recompute sites and both cast paths.
+ManaCost EmergeCastCost(const CardDefinition& def, const GameState& state, int victim_mv);
 
 // CR 601.2f FOR {X} SPELLS (Hydras / Gargos, 2026-11-11). EffectiveSpellCost prices the PRINTED cost,
 // where X counts as 0, and floors every generic reduction at 0 -- so a reduction bigger than the printed

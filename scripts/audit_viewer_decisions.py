@@ -560,6 +560,10 @@ MANIFEST = {
     # a searched cast variant (battlefield classes + same-plan hand creatures); the human picks at CAST
     # through the `sacrifice` board click (PerformSacrificeCreatureCost, g_play_sacrifice_chooser).
     "sac_additional_creature":       ("sacrifice",    truthy),
+    # Decimator of the Provinces (Boars I4): EMERGE. The MODE (emerge vs hard cast) is a main_phase variant of the
+    # hand slot (Action::emerge, #EM1/#EM0, the CheckLine `emerge` sub); WHICH creature dies is the `sacrifice`
+    # board click, asked at the cast BEFORE payment (EmergeResolveVictim -- the victim's MV sets the bill).
+    "emerge_cost":                   ("sacrifice",    truthy),
     # Lake of the Dead: WHICH Swamp its entry replacement / its crack eats -- the `sacrifice` board click
     # over every Swamp (ChooseSubtypeLandSacrifice); the autonomous side folds soundly (tap-first +
     # basic-subset dominance).
@@ -1590,6 +1594,9 @@ INERT_PARAMS = {
     "cast_trigger_untap_pump_power": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
     "cast_trigger_untap_pump_tough": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
     "cast_trigger_untap_pump_grants_trample": "Raggadragga's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
+    "cast_trigger_team_pump_power": "Decimator of the Provinces' MANDATORY untargeted cast trigger (creatures you control +2/+2 until end of turn), no choice; Boars I4",
+    "cast_trigger_team_pump_tough": "Decimator of the Provinces' cast-trigger pump amount, no choice; Boars I4",
+    "cast_trigger_team_pump_trample": "Decimator's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
     "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
     "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",
@@ -2202,7 +2209,8 @@ def modeled_tokens(card):
     # Diabolic Intent / Culling the Weak (any creature) and Lake of the Dead's two Swamp sacrifices:
     # all surfaced through the `sacrifice` board click (see MANIFEST).
     if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
-            or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands"):
+            or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands") \
+            or p.get("emerge_cost"):   # + Decimator's emerge victim (Boars I4)
         t.add("sacrifice")
     # Shadowborn INT-2: the Apostle's six (and its Demon search, a plan variant) and the Overlord's upkeep
     # sacrifice are `sacrifice` board clicks; Reaper's morbid destroy is a `target` board click.
