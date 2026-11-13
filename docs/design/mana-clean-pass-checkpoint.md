@@ -1269,6 +1269,22 @@ fungus 1,880, gods 4,300 (first run).
     no single hold repairs, which play never reached on that block). Smoke 199/199 and regression 316/316
     byte-identical (0 play-changed, refs 0 drift), so no GT to accept; check_gt_logs 1146 clean. Stays default ON.
     OWED (handoff #5): (3) the ActLineHoldMask fix for s30027719 T6, (4) `./build.sh pgo` + re-gate on 32000-36999.
+* **Queue item A round 2 (2026-11-13): the `wild` CR 106.1b violation -- TAG version VALIDATED (MTG_PREPAY_WILD_TRUE,
+  default ON; 0ca9f0e11 + e9553cbf1).** e9553cbf1 fixed the WIP's dual over-restriction (it pinned a dual's unit to the
+  colour it was tapped for; now each restricted unit carries the MASK of its source's colours, pips are matched to
+  units). Units 2945/2945. Of the 24 pre-fix detector units (Niv 6, Cyclone 4, Melira 4, Minotaur 3, Morph 3, Hinata 2)
+  9 were dual false positives; 15 units in 13 games are REAL (a Forest/Mountain/bundle/Blood Crypt unit paying a
+  colour its source cannot make; logs/mana-clean-chain/wildA-r2/flagged22_v4_oldarm.txt). Held-out A/B (seeds 88140000+,
+  2000/arm on the 9 flagged decks + gods, 300/arm elsewhere, 51 decks): 47 decks byte-identical; cyclone +1, hinata +1,
+  niv +3 net (5 slower / 1 faster) -- every slower game had a REAL violation in the old arm (illegal-before): a
+  CORRECTNESS COST, not a regression. Real-game violations 108 units (old arm) -> refusals 113 (new arm). Smoke: 7
+  play-changed at same score, accepted. Regression: 12 play-changed + 2 slower (niv d5 s3003 gi128/gi143, 4.4867 ->
+  4.5000), both illegal-before (old arm audit: an {R}-only unit paid {U} on T3) and T5 at d8 b0 too -> accepted;
+  check_gt_logs clean. KNOWN GAPS (permissive, never lossy): overflow 15.5M of 146M booked units (more than 8 restricted
+  units in one pool -- released as any-colour), inconsistent loads 91K, the stage_pool corner (duals booked fixed).
+  NEXT (USER 2026-11-13, "That shouldn't show up in anything"): literal route (a) -- no single-colour unit ever booked
+  as `wild`; design notes in logs/mana-clean-chain/A-wild-handoff.md.
+
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
