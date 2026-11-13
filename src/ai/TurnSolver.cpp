@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102315,6 +102315,10 @@ namespace p18
         // passes below) with no clamp to the decision's REAL remaining. The gate's leafless walks are real spend the
         // heuristic ladder never makes; clamping on them refuses interior-heavy passes the ladder admits (Landfall T1).
         o.nr = k.find("_pnr") != std::string::npos;
+        // _pcr (P18e): the real-remaining clamp credits back THIS pass's own leafless walk -- the one cost the gate pays
+        // twice (its commit re-walks the interior). A decision may overspend by at most that duplicated interior, which
+        // the heuristic ladder pays once; bounded between the clamp (_prr-free) and _pnr.
+        o.cr = k.find("_pcr") != std::string::npos;
         { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
@@ -111232,7 +111236,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // more than what this decision really has left, since the committing pass is paid in real units.
             // _pnr: no real-remaining clamp -- the heuristic ladder's own admit line (its budget less its estimated spend),
             // the committing pass's real overspend bounded by its overrun ceiling as the heuristic ladder's is.
-            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, kn.nr ? rem0 - priced : std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
+            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, kn.nr ? rem0 - priced : std::min(rem0 - priced, static_cast<double>(budget->Remaining()) + (kn.cr ? static_cast<double>(lu) : 0.0)));
             const long long su0 = pb->Used();
             double x_pv = 0.0, sx = 0.0, sxx = 0.0; int m = 0; int best = 0;
             double est = static_cast<double>(lu), se = 0.0; int fit = -1; std::string ck;

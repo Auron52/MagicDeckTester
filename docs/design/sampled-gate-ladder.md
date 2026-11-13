@@ -336,7 +336,8 @@ heur's total spend 14.1k. The gate walks pass 4 leafless (7,934 real units), so 
 1.1 x (18k - 8.8k) = 10.8k against a commit price 15.7k (the commit re-walks the same ~7.9k interior: measured, the
 committing pass's interior equals the leafless l on every committed pass inspected -- the in-window proofs it
 shares do not cover no-win interior). On interior-heavy passes the gate pays the interior twice; no sampling or
-interval change can recover that. 23 of 23 Landfall `_pact` losers are this shape (T1, pass 4 or 5).
+interval change can recover that. 19 of the 23 Landfall `_pact` losers (10 of 14 Melira) have a T1 decision
+committed shallower than heur; the 8 Landfall ones inspected by hand are all this shape (pass 4 or 5).
 
 ### S13 (S12 seeds; 13,800 games, one pooled batch; `build/scratch/p18e/S13`, binary `mtg_e3` = 6b0be9766)
 `_pnr`: the admit line and the leafless cap read the heuristic ladder's remaining (rem0 less the priced passes below),
