@@ -542,6 +542,7 @@ static std::string FdPlanText(const TurnSolver::Plan& p)
     // The RECORDED continuation rides the phase too (replayed by the post-loop catch-all), and a
     // committed line whose projection depends on it reads as a plain cast list without this:
     // knights s1115 d3's T3 "Plains + Acclaimed Contender" only wins T4 WITH its recorded Vial.
+    if (p.legend_keep_turn != 0) { s += " lkeep" + std::to_string(static_cast<int>(p.legend_keep_turn)); }   // Boars LK
     if (!p.breakpoint_actions.empty())
     {
         s += " | bp[";

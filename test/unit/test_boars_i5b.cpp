@@ -1031,3 +1031,20 @@ TEST_CASE("LK SBA: a duplicate left at the end step is legend-ruled there (execu
         }
     }
 }
+
+TEST_CASE("LK put: Galadriel of Lothlorien's scry-reveal land put of a second Grey Havens is twinned (the T5 Galadriel miss)")
+{
+    LkSearchedScope searched;
+    GameState s = IBase();
+    IPut(s, "Galadriel of Lothl\xC3\xB3rien", 5);
+    IPut(s, kHavens, 10);
+    s.players[0].library.push_back(ICard(kHavens, 20));
+    TurnSolver::Plan base;
+    base.land_decided = true;
+    CHECK(LkTurnKeeps(s, base) == std::vector<int>{ 1, 2 });
+    {   // no Galadriel: nothing can put the library Havens
+        GameState t = s;
+        t.battlefield.erase(t.battlefield.begin());
+        CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });
+    }
+}

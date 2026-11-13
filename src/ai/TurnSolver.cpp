@@ -88469,7 +88469,15 @@ static bool LegendEntryRouteParams(const CardParams& q)
         || q.reanimate_creature_max_mv > 0 || q.endstep_modal_reanimate_mv > 0 || q.ltb_return_creatures > 0
         || q.etb_exile_free_cast_max_mv > 0 || q.cycle_draw_exile_shared_type_freecast || q.cascade_max_mv > 0
         || q.shuffle_reveal_freecast || q.combat_damage_free_cast || q.upkeep_adds_charge
-        || q.tap_put_from_hand_cost.has_value() || q.pod_activation_cost.has_value() || q.attack_dig_attach_count > 0;
+        || q.tap_put_from_hand_cost.has_value() || q.pod_activation_cost.has_value() || q.attack_dig_attach_count > 0
+        // The LAND puts (every EnterLand route that can find a non-basic land, so a legendary one: The Grey Havens).
+        // scry_reveal_land_to_battlefield was the Galadriel miss (LK, 2026-11-13): Galadriel of Lothlorien's "whenever
+        // you scry, reveal the top card; a land is put onto the battlefield tapped" put a second Havens on T5 of seed
+        // 9101 gi1/gi2/gi6 with the keep left to the provider (pinned=0) -- no listed route matched, so no plan of
+        // that turn was twinned.
+        || q.scry_reveal_land_to_battlefield || q.enters_look_top_land_or_hand || q.tutor_land_to_battlefield
+        || q.tutor_to_battlefield
+        || (q.land_search_count > q.land_search_to_hand && !q.land_search_basic_only);
 }
 static bool LegendCopyRouteParams(const CardParams& q)
 {
