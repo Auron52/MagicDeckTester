@@ -8367,11 +8367,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // after in both); the trailing pass skips them.
     // MTG_LINE_PAY_AUDIT (Morph INT-14): measurement only -- arms a frame over the rest of this apply.
     LinePayAuditGuard _line_pay_audit(state, plan.actions, m_in_rollout);
-    // PLAN JOINT PAY (MTG_PLAN_JOINT_PAY) -- lockstep twin of ApplyPlanDirect's call: same point (after the
-    // pre-pass, before the lead flips), same actions, same human-line exclusions (human_action_order covers every
-    // human pin, the "**" sequence included). true -> the casts-only prepay below is skipped.
-    const bool plan_joint_paid = !plan.human_action_order && plan.human_pre_taps.empty()
-                              && TurnSolver::PlanJointPayFallback(state, plan.actions);
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
     { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
@@ -8432,7 +8427,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
     });
-    if (!loam_target_plan && !plan_joint_paid)
+    if (!loam_target_plan)
     { TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
                                       /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true); }
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);

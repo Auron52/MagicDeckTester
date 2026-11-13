@@ -66719,7 +66719,7 @@ static bool HumanLinePaysAsItGoes(const TurnSolver::Plan& plan, bool human_v2, b
 // the line (Morph: a Den Protector flip queued first spent a Forest on its generic and stranded a Might's {G}).
 // This pays the WHOLE line jointly instead. Engaged only by PrepareHumanCommit, and only after a trial apply with
 // it set paid every step, so it can never lose a step the as-queued apply made.
-// THE LINE'S JOINT BILL (shared by the human "**" path and the AI fallback below). `bill` = the mana of every step:
+// THE LINE'S JOINT BILL (the human "**" path's joint pay, HumanLineJointPrepay). `bill` = the mana of every step:
 // each hand cast's stamped cost (Action::cost -- what the subset math afforded the plan with) and each activation's
 // own cost (OutletOwnCost). `act_hold` = the ActivatePermAbility steps' share, which joins the line hold while the
 // joint float is live (g_line_hold_has_acts). `tap_src` = the {T} sources of the line's activations, set aside from
@@ -66731,23 +66731,18 @@ struct LineJointBill
     ManaCost bill{};
     ManaCost act_hold{};
     std::vector<int> tap_src;
-    int casts = 0;      // paying hand casts
-    int acts  = 0;      // paying activations
 };
 }
-static bool BuildLineJointBill(const std::vector<Action>& acts, bool ai, LineJointBill& jb, bool trace)
+static bool BuildLineJointBill(const std::vector<Action>& acts, LineJointBill& jb, bool trace)
 {
     auto add = [&](const ManaCost& c) -> bool
     {
-        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0) { return false; }
-        // Snow pips ride in `generic` (ManaCost::snow_pips). The human path declines them; the AI path carries
-        // them only onto an ALL-SNOW board (the caller checks), where the float's wild is snow mana.
-        if (c.snow_pips != 0 && !ai) { return false; }
+        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0 || c.snow_pips != 0)
+        { return false; }
         if (jb.bill.hybrid_count + c.hybrid_count > 6) { return false; }
         for (int i = 0; i < c.hybrid_count; ++i) { jb.bill.hybrid_pair[jb.bill.hybrid_count++] = c.hybrid_pair[i]; }
         jb.bill.generic += c.generic; jb.bill.white += c.white; jb.bill.blue += c.blue; jb.bill.black += c.black;
         jb.bill.red += c.red; jb.bill.green += c.green; jb.bill.colorless += c.colorless;
-        jb.bill.snow_pips = static_cast<std::uint8_t>(jb.bill.snow_pips + c.snow_pips);
         return true;
     };
     for (const Action& a : acts)
@@ -66758,23 +66753,7 @@ static bool BuildLineJointBill(const std::vector<Action>& acts, bool ai, LineJoi
             {
                 if (a.sacrifice_land || a.alt_cost || a.free_cast) { break; }
                 if (a.convoke_green > 0 || a.convoke_other > 0 || a.ritual_float > 0) { return false; }
-                if (ai)
-                {
-                    // MID-LINE MANA is not supply here (the solve sees the plan-start board), so a line that
-                    // makes mana -- a rock, a dork, a Treasure, a land-untapping ETB -- is left to the as-queued
-                    // payment, which spends it; and a doubler the executor may defer to combat
-                    // (NoteDoublerDeferPayable) must not have its mana floated in main.
-                    if (a.rock_mana.Total() > 0 || a.awaken || a.phyrexian_life > 0 || a.twobrid_colored > 0)
-                    { return false; }
-                    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-                    if (d == nullptr || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock
-                        || d->params.etb_untap_lands > 0 || d->params.trick_double_power
-                        || d->params.lens_imprint_land || d->tmpl == CardTemplate::DrawUntilNonland
-                        || d->params.return_up_to_gy_lands > 0)   // Loam pays in cast order (its target snapshot)
-                    { return false; }
-                }
                 if (!add(a.cost)) { return false; }
-                if (a.cost.ManaValue() > 0) { ++jb.casts; }
                 break;
             }
             case Action::Kind::ActivatePermAbility:
@@ -66784,26 +66763,18 @@ static bool BuildLineJointBill(const std::vector<Action>& acts, bool ai, LineJoi
                 if (a.ability_mode == Action::AbilityMode::TapBlood || a.ability_mode == Action::AbilityMode::PingLoop
                     || a.ability_mode == Action::AbilityMode::SacNamedTutorPut
                     || a.chosen_x > 1 || TurnSolver::IsLandSearchActivation(a)) { return false; }   // chosen_x = activation count
-                if (ai && (a.ability_mode == Action::AbilityMode::TapTargetPump
-                           || a.ability_mode == Action::AbilityMode::UntapLand)) { return false; }
                 if (PermAbilityTaps(a.ability_mode)) { jb.tap_src.push_back(a.sac_source_id); }
                 const ManaCost oc = OutletOwnCost(a);
                 if (!add(oc)) { return false; }
                 AddManaCost(jb.act_hold, oc);
-                jb.act_hold.snow_pips = static_cast<std::uint8_t>(jb.act_hold.snow_pips + oc.snow_pips);
-                if (oc.ManaValue() > 0) { ++jb.acts; }
                 break;
             }
             case Action::Kind::Equip: case Action::Kind::ActivateBlink:
-                if (ai) { if (a.cost.ManaValue() > 0) { return false; } break; }
                 if (!add(a.cost)) { return false; }
                 break;
             default:
                 // Any other kind that pays mana (a pump paid K times, an untapper, a mana source) is not
-                // summed here: decline rather than guess. The AI path also leaves every mana-MAKING step alone.
-                if (ai && (a.kind == Action::Kind::SacForMana || a.kind == Action::Kind::Suspend
-                           || a.kind == Action::Kind::DigDraw || a.kind == Action::Kind::UntapCreature))
-                { return false; }
+                // summed here: decline rather than guess.
                 if (a.cost.ManaValue() > 0 || a.ritual_float > 0)
                 {
                     if (trace) { std::fprintf(stderr, "[joint-pay] declined: kind %d (%s)\n", static_cast<int>(a.kind), a.card_name.c_str()); }
@@ -66901,7 +66872,7 @@ bool TurnSolver::HumanLineJointPrepay(GameState& state, const Plan& plan)
     if (!s_on) { return false; }
     static const bool s_trace = EnvOn("MTG_HUMAN_LINE_JOINT_PAY_TRACE");   // diagnostic only
     LineJointBill jb;
-    if (!BuildLineJointBill(plan.actions, /*ai=*/false, jb, s_trace)) { return false; }
+    if (!BuildLineJointBill(plan.actions, jb, s_trace)) { return false; }
     if (s_trace)
     {
         const ManaCost& bill = jb.bill;
@@ -66910,162 +66881,6 @@ bool TurnSolver::HumanLineJointPrepay(GameState& state, const Plan& plan)
                      jb.tap_src.size(), state.floating_mana.Total());
     }
     return LineJointPrepayCore(state, jb, s_trace);
-}
-
-// PLAN JOINT PAY -- the AI twin (MTG_PLAN_JOINT_PAY; see the declaration). Diagnostics only: MTG_PLAN_JOINT_PAY_TRACE=1
-// prints each REAL fire (job, game, turn, plan) and, at exit, the process-wide counters (dry walks run, dry walks
-// short, fires, real fires). No game logic reads them.
-static std::atomic<long long> g_pjp_probe{0}, g_pjp_short{0}, g_pjp_fired{0}, g_pjp_fired_real{0};
-namespace {
-struct PlanJointPayDump
-{
-    ~PlanJointPayDump()
-    {
-        if (!EnvOn("MTG_PLAN_JOINT_PAY_TRACE")) { return; }
-        std::fprintf(stderr, "PLAN_JOINT_PAY_STATS dry_walks=%lld short=%lld fired=%lld fired_real=%lld\n",
-                     g_pjp_probe.load(), g_pjp_short.load(), g_pjp_fired.load(), g_pjp_fired_real.load());
-    }
-} g_plan_joint_pay_dump;
-}   // namespace
-
-// The as-queued payments of `acts`, on a COPY, in the order both appliers make them: the LEAD flips (before the plan
-// traits), the casts' whole-turn prepay and each cast, then each trailing activation with its {T} paid first and the
-// trailing pass's reservation in scope. Payments only -- no effect resolves -- so it is an estimate of where the
-// as-queued apply comes up short; the joint solve below is the authority on whether anything better exists.
-static bool PlanPaymentsShort(const GameState& s0, const std::vector<Action>& acts)
-{
-    GameState c = s0;
-    RevealLogPause quiet;
-    LineUnpaidCostScope _luc(g_line_unpaid_cost);   // the dry walk's decrements stay on the copy's side
-    const int me = c.active_player_index;
-    std::vector<int> lead_done;
-    if (c.deck_has_morph)
-    {
-        for (const Action& a : acts)
-        {
-            if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::TurnFaceUp) { continue; }
-            if (!PermAbilitySourceLive(c, me, a.sac_source_id, a.ability_mode)) { continue; }
-            if (!TapForCostDirect(c, a.cost, /*for_creature=*/false)) { return true; }
-            lead_done.push_back(a.sac_source_id);
-        }
-    }
-    // The plan traits stay in scope to the END of the walk, as they do in both appliers (installed after the lead
-    // flips, live through the casts AND the trailing pass): the trailing activations' soft hold (ActLineHoldMask) is
-    // what keeps a second Scrying Sheets from being tapped for the first one's mana. Scoped to the casts only, the
-    // walk read "short" on lines the appliers pay (two Sheets: 2.6 of every 5 dry walks short, none real).
-    PlanTraits pt;
-    if (PlanTraitsWanted()) { pt = TurnSolver::ComputePlanTraits(c, acts); }
-    PlanTraitsScope _pts(PlanTraitsWanted() ? &pt : nullptr);
-    {
-        TurnSolver::BatchPrepayMainCasts(c, acts, /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true);
-        PlanSourceReserveScope _res(TurnSolver::PlanReserveSources(c, acts));
-        for (const Action& a : acts)
-        {
-            if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land || a.alt_cost || a.free_cast) { continue; }
-            const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-            if (!TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature())) { return true; }
-            SubManaCost(g_line_unpaid_cost, a.cost);
-        }
-    }
-    ActLinePassScope _pass;
-    std::optional<PlanSourceReserveScope> _act_reserve;
-    {
-        std::vector<Action> trailing;
-        for (const Action& a : acts) { if (a.kind == Action::Kind::ActivatePermAbility) { trailing.push_back(a); } }
-        std::vector<int> hold = TurnSolver::ActivationTapReserveUnion(c, trailing);
-        if (!hold.empty()) { _act_reserve.emplace(std::move(hold)); }
-    }
-    for (const Action& a : acts)
-    {
-        if (a.kind != Action::Kind::ActivatePermAbility) { continue; }
-        if (std::find(lead_done.begin(), lead_done.end(), a.sac_source_id) != lead_done.end()
-            && a.ability_mode == Action::AbilityMode::TurnFaceUp) { continue; }
-        const ManaCost oc = OutletOwnCost(a);
-        const bool taps = PermAbilityTaps(a.ability_mode);
-        if (taps)
-        {
-            bool found = false;
-            for (Permanent& p : c.battlefield)
-            {
-                if (p.card.m_number != a.sac_source_id || p.controller_index != me) { continue; }
-                if (p.tapped) { return true; }   // its {T} source was spent on an earlier step's mana
-                p.tapped = true; found = true; break;
-            }
-            if (!found) { continue; }
-        }
-        if (oc.ManaValue() == 0) { continue; }
-        std::optional<CreatureAbilityPayScope> cas;
-        if (PermAbilitySourceIsCreature(c, me, a.sac_source_id)) { cas.emplace(AbilitySourceCard(c, me, a.sac_source_id)); }
-        ActLinePayScope _pay(oc);
-        if (!TapForCostDirect(c, oc, /*for_creature=*/false)) { return true; }
-        _pay.Paid();
-    }
-    return false;
-}
-
-bool TurnSolver::PlanJointPayFallback(GameState& state, const std::vector<Action>& acts)
-{
-    static const bool s_on = EnvOn("MTG_PLAN_JOINT_PAY", true);
-    if (!heurarm::Flag(heurarm::PLAN_JOINT_PAY, s_on)) { return false; }
-    // Cheap kind scan first: only a plan that PAYS for an activation can be short in the way this repairs.
-    bool any_act = false;
-    for (const Action& a : acts)
-    { if (a.kind == Action::Kind::ActivatePermAbility && a.cost.ManaValue() > 0) { any_act = true; break; } }
-    if (!any_act) { return false; }
-    // The mana oracle scripts every payment of its own copy; a scripted crack must reach its first bill; a float
-    // already live (a ritual, a cracked Lotus) is not this solve's to re-book.
-    if (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) { return false; }
-    if (state.scripted_early_ondemand_crack) { return false; }
-    if (state.floating_mana.Total() != 0 || state.floating_creature_mana.Total() != 0
-        || state.floating_bigspell_mana.Total() != 0) { return false; }
-    LineJointBill jb;
-    if (!BuildLineJointBill(acts, /*ai=*/true, jb, false)) { return false; }
-    if (jb.acts < 1 || jb.casts + jb.acts < 2) { return false; }
-    const int me = state.active_player_index;
-    // {S} rides the float as wild only where every mana source is snow (TapForCostSharedOnce's strict-snow scan).
-    if (jb.bill.snow_pips > 0)
-    {
-        for (const Permanent& p : state.battlefield)
-        {
-            if (p.controller_index != me) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d == nullptr) { continue; }
-            const bool sourcey = d->card.IsLand() || d->tmpl == CardTemplate::ManaDork || d->params.mana_rock
-                              || d->params.is_filter || d->params.any_color_filter || d->params.ramp_filter;
-            if (sourcey && !d->card.HasSupertype(Supertype::Snow)) { return false; }
-        }
-    }
-    // Every {T} source must be up (a tapped one fails its step whichever way the mana is paid).
-    for (const int id : jb.tap_src)
-    {
-        for (const Permanent& p : state.battlefield)
-        { if (p.card.m_number == id && p.controller_index == me && p.tapped) { return false; } }
-    }
-    // Supply bound: the board cannot make the bill's mana value -> the joint solve cannot pay it either.
-    if (AvailableManaPool(state).Total() < jb.bill.ManaValue()) { return false; }
-    g_pjp_probe.fetch_add(1, std::memory_order_relaxed);
-    if (!PlanPaymentsShort(state, acts)) { return false; }
-    g_pjp_short.fetch_add(1, std::memory_order_relaxed);
-    if (!LineJointPrepayCore(state, jb, false)) { return false; }
-    g_pjp_fired.fetch_add(1, std::memory_order_relaxed);
-    if (g_real_resolution)
-    {
-        g_pjp_fired_real.fetch_add(1, std::memory_order_relaxed);
-        static const bool s_trace = EnvOn("MTG_PLAN_JOINT_PAY_TRACE");
-        if (s_trace)
-        {
-            std::string pl;
-            for (const Action& x : acts)
-            {
-                pl += (pl.empty() ? "" : ", ") + x.card_name.str();
-                if (x.kind != Action::Kind::CastFromHand) { pl += "(act)"; }
-            }
-            std::fprintf(stderr, "PLAN_JOINT_PAY job=%s gi=%d t%d bill=%s plan=[%s]\n",
-                         escstats::t_job ? escstats::t_job : "-", escstats::t_gi, state.turn_number,
-                         jb.bill.ToDisplayString().c_str(), pl.c_str());
-        }
-    }
-    return true;
 }
 
 void TurnSolver::EraseHumanSequenceAction(Plan& plan, std::size_t q)
@@ -74991,13 +74806,6 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Executor twin: the same TurnSolver::ApplyFaceUpLeadActs at AIEngine::TakeTurn's pre-cast pass. A
     // flip already done is face up by the trailing pass, whose liveness check then skips it. No-op for a
     // plan without one (every deck without a morph card). A human sequence orders its own steps.
-    // PLAN JOINT PAY (MTG_PLAN_JOINT_PAY; TurnSolver::PlanJointPayFallback): when the as-queued payments of an
-    // AI plan come up short on a step and the whole bill pays jointly, pay it jointly here -- before the lead flips,
-    // so they draw on it too -- and skip the casts-only prepay below. Executor twin: AIEngine::TakeTurn, the same
-    // call at the same point with the same actions. Never on a human-ordered or hand-tapped line (those keep the
-    // payment they were played with; the "**" sequence has its own joint pay, HumanLineJointPrepay).
-    const bool plan_joint_paid = !human_v2 && !plan.human_action_order && plan.human_pre_taps.empty()
-                              && TurnSolver::PlanJointPayFallback(state, plan.actions);
     if (!human_v2)
     {
         // The realised-order note (line_order_note) for each LEAD flip that fires HERE, where it happens. The
@@ -75129,8 +74937,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // prepayment can spend a Mine earmarked for a later Loam before an earlier
     // spell's SBA, making that Mine appear to be a legal target. Pay this plan
     // in cast order so the target snapshot is the actual declaration snapshot.
-    if (plan_joint_paid) {}   // the whole line's mana is already floating (PlanJointPayFallback above)
-    else if (!loam_target_plan && bp_capture != nullptr && BpPrefixPrepayEnabled())
+    if (!loam_target_plan && bp_capture != nullptr && BpPrefixPrepayEnabled())
     {
         TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, BpPrepayPrefix(state, plan),
                                                                               dbl_prepay_scratch),

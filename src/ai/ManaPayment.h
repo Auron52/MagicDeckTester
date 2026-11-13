@@ -941,7 +941,7 @@ void SubManaCost(ManaCost& dst, const ManaCost& paid);
 // breakpoint re-solve inside an apply) sets its own hold and restores the outer one on exit.
 // THE HOLD CARRIES THE LINE'S ACTIVATIONS TOO (Morph INT-14): true while the hold bound at THIS level also holds
 // the mana of the line's ActivatePermAbility steps, because a JOINT payment pre-loaded the float with them
-// (TurnSolver::HumanLineJointPrepay / TurnSolver::PlanJointPayFallback). Every ActivatePermAbility pay site (both
+// (TurnSolver::HumanLineJointPrepay). Every ActivatePermAbility pay site (both
 // apply worlds, and ApplyFaceUpLeadActs) then takes its own cost back out of the hold once it is paid, exactly as
 // each cast does. Without it the hold carried the casts only, so the line-aware float orders read the activations'
 // pips as SURPLUS and settled a floating wild onto a cast's colour (Morph g0007: Might's {G} took the wild, the Den

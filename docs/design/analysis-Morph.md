@@ -1133,6 +1133,13 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
   * **Recommendation (USER decision):** the AI fallback is correct, lockstep and default ON as briefed, but on
     this evidence it buys nothing measurable and costs ~9% wall on Snow. Keep it ON only if the continuation fix
     above is built on top of it; otherwise set it OFF (or delete it) rather than pay the dry walk for nothing.
+  * **DROPPED (USER 2026-11-13, verbatim):** "Okay, let's drop it then. To be fair, we have an agent that has been
+    working on mana for a while, so perhaps it isn't a huge issue and even if it crops back up again it will
+    hopefully find it." `MTG_PLAN_JOINT_PAY` is DELETED on branch `morph-integ` (both appliers' calls,
+    TurnSolver::PlanJointPayFallback, its dry walk PlanPaymentsShort and trace counters, BuildLineJointBill's
+    AI-only declines, heurarm slot PLAN_JOINT_PAY + its name). Everything else of e4264949f stays: the trial's
+    ConcreteDeferScope in PrepareHumanCommit, `g_line_hold_has_acts`, the physical-{C} pre-load, the
+    SacNamedTutorPut decline, and scenario `morph_human_seq_joint_pay_might_first_turf_birds`.
 
 ### INT-16 (2026-11-13) -- exact doubler combat payability
 - USER (verbatim, 2026-11-13), about INT-12's documented probe approximations: "If we are approximating and this might
