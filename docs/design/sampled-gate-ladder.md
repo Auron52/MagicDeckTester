@@ -126,6 +126,36 @@ S4 (in flight): _pb1 BOOTSTRAP-EXACT -- pass 1 runs on rollouts exactly as the h
 bootstrap check decides pass 2 on that real cost, and prices admit passes 3+ only (variants _pz10, _pd15, _pmr80).
 10-game probe: both EDF losers (312, 369) recovered.
 
+## Iterations 4-6 (S4-S6, same seeds): BOOTSTRAP-EXACT + LEAFLESS CAP -- quality at heur, cost below it on 4 of 5
+
+_pb1 (BOOTSTRAP-EXACT): pass 1 runs on rollouts exactly as the heuristic ladder runs it (guarded by the ladder's own
+overrun ceiling, anytime commit), the ladder's own bootstrap check `c1 x 6.0 <= 1.1 x remaining` decides pass 2 on
+that REAL cost (exact parity there), and pricing starts at pass 2 and admits passes 3+ only. Pass 1 is the cheapest
+pass, so this costs little, and it removes the SHALLOWER pass-1/pass-2 divergences that carried every loss.
+_plc (LEAFLESS CAP): a pass whose leafless tree alone outgrows the admit threshold cannot fit (its price is at least
+that tree), so the leafless pass stops at the threshold and the pass is refused -- a sound cut, absent at an
+unlimited budget (thr = the budget's own threshold). Refused passes' leafless trees were the biggest single overhead:
+Hydras 3.69M units of leafless trees on refused passes (2.83M of it past the threshold) vs heur's 3.96M superseded.
+Every leafless pass also carries the ladder's overrun ceiling now (S6 fix: an unguarded _pb1 pass 1 ran 814k units
+on Snow where the ladder aborts at 450k).
+
+S6 (`mtg_b8`, 89b225bb7), g_pb1_plc vs heur, train seeds:
+
+| deck | units | thread-CPU | dturn | better/worse |
+|---|---|---|---|---|
+| Hydras (1000) | 0.917x | 0.987x (S5 0.922x) | 0.0000 | 3/3 |
+| Alchemist (400) | 0.837x | 0.686x | 0.0000 | 1/1 |
+| EDF (400) | 0.999x | 0.934x | 0.0000 | 0/0 |
+| Snow (400) | 0.981x | 1.124x | +0.0025 | 0/1 |
+| Midrange Burn (400) | 1.007x | 1.054x (S5 0.983x) | -0.0050 | 2/0 |
+
+Thread-CPU per job is NOISY in a 32-worker pool (same-digest Snow jobs at 0.99x units read 1.84x CPU; a
+40-game 8-thread probe of the same jobs read 0.95x CPU at 0.96x units). Snow's 1.12-1.20x CPU at <=1.0x units is
+nevertheless systematic across S3-S6 -- suspected: the reservoir copies GameStates (up to 64 + ~64 ln(n/64) per pass,
+not charged in units) and allocation contention under 32 workers. S7 (Snow only, MTG_P17_LEDGER) localizes it
+(`ledcpu.py S7/err.log`). Snow's one loser (game 364): heur K=3 on pass 3 = 14.1k against thr 14.2k; our price
+21.4k (1.5x high: the warm-vs-cold pre-pay factor) refused.
+
 ## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
 - S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
