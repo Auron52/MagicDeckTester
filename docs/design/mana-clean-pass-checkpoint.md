@@ -1053,6 +1053,32 @@ fungus 1,880, gods 4,300 (first run).
     per-player/turn scalar). Next step: dump the two states' MidTurnStateKeyOfPayment inputs field by field. Repro:
     `MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg decks/Gods/Gods.cod --profile decks/Gods/Gods.profile.json
     --games 1 --seed 30014741 --game-index 14741`.
+* **Round 16 (sixteenth item-6 agent, 2026-11-13).**
+  * **fungus DOMINATED-CREATURE lead 1 (pre-float doomed bodies): FIXED (57cc178e4, `MTG_FADE_PREFLOAT_DOOMED`, heurarm,
+    default ON).** The FadeSaproling case of ApplyPermAbility (so the executor, the rollout and SpendFadeActivations'
+    repeats all run it) first taps every untapped token of THIS Burst that the counter removal will kill (the sweep's own
+    toughness test at the post-cost count, lords/auras/equipment included) and that has exactly ONE free mana face
+    (Badger's {G}) into the float, through core->ai hook g_fade_prefloat_hook -> ApplyEnginePreTap (legality =
+    HumanPreTapOfferFor: summoning sickness, live grant). Never worse: CR 602.2b/605.3a lets the controller activate mana
+    abilities while paying the cost, the body dies either way, and mana empties unused (no burn); no colour decided.
+    Off for human play (hand taps) and inside MakeSameLineSacFodder (may run inside ApplySacForMana's payment). Repro
+    s30065330 T4: DOMINATED-CREATURE 2 -> 0, same win turn. Units 2909/2909. Held-out fungus 5000 paired @7500001+ (one
+    pooled batch): 0 job digest diffs, 4.5302 both arms, net 0. Smoke 199/199, regression 316/316 unchanged (viewer
+    protocol 0 drift), check_gt_logs clean. Only Fungus holds Saproling Burst.
+  * **Gates (PGO, both recorded in test/mana_clean.json):** 70000-74999 on e00293916e05 (pre-fix): 773 issues (ENUM-GAP 206,
+    DOMINATED-CREATURE 149, CAPPED 343, ORACLE-GAP 67, UNMODELED 6, APPLY-DROP-ORDER 2). 75000-79999 on 57cc178e4: **519
+    issues** (ENUM-GAP 167, DOMINATED-CREATURE 119, CAPPED 177, ORACLE-GAP 54, APPLY-DROP-ORDER 2). Identity byte-identical
+    both times. Block-to-block variance is large (543 / 773 / 519 on consecutive blocks).
+  * **NEXT LEAD (diagnosed, not fixed): fade_exhaust=0 at the whole-turn prepay.** s30075725 T4 plan {Forest + Utopia
+    Mycon + Doubling Season + act:Saproling Burst(x1)} (pre-existing with the lever off): the prepay (cost 6) holds the
+    three doomed 0/0 Burst tokens in its attacker hold and its partial ladder releases the LASTING 1/1s first (power tie,
+    battlefield order), so Doubling Season taps #1000/#1004 + Ancient Tomb (+2 life) and the doomed bodies only float
+    (now) or die untapped (before). MTG_PREPAY_HOLD_TRACE with the traits' fade_exhaust_count added to the [hold] line:
+    all 826 T4 cost-6 rungs that hold a 0/0 token ran with fade_exhaust_count == 0, so IsDoomedPlanBody (and the
+    PAY_DOOMED_AHEAD_OF_LANDS exclusion from reserved_crea, TurnSolver ~62535) never fires there. Find which
+    ComputePlanTraits list the prepay's PlanTraitsScope is built from (casts only? a cast-prefix?) and include the plan's
+    FadeSaproling actions. Repro: `MTG_PREPAY_HOLD_TRACE=1 MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg
+    decks/Fungus/Fungus.cod --profile decks/Fungus/Fungus.profile.json --games 1 --seed 30075725 --game-index 75725`.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
