@@ -1173,6 +1173,37 @@ fungus 1,880, gods 4,300 (first run).
   battlefield,#54` / `#53`, i.e. the engine ends with a Tendo counter that every oracle line spends. The prepay path is
   fixed, so this one is a different payer path (per-cast payer, ordered-cast route, or the mana cache). Trace it the
   same way: `MTG_TAPDBG=1` + the repro in the report (the TFCD lines print each cost and the float).
+* **Round 20 (twentieth agent, 2026-11-13): the `wild` {C} class generalised (FIXED, 852913f25); the remaining gods
+  Tendo-shaped ORACLE-GAP rows are the OPEN USER QUESTION "surplus COLOURED mana booked as `wild`" (PARKED).**
+  * **FIXED -- `MTG_PREPAY_COSTLY_C` (heurarm, default ON).** Four cards list {C} + every colour in `produces` but charge
+    for the colour: Aether Hub ({E}; EDF), Tarnished Citadel + Grand Coliseum (damage; Prevent Damage), Voldaren Estate
+    (1 life; Vampires). `pure_c_tapped` exempted them like Cavern / Sliver Hive, so a {C} from their free "{T}: Add {C}"
+    ability rode `wild` and could pay a colour pip outside the bill with the energy / life never spent (CR 106.1b).
+    Now a source with `tap_self_damage > 0` or `energy_per_colored_tap > 0` is counted like Caves of Koilos (its {C}
+    stays `colorless`; a colour tap of it is over-counted the same conservative way -- only matters on a board that
+    also holds a FREE any-colour {C} source, i.e. Vampires' Territory / Courtyard beside an Estate). Units: 2 new cases
+    in test_prepay_c_not_wild.cpp (Hub; Citadel + Coliseum), both fail with the lever off; suite 2921/2921. Held-out A/B
+    one pooled batch, seeds 7420001+, 2000 games/deck/arm: edf, pd, vampires 0 digest diffs, net +0 each (latent
+    illegal line, play-neutral on the sample at the shipped depth). Smoke 199/199 unchanged. Regression 314/316: the two
+    changed rows are d0 only, same score, play-changed (edf_regression_d0_s2002 gi29/759/810/948, vampires_regression_d0
+    _s2002 gi799), each reproduced lever-off = GT digest / lever-on = new digest. vampires gi799 T4 checked: the OLD
+    line cast Pit Fighter {R} + Markov Baron {2}{B} off Voldaren Estate + Unclaimed Territory + 2 convoke with life
+    staying 17 -- the Estate's free {C} paid a colour pip without the 1 life (illegal); the new line casts Pit Fighter
+    only, same win turn. Accepted (regression GT); check_gt_logs clean (1146 consistent).
+  * **PARKED (USER QUESTION) -- s30018016 T6 {Careful Study + Magus}, s30018089 T5 [ordered] {Looting + Magus}, and by
+    the same shape the rest of the 20 gods ORACLE-GAP flags of gate 15000-19999.** Traced with `MTG_TAPDBG` (TFCD lines). The prepay
+    pays the bill ({U} + {1}{U}, resp. {R} + {1}{U}) and books the generic's COLOUR funding as `wild`: s30018016 taps
+    Forest #16, Vivid Creek #58 (c0), Creek #57 (c1) -> float U2 **w1** (a Forest {G} or a base-face Creek {U}); the
+    post-draw continuation casts Careful Study ({U}), then flashes back the discarded Faithless Looting ({2}{R}, outside
+    the bill) with that `wild` as the {R} and Tendo #54 tapped for {C} (counter kept). s30018089: Creek #57 / Creek #58
+    (base {U}) + Reflecting Pool {R} -> U1 R1 **w1**; the flashback's {R} is the `wild` = a Creek {U} with its charge
+    counters untouched. One red source for two {R} pips; no oracle realisation matches (the oracle needs Tendo's / a
+    Creek's counter). The Cephalid Coliseum rows end with a `{*x1}` float the oracle cannot represent. This is exactly
+    the OPEN USER QUESTION in `docs/design/handoff-cwild-mana.md` ("surplus COLOURED mana booked as `wild`", NOT
+    implemented by instruction): its route (a) -- true colours + an exported bill hold maintained by executor AND
+    rollout -- is non-local and moves every deck that prepays a multi-cast bill. Not attempted here. Evidence for the
+    USER: all 20 gods ORACLE-GAP flags of that gate (12 signatures) are prepaid {Looting / Careful Study + Magus}
+    bills of this shape; two traced, three more read from the report (graft = a Tendo / Creek counter, or a `{*x1}` float).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
