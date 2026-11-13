@@ -1,0 +1,33 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 2,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator E1), the held-fetch crack-then-cast hole with TWO held fetches: one Plains + two Flooded Strands held from earlier turns (land drop used); hand: Drogskol Captain ({1}{W}{U}); library: Plains filler with exactly one Island. Crack BOTH Strands first (one for the Island, one for a Plains), then cast the Captain T3 and attack T4 for 2 -> win T4. Pins the recursion of the crack-first expansion (every held untapped-land fetch may precede the casts, each pick searched). Budget 0. Starts INSIDE main 1 (resume_at) with the land drop used: the no-drop enumeration path, the one a held fetch meets most (drop used, main 2, the post-draw re-solve).",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Flooded Strand"
+    },
+    {
+      "name": "Flooded Strand"
+    }
+  ],
+  "hand": [
+    "Drogskol Captain"
+  ],
+  "library": [
+    "Island"
+  ],
+  "expect_win_turn": 4
+}
