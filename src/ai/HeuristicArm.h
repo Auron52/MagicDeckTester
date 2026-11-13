@@ -915,6 +915,7 @@ enum Slot : int
     FACEUP_TRAIL_STALE_PIN_FOLD, // MTG_FACEUP_TRAIL_STALE_PIN_FOLD  Morph INT-15 P2 (engine identity fold): after combat, a regrowth TRAIL flip (Den Protector) emits no variant naming a hand solo-target trick the provider no longer offers -- it cannot reach the graveyard, so the pin is stale and resolves as the TRAIL base. Default ON; =0 -> kept
     PREPAY_WILD_LITERAL,      // MTG_PREPAY_WILD_LITERAL  item A round 3, route (a) LITERAL (USER 2026-11-13: "Does this wild-mana fix avoid floating wild mana? That shouldn't show up in anything."): the prepay books a single-colour source's generic funding as ITS COLOUR (never `wild`) plus a per-pool generic-funding count (GameState::PrepayWildTrue::gfund/cfund) the drain spends on generic first; only a multi-colour source's unit stays `wild` (its colours, committed at spend). Rides on PREPAY_WILD_TRUE. Default ON; =0 -> the tag version
     PREPAY_WILD_REPLAY,       // MTG_PREPAY_WILD_REPLAY  item A round 5: a planner's replay of the general-float drain (LineFloatTapFirstPlan, the hybrid float order) runs under the prepay's record, so the literal booking's generic funding pays a replayed generic pip first, as the payer does (alchemist regression d0 s2002 gi83). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the replay drains without the record
+    SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  TEMPORARY A/B SELECTOR (Spirits Stage 1 fetch_hold_review): SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). Default OFF = the hold is offered (root default). Measurement only; the hold policy is a USER decision
     COUNT
 };
 
@@ -1774,6 +1775,7 @@ inline const char* Name(int slot)
         "MTG_FACEUP_TRAIL_STALE_PIN_FOLD",
         "MTG_PREPAY_WILD_LITERAL",
         "MTG_PREPAY_WILD_REPLAY",
+        "MTG_SPIRITS_NO_FETCH_HOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

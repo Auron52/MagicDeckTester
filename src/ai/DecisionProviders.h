@@ -4295,7 +4295,14 @@ public:
     // and its menu is the boast activations alone (soundness argument at the definition).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
-    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;    // TEMPORARY A/B selector for the Stage 1 fetch_hold_review (MTG_SPIRITS_NO_FETCH_HOLD, per-job via
+    // HeuristicArm): =1 declines the battlefield hold. Default OFF -> the root default (hold offered).
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override
+    {
+        static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD");
+        if (heurarm::Flag(heurarm::SPIRITS_NO_FETCH_HOLD, env)) { return false; }
+        return DeckProvider::ConsiderFetchHold(s, fetch);
+    }
 };
 
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.
