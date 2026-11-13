@@ -1,14 +1,14 @@
-# Regression ground truth -- commit afe67db6b  date 2026-11-13
+# Regression ground truth -- commit 72be9f8fb  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-morph_smoke_d0_s1001=4.7380/34fc50d3a92be7bd
-morph_smoke_d3_s1001=4.0200/eb01ec2903a67eb6
-morph_smoke_d5_s1001=4.0900/3a8343cd0bfcea70
-morph2hg_smoke_d5_s1001=4.5200/58fe1d5ea858cfee
+morph_smoke_d0_s1001=4.7380/09005a679a46d696
+morph_smoke_d3_s1001=3.9800/5c6ff259a645ffb6
+morph_smoke_d5_s1001=4.0600/5b4eedaabe9aa91e
+morph2hg_smoke_d5_s1001=4.4800/af1aa1585607696b
 hydras_smoke_d0_s1001=5.8480/4401470db4ecbd6f
 hydras_smoke_d3_s1001=5.4600/18823577a2f1be63
 hydras_smoke_d5_s1001=5.4500/0f6a8978637ac3f8
@@ -206,13 +206,13 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-morph_regression_d0_s2002=4.7730/770f3e7a37cda5a5
-morph_regression_d3_s2002=4.0800/b6b787855d388523
-morph_regression_d5_s2002=4.0933/d305a5d52127fd66
-morph_regression_d5_s3003=4.1867/0aa1225466a6322b
-morph2hg_regression_d5_s2002=4.7200/317d253524366956
-morph_regression_d3_s30001=4.3333/6b1266b664296d26
-morph_regression_d5_s30001=4.3333/6b1266b664296d26
+morph_regression_d0_s2002=4.7730/c0155d7854c1f283
+morph_regression_d3_s2002=4.0267/8b0dde195794bee2
+morph_regression_d5_s2002=4.0400/99f50f3ae5a7bf70
+morph_regression_d5_s3003=4.1200/bef4987f8e3caa21
+morph2hg_regression_d5_s2002=4.6800/2a4866cf5a325043
+morph_regression_d3_s30001=4.0000/4b3fce1ed24ff2fd
+morph_regression_d5_s30001=4.0000/4b3fce1ed24ff2fd
 hydras_regression_d0_s2002=5.7910/2f302f5e6f2a2826
 hydras_regression_d3_s2002=5.3867/8dc8d0544f203e7e
 hydras_regression_d5_s2002=5.3800/9c23aae1d8781467
