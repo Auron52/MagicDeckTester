@@ -38,8 +38,8 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | Hallowed Fountain | 1 | Steam Vents schema | A (`land_entry`) | IMPLEMENTED 87078b215 |
 | Drogskol Captain | 1 | `lord_effect` Spirit +1/+1, `lord_excludes_self`; hexproof grant PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
 | Supreme Phantom | 1 | `lord_effect` Spirit +1/+1, excludes self | none | IMPLEMENTED 87078b215 |
-| Patrician Geist | 2 | Spirit lord + new `reduces_graveyard_cast_generic 1` (Souls flashback {1}{B}→{B}) at every gy-cast price/pay site incl. same-turn ManaPruneBound credit; NOT `reduces_spell_subtype` (→ goblin route) | none | drafted |
-| Mausoleum Wanderer | 2 | +1/+1 UNTIL EOT (not a counter) when another Spirit enters: `own_creature_enters_self_temp_power/_tough` + `enters_watch_subtypes Spirit`, add to `DefHasCreatureEnterWatcher` | none | drafted |
+| Patrician Geist | 2 | Spirit lord + new `reduces_graveyard_cast_generic 1` inside the shared `GraveyardCastSpellCost` (Souls flashback {1}{B}→{B}; executor Lurrus cast hooked too) + same-turn credit (`SameTurnReducerCounts::gy_cast`, any_reducer, ManaPruneBound bail, gate soft term) for a Geist cast/Vialed in the same plan; NOT `reduces_spell_subtype` (→ goblin route) | none | IMPLEMENTED 83ff5dedc |
+| Mausoleum Wanderer | 2 | +1/+1 UNTIL EOT (not a counter) when another Spirit enters: new `own_creature_enters_self_temp_power/_tough` + `enters_watch_subtypes Spirit` (FireCreatureEnterWatchers, `DefHasCreatureEnterWatcher`, `DuplicateEntryOrDeathHasUpside`, 5th `spirits` routing term); sac-to-counter PROVISIONAL deferral | none | IMPLEMENTED 83ff5dedc |
 
 Integration plan (serial, one agent each, brief `logs/spirits/integrator-common.md`):
 A = SpiritsProvider routing + Captain, Phantom, Shacklegeist, Labyrinth, Strand, Fountain, Geist of Saint Traft;
@@ -194,6 +194,57 @@ slower 1 / faster 3 / play-changed 79; d0: slower 9 / faster 12. The one searche
 **Open (surfaced, not decided):** (1) the human-play payment drop above; (2) `tutor_from_graveyard` has no
 graveyard-reader bit (Hole A's sibling); (3) retrace stays one candidate per NAME, so "retrace Throes twice in
 one main" (two land discards) is still unenumerable -- the same shape as B2, not in this scope.
+
+### Integrator B2 (2026-11-13): Patrician Geist + Mausoleum Wanderer
+
+**Patrician Geist (Tier 2).** Spirit lord on existing params plus NEW `reduces_graveyard_cast_generic`
+(CardParams + loader; NOT `reduces_spell_subtype`, which is a Goblins signature term). Applied inside the shared
+`GraveyardCastSpellCost` (ManaPayment.cpp: new `GraveyardCastGenericDiscount` = sum over the caster's permanents,
+generic only, one more floored reduction = CR 601.2f's single floor), so every graveyard-cast price/pay site reads
+it: CollectActions' flashback/retrace block, the B1 pending post-pass, the Lurrus block + its site-9 key, the
+rollout's apply_one, the executor's `cast_from_graveyard`, AND (new) the executor's LURRUS cast
+(`CastSpellFromHand` with `gy_cast_source_id >= 0` now prices through the helper, as apply_one already did;
+identical for every Lurrus card when no Geist is out).
+**Same-turn completeness** (a Geist cast or Vial-put earlier in the plan discounts the plan's flashback), every
+gate the draft named, checked against the code:
+- `SameTurnReducerCounts::gy_cast` (CountSameTurnReducers) + `SameTurnReducerDiscountFor` credits each
+  CastFromGraveyard cand; `ActionGyCastReducerAmount` counts a hand CAST and a Vial PUT (Vial actions carry no
+  def; looked up by name, the Ragemonger shape). EXACT, not optimistic: both apply worlds resolve every graveyard
+  cast after the hand casts and Vial puts (verified in both worlds by the unit tests below).
+- EnumeratePlans' `any_reducer` arms that credit when a Geist cand AND a graveyard-cast cand coexist.
+- `ManaPruneBound` bails under the same condition (the MTG_SUBRED_BAIL precedent).
+- Selection-exact gate: a Geist term is `block` + `soft` with `red = 1` (an upper bound: SelGateExactRefuses
+  counts it against every selected cast); `ManaGateWouldHelp` sees it. A Vial-put Geist (no def) blocks hard.
+- The cost-reframe `interacts` test (default OFF) sees it too. Not touched: Solve's leaf credit
+  (`MTG_LEAF_REDUCER_CREDIT`, default OFF for every reducer: beyond-horizon policy), and the ef rescue's
+  sequential walk (refuses graveyard casts outright, "unmodelled kind").
+- Proof: `test/scenarios/spirits_geist_discounts_same_main_flashback.json` at `--depth 3 --budget-ms 0`: win T5
+  (Geist {2}{U} + flashback {B} on four lands is the only T5 kill); with `MTG_NO_COST_TRICKS=1` (credit off) it
+  reads **T6** -- the line is unfindable without the credit. Unit: same line + the Vial-put form (Vial(3) Geist +
+  {B} on ONE land) enumerated and paid identically by ApplyPlan and AIEngine::TakeTurn; three lands correctly
+  admit no Geist + flashback plan.
+**Mausoleum Wanderer (Tier 2 + PROVISIONAL deferral).** NEW `own_creature_enters_self_temp_power/_tough` + existing
+`enters_watch_subtypes ["Spirit"]`: a FireCreatureEnterWatchers clause (the Valkyrie filter, landfall-pump
+payload into temp_power_bonus/temp_tough_bonus, cleared at both cleanup sites; already in BuildSimKey). Added
+to `DefHasCreatureEnterWatcher` (else silently skipped) and to `DuplicateEntryOrDeathHasUpside` (a duplicate
+legendary Spirit dying to the legend rule still pumps). Verified against the live Scryfall JSON: +1/+1 UNTIL
+END OF TURN, not a counter. Fires for tokens (Souls), Vial puts and casts in both worlds (unit), and through
+combat (`spirits_wanderer_pumped_by_souls_tokens.json`: Souls pre-combat makes the Wanderer a 3/3, kill T4).
+Fifth `spirits` routing term (a Spirit carrying the pump and watching "Spirit"); the cut-one-card test now cuts
+each of the five cards. Sac-to-counter: **[USER, PROVISIONAL]** deferred with the bracket note (open question
+above, unchanged).
+**Viewer:** no new decision (static discount; mandatory untargeted pump). INERT_PARAMS += the three params.
+**Lingering Souls' oracle note** lost its "[PARTIAL: Patrician Geist ... NOT applied yet]" (discharged).
+**Not done (only matters if Spirits ever gets a second main):** ClassifyMainPhase has no dependency pull of
+Spirit casts to Main1 while a Wanderer is out (draft 01's note). Spirits is single-main today.
+**Verification (2026-11-13, integrator B2).** New `test/unit/test_spirits_geist_wanderer.cpp` (11 cases); routing
+cut-one-card test extended to Patrician Geist and Wanderer. Units 2885/2885; scenarios 499/499 (two new);
+`audit_card_fields.py` rc 0 (snapshot rows added from the Scryfall collection JSON); `provider_audit.py --check`
+rc 0; `audit_viewer_decisions.py --no-sweep decks/Spirits/Spirits.cod` rc 0; `check_plan_sig_lockstep.py`
+unchanged (only `#BB`). **Smoke** (alone on the box): 191 pass, 4 FAIL -- exactly the 4 Gods keys at integrator
+B's numbers (`gods_smoke_d0` 8.7830, `d3` 5.4000, `d5` 5.2000, `gods2hg_smoke_d5` 5.3200; searched slower 1 /
+faster 3 / play-changed 79, d0 9/12 -- identical counts): integrator B's Hole A/B movement, GT not yet accepted.
+Every other deck byte-identical; play-changed attributable to B2: 0. `check_gt_logs.py` consistent.
 
 ## Approved deferrals
 
