@@ -1696,6 +1696,11 @@ struct LinePayAuditFrame
 {
     bool rollout = false;                   // a rollout engine's apply (MTG_LINE_PAY_AUDIT_ROLLOUT=1), else REAL
     std::vector<std::string> short_steps;   // "<kind> <card>"
+    // What a breakpoint continuation (AIEngine resolve_draw_breakpoint) applied inside this plan's apply, one
+    // entry per continuation: "<route>:<action>,<action>" (route = carried / resolve). Classification only:
+    // the oracle prices the TOP-LEVEL plan's bill, so a short step after a continuation that spent mana on a
+    // card the plan never named is a mid-line change of plan, not a payment-order defect.
+    std::vector<std::string> cont_acts;
 };
 extern thread_local LinePayAuditFrame* g_line_pay_frame;
 void NoteLinePayShort(const char* kind, const char* card);

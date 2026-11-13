@@ -3332,7 +3332,8 @@ void AIEngine::DecideAttackLand(GameState& state, const std::vector<int>& attack
 // cast, a ritual, a land played or fetched, an untapper, a Lotus) is NOT counted as supply and creature-only
 // mana is refused, so a YES is a joint payment that really exists; a "no" may still be payable. -1 = a cost the
 // sum cannot carry (X, twobrid, convoke, more than six hybrid pips).
-static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& acts, int* steps_out)
+static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& acts, int* steps_out,
+                              bool price_repeats = false)
 {
     int steps = 0;
     if (steps_out) { *steps_out = 0; }
@@ -3368,6 +3369,10 @@ static int LineJointPayOracle(const GameState& s0, const std::vector<Action>& ac
                 { tap_src.push_back(a.sac_source_id); }
                 ++steps;
                 if (!add(a.cost)) { return -1; }
+                // price_repeats: a {T}-less sink asked for K activations (chosen_x) carries only ONE on the
+                // subset's books; the other K-1 are paid at apply out of what is left (SpendRepeatActivations).
+                if (price_repeats && a.kind == Action::Kind::ActivatePermAbility && !PermAbilityTaps(a.ability_mode))
+                { for (int r = 1; r < a.chosen_x; ++r) { if (!add(a.cost)) { return -1; } } }
                 break;
             }
             case Action::Kind::SacForMana: case Action::Kind::Suspend:
@@ -3438,16 +3443,21 @@ struct LinePayAuditGuard
         g_lpa[w][v > 0 ? LPA_YES : v == 0 ? LPA_NO : LPA_UNKNOWN].fetch_add(1, std::memory_order_relaxed);
         if (LinePayAuditLevel() >= 2 && (!frame.rollout || v > 0))
         {
-            std::string line, plan;
+            std::string line, plan, cont;
             for (const std::string& st : mine) { line += (line.empty() ? "" : "; ") + st; }
             for (const Action& x : *acts)
             {
                 plan += (plan.empty() ? "" : ", ") + x.card_name.str();
                 if (x.kind != Action::Kind::CastFromHand) { plan += "(act)"; }
+                if (x.chosen_x > 1) { plan += "x" + std::to_string(x.chosen_x); }
             }
-            std::fprintf(stderr, "LINE_PAY_SHORT %s job=%s gi=%d t%d joint=%s short=[%s] plan=[%s]\n",
+            for (const std::string& c : frame.cont_acts) { cont += (cont.empty() ? "" : " | ") + c; }
+            // jointK: the same oracle with every {T}-less sink's K repeats on the bill (classification only).
+            const int vk = LineJointPayOracle(s0, *acts, nullptr, /*price_repeats=*/true);
+            std::fprintf(stderr, "LINE_PAY_SHORT %s job=%s gi=%d t%d joint=%s jointK=%s short=[%s] plan=[%s] cont=[%s]\n",
                          frame.rollout ? "rollout" : "real", escstats::t_job ? escstats::t_job : "-",
-                         escstats::t_gi, turn, v > 0 ? "YES" : v == 0 ? "no" : "?", line.c_str(), plan.c_str());
+                         escstats::t_gi, turn, v > 0 ? "YES" : v == 0 ? "no" : "?",
+                         vk > 0 ? "YES" : vk == 0 ? "no" : "?", line.c_str(), plan.c_str(), cont.c_str());
         }
     }
 };
@@ -6552,6 +6562,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // The chosen continuation's during-cast pins (ContPins) for its casts below -- the twin of
         // ApplyPlanDirect's ContPinFrame. Whichever route set `extra` (rank, chain, EMPTY, or the
         // searched re-solve), its own searched sub-decisions are the ones it was scored with.
+        // MTG_LINE_PAY_AUDIT (measurement only): name what this continuation applies, for the audited plan's
+        // classification (see LinePayAuditFrame::cont_acts). Inert when the audit is off.
+        if (g_line_pay_frame != nullptr && !g_line_pay_frame->rollout)
+        {
+            std::string d = bp_searched_here ? "carried:" : "resolve:";   // carried = plan rank / EMPTY / committed mirror
+            bool first = true;
+            for (const Action& ca : extra.actions)
+            {
+                d += (first ? "" : ",") + ca.card_name.str();
+                if (ca.kind != Action::Kind::CastFromHand) { d += "(act)"; }
+                if (ca.chosen_x > 1) { d += "x" + std::to_string(ca.chosen_x); }
+                first = false;
+            }
+            g_line_pay_frame->cont_acts.push_back(d);
+        }
         const ContPins rdb_pins = ContPinsOf(extra);
         std::optional<ContPinScope> rdb_scope;
         if (rdb_pins.Any()) { rdb_scope.emplace(&rdb_pins); }
