@@ -6452,6 +6452,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if ((a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || cont_sac_in_order))
                 || a.kind == Action::Kind::ActivateVial) { cont_order.push_back(i); }
         }
+        // Graveyard casts ride the sequence where the rollout's apply_plan_actions rank-sorts this
+        // continuation: never an explicit (searched) order, and an opaque set only under
+        // OpaqueCastOrderActive -- its opaque test (a non-sacrifice HAND cast), verbatim.
+        if (!extra.searched_order)
+        {
+            bool gy_opaque = false;
+            for (const Action& a : extra.actions)
+            { if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land && OrderingOpaque(a.card_name)) { gy_opaque = true; break; } }
+            if (!gy_opaque || OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, extra.actions, cont_order); }
+        }
         if (!extra.searched_order && cont_order.size() > 1)
         {
             bool cont_opaque = false;
@@ -6525,6 +6535,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.kind == Action::Kind::ActivateVial)
             { deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
               exec_cont_land_hook(rdb_land, a); continue; }
+            if (a.kind == Action::Kind::CastFromGraveyard)   // at its rank (GyCastRidesCastSequence)
+            { cast_gy_action(a); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
+              exec_cont_land_hook(rdb_land, a); continue; }
             {
                 m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
                 const bool cont_cast_paid = last_cast_paid;   // before the nested re-solve overwrites it
@@ -6568,8 +6581,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
               exec_cont_land_hook(rdb_land, a); }
         }
-        for (const Action& a : extra.actions)
+        for (std::size_t gi = 0; gi < extra.actions.size(); ++gi)
         {
+            const Action& a = extra.actions[gi];
+            if (OrderHoldsGyCast(extra.actions, cont_order, gi)) { continue; }   // cast at its rank above
             if (a.kind == Action::Kind::CastFromGraveyard)
             { cast_gy_action(a); resolve_now(); exec_cont_land_hook(rdb_land, a); }
         }
@@ -7025,6 +7040,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             || ca.kind == Action::Kind::ActivateVial)
                         { pod_cont_order.push_back(ci); }
                     }
+                    // Graveyard casts ride the sequence where the rollout's apply_plan_actions rank-sorts
+                    // this continuation (GyCastRidesCastSequence; resolve_draw_breakpoint's twin above).
+                    if (!extra.searched_order)
+                    {
+                        bool gy_opaque = false;
+                        for (const Action& ga : extra.actions)
+                        { if (ga.kind == Action::Kind::CastFromHand && !ga.sacrifice_land && OrderingOpaque(ga.card_name)) { gy_opaque = true; break; } }
+                        if (!gy_opaque || OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, extra.actions, pod_cont_order); }
+                    }
                     if (!extra.searched_order && pod_cont_order.size() > 1)
                     {
                         if (pod_land.pending && pod_land.slot > 0)
@@ -7045,6 +7069,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         if (ca.kind == Action::Kind::ActivateVial)
                         { deploy_via_vial(ca.card_name, ca.tutor_target.str()); resolve_now(); pod_unlock->Fire();
                           exec_cont_land_hook(pod_land, ca); continue; }
+                        if (ca.kind == Action::Kind::CastFromGraveyard)   // at its rank (GyCastRidesCastSequence)
+                        { cast_gy_action(ca); resolve_now(); pod_unlock->Fire(); exec_cont_land_hook(pod_land, ca); continue; }
                         m_cast_riders = CastRiders::Of(ca); cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
                                      ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
                                      ca.splice_count, ca.chosen_float_color, ca.enchant_target,
@@ -8241,6 +8267,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // CastSectionUnlock (ManaPayment.h), which each continuation applier below builds as well.
     CastSectionUnlock _unlock(state, plan.actions);
     auto fire_unlock = [&]() { _unlock.Fire(); };
+    // A graveyard cast sequenced at its card's rank (GyCastRidesCastSequence; Spirits integrator E2): cast
+    // exactly as the trailing graveyard pass casts it, plus the cast-section unlock a hand cast fires.
+    // `exec_gy_in_seq` makes that trailing pass skip it. Rollout twin: ApplyPlanDirect's apply_gy_in_seq.
+    std::set<size_t> exec_gy_in_seq;
+    auto exec_gy_in_seq_cast = [&](int oi)
+    {
+        const Action& a = plan.actions[static_cast<std::size_t>(oi)];
+        exec_gy_in_seq.insert(static_cast<size_t>(oi));
+        exec_karoo_pre_hook(a); cast_gy_action(a); note_draw_engine(BpNameOf(a)); resolve_now(); fire_unlock();
+        exec_slot_hook(a);
+    };
     // Cast-ordering search (C): a committed plan with searched_order set carries an
     // EXPLICIT interleaving the search scored (e.g. enabler/destroy-all-payload rebuild);
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
@@ -8422,6 +8459,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (is_hoisted_minter(a)) { continue; }   // already cast in the hoist (MTG_MINT_CREDIT_EXACT)
         ord.push_back(i);
     }
+    // Graveyard casts ride the sequence only when this opaque set is rank-sorted (ApplyPlanDirect twin).
+    if (OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, plan.actions, ord); }
     if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, ord); }   // land position: ties
     if (OpaqueCastOrderActive(state))
     {
@@ -8440,6 +8479,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (a.kind == Action::Kind::CastFromGraveyard) { exec_gy_in_seq_cast(oi); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -8532,7 +8572,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[i];
         if ((a.kind == Action::Kind::CastFromHand && (!a.sacrifice_land || sac_in_order_clean))
-            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a))
+            || (GarthOrderedEnabled() && a.kind == Action::Kind::GarthActivate) || is_put(a)
+            || GyCastRidesCastSequence(state, a))   // a graveyard cast at its rank (ApplyPlanDirect twin)
         { order.push_back(i); }
     }
     if (exec_slot_order) { TurnSolver::LandSlotWatchersFirst(plan.actions, order); }   // land position: ties
@@ -8553,6 +8594,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     {
         const Action& a = plan.actions[oi];
         if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (a.kind == Action::Kind::CastFromGraveyard) { exec_gy_in_seq_cast(oi); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -8658,9 +8700,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (a.kind == Action::Kind::CastFromHand && a.sacrifice_land)
         { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); note_draw_engine(BpNameOf(a)); resolve_now(); walker_cast_activation(a); fire_unlock(); exec_slot_hook(a); }
     }
-    for (const Action& a : plan.actions)
+    for (size_t ai = 0; ai < plan.actions.size(); ++ai)
     {
         if (staged_break || bp_trunc_exec) { break; }
+        if (exec_gy_in_seq.count(ai)) { continue; }   // already cast at its rank
+        const Action& a = plan.actions[ai];
         if (a.kind == Action::Kind::CastFromGraveyard)
         { exec_karoo_pre_hook(a); cast_gy_action(a); note_draw_engine(BpNameOf(a)); resolve_now(); exec_slot_hook(a); }
     }
@@ -8894,6 +8938,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         || ca.kind == Action::Kind::ActivateVial)
                     { pe_cont_order.push_back(ci); }
                 }
+                // Graveyard casts ride the sequence where the rollout's apply_plan_actions rank-sorts
+                // this continuation (GyCastRidesCastSequence; resolve_draw_breakpoint's twin above).
+                if (!extra.searched_order)
+                {
+                    bool gy_opaque = false;
+                    for (const Action& ga : extra.actions)
+                    { if (ga.kind == Action::Kind::CastFromHand && !ga.sacrifice_land && OrderingOpaque(ga.card_name)) { gy_opaque = true; break; } }
+                    if (!gy_opaque || OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, extra.actions, pe_cont_order); }
+                }
                 if (!extra.searched_order && pe_cont_order.size() > 1)
                 {
                     if (pe_land.pending && pe_land.slot > 0)
@@ -8950,6 +9003,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (extra.actions[ci].kind == Action::Kind::ActivateVial)
                     { deploy_via_vial(extra.actions[ci].card_name, extra.actions[ci].tutor_target.str()); resolve_now(); pe_unlock->Fire();
                       exec_cont_land_hook(pe_land, extra.actions[ci]); continue; }
+                    if (extra.actions[ci].kind == Action::Kind::CastFromGraveyard)   // at its rank (GyCastRidesCastSequence)
+                    { cast_gy_action(extra.actions[ci]); resolve_now(); pe_unlock->Fire();
+                      exec_cont_land_hook(pe_land, extra.actions[ci]); continue; }
                     pe_cast(extra.actions[ci]);
                     pe_trunc = pe_truncates(extra.actions[ci]);
                     pe_unlock->Fire(); exec_cont_land_hook(pe_land, extra.actions[ci]);
@@ -8967,9 +9023,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 // realised with no recast (test/scenarios/martyr_lurrus_sac_recast_same_turn.json: a
                 // proven T4 kill realised T5). Gated on the permission rider: a RETRACE cast in a site-9
                 // continuation is still not realised here (a pre-existing gap, left byte-identical).
-                for (const Action& ca : extra.actions)
+                for (std::size_t gi = 0; gi < extra.actions.size(); ++gi)
                 {
                     if (pe_trunc) { break; }
+                    const Action& ca = extra.actions[gi];
+                    if (OrderHoldsGyCast(extra.actions, pe_cont_order, gi)) { continue; }   // cast at its rank above
                     if (ca.kind == Action::Kind::CastFromGraveyard && ca.gy_cast_source_id >= 0)
                     { cast_gy_action(ca); resolve_now(); exec_cont_land_hook(pe_land, ca); }
                 }

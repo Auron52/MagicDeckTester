@@ -4603,6 +4603,87 @@ bool OrderingOpaque(const std::string& name)
         || d->params.solo_target_trick;
 }
 
+// ---- Graveyard casts ride the cast sequence (see the header) ------------------------------------
+bool GyCastInSequenceEnabled()
+{
+    static const bool on = EnvOn("MTG_GY_CAST_IN_SEQUENCE", true);   // DEFAULT ON; =0 -> every gy cast trails
+    return on;
+}
+
+bool GyCastRidesCastSequence(const GameState& state, const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromGraveyard || !GyCastInSequenceEnabled()) { return false; }
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+    if (d == nullptr) { return false; }
+    return !OrderingOpaque(a.card_name) && !d->params.tutor_from_graveyard
+        && !TurnSolver::ParamKeyedDrawClass(state, *d);
+}
+
+void AppendSequencedGyCasts(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order)
+{
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+    {
+        if (GyCastRidesCastSequence(state, acts[static_cast<std::size_t>(i)])) { order.push_back(i); }
+    }
+}
+
+bool OrderHoldsGyCast(const std::vector<Action>& acts, const std::vector<int>& order, std::size_t i)
+{
+    if (i >= acts.size() || acts[i].kind != Action::Kind::CastFromGraveyard) { return false; }
+    return std::find(order.begin(), order.end(), static_cast<int>(i)) != order.end();
+}
+
+void ApplyGraveyardCastDependencyOrder(const GameState& state, const std::vector<Action>& acts,
+                                       std::vector<int>& order)
+{
+    bool any = false;
+    for (int i : order) { if (acts[static_cast<std::size_t>(i)].kind == Action::Kind::CastFromGraveyard) { any = true; break; } }
+    if (!any) { return; }
+    // Copies of each graveyard-cast name available at the section's start, then walked through the order:
+    // a graveyard cast consumes one, a hand cast of an instant / sorcery of that name adds one when it
+    // resolves. A cast that finds none waits for the next such hand cast (or the end of the section).
+    std::vector<std::pair<InternedName, int>> avail;
+    auto slot = [&](const InternedName& n) -> int&
+    {
+        for (auto& e : avail) { if (e.first == n) { return e.second; } }
+        int c = 0;
+        for (const Card& g : state.ActivePlayer().graveyard) { if (g.m_name == n) { ++c; } }
+        avail.emplace_back(n, c);
+        return avail.back().second;
+    };
+    std::vector<int> out, waiting;
+    out.reserve(order.size());
+    bool moved = false;
+    for (int i : order)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        if (a.kind == Action::Kind::CastFromGraveyard)
+        {
+            int& n = slot(a.card_name);
+            if (n > 0) { --n; out.push_back(i); }
+            else       { waiting.push_back(i); moved = true; }
+            continue;
+        }
+        out.push_back(i);
+        if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !(d->card.IsInstant() || d->card.IsSorcery())) { continue; }
+        int& n = slot(a.card_name);
+        ++n;
+        for (auto w = waiting.begin(); w != waiting.end(); ++w)
+        {
+            if (acts[static_cast<std::size_t>(*w)].card_name != a.card_name) { continue; }
+            --n;
+            out.push_back(*w);
+            waiting.erase(w);
+            break;
+        }
+    }
+    if (!moved) { return; }
+    out.insert(out.end(), waiting.begin(), waiting.end());
+    order.swap(out);
+}
+
 // ---- The cast-order RANGE and its fallback ladder ---------------------------------------------
 // See ManaPayment.h for the shape and docs/design/cast-order-ideal-with-ranges.md for the design.
 
@@ -6561,6 +6642,7 @@ void ApplyPayableCastOrder(const GameState& state, const std::vector<Action>& ac
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
     ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
     ApplyConvokeShortfallOrder(state, acts, order);    // structural (mana-clean gate, Vampires)
+    ApplyGraveyardCastDependencyOrder(state, acts, order);   // structural (graveyard casts in the sequence)
 }
 
 void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& acts,
@@ -6572,6 +6654,7 @@ void ApplyPayableCastOrderAt(const GameState& state, const std::vector<Action>& 
     ApplyAttachSpellDependencyOrder(acts, order);   // structural, last (see ManaPayment.h)
     ApplyConvokeArrivalDependencyOrder(acts, order);   // structural (Vampires item B)
     ApplyConvokeShortfallOrder(state, acts, order);    // structural (mana-clean gate, Vampires)
+    ApplyGraveyardCastDependencyOrder(state, acts, order);   // structural (graveyard casts in the sequence)
 }
 
 void ApplyCastOrderRangeLadder(const GameState& state, const std::vector<Action>& acts,

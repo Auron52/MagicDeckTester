@@ -1,0 +1,48 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 28,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 9,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator E2), graveyard-cast-search-holes-deferred.md section 3: a GRAVEYARD cast PRECEDES a hand cast. Lingering Souls in the graveyard, Millicent in hand, four lands (Godless Shrine B, Hallowed Fountain W, Island U, Plains), three Spirits out. Flashback {1}{B} (two Spirit tokens) then Millicent {5}{W}{U}-5 = {W}{U} pays both; Millicent first ({2}{W}{U}) leaves nothing for the flashback. That line deals 30 by T6. HEAD (every graveyard cast in the TRAILING pass, no affinity credit for it) and MTG_GY_CAST_IN_SEQUENCE=0 deal at most 26 by T6 and read win T7 at --depth 3 --budget-ms 0. Opponent 28.",
+  "battlefield": [
+    {
+      "name": "Godless Shrine"
+    },
+    {
+      "name": "Hallowed Fountain"
+    },
+    {
+      "name": "Island"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Supreme Phantom",
+      "sick": false
+    },
+    {
+      "name": "Mausoleum Wanderer",
+      "sick": false
+    },
+    {
+      "name": "Shacklegeist",
+      "sick": false
+    }
+  ],
+  "graveyard": [
+    "Lingering Souls"
+  ],
+  "hand": [
+    "Millicent, Restless Revenant"
+  ],
+  "expect_win_turn": 6
+}
