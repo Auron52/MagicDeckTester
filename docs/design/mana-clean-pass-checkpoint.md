@@ -1334,3 +1334,10 @@ fungus 1,880, gods 4,300 (first run).
 ## Still open for the USER
 - Two unit failures on the branch are another session's: `test_landfall` fetchland (Beast count 1 != 2) and
   `test_pirates_provider` (deck folders 47 != 46, after the RW Burn deck).
+
+* **Queue item A round 3 (2026-11-13): literal route (a) BUILT, smoke accepted, regression PENDING
+  (MTG_PREPAY_WILD_LITERAL, default ON; 8af2d7a3e + 5cf6118f3, local).** A single-colour source's prepay funding now
+  floats as its colour (never `wild`) with a per-pool generic-funding count the drain spends first; only a dual's unit
+  stays `wild` (its colours). Detector: single-colour units booked `wild` 21,889 -> 0 (real games), 0 in search;
+  overflow 0. Held-out A/B 51 decks x 500-1500 games/arm: 0 slower games, hinata net -1, all others 0. =0 is
+  byte-identical (smoke 199/199). Handoff: logs/mana-clean-chain/A-wild-handoff.md (round 3 at top).
