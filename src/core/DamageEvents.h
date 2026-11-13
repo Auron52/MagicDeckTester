@@ -807,6 +807,22 @@ inline bool UsefulLineOkEnabled()
     return heurarm::Flag(heurarm::PD_USEFUL_LINE_OK, v);
 }
 
+// REST OF LINE REPAIR IN THE HARMFUL MODE (MTG_PD_HARM_LINE_REPAIR, default ON; =0 = the stranding
+// minimum stands). Mana-clean gate, Prevent Damage, seed 30024638 T3: plan {Brushland, Living Wish {1}{G},
+// Rolling Earthquake X=1 {1}{R}} on Karplusan Forest, Ancient Tomb, Brushland, no gain engine. Both
+// one-damage assignments of Living Wish tap Karplusan -- the board's only {R} -- and so does the
+// historical assignment the exact path falls back to, so the Earthquake was dropped, while Tomb {C} +
+// Brushland {G} (three damage) pays both. Now, when the minimum AND the historical payment both strand
+// the line, the harmful mode re-pays holding each source either of them tapped (one at a time, at most
+// one retry per such source, capped at the survivable room) and keeps the least-damage payment that
+// leaves the line payable. None does -> the minimum, exactly as before. Like the useful mode's repair
+// it can only turn a payment that drops a cast of the line into one that does not.
+inline bool HarmLineRepairEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_HARM_LINE_REPAIR", true);   // DEFAULT ON; =0 = no repair
+    return heurarm::Flag(heurarm::PD_HARM_LINE_REPAIR, v);
+}
+
 // The board's damage -> lifegain -> drain chain, read off card params (never names).
 struct GainChain
 {
@@ -1189,13 +1205,55 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
             paystats::Inc(paystats::kHarmAtFloor);
             if (line_state == -1 || line_ok(false) == 1) { return true; }
             // The minimum strands the rest of the line: try the historical assignment.
+            // Sources a payment tapped (battlefield index bits; the board must not have changed shape).
+            auto tapped_by = [&]() -> std::uint64_t
+            {
+                std::uint64_t m = 0;
+                if (s.battlefield.size() != pre_line.bf.size()) { return 0; }
+                for (std::size_t i = 0; i < s.battlefield.size() && i < 64; ++i)
+                {
+                    if (s.battlefield[i].tapped && !pre_line.bf[i].tapped
+                        && s.battlefield[i].card.m_number == pre_line.bf[i].card.m_number)
+                    { m |= (1ull << i); }
+                }
+                return m;
+            };
+            const bool repair = HarmLineRepairEnabled();
+            std::uint64_t strand_taps = repair ? tapped_by() : 0;
             PayAttemptSnap capped_post;
             capped_post.Take(s, available);
             pre_line.Restore(s, available);
             t_pay_cap = { true, kNoCap, barbs, /*pain_first=*/false, barb_total };
-            if (attempt() && line_ok(false) == 1
-                && life0 - (PaymentDamage(s, ctrl, barbs) - base) > 0)
-            { return true; }
+            if (attempt())
+            {
+                if (line_ok(false) == 1 && life0 - (PaymentDamage(s, ctrl, barbs) - base) > 0) { return true; }
+                if (repair) { strand_taps |= tapped_by(); }
+            }
+            // HARMFUL-MODE LINE REPAIR (HarmLineRepairEnabled): both strand -> hold each such source.
+            if (strand_taps != 0)
+            {
+                paystats::Inc(paystats::kLineStrand);
+                PayAttemptSnap best_post;
+                int best = -1;
+                for (std::uint64_t m = strand_taps; m != 0; m &= m - 1)
+                {
+                    pre_line.Restore(s, available);
+                    t_pay_cap = { true, base + (life0 - 1), barbs, /*pain_first=*/false, barb_total };
+                    bool r;
+                    { HoldScope hs(t_pay_hold | (m & (~m + 1))); r = attempt(); }
+                    if (!r || line_ok(false) != 1) { continue; }
+                    const int dmg = PaymentDamage(s, ctrl, barbs) - base;
+                    if (life0 - dmg <= 0 || (best >= 0 && dmg >= best)) { continue; }
+                    best = dmg;
+                    best_post.Take(s, available);
+                }
+                if (best >= 0)
+                {
+                    paystats::Inc(paystats::kLineRepaired);
+                    best_post.Restore(s, available);
+                    return true;
+                }
+            }
             capped_post.Restore(s, available);
             return true;
         }

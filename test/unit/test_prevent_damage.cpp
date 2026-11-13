@@ -1406,6 +1406,46 @@ TEST_CASE("Prevent Damage useful-mode payment: the rest of the line stays payabl
     CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
 }
 
+TEST_CASE("Prevent Damage harmful-mode payment: the rest of the line stays payable (seed 30024638 T3)")
+{
+    // Karplusan Forest, Ancient Tomb, Brushland, Dina out (no gain engine); 17 life. Line: Living Wish {1}{G},
+    // then Rolling Earthquake X=1 {1}{R}. Both one-damage assignments of the Wish tap Karplusan, the board's
+    // only {R}; Tomb {C} + Brushland {G} (three damage) leaves it for the Earthquake.
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts    = 2;
+    t.cast_mv_total = 4;
+    t.cast_pips[3]  = 1;   // R
+    t.cast_pips[4]  = 1;   // G
+    PlanTraitsScope ts(&t);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 3;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 17;
+        Put(s, "Karplusan Forest");
+        Put(s, "Ancient Tomb");
+        Put(s, "Dina, Soul Steeper");
+        Put(s, "Brushland");
+        return s;
+    };
+    bool control_strands = false;
+    {
+        HeurArmSet off(heurarm::PD_HARM_LINE_REPAIR, false);
+        GameState s = board();
+        REQUIRE(Pay(s, Cost(1, 0, 0, 0, /*g=*/1)));
+        control_strands = !Pay(s, Cost(1, 0, 0, /*r=*/1));
+    }
+    HeurArmSet on(heurarm::PD_HARM_LINE_REPAIR, true);
+    GameState s = board();
+    REQUIRE(Pay(s, Cost(1, 0, 0, 0, /*g=*/1)));
+    CHECK_FALSE(TappedNamed(s, "Karplusan Forest"));
+    CHECK(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
+}
+
 // ---- USER ruling 2026-11-04: damage is useful only if a Tamanoa is on the battlefield WHEN it is dealt ----
 // The payer's mode (SelfDamageUseful -> dmgev::SelfDamageGainEngine) and the deferral's Now chain read the
 // LIVE battlefield at the payment; the deferral's After chain is the board at the end-of-main-1 sweep (a
