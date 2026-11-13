@@ -4224,6 +4224,9 @@ public:
     // card remains in our library (a SOUND prune: with none, the trade loses a land and finds
     // nothing, and no card in the Spirits 60 reads a land in the graveyard or a land dying).
     bool OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const override;
+    // A Spirit LORD's value to the greedy chooser (the d0 runner, the playout beyond the horizon): its own body
+    // as EvalCard prices it PLUS its +N on every other Spirit creature we control (MTG_SPIRITS_LORD_VALUE).
+    bool ComboCardValue(const GameState& s, const CardDefinition& def, int dmg_unit, int& out) const override;
     // Usher of the Fallen's BOAST: the narrow post-combat main (BoastSecondMainLive / IsBoastActivation,
     // DecisionProviders.cpp) -- opened only on a turn an attacked, un-boasted Usher can pay its {1}{W},
     // and its menu is the boast activations alone (soundness argument at the definition).

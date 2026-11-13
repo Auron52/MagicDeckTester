@@ -22036,6 +22036,36 @@ int SpiritsProvider::FetchLandSearchPickWidth(const GameState& s, int controller
     return width;
 }
 
+// ---- SpiritsProvider: a Spirit lord's value to the greedy chooser (USER Q8, 2026-11-13) ------------------
+// EvalCard prices a creature as power x expected attacks (one fewer without haste) x DMG -- its OWN clock. A
+// lord's real clock is mostly the +N it gives every other Spirit, which EvalCard never sees, so the d0 runner
+// and the beyond-horizon playout under-rank Drogskol Captain / Supreme Phantom / Patrician Geist against any
+// body of equal power. This prices the lord as EvalCard would (printed power + the bonus it receives itself,
+// x (attacks - 1)) PLUS power_bonus x (other Spirit creatures we control now) x attacks -- they swing this turn
+// (the d0 runner casts in main 1, before combat). Spirits arriving later are not credited (conservative).
+// Applies only where EvalCard is consulted (the permitted greedy sites); the search itself is untouched.
+// USER: "8 you could try to adjust if it seems to make sense to do so, but I wouldn't spend a lot of time."
+bool SpiritsProvider::ComboCardValue(const GameState& s, const CardDefinition& def, int dmg_unit, int& out) const
+{
+    static const bool env = EnvOn("MTG_SPIRITS_LORD_VALUE");   // default OFF pending the A/B
+    if (!heurarm::Flag(heurarm::SPIRITS_LORD_VALUE, env)) { return false; }
+    const CardParams& pp = def.params;
+    if (!def.card.IsCreature() || pp.power_bonus <= 0 || pp.affects_all_creatures
+        || std::find(pp.subtypes_affected.begin(), pp.subtypes_affected.end(), "Spirit") == pp.subtypes_affected.end())
+    { return false; }
+    const int me = s.active_player_index;
+    int others = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index == me && p.card.IsCreature() && CardHasSubtype(p.card, "Spirit")) { ++others; }
+    }
+    const int attacks = std::max(1, std::min(6 - s.turn_number + 1, 5));   // TurnSolver's ExpectedAttacks
+    const int own_pb  = ComputeLordBonus(def.card, s, me).first;
+    const int own     = std::max(0, def.card.m_power.value_or(0) + own_pb) * (attacks - 1);
+    out = (own + pp.power_bonus * others * attacks) * dmg_unit;
+    return true;
+}
+
 bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const
 {
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
