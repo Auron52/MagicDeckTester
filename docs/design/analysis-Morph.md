@@ -1127,6 +1127,9 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     4.4862, selesnyav2 d0 5.081 -> 5.080, bruna d0 5.938 (digest only), edf d0 5.303 (digest only). Mostly d0:
     the depth-0 runner applies through the same appliers, so the fallback fires there too. Log
     `build/scratch/payer2/smoke.log`.
+  * **Regression on e4264949f (NOT accepted):** 6 rows move, every one equal or better -- morph d0 s2002 4.773
+    (digest only), kithkin d0 4.991 -> 4.988, kithkin d3 4.460 (digest only), kithkin d5 s2002 4.494 -> 4.492,
+    kithkin d5 s3003 4.474 -> 4.472, edf d0 5.322 (digest only). Log `build/scratch/payer2/regr.log`.
   * **Recommendation (USER decision):** the AI fallback is correct, lockstep and default ON as briefed, but on
     this evidence it buys nothing measurable and costs ~9% wall on Snow. Keep it ON only if the continuation fix
     above is built on top of it; otherwise set it OFF (or delete it) rather than pay the dry walk for nothing.
