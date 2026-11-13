@@ -53,7 +53,13 @@ run stands and what to do next.
     second Ilharg). 3002/3002; Kithkin / Critter Lifegain / Mirrorwing Dragon / Knights identical vs item 2; Boars
     40/40 avg 5.225 wins byte-identical (tuck fires in 3/40). No movers. Item 4 (legend-rule keep) remains;
     owed: class-(c) duplicate-plan fold; USER Q: DiesTuckDefault playout policy.
-  * I5b TODO (original list; (2) is now done): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
+  * I5b item 4 DONE `8600244c7`: the legend-rule keep (CR 704.5j) is SEARCHED on the cast routes (keep-old/keep-new
+    twins in CollectActions + a plan-level fan + the attack-put bit) and asked of a human for every legend whose copies
+    differ. 3006/3006; 28 duplicate-legend decks + 2 controls byte-identical by full game log; Boars 40/40 avg 5.225
+    byte-identical. No movers. Remaining in-window provider picks (land play, puts, nested free casts, token copies):
+    `docs/design/legend-rule-keep-remaining-greedy.md`. USER Q: the beyond-horizon keep default.
+  * **I5b INTEGRATION COMPLETE (2026-11-13): items 1-4 done, all local commits, nothing pushed.**
+  * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
     / ApplyGoblinGuideAttackTriggers / AttackUntapSnowFires / ApplyAttackLifegainTeamPump must iterate the declared

@@ -570,4 +570,40 @@ then lower card number. It orders the playout only; inside the window every opti
   to item 2; the tuck fires in 3 of 40 games. **No moved decks.** mtg-test 3002/3002.
 * **Owed:** with two Ilhargs in hand and none on the battlefield, the conditional twins build duplicate plans that
   fold only at the plan signature (sound, wasteful; an earlier fold needs to know which copy is cast second).
-* Item 4 (legend-rule keep choice) remains: `logs/boars-research/I5b-handoff.md`.
+* Item 4 (legend-rule keep choice): done, next section.
+
+## I5b item 4 done (2026-11-13, `8600244c7`)
+
+* **The legend-rule keep (CR 704.5j) is a SEARCHED choice** on every route that goes through a hand cast: a
+  legendary cast beside a same-name permanent of ours is twinned keep-oldest / keep-newest (`Action::legend_keep`), a
+  plan casting two copies is fanned at plan level (every cast of the name carries one answer), and Ilharg's attack
+  put carries a keep bit. One decision point (`LegendKeepPick`) serves the provisional loser (`LegendRuleLoser`) and
+  the SBA, so ETB watchers see the same copy as dead. No identity fold at enumeration: a fresh entrant is never
+  provably identical to the old copy, so the twins cost width even for plain copies (e.g. two Thrumming Stones).
+* **Viewer:** the `legend_keep` board decision is asked for EVERY legend whose copies differ (it was Chandra only),
+  with the group's name and the differing fields; identical copies are not asked.
+* **Identity vs item 3** (20 g d3 b10 seed 9101; compared by FULL game-log content, not only the win turns): all 28
+  suite decks with a duplicated legend (Angels, Auras, Breaching Dragonstorm, Bruna, Critter Lifegain, Dragons, Eldrazi
+  Displacer Flicker, Five Colour, Galadriel, Goblins, Hinata, Hydras, Jumbo Cactuar, Kitty Equipment, Knights,
+  Landfall, Lifegain Heliod Combo, Melira Pod, Midrange Burn, Minotaur, Mirrorwing Dragon, NivMizzetCombo, Prevent
+  Damage, Shadowborn Apostle, Snow, Soldiers, Unpredictable Cyclone, White Knights) and both controls (Stompy
+  Surprise, Treasure Hunt) are byte-identical. **Boars 40 g d3 b10: 40/40 avg 5.225, byte-identical.** Mechanism:
+  in every real-play legend rule the search decided (Boars Ilharg + Raggadragga, Angels Lyra, Galadriel x4,
+  Mirrorwing Zada, Snow Slumber, EDF Emiel), the old copy was untapped and non-sick and keep-oldest won, which is
+  also the provider's answer. The twins were evaluated (search work rose a little: Boars solve-memo misses +29, Kitty
+  Equipment +9%); wall at this size is noise (sub-second to ~14 s per 20 games, no consistent direction).
+* **Moved decks (GT to re-accept): NONE.**
+* Audits: card_costs 616/616, card_fields (pre-existing bracket-note divergences only), viewer decisions
+  (--no-sweep) clean, all rc 0. mtg-test 3006/3006.
+* **Not yet searched (disclosed, deferred):** the keep is still the provider's pick on routes with no cast rider --
+  legendary land plays, put-onto-the-battlefield effects, free casts nested in another card's resolution, token
+  copies, copy-entrants, reanimation. In the census four suite decks reach one with differing copies: Galadriel (The
+  Grey Havens land play: keep-oldest kept the TAPPED copy, 2 of 20 games), Goblins (Muxus via Goblin Lackey), Jumbo
+  Cactuar (Surrak via a tutor put; the new copy has a +1/+1 counter) and Unpredictable Cyclone (Emrakul free cast, 16
+  events, probably benign: the new copy is sick). Full assessment: `docs/design/legend-rule-keep-remaining-greedy.md`.
+* **USER QUESTION -- agent-chosen playout policy:** beyond the search horizon (rollout leaves, the d0 runner) the keep
+  is the provider's `LegendKeepIndex`: keep the oldest, with overrides in CritterLifegain, Mirrorwing and MidrangeBurn.
+  The agent chose this default; it is not a USER ruling. It never applies inside the search window on the cast routes.
+* **USER QUESTION -- width:** a sound DOMINANCE fold (keep-oldest when the old copy is untapped, non-sick or
+  haste-irrelevant, has no fewer counters and nothing is attached to either) would remove most of the twin width. Not
+  applied without approval.
