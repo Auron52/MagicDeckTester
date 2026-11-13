@@ -3787,6 +3787,17 @@
     "toughness": "1",
     "type_line": "Creature — Angel Wizard"
   },
+  "Lingering Souls": {
+    "cmc": 3.0,
+    "keywords": [
+      "Flashback"
+    ],
+    "mana_cost": "{2}{W}",
+    "oracle_text": "Create two 1/1 white Spirit creature tokens with flying.\nFlashback {1}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
   "Linvala, Shield of Sea Gate": {
     "cmc": 3.0,
     "keywords": [

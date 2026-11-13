@@ -186,7 +186,11 @@ TEST_CASE("Mystic Retrieval needs a legal graveyard target in both cast modes")
     s.players[0].graveyard.push_back(GodsCard("Careful Study", 503));
     CHECK(HasGraveyardTutorTarget(s, 0, d->params, 501));
     CHECK(casts(s).first == 1);
-    CHECK(casts(s).second == 1);
+    // The graveyard copy's flashback, plus (2026-11-13, Spirits integrator B, hole B1) the hand copy's
+    // PENDING flashback: 7 lands pay {3}{U} + {2}{R}, the hand cast returns one of the two targets and the
+    // flashback the other -- a legal same-main line that was unfindable before. With one target only
+    // (above) the pending cast is not offered.
+    CHECK(casts(s).second == 2);
 }
 
 TEST_CASE("Gods Mystic Retrieval targets Replenish before dredge outlets")

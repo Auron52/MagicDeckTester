@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Spirits (2026-11-13), Lingering Souls HOLE B2: TWO Souls in the graveyard, BOTH flashed back in one main ({1}{B} + {1}{B}; the two {B} from Godless Shrine and Watery Grave). Supreme Phantom (not sick) lords the tokens to 2/2. Opponent 10. The only T5 kill: T4 both flashbacks -> four 2/2 fliers, Phantom 1 (9); T5 1 + 8 = 9. One flashback per turn gives 1 + (1 + 4) = 6 by T5, kill T6. Before the fix the graveyard cast was one candidate per distinct NAME, so a plan held at most one Souls flashback at any budget (this fixture at budget 0 read win T6).",
+  "battlefield": [
+    { "name": "Godless Shrine" },
+    { "name": "Watery Grave" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Supreme Phantom", "sick": false }
+  ],
+  "graveyard": [ "Lingering Souls", "Lingering Souls" ],
+  "hand": [],
+  "expect_win_turn": 5
+}

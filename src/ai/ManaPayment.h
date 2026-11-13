@@ -58,6 +58,17 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
 ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
                                     const ManaCost& alternate_base);
+// THE GRAVEYARD-CAST PRICE (Spirits integrator B, 2026-11-13): what a spell cast FROM THE GRAVEYARD costs --
+// a flashback card (Lingering Souls, Faithless Looting) at its flashback_cost, a retrace card (Throes of
+// Chaos) and a Lurrus permission cast at the printed cost -- through the same EffectiveSpellCost every
+// cast uses. ONE definition for every graveyard-cast site: the enumeration (CollectActions' retrace /
+// flashback block and the Lurrus block), the Lurrus site-9 key (CollectActivationKeys), the rollout's
+// apply_one and the executor's cast_from_graveyard, so the two worlds cannot price it differently.
+// A "spells you cast from your graveyard cost {N} less" effect (Patrician Geist) belongs HERE, applied to
+// the result (generic only, floored at 0); the executor's Lurrus cast goes through cast_by_name and would
+// need the same hook there. Byte-identical to the pre-helper sites (copy the definition, swap the
+// printed cost for the flashback cost, price it).
+ManaCost GraveyardCastSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
 
 // CR 601.2f FOR {X} SPELLS (Hydras / Gargos, 2026-11-11). EffectiveSpellCost prices the PRINTED cost,
 // where X counts as 0, and floors every generic reduction at 0 -- so a reduction bigger than the printed

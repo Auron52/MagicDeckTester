@@ -628,7 +628,7 @@ def _turn_ledger(game, turn, db, precombat_only=True):
             paid = a.get("manaPaid") or ""
             if paid == "Vial":
                 continue                          # Aether Vial: onto the battlefield, no mana paid
-            paid = paid.replace(" (retrace)", "")
+            paid = paid.replace(" (retrace)", "").replace(" (flashback)", "")
             got, ok = _parse_cost(paid)
             if not ok:
                 hard.append("uncosted:%s(%s)" % (a.get("cardName"), paid))

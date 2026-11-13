@@ -1309,7 +1309,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
                 if (!named && gd)
                 {
                     const CardParams& gp = gd->params;
-                    named = ((gy_bits & GyR_RetraceNames)  && gp.retrace)
+                    named = ((gy_bits & GyR_RetraceNames)  && (gp.retrace || gp.flashback_cost))
                          || ((gy_bits & GyR_SelfCopyNames) && (gp.gy_self_power_bonus > 0
                                                             || gp.ritual_float_gy_self_bonus))
                          || ((gy_bits & GyR_LandsEdgeNames) && gp.discard_land_damage > 0)

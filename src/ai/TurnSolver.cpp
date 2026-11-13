@@ -21778,6 +21778,16 @@ static bool SubsetHasEquipOntoAttachedPiece(const GameState& state, const std::v
 // is the sharp one: it would read a gate with no live callsite and a sweep would then skip that
 // gate as provably dead. So when ANY of the three is armed, the summary comes back all-true and
 // every instrument sees exactly the callsites it saw before this optimisation existed.
+// One NAME's flashback graveyard-cast candidates (SubsetFilterPre::gy_copy_runs; Spirits integrator B,
+// 2026-11-13): their candidate indices in candidate order, and how many are REAL graveyard copies -- the
+// rest are the PENDING candidates CollectActions emits per hand copy cast this main (hole B1).
+struct GyCopyRun
+{
+    InternedName     name;
+    std::vector<int> cands;
+    int              real = 0;
+};
+
 struct SubsetFilterPre
 {
     bool lifegain_removal  = true;   // SubsetHasUnbackedLifegainRemoval
@@ -21883,6 +21893,10 @@ struct SubsetFilterPre
     // beside a same-plan granter (SubsetHasUngrantedReplicatePin). EMPTY = no such candidate, which is
     // exact rather than a weaker precondition, so it is built on the instruments-armed path too.
     std::vector<char> rep_pending;
+    // Per flashback NAME with two or more candidates, or any pending one (SubsetHasNonCanonicalGyCopies).
+    // EMPTY = no such name, which is exact (every deck without flashback_cost), so it is built on the
+    // instruments-armed path too.
+    std::vector<GyCopyRun> gy_copy_runs;
     std::vector<const CardDefinition*> sac_src_def;   // per candidate; nullptr = none/not a sac action
     bool board_persist     = false;                   // meaningful only when sac_src_def is non-empty
     // `board_death_payoff` is hoisted from SubsetWastesCreatureSacMana's FINAL test for the same
@@ -22561,6 +22575,74 @@ static void BuildAuraShroudSrc(const GameState& state, const std::vector<Action>
     }
 }
 
+// FLASHBACK COPIES (SubsetFilterPre::gy_copy_runs; Spirits integrator B, 2026-11-13). CollectActions offers a
+// flashback card once per graveyard COPY plus once per hand copy it can cast this main (PENDING: the card
+// reaches the graveyard when that cast resolves, and every graveyard cast applies after the hand casts in
+// both worlds). `real` = min(graveyard copies of the name, its candidates) -- an over-count only admits a
+// pending cast whose apply then finds no card (a no-op the post-apply dedup folds), never the reverse.
+// Lurrus permission casts (gy_cast_source_id >= 0) and retrace casts (one per name) are not runs. Runs with
+// a single REAL candidate can trip neither clause of the filter, so they are not built: EMPTY for every
+// deck without flashback, and for a flashback deck whose graveyard and hand hold at most one copy.
+static void BuildGyCopyRuns(const GameState& state, const std::vector<Action>& cands, std::vector<GyCopyRun>& out)
+{
+    out.clear();
+    for (int j = 0; j < static_cast<int>(cands.size()); ++j)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromGraveyard || a.gy_cast_source_id >= 0) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !d->params.flashback_cost) { continue; }
+        GyCopyRun* r = nullptr;
+        for (GyCopyRun& e : out) { if (e.name == a.card_name) { r = &e; break; } }
+        if (r == nullptr) { out.push_back(GyCopyRun{ a.card_name, {}, 0 }); r = &out.back(); }
+        r->cands.push_back(j);
+    }
+    if (out.empty()) { return; }
+    const std::vector<Card>& gy = state.ActivePlayer().graveyard;
+    for (GyCopyRun& r : out)
+    {
+        int copies = 0;
+        for (const Card& c : gy) { if (c.m_name == r.name) { ++copies; } }
+        r.real = std::min(copies, static_cast<int>(r.cands.size()));
+    }
+    out.erase(std::remove_if(out.begin(), out.end(),
+                             [](const GyCopyRun& r) { return r.cands.size() == 1 && r.real == 1; }),
+              out.end());
+}
+
+// Reject a subset that (1) flashes back MORE copies of a name than the graveyard holds plus the copies
+// this subset casts from hand -- the surplus cast finds no card at apply, so the subset realises exactly
+// its twin without the surplus, which is enumerated: an identity fold; and (2) under the odometer fold
+// (`fold`, as SubsetVampOutletInvalidWith's symmetry rule) selects a NON-PREFIX of a name's candidates.
+// The copies are identical (both applies cast "the first copy of that name in the graveyard", and the
+// plan signature keys a graveyard cast by name alone), so "which k" is no decision and only "how many"
+// is searched: k copies cost k+1 subsets, not 2^k. A copy that reaches the graveyard some OTHER way
+// mid-plan (Faithless Looting discarding a second Looting) is not a pending candidate: the cast that
+// put it there draws, and the draw's breakpoint continuation enumerates the real graveyard.
+static bool SubsetHasNonCanonicalGyCopies(const std::vector<Action>& cands, const std::vector<int>& sel,
+                                          const std::vector<GyCopyRun>& runs, bool fold)
+{
+    for (const GyCopyRun& r : runs)
+    {
+        int k = 0;
+        for (std::size_t t = 0; t < r.cands.size(); ++t)
+        {
+            if (std::find(sel.begin(), sel.end(), r.cands[t]) == sel.end()) { continue; }
+            if (fold && static_cast<int>(t) != k) { return true; }
+            ++k;
+        }
+        if (k <= r.real) { continue; }
+        int h = 0;
+        for (int j : sel)
+        {
+            const Action& c = cands[static_cast<std::size_t>(j)];
+            if (c.kind == Action::Kind::CastFromHand && c.card_name == r.name) { ++h; }
+        }
+        if (k > r.real + h) { return true; }
+    }
+    return false;
+}
+
 // The pending-grant replicate pins (SubsetFilterPre::rep_pending). Only CollectActions' pending-grant fan
 // pins a count on a creature the board cannot replicate, so `out` stays EMPTY for every candidate list
 // that holds no such pin (every deck but slivers, the greedy picker, human play): one int compare per
@@ -22694,6 +22776,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
         p.host_sac_for_mana = AnyHostSacrificedForMana(cands);
         BuildEquipReleaseOnly(state, cands, p.equip_release_only);
         BuildReplicatePending(state, cands, p.rep_pending);
+        BuildGyCopyRuns(state, cands, p.gy_copy_runs);
         BuildEquipHostFold(state, cands, p);
         BuildEquipUnlandedCopy(state, cands, p);
         BuildCopyCap(state, cands, p.copy_cap);
@@ -22947,6 +23030,7 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
     p.host_sac_for_mana = AnyHostSacrificedForMana(cands);
     if (p.equip) { BuildEquipReleaseOnly(state, cands, p.equip_release_only); }
     BuildReplicatePending(state, cands, p.rep_pending);
+    BuildGyCopyRuns(state, cands, p.gy_copy_runs);
     if (p.equip) { BuildEquipHostFold(state, cands, p); }
     if (p.equip) { BuildEquipUnlandedCopy(state, cands, p); }
 
@@ -30862,7 +30946,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
                 have.AddPool(state.floating_mana);
                 total_cache = static_cast<int>(have.Total());
             }
-            if (EffectiveCost(*o.def, state).ManaValue() > total_cache) { continue; }
+            if (GraveyardCastSpellCost(*o.def, state).ManaValue() > total_cache) { continue; }
             out.push_back(ActKey(num, kActGyCast) | ((o.card->m_name_hash & 0xFFFFFFull) << 40));
         }
     }
@@ -41728,10 +41812,15 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
-    // --- Retrace: cast a retrace card from the graveyard (Throes of Chaos) ---
-    // Additional cost: discard a land card from hand. The card is not exiled, so it
-    // returns to the graveyard and can be retraced again on a later turn. One Action
-    // per distinct card name (apply finds the first matching copy in the graveyard).
+    // --- Retrace / FLASHBACK: cast a card from the graveyard (Throes of Chaos; Lingering Souls) ---
+    // Retrace's additional cost: discard a land card from hand. The card is not exiled, so it
+    // returns to the graveyard and can be retraced again on a later turn. One Action per distinct
+    // RETRACE name (apply finds the first matching copy in the graveyard). A FLASHBACK card is
+    // offered once per graveyard COPY (Spirits integrator B, hole B2: two Lingering Souls in the
+    // graveyard are two casts this main, which one-per-name made unfindable at any budget); the
+    // identical copies are collapsed to their canonical prefix by SubsetHasNonCanonicalGyCopies, so
+    // k copies cost k+1 subsets, not 2^k. A flashback card cast from HAND this main is offered too,
+    // as a PENDING candidate (hole B1; the post-pass near the end of CollectActions).
     {
         int lands_in_hand = 0;
         for (const Card& c : ap.hand)
@@ -41754,7 +41843,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                               || state.stack.empty();
                 if (!timing_ok) { continue; }
                 if (gdef->card.m_mana_cost.has_x) { continue; }
-                if (!seen_gy.insert(gc.m_name).second) { continue; }
+                if (!gdef->params.flashback_cost && !seen_gy.insert(gc.m_name).second) { continue; }
                 // Flood-engine gate (same as hand casts): a retrace card here is Throes of
                 // Chaos, which cascades into Treasure Hunt -- only recast it from the
                 // graveyard when the resulting draw has a payoff this turn. In human play the
@@ -41771,10 +41860,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.kind                  = Action::Kind::CastFromGraveyard;
                 a.card_name             = gc.m_name;
                 a.hand_index            = -1;            // sourced from graveyard, not hand
-                CardDefinition pay_def = *gdef;
-                if (gdef->params.flashback_cost)
-                { pay_def.card.m_mana_cost = *gdef->params.flashback_cost; }
-                a.cost                  = EffectiveCost(pay_def, state);
+                a.cost                  = GraveyardCastSpellCost(*gdef, state);
                 a.discard_lands         = gdef->params.retrace ? 1 : 0;
                 a.eval                  = EvalCard(*gdef, state);
                 a.is_noncreature        = !gdef->card.IsCreature();
@@ -41805,7 +41891,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         a.kind              = Action::Kind::CastFromGraveyard;
         a.card_name         = o.card->m_name;
         a.hand_index        = -1;            // sourced from the graveyard, not hand
-        a.cost              = EffectiveCost(gdef, state);
+        a.cost              = GraveyardCastSpellCost(gdef, state);
         a.discard_lands     = 0;             // a permission cast, not retrace: no additional cost
         a.eval              = EvalCard(gdef, state);
         a.is_noncreature    = !gdef.card.IsCreature();
@@ -49680,6 +49766,62 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         actions.swap(kept);
     }
 
+    // FLASHBACK FROM HAND, SAME MAIN (Spirits integrator B, 2026-11-13; hole B1). A flashback card cast from
+    // HAND this main can be flashed back in the SAME main: it resolves into the graveyard, and every graveyard
+    // cast applies AFTER the plan's hand casts in both worlds (ApplyPlanDirect's trailing CastFromGraveyard
+    // pass; AIEngine::TakeTurn's likewise). The retrace / flashback block enumerates only the graveyard the
+    // plan STARTED from, and no breakpoint opens when the cast card lands there (site 9's kActGyCast is
+    // Lurrus's permission), so "Lingering Souls, then its flashback" was unfindable at any budget. One PENDING
+    // CastFromGraveyard per hand copy that has a hand cast in this list, legal only beside that cast
+    // (SubsetHasNonCanonicalGyCopies), so the plan holds both and the search branches on it like any other
+    // action -- an ENUMERATOR fix, per the USER's ruling for the analogous Astrolabe gap ("we don't want to
+    // add extra breakpoints or required resolves for no reason"). Here, after every post-pass that can drop
+    // a hand cast, so a pending candidate always has its cast in the list. One param test per hand card for
+    // every deck without flashback_cost.
+    {
+        const Player& fb_ap = state.ActivePlayer();
+        const int fb_n = static_cast<int>(fb_ap.hand.size());
+        for (int i = 0; i < fb_n; ++i)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(fb_ap.hand[static_cast<std::size_t>(i)]);
+            if (hd == nullptr || !hd->params.flashback_cost || hd->params.retrace) { continue; }
+            if (hd->card.m_mana_cost.has_x) { continue; }
+            if (!(hd->card.IsInstant() || hd->card.HasKeyword(Keyword::Flash) || state.stack.empty())) { continue; }
+            bool cast_here = false;
+            for (const Action& c : actions)
+            { if (c.kind == Action::Kind::CastFromHand && c.hand_index == i) { cast_here = true; break; } }
+            if (!cast_here) { continue; }
+            // A REGROWTH flashback (Mystic Retrieval) needs a target for EACH cast: the hand cast takes one,
+            // so the flashback needs a second -- one already in the graveyard, or another hand card the plan
+            // can cast into it first (graveyard casts apply after every hand cast). Fewer than two in both
+            // zones together and the pending cast can never be legal (a superset test, never a miss).
+            if (hd->params.tutor_from_graveyard)
+            {
+                int targets = 0;
+                for (const Card& gc : fb_ap.graveyard)
+                { if (GraveyardTutorTargetOk(gc, hd->params)) { ++targets; } }
+                for (int h = 0; h < fb_n && targets < 2; ++h)
+                {
+                    if (h != i && GraveyardTutorTargetOk(fb_ap.hand[static_cast<std::size_t>(h)], hd->params))
+                    { ++targets; }
+                }
+                if (targets < 2) { continue; }
+            }
+            Action a;
+            a.kind                  = Action::Kind::CastFromGraveyard;
+            a.card_name             = fb_ap.hand[static_cast<std::size_t>(i)].m_name;
+            a.hand_index            = -1;            // cast from the graveyard (after the hand cast lands it)
+            a.cost                  = GraveyardCastSpellCost(*hd, state);
+            a.discard_lands         = 0;
+            a.eval                  = EvalCard(*hd, state);
+            a.is_noncreature        = !hd->card.IsCreature();
+            a.card_mv               = hd->card.m_mana_cost.ManaValue();
+            a.is_draw_until_nonland = (hd->tmpl == CardTemplate::DrawUntilNonland);
+            a.discard_land_damage   = hd->params.discard_land_damage;
+            actions.push_back(std::move(a));
+        }
+    }
+
     // Identical creature-Aura HOSTS -> the first k of each class (MTG_AURA_HOST_FOLD; see the function).
     // Dominated haste/shroud equip moves (see DropInertHasteShroudEquips): the search's lever or the
     // greedy's by scope, never in human play or an unpruned (viewer / claude-play) enumeration, and only
@@ -56628,6 +56770,10 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
+        // Flashback copies: a surplus or (odometer only) non-prefix selection of one name's graveyard casts
+        // (see the helper). Lockstep twin in eval_and_push. Empty table (no flashback card) -> inert.
+        if (!pre.gy_copy_runs.empty()
+            && SubsetHasNonCanonicalGyCopies(cands, sel, pre.gy_copy_runs, fold_from_odometer)) { return; }
         if (es_on_c) { enumstats::g_c_rules.fetch_add(1, std::memory_order_relaxed); }   // passed the rules
         if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
@@ -66363,10 +66509,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // Desperate Ritual SPLICE: pay (splice_count+1) times the printed cost (single Medallion floor
         // inside EffectiveCost). Matches the enum's a.cost = EffectiveCost(def,state,k+1) and the
         // executor's CastSpellFromHand -> lockstep. copies=1 for every non-spliced cast.
-        CardDefinition pay_def = def;
-        if (from_graveyard && def.params.flashback_cost)
-        { pay_def.card.m_mana_cost = *def.params.flashback_cost; }
-        ManaCost ec = EffectiveCost(pay_def, state, splice_count + 1);
+        // A graveyard cast is priced by THE shared GraveyardCastSpellCost (flashback cost swap; the
+        // executor's cast_from_graveyard and the enumeration read the same helper -> lockstep).
+        ManaCost ec = from_graveyard ? GraveyardCastSpellCost(def, state, splice_count + 1)
+                                     : EffectiveCost(def, state, splice_count + 1);
         if (def.params.tooth_and_nail && chosen_x == 2) { ec.generic += 2; }
         // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
         // lockstep with the enumeration's a.cost and the executor's CastSpellFromHand).
@@ -77288,6 +77434,10 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         // Reject a pinned pending-grant replicate count with no granter in the subset (an exact
         // duplicate of the unpinned cast; MTG_REPLICATE_PENDING). Empty table -> inert, byte-identical.
         if (!pre.rep_pending.empty() && SubsetHasUngrantedReplicatePin(cands, sel, pre.rep_pending)) { return; }
+        // Flashback copies (see the helper): lockstep twin of Solve::consider's call.
+        if (!pre.gy_copy_runs.empty()
+            && SubsetHasNonCanonicalGyCopies(cands, sel, pre.gy_copy_runs, fold_from_odometer || !sat_bypass))
+        { return; }
         if (eshape != nullptr) { shapestats::Bump(eshape->e_passed); ++ecallf.passed; }
         // Reject a sequenced restricted aura (injected above) with no in-subset enabler on its target.
         // No-op unless AppendSequencedAuraCandidates injected such a candidate (aura decks) -> byte-identical
@@ -95704,8 +95854,9 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             }
         }
 
-        // Graveyard: the rollout reads it only via Retrace, so fold it ONLY when it
-        // holds a retrace-castable card. Decks without retrace never fold it and keep
+        // Graveyard: the rollout reads it only via Retrace / FLASHBACK, so fold it ONLY when it
+        // holds a card castable from it (flashback joined 2026-11-13: before, "Lingering Souls still
+        // in the graveyard" and "already flashed back" shared a TT / memo key). Decks without retrace never fold it and keep
         // the exact key — and identical TT/budget behaviour — they had before. Folded
         // order-insensitively (commutative sum of name hashes): two states differing
         // only in cast/discard order share a key, so this never adds spurious misses.
@@ -95844,7 +95995,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
                 if (gy_retrace_possible)
                 {
                     const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
-                    if (cdef && cdef->params.retrace) { gy_retraceable = true; }
+                    if (cdef && (cdef->params.retrace || cdef->params.flashback_cost)) { gy_retraceable = true; }
                 }
                 // same test as GraveyardLandFuel
                 if (gy_fuel_possible && ZoneCard(c).IsLand()) { ++gy_lands; }

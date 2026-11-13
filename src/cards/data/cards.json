@@ -16252,6 +16252,30 @@
     "created_token_color": "W",
     "attack_token_exile_end_of_combat": true
    }
+  },
+  {
+   "name": "Lingering Souls",
+   "mana_cost": "{2}{W}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Create two 1/1 white Spirit creature tokens with flying.\nFlashback {1}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.) [FULLY MODELLED. TOKENS: cast_creates_tokens 2 on the shared cast_created_token_* spec (1/1, white, Spirit, Flying) -> ApplyCastCreatesTokens, the same helper in the executor and the rollout; each token enters through CreateToken, so a Spirit lord (Drogskol Captain, Supreme Phantom) pumps it via the subtype on the token's own Card and an enter watcher sees each token. FLASHBACK: flashback_cost {1}{B} -> a CastFromGraveyard plan action (viewer label '(flashback)', the graveyard tile is clickable via flashback_gy), paid at {1}{B} through the shared GraveyardCastCost and exiled on leaving the stack in both worlds. SAME-MAIN LINES: one flashback candidate per graveyard COPY plus one PENDING candidate per hand copy (legal only beside that hand cast; every graveyard cast applies after the hand casts in both worlds), so 'cast it, then flash it back' and 'flash back two' are both plans at every budget; identical copies are collapsed to a prefix. Flying on the tokens: carried; evasion is inert vs the passive goldfish (it never blocks). [PARTIAL: Patrician Geist's 'spells you cast from your graveyard cost {1} less' is NOT applied yet (the next integrator's card; its one site is GraveyardCastCost) -- ONE-WAY AGAINST THIS CARD until it lands.] [PARTIAL and ONE-WAY AGAINST THIS CARD: EvalCard has no default branch for cast_creates_tokens (MTG_EVAL_CAST_TOKENS is default OFF, refuted on Fungus) and scores the cast as a cantrip at d0 / in the playout ordering; the search itself plays the tokens out, so this only under-rates the card where EvalCard IS the policy.]]",
+   "template": "custom",
+   "parameters": {
+    "cast_creates_tokens": 2,
+    "cast_created_token_power": 1,
+    "cast_created_token_toughness": 1,
+    "cast_created_token_subtypes": [
+     "Spirit"
+    ],
+    "cast_created_token_color": "W",
+    "cast_created_token_keywords": [
+     "Flying"
+    ],
+    "flashback_cost": "{1}{B}"
+   }
   }
  ]
 }

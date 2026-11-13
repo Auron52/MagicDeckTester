@@ -84,7 +84,7 @@ enum GyReader : std::uint32_t
 {
     GyR_None            = 0,
     GyR_AllNames        = 1u << 0,  // Regrowth / Garth: ANY card can return to hand -> full multiset
-    GyR_RetraceNames    = 1u << 1,  // retrace cards are castable FROM the graveyard (Throes, Flame Jab)
+    GyR_RetraceNames    = 1u << 1,  // retrace / FLASHBACK cards are castable FROM the graveyard (Throes, Lingering Souls)
     GyR_SelfCopyNames   = 1u << 2,  // "per copy of THIS card in a graveyard" (Ancestral Anger, Rite of Flame)
     GyR_MulticolorNames = 1u << 3,  // Jared Carthalion -6: highest-MV MULTICOLORED card returns
     GyR_LandsEdgeNames  = 1u << 4,  // Land's Edge definition lookup falls through to the graveyard
