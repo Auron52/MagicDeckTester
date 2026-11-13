@@ -616,9 +616,14 @@ launch unless the user requests a restart.
   therefore on YOU to look:
   ```
   gh run list --branch "$(git rev-parse --abbrev-ref HEAD)" --limit 3   # the just-pushed run's id
-  gh run watch <id> --exit-status               # run THIS in the background (it blocks until the run lands)
+  gh run watch <id> --interval 60 --exit-status # run THIS in the background (it blocks until the run lands)
   gh run view --log-failed                      # on a red run
   ```
+  **Always pass `--interval 60`.** `gh run watch` polls every 3 s by default, which is well over a thousand
+  API calls per CI run, and GitHub's 5,000/hour limit is SHARED by every session and agent on this machine
+  (they all authenticate as `dtippett-bot`). 2026-11-13: the limit hit 0 mid-watch (HTTP 403) and the watch
+  died without a verdict. After a 403, check `gh api rate_limit --jq .resources.core` and wait for the
+  reset rather than retrying.
   **Do NOT wait on CI (USER 2026-10-21: *"we could also not wait on CI, but still check the result when it
   finishes. It rarely fails after all."*).** Start the watch in the background and carry on: never hold a
   landing, a report or the next step for it. Report the per-OS outcome when it lands; if it has not landed
