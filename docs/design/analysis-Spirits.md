@@ -483,3 +483,12 @@ Smoke on 1c7f51311 (C2), run alone: 191 passed, 4 failed — exactly the four go
 identical to B's. Every other deck byte-identical. Nothing accepted (GT accepts are batched at the end).
 Live cost audit (`audit_card_costs.py`, 2026-11-13): 599 compared, all match; 7 NON-Spirits cards (Dragonstorm
 rituals etc.) NOT COMPARED on HTTP 429 → rc=2 (incomplete, not a pass); every costed Spirits card compared clean.
+
+## Stage 3 — coverage re-check (orchestrator, 2026-11-13, after 7c8bd7fe2)
+`analyze_deck.py --coverage-only`: rc 0, `missing: []`, every card `full`, no gaps. Bracket-note classification
+of the 14 new cards: PARTIALs are all provably inert vs the passive goldfish and PROVISIONAL pending USER
+sign-off (Drogskol hexproof grant; Labyrinth draw cap + abort guard; Wanderer sac-counter; Shacklegeist tap
+ability / block restriction; White Orchid flying). The two disclosed OPEN notes are engine holes being FIXED in
+this run, not deferrals: Flooded Strand held-fetch crack-then-cast (integrator E1) and Millicent's
+flashback-before-hand-cast ordering (E2, `graveyard-cast-search-holes-deferred.md` §3). Every other note reads
+FULLY MODELLED. `fetch_hold_review.required = true` (Flooded Strand, hold modelled) — measured after E1.
