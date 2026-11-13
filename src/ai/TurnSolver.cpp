@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102319,6 +102319,13 @@ namespace p18
         // twice (its commit re-walks the interior). A decision may overspend by at most that duplicated interior, which
         // the heuristic ladder pays once; bounded between the clamp (_prr-free) and _pnr.
         o.cr = k.find("_pcr") != std::string::npos;
+        // _phx (P18f): the heuristic ladder's OWN free refusal, on prices. Before pass k >= 3 is walked, its estimate
+        // c_{k-1}^2 / c_{k-2} (the priced costs below) is checked against gate_alpha x (rem0 - priced), exactly the
+        // heuristic ladder's start gate with prices standing in for its real superseded costs. A pass heur would not
+        // start is refused at no cost (heur pays nothing for it either); only passes heur would start are walked and
+        // priced. Measured 2026-11-13 (T3): refused passes' leafless walks were Landfall's and Melira's largest
+        // overhead (1.64M / 1.43M units, vs 0.76M / 0.86M for the double walk).
+        o.hx = k.find("_phx") != std::string::npos;
         { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
@@ -106285,6 +106292,28 @@ namespace gamelc
         static const bool env = EnvOn("MTG_LEAFLESS_READS_LEAFED", true);
         return heurarm::Flag(heurarm::LEAFLESS_READS_LEAFED, env);
     }
+    // P18f LEAF-FREE ANSWERS (MTG_P18_LEAFFREE, or the arm-key substring "_plf"; default OFF). ENGINE IDENTITY FOLD.
+    // A node whose COMPLETE search under cutoff c reached no depth-0 leaf and read no memo answer (the taint below is
+    // unchanged across its subtree) proved "no win at or before c" without scoring a single leaf, so the proof holds for
+    // EVERY leaf kind: a leafed search of the same (state, depth, beam/label context) under a cutoff c' <= c explores a
+    // subset of those lines (cuts only tighten), none of which reaches depth 0, and finds the same no in-window win.
+    // Stored under the leaf code kLeafFree, read by any node (rollout, value or no leaf) with cutoff <= the bound; a
+    // hit is itself leaf-free, so it does not taint its ancestors. This is what lets the sampled gate's committing
+    // rollout pass skip the dead interior its leafless walk already refuted (the P18e double walk).
+    // Budget-independent (it reads only completed proofs), so it applies at every budget.
+    inline constexpr unsigned kLeafFree = 0x1EAFF3EEu;
+    inline std::atomic<long long> g_lf_stores{0}, g_lf_hits{0}, g_lf_ver_n{0}, g_lf_ver_bad{0};
+    inline bool LeafFreeOn()
+    {
+        static const bool env = EnvOn("MTG_P18_LEAFFREE");
+        thread_local std::string last; thread_local bool v = false, init = false;
+        const std::string& k = valuearm::t_deck_key;
+        if (!init || k != last) { last = k; v = env || k.find("_plf") != std::string::npos; init = true; }
+        return v;
+    }
+    // Everything that answers part of a subtree without searching it (a leaf, a memo read, a truncation).
+    inline long long LfTaint()
+    { return g_fs_leaf_evals + g_fs_memo_win_hits + g_fs_memo_nowin_hits + static_cast<long long>(g_fs_trunc_events); }
     // MTG_BP_DEV_SEQ's first pass (see TurnSolver::FullSearchLine): a node whose walk met a latent occurrence answered
     // for the one-deviation tree only. It is kept under this second tag, which only a first pass reads, and a hit on it
     // counts as meeting a latent occurrence -- its subtree holds one -- so the second pass still runs. Every other
@@ -106298,6 +106327,9 @@ namespace gamelc
             std::cerr << "[game-line-cache] win_hits=" << g_win_hits.load() << " nowin_hits=" << g_nowin_hits.load()
                       << " stores=" << g_stores.load() << " full_refusals=" << g_full.load()
                       << " leafless_reads=" << g_lr_hits.load();
+            if (g_lf_stores.load() + g_lf_hits.load() > 0)
+            { std::cerr << " leaffree_stores=" << g_lf_stores.load() << " leaffree_hits=" << g_lf_hits.load()
+                        << " leaffree_verified=" << g_lf_ver_n.load() << " leaffree_MATERIAL=" << g_lf_ver_bad.load(); }
             if (Verify())
             {
                 std::cerr << " verified=" << g_ver_n.load() << " DISAGREE=" << g_ver_bad.load()
@@ -106568,6 +106600,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     TranspositionTable::Key key, key_win, key_base;
     int dvs_read_mlt = INT_MAX;   // precise dirty-memo provenance when the carry has it
     bool gamelc_hit = false; int gamelc_hit_win = 0;   // MTG_GAME_LINE_CACHE_VERIFY: the cached answer to check
+    bool lf_hit = false;                               // ...and it was a P18f leaf-free answer
     bool inwin_hit = false; int inwin_hit_win = 0;     // MTG_INWIN_CACHE_VERIFY: the cached answer to check
     int pastcut_cached = 0;                            // MTG_FSL_PASTCUT_VERIFY: the memo win being re-searched
     struct GamelcUnreached { const bool& hit; bool done = false; ~GamelcUnreached()
@@ -106594,6 +106627,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 }
             }
             if (dvs_read_dirty && DvsDirtyReadOn()) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
+        }
+        // P18f LEAF-FREE ANSWERS (see gamelc::LeafFreeOn): a completed no-leaf refutation answers any leaf kind.
+        if (gamelc::On() && g_fsline_nest > 0 && g_devseq_suppress == 0 && gamelc::LeafFreeOn())
+        {
+            auto lf = gamelc::t_map.find(gamelc::TagLeaf(key, gamelc::kLeafFree));
+            if (lf != gamelc::t_map.end() && cutoff <= lf->second.nowin_bound)
+            {
+                gamelc::g_lf_hits.fetch_add(1, std::memory_order_relaxed);
+                if (!gamelc::Verify()) { return lf->second.line; }
+                gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = lf->first; lf_hit = true;
+            }
         }
         // MTG_GAME_LINE_CACHE: an answer an earlier decision of this game computed (see gamelc).
         if (gamelc::On() && g_fsline_nest > 0)
@@ -107187,6 +107231,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // watermark for the budget cuts that never book a truncation (see SearchBudget.h).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long binds_at_entry = budgetbind::t_binds;
+    const long long lf_taint_at_entry = gamelc::LfTaint();   // P18f: leaf-free iff unchanged at the store
     // What this node's search COSTS, in the same deterministic work units the budget is denominated
     // in. Stored beside its answer in the wave index so a permuted twin can price the re-search it
     // is deciding whether to skip -- a measured cost, not a guess at one. Subtree-inclusive, which
@@ -109601,6 +109646,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 gamelc::g_ver_n.fetch_add(1, std::memory_order_relaxed);
                 const bool fresh_win = best.win_turn <= max_turns, cached_win = gamelc_hit_win <= max_turns;
+                if (lf_hit)
+                {
+                    gamelc::g_lf_ver_n.fetch_add(1, std::memory_order_relaxed);
+                    if (best.win_turn <= cutoff)
+                    {
+                        if (gamelc::g_lf_ver_bad.fetch_add(1, std::memory_order_relaxed) < 12)
+                        { std::cerr << "[leaffree] DISAGREE job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-") << " turn=" << state.turn_number
+                                    << " depth=" << depth << " cutoff=" << cutoff << " fresh=" << best.win_turn
+                                    << " leaf=" << gamelc::LeafCode(state) << "\n"; }
+                    }
+                }
                 if (fresh_win != cached_win || (fresh_win && best.win_turn != gamelc_hit_win))
                 {
                     gamelc::g_ver_bad.fetch_add(1, std::memory_order_relaxed);
@@ -109664,6 +109720,28 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             else if (!win && it->second.nowin_bound != std::numeric_limits<int>::max()
                      && it->second.nowin_bound < std::min(cutoff, max_turns + 1))
             { it->second.nowin_bound = std::min(cutoff, max_turns + 1); }   // a wider refutation supersedes
+            // P18f: the same refutation, leaf-free, for every leaf kind (see gamelc::LeafFreeOn).
+            if (!win && !dvs_sup && g_devseq_suppress == 0 && !gamelc_hit && gamelc::LeafFreeOn()
+                && gamelc::LfTaint() == lf_taint_at_entry)
+            {
+                const TranspositionTable::Key fk = gamelc::TagLeaf(key, gamelc::kLeafFree);
+                const int b = std::min(cutoff, max_turns + 1);
+                auto fi = gamelc::t_map.find(fk);
+                if (fi == gamelc::t_map.end())
+                {
+                    const std::size_t nb = tier1::On() ? static_cast<std::size_t>(tier1::kFslEntryB + tier1::kMapNodeB)
+                                                       : sizeof(FSLineEntry) + 64;
+                    if (gamelc::t_bytes + nb > gamelc::CapBytes()) { gamelc::g_full.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    {
+                        gamelc::t_bytes += nb;
+                        tier1::Set(tier1::kGameLc, static_cast<long long>(gamelc::t_bytes));
+                        gamelc::g_lf_stores.fetch_add(1, std::memory_order_relaxed);
+                        gamelc::t_map.emplace(fk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best, b });
+                    }
+                }
+                else if (fi->second.nowin_bound < b) { fi->second.nowin_bound = b; }
+            }
         }
     }
     // MTG_INWIN_CACHE: keep this node's in-window proofs for any depth (see inwin).
@@ -111153,6 +111231,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (pred > kn.ppr * thr_pre)
                 {
                     if (p16::On()) { p18::t_rec.push_back({k, 0, 0, thr_pre, pred, 0.0, 0, 0, 0, 0, std::string("ppr")}); }
+                    p18_stop = k; break;
+                }
+            }
+            if (kn.hx && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
+            {
+                const double pe = p18_est[static_cast<std::size_t>(k - 1)];
+                const double e = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double remh = std::max(0.0, rem0 - priced);
+                const bool fitsh = g_reserve_value_pass ? (e + e <= gate_alpha * remh) : (e <= gate_alpha * remh);
+                if (!fitsh)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remh, e, 0.0, 0, 0, 0, 0, std::string("phx")}); }
                     p18_stop = k; break;
                 }
             }
