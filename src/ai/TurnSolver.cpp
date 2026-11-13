@@ -110970,8 +110970,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (!kn.verify) { line = pr; committed_depth = k; prev_line = line; prev_committed = k; p18_done = true; } break;
             }
             if (unl) { p18_K = k; continue; }   // nothing to price: every pass fits an unlimited budget
+            if (pr.truncated) { break; }        // the budget ran out inside the leafless pass: pass k cannot fit
             // (2) PRICE rollout pass k from sampled rollouts, one at a time, until the gate's question is decided.
-            const double thr = kStartGateAlpha * std::max(0.0, rem0 - priced);   // the heuristic ladder's admit line
+            // The heuristic ladder's admit line: alpha x its remaining budget (less the priced passes below) -- and never
+            // more than what this decision really has left, since the committing pass is paid in real units.
+            const double thr = kStartGateAlpha * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
             const long long su0 = pb->Used();
             double x_pv = 0.0, sx = 0.0, sxx = 0.0; int m = 0; int best = 0;
             double est = static_cast<double>(lu), se = 0.0; int fit = -1; std::string ck;
@@ -111004,26 +111007,29 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     est = static_cast<double>(lu) + x_pv + rest * mean;
                     if (m > 0)
                     {
-                        const double sd = std::max(std::sqrt(std::max(0.0, sxx / mm - mean * mean)), kn.cvf * mean);
+                        const double sd = std::max(std::sqrt(std::max(0.0, sxx / mm - mean * mean)), kn.cvf * std::max(mean, x_pv));
                         const double fpc = rest > 1.0 ? std::sqrt(std::max(0.0, 1.0 - (mm - 1.0) / (rest - 1.0))) : 0.0;
                         se = rest * sd / std::sqrt(mm) * fpc;
                     }
                     const bool all = (i >= avail);
                     if (kn.verify && p16::On() && (m == 0 || (m & (m - 1)) == 0 || all))
                     { char cb[64]; std::snprintf(cb, sizeof cb, "%s%d=%.0f", ck.empty() ? "" : ",", m, est); ck += cb; }
-                    if (rest <= 0.0 || all || (!kn.verify && m > 0 && (est + kn.z * se <= thr || est - kn.z * se > thr)))
-                    { fit = (est <= thr) ? 1 : 0; break; }
+                    if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest)
+                                                && (est + kn.z * se <= thr || est - kn.z * se > thr)))
+                    { fit = (thr > 0.0 && est <= thr) ? 1 : 0; break; }
                     const int cutoff = std::min(smp.cuts[i], best > 0 ? best - 1 : smp.cuts[i]);   // the incumbent's cut
                     const double x = roll(std::move(smp.res[i]), cutoff);
                     sx += x; sxx += x * x; ++m;
                 }
             }
-            else { est = static_cast<double>(lu); fit = (est <= thr) ? 1 : 0; }   // no leaf reached: the tree is the pass
+            else { est = static_cast<double>(lu); fit = (thr > 0.0 && est <= thr) ? 1 : 0; }   // no leaf reached: the tree is the pass
             const long long su = pb->Used() - su0;
             if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, thr, est, se, m, su, fit, best, std::move(ck)}); }
-            // (3) Pass 1 always runs (the heuristic ladder never gates it); pass k > 1 is admitted iff its price fits.
-            if (k > 1 && fit == 0 && !kn.verify) { break; }
-            p18_K = k; p18_wb = best; wb_prev = best;
+            // (3) Pass k is admitted iff its price fits. Pass 1 always runs (the heuristic ladder never gates it), and
+            // a pass 1 that does not fit leaves nothing deeper that could.
+            if (fit == 0 && !kn.verify) { break; }
+            p18_K = k;
+            if (best > 0) { p18_wb = best; wb_prev = best; }   // the best sampled win so far: a real line reaches it
             priced += kn.actual_rem ? static_cast<double>(lu + su) : est;
         }
         if (kn.noasp) { p18_wb = 0; }
