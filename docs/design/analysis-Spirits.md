@@ -27,7 +27,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | card | tier | model | viewer bucket | status |
 |---|---|---|---|---|
 | Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED 87078b215 |
-| Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit + generic AFFINITY cast-order tier 25 + same-turn credit for Vial puts / token-making hand casts / a Spirit-named Mimic (`AffinityFeedCount`); new `combat_damage_tokens_per_trigger` + `combat_damage_watch_nontoken` (shared FireCombatDamageTokens); new `dies_watch_nontoken` (OnCreatureDies both walks, DeathOfWouldPay) | none (legend_keep for a 2nd copy) | IMPLEMENTED (C1, hash in the note below) |
+| Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit + generic AFFINITY cast-order tier 25 + same-turn credit for Vial puts / token-making hand casts / a Spirit-named Mimic (`AffinityFeedCount`); new `combat_damage_tokens_per_trigger` + `combat_damage_watch_nontoken` (shared FireCombatDamageTokens); new `dies_watch_nontoken` (OnCreatureDies both walks, DeathOfWouldPay) | none (legend_keep for a 2nd copy) | IMPLEMENTED 55c43ab8a |
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
 | Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
@@ -246,7 +246,7 @@ B's numbers (`gods_smoke_d0` 8.7830, `d3` 5.4000, `d5` 5.2000, `gods2hg_smoke_d5
 faster 3 / play-changed 79, d0 9/12 -- identical counts): integrator B's Hole A/B movement, GT not yet accepted.
 Every other deck byte-identical; play-changed attributable to B2: 0. `check_gt_logs.py` consistent.
 
-### Integrator C1 (2026-11-13): Millicent, Restless Revenant
+### Integrator C1 (2026-11-13): Millicent, Restless Revenant (55c43ab8a)
 
 **Card (Tier 2).** Cost/oracle re-verified against live Scryfall (`logs/spirits/drafts/scry/millicent/`; the
 collection JSON had no Millicent row): `{5}{W}{U}`, cmc 7, Legendary Creature -- Spirit Soldier 4/4, keywords
