@@ -54,7 +54,19 @@ T6   new: land Swamp; Shadowborn Apostle; Demonic Tutor; Diabolic Intent
 T7   new: land Swamp; ATTACK                              [opp -7]
 ```
 
-A real defect until shown otherwise: the old line cast Demonic Tutor + Apostle on T4 off the same board. Likely
+**ROOT-CAUSED 2026-11-13: an executor/rollout lockstep break (fixed in `AIEngine::TakeTurn`).** `MTG_FD_TRACE`
+shows the T3 search committed a T5-win line: T4 main 2 = Demonic Tutor + Profane Tutor suspend, bp[Apostle].
+The executor's pre-pass (Lotus SacForMana / Suspend / convoke) ran BEFORE it installed the line hold
+(`LineUnpaidCostScope`), while `ApplyPlanDirect` installs the hold at its entry, before its own pre-pass. So in
+the executor `ApplySuspend` paid Profane's {1}{B} against an empty hold and simply tapped Lake and the Swamp; in
+the rollout the payer saw DT + Apostle still owed and cracked Lake (sac the Swamp) for BBBB. Demonic Tutor was
+then unpayable (`[exec-tap] before Demonic Tutor: untapped: ... Thrumming Stone` only), the line broke, and T5's
+fallback lookahead passed. `4238755e9` had added the suspend cost to the hold for exactly this case, but the
+executor's hold did not exist yet when the suspend paid. Fix: move the three line scopes (`_luc`, `_lou`,
+`_lht`) above the pre-pass, the rollout's order. The game wins T5 again. A bisect was started and dropped in
+favour of the direct trace (USER: "dig into what is going wrong directly").
+
+Original note: A real defect until shown otherwise: the old line cast Demonic Tutor + Apostle on T4 off the same board. Likely
 suspects among the commits since 2026-11-10 that touch this board: the on-demand sacrifice payer for Lake of
 the Dead (`247d61153` "Integrate Shadowborn searched picks and on-demand sacrifice payer", `faa4eca67`,
 `573a4837f`, `d0879307a` Lake on-demand crack in the mana oracle, `5359ac24f`, `c1fc9063d`), the depletion tier

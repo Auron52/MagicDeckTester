@@ -8110,6 +8110,28 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // Plan::soulbond_decline (lockstep twin of ApplyPlanDirect's scope): a plan the search scored
     // as "cast the Paladin, do not pair it" is realised that way here too.
     PlanSoulbondDeclineScope _sbd_plan(plan.soulbond_decline);
+    // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
+    // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
+    // cast decrements it as it pays (CastSpellFromHand). Zero for every plan with no hand cast.
+    // FUNCTION SCOPE, deliberately: it must outlive the prepay and every cast below. Its first
+    // home was inside the lookahead branch above, where the RAII scope closed before any payment
+    // ran, so the executor paid every line with an empty hold (2026-09-15; see the note there).
+    // Under the shipped flags no autonomous payment reads the hold -- its readers are human-play
+    // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
+    // every default-flag game; it is what makes that lever's executor half exist at all.
+    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
+    // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point
+    // and from the same actions as ApplyPlanDirect's scope (lockstep).
+    LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
+    // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed.
+    LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
+    // ...and the plan's TRAIL flips for the cast-time largest-attacker pick (Morph INT-6; ApplyPlanDirect's twin).
+    PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
+    // ORDER (2026-11-13, Shadowborn s7007 gi183): these scopes are installed BEFORE the Lotus / suspend /
+    // convoke pre-pass below, as ApplyPlanDirect installs them (its entry) before its own pre-pass. The
+    // pre-pass PAYS (ApplySuspend's suspend cost, a Lake on-demand crack) and the payer reads this hold:
+    // with the hold not yet bound, Profane Tutor's {1}{B} suspend tapped Lake of the Dead and the Swamp
+    // instead of cracking Lake for BBBB, and the committed Demonic Tutor + Apostle could not be paid.
     // Lotus Bloom: apply SacForMana (float the chosen colour) and Suspend BEFORE the batch pre-pay /
     // casts, exactly as the rollout's ApplyPlanDirect does at this same logical point -> lockstep. Both
     // loops are empty for every deck without a Lotus (no SacForMana/Suspend action) -> byte-identical.
@@ -8128,23 +8150,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                  && (a.convoke_green > 0 || a.convoke_other > 0))
         { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
     }
-    // What this line still owes, seeded at the SAME point ApplyPlanDirect seeds it -- plan chosen,
-    // nothing paid -- so the executor's payments and the rollout's read the identical hold. Each
-    // cast decrements it as it pays (CastSpellFromHand). Zero for every plan with no hand cast.
-    // FUNCTION SCOPE, deliberately: it must outlive the prepay and every cast below. Its first
-    // home was inside the lookahead branch above, where the RAII scope closed before any payment
-    // ran, so the executor paid every line with an empty hold (2026-09-15; see the note there).
-    // Under the shipped flags no autonomous payment reads the hold -- its readers are human-play
-    // gated or behind MTG_HOLD_C_FOR_LINE -- so this move is byte-identical by construction for
-    // every default-flag game; it is what makes that lever's executor half exist at all.
-    LineUnpaidCostScope _luc(LineCastCostTotal(plan.actions));
-    // ...and whether the line casts a breakpoint opener (g_line_opens_unseen), seeded at the same point
-    // and from the same actions as ApplyPlanDirect's scope (lockstep).
-    LineOpensUnseenScope _lou(LineOpensUnseenCasts(state, plan.actions));
-    // ...and the creature casts that can take Generator Servant's haste (MTG_SERVANT_HASTE_KEEP), same seed.
-    LineHasteTakersScope _lht(LineHasteTakerCount(plan.actions));
-    // ...and the plan's TRAIL flips for the cast-time largest-attacker pick (Morph INT-6; ApplyPlanDirect's twin).
-    PlanTrailFlipsScope _ptf(TurnSolver::PlanTrailFlipsFor(state, plan.actions));
     // Plan::land_search_act_slot == 0 -- lockstep twin of ApplyPlanDirect's pre-cast pass: the plan's
     // land-search activations run now, through the ONE shared body, at the same point relative to the
     // line hold above (installed first in both worlds) and the plan-traits scope below (installed
