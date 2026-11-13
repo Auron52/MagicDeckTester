@@ -907,6 +907,7 @@ enum Slot : int
     PD_HARM_LINE_REPAIR,      // MTG_PD_HARM_LINE_REPAIR  item 10 (mana-clean, Prevent Damage APPLY-DROP s30024638 T3 {Living Wish + Rolling Earthquake X=1}): the pain-HARMFUL payment's exact path, when BOTH the minimum-damage assignment and the historical one strand a later cast of the line, re-pays holding each source either of them tapped (one at a time, capped at the survivable room) and keeps the least-damage payment that leaves the line payable (dmgev::PainAwarePay). Default ON; =0 -> the stranding minimum stands
     DOUBLER_AFTER_EXALTED,    // MTG_DOUBLER_AFTER_EXALTED  USER 2026-11-13 ("Anything doubler cast at the end will be assumed to be in the attack phase"): a pre-combat main's trailing run of power doublers (trick_double_power: Berserk, Legion Leadership) counts as cast in the declare-attackers step after exalted, so a lone attacker's doubled power includes exalted's +E (SpellEffects.h DoublerDeferExaltedExtra), when the plan-start probe finds the run payable in combat with main's floating mana gone (CR 500.4; TurnSolver::NoteDoublerDeferPayable). A modelling correction. Default ON; =0 -> doublers resolve before exalted as before
     EXALTED_DS_PROJECTION,    // MTG_EXALTED_DS_PROJECTION  2026-11-13 modelling fix: the attack projection (PendingAttackDamageImpl) folds a lone attacker's exalted +E into its power as the combat core does, so a double striker (Temur Battle Rage) deals it in both steps and a Jitte bearer's closed form sees it. Default ON; =0 -> the old once-only +E
+    PLAN_JOINT_PAY,           // MTG_PLAN_JOINT_PAY  Morph INT-14 (USER 2026-11-13: "our mana handling should be smart enough to address shortfalls in part of the plan"): when an AI plan's as-queued payments (lead flips, the casts' prepay, each trailing activation) come up short on a step and the WHOLE bill pays in one solve on the plan-start board, both appliers pay it jointly and pre-load the float (TurnSolver::PlanJointPayFallback). Default ON; =0 -> the as-queued payment
     COUNT
 };
 
@@ -1758,6 +1759,7 @@ inline const char* Name(int slot)
         "MTG_PD_HARM_LINE_REPAIR",
         "MTG_DOUBLER_AFTER_EXALTED",
         "MTG_EXALTED_DS_PROJECTION",
+        "MTG_PLAN_JOINT_PAY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -7527,6 +7527,7 @@ thread_local std::vector<int> g_plan_reserved_sources;
 
 // Line-scoped unpaid cost (see the header). Zero unless a plan application set it.
 thread_local ManaCost g_line_unpaid_cost;
+thread_local bool     g_line_hold_has_acts = false;   // see ManaPayment.h (LineUnpaidCostScope)
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
 thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)

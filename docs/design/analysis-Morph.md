@@ -894,6 +894,73 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
   (ii) trailing activations' costs are not in pay_main -- lead flips are, since they run before the probe, (iii) the
   post-combat state keeps main's taps). No scenario repros for 2b were built yet.
 
+- **Continuation (2026-11-13, branch morph-payer).**
+  * **Residual drain FIXED -- 300 of 300 generated lines now accept.** Root cause was NOT the line hold: the
+    viewer's `validate_line` reaches PrepareHumanCommit OUTSIDE TakeTurn, so its trial applies ran without the
+    commit's ConcreteDeferScope, and ConcretiseHumanFloat committed each payment's leftover mid-line by the
+    human-play demand model. In g0007 the Might's {G} payment concretised the joint float's generic `wild` to
+    {G}; the Den flip's generic then ate a {R} and the Firecat's {R}{R} was one short. Fix: the trial lambda
+    installs a ConcreteDeferScope on its copy (a no-op count when nested inside TakeTurn, where the commit already
+    defers). Also landed: the joint float's activations join the line hold (`g_line_hold_has_acts`, ManaPayment.h;
+    cleared/restored by every LineUnpaidCostScope; each ActivatePermAbility pay site in both worlds and
+    ApplyFaceUpLeadActs give their share back as they land), so the line-aware generic orders see what the line
+    still owes; the joint pre-load keeps a physically colourless source's units as {C} (as BatchPrepayMainCasts
+    does) instead of booking them `wild`; SacNamedTutorPut now declines the joint path (it is already in the casts'
+    hold). New scenario `morph_human_seq_joint_pay_might_first_turf_birds` (g0007; `MTG_HUMAN_LINE_JOINT_PAY=0`
+    -> illegal). All four joint-pay scenarios pass.
+  * **AI path built: `MTG_PLAN_JOINT_PAY` (heurarm slot PLAN_JOINT_PAY, DEFAULT ON).** TurnSolver::
+    PlanJointPayFallback, called by BOTH appliers (AIEngine::TakeTurn, ApplyPlanDirect) at the same point (after
+    the Lotus/suspend/convoke pre-pass, before the lead flips) with the same actions; true -> the casts-only prepay
+    is skipped. Fires only when the plan pays for >= 1 ActivatePermAbility and >= 2 steps, a payments-only DRY WALK
+    of the as-queued order on a copy (lead flips; plan traits; BatchPrepayMainCasts + each cast; each trailing
+    activation, {T} first) comes up short, and the whole bill pays in ONE solve with the activations' {T} sources
+    set aside. A payment choice only (the payer's exemption): plan, order and every searched decision unchanged;
+    every budget. Never on a human-ordered or hand-tapped plan. Declines: mid-line mana (rock/dork/ritual/Treasure/
+    land-untapping ETB/UntapCreature/UntapLand), X/twobrid/phyrexian/awaken, re-priced activations (TapBlood,
+    PingLoop, TapTargetPump, chosen_x > 1), land-search acts, Loam, Lens, flood/dig, a live float, a doubler (the
+    executor may defer it to combat -- NoteDoublerDeferPayable is untouched), and {S} off an all-snow board.
+    Trace: `MTG_PLAN_JOINT_PAY_TRACE=1` (per real fire + exit counters).
+  * **A/B (one pooled batch, binary at morph-payer + this work, each deck's play settings: snow d5 b20,
+    selesnyav2 d6 b20, edf d5 b20, morph d5 b20, pd d6 b20; seeds 95000/96000/97000/98000/99000, 24 threads,
+    `build/scratch/payer2/ab2/`), flag ON vs `=0`, unwon = 9:**
+
+    | deck | games | avg off | avg on | faster | slower | summed dt | games whose play changed | units on/off | real fires (games) |
+    |---|---|---|---|---|---|---|---|---|---|
+    | snow | 600 | 5.7167 | 5.7167 | 0 | 0 | 0 | 0 | 0.9997 | 0 |
+    | selesnyav2 | 600 | 4.6300 | 4.6300 | 0 | 0 | 0 | 0 | 1.0000 | 0 |
+    | edf | 600 | 4.0483 | 4.0483 | 0 | 0 | 0 | 1 (gi581) | 1.0000 | 1 |
+    | morph | 1000 | 4.0110 | 4.0110 | 0 | 0 | 0 | 1 (gi471) | 1.0000 | 1 |
+    | pd | 400 | 5.4525 | 5.4525 | 0 | 0 | 0 | 0 | 1.0000 | 0 |
+
+    No slower game, so there is nothing to re-run at d8 b0. Process-wide: 7.67M dry walks (rollouts included),
+    1.04M short, 1,493 fires, 2 real. **Cost:** an INTERLEAVED timing batch (12 alternating 20-game chunks per arm,
+    seed 61000, `build/scratch/payer2/t2/`, run on the first build) measured wall on/off snow 1.087, selesnyav2
+    0.916, edf 1.016 -- the dry walk is a GameState copy plus a prepay solve per qualifying apply, and Snow's
+    Sheets/Augur plans qualify constantly. The pooled A/B's wall ratios (snow 1.71) are order-biased and not a
+    measurement.
+  * **The first build's dry walk was wrong, and the A/B caught it.** Its plan traits were scoped to the casts
+    only, so the trailing activations paid WITHOUT ActLineHoldMask's soft hold and a second Scrying Sheets was
+    tapped for the first one's mana: 3.0M of 7.67M walks read short, 1.98M fired (119 real), changing play in 5
+    snow / 1 selesnya / 1 edf / 1 morph game with no win-turn change. Traits now stay in scope for the whole walk,
+    as in both appliers.
+  * **FINDING -- the fallback repairs none of the measured real shortfalls.** MTG_LINE_PAY_AUDIT over the
+    interleaved batch (720 games): jointly-payable short plans ON vs OFF snow 9/9, selesnyav2 2/2, edf 1/1. Every
+    one is a shape outside this design: (1) **snow 9/9: a breakpoint continuation spends the line's mana.** Repro
+    `Snow.cod --seed 61042 --game-index 42` T3, plan [Frost Augur(act), Scrying Sheets(act)] on Snow-Covered Forest
+    + Boreal Druid + Rimewood Falls: the Augur reveals Arcum's Astrolabe, the draw re-solves, the continuation casts
+    the Astrolabe {1} out of the mana the Sheets needed (the continuation binds its own casts-only line hold and
+    does not see the outer trailing activations; MTG_ACT_HOLD_OUTER, default OFF, holds their {T} sources only),
+    and the Sheets is unpaid. The joint pay does not help: it pre-floats the Sheets' share and the continuation
+    spends it all the same. (2) selesnyav2 Nykthos Paragon + Priest of Titania and edf Cloud of Faeries + Trace of
+    Abundance: cast-only lines with a producer (the casts-only prepay's PRODUCER decline). (3) selesnyav2 Blossoming
+    Bogbeast + Wirewood Lodge: a mana-making UntapCreature step. **Proposed next step (for the USER):** give a
+    breakpoint continuation the outer line's still-owed trailing activations -- their mana in its line hold AND in
+    its enumeration's admission -- so a new card is cast only from mana the rest of the line can spare (or the
+    search chooses it over the activation knowingly). That is a search change, not a payer one.
+  * **Recommendation (USER decision):** the AI fallback is correct, lockstep and default ON as briefed, but on
+    this evidence it buys nothing measurable and costs ~9% wall on Snow. Keep it ON only if the continuation fix
+    above is built on top of it; otherwise set it OFF (or delete it) rather than pay the dry walk for nothing.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18

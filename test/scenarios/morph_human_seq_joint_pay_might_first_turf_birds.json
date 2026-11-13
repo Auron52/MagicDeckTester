@@ -1,0 +1,62 @@
+{
+ "_comment": [
+  "HUMAN LINE JOINT PAY (Morph INT-14), the generated residual g0007. Might of Old Krosa {G} FIRST, then Den Protector's",
+  "flip {1}{G}, then Blistering Firecat's flip {R}{R}. Board: Mountain, Forest, Gruul Turf ({R}{G} per tap), Birds of",
+  "Paradise -- {R}{R}{G}{G} plus one generic, exactly the board. The joint solve paid, but the line hold carried the",
+  "Might only, so the float's wild settled onto the Might's {G}, the Den flip's generic ate a {R} and the Firecat was one",
+  "{R} short. Fixed by holding the line's activations in the line hold while the joint float is live",
+  "(g_line_hold_has_acts). MTG_HUMAN_LINE_JOINT_PAY=0 gives verdict illegal."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 4,
+ "on_the_play": false,
+ "active_life": 20,
+ "opponent_life": 40,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Blistering Firecat (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Birds of Paradise",
+   "controller": 0,
+   "sick": false
+  }
+ ],
+ "hand": [
+  "Might of Old Krosa"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 4,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "validate_line": "cast=Might of Old Krosa;face_up=Den Protector;face_up=Blistering Firecat;seq=cast=Might of Old Krosa|face_up=Den Protector|face_up=Blistering Firecat",
+ "expect_verdict": "accept"
+}

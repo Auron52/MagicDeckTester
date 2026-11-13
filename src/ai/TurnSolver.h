@@ -3183,6 +3183,22 @@ public:
     // order the steps come in. false with `state` untouched when the bill cannot be summed exactly (X, snow,
     // twobrid, a dynamic activation cost, a mana-making step) or the board cannot pay it jointly.
     static bool HumanLineJointPrepay(GameState& state, const Plan& plan);
+    // PLAN JOINT PAY -- the AI twin (MTG_PLAN_JOINT_PAY, DEFAULT ON; =0 -> the as-queued payment only). Morph
+    // INT-14, USER 2026-11-13 (verbatim): "The payment order doesn't matter that much to me but our mana handling
+    // should be smart enough to address shortfalls in part of the plan. Maybe that means we need adjustments."
+    // Both plan appliers (AIEngine::TakeTurn and ApplyPlanDirect) call it at the SAME point -- after the
+    // Lotus/suspend/convoke pre-pass, before the LEAD flips -- with the same actions (lockstep), and skip their
+    // casts-only BatchPrepayMainCasts when it returns true. It fires only when (1) the plan pays for at least one
+    // activation and at least two steps in all, (2) a payments-only dry walk of the as-queued order on a copy comes
+    // up short on some step, and (3) the WHOLE bill -- every cast's and every activation's mana -- pays in one
+    // solve on the plan-start board with the activations' {T} sources set aside. Then it pays that bill, pre-loads
+    // the float with it (pips pinned, generic as wild, physical {C} kept {C}) and holds the activations' share in
+    // the line hold, so each step drains its own share. A PAYMENT choice only (the payer's standing exemption):
+    // the plan, its order and every searched decision are unchanged; a declined or unneeded fire leaves `state`
+    // untouched. Applies at every budget. Declines on mid-line mana (rocks, dorks, rituals, untappers), X / twobrid /
+    // phyrexian costs, re-priced activations, snow pips off an all-snow board, a live float, and a doubler (the
+    // executor may defer it to combat).
+    static bool PlanJointPayFallback(GameState& state, const std::vector<Action>& acts);
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
