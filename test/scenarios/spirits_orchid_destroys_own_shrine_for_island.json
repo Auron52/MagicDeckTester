@@ -1,0 +1,27 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 0,
+  "_comment": "Spirits (2026-11-13, integrator C2): White Orchid Phantom's OWN-land target is SEARCHED. Board: Plains, Plains, Godless Shrine (no blue source); hand: White Orchid Phantom ({W}{W}) + Supreme Phantom ({1}{U}); library: Plains filler with the deck's only Island at the BOTTOM (never drawn). Cast the Phantom off the two Plains, destroy OUR OWN Godless Shrine, search the ISLAND (tapped). T4: draw + play a Plains, cast Supreme Phantom (Island + Plains), attack with the pumped 3-power Phantom -> win T4. The provider's fold alone (an opponent's nonbasic, else none) never touches our land: no blue, 2 damage T4, win T5. Also pins the searched basic pick (a Plains would not cast Supreme Phantom).",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Godless Shrine" }
+  ],
+  "hand": [
+    "White Orchid Phantom",
+    "Supreme Phantom"
+  ],
+  "library": [
+    "Island"
+  ],
+  "expect_win_turn": 4
+}

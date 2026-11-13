@@ -442,6 +442,12 @@ MANIFEST = {
     # Foundation Breaker's `dig` "(may destroy)" modal (every legal target, both sides; -1 = none) at
     # ResolveOptionalDestroyArtifactEnchantment.
     "sac_outlet_destroy_artifact_enchantment_optional": ("dig", truthy),
+    # Skyclave Apparition: "exile up to one target nonland, nontoken permanent you don't control with MV
+    # <= N" -- the `dig` "(may exile)" modal over every legal target (-1 = none) at ResolveEtbExileUpToOne.
+    "etb_exile_opp_nonland_nontoken_max_mv": ("dig", lambda v: v is not None and v >= 0),
+    # White Orchid Phantom: "destroy up to one target nonbasic land" -- the `dig` "(may destroy nonbasic
+    # land)" modal over every nonbasic land, both sides (-1 = none), then `tutor_etb` for our basic.
+    "etb_destroy_nonbasic_land_optional": ("dig", truthy),
     # Timeless Witness: "return target card from your graveyard to your hand" -- human play asks the
     # shared `dig` chooser over the graveyard at resolution (no named plan variants under human play).
     "etb_return_gy_to_hand":         ("dig",         truthy),
@@ -889,6 +895,8 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Spirits (2026-11-13, integrator C2): Skyclave Apparition's LTB.
+    "ltb_exiled_owner_illusion_token": "mandatory LTB: the exiled card's owner creates an X/X Illusion (X = its MV) -- no target, no 'may', no choice",
     # Spirits (2026-11-13): Geist of Saint Traft's Angel and Spirit of the Labyrinth's guard.
     "attack_token_keywords": "token spec constant (Geist of Saint Traft's Angel 'with flying') -- printed keywords on a mandatory attack-trigger token; no choice",
     "attack_token_exile_end_of_combat": "mandatory delayed exile of the attack-trigger token at end of combat (Geist of Saint Traft) -- no 'may', no target, no choice",
@@ -2167,6 +2175,12 @@ def modeled_tokens(card):
     if (p.get("etb_destroy_artifact_enchantment_optional") or p.get("sac_outlet_destroy_nonbasic_land")
             or p.get("sac_outlet_destroy_artifact_enchantment_optional")):
         t.add("target")
+    # Skyclave Apparition's optional exile (the `dig` "(may exile)" pick IS its target choice); White
+    # Orchid Phantom's optional nonbasic-land destroy (the `dig` pick) + our basic search (tutor_etb).
+    if p.get("etb_exile_opp_nonland_nontoken_max_mv", -1) >= 0:
+        t.add("target")
+    if p.get("etb_destroy_nonbasic_land_optional"):
+        t.update({"target", "search"})
     # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
     # one pick per target, at ChooseCastTriggerTargets).
     if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:

@@ -49367,6 +49367,71 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // WHITE ORCHID PHANTOM post-pass ("When this creature enters, destroy up to one target nonbasic
+    // land. Its controller may search their library for a basic land card, put it onto the battlefield
+    // tapped, then shuffle"; Spirits 2026-11-13). Destroying OUR OWN nonbasic is a real decision (a
+    // basic replaces it, tapped: thinning, and a colour an Unclaimed Territory only gives creatures),
+    // so in the DECISION space one variant per DISTINCT own nonbasic NAME is appended beside the base,
+    // for the CAST and for the AETHER VIAL PUT alike (the ETB fires on both), each pinning tutor_target
+    // (FireOwnEtbTriggers hands it to ResolveEtbDestroyNonbasicLandOptional, which takes a TAPPED copy
+    // of that name first -- a sound fold; #WO in the plan signature keeps the dedup lossless). The base
+    // keeps an EMPTY pin = the provider's fold (an opponent's nonbasic, else none -- outcome-identical,
+    // see EtbOptionalNonbasicLandDestroyPick). The basic the search then finds is itself searched (a
+    // land_search_pins ordinal, counted in the in-plan pin fan). DecisionProvider::
+    // OfferOwnNonbasicLandDestroy may PRUNE the own variants (Spirits: only while a basic remains in
+    // the library). Human play: no variants -- the dig modal asks at resolution off the live board.
+    // Rollout leaves keep only the base. Gated on the param.
+    {
+        const bool wo_decision_space = (g_search_candidate_enum || g_condemn_root_turn < 0)
+                                    && !HumanPlayActive();
+        const std::size_t wo_n = actions.size();
+        bool wo_offer_known = false, wo_offer = false;
+        std::vector<std::string> wo_names;
+        bool wo_names_built = false;
+        for (std::size_t i = 0; wo_decision_space && i < wo_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand && actions[i].kind != Action::Kind::ActivateVial)
+            { continue; }
+            const CardDefinition* wd = actions[i].def != nullptr ? actions[i].def
+                                     : CardDatabase::Instance().Lookup(actions[i].card_name.str());
+            if (wd == nullptr || !wd->params.etb_destroy_nonbasic_land_optional) { continue; }
+            if (!actions[i].tutor_target.str().empty()) { continue; }
+            if (!wo_offer_known)
+            {
+                wo_offer = ResolveProvider(state).OfferOwnNonbasicLandDestroy(state, state.active_player_index);
+                wo_offer_known = true;
+            }
+            if (!wo_offer) { break; }
+            if (!wo_names_built)
+            {
+                for (const Permanent& q : state.battlefield)
+                {
+                    if (q.controller_index != state.active_player_index || !q.card.IsLand()
+                        || IsBasicLandCard(q.card)) { continue; }
+                    const std::string nm = q.card.m_name.str();
+                    if (std::find(wo_names.begin(), wo_names.end(), nm) == wo_names.end()) { wo_names.push_back(nm); }
+                }
+                // ...and a nonbasic still in HAND: this turn's land drop may put it onto the battlefield
+                // before the Phantom enters (a pin whose land is absent at resolution falls back to the
+                // base's fold, so an unplayed one only costs a duplicate the post-apply dedup drops).
+                for (const Card& hc : state.players[state.active_player_index].hand)
+                {
+                    const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+                    if (hc.m_is_staged || hd == nullptr || !hd->card.IsLand() || IsBasicLandCard(*hd)) { continue; }
+                    const std::string nm = hc.m_name.str();
+                    if (std::find(wo_names.begin(), wo_names.end(), nm) == wo_names.end()) { wo_names.push_back(nm); }
+                }
+                wo_names_built = true;
+            }
+            for (const std::string& nm : wo_names)
+            {
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = nm;
+                actions.push_back(std::move(v));
+            }
+        }
+    }
+
     // FORGE ANEW post-pass ("When this enchantment enters, return target Equipment card from your
     // graveyard to the battlefield"): the Witness shape above, restricted to the legal set -- one
     // cast variant per DISTINCT graveyard EQUIPMENT name, each pinning tutor_target (#FE in the plan
@@ -58592,7 +58657,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
             bool has_vial = false;
             for (int existing : groups[gi])
             {
-                if (cands[existing].kind == Action::Kind::ActivateVial) { has_vial = true; break; }
+                if (cands[existing].kind == Action::Kind::ActivateVial
+                    && cands[existing].tutor_target == cands[j].tutor_target) { has_vial = true; break; }   // White Orchid pins stay distinct
             }
             if (has_vial) { continue; }
         }
@@ -65254,7 +65320,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     }
 
     // Deploy creatures via Aether Vial before casting spells so lord effects are live.
-    auto apply_vial = [&](const std::string& name)
+    auto apply_vial = [&](const std::string& name, const std::string& etb_pin = std::string())
     {
         // A put rides the cast sequence now, so a PARTITION truncation (bp_truncate) ends it like a
         // cast: the continuation already decided the rest (AIEngine::TakeTurn breaks its loop).
@@ -65310,7 +65376,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             {
                 const int slot = entrant_slot;
                 FireEtbWatchers(state, state.active_player_index, slot);
-                FireOwnEtbTriggers(state, state.active_player_index, slot);
+                // White Orchid Phantom's searched own-land pin rides the put (Action::tutor_target);
+                // only that card reads it, so every other Vial put passes the empty default.
+                FireOwnEtbTriggers(state, state.active_player_index, slot,
+                                   copt->params.etb_destroy_nonbasic_land_optional ? etb_pin : std::string());
             }
             // ETB dig AFTER the enter cascade -- the order the hand-CAST path has always used
             // (EnterBattlefield fires the watchers, then the dig; ApplyPlanDirect's cast branch
@@ -65348,6 +65417,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 Action rec;
                 rec.kind      = Action::Kind::ActivateVial;
                 rec.card_name = name;
+                if (copt->params.etb_destroy_nonbasic_land_optional) { rec.tutor_target = etb_pin; }
                 sink_stack.back()->push_back(rec);
             }
             return;
@@ -70106,7 +70176,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         line_order_trace("vial", a);
                         karoo_pre_hook(a);
                         const bool tb = bp_truncate;
-                        apply_vial(a.card_name);
+                        apply_vial(a.card_name, a.tutor_target.str());
                         fire_unlock();
                         slot_hook(a, tb);
                     }
@@ -70227,7 +70297,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     line_order_trace("vial", a);
                     karoo_pre_hook(a);
                     const bool tb = bp_truncate;
-                    apply_vial(a.card_name);
+                    apply_vial(a.card_name, a.tutor_target.str());
                     fire_unlock();
                     slot_hook(a, tb);
                 }
@@ -70471,7 +70541,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     line_order_trace(is_put(a) ? "vial" : a.sacrifice_land ? "sacland" : "cast", a);
                     karoo_pre_hook(a);
                     const bool tb = bp_truncate;
-                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
+                    if (is_put(a)) { apply_vial(a.card_name, a.tutor_target.str()); fire_unlock(); slot_hook(a, tb); continue; }
                     const int dbg_before = dbg_count(a);
                     // BREAKPOINT LEFTOVERS (see lo_pending): this list's remaining casts.
                     {
@@ -70532,7 +70602,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     line_order_trace(is_put(a) ? "vial" : a.sacrifice_land ? "sacland" : "cast", a);
                     karoo_pre_hook(a);
                     const bool tb = bp_truncate;
-                    if (is_put(a)) { apply_vial(a.card_name); fire_unlock(); slot_hook(a, tb); continue; }
+                    if (is_put(a)) { apply_vial(a.card_name, a.tutor_target.str()); fire_unlock(); slot_hook(a, tb); continue; }
                     if (a.sacrifice_land) { spec_hoisted_sac.insert(static_cast<size_t>(i)); }   // cast here, not in the trailing pass
                     cast_riders = CastRiders::Of(a); apply_one(a.card_name, a.sacrifice_land, false, 0, a.alt_cost, a.alt_lifegain, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
                     fire_unlock();
@@ -75320,7 +75390,14 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
     {
         switch (act.kind)
         {
-            case Action::Kind::ActivateVial: w.Begin(kSigV); w.Put(act.card_name); w.End(); break;
+            case Action::Kind::ActivateVial:
+            {
+                w.Begin(kSigV); w.Put(act.card_name);
+                // White Orchid Phantom's own-land pin rides a Vial put too (gated on the param).
+                const CardDefinition* vd = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
+                if (vd && vd->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
+                w.End(); break;
+            }
             case Action::Kind::CastFromHand:
             {
                 const CardDefinition* d = act.def;
@@ -75377,6 +75454,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (!act.pitch_name.empty()) { w.Put("#EX"); w.Put(act.pitch_name); }   // PITCH EVOKE (Fury)
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
+                if (d && d->params.etb_destroy_nonbasic_land_optional) { w.Put("#WO"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
                 if (d && d->params.is_land_aura && act.enchant_target > 0 && host_sig) { w.Put("#H"); w.Int(act.enchant_target); }
                 if (cre_host_sig && d && d->params.is_aura && !d->params.is_land_aura && act.enchant_target > 0)
@@ -76827,7 +76905,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
             bool has_vial = false;
             for (int existing : groups[gi])
             {
-                if (cands[existing].kind == Action::Kind::ActivateVial) { has_vial = true; break; }
+                if (cands[existing].kind == Action::Kind::ActivateVial
+                    && cands[existing].tutor_target == cands[j].tutor_target) { has_vial = true; break; }   // White Orchid pins stay distinct
             }
             if (has_vial) { continue; }
         }
@@ -80519,7 +80598,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         {
             switch (act.kind)
             {
-                case Action::Kind::ActivateVial:      v.push_back(act.card_name); break;
+                case Action::Kind::ActivateVial:
+                {
+                    // White Orchid Phantom's own-land pin rides a Vial put too -- distinct plans (#WO,
+                    // the #G precedent). Gated on the param, so no other deck's signature moves.
+                    const CardDefinition* vd = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
+                    if (vd && vd->params.etb_destroy_nonbasic_land_optional)
+                    { v.push_back(act.card_name.str() + "#WO" + act.tutor_target.str()); }
+                    else { v.push_back(act.card_name); }
+                    break;
+                }
                 case Action::Kind::CastFromHand:
                     // Apex of Power: distinct float COLOURS are DISTINCT plans (each floats a different
                     // colour that pays different exiled spells), so keep the colour in the signature so the
@@ -80712,6 +80800,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // (one cast variant per distinct graveyard name + the unpinned resolution
                         // pick) -- distinct plans, the #T precedent. Gated on the param.
                         if (cd && cd->params.etb_return_gy_to_hand) { k += "#G"; k += act.tutor_target.str(); }
+                        // White Orchid Phantom: WHICH own nonbasic land the ETB destroys (one cast
+                        // variant per distinct own nonbasic name + the unpinned fold) -- the #G shape.
+                        if (cd && cd->params.etb_destroy_nonbasic_land_optional) { k += "#WO"; k += act.tutor_target.str(); }
                         // Forge Anew: WHICH graveyard Equipment the ETB returns is a real decision
                         // (one cast variant per distinct graveyard Equipment name + the unpinned
                         // resolution pick) -- the #G precedent. Gated on the param.
@@ -90381,6 +90472,21 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                 && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
                             { ++n_cast; union_into(v_cast, values_of(rd, nullptr, hand_land)); }
                         }
+                        continue;
+                    }
+                    // White Orchid Phantom: a cast / Vial put PINNED to destroy our own nonbasic land
+                    // resolves one optional basic search (ResolveEtbDestroyNonbasicLandOptional consumes
+                    // the ordinal); the unpinned base destroys none of ours, so holds no ordinal.
+                    if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+                        && d->params.etb_destroy_nonbasic_land_optional && !a.tutor_target.str().empty())
+                    {
+                        const int ww = static_cast<int>(
+                            LandSearchMemoSlot(state, me, WhiteOrchidLandSearchSpec()).picks.size());
+                        std::vector<int> wv;
+                        for (int i = 0; i < std::max(ww, 1); ++i) { wv.push_back(i); }
+                        wv.push_back(kLandSearchPinMask);   // "may search": the searched decline
+                        ++n_cast;
+                        union_into(v_cast, wv);
                         continue;
                     }
                     if (d->params.land_search_count <= 0) { continue; }

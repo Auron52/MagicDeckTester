@@ -4352,6 +4352,23 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "opponent's -- check whose before you pick), or -1 to destroy nothing (\"you may\"). "
                "Default = the AI's pick (an opponent's, else nothing).");
     }
+    else if (source.find("(may exile)") != std::string::npos)
+    {
+        // Skyclave Apparition's ETB (SpellEffects.h ResolveEtbExileUpToOne): `examined` = every legal
+        // target -- a nonland, nontoken permanent the opponent controls with MV <= 4. "Up to one".
+        d.Note("reply an examined index to EXILE that permanent (the opponent's), or -1 to exile nothing "
+               "(\"up to one\"). When the Apparition later leaves the battlefield, the exiled card's owner "
+               "creates an X/X Illusion (X = its mana value). Default = the AI's pick (the largest).");
+    }
+    else if (source.find("(may destroy nonbasic land)") != std::string::npos)
+    {
+        // White Orchid Phantom's ETB (SpellEffects.h ResolveEtbDestroyNonbasicLandOptional): `examined`
+        // = every nonbasic land on the battlefield, BOTH sides (yours included). "Up to one".
+        d.Note("reply an examined index to DESTROY that nonbasic land (yours or the opponent's -- check "
+               "whose before you pick; its controller may then search for a basic land, which enters "
+               "tapped -- you are asked separately if it is yours), or -1 to destroy nothing. Default = "
+               "the AI's pick (an opponent's, else nothing).");
+    }
     else if (source.find("(trigger order)") != std::string::npos)
     {
         // The CR 603.3b order of an entering creature's own top-of-library tutor (Flamekin Harbinger)

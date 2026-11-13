@@ -5974,6 +5974,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Skyclave Apparition": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{W}{W}",
+    "oracle_text": "When this creature enters, exile up to one target nonland, nontoken permanent you don't control with mana value 4 or less.\nWhen this creature leaves the battlefield, the exiled card's owner creates an X/X blue Illusion creature token, where X is the mana value of the exiled card.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Kor Spirit"
+  },
   "Skycloud Expanse": {
     "cmc": 0.0,
     "keywords": [],
@@ -7459,6 +7468,18 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf"
+  },
+  "White Orchid Phantom": {
+    "cmc": 2.0,
+    "keywords": [
+      "Flying",
+      "First strike"
+    ],
+    "mana_cost": "{W}{W}",
+    "oracle_text": "Flying, first strike\nWhen this creature enters, destroy up to one target nonbasic land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Spirit Knight"
   },
   "Wild Growth": {
     "cmc": 1.0,

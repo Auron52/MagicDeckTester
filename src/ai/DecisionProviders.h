@@ -4213,6 +4213,10 @@ public:
     std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller,
                                                    const CardParams& fetch_pp,
                                                    const std::vector<std::string>& ranked) const override;
+    // White Orchid Phantom on OUR OWN nonbasic land: offered to the search only while a basic land
+    // card remains in our library (a SOUND prune: with none, the trade loses a land and finds
+    // nothing, and no card in the Spirits 60 reads a land in the graveyard or a land dying).
+    bool OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const override;
 };
 
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.

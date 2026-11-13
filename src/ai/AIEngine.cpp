@@ -4918,7 +4918,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     }
 
     // Deploy a creature from hand via Aether Vial (lords boost subsequent spell evals).
-    auto deploy_via_vial = [&](const std::string& name)
+    auto deploy_via_vial = [&](const std::string& name, const std::string& etb_pin = std::string())
     {
         const CardDefinition* copt = CardDatabase::Instance().Lookup(name);
         if (!copt || !copt->card.IsCreature()) { return; }
@@ -4978,7 +4978,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             {
                 const int slot = entrant_slot;
                 FireEtbWatchers(state, state.active_player_index, slot);
-                FireOwnEtbTriggers(state, state.active_player_index, slot);
+                // White Orchid Phantom's searched own-land pin rides the put (Action::tutor_target);
+                // only that card reads it, so every other Vial put passes the empty default.
+                FireOwnEtbTriggers(state, state.active_player_index, slot,
+                                   copt->params.etb_destroy_nonbasic_land_optional ? etb_pin : std::string());
             }
             // ETB dig AFTER the enter cascade -- the order the hand-CAST path has always used
             // (EnterBattlefield fires the watchers, then the dig; ApplyPlanDirect's cast branch
@@ -5886,7 +5889,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
               TryPlaySpecificLand(state, a.card_name, a.land_fetch_target.str(),
                                   a.land_face.str(), a.land_rad_mode, a.land_from_top); }
             else if (a.kind == Action::Kind::ActivateVial)
-            { deploy_via_vial(a.card_name); resolve_now(); }
+            { deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); }
             else if (a.kind == Action::Kind::CastFromHand)
             { if (a.convoke_green > 0 || a.convoke_other > 0)
               { ApplyConvokeTapsForCard(state, state.active_player_index, ActionCastDef(a), a.convoke_green, a.convoke_other); }
@@ -6506,7 +6509,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             const int ci = cont_order[cpos];
             const Action& a = extra.actions[ci];
             if (a.kind == Action::Kind::ActivateVial)
-            { deploy_via_vial(a.card_name); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
+            { deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); cont_unlock->Fire(&cont_unlock_fired);
               exec_cont_land_hook(rdb_land, a); continue; }
             {
                 m_cast_riders = CastRiders::Of(a); cast_by_name(a.card_name, a.tutor_target, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.free_cast, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked); resolve_now(); walker_cast_activation(a);
@@ -7026,7 +7029,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     {
                         const Action& ca = extra.actions[ci];
                         if (ca.kind == Action::Kind::ActivateVial)
-                        { deploy_via_vial(ca.card_name); resolve_now(); pod_unlock->Fire();
+                        { deploy_via_vial(ca.card_name, ca.tutor_target.str()); resolve_now(); pod_unlock->Fire();
                           exec_cont_land_hook(pod_land, ca); continue; }
                         m_cast_riders = CastRiders::Of(ca); cast_by_name(ca.card_name, ca.tutor_target, ca.chosen_x,
                                      ca.soulfire_own_targets, ca.ponder_keep, ca.crackle_targets,
@@ -8213,7 +8216,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         }
         for (const Action& a : plan.actions)
         {
-            if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+            if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
             exec_karoo_pre_hook(a);
@@ -8392,7 +8395,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : ord)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -8505,7 +8508,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     for (int oi : order)
     {
         const Action& a = plan.actions[oi];
-        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+        if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
         if (a.kind == Action::Kind::GarthActivate)   // only present under MTG_GARTH_ORDERED
         {
             ManaPool avail = AvailableManaPool(state);
@@ -8898,7 +8901,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 for (int ci : pe_cont_order)
                 {
                     if (extra.actions[ci].kind == Action::Kind::ActivateVial)
-                    { deploy_via_vial(extra.actions[ci].card_name); resolve_now(); pe_unlock->Fire();
+                    { deploy_via_vial(extra.actions[ci].card_name, extra.actions[ci].tutor_target.str()); resolve_now(); pe_unlock->Fire();
                       exec_cont_land_hook(pe_land, extra.actions[ci]); continue; }
                     pe_cast(extra.actions[ci]);
                     pe_trunc = pe_truncates(extra.actions[ci]);

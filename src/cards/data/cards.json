@@ -16329,6 +16329,48 @@
    }
   },
   {
+   "name": "Skyclave Apparition",
+   "mana_cost": "{1}{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kor",
+    "Spirit"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "When this creature enters, exile up to one target nonland, nontoken permanent you don't control with mana value 4 or less.\nWhen this creature leaves the battlefield, the exiled card's owner creates an X/X blue Illusion creature token, where X is the mana value of the exiled card. [FULLY MODELLED. ETB = etb_exile_opp_nonland_nontoken_max_mv 4, fired from the shared enter cascade (FireOwnEtbTriggers: a cast AND an Aether Vial put, executor and rollout alike). Legal = permanents we do not control that are nonland, nontoken, MV <= 4 and targetable (no hexproof/shroud): against the goldfish, the opponent's scheduled spawns (MV 0, 8 of 10 game indices); 'up to one' -> none is legal. The exile is permanent (not 'until'), linked to this permanent (kSkyclaveExileBase + linked_exile_number, disjoint from Brutal Cathar's returning link). WHICH target autonomously: DecisionProvider::EtbOptionalExileTargetPick, a stated IDENTITY FOLD -- the opponent's largest body (the Chupacabra / Brutal Cathar convention); exile / decline / which spawn are outcome-identical in the real game (spawns never attack or block, no card in this list reads an opponent permanent for value, the LTB gift is a 0/0) -- PROVISIONAL pending USER sign-off. Human play: the dig '(may exile)' modal over every legal target, -1 = exile nothing. LTB = ltb_exiled_owner_illusion_token (FireLeavesBattlefieldTriggers): the exiled card's OWNER creates an X/X blue Illusion, X = its mana value; X = 0 makes a 0/0 that dies to state-based actions at once; nothing exiled -> no token. Unreachable in the Spirits 60 (nothing there makes it leave), modelled and unit-tested.]",
+   "template": "custom",
+   "parameters": {
+    "etb_exile_opp_nonland_nontoken_max_mv": 4,
+    "ltb_exiled_owner_illusion_token": true
+   }
+  },
+  {
+   "name": "White Orchid Phantom",
+   "mana_cost": "{W}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Knight"
+   ],
+   "keywords": [
+    "Flying",
+    "First strike"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying, first strike\nWhen this creature enters, destroy up to one target nonbasic land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle. [ETB = etb_destroy_nonbasic_land_optional, fired from the shared enter cascade (a cast AND an Aether Vial put, executor and rollout alike). Legal = every NONBASIC land on BOTH sides (the passive opponent's 0-3 'Opponent Nonbasic Land' placeholders and our own); 'up to one' -> none is legal. OUR OWN LANDS ARE SEARCHED: one cast / Vial-put variant per distinct own nonbasic name (a tapped copy of that name is taken first -- a sound fold), offered while SpiritsProvider::OfferOwnNonbasicLandDestroy holds (a basic land card left in our library; with none the trade is strictly dominated), and the basic it then finds is itself a searched land-search pick (Plains / Island / decline). The base variant = DecisionProvider::EtbOptionalNonbasicLandDestroyPick, an IDENTITY FOLD (an opponent's nonbasic, else none -- outcome-identical: nothing reads the opponent's lands, land count or library). Our land destroyed -> the shared PerformLandSearch (basic, tapped, optional; declining makes no shuffle). The OPPONENT's 'may search' is modelled as an 'Opponent Basic Land' placeholder entering TAPPED (the opponent has no real library; it never taps a land). HUMAN PLAY: the dig '(may destroy nonbasic land)' modal over every legal land (-1 = none), then tutor_etb for our basic (-1 = decline). First strike IS modelled (the first-strike combat damage step). PARTIAL, PROVISIONAL: Flying is inert -- no blocking is modelled.]",
+   "template": "custom",
+   "parameters": {
+    "etb_destroy_nonbasic_land_optional": true
+   }
+  },
+  {
    "name": "Millicent, Restless Revenant",
    "mana_cost": "{5}{W}{U}",
    "types": [

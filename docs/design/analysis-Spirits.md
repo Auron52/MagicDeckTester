@@ -31,9 +31,9 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
 | Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
-| Skyclave Apparition | 2/3 | new optional ETB exile opp nonland nontoken MV≤4 (opponent spawns are legal targets in 8/10 games) + LTB Illusion | A (`dig` "(may exile)") | drafted |
+| Skyclave Apparition | 2 | new `etb_exile_opp_nonland_nontoken_max_mv` 4 (ResolveEtbExileUpToOne, shared enter cascade: cast + Vial put) + `ltb_exiled_owner_illusion_token` (permanent exile on a NEW link range `kSkyclaveExileBase`, never returned by the Cathar orphan sweep); target = provider identity fold `EtbOptionalExileTargetPick` (largest) | A (`dig` "(may exile)") | IMPLEMENTED (C2) |
 | Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
-| White Orchid Phantom | 2 | `etb_destroy_nonbasic_land_optional` (opponent placeholder lands 0-3 nonbasic since 2026-11-05) | A (`dig` may-destroy, `tutor_etb`) | drafted |
+| White Orchid Phantom | 2 | new `etb_destroy_nonbasic_land_optional` (ResolveEtbDestroyNonbasicLandOptional, both sides); own lands SEARCHED (cast AND Vial-put variants pinned on tutor_target, `#WO`, the basic a land_search_pins ordinal); base = provider fold (opp nonbasic, else none); opponent gets a tapped `Opponent Basic Land`; Spirits prunes own variants with no basic in library | A (`dig` "(may destroy nonbasic land)" + `tutor_etb`) | IMPLEMENTED (C2) |
 | Flooded Strand | 1 | Arid Mesa battlefield-fetch schema, Plains/Island; routed to SpiritsProvider (lossless fetch fan, hold kept) | A (fetch, hold, shock) | IMPLEMENTED 87078b215 |
 | Hallowed Fountain | 1 | Steam Vents schema | A (`land_entry`) | IMPLEMENTED 87078b215 |
 | Drogskol Captain | 1 | `lord_effect` Spirit +1/+1, `lord_excludes_self`; hexproof grant PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
@@ -54,7 +54,7 @@ Scryfall note: concurrent research agents 429'd the single-card API; texts came 
 - **[USER, PROVISIONAL default taken]** Spirit of the Labyrinth's draw cap deferred as inert (no draw in the 60), with an abort guard if any second draw ever happens under it.
 - **[USER, PROVISIONAL]** Skyclave Apparition's exile target folded to one default (opponent's largest creature, Brutal Cathar convention) in autonomous play — all choices outcome-equivalent vs the goldfish; the human sees all.
 - **[USER, PROVISIONAL]** Shacklegeist's tap ability + blocking restriction, flying (no blocking anywhere) deferred as inert.
-- **[USER, PROVISIONAL]** White Orchid Phantom: opponent's "may search for a basic" a no-op (Path to Exile precedent).
+- **[USER, PROVISIONAL]** White Orchid Phantom: the opponent's "may search for a basic" is modelled as an `Opponent Basic Land` placeholder entering tapped (integrator C2 took the draft's faithful option instead of the Path no-op; nothing reads it).
 - **[USER]** Fetch hold policy for Flooded Strand — measure first with full timing (provider returns every distinct target, hold offered), then A/B named policies.
 - **[USER, PROVISIONAL]** Drogskol Captain's hexproof grant deferred as inert (the opponent never targets; Lord of Atlantis islandwalk precedent, approved 2026-11-01).
 - **[USER, PROVISIONAL]** Mausoleum Wanderer's "sacrifice: counter target instant/sorcery unless its controller pays {X}" deferred. Only target is our own Lingering Souls; it can beat keeping Wanderer only with Millicent on the battlefield (sac → nontoken Spirit dies → 1/1 token), a narrow window disclosed here. Tier-3 alternative: a Remand-style pay-branch rider.
@@ -305,6 +305,73 @@ combat damage to a player"). Snapshot row added to `scryfall_reference.json`. `v
 2898/2898 after the routing-test update; scenarios 501/501 (two new); `audit_card_fields.py` rc 0;
 `provider_audit.py --check` rc 0; `check_plan_sig_lockstep.py` unchanged (only `#BB`).
 **Smoke** (alone on the box): 190 pass, 5 FAIL. Four are the Gods keys at integrator B's numbers (`gods_smoke_d0` 8.7830, `d3` 5.4000, `d5` 5.2000, `gods2hg_smoke_d5` 5.3200; the Hole A/B movement, not yet accepted). The fifth is `extraturns2hg_smoke_d5_s1001`: same score 4.6000, gi19's digest moved. That is NOT this change: re-running the deck alone with the same binary (`--smoke --deck=extraturns2hg`) reproduces the GT digest cc399f1a95984da0 exactly (units 162410 alone vs 220591 in the full run). It is the same budget-timing churn integrator A saw on `extraturns_smoke_d3`. Searched slower 1 / faster 3 / play-changed 80 (B2's 79 + that game); d0 slower 9 / faster 12. Every other deck is byte-identical, Slivers included, so the Vial-put credit moved nothing there. Play changes attributable to C1: 0.
+
+### Integrator C2 (2026-11-13): Skyclave Apparition + White Orchid Phantom
+
+**Cards.** Both re-verified against live Scryfall (`logs/spirits/drafts/scry/c2/`; Skyclave was not in the
+collection JSON): Skyclave `{1}{W}{W}` cmc 3 Kor Spirit 2/2, no keywords; White Orchid Phantom `{W}{W}` cmc 2
+Spirit Knight 2/2, Flying + First strike, **no flash**. Snapshot rows added to `scryfall_reference.json`. Template
+`custom`. Neither param is read by `DetectDecisionProvider` (routing unchanged; `provider_audit.py --check` rc 0).
+
+**Skyclave Apparition (Tier 2).** `ResolveEtbExileUpToOne` (SpellEffects.h) from `FireOwnEtbTriggers`, so a cast
+and an Aether Vial put fire it in both worlds. Legal = permanents we do not control, nonland, nontoken, MV <= 4,
+no hexproof/shroud: against the goldfish, exactly the spawns (MV 0). The exile is PERMANENT: a NEW marker range
+`kSkyclaveExileBase` (-0x20000000, disjoint from Brutal Cathar's `kLinkedExileBase`, so
+`ReturnOrphanedLinkedExiles` never returns it) that also encodes the exiled card's OWNER; the source's
+`linked_exile_number` is set (already folded into both keys and dominance). LTB (`FireExiledOwnerIllusion`, in
+`FireLeavesBattlefieldTriggers`): the owner creates an X/X blue Illusion, X = the exiled card's MV; X = 0 dies at
+once (resolved in the shared code, so both worlds agree without relying on an SBA pass); the link is spent, the
+card stays exiled; nothing exiled -> no token. The exiled permanent's own leave triggers fire (generic).
+- **Target = `DecisionProvider::EtbOptionalExileTargetPick`** (root default, not a Spirits override): the
+  largest by effective power, -1 only when nothing is legal. **Why outcome-equivalent (the real game):** the
+  spawns never attack or block; no card in the Spirits 60 reads an opponent permanent for value (Shacklegeist's
+  tap target only, useless vs a non-blocker); the opponent's lands are not legal; the LTB gift is a 0/0 that
+  dies. **What DOES read it:** the learned value leaf's `MidGameFeature::OppCreatures` / `OppTotalPower`
+  (KeepModel.cpp ~L440); the board eval otherwise does not. So exile-vs-decline moves a future leaf's feature
+  vector, not a game; the default follows the shipped exile-ETB convention (Chupacabra / Cathar) so the Spirits
+  artifacts are fitted on it. **[USER, PROVISIONAL]** (the existing ledger item).
+- Viewer: `dig` "(may exile)" -- every legal target + "Exile nothing" (main.cpp note, `digPanelHtml` branch,
+  DECISIONS.md row, audit manifest `etb_exile_opp_nonland_nontoken_max_mv -> dig`; LTB param INERT_PARAMS).
+
+**White Orchid Phantom (Tier 2).** `ResolveEtbDestroyNonbasicLandOptional` from `FireOwnEtbTriggers`. Legal =
+every nonbasic land, both sides. **Own-land targets are NOT dominated, so they are SEARCHED** (the brief asked for
+an honest check): trading our nonbasic for a basic always thins the library, and can fix a colour the nonbasic
+cannot give a noncreature spell (Unclaimed Territory / Secluded Courtyard pay coloured mana only for Spirit
+creature spells; a fetched Plains pays Lingering Souls' {W}), or find the missing colour outright (the scenario:
+destroy Godless Shrine, fetch the deck's last Island, cast Supreme Phantom next turn -- T4 instead of T5). It IS
+strictly dominated only when no basic land card is left in our library (lose a land, find nothing; nothing in
+the 60 reads a land in the graveyard or a land dying), which `SpiritsProvider::OfferOwnNonbasicLandDestroy` prunes
+(root hook default: always offer, lossless). Engine:
+- **Searched variants (TurnSolver, WHITE ORCHID post-pass beside Timeless Witness's):** in the decision space and
+  not in human play, one variant per DISTINCT own nonbasic NAME (battlefield + nonbasics in hand, for this
+  turn's land drop) for every `CastFromHand` AND `ActivateVial` of the card, pinned on `Action::tutor_target`.
+  Resolution takes a TAPPED copy of that name first (sound: same-name lands differ only in what they can still
+  tap this turn); a pin whose land is gone falls back to the fold. `#WO` in both plan signatures (fast + legacy,
+  the Vial bucket included, gated on the param). The Vial put now carries the pin in both worlds
+  (`apply_vial` / `deploy_via_vial` + the continuation's recorded put), passed to `FireOwnEtbTriggers` only for
+  this card. The grouped enumerators' "one Vial put per card" collapse now keeps differently-pinned puts
+  (`tutor_target` compared; empty for every other deck, so byte-identical).
+- **The basic is searched too:** our destroyed land -> the shared `PerformLandSearch` (basic, 1, tapped,
+  optional) consuming a `land_search_pins` ordinal; the in-plan pin fan counts a pinned White Orchid cast/put as
+  a cast ordinal (picks + the searched decline). `deck_has_land_search` is stamped for the param.
+- **Base (unpinned) = `EtbOptionalNonbasicLandDestroyPick`**: an opponent's nonbasic, else none -- an identity
+  fold (the opponent never taps a land; nothing reads its lands, land count or library; the leaf's features are
+  ours-only for lands). **The opponent's "may search" is modelled** (the draft's faithful option, cheap): an
+  `Opponent Basic Land` placeholder enters TAPPED (numbered after the setup's if Expropriate numbered them).
+- An indestructible target is not destroyed but its controller may still search (no "if you do").
+- Viewer: `dig` "(may destroy nonbasic land)" -- every nonbasic land, both sides + "Destroy nothing"; our land ->
+  `tutor_etb` basic search with decline. No searched variants under human play.
+
+**Real `--claude-play` runs (logs/spirits/integratorC2/cp_driver.py, gi 3):** seed 93 CAST: White Orchid T2
+(examined: 3 opponent nonbasics + our Hallowed Fountain + Secluded Courtyard) and Skyclave T3/T4 (examined: the
+2/2 spawns); with the human picking our Fountain the `tutor_etb` basic prompt follows. VIAL PUT: seed 43 Skyclave
+(vial) T4 and seed 116 White Orchid (vial) T3 both raise the decision.
+
+**Deviations from the drafts.** Template `custom` (both). White Orchid's own-land fold is searched (draft 04) but
+the variant also covers nonbasics in hand and is pruned by a PROVIDER hook (not an engine gate); the opponent's
+search is the placeholder, not the no-op. Skyclave's hook is a root default rather than a Spirits override (the
+draft's design). Stale comments the draft flagged (Fulminator / Acidic Slime "the opponent controls no land")
+not touched (not this scope).
 
 ## Approved deferrals
 

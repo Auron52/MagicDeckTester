@@ -1245,6 +1245,13 @@ inline void TapLargestOppCreature(GameState&, int controller);
 inline void ApplyDayboundOnEnter(GameState& state, int entered_index);
 inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int source_number,
                                         const std::string& src_name);
+// Skyclave Apparition / White Orchid Phantom (Spirits, 2026-11-13), defined beside Foundation Breaker's
+// optional resolver below.
+inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_number, int max_mv,
+                                   const std::string& src_name);
+inline void FireExiledOwnerIllusion(GameState& state, const Card& left);
+inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controller, const std::string& pin,
+                                                  const std::string& src_name);
 // The lethal-damage SBA's toughness (CR 704.5g) -- see the definition for why it is shared.
 // Forward-declared because Pyroclasm's sweep (PerformDamageAllCreatures) needs it well before
 // DynamicBaseToughness, one of its three inputs, is defined.
@@ -12388,6 +12395,14 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         ExileOppCreatureUntilLeaves(state, controller, state.battlefield[entered_index].card.m_number,
                                     def->card.m_name.str());
     }
+    // Skyclave Apparition: "exile up to one target nonland, nontoken permanent you don't control with
+    // mana value N or less" -- every entry path (cast, Aether Vial put), executor and rollout alike.
+    // Erases a permanent: entered_index may be stale after it (nothing below reads it for this card).
+    if (p.etb_exile_opp_nonland_nontoken_max_mv >= 0)
+    {
+        ResolveEtbExileUpToOne(state, controller, state.battlefield[entered_index].card.m_number,
+                               p.etb_exile_opp_nonland_nontoken_max_mv, def->card.m_name.str());
+    }
     if (p.etb_tap_opp_creature)     { TapLargestOppCreature(state, controller); }
 
     // Shriekmaw ("destroy target nonartifact, nonblack creature") / Acidic Slime ("destroy target
@@ -12406,6 +12421,11 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     // were RECORDED by FireEtbWatchers and resolve at this cascade's outermost exit, BEFORE the evoke
     // sacrifice -- an evoked Breaker still entered (CR 702.74a: the sacrifice is its own trigger).
     if (p.etb_destroy_artifact_enchantment_optional) { ResolveEtbDestroyOptional(state, controller, *def); }
+    // White Orchid Phantom: "destroy up to one target nonbasic land" (BOTH sides). `chosen_tutor` is the
+    // cast's / Vial put's searched OWN-land pin (a land NAME; TurnSolver's White Orchid post-pass);
+    // empty = the provider's fold (an opponent's nonbasic, else none) or, in human play, the dig modal.
+    if (p.etb_destroy_nonbasic_land_optional)
+    { ResolveEtbDestroyNonbasicLandOptional(state, controller, chosen_tutor, def->card.m_name.str()); }
     // Timeless Witness: "return target card from your graveyard to your hand." `chosen_tutor` is the
     // cast's searched graveyard pick (one plan variant per distinct graveyard name); empty on a put
     // path / the unpinned variant -> the provider's resolution pick (human: the dig chooser).
@@ -12954,6 +12974,8 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
     // zone (CR 712.8a) -- reachable through Falkenrath Pit Fighter's sacrifice. No linked exile here.
     else if (d && !d->params.transform_front_name.empty())
     { NormalizeLeftDayboundFace(state, controller, left, *d); }
+    // Skyclave Apparition's LTB: the exiled card's owner creates an X/X blue Illusion (X = its MV).
+    if (d && d->params.ltb_exiled_owner_illusion_token) { FireExiledOwnerIllusion(state, left); }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -17349,6 +17371,259 @@ inline void ResolveOptionalDestroyArtifactEnchantment(GameState& state, int cont
 inline void ResolveEtbDestroyOptional(GameState& state, int controller, const CardDefinition& def)
 {
     ResolveOptionalDestroyArtifactEnchantment(state, controller, def.card.m_name.str());
+}
+
+// ---- Skyclave Apparition (Spirits, 2026-11-13) ---------------------------------------------------
+// "When this creature enters, exile up to one target nonland, nontoken permanent you don't control with
+// mana value 4 or less. When this creature leaves the battlefield, the exiled card's owner creates an
+// X/X blue Illusion creature token, where X is the mana value of the exiled card."
+//
+// The exile is PERMANENT (unlike Brutal Cathar's "until"): the card is parked in GameState::exile with
+// m_staged_expiry = kSkyclaveExileBase - (2 * source_number + owner) -- a range DISJOINT from Brutal
+// Cathar's kLinkedExileBase, so ReturnOrphanedLinkedExiles never returns it -- and the source records
+// it in Permanent::linked_exile_number (folded into both state keys and dominance). The marker carries
+// the exiled card's OWNER (the token goes to the owner, not to us). The LTB clears the marker; the card
+// stays exiled. Against the goldfish the legal set is the opponent's scheduled spawns (MV 0, nontoken,
+// nonland); every other opponent permanent is a land.
+constexpr int kSkyclaveExileBase = -0x20000000;
+inline bool CardIsSkyclaveExile(const Card& c)
+{
+    return !c.m_is_staged && c.m_staged_expiry <= kSkyclaveExileBase
+        && c.m_staged_expiry > kSkyclaveExileBase - 0x08000000;
+}
+inline int SkyclaveExileSource(const Card& c) { return (kSkyclaveExileBase - c.m_staged_expiry) >> 1; }
+inline int SkyclaveExileOwner(const Card& c)  { return (kSkyclaveExileBase - c.m_staged_expiry) & 1; }
+
+// The legal set (battlefield indices): a permanent we do NOT control, nonland, nontoken, MV <= max_mv,
+// that we can target (shroud / hexproof stop an opponent's target -- CR 702.18a / 702.11b).
+inline std::vector<int> EtbExileUpToOneLegal(const GameState& state, int controller, int max_mv)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == controller || q.card.IsLand() || q.is_token) { continue; }
+        if (q.card.m_mana_cost.ManaValue() > max_mv) { continue; }
+        if (q.HasKeyword(Keyword::Hexproof) || (q.card.IsCreature() && CreatureHasShroud(q, state))) { continue; }
+        legal.push_back(i);
+    }
+    return legal;
+}
+
+inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_number, int max_mv,
+                                   const std::string& src_name)
+{
+    const std::vector<int> legal = EtbExileUpToOneLegal(state, controller, max_mv);
+    if (legal.empty())
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no legal permanent to exile"); }
+        return;
+    }
+    int k = ResolveProvider(state).EtbOptionalExileTargetPick(state, controller, legal);
+    if (k >= static_cast<int>(legal.size())) { k = -1; }
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+    {
+        std::vector<Card> examined;
+        std::vector<int>  idx;
+        for (std::size_t li = 0; li < legal.size(); ++li)
+        {
+            examined.push_back(state.battlefield[static_cast<std::size_t>(legal[li])].card);
+            idx.push_back(static_cast<int>(li));
+        }
+        const int pick = (*g_play_dig_chooser)(state, controller, src_name + " (may exile)", examined, idx, k);
+        k = (pick >= 0 && pick < static_cast<int>(legal.size())) ? pick : -1;
+    }
+    if (k < 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": exiles nothing"); }
+        return;
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent gone = state.battlefield[static_cast<std::size_t>(bi)];
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.aura_attached_to == gone.card.m_number) { e.aura_attached_to = 0; }
+        if (e.equipped_to      == gone.card.m_number) { e.equipped_to      = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    // nontoken by the legal set, so the card always reaches exile
+    Card c = gone.card;
+    c.m_is_staged     = false;
+    c.m_staged_expiry = kSkyclaveExileBase - (2 * source_number + (gone.owner_index & 1));
+    state.exile.push_back(c);
+    for (Permanent& sp : state.battlefield)
+    { if (sp.card.m_number == source_number) { sp.linked_exile_number = c.m_number; break; } }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": exiles the opponent's " + gone.card.m_name.str());
+    }
+    // The exiled permanent's own leave triggers (none for a goldfish spawn; generic correctness).
+    FireLeavesBattlefieldTriggers(state, gone.controller_index, gone.card);
+}
+
+// The LTB half. Nothing exiled (or the link already spent) -> no token. X = 0 (every goldfish spawn)
+// makes a 0/0 that state-based actions put into the graveyard at once (CR 704.5f); that death is
+// resolved HERE, identically in both worlds, rather than left to whichever SBA pass a world runs.
+inline void FireExiledOwnerIllusion(GameState& state, const Card& left)
+{
+    for (Card& c : state.exile)
+    {
+        if (!CardIsSkyclaveExile(c) || SkyclaveExileSource(c) != left.m_number) { continue; }
+        const int owner = SkyclaveExileOwner(c);
+        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+        const int x = cd ? cd->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
+        c.m_staged_expiry = 0;   // the card stays exiled; the link is spent
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          left.m_name.str() + " left the battlefield: "
+                          + (owner == state.active_player_index ? std::string("you create") : std::string("the opponent creates"))
+                          + " a " + std::to_string(x) + "/" + std::to_string(x) + " blue Illusion");
+        }
+        const std::size_t before = state.battlefield.size();
+        CreateToken(state, owner, x, x, {"Illusion"}, "U", {});
+        if (x > 0) { return; }
+        for (std::size_t i = state.battlefield.size(); i-- > before; )
+        {
+            const Permanent& q = state.battlefield[i];
+            if (!q.is_token || q.controller_index != owner || !q.card.IsCreature()) { continue; }
+            const Card dead = q.card;
+            state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(i));
+            OnCreatureDies(state, owner, dead, /*was_token=*/true, 0, nullptr, 0);
+            if (owner != state.active_player_index) { FireOppCreatureDies(state, owner); }
+        }
+        return;
+    }
+}
+
+// ---- White Orchid Phantom (Spirits, 2026-11-13) --------------------------------------------------
+// "When this creature enters, destroy up to one target nonbasic land. Its controller may search their
+// library for a basic land card, put it onto the battlefield tapped, then shuffle."
+// Legal set = every NONBASIC land on BOTH sides (Fulminator Mage's predicate). WHICH one:
+//   * `pin` non-empty (autonomous search: TurnSolver's White Orchid post-pass appends one cast / Vial-put
+//     variant per DISTINCT own nonbasic NAME) -> our land of that name, a TAPPED copy first. That is a
+//     sound fold: same-name lands differ only in whether they can still tap for mana THIS turn, and
+//     keeping the untapped one keeps that option. A pin whose land is gone by resolution falls back to
+//     the provider's fold below.
+//   * otherwise DecisionProvider::EtbOptionalNonbasicLandDestroyPick (an opponent's, else none);
+//   * HUMAN PLAY: the `dig` "(may destroy nonbasic land)" modal over EVERY legal land, -1 = none.
+// Our land destroyed -> the shared PerformLandSearch (basic only, 1, tapped, optional), its pick a
+// land_search_pins ordinal (searched; human: tutor_etb with a decline). The OPPONENT's -> its "may
+// search" is modelled as an "Opponent Basic Land" placeholder entering TAPPED (the setup's inert basic,
+// GoldFishRunner::SetupGame), so its land count and basic/nonbasic mix stay right for any reader.
+inline LandSearchSpec WhiteOrchidLandSearchSpec()
+{
+    LandSearchSpec s;
+    s.count = 1; s.basic_only = true; s.tapped = true; s.optional = true;
+    return s;
+}
+inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controller, const std::string& pin,
+                                                  const std::string& src_name)
+{
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.IsLand() && !IsBasicLandCard(q.card)) { legal.push_back(i); }
+    }
+    if (legal.empty())
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no nonbasic land to destroy"); }
+        return;
+    }
+    int k = -1;
+    if (!pin.empty())
+    {
+        for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(li)])];
+            if (q.controller_index != controller || q.card.m_name.str() != pin) { continue; }
+            if (k < 0 || (q.tapped && !state.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(k)])].tapped))
+            { k = li; }
+        }
+    }
+    if (k < 0) { k = ResolveProvider(state).EtbOptionalNonbasicLandDestroyPick(state, controller, legal); }
+    if (k >= static_cast<int>(legal.size())) { k = -1; }
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+    {
+        std::vector<Card> examined;
+        std::vector<int>  idx;
+        for (std::size_t li = 0; li < legal.size(); ++li)
+        {
+            examined.push_back(state.battlefield[static_cast<std::size_t>(legal[li])].card);
+            idx.push_back(static_cast<int>(li));
+        }
+        const int pick = (*g_play_dig_chooser)(state, controller, src_name + " (may destroy nonbasic land)",
+                                               examined, idx, k);
+        k = (pick >= 0 && pick < static_cast<int>(legal.size())) ? pick : -1;
+    }
+    if (k < 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": destroys no land"); }
+        return;
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+    const Card dead = q.card;
+    const int  dead_ctrl = q.controller_index;
+    const int  dead_owner = q.owner_index;
+    // An indestructible target is not destroyed, but the ability still resolves: "its controller may
+    // search" does not depend on the destruction (no "if you do"). Not reachable in the Spirits 60.
+    const bool destroyed = !q.HasKeyword(Keyword::Indestructible);
+    const bool was_creature = q.card.IsCreature();
+    const bool was_token = q.is_token;
+    const int  m1 = MinusCountersOn(q);
+    const int  total_counters = TotalCountersOn(q);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x92\x80 " + src_name + ": destroys "
+                      + (dead_ctrl == controller ? std::string("your ") : std::string("the opponent's "))
+                      + dead.m_name.str());
+    }
+    if (destroyed)
+    {
+        if (!was_token) { state.players[static_cast<std::size_t>(dead_owner)].graveyard.push_back(dead); }
+        state.battlefield.erase(state.battlefield.begin() + bi);
+        for (Permanent& o : state.battlefield)
+        {
+            if (o.equipped_to      == dead.m_number) { o.equipped_to      = 0; }
+            if (o.aura_attached_to == dead.m_number) { o.aura_attached_to = 0; }
+        }
+        if (was_creature)
+        {
+            OnCreatureDies(state, dead_ctrl, dead, was_token, m1, nullptr, total_counters);
+            if (dead_ctrl != controller) { FireOppCreatureDies(state, dead_ctrl); }
+        }
+    }
+    if (dead_ctrl == controller)
+    {
+        // The land search holds its in-plan ordinal (land_search_pins) regardless of what it finds.
+        PerformLandSearch(state, controller, WhiteOrchidLandSearchSpec(), src_name, ConsumeScriptedLandSearchPin());
+        return;
+    }
+    Card land;
+    land.m_name = "Opponent Basic Land";
+    land.RehashName();
+    land.AddType(CardType::Land);
+    land.AddSupertype(Supertype::Basic);
+    int max_num = 0;
+    for (const Permanent& o : state.battlefield)
+    { if (o.controller_index == dead_ctrl && o.card.IsLand()) { max_num = std::max(max_num, o.card.m_number); } }
+    if (max_num >= 600000) { land.m_number = max_num + 1; }   // numbered setups (Expropriate) stay distinct
+    Permanent perm;
+    perm.card             = land;
+    perm.controller_index = dead_ctrl;
+    perm.owner_index      = dead_ctrl;
+    perm.tapped           = true;
+    state.battlefield.push_back(perm);
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "trigger", "the opponent searches for a basic land (enters tapped)"); }
 }
 
 // Fury's ETB (CardParams::etb_damage_divided_creatures): "it deals N damage divided as you choose
