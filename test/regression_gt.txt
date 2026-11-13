@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 19d6221e0  date 2026-11-13
+# Regression ground truth -- commit afe67db6b  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -456,10 +456,10 @@ soldiers_regression_d0_s2002=4.4060/b6d12ab4ca857eb5
 soldiers_regression_d3_s2002=4.3000/7ad299a3ecb9da2d
 soldiers_regression_d5_s2002=4.2200/9617d8dc23745a2d
 soldiers_regression_d5_s3003=4.2700/fcd06ec40a6ea942
-pd_regression_d0_s2002=7.3580/76f36fac1bdf7444
+pd_regression_d0_s2002=7.3560/12305007d3a0d306
 pd_regression_d3_s2002=5.7200/bbe89298a28e6b61
 pd_regression_d5_s2002=5.4600/a1f0e22a45c5c71e
-pd_regression_d5_s3003=5.5067/6b7d5a7798c30e2b
+pd_regression_d5_s3003=5.5067/5c48859e09aa19d6
 bruna_regression_d0_s2002=5.8890/d8930dcbe1889047
 bruna_regression_d3_s2002=4.7200/f9813c16f811a775
 bruna_regression_d5_s2002=4.8600/95f82a02ee14b0b8
