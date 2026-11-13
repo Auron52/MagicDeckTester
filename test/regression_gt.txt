@@ -1,4 +1,4 @@
-# Regression ground truth -- commit c6a9afe3e  date 2026-11-12
+# Regression ground truth -- commit 7296d0462  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-12): INT-11 rebase onto 9ba5851a1: mirrorwing/mirrorwing2hg move from OUR #TT plan-signature dedup fix (INT-5); the origin-only binary reproduces origin GT on these keys. Searched slower 0, faster 2, d0 unchanged; same digests as the pre-rebase INT-7..10 GT. Morph keys PASS unchanged under origin's payer/oracle changes.
@@ -180,7 +180,7 @@ snow_smoke_d3_s1001=5.7600/f36d4ce93c929921
 snow_smoke_d5_s1001=5.7440/fceb7ba27dfe318d
 landfall_smoke_d0_s1001=7.3620/126526156bf43b9b
 landfall_smoke_d3_s1001=6.0400/58324bd991e0aabe
-landfall_smoke_d5_s1001=5.7300/9d8bed98389be546
+landfall_smoke_d5_s1001=5.7300/675b9ea67d7fc91c
 galadriel_smoke_d0_s1001=6.9400/9894f279fe8c85d9
 galadriel_smoke_d3_s1001=4.8200/27c8079c8746ce2a
 galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
@@ -477,8 +477,8 @@ snow_regression_d5_s2002=5.6267/09b27ad5e51bb8d2
 snow_regression_d5_s3003=5.7000/6eab8a3d48ac6255
 landfall_regression_d0_s2002=7.3970/e09e1e88ebca719b
 landfall_regression_d3_s2002=5.8800/089e6deca47f86f2
-landfall_regression_d5_s2002=5.6133/bbbcb4e935db7117
-landfall_regression_d5_s3003=5.7067/96c894dfb97a93aa
+landfall_regression_d5_s2002=5.6133/2231f7b652fdd198
+landfall_regression_d5_s3003=5.7067/db94f1df9d20182b
 galadriel_regression_d0_s2002=6.9500/2eadad5edfde174a
 galadriel_regression_d3_s2002=4.6600/a5a93fee0901ef15
 galadriel_regression_d5_s2002=4.8650/92994d5299b8490e
@@ -486,8 +486,8 @@ galadriel_regression_d5_s3003=4.9600/34de41de690c60d6
 galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
 niv_regression_d0_s2002=6.0510/8488f3e81b883671
 niv_regression_d3_s2002=4.4400/3a272f4d45e8352a
-niv_regression_d5_s2002=4.4800/551951e026969b55
-niv_regression_d5_s3003=4.4867/b9c4d0771c2a31c5
+niv_regression_d5_s2002=4.4800/e83d821fde44c8ae
+niv_regression_d5_s3003=4.4867/19c3380dce3c34c6
 niv2hg_regression_d5_s2002=4.4400/110bd5509bda3827
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
