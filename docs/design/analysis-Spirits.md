@@ -26,18 +26,18 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 
 | card | tier | model | viewer bucket | status |
 |---|---|---|---|---|
-| Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED (integrator A) |
+| Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED 87078b215 |
 | Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit; per-connecting-nontoken-Spirit combat-damage token; `dies_watch_nontoken` | none | drafted |
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIX Hole A (flashback missing from state key / dominance, 3 sites; touches Gods) + Hole B (hand-cast→flashback and 2× flashback in one main unfindable) | A (`flashback_gy`) | drafted |
-| Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED (integrator A) |
+| Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
 | Skyclave Apparition | 2/3 | new optional ETB exile opp nonland nontoken MV≤4 (opponent spawns are legal targets in 8/10 games) + LTB Illusion | A (`dig` "(may exile)") | drafted |
-| Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED (integrator A) |
+| Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
 | White Orchid Phantom | 2 | `etb_destroy_nonbasic_land_optional` (opponent placeholder lands 0-3 nonbasic since 2026-11-05) | A (`dig` may-destroy, `tutor_etb`) | drafted |
-| Flooded Strand | 1 | Arid Mesa battlefield-fetch schema, Plains/Island; routed to SpiritsProvider (lossless fetch fan, hold kept) | A (fetch, hold, shock) | IMPLEMENTED (integrator A) |
-| Hallowed Fountain | 1 | Steam Vents schema | A (`land_entry`) | IMPLEMENTED (integrator A) |
-| Drogskol Captain | 1 | `lord_effect` Spirit +1/+1, `lord_excludes_self`; hexproof grant PROVISIONAL inert | none | IMPLEMENTED (integrator A) |
-| Supreme Phantom | 1 | `lord_effect` Spirit +1/+1, excludes self | none | IMPLEMENTED (integrator A) |
+| Flooded Strand | 1 | Arid Mesa battlefield-fetch schema, Plains/Island; routed to SpiritsProvider (lossless fetch fan, hold kept) | A (fetch, hold, shock) | IMPLEMENTED 87078b215 |
+| Hallowed Fountain | 1 | Steam Vents schema | A (`land_entry`) | IMPLEMENTED 87078b215 |
+| Drogskol Captain | 1 | `lord_effect` Spirit +1/+1, `lord_excludes_self`; hexproof grant PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
+| Supreme Phantom | 1 | `lord_effect` Spirit +1/+1, excludes self | none | IMPLEMENTED 87078b215 |
 | Patrician Geist | 2 | Spirit lord + new `reduces_graveyard_cast_generic 1` (Souls flashback {1}{B}→{B}) at every gy-cast price/pay site incl. same-turn ManaPruneBound credit; NOT `reduces_spell_subtype` (→ goblin route) | none | drafted |
 | Mausoleum Wanderer | 2 | +1/+1 UNTIL EOT (not a counter) when another Spirit enters: `own_creature_enters_self_temp_power/_tough` + `enters_watch_subtypes Spirit`, add to `DefHasCreatureEnterWatcher` | none | drafted |
 
