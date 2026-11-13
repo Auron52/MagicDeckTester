@@ -102188,7 +102188,8 @@ namespace p18
         }
     };
     inline thread_local Sampler* t_smp = nullptr;
-    struct Knob { double z = kZ, cvf = kCvFloor; bool actual_rem = false, noasp = false, nobound = false, verify = false; };
+    struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
+                         nocredit = false; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102197,6 +102198,8 @@ namespace p18
             const std::size_t p = k.find(tag);
             if (p != std::string::npos) { out = std::atof(k.c_str() + p + std::strlen(tag)) / 10.0; } };
         num("_pz", o.z); num("_pcv", o.cvf);
+        num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
+        o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -110931,6 +110934,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                      && g_rollout_nest == 0 && !vl_active && !g_force_heuristic_leaf && !emul_done && !lazy_done
                      && depth >= 1;
     int  p18_K = 0;                     // the pass the ladder below runs on rollouts (0 = off)
+    double p18_credit = 0.0;            // ROBUST-OR-EXACT fallback: the pricing spend the heuristic ladder's gate gives back
     int  p18_wb = 0;                    // the best win a sampled rollout of pass p18_K reached (0 = none)
     bool p18_done = false;              // a leafless pass proved an in-window win: committed, no rollout pass at all
     if (p18_on)
@@ -110947,6 +110951,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         SearchBudget* const pb = kn.verify ? &p18_vb : budget;
         TranspositionTable* const ptt = kn.verify ? &p18_vtt : tt;
         p18_K = 1;
+        const long long p18_u0 = pb ? pb->Used() : 0;
+        bool p18_fb = false;            // ROBUST-OR-EXACT: a verdict inside the margin band -> the heuristic ladder decides
         for (int k = 1; k <= depth; ++k)
         {
             // (1) LEAFLESS pass k, cut where the rollout pass's incumbent would cut it (never inside the window).
@@ -111014,26 +111020,43 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     const bool all = (i >= avail);
                     if (kn.verify && p16::On() && (m == 0 || (m & (m - 1)) == 0 || all))
                     { char cb[64]; std::snprintf(cb, sizeof cb, "%s%d=%.0f", ck.empty() ? "" : ",", m, est); ck += cb; }
-                    if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest)
-                                                && (est + kn.z * se <= thr || est - kn.z * se > thr)))
-                    { fit = (thr > 0.0 && est <= thr) ? 1 : 0; break; }
+                    const double hi = est + kn.z * se, lo = est - kn.z * se;
+                    // ROBUST-OR-EXACT (_pf<10F>): decided once the price clears the threshold by the factor F either way,
+                    // or sits wholly inside the band (thr/F, thr*F]; at the end of the sample the point price decides.
+                    const bool decided = (kn.f > 0.0)
+                        ? (hi * kn.f <= thr || lo > thr * kn.f || (lo * kn.f > thr && hi <= thr * kn.f))
+                        : (hi <= thr || lo > thr);
+                    if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest) && decided))
+                    {
+                        fit = (thr > 0.0 && est <= thr) ? 1 : 0;
+                        if (kn.f > 0.0 && thr > 0.0 && est * kn.f > thr && est <= thr * kn.f) { fit = 2; }
+                        break;
+                    }
                     const int cutoff = std::min(smp.cuts[i], best > 0 ? best - 1 : smp.cuts[i]);   // the incumbent's cut
                     const double x = roll(std::move(smp.res[i]), cutoff);
                     sx += x; sxx += x * x; ++m;
                 }
             }
-            else { est = static_cast<double>(lu); fit = (thr > 0.0 && est <= thr) ? 1 : 0; }   // no leaf reached: the tree is the pass
+            else { est = static_cast<double>(lu); fit = (thr > 0.0 && est <= thr) ? 1 : 0; }   // no leaf reached: the tree is the pass (exact)
             const long long su = pb->Used() - su0;
             if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, thr, est, se, m, su, fit, best, std::move(ck)}); }
             // (3) Pass k is admitted iff its price fits. Pass 1 always runs (the heuristic ladder never gates it), and
             // a pass 1 that does not fit leaves nothing deeper that could.
             if (fit == 0 && !kn.verify) { break; }
+            if (fit == 2 && !kn.verify) { p18_fb = true; break; }
             p18_K = k;
             if (best > 0) { p18_wb = best; wb_prev = best; }   // the best sampled win so far: a real line reaches it
             priced += kn.actual_rem ? static_cast<double>(lu + su) : est;
         }
         if (kn.noasp) { p18_wb = 0; }
         if (kn.verify) { p18_K = 0; p18_wb = 0; }
+        if (p18_fb)
+        {
+            // ROBUST-OR-EXACT fallback: the heuristic ladder runs this decision from pass 1 on rollouts (its own K),
+            // its start gate credited with the pricing spend unless _pfnc, so its depth matches the ladder's own.
+            p18_K = 0; p18_wb = 0;
+            if (!kn.nocredit && pb) { p18_credit = static_cast<double>(pb->Used() - p18_u0); }
+        }
     }
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
     long long lad_ttlook_sum = 0, lad_tthit_sum = 0, lad_ttlook_last = 0, lad_tthit_last = 0;
@@ -111079,7 +111102,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
                             : kDefaultGrowth;
             double estimate = static_cast<double>(c_prev) * ratio;
-            const double remaining = static_cast<double>(budget->Remaining());
+            const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
             // PATH-TO-TRUST override (see kTrustPathSlack). Only when the value leaf is driving, a
