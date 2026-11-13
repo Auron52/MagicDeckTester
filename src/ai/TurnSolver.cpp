@@ -121031,6 +121031,11 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         // Maelstrom Archangel: a free cast and a paid cast of the same card produced BYTE-IDENTICAL
         // summaries, so the viewer offered two indistinguishable menu entries with very different
         // mana consequences (same defect the sac-outlet count fixed for viewer issue #4).
+        // MORPH: the hard cast, the face-down cast and the face-down-then-up cast of one card read the same
+        // otherwise (the free-cast defect above) -- the viewer's "the model would accept" list showed three
+        // identical "cast: Den Protector" rows.
+        else if (a.kind == Action::Kind::CastFromHand && a.face_down != 0)
+        { cast_names.push_back(a.card_name + (a.face_down == 2 ? " (face down, turned face up at once)" : " (face down)")); }
         else if (a.free_cast) { cast_names.push_back(a.card_name + " (free)"); }
         // Equipment activations: say what they DO. Listed bare under "cast:", an equip-only line
         // read "cast: Umezawa's Jitte" -- which is a different (and impossible) play from attaching
@@ -121336,6 +121341,18 @@ static std::string BoardActivationIllegalReason(const GameState& s, const TurnSo
         const CardDefinition* d = def_of(name);
         if (d && !(d->params.morph_cost || d->params.megamorph_cost))
         { return "'" + name + "' has no morph or megamorph cost"; }
+    }
+    // --- facedown= / facedownup= (morph, CR 702.37a): the MODE of one of this line's own casts of a morph card.
+    for (const std::vector<std::string>* fdv : { &spec.face_downs, &spec.face_down_ups })
+    {
+        for (const std::string& name : *fdv)
+        {
+            const CardDefinition* d = def_of(name);
+            if (d && !(d->params.morph_cost || d->params.megamorph_cost))
+            { return "'" + name + "' has no morph or megamorph cost, so it cannot be cast face down"; }
+            if (!cast_here(name))
+            { return "facedown names '" + name + "', but the line casts no '" + name + "'"; }
+        }
     }
     for (const std::string& name : spec.transforms)
     {
@@ -122061,6 +122078,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       spec.tap_lifes.empty() && spec.aura_swaps.empty()
                       && spec.land_searches.empty()
                       && spec.steals.empty() && spec.transforms.empty() && spec.face_ups.empty()
+                      && spec.face_downs.empty() && spec.face_down_ups.empty()
                       && spec.sac_nameds.empty()
                       && spec.untap_acts.empty() && spec.tap_draws.empty()))
     {
@@ -122219,6 +122237,13 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     // declaration cannot mean "legacy, match by name". Empty means "do not kick".
     std::vector<std::string> sortedKickeds = spec.kickeds;
     std::sort(sortedKickeds.begin(), sortedKickeds.end());
+    // MORPH face-down cast (CR 702.37a) -- compared UNCONDITIONALLY for the kicked= reason: the hard cast,
+    // the face-down cast and the face-down-then-up cast are all a CastFromHand of the same hand card. Empty
+    // means "cast it face up". Inert without a morph card (LineSpec::face_downs).
+    std::vector<std::string> sortedFaceDowns = spec.face_downs;
+    std::sort(sortedFaceDowns.begin(), sortedFaceDowns.end());
+    std::vector<std::string> sortedFaceDownUps = spec.face_down_ups;
+    std::sort(sortedFaceDownUps.begin(), sortedFaceDownUps.end());
     std::vector<std::string> sortedAnimates = spec.animates;
     std::sort(sortedAnimates.begin(), sortedAnimates.end());
     const bool animate_declared   = !spec.animates.empty();
@@ -122324,6 +122349,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> auraSwapNames;   // Arcanum Wings' swap: ALWAYS its own verb
         std::vector<std::string> adventureNames;
         std::vector<std::string> kickedNames;
+        std::vector<std::string> faceDownNames, faceDownUpNames;   // CastFromHand face_down 1 / 2
         // Spellskite redirect (Action::trick_redirect): the LineSpec has no `redirect` key yet, so a hand
         // line can never DECLARE one -- a redirected plan must not match an undeclared line (the
         // adventure/kicker "same name, different play" hazard). Known gap, tools/play/DECISIONS.md.
@@ -122426,6 +122452,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // the cast multiset, so the human declares `cast=Saproling Migration` either way and
             // `kicked=` only picks the MODE.
             if (a.kicked) { kickedNames.push_back(a.card_name); }
+            // NO `continue` either: a face-down cast IS a hand cast of the card (same name in the multiset);
+            // facedown= / facedownup= only pick the MODE.
+            if (a.kind == Action::Kind::CastFromHand && a.face_down == 1) { faceDownNames.push_back(a.card_name.str()); }
+            if (a.kind == Action::Kind::CastFromHand && a.face_down == 2) { faceDownUpNames.push_back(a.card_name.str()); }
             if (a.trick_redirect != 0) { plan_has_redirect = true; }
             if (animate_declared && a.kind == Action::Kind::AnimateLand)
             { animateNames.push_back(a.card_name); continue; }
@@ -122645,6 +122675,14 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = kickedNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedKickeds) { continue; }      // unconditional -- see sortedKickeds
+        }
+        {   // unconditional -- see sortedFaceDowns
+            std::vector<std::string> v2 = faceDownNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedFaceDowns) { continue; }
+            v2 = faceDownUpNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedFaceDownUps) { continue; }
         }
         if (plan_has_redirect) { continue; }   // never matches an undeclared line (see above)
         if (animate_declared)
@@ -123866,6 +123904,11 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             }
         }
     }
+    // MORPH: the casts the line declares FACE DOWN (facedown= / facedownup=) are priced at {3} (or {3} + the
+    // morph cost), never the printed cost -- otherwise "cast it face down with three lands" reads "can't pay
+    // {4}{G}". Consumed one per matching cast name (multiset), so two copies with one declared face down price
+    // one of each. Empty for every non-morph line (no change).
+    std::vector<std::string> fd_left = spec.face_downs, fdu_left = spec.face_down_ups;
     for (const std::string& name : line_casts)
     {
         const CardDefinition* def = CardDatabase::Instance().Lookup(name);
@@ -123874,6 +123917,21 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             out.verdict = V::Illegal; out.failed_action = "cast=" + name;
             out.reason = "unknown card '" + name + "'";
             return out;
+        }
+        int fd_mode = 0;
+        if (def->params.morph_cost || def->params.megamorph_cost)
+        {
+            if (auto it = std::find(fdu_left.begin(), fdu_left.end(), name); it != fdu_left.end()) { fdu_left.erase(it); fd_mode = 2; }
+            else if (auto jt = std::find(fd_left.begin(), fd_left.end(), name); jt != fd_left.end()) { fd_left.erase(jt); fd_mode = 1; }
+        }
+        if (fd_mode != 0)
+        {
+            PendingCast pc;
+            pc.name = name; pc.def = def; pc.rock = false;
+            pc.full_cost = FaceDownCastCost(*def, fd_mode);
+            pc.has_spectacle = false; pc.spectacle_cost = pc.full_cost; pc.alt_free = false;
+            pending.push_back(pc);
+            continue;
         }
         const ManaCost& mc = def->card.m_mana_cost;
         // {X} still can't be honestly modelled by this affordability check (the cost depends on a

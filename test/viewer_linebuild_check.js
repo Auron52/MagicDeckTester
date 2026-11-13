@@ -372,6 +372,63 @@ function checkActivationVerbs() {
   return fails;
 }
 
+// MORPH (CR 702.37a -- Den Protector, Hystrodon, Blistering Firecat), the kicker contract again: the
+// hard cast, the face-down cast (mode 1) and the face-down-then-up cast (mode 2) share one name, so the
+// line carries `facedown=` / `facedownup=` BESIDE the `cast=`, the "**" step carries `+facedown` /
+// `+facedownup`, and the badge sets the MODE of a queued cast (never appends a second one). A board flip is
+// an ordinary `face_up=<real name>` step. USER 2026-11-13: "How do I morph my creatures in the viewer?"
+function checkMorph() {
+  const fails = [];
+  const D = { name: 'Den Protector', kind: 'permanent' };
+  const enc = (plan) => LB.encodeLine(plan);
+  if (enc([{ ...D }]) !== 'cast=Den Protector')
+    fails.push(`a HARD cast encoded "${enc([{ ...D }])}"`);
+  if (enc([{ ...D, faceDown: 1 }]) !== 'cast=Den Protector;facedown=Den Protector')
+    fails.push(`a face-down cast encoded "${enc([{ ...D, faceDown: 1 }])}"`);
+  if (enc([{ ...D, faceDown: 2 }]) !== 'cast=Den Protector;facedownup=Den Protector')
+    fails.push(`a face-down-then-up cast encoded "${enc([{ ...D, faceDown: 2 }])}"`);
+  if (LB.sequenceToken({ ...D, faceDown: 1 }) !== 'cast=Den Protector+facedown')
+    fails.push(`face-down step token "${LB.sequenceToken({ ...D, faceDown: 1 })}"`);
+  if (LB.sequenceToken({ ...D, faceDown: 2 }) !== 'cast=Den Protector+facedownup')
+    fails.push(`down+up step token "${LB.sequenceToken({ ...D, faceDown: 2 })}"`);
+  if (LB.sequenceToken({ ...D }) !== 'cast=Den Protector')
+    fails.push(`hard-cast step token "${LB.sequenceToken({ ...D })}"`);
+  // A board flip (the face-down Hystrodon #12) and a hand-source flip (the Den Protector just cast down).
+  const flip = { name: 'Hystrodon', src: 'Hystrodon', kind: 'activate', verb: 'face_up', srcNum: 12 };
+  if (enc([flip]) !== 'face_up=Hystrodon') fails.push(`a board flip encoded "${enc([flip])}"`);
+  if (LB.sequenceToken(flip) !== 'face_up=Hystrodon#12') fails.push(`board flip step "${LB.sequenceToken(flip)}"`);
+  const line = [{ ...D, faceDown: 1 }, { name: 'Berserk', kind: 'nonpermanent' },
+                { name: 'Den Protector', src: 'Den Protector', kind: 'activate', verb: 'face_up', fromHand: true }];
+  if (enc(line) !== 'cast=Den Protector;cast=Berserk;facedown=Den Protector;face_up=Den Protector')
+    fails.push(`cast-down / Berserk / flip encoded "${enc(line)}"`);
+  if (LB.sequenceTokens(line).join('|') !== 'cast=Den Protector+facedown|cast=Berserk|face_up=Den Protector')
+    fails.push(`cast-down / Berserk / flip steps "${LB.sequenceTokens(line).join('|')}"`);
+  // The gesture: queue from empty, switch a queued hard cast in place, switch modes, wrap back to hard.
+  let r = LB.toggleFaceDown([], D.name, D.kind, 1);
+  if (r.action !== 'queued' || r.plan.length !== 1 || r.plan[0].faceDown !== 1)
+    fails.push(`face-down from empty gave ${r.action} ${JSON.stringify(r.plan)}`);
+  r = LB.toggleFaceDown([{ ...D }], D.name, D.kind, 1);
+  if (r.action !== 'set' || r.plan.length !== 1 || r.plan[0].faceDown !== 1)
+    fails.push(`face-down over a queued hard cast gave ${r.action} ${JSON.stringify(r.plan)}`);
+  r = LB.toggleFaceDown(r.plan, D.name, D.kind, 2);
+  if (r.action !== 'set' || r.plan.length !== 1 || r.plan[0].faceDown !== 2)
+    fails.push(`down+up over a face-down cast gave ${r.action} ${JSON.stringify(r.plan)}`);
+  r = LB.toggleFaceDown(r.plan, D.name, D.kind, 2);
+  if (r.action !== 'cleared' || r.plan.length !== 1 || r.plan[0].faceDown || enc(r.plan) !== 'cast=Den Protector')
+    fails.push(`the wrap click gave ${r.action} ${JSON.stringify(r.plan)}`);
+  r = LB.toggleFaceDown([{ ...D }, { ...D }], D.name, D.kind, 1);
+  r = LB.toggleFaceDown(r.plan, D.name, D.kind, 1);
+  if (r.plan.length !== 2 || !r.plan.every(p => p.faceDown === 1))
+    fails.push(`two clicks over two casts gave ${JSON.stringify(r.plan)}`);
+  for (let i = 0; i < 7; i++) r = LB.toggleFaceDown(r.plan, D.name, D.kind, 1);
+  if (r.plan.length !== 2) fails.push(`nine clicks grew the plan to ${JSON.stringify(r.plan)}`);
+  // A queued board flip of the same name is not a cast and is never switched.
+  r = LB.toggleFaceDown([{ name: D.name, src: D.name, kind: 'activate', verb: 'face_up' }], D.name, D.kind, 1);
+  if (r.action !== 'queued' || r.plan.length !== 2 || r.plan[0].faceDown)
+    fails.push(`a same-named flip was treated as a cast: ${JSON.stringify(r.plan)}`);
+  return fails;
+}
+
 // KICKER (CR 702.33 -- Saproling Migration). Two layers, and the SECOND is the one that matters:
 //   * the TOKEN -- a kicked cast emits `cast=<name>` AND `kicked=<name>`, since kicking is a real
 //     cast of that hand card and the extra token only says which MODE (encodeLine's own comment).
@@ -1281,6 +1338,10 @@ function main() {
   kickFails.forEach(m => console.log(`  FAIL  kicker: ${m}`));
   console.log(`Viewer kicker: ${kickFails.length ? 'WRONG' : 'cast=+kicked= per kicked copy; the badge toggles in place and never over-queues'} ` +
               `(${kickFails.length} FAIL)`);
+  const morphFails = checkMorph();
+  morphFails.forEach(m => console.log(`  FAIL  morph: ${m}`));
+  console.log(`Viewer morph: ${morphFails.length ? 'WRONG' : 'cast=+facedown=/facedownup= per mode, +facedown step suffixes, face_up= flips; the badge sets the mode in place'} ` +
+              `(${morphFails.length} FAIL)`);
   const suspendFails = checkMultipleSuspends();
   suspendFails.forEach(m => console.log(`  FAIL  suspend: ${m}`));
   console.log(`Viewer suspend: ${suspendFails.length ? 'WRONG' : 'two copies queue in one line, capped by real hand copies'} ` +
@@ -1291,7 +1352,7 @@ function main() {
               `(${fetchSuspendFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length + posFails.length + kickFails.length
+          + tapFails.length + topFails.length + posFails.length + kickFails.length + morphFails.length
           + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 

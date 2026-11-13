@@ -532,3 +532,104 @@ TEST_CASE("morph eot: the BoundaryFan crosses once per menu rank and records the
     REQUIRE(none.size() == 1u);
     CHECK(none[0].first == -2);
 }
+
+// ---- the human LINE (play viewer): facedown= / facedownup= pick the cast's MODE ------------------------------
+// The hard cast, the face-down cast and the face-down-then-up cast share one card name, so `cast=X` alone cannot
+// say which; LineSpec::face_downs / face_down_ups are compared UNCONDITIONALLY (the kicked= contract), so an
+// absent key means the HARD cast and never silently resolves face down. USER 2026-11-13: "How do I morph my
+// creatures in the viewer? It seems to not be available?"
+namespace
+{
+int LineFaceDownMode(const GameState& s, const TurnSolver::LineSpec& ls, const std::string& name,
+                     TurnSolver::LineCheck* out = nullptr)
+{
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::LineCheck lc = TurnSolver::CheckLine(s, true, ls, &plans);
+    if (out != nullptr) { *out = lc; }
+    if (lc.verdict != TurnSolver::LineCheck::Verdict::Accept || lc.plan_index < 0) { return -1; }
+    for (const Action& a : plans[static_cast<std::size_t>(lc.plan_index)].actions)
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == name) { return a.face_down; } }
+    return -2;
+}
+}   // namespace
+
+TEST_CASE("morph line: cast= is the HARD cast; facedown= / facedownup= select the face-down modes")
+{
+    EnsureCardsFd();
+    {
+        GameState s = BaseF();
+        for (int k = 0; k < 5; ++k) { PutF(s, "Forest", 40 + k); }
+        s.players[0].hand.push_back(CardF("Hystrodon", 12));
+        TurnSolver::LineSpec hard;
+        hard.casts.push_back("Hystrodon");
+        TurnSolver::LineCheck lc;
+        CHECK(LineFaceDownMode(s, hard, "Hystrodon", &lc) == 0);
+        INFO("reason: " << lc.reason);
+        TurnSolver::LineSpec down = hard;
+        down.face_downs.push_back("Hystrodon");
+        CHECK(LineFaceDownMode(s, down, "Hystrodon", &lc) == 1);
+        // Hystrodon's down+up is folded away (the hard cast dominates), so the line names a play not on offer.
+        TurnSolver::LineSpec up = hard;
+        up.face_down_ups.push_back("Hystrodon");
+        CHECK(LineFaceDownMode(s, up, "Hystrodon", &lc) == -1);
+    }
+    {
+        GameState s = BaseF();
+        for (int k = 0; k < 3; ++k) { PutF(s, "Forest", 40 + k); }
+        for (int k = 0; k < 3; ++k) { PutF(s, "Mountain", 50 + k); }
+        s.players[0].hand.push_back(CardF("Blistering Firecat", 11));
+        TurnSolver::LineSpec hard;
+        hard.casts.push_back("Blistering Firecat");
+        CHECK(LineFaceDownMode(s, hard, "Blistering Firecat") == 0);
+        TurnSolver::LineSpec down = hard;
+        down.face_downs.push_back("Blistering Firecat");
+        CHECK(LineFaceDownMode(s, down, "Blistering Firecat") == 1);
+        TurnSolver::LineSpec up = hard;
+        up.face_down_ups.push_back("Blistering Firecat");
+        CHECK(LineFaceDownMode(s, up, "Blistering Firecat") == 2);
+        // A face-down mode with no cast of the card, and one naming a non-morph card, are rejected with a reason.
+        TurnSolver::LineSpec orphan;
+        orphan.face_downs.push_back("Blistering Firecat");
+        TurnSolver::LineCheck lc;
+        CHECK(LineFaceDownMode(s, orphan, "Blistering Firecat", &lc) == -1);
+        CHECK(lc.verdict != TurnSolver::LineCheck::Verdict::Accept);
+    }
+    {
+        // NON-MORPH: an ordinary line is untouched (both mode sets empty on both sides).
+        GameState s = BaseF();
+        s.deck_has_morph = false;
+        for (int k = 0; k < 2; ++k) { PutF(s, "Forest", 40 + k); }
+        s.players[0].hand.push_back(CardF("Berserk", 13));
+        TurnSolver::LineSpec ls;
+        ls.casts.push_back("Berserk");
+        TurnSolver::LineCheck lc;
+        const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+        lc = TurnSolver::CheckLine(s, true, ls, &plans);
+        CHECK(lc.verdict != TurnSolver::LineCheck::Verdict::Illegal);
+        TurnSolver::LineSpec bad = ls;
+        bad.face_downs.push_back("Berserk");
+        lc = TurnSolver::CheckLine(s, true, bad, &plans);
+        INFO("reason: " << lc.reason);
+        CHECK(lc.verdict == TurnSolver::LineCheck::Verdict::Illegal);
+        CHECK(lc.reason.find("morph") != std::string::npos);
+    }
+}
+
+TEST_CASE("morph line: face_up= names the REAL card of a face-down permanent")
+{
+    EnsureCardsFd();
+    GameState s = BaseF();
+    for (int k = 0; k < 3; ++k) { PutF(s, "Forest", 40 + k); }
+    PutF(s, "Hystrodon (Face-down)", 9);
+    TurnSolver::LineSpec ls;
+    ls.face_ups.push_back("Hystrodon");
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::LineCheck lc = TurnSolver::CheckLine(s, true, ls, &plans);
+    INFO("reason: " << lc.reason);
+    REQUIRE(lc.verdict == TurnSolver::LineCheck::Verdict::Accept);
+    REQUIRE(lc.plan_index >= 0);
+    bool flipped = false;
+    for (const Action& a : plans[static_cast<std::size_t>(lc.plan_index)].actions)
+    { flipped = flipped || (a.kind == Action::Kind::ActivatePermAbility && a.sac_source_id == 9 && IsTurnFaceUpMode(a.ability_mode)); }
+    CHECK(flipped);
+}

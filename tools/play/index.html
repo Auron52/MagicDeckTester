@@ -166,6 +166,10 @@
   .thumb.tapped img { width:90px; margin:0 auto; transform:rotate(90deg); opacity:.82; filter:saturate(.85); }
   .thumb .sickbadge { position:absolute; top:1px; right:1px; font-size:11px; line-height:12px; z-index:3;
                       text-shadow:0 0 2px #000; }
+  /* MORPH: a face-down permanent (CR 708) -- the owner sees the real card, dimmed and banded. */
+  .thumb.facedown img { filter:grayscale(.75) brightness(.6); }
+  .thumb .fdbadge { position:absolute; top:38%; left:2px; right:2px; background:rgba(40,30,70,.92); color:#e8e0ff;
+      border-radius:4px; font-size:10px; font-weight:700; padding:1px 3px; z-index:2; text-align:center; }
   .thumb .tapbadge { position:absolute; top:2px; left:2px; background:rgba(120,120,130,.92); color:#0c1116;
       border-radius:4px; font-size:10px; font-weight:700; padding:0 4px; z-index:2; }
   .thumb em { font-style:normal; font-size:10px; color:var(--muted); display:block; line-height:1.12; margin-top:3px; }
@@ -1318,6 +1322,39 @@ function kickerSources() {
   return out;
 }
 function kickedCountFor(name) { return S.plan.filter(p => p.kicked && p.name === name).length; }
+// MORPH / MEGAMORPH (CR 702.37a -- Den Protector, Hystrodon, Blistering Firecat). The kicker case once
+// more: the hard cast, the FACE-DOWN cast ({3}, a nameless 2/2; main.cpp `face_down: 1`) and the face-down
+// cast turned face up at once (`face_down: 2`, {3} + the morph cost; the engine folds it away where the hard
+// cast is never dearer) are all casts of the same hand card under one name, so every gesture on the thumb
+// queued the HARD cast and the face-down modes had no gesture at all. USER 2026-11-13: "How do I morph my
+// creatures in the viewer? It seems to not be available?"
+// Maps card name -> { fd1, fd2, flipLater } -- which modes the engine enumerated this decision. `flipLater`
+// = a hand-source TRAIL flip is on offer (Den Protector: cast it face down, then turn it up after the
+// line's other casts -- `face_up_from_hand` on the engine's face_up action).
+function faceDownSources() {
+  const d = S.decision;
+  if (!d || d.type !== 'main_phase') return {};
+  if (S._fdFor === d.decision_index && S._fd) return S._fd;
+  const out = {};
+  (d.plans || []).forEach(p => (p.actions || []).forEach(a => {
+    if (!a || !a.card) return;
+    if (a.face_down && !a.activate) {
+      const e = out[a.card] = out[a.card] || {};
+      if (a.face_down === 2) e.fd2 = true; else e.fd1 = true;
+    }
+    if (a.verb === 'face_up' && a.face_up_from_hand) {
+      const nm = a.activate_source || a.card;
+      (out[nm] = out[nm] || {}).flipLater = true;
+    }
+  }));
+  S._fdFor = d.decision_index; S._fd = out;
+  return out;
+}
+function faceDownCountFor(name, mode) { return S.plan.filter(p => p.faceDown === mode && p.name === name).length; }
+// Queued hand-source flips of `name` (an 'activate' entry flagged fromHand -- no board copy exists yet).
+function handFlipCountFor(name) {
+  return S.plan.filter(p => p.kind === 'activate' && p.verb === 'face_up' && p.fromHand && p.name === name).length;
+}
 function digSources() {
   const d = S.decision;
   if (!d || d.type !== 'main_phase') return { cyc:{}, sac:{} };
@@ -1388,6 +1425,9 @@ function activatableSources(){
     // Mystic's put names the Equipment it puts, which is in HAND) — key the affordance on that.
     (p.actions||[]).forEach(a=>{ if (a && a.activate && a.card) {
       const src = a.activate_source || a.card;
+      // MORPH: a hand-source TRAIL flip (face_up_from_hand) is not a board activation -- it is the
+      // hand thumb's "↑ flip later" badge (faceDownSources) -- so it never joins a board source's menu.
+      if (a.verb==='face_up' && a.face_up_from_hand) return;
       per[src]=(per[src]||0)+(a.sacout ? Math.max(1, a.sac_count||1) : 1);
       if (a.sacout) sacout[src]=true;
       // Every distinct (verb, payload) this source can produce, deduped — the menu a two-step
@@ -1400,6 +1440,9 @@ function activatableSources(){
       // the gyreturn precedent -- the source artifact is never castable, the target IS the choice.
       const payload = (a.verb==='gyreturn' && a.gyreturn_target) ? a.gyreturn_target
                     : ((a.verb==='pod' || a.verb==='ooze' || a.verb==='sacnamed') && a.tutor_target) ? a.tutor_target
+                    // MORPH: turning a face-down permanent face up names the REAL card (`face_up=<real>`);
+                    // the action's own card is the synthesized "<real> (Face-down)" face.
+                    : a.verb==='face_up' ? src
                     : a.card;
       // A BLINK's payload is the outlet, but its real choice is the TARGET -- Emiel blinking a
       // Peregrine Drake (refill five lands) and Emiel blinking anything else are different plays that
@@ -1810,6 +1853,7 @@ function queueActivation(src, opt, clickedNum){
     : opt.verb==='landsearch' ? `${src}: sacrificing it to search for land(s). Commit the phase to resolve it — you pick WHICH lands as it resolves.`
     : opt.verb==='steal' ? `${src}: tapping five untapped Vampires to gain control of a creature. Commit the phase to resolve it — you pick the creature, then the five Vampires to tap, as it resolves.`
     : opt.verb==='transform' ? `${src}: paying {B} to transform it into Lord of Lineage (other Vampires get +2/+2). Commit the phase to resolve it.`
+    : opt.verb==='face_up' ? `${src}: turning it FACE UP (a special action — pays its morph/megamorph cost) at this point in your line. Queue it before or after your spells as you want it.`
     : opt.verb==='pod' ? `${src}: tapping it and sacrificing a creature to fetch ${opt.name}. You pick the victim when committing.`
     : opt.verb==='ooze' ? `${src}: paying {G} to exile ${opt.name} from a graveyard. Commit the phase to resolve it.`
     : opt.verb==='sacnamed' ? (opt.name==='(no fetch)'
@@ -2173,7 +2217,10 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // untapped source, the cost), because the offer is derived from the plans it actually enumerated.
   // CLICK-driven activations only: equipping is a DRAG now (see clickActivationOptions), so an
   // Equipment whose only ability is Equip must not render a click affordance it no longer honours.
-  const clickOpts = (!S.over && !le && !isVial && !canSac) ? clickActivationOptions(o.name) : [];
+  // MORPH: a face-down row carries its REAL name (CR 708.5 -- we see our own), so a face-UP copy of the
+  // same card would also list the face-down copy's "turn face up"; only the face-down row offers it.
+  const clickOpts = ((!S.over && !le && !isVial && !canSac) ? clickActivationOptions(o.name) : [])
+    .filter(op => !!o.face_down === (op.verb === 'face_up'));
   const actCap = clickOpts.length ? (activatableSources()[o.name]||0) : 0;
   const actN = actCap ? clickActivateCount(o.name) : 0;
   // SAC-OUTLET TAG: a second click target for the sacrifice half, so the card BODY means the primary
@@ -2224,8 +2271,15 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
   // they can see rather than against a list of names in a modal.
   const feqN   = S.freeEquipPick ? freeEquipCountFor(o.num) : 0;
   const feqCls = feqN ? ' feqhost' : '';
-  return `<span class="thumb ${cls}${vcls}${tcls}${tapCls}${feqCls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}${tapAttr}>`+
+  // MORPH (CR 708): a FACE-DOWN permanent is a nameless 2/2 with no abilities to everyone else; we may look
+  // at our own (708.5), so the thumb keeps the real card's art -- dimmed and banded so it can never be read
+  // as the face-up card -- and says what turning it up costs (megamorph adds a +1/+1 counter).
+  const fdCls = o.face_down ? ' facedown' : '';
+  const fdTitle = o.face_down
+    ? ` title="FACE DOWN — a nameless 2/2 (really ${esc(o.name)}). ${o.megamorph?'Megamorph':'Morph'} ${esc(o.face_up_cost||'')}: ${actCap?'click it to turn it face up (a special action, in your line where you queue it)':'turn it face up when you can pay that'}${o.megamorph?' — it gets a +1/+1 counter':''}."` : '';
+  return `<span class="thumb ${cls}${vcls}${tcls}${tapCls}${feqCls}${fdCls}" data-name="${esc(o.name)}"${idxAttr}${numAttr}${attrs}${eqAttr}${tapAttr}>`+
     `<img loading="lazy" src="${scryImg(o.name,'small')}" alt="${esc(o.name)}" onerror="this.style.opacity=.15"/>`+
+    (o.face_down?`<span class="fdbadge"${fdTitle}>▽ face down · ${o.megamorph?'megamorph':'morph'} ${esc(o.face_up_cost||'')}</span>`:'')+
     (le?`<span class="lebadge">⚡${S.leMode?' active':''}</span>`:'')+
     (canSac?`<span class="digbadge" title="sacrifice ${esc(o.name)} to draw a card">🩸 sac</span>`:'')+
     (actCap?`<span class="actbadge" title="activated ability available">⟳${actN?` ×${actN}`:''}</span>`:'')+
@@ -2247,7 +2301,7 @@ function bfThumb(o) {   // battlefield entry {name, is_land, is_le, counters?}
     // creature's CURRENT power/toughness (counters, pumps, lords, Auras, Equipment included).
     (o.yield!=null?`<span class="yieldbadge" title="taps for ${o.yield} mana right now" style="position:absolute;left:2px;top:2px;background:#225;color:#fff;border-radius:3px;padding:0 3px;font-size:11px">◆${o.yield}</span>`:'')+
     (o.power!=null?`<span class="ptbadge" title="current power/toughness" style="position:absolute;right:2px;bottom:16px;background:#222;color:#fff;border-radius:3px;padding:0 3px;font-size:11px">${o.power}/${o.toughness}</span>`:'')+
-    `<em>${esc(o.name)}${o.printed?`<i class="printedname">${esc(o.printed)}</i>`:''}</em></span>`;
+    `<em>${o.face_down?'▽ ':''}${esc(o.name)}${o.face_down?' <span style="color:var(--muted)">(face down)</span>':''}${o.printed?`<i class="printedname">${esc(o.printed)}</i>`:''}</em></span>`;
 }
 function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS turn's plan
   const src = entry.kind==='vial'    ? `<span class="srcbadge vial" title="deployed via Aether Vial (free)">⚡</span>`
@@ -2267,9 +2321,13 @@ function plannedThumb(entry, planIdx, ord) {   // a card that is part of THIS tu
                     && Object.keys(enchantTargetsFor(entry.name)).length>0;
   const dragAttr = isQueuedAura
     ? ` draggable="true" data-pi="${planIdx}" title="${esc(entry.name)} — queued; drag onto a creature to enchant it"` : '';
-  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}${isQueuedAura?' aura-plan':''}" data-name="${esc(entry.name)}"${numAttr}${dragAttr}>`+
+  // MORPH: a queued face-down cast lands as a face-down 2/2 (shown the way the board shows one).
+  const fdQ = entry.faceDown===1 ? ' facedown' : '';
+  return `<span class="thumb planned ${entry.kind==='land'?'land':'spell'}${isQueuedAura?' aura-plan':''}${fdQ}" data-name="${esc(entry.name)}"${numAttr}${dragAttr}>`+
     `<span class="ord">${ord}</span><span class="rm" data-rm="${planIdx}">✕</span>`+
     `<img loading="lazy" src="${scryImg(entry.name,'small')}" onerror="this.style.opacity=.15"/>`+
+    (entry.faceDown===1?`<span class="fdbadge" title="cast face down for {3}: a nameless 2/2">▽ face down</span>`
+     :entry.faceDown===2?`<span class="fdbadge" title="cast face down for {3} and turned face up at once">▽↑ down+up</span>`:'')+
     src+`<em>${esc(entry.name)}</em></span>`;
 }
 // A RESOLVED aura (or attached Equipment) stacked BEHIND its host, shifted up so its top bar (name)
@@ -2809,6 +2867,7 @@ function renderPlanbar() {
               : p.verb==='landsearch' ? ' ⟳ sac → search for lands'
               : p.verb==='steal'     ? ' ⟳ tap 5 Vampires → steal'
               : p.verb==='transform' ? ' ⟳ transform'
+              : p.verb==='face_up'   ? ' ↑ turn face up'
               : p.verb==='sacnamed'  ? ' ⟳ sac six → ' + (p.name||'Demon')
               : p.verb==='equip'     ? ' ⟳ equip'
               : p.verb==='attachall' ? ' ⟳ attach all'
@@ -2830,6 +2889,8 @@ function renderPlanbar() {
     // them they just paid four extra mana for -- nor spot that the badge toggled the wrong one.
     const tag = (p.kind==='vial'?' ⚡':p.kind==='retrace'?' ↩':act)
               + (p.kicked?(p.name==='Silvergill Adept'?' ⊕ pay {3}':' ⊕ kicked'):'')
+              // MORPH: the face-down modes share the hard cast's name, the kicker reason exactly.
+              + (p.faceDown===1?' ▽ face down {3}':p.faceDown===2?' ▽↑ face down, turned up at once':'')
               + (p.targetName?` → ${esc(p.targetName)}`:'');
     // An attachment chip -- an Aura (legal enchant targets) or a queued EQUIP -- is draggable onto a
     // creature to (re)aim it. Same .aura affordance for both: it is the same gesture.
@@ -2940,6 +3001,13 @@ function renderHand() {
     const kickMv  = kickerSources();
     const canKick = Object.prototype.hasOwnProperty.call(kickMv, c.name);
     const kickN   = canKick ? kickedCountFor(c.name) : 0;
+    // Morph modes on offer (faceDownSources): the face-down cast, the down-and-up-at-once cast, and the
+    // hand-source "flip later" (offered only once a face-down cast of this card is queued -- it flips THAT one).
+    const fdSrc  = faceDownSources()[c.name] || {};
+    const fd1N   = fdSrc.fd1 ? faceDownCountFor(c.name, 1) : 0;
+    const fd2N   = fdSrc.fd2 ? faceDownCountFor(c.name, 2) : 0;
+    const flipOk = !!fdSrc.flipLater && faceDownCountFor(c.name, 1) > 0;
+    const flipN  = flipOk ? handFlipCountFor(c.name) : 0;
     html += `<span class="thumb ${land?'land':'spell'} ${q?'queued':''} ${spent?'spent':''} ${lehot?'lehot':''} ${vialhot?'vialhot':''}" data-name="${esc(c.name)}" draggable="true" data-card="${esc(c.name)}" data-kind="${c.kind}">`+
       `<img loading="lazy" src="${scryImg(c.name,'small')}" alt="${esc(c.name)}" onerror="this.style.opacity=.15"/>`+
       (leN?`<span class="lealloc" title="${leN} copy/copies discarded to Land’s Edge">⚡${leN}</span>`:'')+
@@ -2971,6 +3039,11 @@ function renderHand() {
       // ⊕ is the glyph because kicker is an ADDITIONAL cost (CR 601.2b) -- it adds, it does not
       // replace -- and because ⚡/🗺/⌛ are taken by channel, adventure and suspend on this same thumb.
       (canKick?`<span class="landface" data-kick="${esc(c.name)}" title="${c.name==='Silvergill Adept'?'PAY INSTEAD — pay {3} rather than reveal a Merfolk card':`KICKER — pay ${esc(c.name)}'s additional cost${kickMv[c.name]?` (+${kickMv[c.name]} mana)`:''} for the bigger effect`}. This toggles the paid cast${kickN?', click again to take it back':''}">⊕ ${c.name==='Silvergill Adept'?'pay {3}':`kicked${kickMv[c.name]?` (+${kickMv[c.name]})`:''}`}${kickN>1?` ×${kickN}`:''}</span>`:'')+
+      // MORPH: the kicker badge's twins (same toggle contract -- they set the MODE of a queued cast).
+      // ▽ = face down; the hard cast stays the thumb's own click.
+      (fdSrc.fd1?`<span class="landface" data-facedown="${esc(c.name)}" title="MORPH — cast ${esc(c.name)} FACE DOWN for {3} as a nameless 2/2 (turn it face up later for its morph cost: click it on the battlefield during your main phase, or at the opponent's end step). This toggles the queued cast${fd1N?', click again to cast it face up instead':''}">▽ face down {3}${fd1N>1?` ×${fd1N}`:''}</span>`:'')+
+      (fdSrc.fd2?`<span class="landface" data-facedownup="${esc(c.name)}" title="MORPH — cast ${esc(c.name)} face down for {3} and turn it face up AT ONCE (pays {3} plus its morph cost; differs from the hard cast in colour needs${c.name==='Den Protector'?' and fires its turned-face-up trigger':''}). This toggles the queued cast${fd2N?', click again to cast it face up instead':''}">▽↑ down+up${fd2N>1?` ×${fd2N}`:''}</span>`:'')+
+      (flipOk?`<span class="landface" data-fliplater="${esc(c.name)}" title="TURN FACE UP LATER — queue the flip of the face-down ${esc(c.name)} you are casting this line; it happens where it sits in your queue (put it after the spells it should follow)${flipN?' — click again to take it back':''}">↑ flip it${flipN>1?` ×${flipN}`:''}</span>`:'')+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
@@ -3076,6 +3149,43 @@ function renderHand() {
       flashHint(r.action === 'kicked'   ? `Paying ${nm}'s kicker${paid} — the queued cast is now KICKED.`
               : r.action === 'unkicked' ? `Took the kicker back off ${nm} — casting it unkicked.`
               :                           `Casting ${nm} with its kicker paid${paid}.`);
+      renderBoard(); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  // Morph badges: LB.toggleFaceDown (the kicker contract) sets / clears the MODE of a queued cast.
+  const fdHandler = (b, nm, mode) => {
+    const kd = (b.closest('.thumb') || {}).dataset ? b.closest('.thumb').dataset.kind : 'permanent';
+    const r = LB.toggleFaceDown(S.plan, nm, kd, mode);
+    S.plan = r.plan;
+    // Clearing the last face-down cast orphans a queued hand flip of it: take that back too.
+    if (faceDownCountFor(nm, 1) === 0)
+      S.plan = S.plan.filter(p => !(p.kind === 'activate' && p.verb === 'face_up' && p.fromHand && p.name === nm));
+    const what = mode === 2 ? 'face down and turning it face up at once ({3} + its morph cost)' : 'FACE DOWN for {3} (a 2/2)';
+    flashHint(r.action === 'cleared' ? `${nm} is cast face up again (its normal cost).`
+            : r.action === 'set'     ? `The queued ${nm} is now cast ${what}.`
+            :                          `Casting ${nm} ${what}.`);
+    renderBoard();
+  };
+  row.querySelectorAll('.landface[data-facedown]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault(); fdHandler(b, b.dataset.facedown, 1); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  row.querySelectorAll('.landface[data-facedownup]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault(); fdHandler(b, b.dataset.facedownup, 2); };
+    b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
+  });
+  // "↑ flip it": a hand-source TRAIL flip -- an ordinary queued step (`face_up=<name>`), so it runs where it
+  // sits in the queue. One per queued face-down cast; a further click takes the last one back.
+  row.querySelectorAll('.landface[data-fliplater]').forEach(b => {
+    b.onclick = e => { e.stopPropagation(); e.preventDefault();
+      const nm = b.dataset.fliplater;
+      if (handFlipCountFor(nm) < faceDownCountFor(nm, 1)) {
+        S.plan.push({ name: nm, src: nm, kind: 'activate', verb: 'face_up', fromHand: true });
+        flashHint(`Turning the face-down ${nm} face up (pays its morph cost) at this point in your line. Queue it after the spells it should follow.`);
+      } else {
+        const i = S.plan.map(p => p.kind === 'activate' && p.verb === 'face_up' && p.fromHand && p.name === nm).lastIndexOf(true);
+        if (i >= 0) { S.plan.splice(i, 1); flashHint(`Took back the flip of ${nm}.`); }
+      }
       renderBoard(); };
     b.ondblclick = e => { e.stopPropagation(); e.preventDefault(); };
   });

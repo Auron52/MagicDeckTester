@@ -3762,6 +3762,21 @@ public:
         // card. Its own verb because the action's card is the face ("X (Face-down)") and a copy of X in hand is a
         // different play. EMPTY keeps the legacy name-in-casts matching.
         std::vector<std::string> face_ups;
+        // "facedown=<card name>" / "facedownup=<card name>" (morph / megamorph, CR 702.37a): this cast of the
+        // card is the FACE-DOWN cast ({3}, a nameless 2/2 -- Action::face_down 1), or the face-down cast turned
+        // face up at once (face_down 2: {3} plus the morph cost). Rides ALONGSIDE the card's own `cast=`, the
+        // kicked= shape: all three are a CastFromHand of the same hand card under one name, so the cast multiset
+        // cannot tell them apart and a declared set is the only way a line can say which the human meant.
+        // Hence BOTH sets are compared ALWAYS, exactly like kicked= -- declaring nothing means the HARD cast.
+        //
+        // Unconditional is inert outside morph: Action::face_down is set ONLY by the morph / megamorph cast
+        // emitter (TurnSolver.cpp, the "(Face-down)" variant), so for every card without morph_cost /
+        // megamorph_cost both sides are empty and the comparison is identically true. The three morph cards
+        // (Blistering Firecat, Den Protector, Hystrodon) are in decks/Morph only, and no saved reference plays
+        // that deck (verified 2026-11-13: references/ holds no Morph directory). Human-line matching only --
+        // no search or AI path reads a LineSpec.
+        std::vector<std::string> face_downs;
+        std::vector<std::string> face_down_ups;
         // "sacnamed=<Demon name | (no fetch)>" (Shadowborn INT-2): Shadowborn Apostle's "{B}, Sacrifice six
         // creatures named ~: put a Demon onto the battlefield" (PermAbilityMode::SacNamedTutorPut), naming
         // the FETCH (the pod= / ooze= reason: the source is any copy, the Demon is the choice; and

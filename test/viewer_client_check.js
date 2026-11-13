@@ -1452,6 +1452,52 @@ function testBlinkBoardTargeting(win) {
   return fails;
 }
 
+// MORPH hand badges, DOM-only (Den Protector: the face-down cast, down+up at once, and the hand-source
+// "↑ flip it" that turns the face-down copy queued THIS line face up where it sits in the queue).
+function testMorphHandBadges(win) {
+  const S = win.__getS(), fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const D = 'Den Protector';
+  const d = { type: 'main_phase', decision_index: 7, turn: 4, phase: 'pre_main', on_the_play: true,
+    me: { life: 20, library_size: 40, land_drops_left: 0, battlefield: [], graveyard: [],
+          hand: [{ num: 12, name: D, cost: '{1}{G}', mv: 2, kind: 'permanent', is_creature: true },
+                 { num: 13, name: 'Berserk', cost: '{G}', mv: 1, kind: 'nonpermanent' }] },
+    opponent: { life: 20, battlefield: [] },
+    plans: [{ index: 0, summary: 'cast: Den Protector', casts: [D], actions: [{ card: D }] },
+            { index: 1, summary: 'cast: Den Protector (face down)', casts: [D], actions: [{ card: D, face_down: 1 }] },
+            { index: 2, summary: 'cast: Den Protector (face down, then turned face up)', casts: [D], actions: [{ card: D, face_down: 2 }] },
+            { index: 3, summary: 'cast: Den Protector (face down), Berserk, flip', casts: [D, 'Berserk'],
+              actions: [{ card: D, face_down: 1 }, { card: 'Berserk' },
+                        { card: D, activate: true, verb: 'face_up', face_up_pos: 'after casts', activate_source: D, face_up_from_hand: true }] }] };
+  S.decision = d; S.prev = null; S.plan = []; S.over = false; S.busy = false; S.handOrder = [];
+  S.leMode = false; S.vialMode = null; win.renderBoard();
+  const q = sel => win.document.querySelector(sel);
+  const click = el => el.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  chk(!!q('#handrow .landface[data-facedown]'), 'the face-down badge renders');
+  chk(!!q('#handrow .landface[data-facedownup]'), 'the down+up badge renders when the engine offers it');
+  chk(!q('#handrow .landface[data-fliplater]'), 'no "flip it" badge before a face-down copy is queued');
+  chk(!win.activationOptions(D).length, 'a hand-source flip never becomes a board activation option');
+  click(q('#handrow .landface[data-facedown]'));
+  chk(S.plan.length === 1 && S.plan[0].faceDown === 1, `face-down badge queues mode 1: ${JSON.stringify(S.plan)}`);
+  win.queueCard('Berserk', 'nonpermanent');
+  const flip = q('#handrow .landface[data-fliplater]');
+  chk(!!flip, 'the "flip it" badge appears once the face-down cast is queued');
+  if (flip) click(flip);
+  chk(win.LineBuild.encodeLine(S.plan) === `cast=${D};cast=Berserk;facedown=${D};face_up=${D}`,
+      `cast down, Berserk, flip encodes as "${win.LineBuild.encodeLine(S.plan)}"`);
+  chk(win.LineBuild.sequenceTokens(S.plan).join('|') === `cast=${D}+facedown|cast=Berserk|face_up=${D}`,
+      `...and pins "${win.LineBuild.sequenceTokens(S.plan).join('|')}"`);
+  const chips = (q('#planbar') || win.document.body).textContent;
+  chk(chips.includes('face down') && chips.includes('turn face up'), 'the chips say "face down" and "turn face up"');
+  // Switching the cast to down+up drops the now-orphaned hand flip.
+  click(q('#handrow .landface[data-facedownup]'));
+  chk(S.plan.filter(p => p.name === D).length === 1 && S.plan[0].faceDown === 2,
+      `down+up replaces the face-down cast and its flip: ${JSON.stringify(S.plan)}`);
+  click(q('#handrow .landface[data-facedownup]'));
+  chk(!S.plan[0].faceDown, 'clicking the active mode again casts it face up');
+  return fails;
+}
+
 function testMdfcLandFace(win) {
   const S = win.__getS(), fails = [];
   const chk = (c, m) => { if (!c) fails.push(m); };
@@ -2268,7 +2314,118 @@ async function testColorlessFirstTapOrder() {
   return fails;
 }
 
+// MORPH (CR 702.37 -- decks/Morph). USER 2026-11-13: "How do I morph my creatures in the viewer? It seems to
+// not be available?" -- the engine enumerated the face-down cast (`face_down: 1`) and the main-phase flip
+// (`verb: face_up`) all along; the viewer had no gesture for either, and drew a face-down permanent as its
+// face-up card. This walks one real game through the GUI's own entry points: the hand thumb's "▽ face down"
+// badge queues the {3} cast (`cast=X;facedown=X`), the commit resolves to a FACE-DOWN row on the board
+// (drawn as such), and a later main phase's click on that row queues `face_up=X`, which turns it face up.
+async function testMorph() {
+  const fails = [];
+  const chk = (c, m) => { if (!c) fails.push(m); };
+  const win = buildDom(); await settle(win);
+  const seed = parseInt(argVal('morph-seed', '1'), 10);
+  await startGame(win, { deck: 'Morph', seed, turns: 8 });
+  const st = () => S(win);
+  const resolvePicks = async () => {
+    for (let i = 0; i < 6; i++) {
+      const pick = win.document.querySelector('#decpanel .varpick');
+      if (!pick) break;
+      pick.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+      await settle(win);
+    }
+  };
+  // 1) Walk on the model's line to the first main phase that offers a face-down cast.
+  let guard = 0, fdName = null;
+  while (guard++ < 80 && !st().over) {
+    const d = st().decision;
+    if (d && d.type === 'main_phase') {
+      const fd = win.faceDownSources();
+      fdName = Object.keys(fd).find(n => fd[n].fd1) || null;
+      if (fdName) break;
+    }
+    if (!(await stepForward(win, 'ai'))) break;
+  }
+  chk(!!fdName, `Morph seed ${seed}: some main phase offers a face-down cast`);
+  if (fails.length) { await settle(win); win.close(); return fails; }
+  const turn1 = st().decision.turn;
+  st().plan = []; win.renderBoard();
+  const badge = [...win.document.querySelectorAll('#handrow .landface[data-facedown]')]
+                  .find(b => b.dataset.facedown === fdName);
+  chk(!!badge, `the hand thumb of ${fdName} carries the "▽ face down" badge`);
+  if (!badge) { await settle(win); win.close(); return fails; }
+  badge.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  chk(st().plan.length === 1 && st().plan[0].faceDown === 1, `the badge queues a face-down cast: ${JSON.stringify(st().plan)}`);
+  chk(win.LineBuild.encodeLine(st().plan) === `cast=${fdName};facedown=${fdName}`,
+      `the face-down line alone is "${win.LineBuild.encodeLine(st().plan)}"`);
+  // Play a land FIRST when the hand holds one (the {3} usually needs the drop).
+  st().plan = []; win.renderBoard();
+  const land = (((st().decision || {}).me || {}).hand || []).find(c => c.kind === 'land');
+  if (land) { win.queueCard(land.name, 'land'); }
+  [...win.document.querySelectorAll('#handrow .landface[data-facedown]')].find(b => b.dataset.facedown === fdName)
+    .dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  const encoded = win.LineBuild.encodeLine(st().plan);
+  chk(encoded === (land ? `land=${land.name};` : '') + `cast=${fdName};facedown=${fdName}`, `the face-down line with its land is "${encoded}"`);
+  const chip = (win.document.getElementById('planbar') || win.document.body).textContent;
+  chk(chip.includes('face down'), 'the queued chip says "face down"');
+  await win.commitLine(); await settle(win); await resolvePicks();
+  chk(!st().hadReject, 'the face-down line is ACCEPTED by the engine');
+  let bf = ((st().decision || {}).me || {}).battlefield || [];
+  const row = bf.find(p => p.name === fdName && p.face_down);
+  if (!row && VERBOSE) console.log('after commit:', st().decision && st().decision.type, JSON.stringify((st().decision||{}).me && st().decision.me.hand), JSON.stringify((st().history||[]).slice(-4)), (win.document.getElementById('verdict')||{}).textContent, (win.document.getElementById('decpanel')||{}).textContent.slice(0,600));
+  chk(!!row, `${fdName} is on the battlefield FACE DOWN after the commit (board: ${JSON.stringify(bf.map(p => p.name + (p.face_down ? '[fd]' : '')))})`);
+  chk(row && row.power === 2 && row.toughness === 2, `the face-down ${fdName} is a 2/2 (${row && row.power}/${row && row.toughness})`);
+  const fdThumb = [...win.document.querySelectorAll('#board .thumb.facedown[data-name]')].find(t => t.dataset.name === fdName);
+  chk(!!fdThumb && !!fdThumb.querySelector('.fdbadge'), 'the board draws it face down (.facedown + ▽ badge)');
+  if (fails.length) { await settle(win); win.close(); return fails; }
+  // 2) Walk on (passing, so the morph card is not spent) to a main phase where that permanent can turn face up.
+  const num = row.num;
+  guard = 0;
+  let flipThumb = null;
+  while (guard++ < 80 && !st().over) {
+    const d = st().decision;
+    if (d && d.type === 'main_phase' && d.turn > turn1) {
+      flipThumb = [...win.document.querySelectorAll('#board .thumb.facedown[data-activate]')]
+                    .find(t => +(t.dataset.num || 0) === num);
+      if (flipThumb) break;
+    }
+    if (!(await stepForward(win, d && d.type === 'main_phase' && d.turn === turn1 ? 'pass' : 'ai'))) break;
+    bf = ((st().decision || {}).me || {}).battlefield || [];
+    if (!bf.some(p => p.num === num && p.face_down)) break;   // flipped / gone by the model's own line
+  }
+  chk(!!flipThumb, `a later main phase offers turning the face-down ${fdName} (#${num}) face up by clicking it`);
+  if (!flipThumb) { await settle(win); win.close(); return fails; }
+  st().plan = []; win.renderBoard();
+  flipThumb = [...win.document.querySelectorAll('#board .thumb.facedown[data-activate]')].find(t => +(t.dataset.num || 0) === num);
+  flipThumb.dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  if (win.document.querySelector('#decpanel [data-actopt]')) {   // a picker (only if the source had several options)
+    win.document.querySelector('#decpanel [data-actopt]').dispatchEvent(new win.MouseEvent('click', { bubbles: true }));
+  }
+  const q = st().plan[0];
+  chk(st().plan.length === 1 && q && q.verb === 'face_up' && q.name === fdName,
+      `the click queues a face_up step naming the REAL card: ${JSON.stringify(st().plan)}`);
+  chk(win.LineBuild.encodeLine(st().plan) === `face_up=${fdName}`, `the flip line is "${win.LineBuild.encodeLine(st().plan)}"`);
+  await win.commitLine(); await settle(win); await resolvePicks();
+  chk(!st().hadReject, 'the flip line is ACCEPTED by the engine');
+  bf = ((st().decision || {}).me || {}).battlefield || [];
+  const after = bf.find(p => p.num === num);
+  chk(after && !after.face_down && after.name === fdName, `${fdName} #${num} is FACE UP after the commit (${JSON.stringify(after)})`);
+  await settle(win); win.close();
+  return fails;
+}
+
 (async () => {
+  if (process.argv.includes('--only-morph')) {
+    let fails;
+    { const w = buildDom(); await settle(w); fails = testMorphHandBadges(w); await settle(w); w.close();
+      fails.forEach(m => console.error('hand badges: ' + m)); if (!fails.length) console.log('✓ morph hand badges'); }
+    if (fails.length) process.exit(1);
+    try { fails = await testMorph(); }
+    catch (e) { console.error(`morph: harness error: ${e.stack || e}`); process.exit(2); }
+    fails.forEach(m => console.error(m));
+    if (!fails.length) console.log('✓ morph (face-down cast badge → face-down 2/2 on the board → click to turn face up)');
+    process.exit(fails.length ? 1 : 0);
+  }
   if (process.argv.includes('--only-graveyard-cast')) {
     const fails = await testGraveyardCastAndHistoryText();
     fails.forEach(m => console.error(m));
@@ -2378,6 +2535,9 @@ async function testColorlessFirstTapOrder() {
     const lfFails = testMdfcLandFace(win);
     if (lfFails.length) { anyFail = true; console.log(`✗ mdfc land face: ${lfFails.length} fail`); lfFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ MDFC land back playable from the palette (badge → land= line, gated on the offer)'); }
+    const mhFails = testMorphHandBadges(win);
+    if (mhFails.length) { anyFail = true; console.log(`✗ morph hand badges: ${mhFails.length} fail`); mhFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ morph hand badges (face down / down+up toggle the cast mode; "flip it" queues the hand-source flip)'); }
     // Ability selection as a tag on the card rather than a modal list (fast, DOM-only).
     const atFails = testAbilityTagAffordance(win);
     if (atFails.length) { anyFail = true; console.log(`✗ ability tag affordance: ${atFails.length} fail`); atFails.forEach(m => console.log('  - ' + m)); }
@@ -2411,6 +2571,14 @@ async function testColorlessFirstTapOrder() {
     catch (e) { console.error(`✗ board activation: harness error: ${e.stack || e}`); process.exit(2); }
     if (baFails.length) { anyFail = true; console.log(`✗ board activation: ${baFails.length} fail`); baFails.forEach(m => console.log('  - ' + m)); }
     else { console.log('✓ board-activated ability (Krenko: clickable → queued → accepted → tokens)'); }
+  }
+  // Morph: face-down cast badge, face-down board row, click-to-flip (needs a real game walk).
+  {
+    let mFails;
+    try { mFails = await testMorph(); }
+    catch (e) { console.error(`✗ morph: harness error: ${e.stack || e}`); process.exit(2); }
+    if (mFails.length) { anyFail = true; console.log(`✗ morph: ${mFails.length} fail`); mFails.forEach(m => console.log('  - ' + m)); }
+    else { console.log('✓ morph (face-down cast badge → face-down 2/2 on the board → click to turn face up)'); }
   }
   // Equip reachable + resolving + displayed like an Aura (needs a real game walk).
   {

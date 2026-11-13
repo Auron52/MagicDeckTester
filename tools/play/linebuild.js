@@ -105,6 +105,9 @@
   //   eternalize= Timeless Witness's from-GRAVEYARD Eternalize (names the card) (LineSpec::eternalizes)
   //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
   //   kicked=     Saproling Migration cast WITH its kicker paid (names the card)  (LineSpec::kickeds)
+  //   facedown=   a morph card cast FACE DOWN for {3} (names the card)          (LineSpec::face_downs)
+  //   facedownup= ...cast face down and turned face up at once (names the card) (LineSpec::face_down_ups)
+  //   face_up=    turn a face-down permanent face up (names the REAL card)      (LineSpec::face_ups)
   //   blink=      Emiel / Eldrazi Displacer, "<outlet>[@<target m_number>]"    (LineSpec::blinks)
   //   taplife=    Wellwisher's "{T}: gain 1 life for each Elf" (names the SOURCE) (LineSpec::tap_lifes)
   //   landsearch= Evolving Wilds / Myriad Landscape / Khalni Heart Expedition crack (names the SOURCE;
@@ -612,7 +615,10 @@
          + (target ? '@' + target : '')
          + (v === 'blink' && p.blinkCount > 0 ? '*' + p.blinkCount : '')
          + (p.kicked ? '+kicked' : '')
-         + (p.adventure ? '+adventure' : '');
+         + (p.adventure ? '+adventure' : '')
+         // MORPH: the face-down cast (1) / face-down then turned up at once (2) -- the engine's
+         // HumanStepMatches compares Action::face_down exactly, so a hard cast says nothing.
+         + (p.faceDown === 2 ? '+facedownup' : p.faceDown === 1 ? '+facedown' : '');
   }
   function sequenceTokens(seg) { return (seg || []).map(sequenceToken).filter(t => t != null); }
 
@@ -691,6 +697,11 @@
     // `cast=<name>` and this token only says WHICH MODE. Compared unconditionally by the engine, so
     // omitting it means "do not kick".
     for (const p of plan) if (p.kicked) parts.push('kicked=' + p.name);
+    // MORPH (CR 702.37a) -- the kicked= shape again: a face-down cast IS a cast of that hand card
+    // (the cast loop already wrote `cast=<name>`), so this only names the MODE. Compared
+    // unconditionally by the engine; omitting it means the HARD (face-up) cast.
+    for (const p of plan) if (p.faceDown === 1) parts.push('facedown=' + p.name);
+    for (const p of plan) if (p.faceDown === 2) parts.push('facedownup=' + p.name);
     // Board activations that are neither a hand cast nor a pass need their own verb -- a line made
     // up ONLY of them used to encode as 'pass' (CheckLine stage 0). MODE_VERBS name the MODE INT,
     // every other verb names a card.
@@ -740,6 +751,27 @@
     if (un.length) { plan[un[un.length - 1]].kicked = true; return { plan, action: 'kicked' }; }
     idxs.forEach(i => { delete plan[i].kicked; });
     return { plan, action: 'unkicked' };
+  }
+
+  // MORPH (CR 702.37a -- Den Protector, Hystrodon, Blistering Firecat): the pure state transition behind
+  // index.html's "▽ face down" / "▽↑ down+up" badges. toggleKicker's contract exactly, for its reason: the
+  // hard cast, the face-down cast ({3}, mode 1) and the face-down cast turned face up at once (mode 2) are
+  // all casts of the SAME hand card under one name, so the badge sets the MODE of a queued cast rather than
+  // appending a second one (with one copy in hand `cast=X;cast=X;facedown=X` matches nothing).
+  //   * nothing of this name queued          -> append a cast in `mode`
+  //   * a queued cast NOT in `mode`          -> switch the LAST one to `mode`
+  //   * every queued cast already in `mode`  -> WRAP: all back to the hard cast
+  // Returns { plan, action }, action being 'set' | 'cleared' | 'queued' for the GUI's hint.
+  function toggleFaceDown(plan, name, kind, mode) {
+    const m = mode === 2 ? 2 : 1;
+    const idxs = plan.map((p, i) => ({ p, i }))
+                     .filter(x => x.p.name === name && isSpecCast(x.p) && lineVerb(x.p) === 'cast')
+                     .map(x => x.i);
+    if (!idxs.length) { plan.push({ name, kind, faceDown: m }); return { plan, action: 'queued' }; }
+    const other = idxs.filter(i => plan[i].faceDown !== m);
+    if (other.length) { plan[other[other.length - 1]].faceDown = m; return { plan, action: 'set' }; }
+    idxs.forEach(i => { delete plan[i].faceDown; });
+    return { plan, action: 'cleared' };
   }
 
   // Queue (or, for a land, toggle) one card into the plan. Returns the resulting plan array (the
@@ -933,7 +965,7 @@
   return { planLand, planLands, landDropsLeft, handCounts, stagedCounts, castableCount, plannedCount,
            toggleSuspend,
            leCount, leMax, encodeLine, encodeSegments, dropFirstSegment, queueCard, isSacOut, lineVerb,
-           toggleKicker,
+           toggleKicker, toggleFaceDown,
            offersLandAfter, topLandOffered, landPosition, karooPositionsOffered,
            sequenceToken, sequenceTokens, sequenceSteps, sequencePinned, validationLine, shrinkingIndices,
            stampPlanNums, isPreTap, preTapToken,

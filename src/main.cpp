@@ -3102,6 +3102,18 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 {
                     os << ", \"verb\": \"face_up\", \"face_up_pos\": \""
                        << (ac.ability_mode == Action::AbilityMode::TurnFaceUp ? "first" : "after casts") << "\"";
+                    // The card the human CLICKS and the line names (`face_up=<real name>`): a board flip's
+                    // card_name is the synthesized "<real> (Face-down)" face, while the board row (CR 708.5:
+                    // we see our own face-down cards) and CheckLine both use the REAL name. A hand-source
+                    // TRAIL flip (Den Protector cast face down, flipped after the plan's other casts) names
+                    // the hand card itself -- `face_up_from_hand` says so, since there is no board copy yet.
+                    static const std::string kFdSuffix = " (Face-down)";
+                    std::string real = ac.card_name.str();
+                    const bool on_board = real.size() > kFdSuffix.size()
+                        && real.compare(real.size() - kFdSuffix.size(), kFdSuffix.size(), kFdSuffix) == 0;
+                    if (on_board) { real.resize(real.size() - kFdSuffix.size()); }
+                    os << ", \"activate_source\": "; JsonStr(os, real);
+                    if (!on_board) { os << ", \"face_up_from_hand\": true"; }
                 }
                 // Shadowborn Apostle's "{B}, Sacrifice six creatures named ~: put a Demon" (INT-2): the
                 // list runs eighteen copies, so `cast=Shadowborn Apostle` is a hand cast. The line value is
@@ -5641,6 +5653,11 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         else if (key == "steal")     { ls.steals.push_back(val); }       // Captivating Vampire's steal (Vampires B)
         else if (key == "sacnamed")  { ls.sac_nameds.push_back(val); }   // Shadowborn Apostle (the Demon)
         else if (key == "transform") { ls.transforms.push_back(val); }
+        // Morph (CR 702.37a): this cast of <name> is the face-down cast (facedown=) / the face-down cast turned
+        // face up at once (facedownup=). See LineSpec::face_downs -- like kicked=, an absent key MEANS the hard
+        // cast and is enforced, because by card name the three modes are the same cast.
+        else if (key == "facedown")   { ls.face_downs.push_back(val); }
+        else if (key == "facedownup") { ls.face_down_ups.push_back(val); }
         else if (key == "faceup" || key == "face_up") { ls.face_ups.push_back(val); }   // morph: turn <real name> face up   // Bloodline Keeper's {B} transform // Wilds / Myriad / Khalni crack
         // "pod=<fetch>[#<victim num>]": Birthing Pod activation (fetch name + optional victim id).
         else if (key == "pod")
