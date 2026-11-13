@@ -102078,6 +102078,41 @@ namespace p16
     inline thread_local std::vector<Pass> t_passes;
     // kind: H rollout ladder pass | P leafless ladder pass | C calibration | F FIT pass | L FIT climb pass
     // status: 0 completed | 1 overrun, rolled back | 2 overrun, anytime-rescued
+    // MTG_P16_ORACLE=<file> (MEASUREMENT ONLY, default unset): "seed ord T sm K" per top-level decision, from a
+    // heuristic-ladder trace. The ladder then runs passes 1..K-1 LEAFLESS and only pass K on rollouts -- the
+    // "skip every superseded rollout, knowing K" upper bound. Never a play shape: it reads another run's answers.
+    struct OKey { unsigned long long s; int ord; bool operator<(const OKey& o) const { return s != o.s ? s < o.s : ord < o.ord; } };
+    struct OVal { int T, sm, K; };
+    inline const std::map<OKey, OVal>& Oracle()
+    {
+        static const std::map<OKey, OVal> m = []{
+            std::map<OKey, OVal> r; const char* f = std::getenv("MTG_P16_ORACLE");
+            if (f == nullptr || *f == '\0') { return r; }
+            std::ifstream in(f); unsigned long long sd; int ord, T, sm, K;
+            while (in >> sd >> ord >> T >> sm >> K) { r[OKey{sd, ord}] = OVal{T, sm, K}; }
+            return r; }();
+        return m;
+    }
+    inline thread_local unsigned long long t_o_seed = 0;
+    inline thread_local int  t_o_ord = 0;
+    inline thread_local bool t_o_dead = false;   // this game diverged from the record: stop applying it
+    inline thread_local int  t_oracle_K = 0;     // the current decision's recorded committing depth (0 = none)
+    inline void OracleBegin(unsigned long long seed, int T, bool sm)
+    {
+        t_oracle_K = 0;
+        const std::map<OKey, OVal>& m = Oracle();
+        if (m.empty()) { return; }
+        // MTG_P16_ORACLE_ARM=<substring>: apply only to jobs whose deck key contains it (an oracle arm pooled with its
+        // own heuristic-ladder control in ONE batch, so core-s is compared under the same contention).
+        static const std::string s_arm = []{ const char* e = std::getenv("MTG_P16_ORACLE_ARM"); return std::string(e ? e : ""); }();
+        if (!s_arm.empty() && valuearm::t_deck_key.find(s_arm) == std::string::npos) { return; }
+        if (seed != t_o_seed) { t_o_seed = seed; t_o_ord = 0; t_o_dead = false; }
+        const int ord = t_o_ord++;
+        if (t_o_dead) { return; }
+        auto it = m.find(OKey{seed, ord});
+        if (it == m.end() || it->second.T != T || it->second.sm != (sm ? 1 : 0)) { t_o_dead = true; return; }
+        t_oracle_K = it->second.K;
+    }
     inline void Rec(char kind, int depth, long long units, long long leaf, int status, int win, int dvs)
     {
         if (!On() || t_hyb_nest != 1) { return; }
@@ -110757,6 +110792,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
     }
 
+    FSLineCache p16_leafless_cache;   // MTG_P16_ORACLE's leafless passes (measurement only)
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
     long long lad_ttlook_sum = 0, lad_tthit_sum = 0, lad_ttlook_last = 0, lad_tthit_last = 0;
     for (int pass_depth = (depth >= 1 ? 1 : depth);
@@ -110765,10 +110801,33 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // Cheap leaf for every pass but the one that commits.
         ForceValueLeafGuard _lvl(s_ladder_value_leaf && pass_depth < depth);
         ConstantLeafPassGuard _clp(vl_constant);   // the no-leaf stand-in / forced constant leaf: stop at exhaustion
+        // MTG_P16_ORACLE (measurement only; see p16::Oracle): passes below the recorded K run leafless.
+        const int p16K = (p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && !vl_active) ? p16::t_oracle_K : 0;
+        // MTG_P16_ORACLE_KEEP=n (default 1): the last n passes below and at K keep their rollouts.
+        static const int s_p16_keep = std::max(1, EnvInt("MTG_P16_ORACLE_KEEP", 1));
+        // SKIP-LEAVES LADDER (value_play.rollout_from = s; P16, default off). A pass the ladder will supersede
+        // needs no leaf estimate: below s the pass runs leafless (it can still PROVE a win, which commits exactly
+        // where the rollout pass would have stopped on it), and the rollout ladder starts at s -- pass s admitted
+        // as the ladder admits its first pass, s+1 on the bootstrap growth, then the measured ratio. At every
+        // budget (an unlimited ladder reaches `depth` on rollouts either way, so nothing becomes unfindable).
+        const int sl_from = (!vl_active && !g_force_heuristic_leaf && g_fsline_nest == 0 && g_rollout_nest == 0
+                             && valuearm::t_deck_rollout_from > 1) ? std::min(valuearm::t_deck_rollout_from, depth) : 0;
+        if ((p16K > 0 && pass_depth <= p16K - s_p16_keep) || (sl_from > 0 && pass_depth < sl_from))
+        {
+            ForceConstantLeafGuard _oc(true); ConstantLeafPassGuard _op(true);
+            const long long ou0 = budget ? budget->Used() : 0;
+            SearchLine pr = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &p16_leafless_cache, budget);
+            p16::Rec('W', pass_depth, (budget ? budget->Used() : 0) - ou0, 0, 0, pr.win_turn,
+                     g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+            if (!pr.truncated && pr.win_turn <= max_turns)
+            { line = pr; committed_depth = pass_depth; prev_line = line; prev_committed = pass_depth; break; }
+            continue;
+        }
         // Start gate: skip (and commit the prior pass) when the next pass clearly
         // won't fit. Keyed on the running work-unit count, never the clock, so a
         // deeper search makes the same skip decision and can never come out worse.
-        if (budget != nullptr && have_prev)
+        // (MTG_P16_ORACLE, measurement only: the recorded K replaces the gate.)
+        if (budget != nullptr && have_prev && p16K == 0)
         {
             double ratio    = (have_prev2 && c_prev2 > 0)
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
@@ -110969,6 +111028,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // order line). A win turn BEYOND the horizon is a greedy-tail estimate, so we
         // keep deepening to verify or beat it (until the start gate / `depth` stops).
         if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
+        if (p16K > 0 && pass_depth >= p16K) { break; }   // MTG_P16_ORACLE: the recorded committing pass
     }
     if (vl_constant && !emul_done && !lazy_done && depth >= 1 && (budget == nullptr || budget->Unlimited())
         && committed_depth == depth && !line.truncated && line.win_turn > state.turn_number + depth - 1)
@@ -111438,19 +111498,31 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const GameState& st; SearchBudget* b; int* ocd; long long u0; int lc0; bool sm;
         P16Decision(const GameState& s_, SearchBudget* b_, int* o_, bool sm_)
             : st(s_), b(b_), ocd(o_), u0(b_ ? b_->Used() : 0), lc0(0), sm(sm_)
-        { ++p16::t_hyb_nest; if (p16::t_hyb_nest == 1) { p16::t_passes.clear(); } }
+        {
+            ++p16::t_hyb_nest;
+            if (p16::t_hyb_nest == 1) { p16::t_passes.clear(); p16::OracleBegin(s_.game_seed, s_.turn_number, sm_); }
+        }
         ~P16Decision()
         {
             if (p16::On() && p16::t_hyb_nest == 1)
             {
-                std::fprintf(stderr, "[p16] k=%s s=%llu T%d sm=%d used=%lld limit=%lld cd=%d n=%zu |",
+                // ONE write per line: a batch's workers share stderr.
+                std::string ln(512, '\0');
+                int w = std::snprintf(ln.data(), ln.size(), "[p16] k=%s s=%llu T%d sm=%d used=%lld limit=%lld cd=%d n=%zu |",
                              valuearm::t_deck_key.c_str(), static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0,
                              (b ? b->Used() : 0) - u0, b ? b->Limit() : 0LL, ocd ? *ocd : -1, p16::t_passes.size());
+                ln.resize(w > 0 ? static_cast<std::size_t>(std::min<int>(w, 511)) : 0);
                 for (const p16::Pass& q : p16::t_passes)
-                { std::fprintf(stderr, " %c%d:%lld/%lld/%d/%d/%d", q.kind, q.depth, q.units, q.leaf, q.status, q.dvs, q.win); }
-                std::fprintf(stderr, "\n");
+                {
+                    char buf[96];
+                    std::snprintf(buf, sizeof buf, " %c%d:%lld/%lld/%d/%d/%d", q.kind, q.depth, q.units, q.leaf, q.status, q.dvs, q.win);
+                    ln += buf;
+                }
+                ln += '\n';
+                std::fwrite(ln.data(), 1, ln.size(), stderr);
                 p16::t_passes.clear();
             }
+            if (p16::t_hyb_nest == 1) { p16::t_oracle_K = 0; }
             --p16::t_hyb_nest;
         }
     } _p16dec(state, budget, out_committed_depth, second_main);

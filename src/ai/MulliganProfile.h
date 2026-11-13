@@ -86,6 +86,10 @@ struct ValuePlay
     // pass at its rollout-twin estimate, so the pass lands at the depth the ladder would commit;
     // "ladder_rem" (P14) = the same climb gated on the decision's true Remaining (valuearm::FitGateCode).
     std::string fit_gate;
+    // SKIP-LEAVES LADDER (P16, 2026-11-13; default 0 = off): the rollout ladder's passes below depth s run LEAFLESS
+    // (a proven win there commits, as the ladder's verified-win stop would), and the rollout ladder starts at s with
+    // the heuristic ladder's own start gate, overrun ceiling and anytime rule. Only for decks with no value model.
+    int rollout_from = 0;
     // Defer FIT's per-game R calibration to first use. -1 unset => the engine default (ON). Melira ships
     // false: it is the one deck where deferring measures worse.
     int    fit_lazy_r = -1;
