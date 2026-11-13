@@ -1,6 +1,9 @@
-# Regression ground truth -- commit 4e2146dd7  date 2026-11-13
+# Regression ground truth -- commit bad810b98  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
+# accepted-with-regressions (smoke, 2026-11-13): Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained); Spirits admitted (integrator G)
+# accepted-with-regressions (regression, 2026-11-13): Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained, 0 searched slower); Spirits admitted (integrator G)
+# accepted-with-regressions (overnight, 2026-11-13): Spirits admitted (integrator G); regenerated under the rebased binary, byte-identical to the pre-rebase accept
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -17,10 +20,10 @@ extraturns_smoke_d0_s1001=5.7010/9e9ef02893ea694c
 extraturns_smoke_d3_s1001=4.7200/76322f02352e42d8
 extraturns_smoke_d5_s1001=4.7300/4d9437f84cea6f3d
 extraturns2hg_smoke_d5_s1001=4.6000/cc399f1a95984da0
-gods_smoke_d0_s1001=8.7860/e5c758deb4dcf261
-gods_smoke_d3_s1001=5.4000/d76344c4961ba53e
-gods_smoke_d5_s1001=5.2200/b66c23c5ed87a275
-gods2hg_smoke_d5_s1001=5.4000/7995557e1f24928f
+gods_smoke_d0_s1001=8.7830/558cea0d96d28a94
+gods_smoke_d3_s1001=5.4000/ef690b70f2191dc1
+gods_smoke_d5_s1001=5.2000/c3c6b8710a0db927
+gods2hg_smoke_d5_s1001=5.3200/e6f8b68c6dfac4bf
 merfolk_smoke_d0_s1001=4.4960/8ecc0b71dee90a10
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -200,10 +203,14 @@ alchemist2hg_smoke_d5_s1001=5.1400/c93023e46ecbe419
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.0680/eaa6b7c58e70044b
+martyr_smoke_d0_s1001=6.0680/f9485c066a4d213a
 martyr_smoke_d3_s1001=5.1800/f52e2a549a880fcd
-martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
+martyr_smoke_d5_s1001=5.2500/d4ca095ade01985a
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
+spirits_smoke_d0_s1001=5.1240/840753f63d453d5e
+spirits_smoke_d3_s1001=4.5600/5ae199dc10023a65
+spirits_smoke_d5_s1001=4.6500/360cf28224b67fae
+spirits2hg_smoke_d3_s1001=5.1600/0c10206376e6a174
 
 # --- regression ---
 morph_regression_d0_s2002=4.7730/c5743aa44fd31389
@@ -303,6 +310,8 @@ snow_regression_d3_s30001=5.0000/1067095304ef3df7
 snow_regression_d5_s30001=5.0000/1067095304ef3df7
 soldiers_regression_d3_s30001=4.4500/fc15453f5a3e98cd
 soldiers_regression_d5_s30001=4.4500/fc15453f5a3e98cd
+spirits_regression_d3_s30181=4.5500/9d52173a4f0f0136
+spirits_regression_d5_s30181=4.5500/9d52173a4f0f0136
 stompy_regression_d3_s30001=4.0500/73b54c6b3f70803d
 stompy_regression_d5_s30001=4.0500/73b54c6b3f70803d
 th_regression_d3_s30001=3.9500/8da665438a106302
@@ -347,10 +356,10 @@ hinata_regression_d0_s2002=6.8040/5dcc7fe0b1de88e0
 hinata_regression_d3_s2002=5.6000/f60ea18cbf1a584e
 hinata_regression_d5_s2002=5.4067/05408822f54f5019
 hinata_regression_d5_s3003=5.7067/6c661e03aa9656fd
-gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
-gods_regression_d3_s2002=5.4200/f78b14b908a115f4
-gods_regression_d5_s2002=5.1800/f7d03bd076c8d626
-gods2hg_regression_d5_s2002=5.2200/08832771848c62a7
+gods_regression_d0_s2002=8.7510/e33c8d399b371c42
+gods_regression_d3_s2002=5.4200/6cf6bc0fc84f8f3f
+gods_regression_d5_s2002=5.1800/5934d79288118522
+gods2hg_regression_d5_s2002=5.2200/c87481457e93bdf1
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8400/b4b0d953ee5adf3a
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
@@ -517,11 +526,15 @@ merfolk_regression_d0_s2002=4.4450/dc0269a9f23bc850
 merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
-martyr_regression_d0_s2002=6.0840/70ffec9c403563a6
-martyr_regression_d3_s2002=5.5400/abe5743ab0d76be1
-martyr_regression_d5_s2002=5.5400/42d8320f9455d7bd
+martyr_regression_d0_s2002=6.0840/43b0bad1d8ed0c12
+martyr_regression_d3_s2002=5.5400/d2350721c3b73599
+martyr_regression_d5_s2002=5.5400/2a519c6298b73198
 martyr_regression_d5_s3003=5.4000/69759b43382fbc5f
 martyr2hg_regression_d5_s2002=5.7333/23b754057d0306da
+spirits_regression_d0_s2002=5.0770/29eea603abe82d0f
+spirits_regression_d3_s2002=4.6533/f4f1e5e6f8ec3c7e
+spirits_regression_d5_s2002=4.6733/7864119ab0190a5f
+spirits_regression_d5_s3003=4.6933/8534ce97ffadbc28
 
 # --- overnight ---
 morph_overnight_d0_s4004=5.0390/8d41146c70bd5745
@@ -638,6 +651,8 @@ snow_overnight_d3_s30211=5.6667/cb85bb96b6e7311a
 snow_overnight_d5_s30211=5.6667/cb85bb96b6e7311a
 soldiers_overnight_d3_s30101=4.2000/316a569e5f534e98
 soldiers_overnight_d5_s30101=4.2000/316a569e5f534e98
+spirits_overnight_d3_s30081=4.5000/1c450ea46c8bd849
+spirits_overnight_d5_s30081=4.5000/1c450ea46c8bd849
 stompy_overnight_d3_s30101=4.1500/28cff511f4054bca
 stompy_overnight_d5_s30101=4.1500/28cff511f4054bca
 jumbo_overnight_d3_s30101=4.0000/a746a323d171bb4b
@@ -1155,3 +1170,15 @@ martyr2hg_overnight_d5_s4004=5.5733/91450fd6a4df770d
 martyr2hg_overnight_d5_s5005=5.6133/c50b3e1116c4453c
 martyr2hg_overnight_d5_s6006=5.4933/6b927796026f156a
 martyr2hg_overnight_d5_s7007=5.4267/f6ec384f585526fa
+spirits_overnight_d0_s4004=5.1225/a794e702cc654b7b
+spirits_overnight_d0_s6006=5.1330/1cf4c5573461881f
+spirits_overnight_d0_s8008=5.1275/317e96617ab7ed49
+spirits_overnight_d0_s10010=5.1135/857cbac5c5484bbc
+spirits_overnight_d3_s4004=4.6500/75da1ec41d638197
+spirits_overnight_d3_s5005=4.6475/5803b6282053faf0
+spirits_overnight_d3_s6006=4.6225/da0343a239f81da8
+spirits_overnight_d3_s7007=4.6850/b22990afcee3dfa4
+spirits_overnight_d5_s4004=4.6400/782bd423f207629d
+spirits_overnight_d5_s5005=4.6565/297be319bced83fa
+spirits_overnight_d5_s6006=4.6306/19c1e7370d881e1f
+spirits_overnight_d5_s7007=4.6659/6658534517defc36
