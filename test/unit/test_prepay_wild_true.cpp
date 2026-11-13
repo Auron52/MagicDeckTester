@@ -402,3 +402,32 @@ TEST_CASE("prepay wild-literal: the record packs runs of one mask (no overflow r
     CHECK(out.n == 12);
     CHECK(out.Count(GW) == 12);
 }
+
+// A PLANNER'S REPLAY OF THE DRAIN READS THE FUNDING (item A round 5). The shared payer's line-float rung
+// (MTG_LINE_FLOAT_TAP_FIRST) replays the drain to see which owed colours this payment's generic would eat. Without
+// the record it drained the generic in W..G order -- the {U} a later cast owes -- and held the pip off the float, so
+// a Forest was tapped for it. AccomplishedAlchemist regression d0 s2002 gi83 (seed 2085) T6: Living Wish and Weather
+// the Storm each tapped an extra Forest, and the kill slipped a turn. The generic is the bill's own: it pays from the
+// green funding and the Forest stays up.
+TEST_CASE("prepay wild-literal: the line-float rung's replay spends the funding, not an owed colour")
+{
+    GameState s = BaseWt(6);
+    PutWt(s, "Forest", 50);
+    // The bill's pre-load: {G} pinned for this cast, {U} for a later one, two {G} funding the bill's generic.
+    s.floating_mana.green = 3;
+    s.floating_mana.blue  = 1;
+    s.prepay_wild_true.gfund[4] = 2;
+    s.prepay_wild_true.stamp    = PrepayCStampNow(s);
+    struct LineScope
+    {
+        ManaCost prev;
+        LineScope() : prev(g_line_unpaid_cost)
+        { ManaCost lu; lu.green = 1; lu.blue = 1; lu.generic = 2; g_line_unpaid_cost = lu; }
+        ~LineScope() { g_line_unpaid_cost = prev; }
+    } _line;
+    ManaCost c; c.green = 1; c.generic = 1;   // Living Wish {1}{G}
+    REQUIRE(TapForCostDirect(s, c, /*for_creature=*/false));
+    CHECK_FALSE(s.battlefield.front().tapped);
+    CHECK(s.floating_mana.green == 1);
+    CHECK(s.floating_mana.blue == 1);
+}

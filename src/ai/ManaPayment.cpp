@@ -10115,6 +10115,37 @@ std::uint64_t ActLineHoldSurplusBits(const GameState& state, std::uint64_t act_m
 // reserve, k = min(the generic the reserve would pay out of colours the line owes, the spare yield); any
 // failure falls through to the unchanged sequence below. A later {C} pip in the line (lu.colorless)
 // disables it.
+// THE PAYER'S DRAIN, REPLAYED ON A COPY OF THE GENERAL FLOAT (MTG_PREPAY_WILD_LITERAL; mana-clean item A round 5).
+// A planner that asks "what would the reserve pay this cost with?" must drain the way the payer will: the payer
+// spends state.floating_mana under the prepay's record (TapForCostSharedOnce's WildTrueScope), and under the
+// literal booking that record carries the bill's GENERIC FUNDING as colour units (WildTrueRec::fund) which a
+// generic pip spends first -- exactly where the tag version's `wild` drained. A replay WITHOUT the record drains
+// generic in WUBRG order instead, so it reads the funding as a pinned colour the line still owes. AccomplishedAlchemist
+// regression d0 s2002 gi83 (seed 2085) T6: the bill {Living Wish, Weather the Storm, Crab Umbra, Staff of
+// Domination} floated G7 U1 with 5 green funding; LineFloatTapFirstPlan's replay paid Living Wish's {1} with the
+// {U} Crab Umbra owes, held that pip off the float, and the payer tapped a Forest for it (twice); the float's
+// leftover green then could not stand in for the Forests, the Staff's {3} tapped the Alchemist and the T6 kill
+// became T7. With the record the replay pays the {1} from the funding, as the payer does (and as the tag version
+// read it). Off the literal booking the record is not consulted (byte-identical: the =0 arm's replay is unchanged).
+// MTG_PREPAY_WILD_REPLAY (heurarm PREPAY_WILD_REPLAY), default ON; =0 -> the replay drains without the record.
+struct GeneralFloatReplay
+{
+    WildTrueRec rec;
+    bool live = false;
+    explicit GeneralFloatReplay(const GameState& state)
+    {
+        static const bool env = EnvOn("MTG_PREPAY_WILD_REPLAY", true);
+        live = PrepayWildLiteralOn() && heurarm::Flag(heurarm::PREPAY_WILD_REPLAY, env) && PrepayWildTrueLoad(state, 0, rec);
+    }
+    // Drain `cost` from `pool` (a copy of the general float, or what an earlier replay left of it) as the payer
+    // would; `w` is the record state that goes with `pool` (start from `rec`).
+    void Drain(ManaPool& pool, ManaCost& cost, WildTrueRec& w) const
+    {
+        WildTrueScope _wt(live ? &w : nullptr, PrepayWildTrueOn());
+        SpendFloatingTowardCost(pool, cost);
+    }
+};
+
 static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_in, bool for_creature,
                                   int& hold_k, std::uint64_t& hold_mask)
 {
@@ -10134,10 +10165,13 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
     // g_line_opens_unseen and the creature-only-colour test below).
     const bool unseen = g_line_opens_unseen && LineFloatUnseenGuardOn();
     // What the reserve would pay toward the GENERIC, by colour: the drain with and without the generic.
+    // Replayed under the prepay's record (GeneralFloatReplay): the payer's own drain, generic funding first.
+    const GeneralFloatReplay replay(state);
+    WildTrueRec w_pips = replay.rec, w_all = replay.rec;
     ManaPool r_pips = f; ManaCost c_pips = cost_in; c_pips.generic = 0;
-    SpendFloatingTowardCost(r_pips, c_pips);
+    replay.Drain(r_pips, c_pips, w_pips);
     ManaPool r_all = f;  ManaCost c_all = cost_in;
-    SpendFloatingTowardCost(r_all, c_all);
+    replay.Drain(r_all, c_all, w_all);
     const int rp[5] = { r_pips.white, r_pips.blue, r_pips.black, r_pips.red, r_pips.green };
     const int ra[5] = { r_all.white, r_all.blue, r_all.black, r_all.red, r_all.green };
     int owed_spend = 0;
@@ -10277,10 +10311,11 @@ static bool LineFloatTapFirstPlan(const GameState& state, const ManaCost& cost_i
         auto keeps_owed = [&](int k) -> bool
         {
             ManaPool r = r_pips;
+            WildTrueRec w = w_pips;
             ManaCost c = cost_in;
             c.white = c.blue = c.black = c.red = c.green = c.colorless = 0;
             c.generic = cost_in.generic - k;
-            SpendFloatingTowardCost(r, c);
+            replay.Drain(r, c, w);
             const int rem[5] = { r.white, r.blue, r.black, r.red, r.green };
             for (int ci = 0; ci < 5; ++ci) { if (rem[ci] < std::min(rp[ci], later[ci])) { return false; } }
             return true;
@@ -10390,11 +10425,14 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             if (later[0] + later[1] + later[2] + later[3] + later[4] > 0)
             {
                 int score[kMaxHybridAssignments];
+                const GeneralFloatReplay replay(state);   // the payer's drain (generic funding first)
+                WildTrueHybridScope _wth_score(&cost_in);  // ...reading the pairs, as the payer below does
                 for (unsigned b = 0; b < n_assign; ++b)
                 {
                     ManaPool f = state.floating_mana;
+                    WildTrueRec w = replay.rec;
                     ManaCost c = cost_in.ExpandHybrids(b);
-                    SpendFloatingTowardCost(f, c);
+                    replay.Drain(f, c, w);
                     const int fl[5] = { f.white, f.blue, f.black, f.red, f.green };
                     int short_ = 0;
                     for (int k = 0; k < 5; ++k) { short_ += std::max(0, later[k] - fl[k]); }
