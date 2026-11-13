@@ -3217,7 +3217,18 @@ public:
     // on the emptying: "take the best possible option of the two" -- when the combat cast is payable it is
     // the better one (same spells, more damage); when it is not, the doublers stay in main. No-op (one
     // flag test, then one action scan) for every other plan.
-    static void NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts);
+    // EXACT (MTG_DOUBLER_COMBAT_PAY, default ON, Morph INT-16): the decision is taken on copies, and the doublers
+    // are then really paid as the combat step pays them (SpellEffects.h DoublerCastPay) -- see the definition.
+    // `no_new_deferral`: arm nothing new (a human line paid by HumanLineJointPrepay); `in_plan_order`: the
+    // plan's steps run in vector order (a human "**" sequence) rather than lead flips, casts, trailing acts.
+    // `explicit_order`: the casts run in vector order (Plan::searched_order); else the appliers' canonical route
+    // orders them by CastOrderRank, and the trailing doublers are read off THAT order.
+    static void NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts,
+                                        bool no_new_deferral = false, bool in_plan_order = false,
+                                        bool explicit_order = true);
+    // The casts the whole-turn prepay should pay: `acts` minus the doublers armed for a combat-step payment.
+    static const std::vector<Action>& DoublerPrepayActs(const GameState& state, const std::vector<Action>& acts,
+                                                        std::vector<Action>& scratch);
     // A face-targeted Lavamancer activation can be the sole source of a
     // same-plan spectacle discount. Return its action index so both apply
     // worlds can run it before the spectacle cast, rather than in the trailing

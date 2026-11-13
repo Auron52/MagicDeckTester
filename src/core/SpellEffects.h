@@ -28050,46 +28050,207 @@ inline bool TrickHandRecipientCanAttackThisTurn(const GameState& state, const Ca
 // exalted site: the executor's combat, the rollout's SimulateCombat, the attack projection, the
 // firebreathing probe).
 
+// ---- EXACT COMBAT PAYMENT (MTG_DOUBLER_COMBAT_PAY; GameState::dbl_cp note) ---------------------------------
+// The live ledger for this turn, or null.
+inline GameState::DblCombatPay* DblCpLive(GameState& s)
+{
+    if (s.dbl_cp.empty() || s.dbl_cp[0].turn != s.TurnSeq()) { return nullptr; }
+    return &s.dbl_cp[0];
+}
+inline const GameState::DblCombatPay* DblCpLive(const GameState& s)
+{
+    if (s.dbl_cp.empty() || s.dbl_cp[0].turn != s.TurnSeq()) { return nullptr; }
+    return &s.dbl_cp[0];
+}
+// This turn's ledger, created (or reset from an earlier turn) on demand.
+inline GameState::DblCombatPay& DblCpEnsure(GameState& s)
+{
+    if (s.dbl_cp.empty()) { s.dbl_cp.emplace_back(); }
+    GameState::DblCombatPay& cp = s.dbl_cp[0];
+    if (cp.turn != s.TurnSeq()) { cp = GameState::DblCombatPay{}; cp.turn = static_cast<std::int16_t>(s.TurnSeq()); }
+    return cp;
+}
+
+// Main phase's floating mana, set aside while a combat-step payment runs (CR 500.4: it empties before the
+// declare-attackers step, so a combat cast can never spend it) and restored after. The combat step's own
+// pool stands in for it; whatever the payment leaves floating is that pool's afterwards.
+struct DblCombatFloatSwap
+{
+    GameState& s;
+    ManaPool f, fc, fb;
+    const CardParams* fbpp;
+    int haste_c;
+    std::uint8_t prepay_c;
+    explicit DblCombatFloatSwap(GameState& st, const ManaPool& combat_pool)
+        : s(st), f(st.floating_mana), fc(st.floating_creature_mana), fb(st.floating_bigspell_mana),
+          fbpp(st.floating_bigspell_pp), haste_c(st.floating_haste_c), prepay_c(st.floating_prepay_c)
+    {
+        s.floating_mana = combat_pool; s.floating_creature_mana = ManaPool{}; s.floating_bigspell_mana = ManaPool{};
+        s.floating_bigspell_pp = nullptr; s.floating_haste_c = 0; s.floating_prepay_c = 0;
+    }
+    // The combat pool after the payment (the leftover); main's float back in place.
+    ManaPool Restore()
+    {
+        const ManaPool left = s.floating_mana;
+        s.floating_mana = f; s.floating_creature_mana = fc; s.floating_bigspell_mana = fb;
+        s.floating_bigspell_pp = fbpp;
+        s.floating_haste_c = haste_c; s.floating_prepay_c = prepay_c;
+        return left;
+    }
+};
+
+// Pay `rec`'s bill as a combat-step payment through `pay` (the caller's own payer, run on the swapped float).
+// Records what it tapped and whether untapping that restores the board (only plain taps: no permanent left,
+// no life paid). False = not payable that way; a failed payment leaves the board as it found it.
+template <class PayFn>
+inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameState::DblCombatRec& rec, PayFn&& pay)
+{
+    const int me = s.active_player_index;
+    std::vector<std::pair<std::int32_t, bool>> before;
+    before.reserve(s.battlefield.size());
+    for (const Permanent& p : s.battlefield) { before.emplace_back(p.card.m_number, p.tapped); }
+    const int life0 = s.players[static_cast<std::size_t>(me)].life;
+    const std::size_t bf0 = s.battlefield.size();
+    DblCombatFloatSwap swap(s, cp.pool);
+    const bool ok = pay();
+    const ManaPool left = swap.Restore();
+    if (!ok) { return false; }
+    rec.pool_before = cp.pool;
+    cp.pool = left;
+    rec.nsrc = 0;
+    bool plain = s.battlefield.size() == bf0 && s.players[static_cast<std::size_t>(me)].life == life0;
+    if (plain)
+    {
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+        {
+            const Permanent& p = s.battlefield[i];
+            if (p.card.m_number != before[i].first) { plain = false; break; }
+            if (p.tapped && !before[i].second)
+            {
+                if (rec.nsrc >= 4 || p.card.m_number <= 0) { plain = false; break; }
+                rec.srcs[rec.nsrc++] = p.card.m_number;
+            }
+        }
+    }
+    rec.revisable = plain ? 1 : 0;
+    return true;
+}
+
+// THE CAST-PAYMENT HOOK, both worlds (TurnSolver apply_one, AIEngine::CastSpellFromHand): every payment of a
+// power doubler's cast goes through here under MTG_DOUBLER_COMBAT_PAY. An ARMED doubler (NoteDoublerDeferPayable)
+// that trails the plan as realised pays combat-style; a PREPAID one pays nothing more; anything else pays in
+// main through `pay`. Either way it stamps which kind of payment the resolving doubler had, which is the only
+// thing NoteDoublerResolved credits. Returns false when it did not handle the payment (not a doubler, flag
+// off): the caller pays as ever.
+template <class PayFn>
+inline bool DoublerCastPay(GameState& s, const CardDefinition& def, int card_num, PayFn&& pay, bool& paid_ok)
+{
+    if (!def.params.trick_double_power || !DoublerAfterExaltedOn() || !DoublerCombatPayOn()) { return false; }
+    GameState::DblCombatPay* cp = DblCpLive(s);
+    if (cp == nullptr) { return false; }   // nothing armed this turn: NoteDoublerResolved sees no ledger
+    cp->last_spells = static_cast<std::int16_t>(s.spells_cast_this_turn + 1);   // its count at resolution
+    cp->last_combat = 0;
+    cp->last_num    = card_num;
+    GameState::DblCombatRec* rec = nullptr;
+    for (GameState::DblCombatRec& r : cp->recs)
+    { if ((r.st == 0 || r.st == 1) && r.name == def.card.m_name.str()) { rec = &r; break; } }
+    if (rec != nullptr && s.phase == Phase::PreCombatMain)
+    {
+        if (rec->st == 1) { rec->st = 2; rec->num = card_num; cp->last_combat = 1; paid_ok = true; return true; }
+        if (s.spells_cast_this_turn >= cp->trail_from && DblCombatPayInto(s, *cp, *rec, pay))
+        {
+            rec->st = 2; rec->num = card_num; cp->last_combat = 1; paid_ok = true;
+            // Keep the record at the END of the ledger: a revert is LIFO over payment order.
+            if (rec != &cp->recs.back())
+            {
+                GameState::DblCombatRec moved = *rec;
+                cp->recs.erase(cp->recs.begin() + (rec - cp->recs.data()));
+                cp->recs.push_back(std::move(moved));
+            }
+            return true;
+        }
+    }
+    paid_ok = pay();
+    return true;
+}
+
 // Called by ApplyTrickPayload for one trick_double_power instance on the creature at `ti`, AFTER the
 // doubling; `pw_before` = its combat power before this instance (before its watcher trigger).
 inline void NoteDoublerResolved(GameState& s, int controller, int ti, int pw_before)
 {
     if (!DoublerAfterExaltedOn()) { return; }
     const int seq = s.TurnSeq();
+    const bool exact = DoublerCombatPayOn();
+    // EXACT: credited only when THIS doubler's payment was a combat-step one (DoublerCastPay stamped it for the
+    // spell count it resolves at). A run doubler paid in main stays in the run -- doublings commute, so it is
+    // just cast at the end of main -- and adds nothing to the credit's exponent.
+    GameState::DblCombatPay* cp = exact ? DblCpLive(s) : nullptr;
+    const bool combat_paid = cp != nullptr && cp->last_combat != 0 && cp->last_spells == s.spells_cast_this_turn;
     // A doubler that cannot be moved to combat stays in main -- and then no EARLIER doubler trails the
     // plan any more, so the whole run is void (dbl_defer_turn = -1), not just this instance.
+    // (EXACT: only the phase / controller / exalted conditions void it; the payment decides the credit.)
     if (s.phase != Phase::PreCombatMain || controller != s.active_player_index
         || s.battlefield[static_cast<std::size_t>(ti)].controller_index != controller
-        || s.dbl_pay_turn != seq || s.dbl_pay_ok == 0 || s.spells_cast_this_turn > s.dbl_pay_max_spells
+        || (!exact && (s.dbl_pay_turn != seq || s.dbl_pay_ok == 0 || s.spells_cast_this_turn > s.dbl_pay_max_spells))
         || CountExalted(s.battlefield, controller) <= 0)
     { s.dbl_defer_turn = -1; return; }
+    auto kill_slot_recs = [&](int sl)   // a voided run's combat payments are spent mana, nothing more
+    {
+        if (cp == nullptr) { return; }
+        for (GameState::DblCombatRec& r : cp->recs) { if (r.st == 3 && (sl < 0 || r.slot == sl)) { r.st = 4; } }
+    };
     // Continuing the run: nothing but this doubler (or another copy of the same spell) has been cast
     // since its last doubler.
     const bool cont = s.dbl_defer_turn == seq
                    && (s.dbl_defer_spells == s.spells_cast_this_turn
                        || s.dbl_defer_spells == s.spells_cast_this_turn - 1);
-    if (!cont) { s.dbl_defer_num[0] = s.dbl_defer_num[1] = 0; s.dbl_defer_n[0] = s.dbl_defer_n[1] = 0; }
+    if (!cont)
+    {
+        s.dbl_defer_num[0] = s.dbl_defer_num[1] = 0; s.dbl_defer_n[0] = s.dbl_defer_n[1] = 0;
+        s.dbl_defer_ndef[0] = s.dbl_defer_ndef[1] = 0;
+        kill_slot_recs(-1);
+    }
     const Permanent& t = s.battlefield[static_cast<std::size_t>(ti)];
     const int num = t.card.m_number;
     int slot = -1;
     for (int i = 0; i < 2; ++i) { if (s.dbl_defer_n[i] > 0 && s.dbl_defer_num[i] == num) { slot = i; } }
     // Its power moved between its last run doubler and this one (an activation -- a flip, an equip):
     // those earlier doublers cannot move past that change, so this target's run restarts here.
-    if (slot >= 0 && s.dbl_defer_pw[slot] != pw_before) { s.dbl_defer_n[slot] = 0; s.dbl_defer_num[slot] = 0; slot = -1; }
+    if (slot >= 0 && s.dbl_defer_pw[slot] != pw_before)
+    {
+        kill_slot_recs(slot);
+        s.dbl_defer_n[slot] = 0; s.dbl_defer_ndef[slot] = 0; s.dbl_defer_num[slot] = 0; slot = -1;
+    }
     if (slot < 0)
     {
         for (int i = 0; i < 2; ++i) { if (s.dbl_defer_n[i] == 0) { slot = i; break; } }
-        if (slot < 0) { s.dbl_defer_turn = -1; return; }   // a third distinct target: not modelled, run void
+        if (slot < 0) { kill_slot_recs(-1); s.dbl_defer_turn = -1; return; }   // a third distinct target: not modelled, run void
         s.dbl_defer_num[slot] = num;
         s.dbl_defer_n[slot]   = 0;
+        s.dbl_defer_ndef[slot] = 0;
     }
     if (s.dbl_defer_n[slot] < 30) { ++s.dbl_defer_n[slot]; }
+    if (combat_paid)
+    {
+        for (GameState::DblCombatRec& r : cp->recs)
+        {
+            if (r.st == 2 && r.num == cp->last_num)
+            {
+                r.st = 3; r.slot = static_cast<std::int8_t>(slot);
+                if (s.dbl_defer_ndef[slot] < 30) { ++s.dbl_defer_ndef[slot]; }
+                break;
+            }
+        }
+        cp->last_combat = 0;   // one cast, one credit (a copy of the spell resolving again is not paid twice)
+    }
     s.dbl_defer_pw[slot] = static_cast<std::int16_t>(std::min(CombatPowerOf(t, s), 32767));
     s.dbl_defer_turn     = static_cast<std::int16_t>(seq);
     s.dbl_defer_spells   = static_cast<std::int16_t>(s.spells_cast_this_turn);
 }
 
 // The run's slot for `p` when it is live NOW (same turn, no spell since, power unchanged), else -1.
+// EXACT mode also needs every deferred doubler of the slot still in the graveyard: one a main-phase effect
+// took back (Den Protector's regrowth) was never cast in combat.
 inline int DoublerDeferLiveSlot(const GameState& s, const Permanent& p)
 {
     if (s.dbl_defer_turn != s.TurnSeq() || s.dbl_defer_spells != s.spells_cast_this_turn) { return -1; }
@@ -28097,7 +28258,22 @@ inline int DoublerDeferLiveSlot(const GameState& s, const Permanent& p)
     {
         if (s.dbl_defer_n[i] > 0 && s.dbl_defer_num[i] == p.card.m_number
             && CombatPowerOf(p, s) == s.dbl_defer_pw[i])
-        { return i; }
+        {
+            if (s.dbl_defer_ndef[i] > 0)
+            {
+                if (const GameState::DblCombatPay* cp = DblCpLive(s))
+                {
+                    const auto& gy = s.players[static_cast<std::size_t>(s.active_player_index)].graveyard;
+                    for (const GameState::DblCombatRec& r : cp->recs)
+                    {
+                        if (r.st != 3 || r.slot != i) { continue; }
+                        if (std::none_of(gy.begin(), gy.end(), [&](const Card& c) { return c.m_number == r.num; }))
+                        { return -1; }
+                    }
+                }
+            }
+            return i;
+        }
     }
     return -1;
 }
@@ -28105,13 +28281,14 @@ inline int DoublerDeferLiveSlot(const GameState& s, const Permanent& p)
 // The EXTRA power a LONE attacker `lone` gets because its run doublers resolve after exalted's +E:
 // 2^n (P + E) instead of 2^n P + E, i.e. E * (2^n - 1). Add it to the exalted bonus at the site that
 // computed `exalted` = CountExalted (exactly one attacker). 0 when nothing is deferred.
+// (EXACT: n = the run doublers that were PAID in combat, dbl_defer_ndef.)
 inline int DoublerDeferExaltedExtra(const GameState& s, const Permanent& lone, int exalted)
 {
     if (exalted <= 0 || s.dbl_defer_turn != s.TurnSeq()) { return 0; }
     if (!DoublerAfterExaltedOn()) { return 0; }
     const int slot = DoublerDeferLiveSlot(s, lone);
     if (slot < 0) { return 0; }
-    const int n = std::min<int>(s.dbl_defer_n[slot], 20);
+    const int n = std::min<int>(DoublerCombatPayOn() ? s.dbl_defer_ndef[slot] : s.dbl_defer_n[slot], 20);
     return exalted * ((1 << n) - 1);
 }
 

@@ -1540,17 +1540,65 @@ struct GameState
     std::int16_t             dbl_defer_pw[2]  = { 0, 0 };   // its combat power after its last run doubler
     std::int8_t              dbl_defer_n[2]   = { 0, 0 };   // run doublers resolved on it
     std::int8_t              dbl_pay_ok       = 0;    // the probe's verdict for this turn's plan
+    // EXACT COMBAT PAYMENT (MTG_DOUBLER_COMBAT_PAY, default ON; Morph INT-16; USER 2026-11-13: "If we are
+    // approximating and this might fail on us we might want to address it."). Under it a run doubler is
+    // credited ONLY when its mana really came from a combat-step payment: sources still untapped after the
+    // rest of main, main's floating mana set aside, the leftover kept in the combat step's own pool. So
+    // the turn's taps ARE the combat schedule's (nothing is optimistic after combat), and two decisions'
+    // doublers can never share one source. dbl_defer_ndef counts the slot's run doublers that were paid
+    // that way (the credit's exponent); a run doubler paid in main stays in the run (doublings commute,
+    // so it is simply cast at the end of main) and adds nothing. dbl_cp holds the turn's combat-payment
+    // ledger (empty on every board without exalted AND a doubler plan): SpellEffects.h DoublerCastPay
+    // and TurnSolver::NoteDoublerDeferPayable are its readers and writers.
+    std::int8_t              dbl_defer_ndef[2] = { 0, 0 };
+    struct DblCombatRec
+    {
+        std::string  name;              // the doubler's card name (armed by name: the applier picks the copy)
+        std::int32_t num      = 0;      // the card number it was paid for (0 until paid)
+        std::int32_t srcs[4]  = { 0, 0, 0, 0 };   // permanents its combat payment tapped (a revert untaps them)
+        std::int8_t  nsrc     = 0;
+        // 0 armed (pays combat-style at its cast), 1 prepaid at plan start, 2 paid, 3 resolved into the run
+        // (deferred: counted in dbl_defer_ndef[slot]), 4 dead (its run was voided -- the mana is spent).
+        std::int8_t  st       = 0;
+        std::int8_t  slot     = -1;
+        std::int8_t  revisable = 0;     // its payment only tapped permanents (so untapping restores it)
+        ManaPool     pool_before;       // the combat pool before its payment (LIFO revert)
+        ManaCost     cost;              // its bill (re-paid in main when reverted)
+    };
+    struct DblCombatPay
+    {
+        std::int16_t turn       = -1;   // TurnSeq() it belongs to
+        std::int16_t trail_from = 0;    // an armed doubler pays combat-style only when cast at
+                                        // spells_cast_this_turn >= this (it trails the plan as realised)
+        std::int16_t last_spells = -1;  // spells_cast_this_turn the latest doubler resolves at...
+        std::int8_t  last_combat = 0;   // ...and whether its payment was combat-style
+        std::int32_t last_num    = 0;
+        ManaPool     pool;              // the declare-attackers step's own mana (leftover of combat payments)
+        std::vector<DblCombatRec> recs; // in payment order (a revert is LIFO)
+    };
+    std::vector<DblCombatPay> dbl_cp;   // 0 or 1 element
     // Key fold for the live run (-1 = none): two states that differ only in which doublers trail the plan
     // deal different combat damage. Value-gated by every caller (-1 folds nothing).
     long long DoublerDeferKey() const
     {
-        if (dbl_defer_turn != TurnSeq() || dbl_defer_spells != spells_cast_this_turn) { return -1; }
         long long k = 0;
-        for (int i = 0; i < 2; ++i)
+        if (dbl_defer_turn == TurnSeq() && dbl_defer_spells == spells_cast_this_turn)
         {
-            if (dbl_defer_n[i] <= 0) { continue; }
-            k = k * 1000003LL + static_cast<long long>(dbl_defer_num[i]) * 64 + dbl_defer_n[i];
-            k = k * 131 + dbl_defer_pw[i];
+            for (int i = 0; i < 2; ++i)
+            {
+                if (dbl_defer_n[i] <= 0) { continue; }
+                k = k * 1000003LL + static_cast<long long>(dbl_defer_num[i]) * 64 + dbl_defer_n[i];
+                k = k * 131 + dbl_defer_pw[i];
+                if (dbl_defer_ndef[i] != 0) { k = k * 37 + dbl_defer_ndef[i]; }   // 0 under =0: old keys
+            }
+        }
+        // The combat-payment ledger decides how this turn's later doublers pay (and what combat can still
+        // buy), so two boards differing in it are different futures.
+        if (!dbl_cp.empty() && dbl_cp[0].turn == TurnSeq() && !dbl_cp[0].recs.empty())
+        {
+            const DblCombatPay& cp = dbl_cp[0];
+            k = k * 1000003LL + cp.trail_from * 7 + cp.pool.Total();
+            for (const DblCombatRec& r : cp.recs) { k = k * 1009LL + r.num * 8 + r.st + static_cast<long long>(r.name.size()) * 131; }
         }
         return k == 0 ? -1 : (k & 0x7fffffffffffLL);
     }

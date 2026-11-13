@@ -1230,8 +1230,15 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
             {
                 // The run's spells are the latest doubler cards in the graveyard (nothing was cast after them).
                 const int slot = DoublerDeferLiveSlot(state, lone);
-                int left = slot >= 0 ? state.dbl_defer_n[slot] : 0;
                 std::string names;
+                const GameState::DblCombatPay* cp = DoublerCombatPayOn() ? DblCpLive(state) : nullptr;
+                if (cp != nullptr)
+                {
+                    // MTG_DOUBLER_COMBAT_PAY: exactly the doublers whose mana came from the combat step.
+                    for (const GameState::DblCombatRec& r : cp->recs)
+                    { if (r.st == 3 && r.slot == slot) { names += (names.empty() ? "" : ", ") + r.name; } }
+                }
+                int left = (slot >= 0 && cp == nullptr) ? state.dbl_defer_n[slot] : 0;
                 const auto& gy = state.ActivePlayer().graveyard;
                 for (auto it = gy.rbegin(); it != gy.rend() && left > 0; ++it)
                 {

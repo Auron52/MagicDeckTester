@@ -13,6 +13,7 @@
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -131,6 +132,7 @@ struct ArmDx
 TEST_CASE("doubler after exalted: a trailing Berserk doubles exalted's +1 too")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 30);
     const int b = PutBearDx(s, 10);
@@ -145,6 +147,7 @@ TEST_CASE("doubler after exalted: a trailing Berserk doubles exalted's +1 too")
 TEST_CASE("doubler after exalted: two trailing doublers -> E x (2^2 - 1); two Hierarchs -> E = 2")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 30);
     PutDx(s, "Ignoble Hierarch", 31);
@@ -159,6 +162,7 @@ TEST_CASE("doubler after exalted: two trailing doublers -> E x (2^2 - 1); two Hi
 TEST_CASE("doubler after exalted: Wild Defiance still fires; the doubled total includes it and exalted")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     s.deck_has_spell_target_watch = true;
     PutDx(s, "Ignoble Hierarch", 30);
@@ -173,6 +177,7 @@ TEST_CASE("doubler after exalted: Wild Defiance still fires; the doubled total i
 TEST_CASE("doubler after exalted: a spell cast AFTER the doubler voids the run (it no longer trails)")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 30);
     const int b = PutBearDx(s, 10);
@@ -187,6 +192,7 @@ TEST_CASE("doubler after exalted: a spell cast AFTER the doubler voids the run (
 TEST_CASE("doubler after exalted: pump first, doubler last -> the pump AND exalted are doubled")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 30);
     const int b = PutBearDx(s, 10);
@@ -199,6 +205,7 @@ TEST_CASE("doubler after exalted: pump first, doubler last -> the pump AND exalt
 TEST_CASE("doubler after exalted: a power change after the run (an activation) voids it for that creature")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 30);
     const int b = PutBearDx(s, 10);
@@ -211,6 +218,7 @@ TEST_CASE("doubler after exalted: a power change after the run (an activation) v
 TEST_CASE("doubler after exalted: inert without exalted, without the probe's verdict, off the flag, next turn")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     {
         GameState s = BaseDx();                 // no Hierarch
         const int b = PutBearDx(s, 10);
@@ -260,6 +268,7 @@ TEST_CASE("doubler after exalted: inert without exalted, without the probe's ver
 TEST_CASE("doubler after exalted: the CR 500.4 probe -- payable in combat from untapped sources only")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     {
         // Forest + Forest: Might off one in main, Berserk off the other in combat.
         GameState s = BaseDx();
@@ -333,6 +342,7 @@ TEST_CASE("exalted ds projection: a double-striking lone attacker's projection c
 TEST_CASE("exalted ds projection: a deferred Berserk on a double striker -- projection == combat")
 {
     EnsureCardsDx();
+    ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);   // the approximate probe (MTG_DOUBLER_COMBAT_PAY=0)
     GameState s = BaseDx();
     PutDx(s, "Ignoble Hierarch", 1, /*sick=*/true);
     const int bear = PutBearDx(s, 3);
@@ -342,4 +352,206 @@ TEST_CASE("exalted ds projection: a deferred Berserk on a double striker -- proj
     const int real = LoneDamageDx(s, bear);
     CHECK(real == 2 * (2 * (2 + 1)));                              // Berserk after exalted, both strikes
     CHECK(TurnSolver::ProjectedAttackDamageForTest(s) == real);
+}
+
+// ---- EXACT COMBAT PAYMENT (MTG_DOUBLER_COMBAT_PAY, default ON; Morph INT-16) ----------------------------------
+// USER 2026-11-13: "If we are approximating and this might fail on us we might want to address it." A doubler is
+// credited only when its cast was PAID as the combat step pays (SpellEffects.h DoublerCastPay, the hook both
+// appliers' cast payment goes through), so the three approximations of the old probe cannot credit damage the
+// turn cannot deal.
+namespace
+{
+// A doubler's cast as the appliers make it: the shared payment hook (else the plain payer), the storm counter,
+// the shared resolver, then the card to the graveyard.
+bool PayCastDx(GameState& s, const std::string& spell, int target_number, int card_number)
+{
+    const CardDefinition& d = DefDx(spell);
+    bool paid = false;
+    if (!DoublerCastPay(s, d, card_number, [&] { return TapForCostDirect(s, d.card.m_mana_cost, false); }, paid))
+    { paid = TapForCostDirect(s, d.card.m_mana_cost, false); }
+    if (!paid) { return false; }
+    ++s.spells_cast_this_turn;
+    REQUIRE(ResolveSoloTargetTrick(s, 0, d, target_number, 0, 0, 0));
+    Card c = d.card;
+    c.m_number = card_number;
+    s.players[0].graveyard.push_back(c);
+    return true;
+}
+bool TappedDx(const GameState& s, int number)
+{
+    for (const Permanent& p : s.battlefield) { if (p.card.m_number == number) { return p.tapped; } }
+    FAIL("no permanent #", number);
+    return false;
+}
+Action FlipLateDx(int source_number, const ManaCost& cost)
+{
+    Action a;
+    a.kind          = Action::Kind::ActivatePermAbility;
+    a.ability_mode  = Action::AbilityMode::TurnFaceUpLate;
+    a.sac_source_id = source_number;
+    a.card_name     = "Blistering Firecat";
+    a.cost          = cost;
+    return a;
+}
+}  // namespace
+
+TEST_CASE("doubler combat pay: an armed doubler pays from untapped sources, main's float set aside")
+{
+    EnsureCardsDx();
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+    const int b = PutBearDx(s, 10);
+    PutDx(s, "Forest", 40);
+    s.floating_mana.green = 1;   // main's float: a combat cast can never spend it (CR 500.4)
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Berserk") });
+    REQUIRE(DblCpLive(s) != nullptr);
+    REQUIRE(PayCastDx(s, "Berserk", 10, 77));
+    CHECK(TappedDx(s, 40));                    // the Forest paid it...
+    CHECK(s.floating_mana.green == 1);         // ...not the float, which empties with main
+    CHECK(s.dbl_defer_ndef[0] == 1);
+    CHECK(ExtraDx(s, b) == 1);
+    CHECK(LoneDamageDx(s, b) == 6);
+    // Only the float: not payable in combat -> paid in main, and nothing is credited.
+    GameState t = BaseDx();
+    PutDx(t, "Ignoble Hierarch", 30, /*sick=*/true);
+    const int tb = PutBearDx(t, 10);
+    t.floating_mana.green = 1;
+    TurnSolver::NoteDoublerDeferPayable(t, { CastActDx("Berserk") });
+    REQUIRE(PayCastDx(t, "Berserk", 10, 77));
+    CHECK(t.floating_mana.green == 0);
+    CHECK(ExtraDx(t, tb) == 0);
+    CHECK(LoneDamageDx(t, tb) == 5);
+}
+
+TEST_CASE("doubler combat pay (ii): a trailing activation's cost is in the main side")
+{
+    EnsureCardsDx();
+    // Gruul Turf + Mountain; Berserk {G}, then a trailing Firecat flip {R}{R}. Main pays both (Turf: G -> Berserk,
+    // the floating R + Mountain -> the flip); with Berserk in combat the flip needs the Turf's R AND the Mountain,
+    // and the Turf's G empties with main. The old probe ignored the flip and credited the combat cast.
+    auto board = []
+    {
+        GameState s = BaseDx();
+        PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+        PutBearDx(s, 10);
+        PutDx(s, "Gruul Turf", 40);
+        PutDx(s, "Mountain", 41);
+        return s;
+    };
+    ManaCost rr; rr.red = 2;
+    const std::vector<Action> plan = { CastActDx("Berserk"), FlipLateDx(20, rr) };
+    {
+        ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);
+        GameState s = board();
+        TurnSolver::NoteDoublerDeferPayable(s, plan);
+        CHECK(s.dbl_pay_ok == 1);              // the approximation: the flip's {R}{R} was not counted
+    }
+    GameState s = board();
+    TurnSolver::NoteDoublerDeferPayable(s, plan);
+    const GameState::DblCombatPay* cp = DblCpLive(s);
+    CHECK((cp == nullptr || cp->recs.empty()));   // nothing armed: Berserk stays in main
+    REQUIRE(PayCastDx(s, "Berserk", 10, 77));
+    CHECK(ExtraDx(s, 1) == 0);
+    CHECK(TapForCostDirect(s, rr, false));     // and the flip is still paid
+}
+
+TEST_CASE("doubler combat pay (i): doublers of two decisions never share a source; the earlier one is re-paid in main")
+{
+    EnsureCardsDx();
+    // Turf (tapped for an earlier Might: {R} floating), Mountain, Forest. Decision 1 casts Legion Leadership,
+    // decision 2 Berserk. Combat cannot pay both ({1}{R/W} + {G} from two lands), so the best real schedule is
+    // Leadership in main (floating R + Mountain) and Berserk in combat (Forest): ONE doubling after exalted.
+    // The old per-decision probe found each payable alone (both off the Forest) and credited two.
+    auto board = []
+    {
+        GameState s = BaseDx();
+        PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+        PutBearDx(s, 10);
+        const int turf = PutDx(s, "Gruul Turf", 40);
+        PutDx(s, "Mountain", 41);
+        PutDx(s, "Forest", 42);
+        s.battlefield[static_cast<std::size_t>(turf)].tapped = true;
+        s.floating_mana.red = 1;
+        ++s.spells_cast_this_turn;   // the Might (resolved below)
+        REQUIRE(ResolveSoloTargetTrick(s, 0, DefDx("Might of Old Krosa"), 10, 0, 0, 0));
+        return s;
+    };
+    {
+        ArmDx legacy(heurarm::DOUBLER_COMBAT_PAY, 0);
+        GameState s = board();
+        TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Legion Leadership") });
+        CastDx(s, "Legion Leadership", 10);
+        s.floating_mana.red = 0;               // main paid it: floating R + Mountain
+        s.battlefield[3].tapped = true;
+        TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Berserk") });
+        CastDx(s, "Berserk", 10);
+        CHECK(ExtraDx(s, 1) == 3);             // the approximation: E x (2^2 - 1)
+    }
+    GameState s = board();
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Legion Leadership") });
+    REQUIRE(PayCastDx(s, "Legion Leadership", 10, 71));
+    CHECK(TappedDx(s, 41));
+    CHECK(TappedDx(s, 42));                    // combat-paid off both lands; the R still floats in main
+    CHECK(s.floating_mana.red == 1);
+    CHECK(s.dbl_defer_ndef[0] == 1);
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Berserk") });
+    REQUIRE(PayCastDx(s, "Berserk", 10, 72));
+    CHECK(s.floating_mana.red == 0);           // Leadership went back to main: floating R + Mountain
+    CHECK(TappedDx(s, 41));
+    CHECK(TappedDx(s, 42));                    // the Forest paid Berserk in combat
+    CHECK(s.dbl_defer_n[0] == 2);
+    CHECK(s.dbl_defer_ndef[0] == 1);
+    CHECK(ExtraDx(s, 1) == 1);
+    CHECK(LoneDamageDx(s, 1) == (2 + 4) * 4 + 1 + 1);
+}
+
+TEST_CASE("doubler combat pay (iii): the board after combat carries the combat schedule's taps")
+{
+    EnsureCardsDx();
+    // Gruul Turf x2 + Forest; a {3} cast and Berserk. Main pays both off the two Turfs (R,G,R -> {3}, G -> Berserk)
+    // and leaves the Forest up; with Berserk in combat the {3} cannot use the Turfs' fourth unit, so all three
+    // lands are tapped. The old probe credited the combat cast but left the Forest untapped.
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+    const int b = PutBearDx(s, 10);
+    PutDx(s, "Gruul Turf", 40);
+    PutDx(s, "Gruul Turf", 41);
+    PutDx(s, "Forest", 42);
+    Action three = CastActDx("Den Protector");
+    three.cost = ManaCost{};
+    three.cost.generic = 3;
+    const std::vector<Action> plan = { three, CastActDx("Berserk") };
+    TurnSolver::NoteDoublerDeferPayable(s, plan);
+    std::vector<Action> scratch;
+    const std::vector<Action>& pre = TurnSolver::DoublerPrepayActs(s, plan, scratch);
+    CHECK(pre.size() == 1);                    // the armed Berserk is out of the whole-turn prepay
+    REQUIRE(TapForCostDirect(s, three.cost, true));
+    ++s.spells_cast_this_turn;
+    REQUIRE(PayCastDx(s, "Berserk", 10, 77));
+    CHECK(TappedDx(s, 40));
+    CHECK(TappedDx(s, 41));
+    CHECK(TappedDx(s, 42));
+    CHECK(ExtraDx(s, b) == 1);
+}
+
+TEST_CASE("doubler combat pay: a main-paid run doubler keeps the combat one's credit; a regrown one loses it")
+{
+    EnsureCardsDx();
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 30, /*sick=*/true);
+    const int b = PutBearDx(s, 10);
+    PutDx(s, "Forest", 40);
+    TurnSolver::NoteDoublerDeferPayable(s, { CastActDx("Berserk") });
+    REQUIRE(PayCastDx(s, "Berserk", 10, 77));
+    // A second doubler paid in main (nothing armed for it): the doublings commute, so it is cast at the end of
+    // main and the first still doubles after exalted -- 2 -> 4 (main) -> +1 -> 10.
+    s.floating_mana.green = 1;
+    REQUIRE(PayCastDx(s, "Berserk", 10, 78));
+    CHECK(s.dbl_defer_n[0] == 2);
+    CHECK(s.dbl_defer_ndef[0] == 1);
+    CHECK(LoneDamageDx(s, b) == (2 * 2 + 1) * 2);
+    // Den Protector's regrowth takes the combat-paid Berserk back in main: it was never cast in combat.
+    auto& gy = s.players[0].graveyard;
+    gy.erase(std::remove_if(gy.begin(), gy.end(), [](const Card& c) { return c.m_number == 77; }), gy.end());
+    CHECK(ExtraDx(s, b) == 0);
 }

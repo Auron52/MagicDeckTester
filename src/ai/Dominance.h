@@ -624,6 +624,10 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-13, mana-clean item A round 3; 1456 -> 1464): `prepay_wild_true` grows to 27 bytes (gfund[5] /
 // cfund[5]: the literal booking's per-pool generic-funding subset counts, MTG_PREPAY_WILD_LITERAL; slots now pack
 // mask + count). Same classification and the same value-gated fold (PrepayWildTrueKey mixes the clamped counts).
+// +32 bytes (2026-11-13, MTG_DOUBLER_COMBAT_PAY, Morph INT-16): `dbl_defer_ndef[2]` (the run's combat-PAID count) and
+// the `dbl_cp` ledger (a vector, empty off a Morph turn with exalted + a doubler plan). Classification: FUTURE-
+// DETERMINING within the turn (which doublers are combat-paid, what the combat pool holds), FOLDED in Build() through
+// GameState::DoublerDeferKey (value-gated: ndef only when nonzero, the ledger only when it has records).
 static_assert(sizeof(GameState) == 1464,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

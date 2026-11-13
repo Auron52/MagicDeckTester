@@ -1134,6 +1134,44 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     this evidence it buys nothing measurable and costs ~9% wall on Snow. Keep it ON only if the continuation fix
     above is built on top of it; otherwise set it OFF (or delete it) rather than pay the dry walk for nothing.
 
+### INT-16 (2026-11-13) -- exact doubler combat payability
+- USER (verbatim, 2026-11-13), about INT-12's documented probe approximations: "If we are approximating and this might
+  fail on us we might want to address it." Worktree `morph-dblprobe`, branch `morph-dblprobe` (local, on `morph-payer`
+  97939fbf8).
+- **The three approximations of INT-12's probe** (`NoteDoublerDeferPayable` as built): it proved on a COPY that the plan's
+  doublers were payable in the declare-attackers step, but the real game kept main's payment. (i) Doublers split across
+  decisions (two human lines; a second plan apply) were each probed alone, so one untapped source could back both;
+  (ii) trailing activations' costs (a TRAIL flip) were not in the main side; (iii) after combat the board kept main's
+  taps although the combat schedule needs more (a Karoo split).
+- **Repros (scenarios, each FAILS on the INT-12 binary and under `MTG_DOUBLER_COMBAT_PAY=0`):**
+  * `morph_doubler_combat_pay_trailing_flip` (ii): Berserk then a Firecat flip {R}{R} off Gruul Turf + Mountain. Old:
+    6 damage, a phantom T3 kill; real best 5 (opponent at 1).
+  * `morph_doubler_combat_pay_split_decisions` (i): three human lines (Might with the Turf tapped by hand, then Legion
+    Leadership, then Berserk). Old: 28 = a phantom kill (both doublers "payable" off the same Forest); real best 26.
+  * `morph_doubler_combat_pay_post_combat_taps` (iii): {3} face-down + Berserk off Turf x2 + Forest, then Birds in
+    main 2. Old: credited the combat cast AND left the Forest up for Birds; the combat schedule taps all three.
+- **Fix: `MTG_DOUBLER_COMBAT_PAY`, DEFAULT ON (heurarm slot DOUBLER_COMBAT_PAY; `=0` -> the INT-12 probe).** The decision
+  is still taken on copies, but the doublers are then really PAID as the combat step pays them, and only such a payment
+  is credited:
+  * `GameState::dbl_cp` (a ledger, empty off a Morph turn with exalted + a doubler plan) and `dbl_defer_ndef[2]` (the
+    run's combat-paid count -- the credit's exponent).
+  * `SpellEffects.h DoublerCastPay` -- THE cast-payment hook, both worlds (TurnSolver apply_one, AIEngine::
+    CastSpellFromHand): an armed doubler that trails the plan as realised pays from untapped sources with main's
+    floating mana set aside (its leftover is the combat step's own pool); a prepaid one pays nothing more; everything
+    else pays in main. `NoteDoublerResolved` credits exactly the combat-paid ones; a run doubler paid in main stays in
+    the run (doublings commute: it is just cast at the end of main) and adds nothing.
+  * `TurnSolver::NoteDoublerDeferPayable` (both appliers, same point) simulates the options on copies as the appliers
+    pay them -- the whole-turn prepay of the non-deferred casts, each cast, the trailing activations (or, for a human
+    "**" sequence, its own step order): defer the last k doublers (a suffix), P1 (pay at the cast) or P2 (pay first, so
+    main cannot spend the combat source), and undo the last r combat payments of EARLIER decisions this turn (LIFO,
+    re-paying those doublers in main). Best = most steps paid, then most doublers deferred, then fewest undone.
+  * The armed doublers stay out of the whole-turn prepay (`TurnSolver::DoublerPrepayActs`).
+  * A deferred doubler a main-phase effect took back from the graveyard (Den Protector's regrowth) loses its credit
+    (it was never cast in combat) -- a hole the old model also had.
+  * A human line paid by the INT-14 joint solve (`Plan::human_joint_pay`) arms nothing new (HumanLineJointPrepay /
+    PrepareHumanCommit untouched).
+- RESULTS: (filled below)
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18

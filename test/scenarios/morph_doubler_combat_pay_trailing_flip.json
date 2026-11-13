@@ -1,0 +1,71 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY (ii) -- a trailing activation's cost (MTG_DOUBLER_COMBAT_PAY; Morph INT-16; USER 2026-11-13:",
+  "\"If we are approximating and this might fail on us we might want to address it.\"). Turn 3: Den Protector face down",
+  "(2/2) attacks alone past a sick Ignoble Hierarch (exalted); a TAPPED face-down Blistering Firecat; Gruul Turf ({R}{G})",
+  "and a Mountain untapped; Berserk in hand; the opponent at 6. The human line is Berserk on the Den Protector, THEN turn",
+  "the Firecat face up ({R}{R}).",
+  "",
+  "Main pays both (Turf: G -> Berserk, the floating R + Mountain -> the flip). Berserk CANNOT also be cast in combat: the",
+  "flip needs the Turf's R and the Mountain in main, and the Turf's G empties with main. So Berserk resolves before",
+  "exalted: 4 + 1 = 5, the opponent at 1. The old probe ignored the flip's {R}{R} and credited the combat cast:",
+  "(2 + 1) x 2 = 6 = a phantom turn-3 kill. MTG_DOUBLER_COMBAT_PAY=0 gives opponent_life 0."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 6,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Den Protector (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": true
+  },
+  {
+   "name": "Blistering Firecat (Face-down)",
+   "controller": 0,
+   "sick": false,
+   "tapped": true
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Mountain",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Berserk"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "human_lines": [
+  "cast=Berserk;face_up=Blistering Firecat;seq=cast=Berserk|face_up=Blistering Firecat"
+ ],
+ "human_cast_orders": [
+  [
+   "**",
+   "cast=Berserk",
+   "face_up=Blistering Firecat"
+  ]
+ ],
+ "expect_opponent_life": 1
+}

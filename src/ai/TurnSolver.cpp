@@ -62697,9 +62697,9 @@ int TurnSolver::SpectacleGraveyardDamageFirst(const GameState& state, const std:
     return spectacle ? lavamancer : -1;
 }
 
-void TurnSolver::NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts)
+// The approximate plan-start probe (MTG_DOUBLER_COMBAT_PAY=0): see the declaration's history note.
+static void NoteDoublerDeferPayableApprox(GameState& state, const std::vector<Action>& acts)
 {
-    if (!DoublerAfterExaltedOn() || state.phase != Phase::PreCombatMain) { return; }
     int casts = 0;
     bool any_doubler = false;
     for (const Action& a : acts)
@@ -62727,7 +62727,7 @@ void TurnSolver::NoteDoublerDeferPayable(GameState& state, const std::vector<Act
     // (Activation costs -- a flip, Spellskite's {U/P} -- are not re-priced: an approximation, see the doc.)
     auto pay_main = [&](GameState& c) -> bool
     {
-        if (pre.size() >= 2 && BatchPrepayMainCasts(c, pre)) { return true; }
+        if (pre.size() >= 2 && TurnSolver::BatchPrepayMainCasts(c, pre)) { return true; }
         for (const Action& a : pre)
         {
             const CardDefinition* d = PrepayCastFace(a);
@@ -62754,6 +62754,337 @@ void TurnSolver::NoteDoublerDeferPayable(GameState& state, const std::vector<Act
         empty_pool(c);
         if (pay_doublers(c)) { empty_pool(c); if (pay_main(c)) { state.dbl_pay_ok = 1; return; } }
     }
+}
+
+// ---- EXACT COMBAT PAYMENT of the doublers (MTG_DOUBLER_COMBAT_PAY, Morph INT-16) ---------------------------------
+// USER 2026-11-13 (verbatim): "If we are approximating and this might fail on us we might want to address it."
+// The approximate probe credited a doubler as cast in combat when a COPY found it payable there, while the real
+// game kept main's payment: (i) two decisions' doublers could each be "payable" from the same untapped source,
+// (ii) trailing activations' costs were not in the main side, (iii) after combat the board kept main's (fewer)
+// taps. Here the decision is still taken on copies, but the doublers are then really PAID as the combat step
+// would pay them (GameState::dbl_cp; SpellEffects.h DoublerCastPay at the cast, both worlds), and only such a
+// payment is credited -- so whatever the turn does afterwards, the credit stays a schedule that exists.
+//
+// The options for this plan apply, each simulated on a copy of the board as the appliers will pay it:
+//   r  -- undo the last r combat payments of EARLIER decisions this turn (LIFO), paying those doublers in main
+//         instead (a run doubler paid in main is simply cast at the end of main: doublings commute);
+//   k  -- defer the last k casts of the plan when all of them are doublers (a suffix: the run that trails it);
+//   P1 -- the deferred doublers pay at their cast, from what the plan's earlier casts left untapped;
+//   P2 -- they pay first, at plan start (so the main casts cannot spend the source the combat cast needs).
+// The best option pays the most of the plan's steps, then defers the most doublers (the USER's rule:
+// "Anything doubler cast at the end will be assumed to be in the attack phase"), then undoes the fewest.
+namespace
+{
+struct DblCpSim
+{
+    bool valid = false;
+    int  steps = 0;      // plan steps (casts + mana-paying activations) the simulation paid
+    int  deferred = 0;   // combat-paid doublers after the option (net of the undone ones)
+};
+// Undo the LAST ledger record (its taps, its pool share, its credit) and return it; false = not undoable.
+bool DblCpUndoLast(GameState& s, GameState::DblCombatRec& out)
+{
+    GameState::DblCombatPay* cp = DblCpLive(s);
+    if (cp == nullptr || cp->recs.empty()) { return false; }
+    const GameState::DblCombatRec& r = cp->recs.back();
+    if (r.st != 0 && r.revisable == 0) { return false; }
+    const int me = s.active_player_index;
+    std::vector<std::size_t> idx;
+    for (int k = 0; k < r.nsrc; ++k)
+    {
+        std::size_t found = s.battlefield.size();
+        for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+        {
+            const Permanent& p = s.battlefield[i];
+            if (p.card.m_number == r.srcs[k] && p.controller_index == me && p.tapped) { found = i; break; }
+        }
+        if (found == s.battlefield.size()) { return false; }
+        idx.push_back(found);
+    }
+    for (std::size_t i : idx) { s.battlefield[i].tapped = false; }
+    if (r.st != 0) { cp->pool = r.pool_before; }
+    if (r.st == 3 && r.slot >= 0 && r.slot < 2 && s.dbl_defer_ndef[r.slot] > 0) { --s.dbl_defer_ndef[r.slot]; }
+    out = r;
+    cp->recs.pop_back();
+    return true;
+}
+const CardDefinition* DblCastFace(const Action& a)
+{
+    if (a.kind != Action::Kind::CastFromHand) { return nullptr; }
+    return PrepayCastFace(a);
+}
+bool DblIsDoublerCast(const Action& a)
+{
+    const CardDefinition* d = DblCastFace(a);
+    return d != nullptr && d->params.trick_double_power && !a.free_cast && !a.alt_cost && !a.sacrifice_land;
+}
+// The mana an activation step pays (the HumanLineJointPrepay convention); nullopt = it pays none we can price.
+std::optional<ManaCost> DblActCost(const Action& a)
+{
+    switch (a.kind)
+    {
+        case Action::Kind::CastFromHand: return std::nullopt;
+        case Action::Kind::ActivatePermAbility: return OutletOwnCost(a);
+        default: break;
+    }
+    if (a.cost.ManaValue() > 0) { return a.cost; }
+    return std::nullopt;
+}
+}   // namespace
+
+static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Action>& acts, bool no_new_deferral,
+                                         bool in_plan_order, bool explicit_order)
+{
+    static const bool s_trace = EnvOn("MTG_DBL_CP_TRACE");   // diagnostic only
+    const int me = state.active_player_index;
+    if (CountExalted(state.battlefield, me) <= 0) { return; }
+    // An armed record nothing cast belongs to an earlier decision: this plan decides afresh.
+    if (GameState::DblCombatPay* cp = DblCpLive(state))
+    { while (!cp->recs.empty() && cp->recs.back().st == 0) { cp->recs.pop_back(); } }
+    std::vector<std::size_t> cast_ix;
+    for (std::size_t i = 0; i < acts.size(); ++i) { if (acts[i].kind == Action::Kind::CastFromHand) { cast_ix.push_back(i); } }
+    // The order the appliers will REALISE: the vector's for an explicit (searched / human) order, else the canonical
+    // route's stable CastOrderRank sort (apply_plan_actions; the plan vector puts Berserk before Might, the realised
+    // turn casts Might first). Only the doubler suffix and the simulation read it; DoublerCastPay's spell-count
+    // check (trail_from) still guards a realised order that differs.
+    if (!explicit_order && !in_plan_order)
+    {
+        const DecisionProvider& prov = ResolveProvider(state);
+        std::stable_sort(cast_ix.begin(), cast_ix.end(), [&](std::size_t x, std::size_t y)
+        {
+            const CardDefinition* dx = DblCastFace(acts[x]);
+            const CardDefinition* dy = DblCastFace(acts[y]);
+            if (dx == nullptr || dy == nullptr) { return false; }
+            return prov.CastOrderRank(state, *dx) < prov.CastOrderRank(state, *dy);
+        });
+    }
+    int K = 0;
+    for (std::size_t j = cast_ix.size(); j-- > 0;) { if (DblIsDoublerCast(acts[cast_ix[j]])) { ++K; } else { break; } }
+    if (no_new_deferral) { K = 0; }
+    K = std::min(K, 4);
+    // Undoable earlier combat payments (from the end of the ledger).
+    int R = 0;
+    if (const GameState::DblCombatPay* cp = DblCpLive(state))
+    {
+        for (std::size_t j = cp->recs.size(); j-- > 0 && R < 3;)
+        {
+            const GameState::DblCombatRec& r = cp->recs[j];
+            if (r.revisable == 0) { break; }
+            ++R;
+        }
+    }
+    if (s_trace)
+    {
+        std::fprintf(stderr, "[dbl-cp] T%d probe ncast=%zu K=%d R=%d plan:", state.turn_number, cast_ix.size(), K, R);
+        for (const Action& a : acts) { std::fprintf(stderr, " %s/%d", a.card_name.c_str(), static_cast<int>(a.kind)); }
+        std::fprintf(stderr, "\n");
+    }
+    if (K == 0 && R == 0) { return; }
+    RevealLogPause quiet;   // feasibility probes on copies: never ask a human or emit events
+    int credited_now = 0;
+    if (const GameState::DblCombatPay* cp = DblCpLive(state))
+    { for (const GameState::DblCombatRec& r : cp->recs) { if (r.st == 3 || r.st == 1) { ++credited_now; } } }
+    const int spells0 = state.spells_cast_this_turn;
+    const int ncast = static_cast<int>(cast_ix.size());
+
+    // The plan-start part of an option (identical on a copy and on the real board): undo r, P2's payments,
+    // then the undone doublers' main payment. False = the option cannot start.
+    auto start = [&](GameState& c, int r, int k, bool p2, int& undone_credit) -> bool
+    {
+        undone_credit = 0;
+        std::vector<ManaCost> owed;
+        for (int j = 0; j < r; ++j)
+        {
+            GameState::DblCombatRec u;
+            if (!DblCpUndoLast(c, u)) { return false; }
+            if (u.st == 3 || u.st == 1) { ++undone_credit; }
+            if (u.st >= 2) { owed.push_back(u.cost); }   // its spell resolved in main: it is paid there now
+        }
+        GameState::DblCombatPay& cp = DblCpEnsure(c);
+        if (k > 0)
+        {
+            cp.trail_from = static_cast<std::int16_t>(spells0 + ncast - k);
+            for (int j = ncast - k; j < ncast; ++j)
+            {
+                const Action& a = acts[cast_ix[static_cast<std::size_t>(j)]];
+                GameState::DblCombatRec rec;
+                rec.name = DblCastFace(a)->card.m_name.str();
+                rec.cost = a.cost;
+                if (p2)
+                {
+                    if (!DblCombatPayInto(c, cp, rec, [&] { return TapForCostDirect(c, a.cost, false); })) { return false; }
+                    rec.st = 1;
+                }
+                cp.recs.push_back(rec);
+            }
+        }
+        for (const ManaCost& oc : owed) { if (!TapForCostDirect(c, oc, false)) { return false; } }
+        return true;
+    };
+    auto simulate = [&](int r, int k, bool p2) -> DblCpSim
+    {
+        DblCpSim out;
+        GameState c = state;
+        int undone = 0;
+        if (!start(c, r, k, p2, undone)) { return out; }
+        std::vector<Action> pre;
+        for (int j = 0; j < ncast - k; ++j) { pre.push_back(acts[cast_ix[static_cast<std::size_t>(j)]]); }
+        if (pre.size() >= 2) { TurnSolver::BatchPrepayMainCasts(c, pre, false, HumanPlayActive(), true); }
+        GameState::DblCombatPay& cp = DblCpEnsure(c);
+        int cast_no = 0;
+        auto pay_cast = [&](const Action& a) -> bool
+        {
+            const int j = cast_no++;
+            if (j >= ncast - k)
+            {
+                if (p2) { return true; }
+                for (GameState::DblCombatRec& rec : cp.recs)
+                {
+                    if (rec.st != 0 || rec.name != DblCastFace(a)->card.m_name.str()) { continue; }
+                    if (!DblCombatPayInto(c, cp, rec, [&] { return TapForCostDirect(c, a.cost, false); })) { return false; }
+                    rec.st = 2;
+                    return true;
+                }
+                return false;
+            }
+            const CardDefinition* d = DblCastFace(a);
+            return TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature());
+        };
+        auto pay_act = [&](const Action& a) -> bool
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility && PermAbilityTaps(a.ability_mode))
+            {
+                for (Permanent& p : c.battlefield)
+                { if (p.card.m_number == a.sac_source_id && p.controller_index == me) { p.tapped = true; } }
+            }
+            const std::optional<ManaCost> mc = DblActCost(a);
+            return !mc || mc->ManaValue() == 0 || TapForCostDirect(c, *mc, false);
+        };
+        bool deferred_ok = true;
+        auto is_paying_act = [&](const Action& a) -> bool
+        {
+            if (a.kind == Action::Kind::CastFromHand) { return false; }
+            if (!in_plan_order && a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TurnFaceUp) { return false; }   // a LEAD flip ran already
+            if (TurnSolver::IsLandSearchActivation(a)) { return false; }
+            const std::optional<ManaCost> mc = DblActCost(a);
+            return mc.has_value() && mc->ManaValue() > 0;
+        };
+        if (in_plan_order)
+        {
+            for (const Action& a : acts)
+            {
+                if (a.kind == Action::Kind::CastFromHand)
+                {
+                    const bool deferred = cast_no >= ncast - k;
+                    if (pay_cast(a)) { ++out.steps; } else if (deferred) { deferred_ok = false; }
+                }
+                else if (is_paying_act(a) && pay_act(a)) { ++out.steps; }
+            }
+        }
+        else
+        {
+            for (std::size_t j : cast_ix)
+            {
+                const bool deferred = cast_no >= ncast - k;
+                if (pay_cast(acts[j])) { ++out.steps; } else if (deferred) { deferred_ok = false; }
+            }
+            for (const Action& a : acts) { if (is_paying_act(a) && pay_act(a)) { ++out.steps; } }
+        }
+        out.valid = deferred_ok;
+        out.deferred = credited_now - undone + k;
+        return out;
+    };
+    // Every step paid is the ceiling, so the first option that reaches it with the most deferral wins outright.
+    int total_steps = ncast;
+    for (const Action& a : acts)
+    {
+        if (a.kind == Action::Kind::CastFromHand || TurnSolver::IsLandSearchActivation(a)) { continue; }
+        if (!in_plan_order && a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TurnFaceUp) { continue; }
+        const std::optional<ManaCost> mc = DblActCost(a);
+        if (mc && mc->ManaValue() > 0) { ++total_steps; }
+    }
+    int best_r = 0, best_k = 0; bool best_p2 = false;
+    DblCpSim best; best.steps = -1;
+    auto better = [&](const DblCpSim& x, int r) -> bool
+    {
+        if (!x.valid) { return false; }
+        if (x.steps != best.steps) { return x.steps > best.steps; }
+        if (x.deferred != best.deferred) { return x.deferred > best.deferred; }
+        return r < best_r;
+    };
+    bool done = false;
+    for (int k = K; k >= 0 && !done; --k)
+    {
+        for (int r = 0; r <= R && !done; ++r)
+        {
+            for (int p = 0; p < (k > 0 ? 2 : 1) && !done; ++p)
+            {
+                const DblCpSim x = simulate(r, k, p == 1);
+                if (s_trace)
+                {
+                    std::fprintf(stderr, "[dbl-cp] T%d r=%d k=%d %s -> valid=%d steps=%d/%d deferred=%d\n",
+                                 state.turn_number, r, k, p ? "P2" : "P1", x.valid ? 1 : 0, x.steps, total_steps,
+                                 x.deferred);
+                }
+                if (better(x, r)) { best = x; best_r = r; best_k = k; best_p2 = p == 1; }
+                // r = 0 and every step paid: nothing later in the order can beat it.
+                if (x.valid && x.steps == total_steps && r == 0) { done = true; }
+            }
+        }
+    }
+    if (best.steps < 0 || (best_r == 0 && best_k == 0)) { return; }
+    // Apply the chosen option's plan-start part to the real board, exactly as on the copy.
+    int undone = 0;
+    GameState::DblCombatRec dummy;
+    (void)dummy;
+    if (!start(state, best_r, best_k, best_p2, undone))
+    {
+        // Unreachable on a deterministic board (the copy ran the same calls). Never leave a phantom: drop the
+        // armed records so nothing more is deferred; a payment already made stays a real one.
+        if (GameState::DblCombatPay* cp = DblCpLive(state))
+        { while (!cp->recs.empty() && cp->recs.back().st == 0) { cp->recs.pop_back(); } }
+    }
+    if (s_trace)
+    {
+        std::fprintf(stderr, "[dbl-cp] T%d chose r=%d k=%d %s (steps %d/%d, deferred %d)\n", state.turn_number,
+                     best_r, best_k, best_p2 ? "P2" : "P1", best.steps, total_steps, best.deferred);
+    }
+}
+
+void TurnSolver::NoteDoublerDeferPayable(GameState& state, const std::vector<Action>& acts, bool no_new_deferral,
+                                         bool in_plan_order, bool explicit_order)
+{
+    if (!DoublerAfterExaltedOn() || state.phase != Phase::PreCombatMain) { return; }
+    if (DoublerCombatPayOn())
+    { NoteDoublerDeferPayableExact(state, acts, no_new_deferral, in_plan_order, explicit_order); return; }
+    NoteDoublerDeferPayableApprox(state, acts);
+}
+
+// The casts the whole-turn prepay pays for: the plan's, minus the doublers armed or prepaid for a combat-step
+// payment (MTG_DOUBLER_COMBAT_PAY) -- their mana must not be tapped and floated in main. `acts` itself when
+// nothing is armed (every other plan); otherwise a filtered copy in `scratch`, dropping from the END (the
+// deferred doublers are the plan's trailing casts).
+const std::vector<Action>& TurnSolver::DoublerPrepayActs(const GameState& state, const std::vector<Action>& acts,
+                                                         std::vector<Action>& scratch)
+{
+    const GameState::DblCombatPay* cp = DblCpLive(state);
+    if (cp == nullptr) { return acts; }
+    std::vector<std::string> armed;
+    for (const GameState::DblCombatRec& r : cp->recs) { if (r.st == 0 || r.st == 1) { armed.push_back(r.name); } }
+    if (armed.empty()) { return acts; }
+    scratch = acts;
+    for (std::size_t j = scratch.size(); j-- > 0 && !armed.empty();)
+    {
+        const Action& a = scratch[j];
+        if (!DblIsDoublerCast(a)) { continue; }
+        const std::string nm = DblCastFace(a)->card.m_name.str();
+        auto it = std::find(armed.begin(), armed.end(), nm);
+        if (it == armed.end()) { continue; }
+        armed.erase(it);
+        scratch.erase(scratch.begin() + static_cast<std::ptrdiff_t>(j));
+    }
+    return scratch;
 }
 
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
@@ -69467,10 +69798,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             ManaCost pay_bill = ec;
             NoteLineHasteTakerCast(def, bestow, ec);   // MTG_SERVANT_HASTE_KEEP (executor twin: CastSpellFromHand)
             cast_haste_from_mana = is_creature && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
-            bool paid_ok;
+            bool paid_ok = false;
             {
                 ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
-                paid_ok = TapForCostDirect(state, pay_bill, is_creature);
+                // A power doubler pays through the shared combat-payment hook (MTG_DOUBLER_COMBAT_PAY; executor
+                // twin: CastSpellFromHand); every other cast, and every doubler without a ledger, pays here.
+                if (!DoublerCastPay(state, def, cast_zone_number,
+                                    [&] { return TapForCostDirect(state, pay_bill, is_creature); }, paid_ok))
+                { paid_ok = TapForCostDirect(state, pay_bill, is_creature); }
             }
             if (reserved_host > 0)
             {
@@ -74751,7 +75086,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Doubler after exalted (MTG_DOUBLER_AFTER_EXALTED): can the plan's doublers be paid in combat? Same
     // point and inputs as the executor's call in AIEngine::TakeTurn (lockstep); a no-op without a doubler
     // and exalted.
-    TurnSolver::NoteDoublerDeferPayable(state, plan.actions);   // checks the phase itself
+    // (MTG_DOUBLER_COMBAT_PAY: a human line paid by the joint solve arms nothing new; a human "**" sequence is
+    // simulated in its own step order.)
+    TurnSolver::NoteDoublerDeferPayable(state, plan.actions, /*no_new_deferral=*/human_v2 && plan.human_joint_pay,
+                                        /*in_plan_order=*/human_v2,
+                                        /*explicit_order=*/plan.searched_order);   // checks the phase itself
+    // The doublers armed for a combat-step payment stay out of the whole-turn prepay (their mana must not
+    // float in main). `plan.actions` itself for every plan with none armed.
+    std::vector<Action> dbl_prepay_scratch;
     const bool loam_target_plan = std::any_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
@@ -74764,8 +75106,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     if (plan_joint_paid) {}   // the whole line's mana is already floating (PlanJointPayFallback above)
     else if (!loam_target_plan && bp_capture != nullptr && BpPrefixPrepayEnabled())
     {
-        TurnSolver::BatchPrepayMainCasts(state, BpPrepayPrefix(state, plan), /*mint_prefix=*/false,
-                                         /*hand_demand=*/false, /*allow_partial=*/true);
+        TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, BpPrepayPrefix(state, plan),
+                                                                              dbl_prepay_scratch),
+                                         /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true);
     }
     // HUMAN LINE JOINT PAY (Plan::human_joint_pay, set only by PrepareHumanCommit after a trial proved it pays
     // every step the as-queued payment could not): the whole line's mana in one joint solve, replacing the
@@ -74777,8 +75120,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     {
         // HUMAN PLAY: hold what the rest of the hand needs (MTG_HUMAN_PREPAY_DEMAND). HumanPlayActive()
         // is false in every rollout (HumanPlaySuppress) and every autonomous game -> byte-identical.
-        TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false,
-                                         /*hand_demand=*/HumanPlayActive(), /*allow_partial=*/true);
+        TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
+                                         /*mint_prefix=*/false, /*hand_demand=*/HumanPlayActive(), /*allow_partial=*/true);
     }
 
 

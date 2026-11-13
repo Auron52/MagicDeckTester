@@ -1,0 +1,76 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY (iii) -- the board after combat (MTG_DOUBLER_COMBAT_PAY; Morph INT-16). Turn 3: a face-down",
+  "Blistering Firecat attacks alone past a sick Ignoble Hierarch; Gruul Turf x2 and a Forest untapped; Den Protector,",
+  "Berserk, Birds of Paradise in hand. Main 1: Den Protector face down ({3}), then Berserk on the Firecat; main 2: Birds.",
+  "",
+  "Main alone pays {3} + {G} off the two Turfs and leaves the Forest up. But Berserk is credited as cast in combat",
+  "((2 + 1) x 2 = 6), and then the {3} cannot use the Turfs' fourth unit (it empties with main), so all three lands",
+  "are tapped and Birds cannot be cast in main 2. The old probe credited the combat cast and kept main's taps: the",
+  "Forest stayed up and paid for Birds. MTG_DOUBLER_COMBAT_PAY=0 realises [Den Protector, Berserk, Birds]."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 20,
+ "resume_at": "main1",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Blistering Firecat (Face-down)",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": true
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Forest",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Den Protector",
+  "Berserk",
+  "Birds of Paradise"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 1,
+ "budget_ms": 50,
+ "max_turns": 3,
+ "env": {
+  "MTG_HUMAN_PLAY": "1"
+ },
+ "human_lines": [
+  "cast=Den Protector;facedown=Den Protector;cast=Berserk",
+  "pass",
+  "cast=Birds of Paradise"
+ ],
+ "human_cast_orders": [
+  [],
+  [],
+  [
+   "**",
+   "cast=Birds of Paradise"
+  ]
+ ],
+ "expect_line_order": [
+  "cast Den Protector",
+  "cast Berserk"
+ ]
+}

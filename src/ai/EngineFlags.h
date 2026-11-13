@@ -76,6 +76,16 @@ inline bool DoublerAfterExaltedOn()
     return heurarm::Flag(heurarm::DOUBLER_AFTER_EXALTED, env);
 }
 
+// MTG_DOUBLER_COMBAT_PAY (Morph INT-16, 2026-11-13; a correctness fix, DEFAULT ON, =0 restores the approximate
+// plan-start probe) -- under MTG_DOUBLER_AFTER_EXALTED a run doubler is credited only when it was PAID in combat
+// style (GameState::dbl_cp). Read by the shared cast-payment hook, the resolution marker and
+// TurnSolver::NoteDoublerDeferPayable (both plan appliers).
+inline bool DoublerCombatPayOn()
+{
+    static const bool env = EnvOn("MTG_DOUBLER_COMBAT_PAY", true);
+    return heurarm::Flag(heurarm::DOUBLER_COMBAT_PAY, env);
+}
+
 // MTG_EXALTED_DS_PROJECTION (2026-11-13, a modelling fix; DEFAULT ON, =0 restores the old projection for the A/B
 // arm only) -- the attack projection (TurnSolver.cpp PendingAttackDamageImpl) folds a lone attacker's exalted +E
 // into its power, as the combat core does, so a double striker deals it in both steps and a Jitte bearer's closed

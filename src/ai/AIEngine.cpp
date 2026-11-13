@@ -8424,15 +8424,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // logical point (after the land drop; Vial puts now ride the cast sequence) -> identical prepay. Declined -> greedy.
     // Doubler after exalted (MTG_DOUBLER_AFTER_EXALTED): can the plan's doublers be paid in combat? Same
     // point and inputs as ApplyPlanDirect's call (lockstep); a no-op without a doubler and exalted.
-    TurnSolver::NoteDoublerDeferPayable(state, plan.actions);   // checks the phase itself
+    TurnSolver::NoteDoublerDeferPayable(state, plan.actions, /*no_new_deferral=*/false, /*in_plan_order=*/false,
+                                        /*explicit_order=*/plan.searched_order);   // checks the phase itself
+    std::vector<Action> dbl_prepay_scratch;   // MTG_DOUBLER_COMBAT_PAY: armed doublers stay out of the prepay
     const bool loam_target_plan = std::any_of(plan.actions.begin(), plan.actions.end(), [](const Action& a)
     {
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
     });
     if (!loam_target_plan && !plan_joint_paid)
-    { TurnSolver::BatchPrepayMainCasts(state, plan.actions, /*mint_prefix=*/false, /*hand_demand=*/false,
-                                      /*allow_partial=*/true); }
+    { TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
+                                      /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true); }
     // Indices of sac-land casts hoisted ahead of the Spectacle spell (mirrors ApplyPlanDirect);
     // the trailing sac loop skips them so they are not double-cast. Empty unless a Spectacle
     // enabler is hoisted below.
@@ -10680,10 +10682,27 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         ManaCost pay_bill = effective;
         NoteLineHasteTakerCast(*def, bestow, effective);   // MTG_SERVANT_HASTE_KEEP (rollout twin: apply_one)
         haste_from_mana = def->card.IsCreature() && !bestow && TakeHasteFloatForCreatureSpell(state, pay_bill);
-        bool paid_ok;
+        bool paid_ok = false;
         {
             ScarceHeldOnlyScope _sho(reserved_host > 0);   // the scarce hold outranks the host's (ManaPayment.h)
-            paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature());
+            // A power doubler pays through the shared combat-payment hook (MTG_DOUBLER_COMBAT_PAY; rollout twin:
+            // apply_one). It swaps the float, so `available` is re-derived around it.
+            if (DoublerCastPay(state, *def, hand_card_number,
+                               [&] { available = AvailableManaPool(state);
+                                     return TapForCost(state, pay_bill, available, def->card.IsCreature()); },
+                               paid_ok))
+            {
+                available = AvailableManaPool(state);
+                static const bool s_dbl_trace = EnvOn("MTG_DBL_CP_TRACE");   // diagnostic only
+                if (s_dbl_trace)
+                {
+                    const GameState::DblCombatPay* cp = DblCpLive(state);
+                    std::fprintf(stderr, "[dbl-cp] exec T%d pay %s #%d paid=%d combat=%d rollout=%d\n", state.turn_number,
+                                 def->card.m_name.c_str(), hand_card_number, paid_ok ? 1 : 0,
+                                 cp != nullptr ? cp->last_combat : -1, m_in_rollout ? 1 : 0);
+                }
+            }
+            else { paid_ok = TapForCost(state, pay_bill, available, def->card.IsCreature()); }
         }
         if (reserved_host > 0)
         {
