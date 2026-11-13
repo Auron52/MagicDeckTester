@@ -36,6 +36,9 @@ run stands and what to do next.
     `soulfire_own_targets` not `sac_pins`) + cast-trigger team pump. 2975/2975 unit tests; Shadowborn Apostle /
     Landfall Elementals / Melira Pod byte-identical vs I3b; Boars 40/40 avg 5.325 at d3 b10 (was 5.525). Owed:
     this-turn win estimate ignores the team pump; risk 3 per-cast Ragga rank left for the next integrator.
+  * I4c DONE `07e71e938`: Raggadragga target PER TRIGGER INSTANCE (risk 3 RESOLVED): packed per-instance rank +
+    `GameState::cast_untap_pump_ordinal`; also fans breakpoint continuations. 2977/2977; Extra Turns / Unpredictable
+    Cyclone / Stompy Surprise / Angels byte-identical vs I4; Boars 40/40 avg 5.325 (identical to I4).
   * I5 TODO: Ilharg (+ exalted declared-count fix, put creatures not firing attack triggers,
     legend-rule keep choice in the viewer).
   * Every integrator: add its Boars-only params to the BoarsProvider signature; whitelist its card
@@ -49,5 +52,5 @@ run stands and what to do next.
 
 ## Open USER questions (surfaced, not blocking; repeat in the closing report)
 
-D1-D8 in the ledger ("Agent defaults taken"), I3b risk 3 (per-cast Raggadragga target rank), plus from I1: the viewer now asks a creature type for
+D1-D8 in the ledger ("Agent defaults taken"), I3b risk 3 RESOLVED in I4c, plus from I1: the viewer now asks a creature type for
 Urza's Incubator / Mimic / Automaton in other decks; Boars no longer rides AntiLifegainProvider.

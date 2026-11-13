@@ -374,7 +374,7 @@ without a `--update` round trip, to avoid the 429s I1-I3a hit.
   earlier breakpoint is re-planned only by main 2 / the next decision.
 
 **Open questions (surfaced, not blocking)**
-* **Risk 3 -- OPEN USER QUESTION: build a per-cast target rank, or accept the shared per-turn rank as owed?**
+* **Risk 3 -- RESOLVED in I4c (`07e71e938`, below): built per trigger instance, per the agent default.** Original question:
   Raggadragga's "untap target creature, +7/+7" target is searched on the same whole-turn rank policy as the
   Ulamogs' cast triggers: one rank per plan, applied to EVERY qualifying cast that turn. With two 7+-mana casts in one
   turn (two of End-Raze / Decimator, >= 14 mana, reachable with a Sage refund), the search can only find target pairs
@@ -430,3 +430,48 @@ Audits: audit_card_costs rc 0 (615/615); audit_card_fields rc 0 after adding `em
 * Viewer GUI walk of the emerge mode + pre-payment board click NOT done (Stage 5h).
 * Risk 3 (per-cast Raggadragga target rank) NOT built here: brief ruling "do NOT do the Raggadragga per-cast target
   change (next integrator)". Still an OPEN USER question.
+
+## I4c done (2026-11-13) -- Raggadragga target per trigger instance (risk 3 RESOLVED)
+
+Commit `07e71e938` on `boars-analysis` (local only, not pushed). Unit tests 2977/2977 pass (two new cases in
+`test/unit/test_boars_raggadragga.cpp`, one I3b subcase moved to the new rank encoding). Byte-identity vs the I4
+binary (`build/scratch/boars/mtg.i4`, `--games 20 --seed 9101 --depth 3 --budget-ms 10 --ignore-play-profile`, sorted
+`[win]` lines, `build/scratch/boars/i4c_ident.sh`): **Extra Turns** and **Unpredictable Cyclone** (the Ulamog
+cast-trigger-target users), Stompy Surprise, Angels all IDENTICAL, 20/20 each. Boars 40 games d3 b10: rc 0, 40/40,
+**avg 5.325** (1 x T4, 26 x T5, 12 x T6, 1 x T7) -- the sorted `[win]` lines are identical to I4's (no game in this
+sample had two qualifying casts in one turn), wall 18 s vs 17 s (box shared with the unit suite). Audits:
+audit_card_costs rc 0 (615/615); audit_card_fields rc 0 (advisory oracle divergences only); audit_viewer_decisions
+`--no-sweep` rc 0, oracle cross-check clean.
+
+**Design**
+* The Raggadragga rank is a per-INSTANCE tuple packed in `Plan::cast_trigger_target_choice` (widened int16 -> int32,
+  sizeof(Plan) unchanged at 656): 0 = every instance takes the provider's front; else low 4 bits = digit width B, then
+  one B-bit digit per trigger instance (`UntapPumpRankPack` / `UntapPumpRankDigit`, SpellEffects.h; 27 payload bits).
+  Only the untap-pump consumer decodes; the Ulamogs read the raw rank as before.
+* Instance index = `GameState::cast_untap_pump_ordinal` (NEW uint8 in bool padding, sizeof unchanged, monotonic, bumped
+  once per untap-pump trigger in the shared `FireOnCastTriggers`) minus the ordinal saved when the pin was installed.
+  All three installs pass it (ApplyPlanDirect's `_sctt`, AIEngine's committed-plan install and the breakpoint
+  re-solve adopt), so a re-solve's own pin starts at its digit 0 and an inheriting continuation reads the outer pin's
+  remaining digits -- lockstep in both worlds. Dominance.h: read only relative to an install, nothing to fold.
+* `AppendRaggaInstanceVariants` (TurnSolver.cpp): every tuple over [0, w)^m except the one the base plan already plays
+  (all-zero on a fresh turn, else the live pin's remaining digits clamped to w-1 -- StatePinVariantRanks per digit);
+  w = I3b's per-trigger option upper bound, m = qualifying casts in the plan x Raggadraggas we control. It also fans
+  breakpoint CONTINUATION plans (cont_axes_only, Raggadragga only), so a second qualifying cast that a site-9 refund
+  makes affordable is searched in the rollout rather than inheriting the outer plan's digit. Lossless: an overshoot
+  digit clamps at resolution; tuples that land on the same state fold in the post-apply state dedup; identical targets
+  are one class already (CastTriggerTargetFoldKey). No heuristic narrowing.
+* Viewer: the `target` decision is asked once per trigger instance (it already was per call; DECISIONS.md row says so).
+
+**Tests**: (1) two End-Raze casts off one board reach all six ordered target outcomes (incl. untap the Sage, then pump
+the Boar), the ordinal advances per trigger, and a later install starts at its own digit 0; (2) the SEARCH
+(SolveWithLookahead d2) and the EXECUTOR (AIEngine d2 TakeTurn) both untap two DIFFERENT tapped Apex Altisaurs with two
+Elderscale Wurm casts for a 34-damage kill (opponent at 30); under the shared rank, rank 0 names the Altisaur class and
+then the untapped Altisaur again (17 at most).
+
+**Owed / limits**
+* A plan casting BOTH an Ulamog and a qualifying spell with Raggadragga out keeps the shared flat rank, which the
+  untap-pump consumer then decodes as a tuple (no deck runs both; comment at the axis).
+* Storage bound: 27 payload bits (6 instances at w <= 16) -- 42+ mana of qualifying casts in one turn.
+* Variant count is w^m for a plan with m qualifying casts (no cap, per the completeness rule); in Boars m >= 2 needs
+  >= 14 mana in one turn, so the cost is rare. Not measured beyond the 40-game run.
+
