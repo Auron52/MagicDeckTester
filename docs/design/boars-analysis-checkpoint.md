@@ -42,7 +42,11 @@ run stands and what to do next.
   * I5a DONE `5be6f80bf`: Ilharg attack put from hand (searched pin, every name explicit incl. the default's) +
     end-step return, projection, Horn fold term, D6 clause. 2987/2987; Knights / Goblins / Anti-Lifegain
     byte-identical vs I4c; Boars 40/40 avg 5.225 at d3 b10 (was 5.325). USER Q: AttackPutDefault playout formula.
-  * I5b TODO: (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
+  * I5b item 1 DONE `b8f9c7ba5`: exalted counts the DECLARED attackers (ExaltedAtDeclare / ExaltedBonusForCombat,
+    both combats + the put projection). 2990/2990; 9 decks identical vs I5a; Boars 40/40 avg 5.225 byte-identical; no
+    movers. Items 2-4 handed off: `logs/boars-research/I5b-handoff.md` (item 2 patch script ready, unapplied:
+    `build/scratch/boars/i5b_item2_patch.py`).
+  * I5b TODO (original list; (2) is now done): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
     / ApplyGoblinGuideAttackTriggers / AttackUntapSnowFires / ApplyAttackLifegainTeamPump must iterate the declared
