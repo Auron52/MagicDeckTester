@@ -1651,6 +1651,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_destroy_artifact_enchantment_land  = params.value("etb_destroy_artifact_enchantment_land", false);
     p.etb_destroy_artifact_enchantment_optional =
         params.value("etb_destroy_artifact_enchantment_optional", false);
+    p.etb_destroy_nonbasic_land_optional =
+        params.value("etb_destroy_nonbasic_land_optional", false);
     p.etb_return_gy_to_hand                  = params.value("etb_return_gy_to_hand", false);
     p.etb_return_equipment_from_gy           = params.value("etb_return_equipment_from_gy", false);
     if (params.contains("eternalize_cost"))
@@ -2246,6 +2248,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.nightbound_front_name = params.value("nightbound_front_name", std::string{});
     p.etb_or_transform_exile_opp_creature_until_leaves =
         params.value("etb_or_transform_exile_opp_creature_until_leaves", false);
+    p.etb_exile_opp_nonland_nontoken_max_mv =
+        params.value("etb_exile_opp_nonland_nontoken_max_mv", -1);
+    p.ltb_exiled_owner_illusion_token = params.value("ltb_exiled_owner_illusion_token", false);
 
     // ---- Vampires A2 (2026-10-18) -- see CardParams for each field's oracle clause.
     p.sac_outlet_discard_cost        = params.value("sac_outlet_discard_cost", 0);

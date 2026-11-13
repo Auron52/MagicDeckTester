@@ -4297,6 +4297,57 @@ public:
         return -1;
     }
 
+    // EtbOptionalExileTargetPick -- Skyclave Apparition's "exile up to one target nonland, nontoken
+    // permanent you don't control with mana value N or less" (CardParams::
+    // etb_exile_opp_nonland_nontoken_max_mv): an index into `legal` (battlefield indices, every one an
+    // OPPONENT's permanent), or -1 to exile nothing. A stated IDENTITY FOLD, not a value judgement:
+    // against the goldfish the legal set is the opponent's scheduled spawns, which never attack or
+    // block, and no card that can share a list with this one reads an opponent permanent for value
+    // (Shacklegeist's tap target is useless against a non-blocker); the LTB gift is a 0/0 Illusion
+    // (MV-0 spawn). So exile / decline / which spawn are outcome-identical in the real game. Default =
+    // the largest by effective power (the Chupacabra / Brutal Cathar convention), because a learned
+    // value leaf DOES read opp_creatures / opp_power (KeepModel.cpp MidGameFeature::OppCreatures) and
+    // the deck's artifacts should be fitted on the convention every exile-ETB deck already ships.
+    // PROVISIONAL, USER-owned. The human always sees every legal target and may exile nothing.
+    virtual int EtbOptionalExileTargetPick(const GameState& s, int controller,
+                                           const std::vector<int>& legal) const
+    {
+        (void)controller;
+        int best = -1, best_pw = 0;
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            const int pw = s.battlefield[static_cast<std::size_t>(legal[k])].EffectivePower();
+            if (best < 0 || pw > best_pw) { best = k; best_pw = pw; }
+        }
+        return best;
+    }
+
+    // EtbOptionalNonbasicLandDestroyPick -- White Orchid Phantom's UNPINNED resolution ("destroy up to
+    // one target nonbasic land", CardParams::etb_destroy_nonbasic_land_optional): an index into `legal`
+    // (nonbasic lands, BOTH sides) or -1 for none. An IDENTITY FOLD over the opponent targets and
+    // "none": the opponent never taps a land and nothing reads its lands, land count or library, so
+    // destroying one of its nonbasics (it then fetches a tapped basic) equals destroying nothing. Our
+    // OWN lands are NOT folded here -- they are searched (one cast / Vial-put variant per distinct own
+    // nonbasic name, TurnSolver's White Orchid post-pass, gated by OfferOwnNonbasicLandDestroy below).
+    virtual int EtbOptionalNonbasicLandDestroyPick(const GameState& s, int controller,
+                                                   const std::vector<int>& legal) const
+    {
+        for (int k = 0; k < static_cast<int>(legal.size()); ++k)
+        {
+            if (s.battlefield[static_cast<std::size_t>(legal[k])].controller_index != controller)
+            { return k; }
+        }
+        return -1;
+    }
+
+    // OfferOwnNonbasicLandDestroy -- may the search consider White Orchid Phantom destroying OUR OWN
+    // nonbasic land (then fetching a basic tapped) in this state? A PRUNE hook only. Root default:
+    // always (lossless) -- trading a nonbasic for a basic thins the library and can fix a colour (an
+    // Unclaimed Territory's coloured mana pays only for creatures of its type; a Plains pays for
+    // Lingering Souls), and a land in the graveyard can matter to some list.
+    virtual bool OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const
+    { (void)s; (void)controller; return true; }
+
     // EtbDividedDamageAlloc -- an ENTERS trigger that "deals N damage divided as you choose among any
     // number of target creatures and/or planeswalkers" (Fury). `legal` = battlefield indices of the
     // legal targets (BOTH sides; the caller has applied shroud/hexproof); `lethal_need[k]` = the damage

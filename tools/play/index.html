@@ -4905,6 +4905,30 @@ function digPanelHtml(d){
        `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">Destroy nothing${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
     return h;
   }
+  // Skyclave Apparition ("(may exile)") / White Orchid Phantom ("(may destroy nonbasic land)"):
+  // optional single-target ETBs -- the tiles are every legal target, the button takes none.
+  {
+    const mx=(d.source||'').match(/\s*\((may exile|may destroy nonbasic land)\)\s*$/);
+    if (mx) {
+      const exile=mx[1]==='may exile';
+      const src=(d.source||'').slice(0, mx.index);
+      const verb=exile?'Exile':'Destroy';
+      let h=`<h3>${esc(src)} — ${exile?'exile a permanent':'destroy a nonbasic land'}?</h3>`;
+      h+=exile
+        ? `<div class="sub">${esc(src)} entered: you may exile target nonland, nontoken permanent you don't control with mana value 4 or less. When it leaves the battlefield, the exiled card's owner creates an X/X Illusion (X = its mana value). Click one to exile it, or exile nothing.</div>`
+        : `<div class="sub">${esc(src)} entered: you may destroy target nonbasic land — these are every nonbasic land on the battlefield, including yours. Its controller may then search for a basic land (enters tapped). Click one to destroy it, or destroy nothing.</div>`;
+      h+=`<div class="tutgrid">`;
+      (d.examined||[]).forEach(c=>{
+        const def=c.index===d.heuristic_default;
+        h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — ${verb.toLowerCase()} it">`+
+           `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+           (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+      });
+      h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+         `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">${verb} nothing${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
+      return h;
+    }
+  }
   // The trigger-ORDER choice ("(trigger order)" in the source): an entering creature's own top-of-
   // library search (Flamekin Harbinger) and the look-top triggers (Risen Reef) it raised go on the
   // stack together. Two tiles -- the search's source and the look-top watcher -- pick which resolves

@@ -1,0 +1,26 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Spirits (2026-11-13, integrator C2): the White Orchid Phantom own-land pin rides an AETHER VIAL PUT (the ETB fires on every entry path; the searched variant is offered for the put as well as the cast). Board: Godless Shrine + Aether Vial on 2; hand: White Orchid Phantom + Supreme Phantom; library: Plains filler, the only Island at the bottom. Vial the Phantom in, destroy OUR Godless Shrine, search the ISLAND (tapped). T4: draw + play a Plains, cast Supreme Phantom (Island + Plains), attack for 3 -> win T4. Without the put's pin: no blue source, win T5.",
+  "battlefield": [
+    { "name": "Godless Shrine" },
+    { "name": "Aether Vial", "charge_counters": 2 }
+  ],
+  "hand": [
+    "White Orchid Phantom",
+    "Supreme Phantom"
+  ],
+  "library": [
+    "Island"
+  ],
+  "expect_win_turn": 4
+}

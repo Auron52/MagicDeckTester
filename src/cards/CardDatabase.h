@@ -2554,6 +2554,16 @@ struct CardParams
     // is its enter, so the evoke cast is offered whenever the deck watches creature entries or an
     // opponent target exists. false = inert.
     bool etb_destroy_artifact_enchantment_optional = false;
+    // White Orchid Phantom: "When this creature enters, destroy up to one target nonbasic land. Its
+    // controller may search their library for a basic land card, put it onto the battlefield tapped,
+    // then shuffle." Legal set = every NONBASIC land on BOTH sides (the passive opponent's 0-3
+    // "Opponent Nonbasic Land" placeholders and our own). ResolveEtbDestroyNonbasicLandOptional: an
+    // OWN target rides the cast's / Vial put's searched pin (Action::tutor_target, one variant per
+    // distinct own nonbasic name, TurnSolver's White Orchid post-pass); unpinned = the provider's fold
+    // (DecisionProvider::EtbOptionalNonbasicLandDestroyPick: an opponent's, else none). Our destroyed
+    // land -> the shared PerformLandSearch (basic, tapped, optional; the pick is a land_search_pins
+    // ordinal); the opponent's -> an "Opponent Basic Land" placeholder enters tapped. false = inert.
+    bool etb_destroy_nonbasic_land_optional     = false;
     bool etb_return_gy_to_hand                  = false;
     // Forge Anew: "When this enchantment enters, return target Equipment card from your graveyard to
     // the battlefield." MANDATORY when our graveyard holds an Equipment card (no "up to", CR 603.3d);
@@ -4790,6 +4800,18 @@ struct CardParams
     std::string              daybound_back_name;
     std::string              nightbound_front_name;
     bool                     etb_or_transform_exile_opp_creature_until_leaves = false;
+    // Skyclave Apparition: "When this creature enters, exile up to one target nonland, nontoken
+    // permanent you don't control with mana value 4 or less." -1 = off (MV 0 is a real bound, so 0
+    // cannot be the sentinel); N = the MV cap. ResolveEtbExileUpToOne (SpellEffects.h): the exile is
+    // PERMANENT (not "until"), linked to the source by kSkyclaveExileBase (disjoint from Brutal Cathar's
+    // kLinkedExileBase, so ReturnOrphanedLinkedExiles never returns it) + Permanent::linked_exile_number.
+    // WHICH target = DecisionProvider::EtbOptionalExileTargetPick (a stated identity fold); the human
+    // picks via the `dig` "(may exile)" modal (-1 = none).
+    int                      etb_exile_opp_nonland_nontoken_max_mv = -1;
+    // "When this creature leaves the battlefield, the exiled card's owner creates an X/X blue Illusion
+    // creature token, where X is the mana value of the exiled card." FireLeavesBattlefieldTriggers;
+    // nothing exiled -> no token. false = inert.
+    bool                     ltb_exiled_owner_illusion_token = false;
 
     // ---- Vampires A2 (2026-10-18): discard / sacrifice outlets + graveyard recursion ------------
     // Every field below is new and gated (0 / false / empty / nullopt inert), so every deck that does

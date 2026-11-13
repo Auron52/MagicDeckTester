@@ -22286,6 +22286,13 @@ std::vector<std::string> SpiritsProvider::FetchSearchCandidates(const GameState&
     return ranked;   // the full set -- never DecisionProvider's top-1 default (an arbitrary library-order pick here)
 }
 
+bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const
+{
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
+    { if (IsBasicLandCard(c)) { return true; } }
+    return false;
+}
+
 // The paired baseline is the AntiLifegain route this deck used before onboarding.
 // Ordered opaque casts make a burn spell's damage available before a later
 // spectacle cast, so the enumerator can price that cast at its legal live cost.
