@@ -917,7 +917,7 @@ enum Slot : int
     PREPAY_WILD_REPLAY,       // MTG_PREPAY_WILD_REPLAY  item A round 5: a planner's replay of the general-float drain (LineFloatTapFirstPlan, the hybrid float order) runs under the prepay's record, so the literal booking's generic funding pays a replayed generic pip first, as the payer does (alchemist regression d0 s2002 gi83). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the replay drains without the record
     SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  TEMPORARY A/B SELECTOR (Spirits Stage 1 fetch_hold_review): SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). Default OFF = the hold is offered (root default). Measurement only; the hold policy is a USER decision
     SPIRITS_FETCH_PRIORITY,   // MTG_SPIRITS_FETCH_PRIORITY  the USER's Flooded Strand target rule (2026-11-13; SpiritsFetchRule): order every target, search the pick plus one maker per missing W/U/B colour. Default ON; =0 -> the lossless every-target fan
-    SPIRITS_LORD_VALUE,       // MTG_SPIRITS_LORD_VALUE  Spirits Q8 (USER 2026-11-13 'try to adjust if it seems to make sense'): EvalCard (the d0 runner and the beyond-horizon playout) credits a Spirit lord with its +N on every other Spirit we control, not just its own body (SpiritsProvider::ComboCardValue). Default OFF pending the A/B
+    SPIRITS_LORD_VALUE,       // MTG_SPIRITS_LORD_VALUE  Spirits Q8 (USER 2026-11-13 'try to adjust if it seems to make sense'): EvalCard (the d0 runner and the beyond-horizon playout) credits a Spirit lord with its +N on every other Spirit we control, not just its own body (SpiritsProvider::ComboCardValue). ADOPTED default ON 2026-11-13 (seed 630000: d0 -0.068, d3/d5 0 slower, cheaper); =0 -> the own-body price
     COUNT
 };
 
