@@ -1948,6 +1948,37 @@ void DecisionProvider::CastTriggerTargetOrder(const GameState& s, int controller
     for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
 }
 
+static int AttackPowerOf(const GameState& s, const Permanent& p);   // defined below (the exalted hold)
+void DecisionProvider::UntapPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const
+{
+    // ORDER ONLY (see the declaration). Keys computed once per class.
+    if (class_reps.size() < 2) { return; }
+    struct Keyed { int tier; int key; int idx; };
+    std::vector<Keyed> keyed;
+    keyed.reserve(class_reps.size());
+    // A pure function of the board (no phase read: the two worlds must order identically).
+    for (int idx : class_reps)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(idx)];
+        Keyed k{ 3, 0, idx };
+        if (q.controller_index != controller) { k.tier = 4; }
+        else
+        {
+            const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            const bool refund = q.tapped && d != nullptr && CreatureHasManaAbility(s, &q, q.card)
+                             && CanTapNow(q, s.battlefield);
+            if (refund) { k.tier = 0; k.key = -PermanentManaYield(s, q, *d); }
+            else if (!q.tapped && CanAttackFull(q, s.battlefield, controller))
+            { k.tier = 1; k.key = -AttackPowerOf(s, q); }
+            else { k.tier = 2; k.key = -AttackPowerOf(s, q); }
+        }
+        keyed.push_back(k);
+    }
+    std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b)
+    { return a.tier != b.tier ? a.tier < b.tier : a.key < b.key; });
+    for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
+}
+
 void DecisionProvider::LandfallDoubleTargetOrder(const GameState& s, int controller,
                                                  std::vector<int>& class_reps) const
 {
@@ -5301,6 +5332,9 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     // nothing (USER 2026-08-21: vigilance -> freely attack). Gated with the feature so the
     // default path stays byte-identical.
     if (DorkAtkSearchEnabled() && (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance)) { return false; }   // + End-Raze grant
+    // Raggadragga's attack untap is vigilance-equivalent for mana (Boars I3b): attacking costs the dork nothing, and
+    // its anthem makes a "0-power" dork a 2/3 that EffectivePower (no lords) would misread. Sound exemption.
+    if (AttackUntapsAttacker(s, p))                         { return false; }
     if (p.EffectivePower() > 0)                             { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)            { return false; }
@@ -5533,6 +5567,7 @@ static bool ProviderHeldDorkReleasable(const GameState& s, const Permanent& p)
     if (p.tapped || !p.card.IsCreature())                          { return false; }
     if (p.controller_index != s.active_player_index)               { return false; }
     if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return false; }   // + End-Raze until-EOT grant
+    if (AttackUntapsAttacker(s, p))                                { return false; }   // + Raggadragga's attack untap
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)                   { return false; }
     if (!CanTapNow(p, s.battlefield))                              { return false; }
@@ -5648,7 +5683,7 @@ int DorkAtkContestedKind(const GameState& s)
             // freely attack"): a vigilant dork does not tap to attack, so its mana survives combat
             // and there is nothing to contest. Same exemption the tower applies on the release side.
             if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance) && !p.temp_vigilance
-                && CanTapNow(p, s.battlefield))
+                && CanTapNow(p, s.battlefield) && !AttackUntapsAttacker(s, p))   // + Raggadragga's untap
             {
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (pd && pd->tmpl == CardTemplate::ManaDork) { ++atk_dorks; }
@@ -20372,6 +20407,7 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
 
     // Vigilance: attacking costs it nothing, so never hold it back.
     if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return true; }   // + End-Raze grant
+    if (AttackUntapsAttacker(s, p))            { return true; }  // + Raggadragga's attack untap (Boars I3b)
     if (AttackHasNonPowerValue(s, p))          { return true; }  // attack-trigger value
 
     // Never forfeit a kill: if everything that CAN attack already adds up to lethal, swing with all
@@ -25867,7 +25903,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // counters (the class note lists what later integrators OR in).
         if (p.self_haste_cost.has_value() || p.tap_mana_damage_each_opponent > 0
             || p.creature_cast_trigger_plus_counters > 0
-            || p.etb_other_creatures_grant_vigilance)   // End-Raze Forerunners (I3a)
+            || p.etb_other_creatures_grant_vigilance    // End-Raze Forerunners (I3a)
+            || p.lord_affects_mana_ability_creatures || p.attack_untap_mana_ability_attackers
+            || p.cast_trigger_untap_pump_target_min_spent > 0)   // Raggadragga (I3b)
         { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())

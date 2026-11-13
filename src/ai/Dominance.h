@@ -617,6 +617,10 @@ static_assert(sizeof(Player) == 216,
 // after scripted_upkeep_tutor; no hole there). Classification: FUTURE-DETERMINING (set by the turn's apply / the
 // crossing's Stamp, consumed at the next upkeep by PerformUpkeepHornReveal), FOLDED in Build() value-gated (and in
 // BuildDedupKey's pending pins and the boundary key's tutor slot, value-gated).
+// +0 bytes (2026-11-13, Boars I3b -- Raggadragga): `cast_untap_refunds` (a uint8_t in the bool padding after
+// deck_has_attack_dig_hand). Classification: a MONOTONIC per-game counter read ONLY as a delta against the snapshot
+// a phase's plan took at its start (breakpoint site 9's activation keys); its absolute value never changes a future
+// line, so two states that differ only here are equivalent -- NOTHING TO FOLD (folding it would only split classes).
 static_assert(sizeof(GameState) == 1416,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

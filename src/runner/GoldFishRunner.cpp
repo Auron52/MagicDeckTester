@@ -1287,7 +1287,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && (d->params.cast_trigger_exile_target_permanents > 0
-                      || d->params.cast_trigger_destroy_target_permanents > 0)) { return true; }
+                      || d->params.cast_trigger_destroy_target_permanents > 0
+                      || d->params.cast_trigger_untap_pump_target_min_spent > 0)) { return true; }   // + Raggadragga
         }
         return false;
     }();
@@ -1386,8 +1387,9 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && d->params.attack_untap_snow_permanents) { return true; }
             // End-Raze Forerunners' team vigilance grant: combat-kept mana (UntapSecondMainLive's
-            // second clause, Boars I3a / D6). Raggadragga's attack untap joins here (I3b).
+            // second clause, Boars I3a / D6). Raggadragga's attack untap: the third clause (Boars I3b).
             if (d && d->params.etb_other_creatures_grant_vigilance) { return true; }
+            if (d && d->params.attack_untap_mana_ability_attackers) { return true; }
         }
         return false;
     }();

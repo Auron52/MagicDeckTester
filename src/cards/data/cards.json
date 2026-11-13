@@ -16362,6 +16362,35 @@
    }
   },
   {
+   "name": "Raggadragga, Goreguts Boss",
+   "mana_cost": "{2}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Boar"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Each creature you control with a mana ability gets +2/+2.\nWhenever a creature you control with a mana ability attacks, untap it.\nWhenever you cast a spell, if at least seven mana was spent to cast it, untap target creature. It gets +7/+7 and gains trample until end of turn. [Anthem: lord_affects_mana_ability_creatures + power_bonus/tough_bonus 2 -- a ComputeLordBonus match on CreatureHasManaAbility (a printed mana ability -- mana_dork template, a creature that produces mana, a creature mana rock, a sacrifice-for-mana body, an animated mana land -- or a Brightcap-style GRANTED tap ability). It does not depend on whether the ability can be activated now, so a summoning-sick Birds is a 2/3. Raggadragga has no mana ability and never buffs itself. Attack untap: attack_untap_mana_ability_attackers -- each DECLARED attacker we control with a mana ability is untapped (the Jorn shape: noted at declare-attackers, applied right after combat damage, where this engine taps attackers -- the same post-combat state, since no priority window opens in combat). A creature put onto the battlefield attacking (Ilharg) was never declared and does not trigger (CR 508.4). The untapped creature's mana is spendable in the post-combat main. Cast trigger: cast_trigger_untap_pump_target_min_spent 7, power 7, tough 7 -- fires at every cast site with the mana actually spent on the cost paid (after Herald's Horn reductions, an X, emerge; minus convoke; a free cast spends 0). The target is any creature (shroud honoured: a Lightning Greaves host is illegal), chosen as the trigger is put on the stack and SEARCHED (the cast-trigger target rank; the opponent's creatures are folded away in search, a sound dominance against a passive opponent; the human picks from the full legal set). Untapping a tapped mana creature mid-main is new mana, so the rest of the phase is re-planned (breakpoint site 9). +7/+7 is an until-end-of-turn bonus. PROVISIONAL (D2): 'gains trample' is recorded (cast_trigger_untap_pump_grants_trample) and never applied -- this engine has no blocker path, so trample is inert against the goldfish opponent, who never blocks. Legend rule modelled.]",
+   "template": "custom",
+   "parameters": {
+    "lord_affects_mana_ability_creatures": true,
+    "power_bonus": 2,
+    "tough_bonus": 2,
+    "attack_untap_mana_ability_attackers": true,
+    "cast_trigger_untap_pump_target_min_spent": 7,
+    "cast_trigger_untap_pump_power": 7,
+    "cast_trigger_untap_pump_tough": 7,
+    "cast_trigger_untap_pump_grants_trample": true
+   }
+  },
+  {
    "name": "Herald of Ilharg",
    "mana_cost": "{2}{R}{G}",
    "types": [

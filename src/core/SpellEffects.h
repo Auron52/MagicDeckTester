@@ -5950,6 +5950,10 @@ inline thread_local int g_cast_trigger_mana_spent_probe = -1;
 // that is not mana (Invigorate's lifegain, Fireblast's sacrifice) spends 0. REQUIRED with no default, so every
 // cast site had to state it (the ComputeLordBonus-signature lesson). Every site is in both worlds' shared paths;
 // the executor's CastSpellFromHand and the rollout's apply_one compute it off their lockstep `effective` / `ec`.
+inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
+                                                 const std::string& src_name, bool untap_pump);   // defined below
+inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
+                                   int power, int tough);                                       // defined below
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
     g_cast_trigger_mana_spent_probe = mana_spent;
@@ -6000,6 +6004,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
                        std::vector<std::string> kws; };
     std::vector<TokenSpec> to_create;
     int clues = 0;   // Malcolm's investigate, deferred past the loop like to_create
+    // Raggadragga's untap + pump triggers (Boars I3b), deferred past the loop like to_create: the untap and the
+    // pump change the battlefield the loop walks. Each entry is the source's definition (one per Raggadragga).
+    std::vector<const CardDefinition*> untap_pumps;
 
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -6115,6 +6122,14 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
         // counts every counter (TotalCountersOn). Each Herald resolves its own trigger with its own count; the
         // order of simultaneous cast triggers is inert (each reads only its own counters). Index the battlefield,
         // not `p` (a const ref); neither the put nor face damage reallocates it.
+        // Raggadragga, Goreguts Boss: "Whenever you cast a spell, if at least seven mana was spent to cast it, ..."
+        // The INTERVENING IF (CR 603.4) reads the mana actually spent (this function's contract above): Herald's
+        // Horn makes End-Raze 7 (fires) and two Horns make it 6 (does not); a free cast spends 0. Any spell type.
+        // Raggadragga is on the stack during its own cast, so it never sees itself.
+        if (def->params.cast_trigger_untap_pump_target_min_spent > 0 && p.controller_index == active
+            && mana_spent >= def->params.cast_trigger_untap_pump_target_min_spent)
+        { untap_pumps.push_back(def); }
+
         if (def->params.creature_cast_trigger_plus_counters > 0 && cast_def.card.IsCreature()
             && p.controller_index == active)
         {
@@ -6236,6 +6251,19 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     { CreateTokens(state, active, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
     // After the loop: CreateClueTokens push_backs onto the battlefield (would invalidate `p`).
     if (clues > 0) { CreateClueTokens(state, active, clues); }
+    // Raggadragga's untap + pump, each with its own target, chosen as the trigger is put on the stack (the shared
+    // searched chooser: Plan::cast_trigger_target_choice's rank policy; the board-click `target` decision in human
+    // play). ORDER vs the other cast triggers (Herald of Ilharg's counters, Decimator's team pump) is the
+    // controller's (CR 603.3b) and inert: pumps and counters commute and the untap is independent of both, so a
+    // fixed order is a sound identity. After the tokens above, which are then legal targets (a superset).
+    for (const CardDefinition* rd : untap_pumps)
+    {
+        const std::vector<int> nums = ChooseCastTriggerTargets(state, active, 1, /*destroy=*/false,
+                                                               rd->card.m_name.str(), /*untap_pump=*/true);
+        if (nums.empty()) { continue; }   // no legal target (every creature shrouded): removed (CR 603.3d)
+        ResolveUntapPumpTarget(state, active, rd->card.m_name.str(), nums.front(),
+                               rd->params.cast_trigger_untap_pump_power, rd->params.cast_trigger_untap_pump_tough);
+    }
     // Every cast trigger above has resolved (they sit above the spell); the draw triggers of any card
     // one of them drew (Parun, Kor Spiritdancer, Sram) resolve now, still before the spell -- the Niv
     // loop. One bool test for every deck without it. Shared by every cast site in both worlds.
@@ -6326,8 +6354,15 @@ inline bool IsLordPermanent(const CardDefinition& def)
     return def.card.IsCreature()
         && (def.params.power_bonus != 0 || def.params.tough_bonus != 0)
         && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures
-            || def.params.lord_affects_chosen_subtype);
+            || def.params.lord_affects_chosen_subtype
+            || def.params.lord_affects_mana_ability_creatures);   // Raggadragga (Boars I3b)
 }
+
+// "<creature> with a mana ability" (Raggadragga, Goreguts Boss; Boars I3b). Defined beside ManaDefOf below
+// (it reads the Brightcap-style live grant). HAS the ability, never "can use it now" (CR 605.1a): summoning
+// sickness, tapped state and payability are irrelevant, so a sick Birds is still pumped. `self` may be null
+// (a hand-card projection): the definition alone answers.
+inline bool CreatureHasManaAbility(const GameState& state, const Permanent* self, const Card& c);
 
 // TAKES THE WHOLE GameState, not just the battlefield (changed 2026-08-23 for Neheb, the Worthy).
 // A CONDITIONAL anthem -- "as long as you have one or fewer cards in hand, Minotaurs you control
@@ -6499,6 +6534,12 @@ inline std::pair<int,int> ComputeLordBonus(
         if (ldef->params.affects_all_creatures)
         {
             matches = true;   // anthem for every creature you control (Benalish Marshal)
+        }
+        else if (ldef->params.lord_affects_mana_ability_creatures)
+        {
+            // Raggadragga: "Each creature you control with a mana ability gets +2/+2." Raggadragga itself has
+            // none, so it never buffs itself. Before the subtype branches: the card has no subtypes_affected.
+            matches = CreatureHasManaAbility(state, self, creature);
         }
         else if (ldef->params.lord_affects_chosen_subtype)
         {
@@ -17434,17 +17475,35 @@ inline bool CastTriggerTargetFoldKey(const GameState& state, const Permanent& p,
 }
 // The legal set, folded and ORDERED: `classes[c]` = the battlefield indices of class c (ascending), the
 // classes in the provider's order.
+// `untap_pump` (Raggadragga's "untap target creature. It gets +7/+7 ...", Boars I3b): the legal set is CREATURES
+// only (an animated permanent is one), and in SEARCH (no human chooser) the opponent's creatures are dropped
+// whenever one of ours is legal -- a SOUND fold, not a prune: untapping or pumping a creature of the passive
+// opponent, who never attacks or blocks, changes nothing, so it is weakly dominated by any own target. Human play
+// keeps the full set. The fold key already splits tapped / untapped and summoning-sick / not (LandfallTargetFoldKey
+// mixes `tapped` and `entered_this_turn`), and refuses any temp bonus -- so "untap the tapped Sage" and "pump the
+// untapped Sage" are distinct options, as they must be.
 inline void CastTriggerTargetClasses(const GameState& state, int controller, bool destroy,
-                                     std::vector<std::vector<int>>& classes)
+                                     std::vector<std::vector<int>>& classes, bool untap_pump = false)
 {
     classes.clear();
     std::vector<int> linked;
     LandfallTargetLinks(state, linked);
     std::vector<std::uint64_t> keys;   // parallel to classes; 0 = singleton
+    bool drop_opp = false;
+    if (untap_pump && !g_play_loyalty_chooser)
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)
+                && !CreatureHasShroud(q, state)) { drop_opp = true; break; }
+        }
+    }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
         if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        if (untap_pump && !(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (drop_opp && q.controller_index != controller) { continue; }
         std::uint64_t k = 0;
         const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked);
         bool placed = false;
@@ -17459,7 +17518,8 @@ inline void CastTriggerTargetClasses(const GameState& state, int controller, boo
     std::vector<int> reps;
     reps.reserve(classes.size());
     for (const auto& c : classes) { reps.push_back(c.front()); }
-    ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps);
+    if (untap_pump) { ResolveProvider(state).UntapPumpTargetOrder(state, controller, reps); }
+    else            { ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps); }
     std::vector<std::vector<int>> ordered;
     ordered.reserve(classes.size());
     for (int r : reps)
@@ -17509,10 +17569,10 @@ inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<in
 // THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
 // removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
-                                                 const std::string& src_name)
+                                                 const std::string& src_name, bool untap_pump = false)
 {
     std::vector<std::vector<int>> classes;
-    CastTriggerTargetClasses(state, controller, destroy, classes);
+    CastTriggerTargetClasses(state, controller, destroy, classes, untap_pump);
     std::size_t legal_n = 0;
     for (const auto& c : classes) { legal_n += c.size(); }
     if (n <= 0 || legal_n < static_cast<std::size_t>(n))
@@ -17549,8 +17609,10 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
             int c = dflt_idx;
             if (static_cast<int>(legal.size()) > left)   // a forced pick is not a choice (CR 601.2c)
             {
-                const std::string what = std::string(destroy ? "destroyed" : "exiled")
-                    + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
+                const std::string what = untap_pump
+                    ? std::string("untapped and pumped until end of turn (target creature -- mandatory)")
+                    : std::string(destroy ? "destroyed" : "exiled")
+                      + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
                 const int got = (*g_play_loyalty_chooser)(state, controller, src_name, what, legal, dflt_idx);
                 if (got >= 0 && got < static_cast<int>(legal.size())) { c = got; }
             }
@@ -17561,6 +17623,41 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
     std::vector<int> nums;
     for (int i : pick) { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
     return nums;
+}
+// Raggadragga's cast trigger resolving (Boars I3b): "untap target creature. It gets +P/+T and gains trample until
+// end of turn." Re-found by m_number (CR 608.2b: gone, or no longer a creature -> the trigger does nothing). The
+// intervening if ("at least seven mana was spent") was checked when the trigger fired; the amount cannot change, so
+// the re-check on resolution is the same answer. An untap EFFECT for the payment-rollback ledger. Untapping a
+// TAPPED creature with a mana ability that can tap now is NEW MANA the phase's plan was priced without, so it
+// bumps GameState::cast_untap_refunds -- breakpoint site 9's activation-key delta (kActUntapRefund) then re-plans
+// the rest of the phase in BOTH worlds, so "cast the 7-drop with the Sage, untap the Sage, cast another creature"
+// is findable. Trample: recorded, never applied (D2 -- no blocker path; inert against the goldfish).
+inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
+                                   int power, int tough)
+{
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.card.m_number != number) { continue; }
+        if (!(q.card.IsCreature() || q.is_animated)) { return; }
+        const bool was_tapped = q.tapped;
+        if (was_tapped)
+        {
+            state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
+            q.tapped = false;
+            if (q.controller_index == controller && CreatureHasManaAbility(state, &q, q.card)
+                && CanTapNow(q, state.battlefield))
+            { state.cast_untap_refunds = static_cast<std::uint8_t>(state.cast_untap_refunds + 1); }
+        }
+        q.temp_power_bonus += power;
+        q.temp_tough_bonus += tough;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": " + (was_tapped ? "untaps " : "") + q.card.m_name.str() + ", +"
+                          + std::to_string(power) + "/+" + std::to_string(tough) + " and trample until end of turn");
+        }
+        return;
+    }
 }
 inline int SweepOrphanedAuras(GameState& state);   // defined below
 inline void ResolveCastTriggerTargets(GameState& state, int controller, const std::string& src_name,
@@ -24470,6 +24567,72 @@ inline void UntapSnowPermanents(GameState& state, int controller)
     }
 }
 
+// ---- Raggadragga, Goreguts Boss (Boars I3b): "Whenever a creature you control with a mana ability attacks, ----
+// untap it." (CardParams::attack_untap_mana_ability_attackers). The Jorn shape, both worlds, two steps:
+//   * AttackUntapManaAttackers at declare-attackers -- the DECLARED attackers (the first `declared_n` slots of the
+//     attack list, captured before any token or put joins it: a creature put onto the battlefield attacking was
+//     never declared and does not "attack", CR 508.4 -- Ilharg's put, I5) that we control and that have a mana
+//     ability, provided we control a Raggadragga at declaration. Returned as m_numbers (stable across the index
+//     shifts the attack-trigger helpers cause).
+//   * UntapManaAttackers right AFTER ResolveCombatDamage (where this engine taps attackers): same post-combat
+//     state as untapping on the trigger (damage reads no tapped status; no priority window in combat), so the
+//     mana is spendable in the post-combat main (UntapSecondMainLive's Raggadragga clause). A firebreathing /
+//     combat-aura mana read before damage would not see it -- no such card in a Raggadragga deck (Jorn's note).
+// One trigger per Raggadragga, and untap is idempotent (the legend rule caps it at one anyway). Gated on the deck
+// constant deck_has_attack_untap, then on a Raggadragga actually being out -> every other deck byte-identical.
+inline bool ControlsManaAttackUntapper(const GameState& state, int controller)
+{
+    if (!state.deck_has_attack_untap) { return false; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.attack_untap_mana_ability_attackers) { return true; }
+    }
+    return false;
+}
+// Does attacking with `p` cost it no mana -- the attack untaps it (Raggadragga)? The VIGILANCE-EQUIVALENT test the
+// dork attack/hold providers read beside the printed keyword and temp_vigilance: a sound exemption, holding such
+// a creature home "for its mana" buys nothing.
+inline bool AttackUntapsAttacker(const GameState& state, const Permanent& p)
+{
+    return (p.card.IsCreature() || p.is_animated) && ControlsManaAttackUntapper(state, p.controller_index)
+        && CreatureHasManaAbility(state, &p, p.card);
+}
+inline std::vector<int> AttackUntapManaAttackers(const GameState& state, int controller,
+                                                 const std::vector<int>& attacker_indices, int declared_n)
+{
+    std::vector<int> out;
+    if (!ControlsManaAttackUntapper(state, controller)) { return out; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    const int n = std::min<int>(declared_n, static_cast<int>(attacker_indices.size()));
+    for (int k = 0; k < n; ++k)
+    {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
+        if (a.controller_index != controller) { continue; }
+        if (CreatureHasManaAbility(state, &a, a.card)) { out.push_back(a.card.m_number); }
+    }
+    return out;
+}
+inline void UntapManaAttackers(GameState& state, int controller, const std::vector<int>& numbers)
+{
+    if (numbers.empty()) { return; }
+    // Mana-payment rollback (PayRollback.h): an untap EFFECT fired this turn (UntapSnowPermanents' note).
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        if (std::find(numbers.begin(), numbers.end(), p.card.m_number) != numbers.end())
+        {
+            p.tapped = false;
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "trigger", "Raggadragga: untaps attacking " + p.card.m_name.str()); }
+        }
+    }
+}
+
 // ---- MORAUG, FURY OF AKOUM (2026-10-23): the additional combat's two shared bodies -------------------------
 // "At the beginning of that combat, untap all creatures you control." A delayed trigger of the ADDITIONAL
 // combat only (the regular combat does not untap -- Scryfall ruling 2020-09-25), resolved at its beginning,
@@ -24535,6 +24698,7 @@ inline bool UntapSecondMainLive(const GameState& state)
 {
     if (!state.deck_has_attack_untap) { return false; }   // deck constant: no scan for other decks
     const int me = state.active_player_index;
+    const bool ragga = ControlsManaAttackUntapper(state, me);   // Raggadragga out (third clause below)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != me) { continue; }
@@ -24542,6 +24706,13 @@ inline bool UntapSecondMainLive(const GameState& state)
         if (d && d->params.attack_untap_snow_permanents && CanAttackFull(p, state.battlefield, me))
         { return true; }
         if (CombatKeptManaCreature(p, d)) { return true; }   // End-Raze's vigilance grant (Boars I3a)
+        // THIRD CLAUSE (Boars I3b, D6): Raggadragga's attack untap. A pure-board proxy (the Jorn precedent): we
+        // control a Raggadragga AND an own creature with a mana ability that is untapped and can tap now. An
+        // attacking one was untapped by the trigger; one that stayed home only widens main 2 to a superset of main
+        // 1's remaining options (sound, the I3a argument). No per-turn stamp field: the board already is the key.
+        if (ragga && !p.tapped && (p.card.IsCreature() || p.is_animated) && CreatureHasManaAbility(state, &p, p.card)
+            && CanTapNow(p, state.battlefield))
+        { return true; }
     }
     return false;
 }
@@ -37245,6 +37416,31 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     if (d != nullptr && IsBaselineManaSource(*d)) { return d; }
     if (GrantReaches(g, p) && GrantedBodyCanTap(g, p, state.battlefield)) { return &GrantFaceFor(g, p); }
     return d;
+}
+
+// Raggadragga's "creature with a mana ability" (declared above IsLordPermanent's neighbour; Boars I3b). PRINTED
+// or GRANTED, never activatability (CR 605.1a), so unlike ManaDefOf the grant half does NOT ask GrantedBodyCanTap:
+// a summoning-sick Saproling under a Brightcap still HAS the ability. Definition half: a mana dork, a creature
+// mana rock, a sacrifice-for-mana body (Eldrazi Spawn, Generator Servant), any creature def that `produces`, and
+// Accomplished Alchemist's life-yield tap. An animated land with a mana ability is a creature that has one.
+inline bool CardDefHasManaAbility(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::ManaDork || d.tmpl == CardTemplate::BasicLand || d.params.mana_rock
+        || d.params.sac_for_mana_amount > 0 || !d.params.produces.empty() || d.params.mana_per_life_gained;
+}
+inline bool CreatureHasManaAbility(const GameState& state, const Permanent* self, const Card& c)
+{
+    const CardDefinition* d = (self != nullptr && self->def_absent) ? nullptr
+                                                                    : CardDatabase::Instance().LookupCached(c);
+    if (d != nullptr && CardDefHasManaAbility(*d))
+    {
+        // A land def only counts while it IS a creature (animated); a land card in hand is no creature.
+        if (d->tmpl != CardTemplate::BasicLand && !(d->card.IsLand() && !d->card.IsCreature())) { return true; }
+        return self != nullptr && self->is_animated;
+    }
+    if (self == nullptr || !state.deck_has_mana_grant) { return false; }   // deck constant: no walk elsewhere
+    const ManaGrant g = LiveManaGrant(state, self->controller_index);
+    return GrantReaches(g, *self);
 }
 
 // THE SAME-PLAN GRANT CREDIT (MTG_GRANT_CAST_CREDIT; TurnSolver's CollectActions stamps it on

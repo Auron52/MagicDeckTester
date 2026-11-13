@@ -210,6 +210,10 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "creature_cast_trigger_plus_counters", "creature_cast_counter_damage_min_mv",   // Herald of Ilharg: counters + damage
                 "etb_other_creatures_pump_power", "etb_other_creatures_pump_tough",              // End-Raze Forerunners (I3a):
                 "etb_other_creatures_grant_vigilance",                                           //   a temp pump + vigilance, never a card
+                // Raggadragga (I3b): an anthem, an attack untap and a cast-trigger untap + pump -- never a card.
+                "lord_affects_mana_ability_creatures", "power_bonus", "tough_bonus",
+                "attack_untap_mana_ability_attackers", "cast_trigger_untap_pump_target_min_spent",
+                "cast_trigger_untap_pump_power", "cast_trigger_untap_pump_tough", "cast_trigger_untap_pump_grants_trample",
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -2019,6 +2023,13 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_other_creatures_pump_power = params.value("etb_other_creatures_pump_power", 0);   // End-Raze Forerunners
     p.etb_other_creatures_pump_tough = params.value("etb_other_creatures_pump_tough", 0);
     p.etb_other_creatures_grant_vigilance = params.value("etb_other_creatures_grant_vigilance", false);
+    // Raggadragga, Goreguts Boss (Boars I3b)
+    p.lord_affects_mana_ability_creatures = params.value("lord_affects_mana_ability_creatures", false);
+    p.attack_untap_mana_ability_attackers = params.value("attack_untap_mana_ability_attackers", false);
+    p.cast_trigger_untap_pump_target_min_spent = params.value("cast_trigger_untap_pump_target_min_spent", 0);
+    p.cast_trigger_untap_pump_power = params.value("cast_trigger_untap_pump_power", 0);
+    p.cast_trigger_untap_pump_tough = params.value("cast_trigger_untap_pump_tough", 0);
+    p.cast_trigger_untap_pump_grants_trample = params.value("cast_trigger_untap_pump_grants_trample", false);
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

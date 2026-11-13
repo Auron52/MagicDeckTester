@@ -1176,6 +1176,9 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
     // Mirrors TurnSolver::SimulateCombat (same two shared helpers, same two points).
     const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx);
+    // Raggadragga (attack_untap_mana_ability_attackers, Boars I3b): the DECLARED attackers with a mana ability (the
+    // first declared_n slots), by m_number; untapped right after ResolveCombatDamage, beside Jorn's untap.
+    const std::vector<int> ragga_untap = AttackUntapManaAttackers(state, state.active_player_index, atk_idx, declared_n);
 
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens put onto the battlefield attacking receive the pump (CR 603.3b lets the
@@ -1257,6 +1260,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
     CounterPingFinish(state, state.active_player_index);
     if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
+    UntapManaAttackers(state, state.active_player_index, ragga_untap);   // Raggadragga, see above (no-op when empty)
     // Zhur-Taa Druid's post-combat lethal finish (shared; rollout twin: SimulateOneCombat). No-op unless
     // ready ping dorks alone are lethal -- i.e. for every deck without one.
     PingDorkFinish(state, state.active_player_index);

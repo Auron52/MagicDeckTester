@@ -3750,6 +3750,23 @@ struct CardParams
     int  etb_other_creatures_pump_power = 0;
     int  etb_other_creatures_pump_tough = 0;
     bool etb_other_creatures_grant_vigilance = false;
+    // Raggadragga, Goreguts Boss (Boars I3b). Three clauses, each with ONE shared site in SpellEffects.h:
+    //   * lord_affects_mana_ability_creatures (+ power_bonus / tough_bonus): "Each creature you control with a
+    //     mana ability gets +2/+2" -- a ComputeLordBonus match on CreatureHasManaAbility (HAS the ability, not
+    //     can-use: a summoning-sick Birds is pumped). Layer 7c, both worlds through the one lord walk.
+    //   * attack_untap_mana_ability_attackers: "Whenever a creature you control with a mana ability attacks,
+    //     untap it." DECLARED attackers only (AttackUntapManaAttackers at declare-attackers, UntapManaAttackers
+    //     right after ResolveCombatDamage -- the Jorn shape, both combats); main 2 via UntapSecondMainLive.
+    //   * cast_trigger_untap_pump_target_min_spent (+ _power / _tough / _grants_trample): "Whenever you cast a
+    //     spell, if at least N mana was spent to cast it, untap target creature. It gets +P/+T and gains
+    //     trample until end of turn." Read off FireOnCastTriggers' mana_spent; the target is the searched
+    //     cast-trigger target (Plan::cast_trigger_target_choice, creatures only). Trample recorded, inert (D2).
+    bool lord_affects_mana_ability_creatures = false;
+    bool attack_untap_mana_ability_attackers = false;
+    int  cast_trigger_untap_pump_target_min_spent = 0;
+    int  cast_trigger_untap_pump_power = 0;
+    int  cast_trigger_untap_pump_tough = 0;
+    bool cast_trigger_untap_pump_grants_trample = false;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the

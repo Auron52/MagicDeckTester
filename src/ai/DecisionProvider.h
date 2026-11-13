@@ -1125,6 +1125,15 @@ public:
     virtual void CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
                                         std::vector<int>& class_reps) const;
 
+    // UntapPumpTargetOrder -- Raggadragga's "untap target creature. It gets +7/+7 and gains trample until end of
+    // turn" (Boars I3b). Same contract as CastTriggerTargetOrder: `class_reps` (battlefield indices, one per
+    // identity class, creatures only) is ORDERED in place, never restricted; the search branches over every class
+    // (Plan::cast_trigger_target_choice). Base rule: own TAPPED creatures with a mana ability that can tap now,
+    // largest mana yield first (the untap is new mana this phase -- a tapped Somberwald Sage refunds 3); then own
+    // untapped creatures that can still attack, highest attack power first (+7/+7 on a swing); then the rest of
+    // ours (highest power first); the opponent's last. Stable (oldest first on a tie).
+    virtual void UntapPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const;
+
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
     // double-strike mid-step earnings (see JitteDamageMath; per-turn damage-optimal). The one

@@ -1198,6 +1198,13 @@ struct GameState
     // sizeof(GameState) does not move. Default FALSE: an unstamped state opens no second main,
     // which is the conservative direction (the pre-existing behaviour).
     bool                     deck_has_attack_dig_hand = false;
+    // Raggadragga's cast trigger (Boars I3b) untapped a TAPPED creature with a mana ability that can tap now:
+    // a MONOTONIC count (wraps at 256; never reset), bumped only by ResolveUntapPumpTarget. Its ONLY reader is
+    // breakpoint site 9's activation-key delta (CollectActivationKeys' kActUntapRefund on the Raggadragga), which
+    // compares it against the snapshot taken when the phase's plan started -- so only a CHANGE within one apply
+    // matters, never the absolute value: two states that differ only here have identical futures (Dominance.h
+    // classification: nothing to fold). 0 for every deck without the card. In the bool padding (sizeof unchanged).
+    std::uint8_t             cast_untap_refunds = 0;
     // THE COMBAT LANDFALL-TARGET RANK (Plan::combat_landfall_target_choice, 2026-10-17) -- a per-turn
     // COMBAT PIN like scripted_combat_land_search_crack, placed HERE (int8_t, in this bool padding) because
     // an int beside the other combat pins costs sizeof(GameState) +8 (measured). The rank into

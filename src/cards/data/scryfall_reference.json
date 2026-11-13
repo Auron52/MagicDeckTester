@@ -5099,6 +5099,15 @@
     "toughness": "3",
     "type_line": "Creature — Minotaur Shaman"
   },
+  "Raggadragga, Goreguts Boss": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{G}",
+    "oracle_text": "Each creature you control with a mana ability gets +2/+2.\nWhenever a creature you control with a mana ability attacks, untap it.\nWhenever you cast a spell, if at least seven mana was spent to cast it, untap target creature. It gets +7/+7 and gains trample until end of turn.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Human Boar"
+  },
   "Rakdos Carnarium": {
     "cmc": 0.0,
     "keywords": [],

@@ -695,6 +695,9 @@ MANIFEST = {
     # prompted.
     "cast_trigger_exile_target_permanents":   ("target", positive),
     "cast_trigger_destroy_target_permanents": ("target", positive),
+    # Raggadragga, Goreguts Boss (Boars I3b): "untap target creature. It gets +7/+7 ..." -- the same shared `target`
+    # board-click at ChooseCastTriggerTargets(untap_pump), creatures only, full legal set in human play.
+    "cast_trigger_untap_pump_target_min_spent": ("target", positive),
     # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
     # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
     # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
@@ -1582,6 +1585,11 @@ INERT_PARAMS = {
     # planeswalker/Garth heuristic sub-picks -- were user-approved 2026-08-06, disclosed in 6a.)
     "attack_draw_cards": "automatic attack trigger (Two-Headed Hellkite: draw on attack), no choice",
     "attack_untap_snow_permanents": "automatic attack trigger (Jorn: untap each snow permanent), no choice",
+    "attack_untap_mana_ability_attackers": "automatic attack trigger (Raggadragga: untap each attacking mana creature), no choice; Boars I3b",
+    "lord_affects_mana_ability_creatures": "static anthem (Raggadragga: creatures with a mana ability +2/+2), no choice; Boars I3b",
+    "cast_trigger_untap_pump_power": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
+    "cast_trigger_untap_pump_tough": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
+    "cast_trigger_untap_pump_grants_trample": "Raggadragga's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
     "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
     "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",
@@ -2231,7 +2239,8 @@ def modeled_tokens(card):
         t.add("target")
     # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
     # one pick per target, at ChooseCastTriggerTargets).
-    if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:
+    if (p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0
+            or p.get("cast_trigger_untap_pump_target_min_spent", 0) > 0):   # + Raggadragga (Boars I3b)
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")

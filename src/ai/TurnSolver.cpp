@@ -5938,6 +5938,62 @@ static bool BpCondemnTreasureSitePositiveEnabled()
     return heurarm::Flag(heurarm::BP_CONDEMN_TREASURE_POS, on);
 }
 
+// RAGGADRAGGA'S CAST-TRIGGER TARGET AXIS (Boars I3b): "Whenever you cast a spell, if at least N mana was spent to
+// cast it, untap target creature. It gets +7/+7 ...". The target rides the SAME searched rank policy as the Ulamogs
+// (Plan::cast_trigger_target_choice -> ScriptedCastTriggerTarget -> ChooseCastTriggerTargets(untap_pump)). The
+// width is the number of options the trigger could see, as an UPPER BOUND (a rank past the real option count clamps
+// and lands on its base plan's state, which the post-apply dedup skips): n = 1, so options = classes <= CREATURES at
+// the trigger -- every creature on the battlefield now (either side; paying the spell can SPLIT a class by tapping
+// one copy, so classes on this board are not a bound) plus each creature card the plan casts. 0 when the plan
+// cannot fire the trigger: no Raggadragga we control on the battlefield and none cast by the plan, or no cast in
+// the plan whose spend can reach N (CastSpendMayReach: printed MV >= N, an {X}, or a kicker -- the additional
+// mana costs the Boars pool and its neighbours carry; a deck adding Raggadragga beside buyback / entwine /
+// replicate spells must extend it). NO CAP. Every deck without the card: one battlefield walk, returns 0 -- and the
+// whole axis is behind deck_has_cast_target_trigger anyway.
+//   OWED (surfaced in the ledger): (1) the rank is a WHOLE-TURN policy -- two qualifying casts in one turn share
+// one rank, so "a different target for each" is reachable only where the shared rank happens to name both; (2)
+// the axis skips plans that already carry another axis (sac_pins, ...): I4's emerge MUST NOT ride sac_pins
+// through this skip, or every emerge plan silently takes rank 0 (a greedy pick inside the window).
+static bool CastSpendMayReach(const CardDefinition& d, int n)
+{
+    const ManaCost& m = d.card.m_mana_cost;
+    return m.ManaValue() >= n || m.has_x || d.params.kicker_cost.has_value();
+}
+static long long RaggaUntapPumpAxisWidth(const GameState& state, const TurnSolver::Plan& p)
+{
+    const int me = state.active_player_index;
+    int min_spent = 0;
+    long long creatures = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.card.IsCreature() || q.is_animated) { ++creatures; }
+        if (q.controller_index != me || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.cast_trigger_untap_pump_target_min_spent > 0)
+        { min_spent = min_spent == 0 ? d->params.cast_trigger_untap_pump_target_min_spent
+                                     : std::min(min_spent, d->params.cast_trigger_untap_pump_target_min_spent); }
+    }
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->card.IsCreature()) { ++creatures; }
+        if (d->params.cast_trigger_untap_pump_target_min_spent > 0)
+        { min_spent = min_spent == 0 ? d->params.cast_trigger_untap_pump_target_min_spent
+                                     : std::min(min_spent, d->params.cast_trigger_untap_pump_target_min_spent); }
+    }
+    if (min_spent <= 0) { return 0; }
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d && d->params.cast_trigger_untap_pump_target_min_spent <= 0 && CastSpendMayReach(*d, min_spent))
+        { return creatures; }
+    }
+    return 0;
+}
+
 static bool BpSiteAddedMana(const GameState& state)
 {
     if (!BpCondemnManaSiteExemptEnabled() || g_bp_site_def == nullptr) { return false; }
@@ -31171,7 +31227,10 @@ enum : uint64_t {
     kActTapTokenLive = 217,
     // Flinthoof Boar (Boars I1): the self-haste activation is LIVE (SelfHasteActivationLive) -- a Flinthoof
     // the plan cast is newly activatable, which opens site 9 so the same main can haste it.
-    kActSelfHaste = 218
+    kActSelfHaste = 218,
+    // Raggadragga (Boars I3b): its cast trigger untapped a TAPPED creature with a mana ability -- new mana the plan
+    // was priced without. Board-level, on the Raggadragga, its value GameState::cast_untap_refunds in bits 40+.
+    kActUntapRefund = 219
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -31541,6 +31600,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     if (pp.self_haste_cost.has_value() && SelfHasteActivationLive(state, ctrl, num)
         && ActAffordable(state, ctrl, p.card, pp.self_haste_cost, total_cache))
     { out.push_back(ActKey(num, kActSelfHaste)); }
+    // Raggadragga's cast-trigger untap of a TAPPED mana creature (ResolveUntapPumpTarget bumps the counter only for
+    // one that can tap now): the refund is mana nothing in the plan could spend -- every cast was enumerated against
+    // the plan-START pool. A new counter value is a new key, so site 9 re-plans the rest of the phase ("End-Raze off
+    // the Sage, the trigger untaps the Sage, cast Flinthoof off the refund"); an unchanged value arms nothing.
+    if (pp.cast_trigger_untap_pump_target_min_spent > 0 && state.cast_untap_refunds != 0)
+    { out.push_back(ActKey(num, kActUntapRefund) | (static_cast<uint64_t>(state.cast_untap_refunds) << 40)); }
     if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
     { out.push_back(ActKey(num, kActPod)); }
@@ -74775,6 +74840,9 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
     // Mirrors GameEngine::CombatPhase (same two shared helpers, same two points).
     const bool jorn_untap = AttackUntapSnowFires(state, active, atk_idx);
+    // Raggadragga (attack_untap_mana_ability_attackers, Boars I3b): the DECLARED attackers with a mana ability (the
+    // first declared_n slots), by m_number; untapped right after ResolveCombatDamage, beside Jorn's untap.
+    const std::vector<int> ragga_untap = AttackUntapManaAttackers(state, active, atk_idx, declared_n);
 
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens entering attacking are pumped, and BEFORE the damage loop reads power.
@@ -74854,6 +74922,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Walking Ballista's post-combat-damage lethal finish (shared; executor twin: GameEngine::CombatPhase).
     CounterPingFinish(state, active);
     if (jorn_untap) { UntapSnowPermanents(state, active); }   // Jorn, see above
+    UntapManaAttackers(state, active, ragga_untap);   // Raggadragga, see above (no-op when empty)
     PingDorkFinish(state, active);   // Zhur-Taa's lethal finish (executor twin: GameEngine::CombatPhase)
 
     // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
@@ -85342,6 +85411,11 @@ static int PlanOpensBreakpoint(const GameState& state, const TurnSolver::Plan& p
             }
         }
     }
+    // Raggadragga (Boars I3b): a plan that can fire its cast trigger can untap a tapped mana creature mid-phase
+    // (kActUntapRefund) -- the same width bound the target axis uses says whether it can fire at all.
+    if ((mask & (1 << 9)) == 0 && TurnSolver::PostEntryBreakpointClassOn() && state.deck_has_cast_target_trigger
+        && RaggaUntapPumpAxisWidth(state, p) > 0)
+    { mask |= 1 << 9; }
     // Pharika can acquire a new physical graveyard target during this plan
     // (Phenax mill, looting, dredge, a resolving spell, or a death). The live
     // activation-key delta is the exact gate; this mask only lets the search
@@ -90027,10 +90101,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             if (const Action* seed = CycleSeedOf(p.actions))
             { n_max = std::max(n_max, CycleSeedCastTriggerTargets(state, p, *seed)); }
-            if (n_max <= 0) { continue; }
-            std::vector<int> counts = board_counts();
-            for (int k = 0; k < added; ++k) { counts.push_back(1); }
-            const long long w = CastTriggerOptionCount(counts, n_max);
+            const long long ragga_w = RaggaUntapPumpAxisWidth(state, p);   // Raggadragga (Boars I3b); 0 = none
+            if (n_max <= 0 && ragga_w <= 1) { continue; }
+            long long w = ragga_w;
+            if (n_max > 0)
+            {
+                std::vector<int> counts = board_counts();
+                for (int k = 0; k < added; ++k) { counts.push_back(1); }
+                w = std::max(w, CastTriggerOptionCount(counts, n_max));
+            }
             if (w <= 1) { continue; }
             const int width = static_cast<int>(std::min<long long>(w, 32767));   // int16_t rank storage
             for (const int k : StatePinVariantRanks(CastTriggerTargetPinFor(state), width))
