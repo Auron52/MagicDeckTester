@@ -4328,6 +4328,35 @@ inline int CountExalted(const std::vector<Permanent>& battlefield, int controlle
     return n;
 }
 
+// Exalted's "attacks ALONE" is about DECLARATION (CR 506.5 / 702.83: a creature attacks alone if it is the only
+// creature DECLARED as an attacker). A creature put onto the battlefield attacking -- an attack-trigger token (Adeline,
+// Hero, Militia's Pride), Ilharg's put -- was never declared (CR 508.4) and does not stop the lone declared attacker
+// from getting its bonus; nor does its own exalted trigger (it was not on the battlefield when the creature attacked).
+// So BOTH combat worlds take `ExaltedAtDeclare` when the declared count is captured, and resolve it with
+// `ExaltedBonusForCombat` where they used to read `atk_idx.size() == 1`:
+//   * declared prefix now 0 (the lone declared attacker left the battlefield, e.g. legend-ruled by a put copy) -> 0
+//     (CR 608.2b: the trigger's creature is gone);
+//   * the lone declared attacker is the ONLY attacker -> the bonus is RETURNED and ResolveCombatDamage adds it (the
+//     historical path, byte-identical for every board without undeclared attackers);
+//   * undeclared bodies joined it -> the bonus is applied to the declared creature as +N/+N until end of turn (the
+//     card's own wording) and 0 is returned, so the joined bodies do not get it.
+inline int ExaltedAtDeclare(const GameState& state, int controller, int declared_n)
+{
+    return declared_n == 1 ? CountExalted(state.battlefield, controller) : 0;
+}
+inline int ExaltedBonusForCombat(GameState& state, const std::vector<int>& atk_idx, int declared_n,
+                                 int exalted_at_declare)
+{
+    if (exalted_at_declare <= 0 || declared_n != 1 || atk_idx.empty()) { return 0; }
+    if (atk_idx.size() == 1) { return exalted_at_declare; }
+    const int i = atk_idx.front();
+    if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { return 0; }
+    Permanent& lone = state.battlefield[static_cast<std::size_t>(i)];
+    lone.temp_power_bonus += exalted_at_declare;
+    lone.temp_tough_bonus += exalted_at_declare;
+    return 0;
+}
+
 // ---- Board-level HASTE SOURCES, gathered once -------------------------------------------------
 //
 // The haste scans in CanAttackFull / CanTapNow are asked PER CREATURE and each re-walks the whole

@@ -13153,7 +13153,13 @@ static void ApplyAttackPutProjection(GameState& pre, int active)
     std::vector<int> hand_before;
     for (const Card& c : pre.players[active].hand) { hand_before.push_back(c.m_number); }
     int dn = static_cast<int>(atk.size());
+    const int exalted_at_declare = ExaltedAtDeclare(pre, active, dn);   // CR 506.5: counted before the put
     FireAttackPutFromHand(pre, active, atk, dn, /*live=*/false);
+    // Exalted on the lone DECLARED attacker survives the put body joining it (CR 506.5 / 508.4), exactly as the
+    // combat applies it (ExaltedBonusForCombat): with a body put, the projection below sees two attackers and adds
+    // no exalted itself, so the bonus goes on the declared creature here as a temp +N/+N. Without a put (declined,
+    // or nothing castable) it returns the bonus unapplied and the projection's own `size() == 1` term prices it.
+    (void)ExaltedBonusForCombat(pre, atk, dn, exalted_at_declare);
     for (Permanent& p : pre.battlefield)
     {
         if (p.controller_index != active) { continue; }
@@ -74994,6 +75000,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
 {
 
     int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join (Ilharg's put may shrink it)
+    const int exalted_at_declare = ExaltedAtDeclare(state, active, declared_n);   // CR 506.5 (executor twin)
     // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
     // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
@@ -75059,8 +75066,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     ApplyCombatTransforms(state, active, atk_idx);
 
     // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
-    int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
-                        ? CountExalted(state.battlefield, active) : 0;
+    int exalted_bonus = ExaltedBonusForCombat(state, atk_idx, declared_n, exalted_at_declare);   // CR 506.5
 
     // Firebreathing (Scourge {R}:+1/+0 self, Lathliss {1}{R}: Dragons +1/+0 team): spend LEFTOVER
     // combat mana on attacker pumps BEFORE the damage loop reads their power. Shared with the
