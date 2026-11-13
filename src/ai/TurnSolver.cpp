@@ -62948,7 +62948,25 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
                 return false;
             }
             const CardDefinition* d = DblCastFace(a);
-            return TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature());
+            const bool ok = TapForCostDirect(c, a.cost, d != nullptr && d->card.IsCreature());
+            // The copy PAYS the plan's casts, it does not resolve them -- but a creature cast before the deferred
+            // doublers can be their attacker (a hard-cast hasty Blistering Firecat), and the combat payment holds
+            // the attacker back (DblCombatPayInto, CR 508.1f). Without the body the copy held the pre-plan best
+            // attacker instead (an Ignoble Hierarch), so the other Hierarch that really pays Berserk's {G} in
+            // combat looked spent: seed 97000 gi 69 turn 3, an 18-damage kill read as unpayable. Put it on the
+            // copy as it enters (sick unless it has haste; no ETB -- it only has to be seen as an attacker or a
+            // source). A face-down cast (face_down 1) is a nameless 2/2 that cannot attack this turn: skipped.
+            if (ok && d != nullptr && d->card.IsCreature() && a.face_down != 1)
+            {
+                Permanent perm;
+                perm.card              = d->card;
+                perm.card.m_number     = 2000000000 - j;   // a copy-only id, distinct from every real card number
+                perm.controller_index  = me;
+                perm.owner_index       = me;
+                perm.entered_this_turn = true;
+                c.battlefield.push_back(perm);
+            }
+            return ok;
         };
         auto pay_act = [&](const Action& a) -> bool
         {
@@ -62991,6 +63009,14 @@ static void NoteDoublerDeferPayableExact(GameState& state, const std::vector<Act
             }
             for (const Action& a : acts) { if (is_paying_act(a) && pay_act(a)) { ++out.steps; } }
         }
+        // Once main has paid everything there must still be an ATTACKER for the deferred doublers (they resolve on the
+        // best own attacker at their cast -- kTrickBestOwnTarget -- and their combat step needs it declared). A main
+        // payment can tap the only body: seed 97000 gi 18 turn 4, P2 paid Berserk first off the lands and Might of Old
+        // Krosa's main payment then tapped the lone Hierarch -- "valid", while the real kill was both doublers in
+        // main. NOT "the creature the combat payment held": P2 pays at plan START, so it holds the best attacker of
+        // that board, and a later cast can bring the real one (gi 69: a hard-cast hasty Firecat attacks; the Hierarch
+        // P2 held is then free to pay for the Firecat).
+        if (deferred_ok && k > 0 && FindBestOwnAttacker(c, me) < 0) { deferred_ok = false; }
         out.valid = deferred_ok;
         out.deferred = credited_now - undone + k;
         return out;

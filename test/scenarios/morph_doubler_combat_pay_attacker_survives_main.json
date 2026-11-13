@@ -1,0 +1,53 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY -- the deferred doublers' ATTACKER must survive main's payments (Morph INT-16 A/B finding, seed 97000",
+  "gi 18 turn 4). Ignoble Hierarch (the only creature), Wild Defiance, Stomping Ground + Fire-Lit Thicket untapped; Might",
+  "of Old Krosa, Berserk, Temur Battle Rage, Firecat in hand; opponent at 19. Only two mana without the Hierarch (Stomping",
+  "feeds the Thicket: {G}{G}), so Berserk cannot be cast in combat (the attacking Hierarch is tapped). The real kill is both",
+  "in MAIN: Might (+3 Wild Defiance, +4) = 7, Berserk (+3) = 10 doubled = 20, exalted +1 = 21. The first exact probe took",
+  "P2 (Berserk paid first off the lands, then Might's main payment tapped the Hierarch) as valid -> no attacker, no kill",
+  "(opponent at 11). Fixed: an option whose held attacker is tapped once main has paid is invalid. (=0 credits a phantom",
+  "22 -- Berserk 'in combat' off the Hierarch -- and also wins on turn 4.)"
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 4,
+ "on_the_play": true,
+ "active_life": 18,
+ "opponent_life": 19,
+ "resume_at": "main1",
+ "lands_played_this_turn": 0,
+ "battlefield": [
+  {
+   "name": "Stomping Ground",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Fire-Lit Thicket",
+   "controller": 0,
+   "tapped": false
+  },
+  {
+   "name": "Wild Defiance",
+   "controller": 0
+  }
+ ],
+ "hand": [
+  "Might of Old Krosa",
+  "Berserk",
+  "Temur Battle Rage",
+  "Wild Defiance",
+  "Blistering Firecat"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 4,
+ "expect_win_turn": 4
+}

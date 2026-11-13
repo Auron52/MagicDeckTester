@@ -1,0 +1,50 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY -- a creature the plan casts BEFORE the deferred doubler can be its attacker (Morph INT-16 A/B",
+  "finding, seed 97000 gi 69 turn 3). Two Ignoble Hierarchs, Gruul Turf; Stomping Ground, Blistering Firecat, Berserk in",
+  "hand; opponent at 18. The kill: hard-cast Firecat ({1}{R}{R}{R}: Turf R+G, Stomping R, one Hierarch R; haste 7/1)",
+  "attacks alone (exalted x2 = 9), Berserk in the declare-attackers step off the OTHER Hierarch's {G}: 18. The exact",
+  "probe paid the plan on a copy without resolving it, so the combat payment held the pre-plan best attacker (a",
+  "Hierarch) and Berserk's {G} looked unpayable; Berserk went in main (7 x 2 + 2 = 16, opponent at 2). Fixed: the copy",
+  "puts each creature the plan casts before the deferred doublers onto its battlefield (sick unless haste)."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 17,
+ "opponent_life": 18,
+ "resume_at": "main1",
+ "lands_played_this_turn": 0,
+ "battlefield": [
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Hystrodon",
+  "Blistering Firecat",
+  "Legion Leadership",
+  "Berserk",
+  "Forest",
+  "Stomping Ground",
+  "Fire-Lit Thicket"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 3,
+ "expect_win_turn": 3
+}

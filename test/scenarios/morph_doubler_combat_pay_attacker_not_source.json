@@ -1,0 +1,49 @@
+{
+ "_comment": [
+  "DOUBLER COMBAT PAY -- THE ATTACKER IS NOT A SOURCE (CR 508.1f; Morph INT-16 A/B finding, seed 97000 gi 111 turn 3).",
+  "Ignoble Hierarch + Birds of Paradise (both able to attack), Gruul Turf untapped, Stomping Ground in hand; opponent at",
+  "19. The real kill: Might of Old Krosa in main (+4/+4 on Hierarch, off Birds), Hierarch attacks alone (exalted +1 = 5),",
+  "then Berserk ({G}) and Legion Leadership ({1}{R}) in the declare-attackers step off Gruul Turf + Stomping Ground:",
+  "5 x 2 x 2 = 20. The first exact combat payer let the payer TAP the attacker-to-be for a combat cast, so the doubler",
+  "target moved to a lesser body and the line read as lost; the turn played Firecat + Berserk for 16 (opponent at 3).",
+  "Fixed: DblCombatPayInto holds the best own attacker tapped while it pays (declaring it tapped it)."
+ ],
+ "deck": "decks/Morph/Morph.cod",
+ "turn": 3,
+ "on_the_play": true,
+ "active_life": 18,
+ "opponent_life": 19,
+ "resume_at": "main1",
+ "lands_played_this_turn": 0,
+ "battlefield": [
+  {
+   "name": "Ignoble Hierarch",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Birds of Paradise",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Gruul Turf",
+   "controller": 0,
+   "tapped": false
+  }
+ ],
+ "hand": [
+  "Berserk",
+  "Legion Leadership",
+  "Might of Old Krosa",
+  "Wild Defiance",
+  "Stomping Ground",
+  "Blistering Firecat"
+ ],
+ "library_filler": "Forest",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 3,
+ "expect_win_turn": 3
+}

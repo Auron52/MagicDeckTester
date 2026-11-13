@@ -28106,6 +28106,24 @@ template <class PayFn>
 inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameState::DblCombatRec& rec, PayFn&& pay)
 {
     const int me = s.active_player_index;
+    // THE ATTACKER IS NOT A SOURCE (CR 508.1f; Morph INT-16 A/B finding). A combat-step cast comes after the lone
+    // attacker is declared, and declaring it TAPPED it (no vigilance), so its own mana ({T}: add -- Ignoble
+    // Hierarch, Birds) cannot pay. The attacker is the doubler's target as it resolves (kTrickBestOwnTarget ->
+    // FindBestOwnAttacker), i.e. the best own attacker now; it is held tapped for the payment and released after,
+    // so the payer spends a land instead of it. Without this the payer could tap it, the target then moved to a
+    // lesser body (or none), and a real exalted line read as lost (seed 97000 gi 111: Might + Berserk +
+    // Leadership on an attacking Hierarch, 20 to the face, missed for a 16-damage Firecat line). No attacker =
+    // no combat step to cast in: not payable this way.
+    const int atk = FindBestOwnAttacker(s, me);
+    if (atk < 0) { return false; }
+    const std::int32_t atk_num = s.battlefield[static_cast<std::size_t>(atk)].card.m_number;
+    const bool hold_atk = !CreatureHasVigilance(s.battlefield[static_cast<std::size_t>(atk)], s);
+    if (hold_atk) { s.battlefield[static_cast<std::size_t>(atk)].tapped = true; }
+    auto release_atk = [&]
+    {
+        if (!hold_atk) { return; }
+        for (Permanent& p : s.battlefield) { if (p.card.m_number == atk_num) { p.tapped = false; break; } }
+    };
     std::vector<std::pair<std::int32_t, bool>> before;
     before.reserve(s.battlefield.size());
     for (const Permanent& p : s.battlefield) { before.emplace_back(p.card.m_number, p.tapped); }
@@ -28114,7 +28132,7 @@ inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameStat
     DblCombatFloatSwap swap(s, cp.pool);
     const bool ok = pay();
     const ManaPool left = swap.Restore();
-    if (!ok) { return false; }
+    if (!ok) { release_atk(); return false; }
     rec.pool_before = cp.pool;
     cp.pool = left;
     rec.nsrc = 0;
@@ -28132,6 +28150,7 @@ inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameStat
             }
         }
     }
+    release_atk();
     rec.revisable = plain ? 1 : 0;
     return true;
 }
