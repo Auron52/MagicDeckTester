@@ -115,7 +115,7 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-12 ~22:35 UTC) -- RESUME HERE
+## Checkpoint (2026-11-13 ~20:25 UTC) -- RESUME HERE
 
 FARM LANDING REBASED twice (now 0668b9388 code + 83cd80de3 GT, on origin 714f955bc). After the first rebase (onto
 4f3522ad4) martyr smoke 4/4 + regression 7/7 PASS byte-identical (logs/martyr-lifegain/farm-rebase-{smoke,reg}.log).
@@ -133,8 +133,15 @@ RUNNING: mullgen.sh run (started 03:38 UTC, pid logs/martyr-lifegain/mullgen.pid
 logs/Martyr_Lifegain_mullgen/gen.log, freeze mullgen.freeze = src 709a882f). Phase F picked d1 b1 (rho 0.9836,
 0.10x play cost), K=15, recipe fast (cap R=30): written into Martyr Lifegain.profile.json (uncommitted; commit with
 the profile). 08:17 UTC: size-7 floor done (62,954 cells, 251,816 rollouts), sub-tables 22% (19/s), then adaptive
-refine. On exit: read mullgen.log verdicts (keep + confounded-bottom gates) -> commit artifacts -> rebase + rebuild ->
-`bash scripts/valueleaf.sh run "decks/Martyr Lifegain"` ALONE. Status timer cron 0280a824 (session-only, :17 every 2h).
+refine. 11-13: gen complete 17:17 UTC (artifact check OK: K=15, 62,954 entries, 72,978 sub cells, bottoming on).
+KEEP gate PASSED (early stop after 4 seed pairs): exhaustive vs static -0.3048t, se 0.0121, t -25.2, 4/4. Confounded
+BOTTOM gate running at 20:17 UTC (first pair -0.047t; exh arm ~9x cheaper than lookahead); then mullgen's visibility
+regression (martyr,martyr2hg), then it exits. Pushed 68bff0515 (this checkpoint, replayed) at 12:24 UTC.
+PAUSE AFTER THE MULLIGAN PROFILE (USER 2026-11-13: "Let's plan to pause after the mulligan profile. I might want to get
+this machine to start something else instead."). On exit: read the VERDICT lines; if VALIDATION PASSED commit the
+artifacts LOCALLY; then STOP. NOT started, waiting for the USER: rebase + rebuild, smoke/regression GT re-accept for
+martyr,martyr2hg with the keep table live (do not push the profile before that, or martyr's smoke rows read as moved),
+and `bash scripts/valueleaf.sh run "decks/Martyr Lifegain"` ALONE. Status timer cron 1fbf0e91 (session-only).
 
 ### Checkpoint (2026-11-12 ~18:45 UTC, history)
 
