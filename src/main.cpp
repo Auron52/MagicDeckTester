@@ -10920,7 +10920,8 @@ int main(int argc, char* argv[])
                           << " avg=" << avgbuf
                           << " digest=" << dbuf
                           << " ms=" << r.elapsed_ms
-                          << " units=" << r.units_total << "\n" << std::flush;
+                          << " units=" << r.units_total
+                          << " cpu=" << r.cpu_ms << "\n" << std::flush;
             };
             // Per-game partial results go beside the .wins (BatchRunner::PersistOptions). The binary
             // and cards.json are part of every job's identity, so a rebuilt engine or an edited card

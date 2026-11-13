@@ -90,6 +90,13 @@ struct ValuePlay
     // (a proven win there commits, as the ladder's verified-win stop would), and the rollout ladder starts at s with
     // the heuristic ladder's own start gate, overrun ceiling and anytime rule. Only for decks with no value model.
     int rollout_from = 0;
+    // SAMPLED-GATE LADDER (P18, 2026-11-13; default 0 = off): the heuristic rollout ladder, its start gate fed by
+    // per-decision samples instead of superseded rollout passes. Each pass below `depth` first runs LEAFLESS (a
+    // proven in-window win commits there; its leaf count prices the pass), then its rollout pass runs in the
+    // ladder's own order and STOPS as soon as the rollouts done so far bound the pass's full cost below the
+    // threshold at which the ladder's gate admits the next pass. The final pass starts at the best bound found.
+    // Only for decks with no value model. See docs/design/sampled-gate-ladder.md.
+    int sampled_gate = 0;
     // Defer FIT's per-game R calibration to first use. -1 unset => the engine default (ON). Melira ships
     // false: it is the one deck where deferring measures worse.
     int    fit_lazy_r = -1;

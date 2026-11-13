@@ -1388,7 +1388,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                                    || vp.contains("expected_buckets")
                                    || vp.contains("ladder") || vp.contains("leaf") || vp.contains("commit")
                                    || vp.contains("alpha") || vp.contains("exhaust_mult")
-                                   || vp.contains("fit_alpha") || vp.contains("fit_lazy_r") || vp.contains("fit_gate") || vp.contains("rollout_from")
+                                   || vp.contains("fit_alpha") || vp.contains("fit_lazy_r") || vp.contains("fit_gate") || vp.contains("rollout_from") || vp.contains("sampled_gate")
                                    || vp.contains("emul_r")))
             {
                 profile.value_play.ladder       = vp.value("ladder", std::string(""));
@@ -1402,6 +1402,7 @@ inline void AttachValueSidecar(MulliganProfile& profile, const std::filesystem::
                 profile.value_play.fit_alpha  = vp.value("fit_alpha", 0.0);
                 profile.value_play.fit_gate   = vp.value("fit_gate", std::string(""));
                 profile.value_play.rollout_from = vp.value("rollout_from", 0);
+                profile.value_play.sampled_gate = vp.value("sampled_gate", 0);
                 profile.value_play.fit_lazy_r = vp.contains("fit_lazy_r")
                                               ? (vp["fit_lazy_r"].get<bool>() ? 1 : 0) : -1;
                 profile.value_play.beam_width     = vp.value("beam_width", 0);

@@ -24,6 +24,9 @@
 #include "../ai/DecisionProviders.h"   // SelectDecisionProvider + Name(): report which archetype a job runs under
 #include <algorithm>
 #include <array>
+#if !defined(_WIN32)
+#include <ctime>
+#endif
 #include <climits>
 #include <condition_variable>
 #include <deque>
@@ -693,6 +696,16 @@ struct WorkItem
 // single-game path defaults to reporting on runs that are short and watched, and `--batch` -- the
 // route every long pooled run is REQUIRED to take -- defaulted to silence. That inversion is why a
 // 23-hour matrix run at 3 of 20 cores, containing one 21.4-hour game, produced no signal at all.
+// This thread's CPU time in microseconds (0 where the POSIX clock is unavailable): BatchJobResult::cpu_ms.
+static long long ThreadCpuUs()
+{
+#if defined(_WIN32)
+    return 0;
+#else
+    timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+    return static_cast<long long>(ts.tv_sec) * 1000000LL + ts.tv_nsec / 1000;
+#endif
+}
 static long long SlowGameMs()
 {
     const char* e = std::getenv("MTG_SLOW_GAME_MS");
@@ -1501,6 +1514,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     // only after the job's last game lands, and that read is already ordered by the acq_rel
     // remaining-counter decrement below.
     std::vector<std::atomic<long long>> job_ms(jobs.size());
+    std::vector<std::atomic<long long>> job_cpu_us(jobs.size());   // thread CPU (see BatchJobResult::cpu_ms)
     for (std::atomic<long long>& a : job_ms) { a.store(0, std::memory_order_relaxed); }
     for (std::size_t j = 0; j < jobs.size(); ++j)
     {
@@ -2040,6 +2054,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
         // deterministic and order-stable regardless of the pool's execution interleave.
         r.case_digest = batchpartial::FoldCaseDigest(dg_played);
         r.elapsed_ms  = job_ms[j].load(std::memory_order_relaxed);
+        r.cpu_ms      = job_cpu_us[j].load(std::memory_order_relaxed) / 1000;
         return r;
     };
 
@@ -2435,6 +2450,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 dlog.StartGame(std::string(), global_gi, job.name, job.seed + wi.game, {});
                 engine->SetLogger(&dlog);
                 const auto g_t0 = std::chrono::steady_clock::now();
+                const long long g_cpu0 = ThreadCpuUs();
                 // Arm the per-game work ceiling (see ai/GameWorkMeter.h). Paired with End() below so
                 // a pooled worker thread can never carry one game's meter into the next; Begin also
                 // resets, so the pairing is belt-and-braces rather than load-bearing.
@@ -2702,6 +2718,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 const long long g_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - g_t0).count();
                 job_ms[wi.job].fetch_add(g_ms, std::memory_order_relaxed);
+                job_cpu_us[wi.job].fetch_add(ThreadCpuUs() - g_cpu0, std::memory_order_relaxed);
                 hb.Finished(job.name, global_gi, g_ms);
                 hb.ClearRunning(slot);
 
