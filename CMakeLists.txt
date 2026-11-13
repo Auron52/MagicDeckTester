@@ -308,6 +308,7 @@ add_executable(mtg-test
     test/unit/test_cost_reducers.cpp
     test/unit/test_escalation_budget.cpp
     test/unit/test_fit_gate.cpp
+    test/unit/test_rollout_from.cpp
     test/unit/test_subtype_registry.cpp
     test/unit/test_greedy_window.cpp
     test/unit/test_cumulative_upkeep.cpp
