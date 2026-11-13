@@ -371,3 +371,81 @@ fit_gate; 9 cases, 120 assertions) pass on 09aeac874.
   re-search), or start the commit as a rollout pass and price the NEXT pass from its own leaves; (2) Alchemist's
   `_pnr` losers (3) -- not yet inspected; (3) then the held-out A/B on fresh seeds (mkH.py shape), and a second
   independent batch for CPU.
+
+## Iteration 11 (P18f): the double walk is NOT leaf-free, and it is not the largest overhead
+
+### `_plf` leaf-free answers (exact, measured worthless)
+Built the sound part of "re-enter only the leafless tree's leaf-dependent frontier": a node whose COMPLETE search
+under cutoff c reached no depth-0 leaf and read no memo answer proves "no win <= c" for every leaf kind, so it is
+stored in the game line cache under a leaf-free tag and read by any node (rollout / value / no leaf) at cutoff <= c
+(`gamelc::LeafFreeOn`, MTG_P18_LEAFFREE or arm key `_plf`, default off).
+- Exactness: V1 (140 games, all 7 decks, MTG_GAME_LINE_CACHE_VERIFY=1, every hit re-searched): 46 leaf-free hits
+  re-searched, 0 MATERIAL. U1 (280 paired games, `_pnr` vs `_pnr_plf`): 280/280 digests byte-identical.
+- Effect: 475 leaf-free stores / 411 hits against ~20k ordinary game-line-cache stores; units ratio 1.000 on every
+  deck. The committing pass's interior is leaf-BEARING: almost every interior subtree of pass K reaches a leaf, so no
+  completed leafless proof can stand in for its rollout answer. Removing the double walk exactly needs the leaves
+  themselves (a deferred-leaf replay of the leafless tree: record the leaf frontier in visit order, roll it with the
+  incumbent cut, reconstruct the line), not a cache read. Kept default-off as a sound, inert fold.
+
+### Where `_pnr`'s extra cost really goes (T3: traced, 100 games/deck, Landfall/Melira 200; heur vs `g_pb1_plc_pus25_pbk8_pnr`, binary p18f/mtg_f1 = 42ccc2e52 without _phx)
+`build/scratch/p18f/T3`; tools `p18f/dec.py` (p16 pass records) and `p18f/p18rec.py` ([p18] priced-pass records).
+Units (p16 decision records; the gate's sampled rollouts are in the [p18] `su` column, not here):
+| deck | heur all | heur superseded | gate all | gate leafless walks | double walk (commit interior <= its leafless l) | refused passes' leafless l | admitted passes' l |
+|---|---|---|---|---|---|---|---|
+| Landfall | 4.24M | 1.62M | 5.60M (1.32x) | 3.63M | 0.76M | **1.64M** (183 passes) | 1.68M |
+| Melira | 5.85M | 1.17M | 6.01M (1.03x) | 3.78M | 0.86M | **1.43M** (172) | 1.92M |
+| Hydras | 1.46M | 0.49M | 1.29M | 0.70M | 0.15M | 0.10M | 0.53M |
+| Snow | 4.85M | 0.30M | 3.76M | 0.70M | 0.12M | 0.12M | 0.53M |
+- heur's commit pass on Landfall / Melira is 93% / 94% INTERIOR (leaf units 0.19M of 2.62M, 0.29M of 4.68M): the
+  rollouts are cheap there, so the pool the gate can save is small, and each overhead the gate adds is interior.
+- The refused passes' leafless walks are the LARGEST overhead on both decks (each refused pass walks its interior to
+  the admit line before the cap trips; heur refuses on an extrapolation that costs nothing). The double walk is the
+  second. Even a perfect, exact double-walk removal leaves Landfall at ~1.14x units (5.60M - 0.76M vs 4.24M);
+  Melira would reach ~0.88x.
+- Superseded LEAF units in heur (the most "heur minus unnecessary rollouts" can save, T2): Landfall 12%, Melira 3%,
+  Snow 5%, Alc 11%, EDF 14%, Hydras 20%, MB 27% of heur's units (x ~5 in CPU, since a rollout unit costs ~5x).
+
+### `_phx`: heur's own free refusal, on prices
+Before pass k >= 3 is walked, `c_{k-1}^2 / c_{k-2}` on the PRICED costs is checked against `gate_alpha x (rem0 -
+priced)` -- heur's start gate with prices standing in for its real superseded costs. A pass heur would not start is
+refused at no cost; only passes heur would start are walked and priced (the price can still refuse them). This is not
+a hand-off: nothing runs on rollouts, the gate still commits its priced K. It is the shape the USER asked for ("search
+approximately the same as the heuristic ladder ... except ... not running unnecessary leaves").
+
+### S15 (S12 seeds; 18,400 games, one pooled weight-ordered batch, 32 workers; `build/scratch/p18f/S15`, binary 42ccc2e52)
+thread-CPU vs heur, units, dturn (better/worse):
+| arm | Hydras | Alchemist | EDF | Snow | MB | Landfall | Melira |
+|---|---|---|---|---|---|---|---|
+| `g_pb1_plc_pus25_pbk8_pnr` (S13 repeat) | 0.984 u0.969 -0.0020 (4/2) | 0.755 u0.797 +0.0050 (1/3) | 0.844 u0.938 0 | 0.897 u0.854 +0.0025 (0/1) | 0.929 u1.039 -0.0025 (2/1) | 1.263 u1.277 -0.0010 (17/16) | 1.042 u1.114 -0.0020 (10/8) |
+| `..._pnr_phx` | **0.884** u0.878 +0.0020 (2/4) | 0.838 u0.835 +0.0050 (0/2) | 0.916 u0.991 0 | 0.914 u0.903 +0.0025 (0/1) | 0.855 u0.909 +0.0075 (0/3) | **0.913** u0.943 **+0.0140 (11/25)** | **0.864** u0.918 +0.0070 (4/11) |
+| `g_pb1_plc_pus12_pbk8_pnr_phx` | 0.877 +0.0020 (2/4) | 0.838 +0.0050 (0/2) | 0.914 0 | 0.917 +0.0025 (0/1) | 0.846 +0.0075 (0/3) | 0.912 +0.0140 (11/25) | 0.865 +0.0070 (4/11) |
+`_phx` puts thread-CPU below heur on all seven decks for the first time (0.85-0.92x), Landfall from 1.26x to 0.91x
+and Melira from 1.04x to 0.86x -- confirming the refused-pass walks as the dominant overhead -- but it gives back
+quality everywhere (Landfall +0.0140, MB +0.0075, Melira +0.0070). Its refusals bite where heur's do not: the
+extrapolation runs on PRICES, and a price is cold (each pass priced on its own, without the rollout-table reuse
+heur's real passes get across the ladder) and the admit line reads `rem0 - priced`, so a high price both inflates the
+estimate and shrinks the room. S16 measures a margin (`_phx<10F>`: refuse only above F x the line).
+
+### S16 (S12 seeds; 18,400 games, one pooled batch; `build/scratch/p18f/S16`, binary 6989ab158): the margin
+| arm | Hydras | Alchemist | EDF | Snow | MB | Landfall | Melira |
+|---|---|---|---|---|---|---|---|
+| `..._pnr_phx15` | 0.901 u0.881 +0.0010 (3/4) | 0.832 +0.0075 (0/3) | 0.913 0 | 0.922 +0.0025 (0/1) | 0.873 +0.0075 (0/3) | 0.964 u1.003 +0.0100 (13/23) | 0.926 u0.978 +0.0060 (3/9) |
+| `..._pnr_phx20` | 0.914 +0.0010 (3/4) | 0.822 +0.0075 (0/3) | 0.913 0 | 0.918 +0.0025 (0/1) | 0.874 +0.0075 (0/3) | 1.003 u1.038 +0.0080 (13/21) | 0.963 u1.021 +0.0020 (5/7) |
+| `..._pnr_phx30` | 0.964 0 (3/3) | 0.854 +0.0075 (0/3) | 0.909 0 | 0.923 +0.0025 (0/1) | 0.904 +0.0025 (0/1) | 1.096 u1.105 +0.0010 (14/15) | 0.997 u1.055 +0.0020 (6/8) |
+The margin trades the refused walks back for quality continuously (Landfall 0.91x/+0.014 -> 0.96x/+0.010 ->
+1.00x/+0.008 -> 1.10x/+0.001; `_pnr` is 1.26x/-0.001). No F passes: wherever Landfall's quality is recovered its CPU
+is back above heur, and Alchemist (+0.0075, 0/3 at every F, +0.0050 under `_pnr`) and MB (+0.0025..0.0075) lose games
+`_pnr` does not -- so part of `_phx`'s loss is not the margin at all (inspect those few games first: they are cheap).
+
+## Checkpoint (P18f, 2026-11-13 ~12:25 UTC) -- no arm passes the train screen
+- The double walk is real but leaf-bearing: no completed leafless proof can answer the committing pass's interior
+  (`_plf`, exact and inert). An exact removal needs a deferred-leaf replay of the leafless tree (record the leaf
+  frontier and the holes the leafless walk answered from caches; roll the frontier in visit order with the incumbent
+  cut; re-search the holes with rollouts). Even perfect, it leaves Landfall ~1.14x units under `_pnr`.
+- The LARGEST overhead on interior-heavy decks is the refused pass's leafless walk (Landfall 1.64M, Melira 1.43M
+  units in T3) -- heur refuses for free. `_phx` (heur's own start gate, on prices) removes it and puts CPU below heur
+  on all seven decks (0.85-0.92x), but at a quality cost that a margin buys back only with the CPU.
+- Why prices refuse where heur's real costs admit is the open question; the leading hypothesis is that a price is
+  cold (heur's real pass k reuses pass k-1's rollouts through the rollout table) and that `rem0 - priced` charges
+  those cold prices against the room. Test: in the same decisions, compare `p18_est[k]` with heur's real `c_k`
+  (`_pverify` prices on a scratch meter and then runs heur, pairing each price with the real cost).
