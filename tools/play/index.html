@@ -286,6 +286,34 @@
   .thumb .landface { position:absolute; bottom:2px; right:2px; background:rgba(122,180,255,.95); color:#0c1116;
       border-radius:4px; font-size:9px; font-weight:700; padding:0 3px; z-index:3; cursor:pointer; }
   .thumb .landface:hover { background:#a6d8ff; box-shadow:0 0 6px rgba(122,180,255,.7); }
+  /* ALTERNATIVE-PLAY STRIP (USER 2026-11-13: "make the clickable area a little larger ... overlap a bit with
+     the card text part of the image, preferably with a partially transparent visible area"). The badges stack
+     full-width over the card's text box instead of sharing one tiny corner; translucent so the card text still
+     shows through. The strip itself passes clicks through; only the badges take them. */
+  /* Anchored to the BOTTOM EDGE of the 90px-wide card image (146x204 Scryfall small -> ~125px tall) and growing
+     UPWARD: one badge covers only the bottom of the text box, three still leave the whole art clear, and the art
+     plus the gaps between badges still play the card normally (USER: "still leaving a good amount of room to see
+     the image and have a sizeable clickable area to play the card normally"). */
+  .thumb .altcasts { position:absolute; left:4px; right:4px; top:121px; transform:translateY(-100%);
+      display:flex; flex-direction:column; gap:2px; z-index:3; pointer-events:none; }
+  .thumb .altcasts > .landface, .thumb .altcasts > .digbadge { position:static; display:block; pointer-events:auto;
+      min-height:18px; line-height:18px; font-size:11px; padding:0 4px; border-radius:5px; text-align:center;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border:1px solid rgba(255,255,255,.55);
+      box-shadow:0 1px 3px rgba(0,0,0,.45); }
+  .thumb .altcasts > .landface { background:rgba(122,180,255,.78); }
+  .thumb .altcasts > .digbadge { background:rgba(90,200,180,.78); }
+  .thumb .altcasts > .landface:hover { background:rgba(166,216,255,.95); }
+  /* One colour per KIND of alternative play, so several on one card read as distinct regions (USER 2026-11-13:
+     "divide up the card text area into multiple clickable regions with different coloration"). */
+  .thumb .altcasts > .landface[data-facedown]   { background:rgba(170,140,230,.80); }
+  .thumb .altcasts > .landface[data-facedownup] { background:rgba(225,150,210,.80); }
+  .thumb .altcasts > .landface[data-fliplater]  { background:rgba(240,190,110,.82); }
+  .thumb .altcasts > .landface[data-kick]       { background:rgba(240,215,110,.82); }
+  .thumb .altcasts > .landface[data-suspend]    { background:rgba(160,200,120,.82); }
+  .thumb .altcasts > .landface[data-channel]    { background:rgba(240,140,120,.82); }
+  .thumb .altcasts > .landface[data-adventure]  { background:rgba(120,210,230,.82); }
+  .thumb .altcasts > span:hover { filter:brightness(1.18); box-shadow:0 0 6px rgba(255,255,255,.6); }
+  .thumb .altcasts > .digbadge:hover { background:rgba(120,225,205,.95); }
   .thumb.sac-src { cursor:pointer; box-shadow:0 0 0 1px #2f8f7e inset; }
   .thumb.sac-src:hover { box-shadow:0 0 0 2px #5ac8b4, 0 0 8px rgba(90,200,180,.45); }
   /* The cycle affordance is the BADGE, not the card: clicking the card body plays it. (It used to
@@ -3016,6 +3044,10 @@ function renderHand() {
       // land-face / channel / suspend badges below do -- and, unlike them, cycling RESOLVES ON THE
       // SPOT (fireDig commits the plan), so it must never be what an ordinary click on the card body
       // does. Clicking the body plays the card.
+      // ALTERNATIVE PLAYS (cycle / land face / channel / suspend / adventure / kicker / morph): ONE stacked
+      // strip over the card's text box, full thumb width, so each badge is a large target and several never
+      // sit on top of each other (USER 2026-11-13: the tiny corner badges were easy to misclick).
+      '<span class="altcasts">'+
       (canCyc?`<span class="digbadge" data-cycle="${esc(c.name)}" title="CYCLE — queue cycling ${esc(c.name)} as part of your line (it runs after what is queued before it; commit the line to do it). Click the card itself to play it instead.">↻ cycle</span>`:'')+
       // MDFC land side: an explicit badge, because the card's own kind is the FRONT's and every
       // other route on this thumb (double-click, drag) casts that front. Clicking it queues the
@@ -3044,6 +3076,7 @@ function renderHand() {
       (fdSrc.fd1?`<span class="landface" data-facedown="${esc(c.name)}" title="MORPH — cast ${esc(c.name)} FACE DOWN for {3} as a nameless 2/2 (turn it face up later for its morph cost: click it on the battlefield during your main phase, or at the opponent's end step). This toggles the queued cast${fd1N?', click again to cast it face up instead':''}">▽ face down {3}${fd1N>1?` ×${fd1N}`:''}</span>`:'')+
       (fdSrc.fd2?`<span class="landface" data-facedownup="${esc(c.name)}" title="MORPH — cast ${esc(c.name)} face down for {3} and turn it face up AT ONCE (pays {3} plus its morph cost; differs from the hard cast in colour needs${c.name==='Den Protector'?' and fires its turned-face-up trigger':''}). This toggles the queued cast${fd2N?', click again to cast it face up instead':''}">▽↑ down+up${fd2N>1?` ×${fd2N}`:''}</span>`:'')+
       (flipOk?`<span class="landface" data-fliplater="${esc(c.name)}" title="TURN FACE UP LATER — queue the flip of the face-down ${esc(c.name)} you are casting this line; it happens where it sits in your queue (put it after the spells it should follow)${flipN?' — click again to take it back':''}">↑ flip it${flipN>1?` ×${flipN}`:''}</span>`:'')+
+      '</span>'+
       (total>1?`<span class="pip">×${total}</span>`:'')+(q?`<span class="qct">${q}</span>`:'')+
       `<em>${esc(c.name)}${c.cost?` <span style="color:var(--muted)">${esc(c.cost)}</span>`:''}</em></span>`;
   }
