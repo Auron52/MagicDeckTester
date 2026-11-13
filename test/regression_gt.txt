@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 9a4a995c3  date 2026-11-13
+# Regression ground truth -- commit 4e2146dd7  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -272,7 +272,7 @@ giants_regression_d5_s30001=6.0000/bd7f00c0ffc0b7e9
 goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
 hinata_regression_d3_s30001=5.2500/ce9c505b3c5b7b98
-hinata_regression_d5_s30001=5.2500/ce9c505b3c5b7b98
+hinata_regression_d5_s30001=5.2000/0da93550e9e0742c
 jumbo_regression_d3_s30001=4.2500/093712beec5968b7
 jumbo_regression_d5_s30001=4.2500/4e11ac11d1db0ede
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
@@ -344,7 +344,7 @@ antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/56d7579d625f44e3
 antilife_regression_d5_s3003=4.1960/1fc0e711597a121e
 hinata_regression_d0_s2002=6.8040/5dcc7fe0b1de88e0
-hinata_regression_d3_s2002=5.6000/c238dc9d885af207
+hinata_regression_d3_s2002=5.6000/f60ea18cbf1a584e
 hinata_regression_d5_s2002=5.4067/05408822f54f5019
 hinata_regression_d5_s3003=5.7067/6c661e03aa9656fd
 gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
@@ -393,10 +393,10 @@ jumbo_regression_d0_s2002=5.5450/71eddd4d435ade88
 jumbo_regression_d3_s2002=4.2500/7ae36a9153b220f6
 jumbo_regression_d5_s2002=4.0860/33ded915fb1388e0
 jumbo_regression_d5_s3003=4.0640/d58d88f3edf53f9c
-minotaur_regression_d0_s2002=5.3100/67fae8bc55081591
+minotaur_regression_d0_s2002=5.3100/0d522c9d270f350f
 minotaur_regression_d3_s2002=4.8800/2192c7cd2cc8d894
-minotaur_regression_d5_s2002=4.8780/a35660309103de4b
-minotaur_regression_d5_s3003=4.8480/5de0fbafb1dbcbb4
+minotaur_regression_d5_s2002=4.8780/c3f0de692d29640b
+minotaur_regression_d5_s3003=4.8480/b0102b826bd4b040
 kittyv3_regression_d0_s2002=4.8310/ab72dc99e1cf2e58
 kittyv3_regression_d3_s2002=3.8400/c58e53b2c7c7b2d0
 kittyv3_regression_d5_s2002=3.8067/3ea08f6dd31f8e38
@@ -483,9 +483,9 @@ galadriel_regression_d5_s3003=4.9600/34de41de690c60d6
 galadriel2hg_regression_d5_s2002=4.8133/d5c14dd1b4a66662
 niv_regression_d0_s2002=6.0510/8488f3e81b883671
 niv_regression_d3_s2002=4.4400/1be6b51aeeacfd11
-niv_regression_d5_s2002=4.4800/7bed49695943bf80
-niv_regression_d5_s3003=4.5000/8b5c86c9d647c9d0
-niv2hg_regression_d5_s2002=4.4400/f50b528afecc514d
+niv_regression_d5_s2002=4.4800/5b5ae2c3ca13d100
+niv_regression_d5_s3003=4.5000/4d6532c051b85cfe
+niv2hg_regression_d5_s2002=4.4400/96cd06a8eb61b674
 colossus_regression_d0_s2002=4.4220/ae6fe0b99f69692d
 colossus_regression_d3_s2002=3.4800/256c45f4dbd5f29b
 colossus_regression_d5_s2002=3.4350/8051c222be08e92d
