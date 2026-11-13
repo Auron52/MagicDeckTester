@@ -3006,6 +3006,17 @@
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
   },
+  "Herald of Ilharg": {
+    "cmc": 4.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{2}{R}{G}",
+    "oracle_text": "Trample\nWhenever you cast a creature spell, put two +1/+1 counters on this creature. If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to each opponent.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Boar Beast"
+  },
   "Herald's Horn": {
     "cmc": 3.0,
     "keywords": [],

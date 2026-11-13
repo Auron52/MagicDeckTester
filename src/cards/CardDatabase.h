@@ -1148,6 +1148,17 @@ struct CardParams
     // 0 = not an instant/sorcery cast-trigger -> byte-identical for every other deck.
     int                      cast_trigger_instant_sorcery_tokens = 0;
 
+    // Herald of Ilharg (Boars I2b): "Whenever you cast a creature spell, put two +1/+1 counters on this creature.
+    // If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it
+    // to each opponent." Fired from FireOnCastTriggers (every cast site, executor + rollout lockstep): the counters
+    // go on through PutPlusCounters (the doubler chokepoint), THEN -- when the cast spell's PRINTED mana value
+    // (CR 202.3; a reduction or emerge never changes it; X is not counted, no Boars creature has one) is >=
+    // creature_cast_counter_damage_min_mv -- damage equal to ALL counters on it (TotalCountersOn, read after the
+    // put) to each opponent (x OpponentHeads). A put onto the battlefield is not a cast and never reaches here.
+    // 0 = none -> byte-identical for every other card.
+    int                      creature_cast_trigger_plus_counters = 0;
+    int                      creature_cast_counter_damage_min_mv = 0;   // 0 = no damage rider
+
     // Attack-trigger token creation (e.g. Adeline, Resplendent Cathar: "Whenever you
     // attack, for each opponent, create a 1/1 white Human token that's tapped and
     // attacking"). When attack_creates_tokens > 0, declaring at least one attacker makes

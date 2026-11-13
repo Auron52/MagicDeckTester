@@ -262,13 +262,13 @@ TEST_CASE("Malcolm, the Eyes: investigates on the SECOND spell of the turn only"
     Put(s, "Malcolm, the Eyes", 0, 50);
     const CardDefinition& bolt = Def("Lightning Bolt");
     s.spells_cast_this_turn = 1;
-    FireOnCastTriggers(s, bolt);
+    FireOnCastTriggers(s, bolt, /*mana_spent=*/0);
     CHECK(CountNamed(s, "Clue Token") == 0);
     s.spells_cast_this_turn = 2;
-    FireOnCastTriggers(s, bolt);
+    FireOnCastTriggers(s, bolt, /*mana_spent=*/0);
     CHECK(CountNamed(s, "Clue Token") == 1);
     s.spells_cast_this_turn = 3;
-    FireOnCastTriggers(s, bolt);
+    FireOnCastTriggers(s, bolt, /*mana_spent=*/0);
     CHECK(CountNamed(s, "Clue Token") == 1);
 }
 

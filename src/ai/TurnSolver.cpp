@@ -14199,6 +14199,101 @@ static int CannonsTriggerDamage(const GameState& state, const CannonsCtx& c,
     return dmg;
 }
 
+// ---- MTG_ATTACK_HERALD_TRIGGER: Herald of Ilharg's cast trigger in the this-turn projection --------------
+// "Whenever you cast a creature spell, put two +1/+1 counters on this creature. If that spell has mana value 5 or
+// greater, this creature deals damage equal to the number of counters on it to each opponent" (FireOnCastTriggers,
+// creature_cast_trigger_plus_counters / creature_cast_counter_damage_min_mv). Neither consider() site saw it, so
+// a turn that wins through Herald's ping, or through the counters an ATTACKING Herald grows by this plan's
+// pre-combat creature casts (pending_atk is read off the pre-plan board), did not read as `wins` -- the Mana
+// Cannons miss for a new card. The plan's casts are walked in cast order (PlanCastOrder): every creature cast
+// adds the counters (x the doubler shift) to each Herald already out, then an MV >= threshold cast deals each
+// Herald's running count x OpponentHeads. A Herald cast earlier in the plan joins for later casts and never for
+// itself; its own growth is not credited as attack (it attacks only with haste -- left out, conservative).
+// Growth counts only pre-combat, only for a Herald the projection would attack with (CanAttackFull +
+// AttackWith). A projection term, not a restriction: the rollout itself is exact either way. Inert (live ==
+// false) unless a Herald is on our battlefield or castable AND a creature cast is on offer.
+static bool AttackHeraldTriggerEnabled()
+{
+    static const bool env_on = EnvOn("MTG_ATTACK_HERALD_TRIGGER", true);   // DEFAULT ON; =0 not projected
+    return heurarm::Flag(heurarm::ATTACK_HERALD_TRIGGER, env_on);
+}
+struct HeraldOut { int counters = 0; int add = 0; int min_mv = 0; bool attacks = false; };
+struct HeraldCtx { bool live = false; int shift = 0; std::vector<HeraldOut> on_bf; };
+static HeraldCtx BuildHeraldCtx(const GameState& state, bool is_pre_combat, const std::vector<Action>& cands)
+{
+    HeraldCtx c;
+    if (!AttackHeraldTriggerEnabled()) { return c; }
+    const int active = state.active_player_index;
+    bool cast_herald = false, creature = false;
+    for (const Action& a : cands)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr) { continue; }
+        if (d->params.creature_cast_trigger_plus_counters > 0) { cast_herald = true; }
+        if (d->card.IsCreature()) { creature = true; }
+    }
+    if (!creature) { return c; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || d->params.creature_cast_trigger_plus_counters <= 0) { continue; }
+        HeraldOut h;
+        h.counters = TotalCountersOn(p);
+        h.add      = d->params.creature_cast_trigger_plus_counters;
+        h.min_mv   = d->params.creature_cast_counter_damage_min_mv;
+        h.attacks  = is_pre_combat && !p.tapped && CanAttackFull(p, state.battlefield, active)
+                  && ResolveProvider(state).AttackWith(state, p);
+        c.on_bf.push_back(h);
+    }
+    c.live = !c.on_bf.empty() || cast_herald;
+    if (c.live) { c.shift = DoublerShift(state, active, /*for_tokens=*/false); }
+    return c;
+}
+static int HeraldTriggerReach(const GameState& state, const HeraldCtx& c,
+                              const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    if (!c.live) { return 0; }
+    bool any_creature = false;
+    for (int j : sel)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d != nullptr && d->card.IsCreature()) { any_creature = true; break; }
+    }
+    if (!any_creature) { return 0; }
+    std::vector<int> order;
+    PlanCastOrder(state, cands, sel, order);
+    std::vector<HeraldOut> heralds = c.on_bf;
+    const int heads = gamesetup::OpponentHeads();
+    int reach = 0;
+    for (int j : order)
+    {
+        const Action& a = cands[static_cast<std::size_t>(j)];
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        const int mv = d->card.m_mana_cost.ManaValue();
+        for (HeraldOut& h : heralds)
+        {
+            const int put = h.add << c.shift;
+            h.counters += put;
+            if (h.attacks) { reach += put; }
+            if (h.min_mv > 0 && mv >= h.min_mv) { reach += h.counters * heads; }
+        }
+        if (d->params.creature_cast_trigger_plus_counters > 0)
+        {
+            HeraldOut h;
+            h.add    = d->params.creature_cast_trigger_plus_counters;
+            h.min_mv = d->params.creature_cast_counter_damage_min_mv;
+            heralds.push_back(h);
+        }
+    }
+    return reach;
+}
+
 // MTG_FREECAST_PRUNE (DEFAULT ON, =0 hatch; adopted 2026-08-20): the post-combat main emits free-cast
 // variants only for the top (charges + 2) hand casts by mana value -- see CollectActions. One reader,
 // because the free-cast projection below has to honour the same floor.
@@ -57413,6 +57508,8 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
+    // Herald of Ilharg's cast trigger (MTG_ATTACK_HERALD_TRIGGER), the same term. Lockstep twin.
+    const HeraldCtx herald_ctx = BuildHeraldCtx(state, is_pre_combat, cands);
     // The spell a connecting Maelstrom Archangel frees (MTG_ATTACK_FREECAST_DAMAGE). Lockstep twin.
     const FreeCastCtx freecast_ctx = BuildFreeCastCtx(state, is_pre_combat, cands, atk_mana_srcs, atk_tap_ctx);
 
@@ -58911,6 +59008,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
         }
         // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER; 0 unless a Cannons is live).
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
+        const int herald_dmg = HeraldTriggerReach(state, herald_ctx, cands, sel);   // 0 unless a Herald is live
         // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE; 0 unless one attacks).
         const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
         // Searing Blood finished by the plan's own creature damage (MTG_KILL_TRIGGER_COMBO; 0 off).
@@ -58924,7 +59022,7 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                               ? GreedyTrickStackCredit(state, cands, sel,
                                                        combined.ManaValue(), (credited ? eff : pool).Total())
                               : 0;
-        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach
+        bool wins = (projected_atk + boros_extra + direct_dmg + extra_lethal + cannons_dmg + herald_dmg + freecast_dmg + kill_combo_dmg + ping_reach
                      + trick_stack)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (Dimensional Infiltrator decking them out). Rides the same
@@ -68120,6 +68218,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // REMAND rider: the Remand is paid in X's ONE bill (the enumeration's combined a.cost; lockstep
         // with CastSpellFromHand, SubsetPayableSequential and BatchPrepayMainCasts). Paying the two
         // spells' costs in one tap pass is exact: nothing between X's cast and the Remand's adds mana.
+        // MANA SPENT (FireOnCastTriggers' contract; executor twin: CastSpellFromHand's x_effective): X's own
+        // bill, every reduction applied and {X} folded in, BEFORE the Remand rider joins it. The creature-spell
+        // convoke taps below come off it; a free / alternative-cost cast spends none.
+        int cast_mana_spent = (free_cast || alt_cost) ? 0 : ec.ManaValue();
         if (remand_def != nullptr) { AddRemandRiderCost(ec, state, cast_remand.str()); }
         if (remand_chain_def != nullptr) { AddRemandRiderCost(ec, state, cast_remand_chain.str()); }
         if (!free_cast && !alt_cost)
@@ -68241,7 +68343,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // bodies on the board as it stands now (a creature this plan cast earlier is there, sick)
             // and reduce by what was tapped; untapped again if the payment fails.
             ConvokeCastTaps _cv;
+            const int cv_before = ec.ManaValue();
             _cv.Tap(state, state.active_player_index, def, convoke_green, convoke_other, ec);
+            cast_mana_spent = std::max(0, cast_mana_spent - (cv_before - ec.ManaValue()));   // a tapped body is not mana
             SpellSubtypePayScope _ssps(&def.card);
             // GENERATOR SERVANT (sac_for_mana_grants_haste): a creature SPELL spends one haste-tagged
             // {C} on its own bill first -- a sound fold, see TakeHasteFloatForCreatureSpell. `ec`
@@ -68828,7 +68932,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (state.own_death_live && SelfHasLost(state)) { return; }
         if (!rip_precast)   // a ripple cast fired these at its cast (the handler; PushFreeCast's order)
         {
-            FireOnCastTriggers(state, def);
+            FireOnCastTriggers(state, def, cast_mana_spent);
             FireProwess(state, def);
             FlushNoncombatTriggersAtPriorityBoundary(state);
         }
@@ -70808,7 +70912,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     : std::min(state.casts_remaining_this_turn, md->params.max_casts_after);
             }
             if (state.own_death_live && SelfHasLost(state)) { return; }
-            FireOnCastTriggers(state, *md);
+            FireOnCastTriggers(state, *md, /*mana_spent=*/0);   // ripple: "without paying its mana cost"
             FireProwess(state, *md);
             FlushNoncombatTriggersAtPriorityBoundary(state);
             if (state.own_death_live && SelfHasLost(state)) { return; }
@@ -77881,6 +77985,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     BuildAttackTapCtx(state, is_pre_combat, pending_atk, atk_mana_srcs, cands, atk_tap_ctx);
     // Mana Cannons on the battlefield / castable, for the cast-trigger damage term. Lockstep twin.
     const CannonsCtx cannons_ctx = BuildCannonsCtx(state, cands);
+    // Herald of Ilharg's cast trigger (MTG_ATTACK_HERALD_TRIGGER), the same term. Lockstep twin.
+    const HeraldCtx herald_ctx = BuildHeraldCtx(state, is_pre_combat, cands);
     // The spell a connecting Maelstrom Archangel frees (MTG_ATTACK_FREECAST_DAMAGE). Lockstep twin.
     const FreeCastCtx freecast_ctx = BuildFreeCastCtx(state, is_pre_combat, cands, atk_mana_srcs, atk_tap_ctx);
 
@@ -78687,7 +78793,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     // MTG_XWASTE_EARLY_VERIFY=1 keeps the late drop and counts any selection the early test would have dropped
     // that the body went on to emit or to keep past the projection ([xwaste-early] at exit; must be 0).
     bool xw_nowin = false;
-    if (XwasteEarlyOn() && !cannons_ctx.live && freecast_ctx.casters <= 0 && !state.deck_has_counter_ping
+    if (XwasteEarlyOn() && !cannons_ctx.live && !herald_ctx.live && freecast_ctx.casters <= 0 && !state.deck_has_counter_ping
         && !has_extra_lethal && atk_mana_srcs.empty() && atk_tap_ctx.cand_bit.empty()
         && atk_tap_ctx.cand_mask.empty() && atk_tap_ctx.cand_walk.empty())
     {
@@ -80593,6 +80699,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
         // Mana Cannons' cast triggers (MTG_ATTACK_CANNONS_TRIGGER) -- twin of Solve's.
         const int cannons_dmg = CannonsTriggerDamage(state, cannons_ctx, cands, sel);
+        const int herald_dmg = HeraldTriggerReach(state, herald_ctx, cands, sel);   // 0 unless a Herald is live
         // The spell a connecting free-caster frees (MTG_ATTACK_FREECAST_DAMAGE) -- twin of Solve's.
         const int freecast_dmg = FreeCastDamage(freecast_ctx, cands, sel);
         // Searing Blood finished by the plan's own creature damage (MTG_KILL_TRIGGER_COMBO) -- twin of Solve's.
@@ -80601,7 +80708,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
         const int ping_reach = CounterPingReach(state, cands, sel);
         const int boros_extra = BorosMode3ExtraStrike(state, is_pre_combat, cands, sel,
                                                       atk_mana_srcs, noncreature_count);
-        bool wins = (projected_atk + boros_extra + direct_dmg + cannons_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
+        bool wins = (projected_atk + boros_extra + direct_dmg + cannons_dmg + herald_dmg + freecast_dmg + kill_combo_dmg + ping_reach)
                     >= state.Opponent().life;
         // A NON-DAMAGE win this turn (a deck-out). Board-level, so it needs no `casting` list and
         // costs one virtual call behind the has_extra_lethal gate; false for every deck without an

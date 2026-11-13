@@ -5934,8 +5934,22 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
     }
 }
 
-inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
+// The mana actually spent on the LAST FireOnCastTriggers call on this thread (-1 = none yet). A TEST PROBE only:
+// nothing in the engine reads it (Raggadragga's "if at least seven mana was spent to cast it" will read the
+// argument itself), so it can never move play. See the `mana_spent` contract below.
+inline thread_local int g_cast_trigger_mana_spent_probe = -1;
+
+// MANA SPENT (Boars I2b, the plumbing for Raggadragga's intervening if; CR 601.2h / 106.1): `mana_spent` is the
+// total mana actually paid for THIS spell's cost -- after every reduction (Herald's Horn, Medallions, Hinata's
+// X discount), with {X} folded into generic, minus the pips paid by convoke (a tapped creature is not mana) or by
+// Phyrexian life, and WITHOUT a Remand rider that rides the same bill (that is the Remand's own cost). A cast
+// "without paying its mana cost" (cascade, ripple, suspend, Garth, a banked free cast) or for an alternative cost
+// that is not mana (Invigorate's lifegain, Fireblast's sacrifice) spends 0. REQUIRED with no default, so every
+// cast site had to state it (the ComputeLordBonus-signature lesson). Every site is in both worlds' shared paths;
+// the executor's CastSpellFromHand and the rollout's apply_one compute it off their lockstep `effective` / `ec`.
+inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
+    g_cast_trigger_mana_spent_probe = mana_spent;
     int mv = cast_def.card.m_mana_cost.ManaValue();
     int active = state.active_player_index;
     if (cast_def.card.IsCreature())
@@ -6086,6 +6100,46 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                               "\xF0\x9F\x94\xA5 Aria of Flame (" + std::to_string(dmg) + " verse): "
                               + std::to_string(dmg) + " to opponent (" + std::to_string(before)
                               + "\xE2\x86\x92" + std::to_string(before - dmg) + ")");
+            }
+        }
+
+        // Herald of Ilharg: "Whenever you cast a creature spell, put two +1/+1 counters on this creature. If that
+        // spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to
+        // each opponent." Herald is on the stack, not the battlefield, during its own cast, so it never sees
+        // itself; another Herald already out does. The MV test is on resolution (a second sentence, not an
+        // intervening if) and reads the PRINTED MV (`mv`): Herald's Horn / emerge reduce the cost, never the MV,
+        // so a Decimator cast for emerge still deals the damage. "Number of counters" is read AFTER the put, and
+        // counts every counter (TotalCountersOn). Each Herald resolves its own trigger with its own count; the
+        // order of simultaneous cast triggers is inert (each reads only its own counters). Index the battlefield,
+        // not `p` (a const ref); neither the put nor face damage reallocates it.
+        if (def->params.creature_cast_trigger_plus_counters > 0 && cast_def.card.IsCreature()
+            && p.controller_index == active)
+        {
+            Permanent& h = state.battlefield[static_cast<std::size_t>(i)];
+            PutPlusCounters(state, h, def->params.creature_cast_trigger_plus_counters);
+            if (def->params.creature_cast_counter_damage_min_mv > 0
+                && mv >= def->params.creature_cast_counter_damage_min_mv)
+            {
+                const int n = TotalCountersOn(h);
+                const int before = state.players[1 - active].life;
+                for (int head = 0; head < gamesetup::OpponentHeads(); ++head)
+                { DealPermanentAbilityDamage(state, active, *def, n, /*target=*/0, /*ask_human=*/false); }
+                if (g_play_event_sink != nullptr && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "damage",
+                                  def->card.m_name.str() + " (" + cast_def.card.m_name.str() + ", MV "
+                                  + std::to_string(mv) + "): " + std::to_string(def->params.creature_cast_trigger_plus_counters)
+                                  + " +1/+1 counters, then " + std::to_string(n)
+                                  + " damage to each opponent (" + std::to_string(before) + "\xE2\x86\x92"
+                                  + std::to_string(state.players[1 - active].life) + ")");
+                }
+            }
+            else if (g_play_event_sink != nullptr && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              def->card.m_name.str() + " (" + cast_def.card.m_name.str()
+                              + "): " + std::to_string(def->params.creature_cast_trigger_plus_counters)
+                              + " +1/+1 counters");
             }
         }
 
@@ -13754,7 +13808,13 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     // (a multicolored conjure would ping Mana Cannons -- none of the six is multicolored).
     ++state.spells_cast_this_turn;
     state.mv_cast_this_turn += cd->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
-    FireOnCastTriggers(state, *cd);
+    // "You still pay its costs": both callers pay the copy's cost (its Action::cost, {X} folded in) just before
+    // this, so the mana spent is the printed cost plus Braingeyser's X.
+    {
+        const ManaCost& mc = cd->card.m_mana_cost;
+        const int x_paid = mc.has_x ? std::max(1, static_cast<int>(mc.x_pips)) * std::max(0, braingeyser_x) : 0;
+        FireOnCastTriggers(state, *cd, mc.ManaValue() + x_paid);
+    }
 
     if (name == "Black Lotus" || name == "Shivan Dragon")
     {
@@ -21039,7 +21099,8 @@ inline bool MadnessPinnedOptionNow(const GameState& state, const MadnessPending&
 // ResolveSuspendRipple in CastOffSuspend). It is the ONE path both worlds
 // can call at every madness site, including the rollout's cleanup.
 inline void FireProwess(GameState& state, const CardDefinition& def);   // defined far below
-inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source)
+inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source,
+                            int mana_spent)   // the madness cost actually paid (MadnessOption::reduced)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     if (d == nullptr) { state.players[controller].graveyard.push_back(card); return; }
@@ -21053,7 +21114,7 @@ inline void CastFromMadness(GameState& state, int controller, const Card& card, 
                 ? d->params.max_casts_after
                 : std::min(state.casts_remaining_this_turn, d->params.max_casts_after);
     }
-    FireOnCastTriggers(state, *d);
+    FireOnCastTriggers(state, *d, mana_spent);
     FireProwess(state, *d);
     Permanent perm;
     perm.card              = d->card;
@@ -21167,7 +21228,7 @@ inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& 
             pca = prev;
             if (paid)
             {
-                CastFromMadness(state, pend.owner, pend.card, pend.cause);
+                CastFromMadness(state, pend.owner, pend.card, pend.cause, o.reduced.ManaValue());
                 ++casts;
                 cast = true;
             }
@@ -23671,7 +23732,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         }
         if (def->tmpl == CardTemplate::DirectDamage)
         {
-            FireOnCastTriggers(state, *def);
+            FireOnCastTriggers(state, *def, /*mana_spent=*/0);   // cast off suspend without paying its mana cost
             FireProwess(state, *def);
             FlushNoncombatTriggersAtPriorityBoundary(state);
             // Cast triggers resolve ABOVE the spell. Lethal Eidolon damage ends the game
@@ -49463,7 +49524,7 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
         Card inv = ap.hand[i];
         ap.hand.erase(ap.hand.begin() + i);
         OpponentGainsLife(state, active, pp.alt_lifegain_cost);
-        FireOnCastTriggers(state, *d);
+        FireOnCastTriggers(state, *d, /*mana_spent=*/0);   // alternative cost: lifegain, no mana
         FireProwess(state, *d);
         state.battlefield[target_bi].temp_power_bonus += pp.power_bonus;
         state.battlefield[target_bi].temp_tough_bonus += pp.tough_bonus;

@@ -586,16 +586,16 @@ TEST_CASE("Niv-Mizzet, Parun: an instant/sorcery CAST draws a card and that draw
     EnsureCardsLoadedNiv();
     GameState s = FreshNiv();
     PutNiv(s, "Niv-Mizzet, Parun", 1);
-    FireOnCastTriggers(s, DefNiv("Preordain"));
+    FireOnCastTriggers(s, DefNiv("Preordain"), /*mana_spent=*/0);
     CHECK(Hand(s) == 1);
     CHECK(s.players[1].life == 19);            // the cast trigger's draw pinged before the spell resolves
-    FireOnCastTriggers(s, DefNiv("Tandem Lookout"));
+    FireOnCastTriggers(s, DefNiv("Tandem Lookout"), /*mana_spent=*/0);
     CHECK(Hand(s) == 1);
     CHECK(s.players[1].life == 19);
     // Mandatory: from an empty library it loses.
     GameState t = FreshNiv(0);
     PutNiv(t, "Niv-Mizzet, Parun", 1);
-    FireOnCastTriggers(t, DefNiv("Ponder"));
+    FireOnCastTriggers(t, DefNiv("Ponder"), /*mana_spent=*/0);
     CHECK(t.player_lost_on_draw);
 }
 

@@ -16338,6 +16338,28 @@
    }
   },
   {
+   "name": "Herald of Ilharg",
+   "mana_cost": "{2}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar",
+    "Beast"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Trample\nWhenever you cast a creature spell, put two +1/+1 counters on this creature. If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to each opponent. [Cast trigger modelled (Boars I2b, 2026-11-13): creature_cast_trigger_plus_counters 2 + creature_cast_counter_damage_min_mv 5, fired from the shared FireOnCastTriggers at every cast site (executor and rollout in lockstep). The two counters go on through PutPlusCounters (the doubler-aware chokepoint); then, if the cast spell's PRINTED mana value is 5 or more, Herald deals damage equal to ALL counters on it (read after the two are added, so the first trigger off a 5-drop deals 2) to EACH opponent (x the opponent heads in 2HG). Herald's Horn and emerge reduce the cost, never the mana value, so a Decimator cast for emerge still triggers the damage. Herald is on the stack during its own cast and never triggers off itself; a Herald already on the battlefield does, and several Heralds each resolve their own count. A creature PUT onto the battlefield (Ilharg) is not cast and does not trigger. The order of simultaneous cast triggers is inert: each Herald reads only its own counters. The this-turn lethal projection credits the trigger (MTG_ATTACK_HERALD_TRIGGER). [PARTIAL, PROVISIONAL: Trample is recorded and inert -- the goldfish opponent never blocks, so it changes no damage.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "creature_cast_trigger_plus_counters": 2,
+    "creature_cast_counter_damage_min_mv": 5
+   }
+  },
+  {
    "name": "Herald's Horn",
    "mana_cost": "{3}",
    "types": [

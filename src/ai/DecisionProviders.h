@@ -450,12 +450,13 @@ public:
 //     favour Human for Somberwald Sage / Zhur-Taa Druid / Raggadragga), so the choice is a narrowing, not a
 //     fold. Human play is offered every creature type the deck carries (the `creature_type` decision).
 //
-// SIGNATURE (DetectDecisionProvider's `boars`): params carried by no other deck. TODAY that is Flinthoof Boar's
-// self_haste_cost alone (the only Boars-specific param implemented when this provider was created). Herald's Horn's
+// SIGNATURE (DetectDecisionProvider's `boars`): params carried by no other deck. TODAY: Flinthoof Boar's
+// self_haste_cost (I1), Zhur-Taa Druid's tap_mana_damage_each_opponent (I2a), Herald of Ilharg's
+// creature_cast_trigger_plus_counters (I2b). Herald's Horn's
 // upkeep_look_top_chosen_type_to_hand is deliberately EXCLUDED: the Horn is a colourless tribal staple any tribal
-// deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I2-I5): OR in each new Boars-only param
-// -- Herald of Ilharg's cast-creature counters, Raggadragga's, Decimator's emerge/cast pump, Ilharg's attack put
-// -- so one deckbuilding swap cannot lose the routing.
+// deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I3-I5): OR in each new Boars-only param
+// -- Raggadragga's, Decimator's emerge/cast pump, Ilharg's attack put -- so one deckbuilding swap cannot lose the
+// routing.
 // =============================================================================================
 class BoarsProvider : public DeckProvider
 {

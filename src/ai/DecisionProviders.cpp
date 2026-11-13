@@ -25863,9 +25863,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.endstep_sacrifice_self || p.combat_damage_self_may_draw > 0
             || p.turned_face_up_return_gy_to_hand)
         { morph = true; }
-        // Boars: Flinthoof Boar's self haste, Zhur-Taa Druid's tap-for-mana ping (the class note lists what
-        // later integrators OR in).
-        if (p.self_haste_cost.has_value() || p.tap_mana_damage_each_opponent > 0)
+        // Boars: Flinthoof Boar's self haste, Zhur-Taa Druid's tap-for-mana ping, Herald of Ilharg's creature-cast
+        // counters (the class note lists what later integrators OR in).
+        if (p.self_haste_cost.has_value() || p.tap_mana_damage_each_opponent > 0
+            || p.creature_cast_trigger_plus_counters > 0)
         { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())

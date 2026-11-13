@@ -192,6 +192,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         //     non-land-typed land search, which is no audited card's;
         //   * Lightning Greaves' equip keys, Flinthoof Boar's static pump and self haste;
         //   * Zhur-Taa Druid's tap_mana_damage_each_opponent (Boars I2a): its ping deals damage, it never moves a card;
+        //   * Herald of Ilharg's cast trigger (Boars I2b): +1/+1 counters and damage, it never moves a card;
         //   * Herald's Horn's own keys: its upkeep take is COUNTED explicitly by the fold (one card per trigger).
         // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
         {
@@ -205,6 +206,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "chooses_creature_type", "reduces_spell_subtype_amount", "reduces_spell_subtype_creature_only",
                 "upkeep_look_top_chosen_type_to_hand",
                 "tap_mana_damage_each_opponent",   // Zhur-Taa Druid: damage only, never a card
+                "creature_cast_trigger_plus_counters", "creature_cast_counter_damage_min_mv",   // Herald of Ilharg: counters + damage
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -1504,6 +1506,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
     p.tap_mana_damage_each_opponent = params.value("tap_mana_damage_each_opponent", 0);
+    p.creature_cast_trigger_plus_counters = params.value("creature_cast_trigger_plus_counters", 0);
+    p.creature_cast_counter_damage_min_mv = params.value("creature_cast_counter_damage_min_mv", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))
         p.fetch_land_types.push_back(s);
     p.target_own_creature       = params.value("target_own_creature", false);

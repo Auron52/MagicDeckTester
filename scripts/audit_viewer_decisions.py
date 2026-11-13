@@ -105,6 +105,10 @@ MANIFEST = {
     "post_draw_discard":     ("discard",              positive),
     "tap_post_draw_discard": ("discard",            positive),
     "threshold_loot_cost":   ("main_phase",           truthy),
+    # Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn" is a searched main-phase plan
+    # action (Action::Kind::ActivatePump mode 6, `act=Flinthoof Boar`), surfaced in the main_phase plan list
+    # (DECISIONS.md row). Its BOARD_ACTIVATIONS row covers the board verb; this is the decision-manifest row.
+    "self_haste_cost":       ("main_phase",           truthy),
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
@@ -1218,6 +1222,8 @@ INERT_PARAMS = {
     "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
     "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",
     "tap_mana_damage_each_opponent": "automatic on tap (end-step free ping: no decision)",
+    "creature_cast_trigger_plus_counters": "automatic on-cast trigger (Herald of Ilharg: mandatory, untargeted, fixed count; Boars I2b)",
+    "creature_cast_counter_damage_min_mv": "trigger threshold (Herald of Ilharg: damage to EACH opponent, no target; Boars I2b)",
     "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",

@@ -1344,7 +1344,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     }
     state.stack.push_back(std::move(e));
     if (state.own_death_live && SelfHasLost(state)) { return true; }
-    FireOnCastTriggers(state, *def);
+    FireOnCastTriggers(state, *def, /*mana_spent=*/0);   // "without paying its mana cost"
     FireProwess(state, *def);
     FlushNoncombatTriggersAtPriorityBoundary(state);
     if (state.own_death_live && SelfHasLost(state)) { return true; }

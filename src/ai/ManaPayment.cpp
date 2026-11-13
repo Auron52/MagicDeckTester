@@ -7966,7 +7966,8 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     state.mv_cast_this_turn += remand_def.card.m_mana_cost.ManaValue();
     if (post_combat) { NoteMain2StagerCast(state, remand_def); }
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-    FireOnCastTriggers(state, remand_def);
+    // Paid in X's one bill as its own EffectiveSpellCost (AddRemandRiderCost): that share is what it spent.
+    FireOnCastTriggers(state, remand_def, EffectiveSpellCost(remand_def, state).ManaValue());
     FireProwess(state, remand_def);
     // Resolution: counter X to its owner's hand, then draw.
     if (countered) { ReturnCounteredSpellToHand(state, controller, x_card); }
@@ -8025,7 +8026,7 @@ std::size_t CastAndResolveRemandChain(GameState& state, int controller, const Ca
     state.mv_cast_this_turn += a_def.card.m_mana_cost.ManaValue();
     if (post_combat) { NoteMain2StagerCast(state, a_def); }
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-    FireOnCastTriggers(state, a_def);
+    FireOnCastTriggers(state, a_def, EffectiveSpellCost(a_def, state).ManaValue());   // its share of the bill
     FireProwess(state, a_def);
     // B targets A and resolves first: A to hand, B draws.
     return CastAndResolveRemand(state, controller, b_def, post_combat, /*countered=*/true, a_card, b_out);

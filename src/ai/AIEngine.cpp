@@ -5495,7 +5495,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
 
         if (m_logger) { m_logger->LogCastSpell(number, name, effective.ToString() + " (retrace)"); }
         state.stack.push_back(std::move(entry));
-        FireOnCastTriggers(state, *def);
+        FireOnCastTriggers(state, *def, effective.ManaValue());   // the retrace cost paid above
         FireProwess(state, *def);
         // A retrace cast is a cast: its cascade fires exactly as a hand cast's does (this is
         // Throes of Chaos's ONLY effect -- since cascade moved to cast-trigger entries, this
@@ -10319,6 +10319,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // REMAND rider: the Remand is paid in X's ONE bill (lockstep with apply_one and the enumeration's
     // combined Action::cost). X's own cost is kept for the log line.
     const ManaCost x_effective = effective;
+    // MANA SPENT (FireOnCastTriggers' contract; rollout twin: apply_one's cast_mana_spent): X's own bill, before
+    // the Remand rider joins it, less the creature-spell convoke taps below; a free / Fireblast / alternative-
+    // lifegain cast spends none (set where those are decided, below).
+    int cast_mana_spent = x_effective.ManaValue();
     ManaCost remand_cost;
     if (remand_def != nullptr)
     {
@@ -10338,6 +10342,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     if (IsFireblastAlternative(*def, tutor_target)
         && !PayFireblastAlternative(state, state.active_player_index, tutor_target)) { return; }
     bool haste_from_mana = false;   // Generator Servant's rider, set at the payment below
+    if (alt_lifegain > 0 || spend_free) { cast_mana_spent = 0; }
     if (alt_lifegain > 0)
     {
         // Alternative cost: pay no mana; instead the payload's players gain alt_lifegain life
@@ -10432,7 +10437,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // CREATURE-SPELL CONVOKE AT THE CAST (lockstep twin of apply_one): tap the arm's bodies on the
         // board as it stands now and reduce by what was tapped; untapped again if the payment fails.
         ConvokeCastTaps _cv;
+        const int cv_before = effective.ManaValue();
         _cv.Tap(state, state.active_player_index, *def, convoke_green, convoke_other, effective);
+        cast_mana_spent = std::max(0, cast_mana_spent - (cv_before - effective.ManaValue()));   // a tapped body is not mana
         SpellSubtypePayScope _ssps(&def->card);   // see the Giada note at the other cast site
         // GENERATOR SERVANT: a creature SPELL spends one haste-tagged {C} on its own bill first --
         // the executor twin of apply_one's take (TakeHasteFloatForCreatureSpell). `effective` stays
@@ -10741,7 +10748,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // trigger or spell can resolve. The paid cast remains committed on the stack.
     if (state.own_death_live && SelfHasLost(state)) { return; }
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
-    FireOnCastTriggers(state, *def);
+    FireOnCastTriggers(state, *def, cast_mana_spent);
     FireProwess(state, *def);
     // Real-stack cast triggers (cascade instances, demonstrate): pushed ABOVE the spell entry
     // so they -- and the free casts they make -- resolve BEFORE the spell itself (CR 601.2i /
