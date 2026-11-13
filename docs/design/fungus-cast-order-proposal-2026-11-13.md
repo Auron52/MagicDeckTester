@@ -461,4 +461,4 @@ Added 2026-11-13 with §5A/§5B (activations and Saprolings as a cost):
 - **Q16:** "Yes" (diagnose the count menu's blind spots first: same-plan Season/Sporecrown, Shroofus, phase).
 - **Q17:** "Yes"
 - **Q18:** "If we end up going with main 2 and the critters are small then yes, but we don't want to sacrifice larger saprolings willy-nilly." -> only under Q6's main-2 window, and only small tokens.
-- Open: Q13's second half (count a same-plan Sporecrown when deciding a token is doomed); the USER's Q13 answer ended mid-sentence ("If").
+- **Q13 second half** (USER labelled it Q14): "On the sporecrown cast earlier in the plan, yes, it should be taken into account, since they don't die until the upkeep if it is there." -> a same-plan Sporecrown counts when deciding a token is doomed.
