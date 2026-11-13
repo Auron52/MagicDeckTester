@@ -1049,7 +1049,7 @@ pd2hg_overnight_d5_s7007	39756
 pd2hg_regression_d3_s2002	25692
 pd2hg_regression_d5_s2002	53064
 pd2hg_smoke_d3_s1001	15376
-pd2hg_smoke_d5_s1001	49068
+pd2hg_smoke_d5_s1001	49066
 pd_overnight_d0_s10010	1
 pd_overnight_d0_s4004	1
 pd_overnight_d0_s6006	1
@@ -1072,7 +1072,7 @@ pd_regression_d5_s2002	29066
 pd_regression_d5_s30001	19248
 pd_regression_d5_s3003	34971
 pd_smoke_d0_s1001	1
-pd_smoke_d3_s1001	19998
+pd_smoke_d3_s1001	19994
 pd_smoke_d5_s1001	29495
 pirates2hg_overnight_d5_s4004	13310
 pirates2hg_overnight_d5_s5005	12213

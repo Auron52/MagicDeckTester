@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 2e188c3a6  date 2026-11-13
+# Regression ground truth -- commit 19d6221e0  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -144,7 +144,7 @@ pirates2hg_smoke_d5_s1001=4.9000/65ec8d5bb485be8e
 soldiers2hg_smoke_d5_s1001=4.9800/5b7a2068cacdb969
 colossus2hg_smoke_d5_s1001=4.1200/b22ceb2fcfdac37e
 elementals2hg_smoke_d5_s1001=4.9600/04852f7bf379fa70
-pd2hg_smoke_d5_s1001=5.5200/c646696e7c08be4e
+pd2hg_smoke_d5_s1001=5.5200/a7bbe49291597e8a
 fluctuator_smoke_d0_s1001=4.9820/33253c159449c8fd
 fluctuator_smoke_d3_s1001=3.4400/42b9a467b3fe28ab
 fluctuator_smoke_d5_s1001=3.5314/1719605529d48639
@@ -161,9 +161,9 @@ selesnyav22hg_smoke_d5_s1001=4.7400/d61b1c69fbbdd83f
 soldiers_smoke_d0_s1001=4.4200/21bee969c8c43707
 soldiers_smoke_d3_s1001=4.2800/04013b8b10c1dcb1
 soldiers_smoke_d5_s1001=4.2457/be23baaba6574a46
-pd_smoke_d0_s1001=7.2940/79ef6f2a70b4a24e
-pd_smoke_d3_s1001=5.3600/5c7230090ba28a52
-pd_smoke_d5_s1001=5.5100/39231839e3a0495f
+pd_smoke_d0_s1001=7.2920/5c406664395cdfdf
+pd_smoke_d3_s1001=5.3600/3ddb1805d5d45e11
+pd_smoke_d5_s1001=5.5100/c1cb3f1e2116942e
 bruna2hg_smoke_d5_s1001=5.2800/e9abf1ede034d96a
 bruna_smoke_d0_s1001=5.9380/cb553a65150f8560
 bruna_smoke_d3_s1001=4.7200/ff843a1b8ed106f4
