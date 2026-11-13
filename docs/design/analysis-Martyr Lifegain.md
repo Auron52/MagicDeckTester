@@ -115,7 +115,19 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-12 ~18:45 UTC) -- RESUME HERE
+## Checkpoint (2026-11-12 ~22:35 UTC) -- RESUME HERE
+
+FARM LANDING REBASED twice (now 0668b9388 code + 83cd80de3 GT, on origin 714f955bc). After the first rebase (onto
+4f3522ad4) martyr smoke 4/4 + regression 7/7 PASS byte-identical (logs/martyr-lifegain/farm-rebase-{smoke,reg}.log).
+Origin then moved again (hydras P13 engine levers SUBRED / X-waste / walk pre-test, Extra Turns per-game reset):
+rebuild + martyr smoke + regression re-running (farm-rebase2-*.log) before the push.
+5c2 TIE-BREAK DONE -- VERDICT KEEP (default ON). Extension (blocks s2200000.., 12000 paired): net -19, 2 worse / 18
+better (half A -5, half B -14), script verdict KEEP. POOLED with the first run (net -12, 3/15): 24000 paired, 38
+changed, net -31, 5 worse / 33 better; all four halves negative. Nothing to change (GradesNoWinLeaf stays true).
+NEXT: push -> 5h audit_viewer_decisions -> verify_deck --write-ledger -> Stage 6 report -> mullgen.sh run (alone)
+-> valueleaf.sh run.
+
+### Checkpoint (2026-11-12 ~18:45 UTC, history)
 
 FARM AMENDMENT LANDED, DEFAULT ON (a80914138 + GT 045348604): Ranger-Captain / Ranger of Eos admit Curious Farm
 Animals (after Martyr) only while life < the top own threshold AND the hand holds no white card (Martyr's reveal
