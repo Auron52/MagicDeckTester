@@ -7048,6 +7048,50 @@
      "seed": 30022000,
      "src": "fa6ca957b48f91b2b5ffd5ea6fd221cb0ce7e03a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 102,
+      "APPLY-DROP-ORDER": 2,
+      "CAPPED": 351,
+      "CONTINUATION-DIFFERS": 44,
+      "DOMINATED-LAND": 9333,
+      "DOMINATED-LIFE": 13465,
+      "DROP-COVERED": 17,
+      "ORACLE-GAP": 138,
+      "PHANTOM": 53
+     },
+     "commit": "b83f7225aff63ca4c142fe79e7545ae1587f5aea",
+     "date": "2026-11-13T11:24:28Z",
+     "decisions": 49457,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 27000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 593,
+     "life_breakpoints": [],
+     "ms_off": 3754319,
+     "ms_on": 12591044,
+     "report": "logs/mana_clean/20261113-111547/report.md",
+     "run": "20261113-111547",
+     "seed": 30027000,
+     "src": "bd894362e50bb772367facee466df15b8234c0c2",
+     "verdict": "issues"
     }
    ]
   },

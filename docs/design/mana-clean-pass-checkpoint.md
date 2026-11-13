@@ -1247,6 +1247,17 @@ fungus 1,880, gods 4,300 (first run).
     batch that would be lethal, smallest tap first; PaymentPainSafe uses the largest single tap under a Tamanoa).
     **FIXED c628093e1** (default ON): A/B seeds 7450001+, 3000/arm: 114 diffs, 11 faster, 1 slower (gi717, recovers
     at d8 b0), net -10; smoke accepted 1310be5b1. OWED: regression accept, PGO, re-gate 27000-31999 (handoff #3).
+  * **Agent #4 (2026-11-13): regression accept b83f7225a; GATE prevent_damage 27000-31999 (PGO bd894362e50b): 593 issues
+    (was 384 on 22000-26999)** = APPLY-DROP 102 (was 13), APPLY-DROP-ORDER 2 (was 36), ORACLE-GAP 138 (was 145),
+    UNMODELED 0 (was 10), CAPPED 351 (was 180). Oracle-off play byte-identical. Report logs/mana_clean/20261113-111547/report.md.
+    FLOAT_FLUSH cleared the ADO class (36 -> 2, one game). The AD rise is concentrated in 3 games (78 of 102 flags):
+    s30027674 T6 (40) life 3: the oracle's line pays a Citadel 3-tap at life 3 because the drains of the earlier taps
+    kill the opponent first (won-lock); the engine's per-tap safety test does not see the win (that game wins T6 anyway).
+    s30027719 T6 (22): harmful-mode payer, NON-exact floor path -- the minimum-damage Dina {B}{G} (Coliseum B + City G)
+    strands Beseech's {B}{B}{B}; that path has no rest-of-line check (only the exact-floor path has one).
+    s30029561 T6 (16): useful-mode repair holds ONE source at a time; Tamanoa {R}{G}{W} needs Citadel AND Reflecting Pool
+    both held (the pain-first base taps Citadel, the kept deferral taps Pool) to leave Beseech's {B}{B}{B}.
+    CAPPED 351 is analyzer cost in 24 games (4 T8 games = 201). ORACLE-GAP 138 in 17 games, not yet re-diagnosed.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating
