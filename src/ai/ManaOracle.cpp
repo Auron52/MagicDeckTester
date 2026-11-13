@@ -1069,6 +1069,13 @@ struct Face
     // other permanent tapped or untapped). RefinePayment's surplus bound counts released sources by it.
     bool regular  = false;
     int  wild     = 0;                       // measured: the `wild` units the tap adds (every pool)
+    // PayEnum's PRE-TAP MEMO (see PayEnum::memo_on): a regular, unfed, unrestricted face's EFFECT -- the tap's
+    // post-board key with every floating pool put back as it was (TapFoldKey) -- and its exact per-field pool
+    // delta (kPoolFields: general, creature-only, big-spell pools, then the haste {C}).
+    static constexpr int kPoolFields = 34;
+    bool          pre_ok = false;
+    std::uint64_t effect = 0;
+    int           pd[kPoolFields] = {};
 };
 struct SrcClass
 {
@@ -1113,6 +1120,28 @@ private:
     std::size_t* m_depth = nullptr;
 };
 
+// The post-tap memo's board key (PayEnum::memo_on): the full mid-turn state key plus, per permanent, the transient
+// payment fields that key leaves out because no breakpoint ever holds them -- tapped (twins apart, by number), the
+// Prevent Damage tap mark (Permanent::mana_tap_mark: which land's pain / Manabarbs events the payment's flush will
+// deal), a pay-sacrifice and a temporary haste. Measured necessary: without the mark, Karplusan Forest {G} +
+// Brushland {C} and Karplusan {C} + Brushland {G} shared a key and lost a result (seed 30017158 T6).
+std::uint64_t TapFoldKey(const GameState& sc)
+{
+    std::uint64_t k = TurnSolver::MidTurnStateKeyOfPayment(sc);
+    for (const Permanent& p : sc.battlefield)
+    {
+        if (!p.tapped && p.mana_tap_mark == 0 && !p.pay_sac_eaten && !p.temp_haste) { continue; }
+        k = (k ^ (0x7A9Dull + static_cast<std::uint64_t>(p.card.m_number)
+                  + (static_cast<std::uint64_t>(p.mana_tap_mark) << 32)
+                  + (static_cast<std::uint64_t>(p.tapped ? 1 : 0) << 48)
+                  + (static_cast<std::uint64_t>(p.pay_sac_eaten ? 1 : 0) << 49)
+                  + (static_cast<std::uint64_t>(p.temp_haste ? 1 : 0) << 50))) * 0x9E3779B97F4A7C15ULL;
+    }
+    return k;
+}
+// Set by MinimalPayments while it builds its table with the memo on: MeasureFace then keys each face's effect.
+thread_local bool t_face_effect = false;
+
 // Measure a face on a scratch copy: what the tap adds. A fed face is asked with a generous pre-fill so
 // its feed can always be met; its net is then (outputs - feed).
 bool MeasureFace(const GameState& state, Face& f)
@@ -1135,6 +1164,8 @@ bool MeasureFace(const GameState& state, Face& f)
         return t;
     };
     const ManaPool fb = all_pools(sc);
+    const ManaPool gb = sc.floating_mana, cb = sc.floating_creature_mana, bb = sc.floating_bigspell_mana;
+    const int hb = sc.floating_haste_c;
     const std::string why = f.creature ? OracleCreatureTap(sc, f.pt) : ApplyEnginePreTap(sc, f.pt);
     if (!why.empty()) { return false; }
     f.net = AllFloat(sc) - before;
@@ -1162,6 +1193,24 @@ bool MeasureFace(const GameState& state, Face& f)
         if (!f.pt.combo.empty()) { for (int c : f.pt.combo) { ++f.col[c]; } }
         else if (f.pt.color >= 0) { f.col[f.pt.color] += std::max(1, f.net + 1); }
         for (int ac : f.pt.aura_colors) { ++f.col[ac]; }
+    }
+    // After f.col (it reads the post-tap pools): the effect key is taken with the pools put back.
+    if (t_face_effect && !f.fed && !f.creature && f.regular)
+    {
+        auto put = [](int* d, const ManaPool& a, const ManaPool& b)
+        {
+            const int v[11] = { a.white - b.white, a.blue - b.blue, a.black - b.black, a.red - b.red, a.green - b.green,
+                                a.colorless - b.colorless, a.wild - b.wild, a.wild_c - b.wild_c,
+                                a.wild_phantom - b.wild_phantom, a.wild_conv - b.wild_conv, a.snow_units - b.snow_units };
+            std::copy(v, v + 11, d);
+        };
+        put(f.pd, sc.floating_mana, gb);
+        put(f.pd + 11, sc.floating_creature_mana, cb);
+        put(f.pd + 22, sc.floating_bigspell_mana, bb);
+        f.pd[33] = sc.floating_haste_c - hb;
+        sc.floating_mana = gb; sc.floating_creature_mana = cb; sc.floating_bigspell_mana = bb; sc.floating_haste_c = hb;
+        f.effect = TapFoldKey(sc);
+        f.pre_ok = true;
     }
     return true;
 }
@@ -1482,6 +1531,7 @@ struct PayEnum
     std::unordered_set<std::uint64_t>& seen;
     std::vector<PayOption>&         out;
     std::size_t                     probes = 0;
+    std::size_t                     memo_hits = 0;
     std::size_t                     cap    = 4096;
     bool                            capped = false;
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
@@ -1499,6 +1549,61 @@ struct PayEnum
     // SCALED TAP-AHEAD BEFORE A SACRIFICE (see ScaledAheadClasses): classes of untapped scaled dorks whose count
     // includes the creature this payment's cast is about to sacrifice, each with the face that taps it.
     std::vector<Pick>               ahead;
+    // THE POST-TAP MEMO (MTG_ORACLE_TAP_MEMO, DEFAULT ON; =0 every tap set is paid and split on its own). Prevent
+    // Damage mana-clean gate 17000-21999, 2475 UNMODELED "payment enumeration capped": five colour-rich sources
+    // (City of Brass x2, Reflecting Pool, Battlefield Forge, Ancient Tomb x2) paying Beseech the Queen's {6} made
+    // 13,686 probes for 82 distinct results, 78% of them the leftover split of a multi-unit set. Two tap sets that
+    // leave the SAME board after the taps (Forge:R + Pool:W vs Forge:W + Pool:R; every colour of a source whose
+    // unit the bill then spends) are the same input to everything Verify does next -- the float-only payment, the
+    // leftover split, and so the recorded results -- so the second one's outcome is the first one's, and its
+    // results were already recorded (seen keys on the post-payment board). The key is the full mid-turn state key
+    // of the post-tap board plus every tapped permanent's number (twins apart) and whether the set holds a
+    // multi-unit tap (the leftover split reads that from the picks, not the board). A set with a fed face is
+    // never memoised (its order permutations read the picks). Audit-only: MinimalPayments' table, never the refine.
+    // TWO LEVELS. The post-tap key (TapFoldKey) needs a scratch board and the taps made on it; the PRE-tap key needs
+    // neither: per class, the sequence of its picks' face EFFECTS in copy order (MeasureFace: the single tap's board
+    // key with the pools put back), plus the summed exact pool delta and the multi-unit bit. Equal pre-keys claim
+    // equal post-tap boards (taps of distinct regular sources commute and only add to the pools); the first set of a
+    // pre-key is paid for real and records its post-tap key, and MTG_ORACLE_TAP_MEMO_VERIFY=1 re-pays every hit of
+    // either level, printing [tap-memo-LOST] for a result a hit would have dropped and [tap-memo-PRE] for a pre-key
+    // whose post-tap key differs. A pre-key hit costs no probe (no board is copied); they are bounded on their own
+    // (64 x the probe ceiling) so a degenerate table still ends.
+    bool                            memo_on = false;
+    std::unordered_map<std::uint64_t, bool> tap_memo;
+    std::unordered_map<std::uint64_t, std::pair<std::uint64_t, bool>> pre_memo;
+    std::size_t                     pre_hits = 0;
+    std::uint64_t                   memo_salt = 0;
+    // PayAndRecord's side channel for the base payment of a memoised Verify.
+    bool                            want_tap_key = false;
+    bool                            tap_key_ok   = false;
+    bool                            tap_hit      = false;
+    bool                            tap_val      = false;
+    std::uint64_t                   tap_key      = 0;
+    std::string                     verify_from;
+    std::unordered_map<std::uint64_t, std::string> memo_text;   // verify mode only
+
+    std::uint64_t PreKey(const std::vector<Pick>& picks, bool& ok) const
+    {
+        ok = true;
+        std::uint64_t h = memo_salt;
+        long long sum[Face::kPoolFields] = {};
+        for (std::size_t c = 0; c < srcs.size(); ++c)
+        {
+            bool any = false;
+            for (const Pick& pk : picks)
+            {
+                if (pk.cls != static_cast<int>(c)) { continue; }
+                const Face& f = srcs[c].faces[static_cast<std::size_t>(pk.face)];
+                if (!f.pre_ok) { ok = false; return 0; }
+                if (!any) { h = (h ^ (0xC1A5ull + c)) * 0x9E3779B97F4A7C15ULL; any = true; }
+                h = (h ^ f.effect) * 0x9E3779B97F4A7C15ULL;
+                for (int i = 0; i < Face::kPoolFields; ++i) { sum[i] += f.pd[i]; }
+            }
+        }
+        for (int i = 0; i < Face::kPoolFields; ++i)
+        { h = (h ^ (static_cast<std::uint64_t>(sum[i]) + 0x51ull * static_cast<std::uint64_t>(i))) * 0x9E3779B97F4A7C15ULL; }
+        return h;
+    }
 
     PayOption Build(const std::vector<Pick>& picks) const
     {
@@ -1532,10 +1637,53 @@ struct PayEnum
     bool Verify(const std::vector<Pick>& picks)
     {
         ++t_trc_v[t_trc_site];
+        static const bool s_mv = EnvOn("MTG_ORACLE_TAP_MEMO_VERIFY");   // diagnostic: re-pay every memo hit
+        bool memo_this = false, pre_ok = false, pre_known = false;
+        std::uint64_t pre = 0, pre_expect = 0;
+        if (memo_on)
+        {
+            memo_this = true;
+            for (const Pick& pk : picks)
+            {
+                if (srcs[static_cast<std::size_t>(pk.cls)].faces[static_cast<std::size_t>(pk.face)].fed) { memo_this = false; break; }
+            }
+            memo_salt = HasMultiUnit(picks) ? 0x6D756C7469ull : 0x73696E676Cull;
+            if (memo_this) { pre = PreKey(picks, pre_ok); }
+            if (pre_ok)
+            {
+                const auto it = pre_memo.find(pre);
+                if (it != pre_memo.end())
+                {
+                    if (!s_mv)
+                    {
+                        if (++pre_hits > 64 * cap) { capped = true; return false; }
+                        return it->second.second;
+                    }
+                    pre_known = true; pre_expect = it->second.first;
+                }
+            }
+        }
         if (++probes > cap) { capped = true; return false; }
         PayOption o = Build(picks);
         ManaPool offered, left;
-        if (!PayAndRecord(o, &offered, &left))
+        want_tap_key = memo_this; tap_key_ok = false; tap_hit = false;
+        const bool base_paid = PayAndRecord(o, &offered, &left);
+        want_tap_key = false;
+        const bool rec_memo = tap_key_ok;
+        const std::uint64_t mk = tap_key;
+        if (pre_known && rec_memo && mk != pre_expect)
+        {
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[tap-memo-PRE] %s: the pre-key's post-tap key differs\n", TapsText(o).c_str());
+        }
+        auto remember = [&](bool v)
+        {
+            if (!rec_memo) { return; }
+            tap_memo.emplace(mk, v);
+            if (pre_ok) { pre_memo.emplace(pre, std::make_pair(mk, v)); }
+        };
+        if (tap_hit) { ++memo_hits; remember(tap_val); return tap_val; }
+        if (!base_paid)
         {
             // CHAINED FEEDS (item 6, Treasure Hunt seed 30060179 T4: Land's Edge {1}{R}{R} off Reliquary Tower ->
             // Ferrous Lake ({1},{T}: {U}{R}) -> Cascade Bluffs ({U/R},{T}: {R}{R}), Temple of Epiphany left untapped).
@@ -1551,7 +1699,7 @@ struct PayEnum
                 const SrcClass& sc = srcs[static_cast<std::size_t>(pk.cls)];
                 if (sc.faces[static_cast<std::size_t>(pk.face)].fed) { ++nf; }
             }
-            if (!s_fed_order || nf < 2) { return false; }
+            if (!s_fed_order || nf < 2) { remember(false); return false; }
             const std::size_t at = o.taps.size() - nf;   // Build puts the fed taps last
             const PayOption base = o;
             std::vector<std::size_t> perm(nf);
@@ -1570,6 +1718,7 @@ struct PayEnum
         }
         // Only a multi-unit tap makes a leftover of its own: a set of one-unit taps pays exactly, and
         // the floating pool it was offered is already split by the outer set-aside enumeration.
+        remember(true);
         if (whole_float || !HasMultiUnit(picks)) { return true; }
         const int n = left.white + left.blue + left.black + left.red + left.green + left.colorless;
         if (n == 0 || offered.wild != 0 || left.wild != 0) { return true; }
@@ -1613,6 +1762,18 @@ struct PayEnum
             return false;
         };
         if (!PerformTaps(sc, o)) { return why("a tap was refused"); }
+        bool verify_hit = false;
+        if (want_tap_key && offered != nullptr)
+        {
+            static const bool s_mv = EnvOn("MTG_ORACLE_TAP_MEMO_VERIFY");
+            const std::uint64_t k = TapFoldKey(sc) ^ memo_salt;
+            tap_key_ok = true;
+            tap_key    = k;
+            const auto it = tap_memo.find(k);
+            if (it != tap_memo.end() && !s_mv) { tap_hit = true; tap_val = it->second; return it->second; }
+            if (it != tap_memo.end()) { verify_hit = true; verify_from = memo_text[k] + (it->second ? " paid" : " FAILED"); }
+            else if (s_mv)            { memo_text[k] = TapsText(o); }
+        }
         ManaPool& sf = sc.floating_mana;
         if (sf.white < o.stash.white || sf.blue < o.stash.blue || sf.black < o.stash.black
             || sf.red < o.stash.red || sf.green < o.stash.green || sf.colorless < o.stash.colorless)
@@ -1648,6 +1809,11 @@ struct PayEnum
         }
         if (seen.insert(rkey).second)
         {
+            if (verify_hit)
+            {
+                std::lock_guard<std::mutex> lk(g_print_mu);
+                std::fprintf(stderr, "[tap-memo-LOST] %s  (memo from %s)\n", TapsText(o).c_str(), verify_from.c_str());
+            }
             out.push_back(std::move(o));
             if (out.size() >= want) { capped = true; lazy = true; }
         }
@@ -1895,7 +2061,12 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
     std::optional<SpellSubtypePayScope> _ssp;
     if (spell != nullptr) { _ssp.emplace(spell); }
     std::vector<PayOption> out;
+    static const bool s_tap_memo = EnvOn("MTG_ORACLE_TAP_MEMO", true);   // DEFAULT ON; =0 off (PayEnum::memo_on)
+    const bool memo = s_tap_memo && !whole_float;
+    const bool fe_saved = t_face_effect;
+    t_face_effect = memo;
     const std::vector<SrcClass> srcs = BuildSources(state, for_creature, unmodeled, UsefulColorMask(state, cost));
+    t_face_effect = fe_saved;
     if (Level() >= 4)
     {
         std::lock_guard<std::mutex> lk(g_print_mu);
@@ -1939,10 +2110,21 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
         pe.want        = max_opts;
+        pe.memo_on = memo;
+        // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 4096, the historical constant; diagnostic sizing only).
+        { static const int s_pc = std::max(1, EnvInt("MTG_ORACLE_PAY_PROBES", 4096)); pe.cap = static_cast<std::size_t>(s_pc); }
         // MTG_ORACLE_SCALED_AHEAD (DEFAULT ON; =0 the one-extra-tap table alone): audit-only, see ExtendScaledAhead.
         static const bool s_ahead = EnvOn("MTG_ORACLE_SCALED_AHEAD", true);
         if (!whole_float && s_ahead) { pe.ahead = ScaledAheadClasses(state, srcs, sac_victim); }
+        t_trc_v[0] = t_trc_v[1] = t_trc_v[2] = 0;
         pe.Dfs(0, col, total);
+        static const bool s_probe_trc = EnvOn("MTG_ORACLE_PAY_PROBES_TRACE");   // diagnostic: one line per table
+        if (s_probe_trc)
+        {
+            std::lock_guard<std::mutex> lk(g_print_mu);
+            std::fprintf(stderr, "[pay-probes] cost=%s probes=%zu out=%zu capped=%d lazy=%d srcs=%zu dfs=%ld fed=%ld surplus=%ld memo_hits=%zu pre_hits=%zu\n", cost.ToString().c_str(),
+                         pe.probes, out.size(), pe.capped ? 1 : 0, pe.lazy ? 1 : 0, srcs.size(), t_trc_v[0], t_trc_v[1], t_trc_v[2], pe.memo_hits, pe.pre_hits);
+        }
         if (pe.capped && !pe.lazy && unmodeled != nullptr) { unmodeled->push_back("payment enumeration capped"); }
     }
     return out;
