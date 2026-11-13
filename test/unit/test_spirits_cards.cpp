@@ -276,25 +276,4 @@ TEST_CASE("Hero of Bladehold's tokens are NOT recorded for the end-of-combat exi
     CHECK(soldiers == 2);
 }
 
-// ---- Spirit of the Labyrinth's fail-closed guard ------------------------------------------------
-
-TEST_CASE("Spirit of the Labyrinth: the guard's deck constant and the non-aborting paths")
-{
-    CHECK(SpDef("Spirit of the Labyrinth").params.each_player_draw_cap_per_turn == 1);
-    GameState s = SpFresh();
-    s.deck_has_draw_cap = true;
-    SpPut(s, "Spirit of the Labyrinth", 1);
-    // The turn's first draw is legal under the cap and only sets the marker (no miracle bookkeeping).
-    EnterHand(s, 0, SpCard("Plains", 50), HandEntryReason::DrawStep);
-    CHECK(s.players[0].first_draw_card_number_this_turn == 50);
-    CHECK(s.players[0].pending_miracle_card_number == 0);
-    // A non-draw hand entry (a bounce, a tutor) is not a draw: no abort.
-    EnterHand(s, 0, SpCard("Plains", 51), HandEntryReason::Bounce);
-    EnterHand(s, 0, SpCard("Plains", 52), HandEntryReason::Tutor);
-    CHECK(s.players[0].hand.size() == 3);
-    // Without a cap permanent on the battlefield a second draw is fine.
-    s.battlefield.clear();
-    EnterHand(s, 0, SpCard("Plains", 53), HandEntryReason::Draw);
-    CHECK(s.players[0].hand.size() == 4);
-    // (The abort itself -- a second draw with the Spirit out -- is not exercised here: it ends the process.)
-}
+// (Spirit of the Labyrinth's draw cap: test_spirit_labyrinth.cpp.)

@@ -324,6 +324,9 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     // this one). Lockstep twin: SimulateEndAndStartNextTurn. 0 for every deck without the card.
     auto opponent_turn = [&]()
     {
+        // Their notional turn starts: under a per-turn draw cap every player's draw count restarts
+        // (core/DrawCap.h). Deck-gated no-op elsewhere. Lockstep twin in the other world's opponent_turn.
+        drawcap::TurnBoundary(state);
         state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
         state.ephara_creature_entered_this_turn = false;
         state.compressed_opponent_upkeep = true;
@@ -417,6 +420,7 @@ void GameEngine::UntapStep(GameState& state)
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }
     ap.cards_drawn_this_turn     = 0;   // Fists of Flame drawn-count resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     ap.first_draw_card_number_this_turn = 0;
+    drawcap::TurnBoundary(state);       // ...and, under a per-turn draw cap, the opponent's count too (same lockstep)
     ap.pending_miracle_card_number = 0;
     state.keranos_first_own_draw_seen = false;
     state.draw_trigger_mark      = 0;   // ...and the Niv draw-trigger watermark with it (same lockstep)

@@ -1327,7 +1327,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("attack_token_keywords", json::array()))
         p.attack_token_keywords.push_back(s);
     p.attack_token_exile_end_of_combat = params.value("attack_token_exile_end_of_combat", false);
-    // Spirit of the Labyrinth's draw cap (guarded, not modelled) -- see CardParams.
+    // Spirit of the Labyrinth's per-turn draw cap -- see CardParams and core/DrawCap.h.
     p.each_player_draw_cap_per_turn    = params.value("each_player_draw_cap_per_turn", 0);
     // Mavren Fein, Dusk Apostle (Vampires 2026-10-18): "whenever one or more <matching> creatures you
     // control attack, create <token>" -- see CardParams.

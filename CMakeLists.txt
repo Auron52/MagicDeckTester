@@ -330,6 +330,7 @@ add_executable(mtg-test
     test/unit/test_kithkin_cards.cpp
     test/unit/test_martyr_lifegain_cards.cpp
     test/unit/test_spirits_cards.cpp
+    test/unit/test_spirit_labyrinth.cpp
     test/unit/test_held_fetch_crack_first.cpp
     test/unit/test_spirits_souls.cpp
     test/unit/test_spirits_geist_wanderer.cpp

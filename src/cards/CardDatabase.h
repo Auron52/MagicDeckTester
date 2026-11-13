@@ -1192,9 +1192,10 @@ struct CardParams
     //                                       combat function (no search node sits between the token block
     //                                       and the sweep), so there is no new state to fold into a key.
     // Spirit of the Labyrinth: "Each player can't draw more than one card each turn" (the per-turn cap;
-    // 0 = none). NOT MODELLED as a restriction -- inert in the Spirits list, which has no draw effect --
-    // and GUARDED: GameState::deck_has_draw_cap arms an abort on any second draw in a turn while such a
-    // permanent is on the battlefield (handentry::NoteFirstDraw). See docs/design/analysis-Spirits.md.
+    // 0 = none). MODELLED (integrator F, 2026-11-13): while a permanent carrying it is on the battlefield,
+    // a player's draws past the cap this turn are ignored, in both worlds, at the one draw choke point
+    // (AttemptDrawIntoHand) plus the opponent's raw draws. Armed by the deck constant
+    // GameState::deck_has_draw_cap. Full rule set and wiring: core/DrawCap.h.
     int                      each_player_draw_cap_per_turn = 0;
     std::vector<std::string> attack_token_keywords;
     bool                     attack_token_exile_end_of_combat = false;

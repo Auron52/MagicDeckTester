@@ -25,6 +25,7 @@
 // card is a bare placeholder; its types come from the definition at read time, per the empty-mask
 // rule in docs/design/ -- never call IsLand() on the zone card itself).
 #include "GameState.h"
+#include "DrawCap.h"
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -134,6 +135,9 @@ inline void Deal(GameState& state, bool needed, uint64_t seed)
 inline void EndOfTurnDraw(GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return; }
+    // The per-turn draw cap (core/DrawCap.h): this is the first draw of THEIR turn (drawcap::TurnBoundary
+    // opened it), so it never binds today; tested first because an ignored draw is no deck-out.
+    if (drawcap::Blocks(state, 1)) { return; }
     Player& opp = state.players[1];
     if (opp.library.empty())
     {
@@ -148,6 +152,9 @@ inline void EndOfTurnDraw(GameState& state)
     }
     opp.hand.push_back(opp.library.front());
     opp.library.erase(opp.library.begin());
+    // Counted for the cap only (a Howling Mine draw that follows on their turn is their second). Deck-gated:
+    // every other deck leaves the opponent's count untouched, exactly as before.
+    if (state.deck_has_draw_cap) { ++opp.cards_drawn_this_turn; }
 }
 
 // THE mill / exile-from-library primitive: take `n` cards off the top of the opponent's library
@@ -215,6 +222,10 @@ inline int MillToGraveyard(GameState& state, int n)
 inline int ForcedDraw(GameState& state, int n)
 {
     if (!state.opponent_library_dealt || n <= 0) { return 0; }
+    // The per-turn draw cap (core/DrawCap.h): draws past it are IGNORED, so they neither fill the hand nor
+    // ask for a card from an empty library. n is the identity for every deck without a cap card.
+    n = drawcap::Allowed(state, 1, n);
+    if (n <= 0) { return 0; }
     Player& opp = state.players[1];
     int drawn = 0;
     for (; drawn < n && !opp.library.empty(); ++drawn)
@@ -222,6 +233,7 @@ inline int ForcedDraw(GameState& state, int n)
         opp.hand.push_back(opp.library.front());
         opp.library.erase(opp.library.begin());
     }
+    if (state.deck_has_draw_cap) { opp.cards_drawn_this_turn += drawn; }
     if (opp.library.empty()) { state.opponent_decked = true; }
     return drawn;
 }
@@ -232,7 +244,11 @@ inline int ForcedDraw(GameState& state, int n)
 inline int ForcedDrawLethalX(const GameState& state)
 {
     if (!state.opponent_library_dealt || state.opponent_decked) { return 0; }
-    return std::max(1, static_cast<int>(state.players[1].library.size()));
+    const int lib = static_cast<int>(state.players[1].library.size());
+    // Under a per-turn draw cap only the draws they may still make this turn count: no X decks them
+    // when the library holds more than that (ForcedDraw ignores the rest).
+    if (drawcap::Allowed(state, 1, std::max(1, lib)) < std::max(1, lib)) { return 0; }
+    return std::max(1, lib);
 }
 
 } // namespace opponentdeck
