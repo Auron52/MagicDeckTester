@@ -110978,10 +110978,26 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (k == 1 && kn.b1 && !unl && !kn.verify)
             {
                 const long long r0 = budget->Used();
+                // The heuristic ladder's OVERRUN guard for its pass 1, armed exactly as the ladder below arms it.
+                if (s_overrun_prop)
+                { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
+                else
+                { budget->SetOverrunLimit(r0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor)); }
                 SearchLine p1 = FSLineWin(state, 1, max_turns, root_cut, second_main, tt, &line_cache, budget);
+                const bool ab1 = budget->Overrun();
+                budget->SetOverrunLimit(0);
                 const long long c1 = budget->Used() - r0;
+                if (ab1)
+                {
+                    // ANYTIME COMMIT, as the ladder below: a strictly better proven win is kept, else the prior line.
+                    const bool rescued = s_id_anytime && p1.win_turn < prev_line.win_turn;
+                    p16::Rec('H', 1, c1, 0, rescued ? 2 : 1, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    if (rescued) { line = p1; committed_depth = 1; escstats::t_esc_rescued_main = true; }
+                    else         { line = prev_line; committed_depth = prev_committed; }
+                    p18_done = true; break;
+                }
                 p16::Rec('H', 1, c1, 0, 0, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
-                if (p1.truncated || budget->Overrun()) { p18_K = 1; break; }   // the ladder below runs pass 1 its own way
+                if (p1.truncated) { p18_K = 1; break; }   // the ladder below runs pass 1 its own way (order-free re-search)
                 const double rem = static_cast<double>(budget->Remaining());
                 const double e2 = static_cast<double>(c1) * kDefaultGrowth;
                 const bool adm2 = depth >= 2 && (g_reserve_value_pass ? (e2 + e2 <= gate_alpha * rem) : (e2 <= gate_alpha * rem));
@@ -111003,8 +111019,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
             const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(kn.lean * kStartGateAlpha
                                          * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())))) : 0;
-            const long long ol_saved = capk ? pb->OverrunLimit() : 0;
-            if (capk && (ol_saved == 0 || cap_abs < ol_saved)) { pb->SetOverrunLimit(cap_abs); }
+            // Every leafless pass also carries the ladder's own OVERRUN ceiling (a pass past it is pathological).
+            const bool guard = !unl && !kn.verify && pb != nullptr;
+            const long long ceil_abs = guard ? (s_overrun_prop ? SearchBudget::SatAdd(u0, SearchBudget::SatMulD(kOverrunBudgetMult, pb->EffectiveLimit()))
+                                                               : u0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(pb->Limit())), kOverrunFloor)) : 0;
+            const long long ol_saved = guard ? pb->OverrunLimit() : 0;
+            if (guard)
+            {
+                long long lim = capk ? std::min(cap_abs, ceil_abs) : ceil_abs;
+                if (ol_saved > 0) { lim = std::min(lim, ol_saved); }
+                pb->SetOverrunLimit(lim);
+            }
             SearchLine pr;
             {
                 ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
@@ -111012,8 +111037,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 pr = FSLineWin(state, k, max_turns, lcut, second_main, ptt, &p18_leafless_cache, pb);
                 p18::t_smp = prev;
             }
-            if (capk) { pb->SetOverrunLimit(ol_saved); }
+            if (guard) { pb->SetOverrunLimit(ol_saved); }
             const long long lu = (pb ? pb->Used() : 0) - u0;
+            if (guard && pb->Used() >= ceil_abs && !(capk && cap_abs <= ceil_abs))
+            { p16::Rec('W', k, lu, smp.n, 4, pr.win_turn, 0); if (k == 2 && p18_force2) { p18_K = 2; } break; }   // overrun
             if (capk && pb->Used() >= cap_abs)
             {
                 p16::Rec('W', k, lu, smp.n, 3, pr.win_turn, 0);   // capped: the tree alone does not fit
