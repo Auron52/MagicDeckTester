@@ -68715,9 +68715,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             const int draws = (def.params.modal_choose_n - sN) * def.params.modal_draw_per_choice;
             std::size_t before = ap.hand.size();
+            // Counted per draw (the per-turn draw cap reads the count before each draw; same total).
+            // Lockstep twin: EffectHandler's modal draws.
             for (int k = 0; k < draws && !ap.library.empty(); ++k)
-            { DrawIntoHand(state, state.active_player_index, 1, HandEntryReason::Draw); }
-            ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - before);
+            {
+                const std::size_t k_before = ap.hand.size();
+                DrawIntoHand(state, state.active_player_index, 1, HandEntryReason::Draw);
+                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - k_before);
+            }
             if (g_play_draw_sink)
             {
                 for (std::size_t hi = before; hi < ap.hand.size(); ++hi)
@@ -73708,6 +73713,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // twin of GameEngine::RunTurnFrom's gate). pending_extra_turns is 0 for every other deck.
     auto opponent_turn = [&]() -> bool
     {
+        // Their notional turn starts: under a per-turn draw cap every player's draw count restarts
+        // (core/DrawCap.h). Deck-gated no-op elsewhere. Lockstep twin in the other world's opponent_turn.
+        drawcap::TurnBoundary(state);
         state.ephara_creature_entered_last_turn = state.ephara_creature_entered_this_turn;
         state.ephara_creature_entered_this_turn = false;
         state.compressed_opponent_upkeep = true;
@@ -73795,6 +73803,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     if (state.deck_has_draw_ping) { ResolveDrawTriggers(state); }   // Niv watermark backstop (lockstep w/ UntapStep)
     ap.cards_drawn_this_turn      = 0;             // Fists of Flame drawn-count resets each turn (lockstep w/ UntapStep)
     ap.first_draw_card_number_this_turn = 0;
+    drawcap::TurnBoundary(state);                  // ...and, under a per-turn draw cap, the opponent's too (same lockstep)
     ap.pending_miracle_card_number = 0;
     state.keranos_first_own_draw_seen = false;
     state.draw_trigger_mark       = 0;             // ...and the Niv draw-trigger watermark with it (same lockstep)
@@ -96071,9 +96080,12 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // actually holding a pump_per_cards_drawn_power card AND the count being nonzero -- every
         // deck without such a card keeps the EXACT prior key (byte-identical), and the fold cost
         // is one cached-lookup hand scan only for the deck that needs it.
+        // A PER-TURN DRAW CAP deck (core/DrawCap.h) folds it too: the count decides whether this turn's next
+        // draw happens (including under a cap card cast LATER this turn -- earlier draws count). Deck constant,
+        // so every deck without a cap card keeps the exact prior key.
         if (p.cards_drawn_this_turn > 0)
         {
-            bool reads_drawn = false;
+            bool reads_drawn = state.deck_has_draw_cap;
             for (const Card& hc : p.hand)
             {
                 const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);

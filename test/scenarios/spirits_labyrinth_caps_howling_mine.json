@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "library_top": [ "Plains", "Lightning Bolt" ],
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "_comment": "Spirit of the Labyrinth's draw cap (integrator F, 2026-11-13; core/DrawCap.h). T4: the draw step draws the Plains (the turn's one draw), so Howling Mine's extra draw -- the Lightning Bolt -- is IGNORED; the Spirit attacks for 3 (6 -> 3). T5: the draw step draws the Bolt (the cap restarted), Bolt + attack = win T5. The twin spirits_labyrinth_absent_howling_mine_draws.json (a 3/3 instead of the Spirit) draws the Bolt off the Mine on T4 and wins T4.",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Howling Mine" },
+    { "name": "Spirit of the Labyrinth" }
+  ],
+  "hand": [],
+  "expect_win_turn": 5
+}

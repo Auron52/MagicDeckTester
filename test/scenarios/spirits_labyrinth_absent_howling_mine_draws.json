@@ -1,0 +1,21 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 6,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "library_top": [ "Plains", "Lightning Bolt" ],
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "_comment": "Control twin of spirits_labyrinth_caps_howling_mine.json (integrator F, 2026-11-13): the same board with a vanilla 3/3 (Boros Reckoner) in place of Spirit of the Labyrinth. No cap: T4 draws the Plains, then Howling Mine draws the Lightning Bolt; Bolt (3) + attack (3) = 6 = win T4. Proves the Labyrinth fixture is sensitive to the cap.",
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Howling Mine" },
+    { "name": "Boros Reckoner" }
+  ],
+  "hand": [],
+  "expect_win_turn": 4
+}

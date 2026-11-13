@@ -11459,6 +11459,9 @@ inline void DrawForPlayedLand(GameState& state, int player, GameLogger* logger =
     const int n = ActiveHornCount(state);
     for (int i = 0; i < n; ++i)
     {
+        // The per-turn draw cap (core/DrawCap.h): an ignored draw is no deck-out, and every later one
+        // is ignored too. Tested before the empty-library loss for that reason. Deck-gated.
+        if (drawcap::Blocks(state, player)) { break; }
         if (state.players[player].library.empty())
         {
             if (player == state.active_player_index) { state.player_lost_on_draw = true; }
@@ -11489,6 +11492,9 @@ inline void DrawHowlingMineCards(GameState& state, int player, GameLogger* logge
     const int n = UntappedHowlingMineCount(state);
     for (int i = 0; i < n; ++i)
     {
+        // The per-turn draw cap (core/DrawCap.h): an ignored draw is no deck-out, and every later one
+        // is ignored too. Tested before the empty-library loss for that reason. Deck-gated.
+        if (drawcap::Blocks(state, player)) { break; }
         if (state.players[player].library.empty())
         {
             if (player == state.active_player_index) { state.player_lost_on_draw = true; }
@@ -13590,9 +13596,13 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     {
         Player& pl = state.players[controller];
         std::size_t before = pl.hand.size();
+        // Counted per draw (the per-turn draw cap reads the count before each draw; same total).
         for (int k = 0; k < braingeyser_x && !pl.library.empty(); ++k)
-        { DrawIntoHand(state, controller, 1, HandEntryReason::Draw); }
-        pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
+        {
+            const std::size_t k_before = pl.hand.size();
+            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
+            pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - k_before);
+        }
         if (g_play_draw_sink)
         {
             for (std::size_t hi = before; hi < pl.hand.size(); ++hi)
@@ -24605,7 +24615,10 @@ inline bool PerformOpponentUpkeepHellbentDraw(GameState& state)
         const int drawn_before = ap.cards_drawn_this_turn;
         HellbentUpkeepResolve(state, me, d->params, p.card.m_name.str() + " (opponent's upkeep)");
         if (state.player_lost_on_draw) { ok = false; }
-        state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn = drawn_before;
+        // Under a per-turn draw cap the count is THEIR turn's (drawcap::TurnBoundary opened it) and must
+        // keep this draw, so a second Visitor's draw is capped; ours restarts at our untap either way.
+        if (!state.deck_has_draw_cap)
+        { state.players[static_cast<std::size_t>(me)].cards_drawn_this_turn = drawn_before; }
     }
     return ok;
 }
@@ -49086,6 +49099,9 @@ inline const CardDefinition* CycleDrawReplacer(const GameState& state, int contr
 {
     if (!state.deck_has_cycle_draw_replacement) { return nullptr; }
     if (cycled.card.IsLand()) { return nullptr; }
+    // A draw the per-turn draw cap ignores cannot be replaced (core/DrawCap.h): the cycle then simply draws
+    // nothing (the caller's draw is ignored at the choke point). Deck-gated no-op elsewhere.
+    if (drawcap::Blocks(state, controller)) { return nullptr; }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != controller) { continue; }

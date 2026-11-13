@@ -679,10 +679,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                                       * def.params.modal_draw_per_choice;
                     Player& mp = state.players[entry.controller_index];
                     std::size_t before = mp.hand.size();
-                    std::size_t mp_before = mp.hand.size();
+                    // Counted per draw, not after the loop: the per-turn draw cap (core/DrawCap.h) reads
+                    // the count before each draw. Same total. Lockstep twin: TurnSolver's modal draws.
                     for (int k = 0; k < draws && !mp.library.empty(); ++k)
-                    { DrawIntoHand(state, entry.controller_index, 1, HandEntryReason::Draw); }
-                    mp.cards_drawn_this_turn += static_cast<int>(mp.hand.size() - mp_before);
+                    {
+                        const std::size_t mp_before = mp.hand.size();
+                        DrawIntoHand(state, entry.controller_index, 1, HandEntryReason::Draw);
+                        mp.cards_drawn_this_turn += static_cast<int>(mp.hand.size() - mp_before);
+                    }
                     if (g_play_draw_sink)
                     {
                         for (std::size_t hi = before; hi < mp.hand.size(); ++hi)
