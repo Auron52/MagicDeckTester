@@ -6,6 +6,9 @@
 // this build has no LTO, so an out-of-line body can no longer be inlined across TUs. Only helpers
 // that run once per RESOLUTION of a specific card or effect may move; the per-cast / per-death /
 // per-combat helpers stay inline. See SpellEffects.cpp for the measurement and the rule.
+#if defined(__linux__)
+#include <execinfo.h>   // MTG_PREPAY_WILD_AUDIT=3 diagnostic stack (PrepayWildTrueLoad)
+#endif
 #include "EnvFlags.h"
 #include "GameSetup.h"                 // OpponentHeads(): 2HG second-face targeting + "each opponent"
 #include "GameState.h"
@@ -1597,6 +1600,7 @@ inline std::atomic<long long> g_pwt_violation_units{0};   // colour pips a wrong
 inline std::atomic<long long> g_pwt_refused_units{0};     // colour pips the drain refused (lever on)
 inline std::atomic<long long> g_pwt_booked_units{0};      // restricted units the prepay booked
 inline std::atomic<long long> g_pwt_inconsistent{0};      // a record larger than its pool's wild at load
+inline std::atomic<long long> g_pwt_inconsistent_live{0}; // ...of those, with wild left (a unit could be misattributed)
 inline std::atomic<long long> g_pwt_overflow{0};          // restricted units beyond the record's slots (released)
 inline std::atomic<long long> g_pwt_violation_real{0};    // ...of the violations, in the REAL game (g_real_resolution)
 inline std::atomic<long long> g_pwt_refused_real{0};      // ...of the refusals, in the REAL game
@@ -1613,11 +1617,11 @@ struct PrepayWildAuditDump
     {
         if (PrepayWildAuditLevel() <= 0) { return; }
         std::fprintf(stderr, "PREPAY_WILD_AUDIT lever=%d literal=%d booked=%lld single_wild=%lld fund=%lld violations=%lld "
-                     "(real %lld) refused=%lld (real %lld) inconsistent=%lld overflow=%lld %s\n",
+                     "(real %lld) refused=%lld (real %lld) inconsistent=%lld (live %lld) overflow=%lld %s\n",
                      PrepayWildTrueOn() ? 1 : 0, PrepayWildLiteralOn() ? 1 : 0, g_pwt_booked_units.load(),
                      g_pwt_single_wild.load(), g_pwt_fund_units.load(), g_pwt_violation_units.load(),
                      g_pwt_violation_real.load(), g_pwt_refused_units.load(), g_pwt_refused_real.load(),
-                     g_pwt_inconsistent.load(), g_pwt_overflow.load(),
+                     g_pwt_inconsistent.load(), g_pwt_inconsistent_live.load(), g_pwt_overflow.load(),
                      g_pwt_violation_units.load() == 0 ? "(CLEAN)" : "<-- a pip outside the bill paid with another colour's mana");
     }
 };
@@ -1711,6 +1715,20 @@ inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
     if (out.n == 0 && out.FundTotal() == 0) { return false; }
     if (out.n > wild)
     {
+        // MTG_PREPAY_WILD_AUDIT=3 (diagnostic, Linux): the first 12 inconsistent loads print their call stack
+        // (resolve the +0x offsets with addr2line on a RelWithDebInfo binary) -- which spend path drained `wild`
+        // without the record.
+        if (wild > 0) { g_pwt_inconsistent_live.fetch_add(1, std::memory_order_relaxed); }
+        if (PrepayWildAuditLevel() >= 3 && wild > 0 && g_pwt_inconsistent_live.load(std::memory_order_relaxed) <= 12)
+        {
+#if defined(__linux__)
+            void* bt[24];
+            const int nb = backtrace(bt, 24);
+            std::fprintf(stderr, "[pwt-inconsistent] which=%d n=%d wild=%d T%d phase=%d real=%d\n", which, out.n, wild,
+                         s.turn_number, static_cast<int>(s.phase), g_real_resolution ? 1 : 0);
+            backtrace_symbols_fd(bt, nb, 2);
+#endif
+        }
         g_pwt_inconsistent.fetch_add(1, std::memory_order_relaxed);
         out.n = std::max(0, wild);   // canonical order: the tail is the most flexible
     }

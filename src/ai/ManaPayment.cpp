@@ -9186,6 +9186,16 @@ void ExactLineFloatAfter(GameState& state, const ManaCost& cost_in, const PayRef
     if (TapForCostBacktrack(ordinary_later, later, false, state.floating_mana)) { return; }
     GameState alternate = state;
     pre.Restore(alternate, nullptr);
+    // The prepay's colour-restricted `wild` (MTG_PREPAY_WILD_LITERAL): the alternate below re-pays out of the
+    // pre-payment float through the backtracker's float spend, which does not read the record -- so a dual's {U,R}
+    // unit could pay a {G} there, and the leftover replaces the float without the record that describes it (the
+    // detector's `inconsistent` loads). While restricted units float, keep the shared payer's own (record-honouring)
+    // payment. Fund-only records are real colours and need nothing.
+    if (PrepayWildLiteralOn())
+    {
+        WildTrueRec rec;
+        if (PrepayWildTrueLoad(alternate, 0, rec) && rec.n > 0) { return; }
+    }
     ManaPool leftover;
     if (!TapForCostBacktrack(alternate, cost_in, false, pre.fm, nullptr, nullptr, &leftover)) { return; }
     if (leftover.Total() != state.floating_mana.Total()
