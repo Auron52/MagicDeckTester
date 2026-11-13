@@ -485,7 +485,7 @@ fluctuator_smoke_d0_s1001	1
 fluctuator_smoke_d3_s1001	2011
 fluctuator_smoke_d5_s1001	2770
 fungusv32hg_smoke_d3_s1001	6759
-fungusv32hg_smoke_d5_s1001	8253
+fungusv32hg_smoke_d5_s1001	7886
 fungusv3_overnight_d0_s10010	1
 fungusv3_overnight_d0_s4004	1
 fungusv3_overnight_d0_s6006	1
@@ -508,8 +508,8 @@ fungusv3_regression_d5_s2002	5234
 fungusv3_regression_d5_s30001	3025
 fungusv3_regression_d5_s3003	5239
 fungusv3_smoke_d0_s1001	1
-fungusv3_smoke_d3_s1001	3946
-fungusv3_smoke_d5_s1001	4631
+fungusv3_smoke_d3_s1001	3874
+fungusv3_smoke_d5_s1001	4593
 galadriel2hg_overnight_d5_s4004	3626
 galadriel2hg_overnight_d5_s5005	3712
 galadriel2hg_overnight_d5_s6006	4342
