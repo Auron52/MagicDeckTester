@@ -1170,7 +1170,53 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     (it was never cast in combat) -- a hole the old model also had.
   * A human line paid by the INT-14 joint solve (`Plan::human_joint_pay`) arms nothing new (HumanLineJointPrepay /
     PrepareHumanCommit untouched).
-- RESULTS: (filled below)
+- **RESULTS -- held-out A/B, ONE pooled batch per binary** (Morph 1000 g seed 97000 + Morph 2HG 300 g seed 98000
+  [starting_life 30, 2 heads], d5 b20, `MTG_DOUBLER_COMBAT_PAY` ON vs `=0`; the `=0` arm was byte-identical in every
+  run). Turn sum counts an unwon game as 9.
+
+  | binary | deck | =0 avg | ON avg | faster / slower | turn sum =0 -> ON | units ON/=0 | play changed |
+  |---|---|---|---|---|---|---|---|
+  | `4cdee253f` (first build) | Morph | 4.0290 | 4.0350 | 0 / 6 | 4029 -> 4035 | 1.0079 | 24 |
+  | `4cdee253f` | Morph 2HG | 4.6835 | 4.6869 | 0 / 1 | 1418 -> 1419 | 0.9998 | 9 |
+  | **final** (three fixes below) | Morph | 4.0290 | **4.0290** | **0 / 0** | 4029 -> **4029** | 0.9996 | 9 |
+  | **final** | Morph 2HG | 4.6835 | 4.6869 | 0 / 1 | 1418 -> 1419 | 0.9972 | 5 |
+
+  No phantom wins existed to remove in this sample. Every `=0` arm's faster win was a REAL line: the realised game
+  is legal either way, and the `=0` credit only steered the choice of line. So the first build's six slower Morph
+  games were lines the exact check MISSED, and none recovered at `--depth 8 --budget-ms 0` (18 4->5, 70 7->8, 111/197/719/816
+  3->4). Root causes, each with a scenario that FAILS on the previous binary and PASSES now:
+  1. **The attacker paid for its own combat cast** (gi 111, 197, 719, 816;
+     `morph_doubler_combat_pay_attacker_not_source`). `DblCombatPayInto` let the payer tap the creature that attacks.
+     Declaring it tapped it (CR 508.1f), so it is not a source in the declare-attackers step. With the attacker tapped,
+     the doubler's target (`kTrickBestOwnTarget` -> FindBestOwnAttacker) moved to a lesser body and the exalted line
+     read as lost. For example, gi 111 T3: Might of Old Krosa in main, then Berserk + Legion Leadership in combat on an
+     attacking Hierarch, 20 to the face, lost to a 16-damage Firecat line. FIX: the payment holds the best own attacker
+     tapped while it pays and releases it after. With no attacker there is no combat step, so the combat payment
+     is not allowed.
+  2. **Main's payments could tap the attacker after a P2 prepay** (gi 18, 70; `..._attacker_survives_main`). Fix 1 alone
+     turned gi 18's P2 into a false "valid": Berserk was paid first off the lands, then Might's main payment tapped the
+     lone Hierarch. The real kill there is both doublers in MAIN (21 vs 19). The `=0` arm credited 22 using the Hierarch's
+     mana "in combat", a phantom CREDIT on a real kill. FIX: an option with k > 0 is invalid when no attacker is left once
+     main has paid (FindBestOwnAttacker on the copy). A first version demanded that the specific creature the payment
+     held stay untapped. That was wrong for P2, which holds the plan-START attacker while a later cast can bring the
+     real one, and it introduced 9 new slower games (3->4); it was replaced before landing.
+  3. **The copy did not resolve the plan's casts** (gi 69, 154, 443, 547, 551, 619, 646, 735, 855;
+     `..._cast_attacker`). The probe pays the plan on a copy, so a creature cast BEFORE the deferred doubler (a hard-cast
+     hasty Blistering Firecat) was not on the copy's board. The combat payment then held a Hierarch as "the attacker",
+     and the other Hierarch, which really pays Berserk's {G}, looked spent. FIX: the copy puts each creature the plan
+     casts before the deferred doublers onto its battlefield, entered this turn (sick unless it has haste, no ETB). Face-down casts are
+     skipped: a 2/2 cast face down this turn cannot attack.
+  - **The one slower game left, 2HG gi 124 (4->5), RECOVERS at d8 b0 (4).** From the `=0` arm's T4 board both arms
+    kill on T4. That `=0` win used no deferral: both Berserks went in main (29 >= 27). The arms diverge on T2 (ON casts
+    Hystrodon where `=0` casts a face-down Den Protector). That is a d5 b20 horizon/budget pick, not a line the exact
+    check cannot find.
+  - Slower-game re-runs: one pooled batch per stage (`build/scratch/dblprobe/slow*/`), threads 24 = nproc.
+  - Unit 2952/2952, scenarios 518/518 (3 new). **Tiers (`93932d1cb`, NOT accepted -- the parent combines branches):**
+    smoke 197/199 and regression 313/316. Every moved row is Morph and digest-only, with the aggregate unchanged:
+    smoke `morph_smoke_d0_s1001` (4.7380) and `morph2hg_smoke_d5_s1001` (4.4800; gi 17 play differs, T4 kept);
+    regression `morph_regression_d0_s2002` (4.7730), `morph_regression_d5_s3003` (4.1200; gi 11, T3 kept) and
+    `morph2hg_regression_d5_s2002` (4.6800; gi 14 T5, gi 42 T4 kept). Searched: 0 slower / 0 faster. d0: 0 slower
+    (the probe runs in the d0 runner's apply as well). Viewer protocol: 0 play-drift, 0 board-diverged; REQUIRE-BEAT passed.
 
 ## Claude-play sweep
 - commit: `f2df0a83f`
