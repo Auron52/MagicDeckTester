@@ -103,7 +103,9 @@ Then: build, coverage re-check, cost + field audits, provider (BoarsProvider), S
 
 ## I1 done (2026-11-13) -- Windswept Heath, Flinthoof Boar, Herald's Horn
 
-Commit: see `git log` on `boars-analysis` (message "Boars I1: ..."). Local only, not pushed.
+Commit: `3641c75fd` on `boars-analysis` (local only, not pushed). Unit tests 2943/2943 pass; audit_card_costs rc 0;
+audit_card_fields offline rc 0 (the --update refresh hit Scryfall 429s for already-snapshotted cards; the two new
+cards were added). No smoke/regression run (the parent pools one).
 
 **Landed**
 * **Windswept Heath** -> the Wooded Foothills / Arid Mesa battlefield fetchland shape (`produces []`,
