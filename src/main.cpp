@@ -1628,8 +1628,10 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         if (have_exile) { os << "]"; }
     }
     os << ", \"graveyard\": "; JsonNameArray(os, gy);
-    // Retrace: graveyard spells castable from the yard (pay cost + discard a land). The GUI makes
-    // these clickable in the graveyard zone; absent when the yard holds no retrace card.
+    // `retrace_gy`: EVERY graveyard spell castable from the yard -- retrace (pay cost + discard a land) OR
+    // flashback (pay the flashback cost, then exile it); `flashback_gy` is the flashback subset. The key keeps
+    // its historical name because three consumers read it (tools/play index.html, play_invariants.py,
+    // viewer_client_check.js). The GUI makes these clickable in the graveyard zone; absent when none.
     {
         std::vector<std::string> rt, fb;
         for (const Card& c : me.graveyard)

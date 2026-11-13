@@ -686,3 +686,19 @@ Drogskol Captain -> Usher, Spirit of the Labyrinth, Shacklegeist, Geist of Saint
 Lingering Souls (hand, then flashback) -> White Orchid Phantom -> Millicent. All main 1 except Usher's boast.
 Why: Mimic's counter on every later Spirit incl. Souls tokens; Patrician's {1} off a same-turn flashback; Souls
 tokens feed Millicent's affinity; White Orchid late so an own nonbasic it destroys has already made its mana.
+
+## Stage 5i — cleanup-discard bucket PROPOSAL (for USER review; NOT implemented)
+Measured bound first (seed 610000 batch): shedding the WORST card instead of the generic ranking moved 1 game of 300
+at d3 and 0 at d5, so the discard ranking is barely load-bearing for this deck. Proposal anyway (discard FIRST ->
+keep LAST), from cards.json:
+1. **Lingering Souls** while we control an unrestricted black source (Godless Shrine / Watery Grave) or a Flooded
+   Strand that can still fetch one: in the graveyard it is still two 1/1 fliers for {1}{B}.
+2. **Surplus lands** (a land in hand beyond the next drop, once we control 5+ lands): Azorius Chancery first, then
+   basics, then shocks, Flooded Strand last.
+3. **A surplus Aether Vial** (one already on the battlefield).
+4. Goldfish-inert or small bodies: Skyclave Apparition (2/2 for 3, ETB inert), Shacklegeist (2/2), Mausoleum
+   Wanderer (1/1), Usher of the Fallen (2/1), Metallic Mimic (2/1), Spirit of the Labyrinth (3/1),
+   White Orchid Phantom (2/2 flying first strike).
+5. Geist of Saint Traft (2/2 + a 4/4 attacking Angel).
+6. Lords: Patrician Geist, Supreme Phantom, Drogskol Captain.
+7. Millicent, Restless Revenant (cheaper with every Spirit; keep).

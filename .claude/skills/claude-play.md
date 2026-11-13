@@ -125,8 +125,9 @@ deterministic game applying the prior `--choices`, then prints the next decision
 
 - Start with **no** `--choices` (or empty). The command prints ONE decision between
   `<<<CLAUDE_DECISION>>>` and `<<<END_DECISION>>>` and exits **70** ("more input
-  needed"). The JSON has: turn, phase, your life/battlefield/hand/graveyard,
-  `library_size`, `upcoming_draws` (next up-to-N draws if `--reveal N`), opponent
+  needed"). The JSON has: turn, phase, your life/battlefield/hand/graveyard
+  (`retrace_gy` lists EVERY graveyard-castable spell, retrace or flashback; `flashback_gy` is the
+  flashback subset -- a Lingering Souls under `retrace_gy` is expected, not a bug), `library_size`, `upcoming_draws` (next up-to-N draws if `--reveal N`), opponent
   life/battlefield, and an indexed `plans` array of enumerated PROPOSALS. The
   `plan_contract` is `enumerated_proposals`: these preserve the search's optimistic
   menu and are not certified complete legal lines. A plan's `declared_order_payability`
