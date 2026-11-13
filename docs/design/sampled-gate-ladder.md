@@ -211,6 +211,36 @@ moves Snow g_pb1_plc 1.119x -> 1.011x and _prr_prx2 1.167x -> 1.052x. `_pfr20` h
 decks and is below heur's CPU on four; Snow reads 1.017x at 0.989x units. S10 (Snow + MB, 2,000 games/arm on fresh
 seeds with a heur A/A arm for the CPU noise floor) checks whether that is real.
 
+### S10 / S11 / D1 (P18d)
+- S10 (Snow + MB, 2,000 games/arm, fresh seeds 725000/726000, weight-ordered, with an A/A copy of heur):
+  heurB 0.998x / 0.983x CPU (the noise floor), `_pfr20` Snow 1.012x CPU at 1.012x units, dt 0 (2/2); MB 0.971x,
+  dt -0.0025 (6/1). `_pfr10` Snow 1.017x / MB 1.020x.
+- S11 (S9's seeds again, binary 2b93bb0df): `_pfr20` reproduces S9's units exactly and reads CPU 0.847 / 0.942 /
+  0.981 / 0.975 / 0.991x (Alchemist / EDF / Hydras / MB / Snow) -- Snow 1.017x in S9 on the same games, so the
+  batch-to-batch CPU noise on 400 Snow games is about +-2.5%. `_pfx` (the free refusal at every k >= 3, routed exact)
+  does not help: `_pfr20_pfx` 0.877 / 0.949 / 0.973 / 0.970 / 1.003x; `_pfr10_pfx` 0.894 / 0.997 / 0.990 / 0.975 /
+  1.012x. No arm has a worse game in S11.
+- D1 (Snow, 400 games, traced, `_pfr20` vs heur): heur 21.12M units = 20.01M committing + 1.12M superseded (5.3%).
+  Gate 21.08M = 18.16M committing + 0.75M superseded + 1.68M leafless + 0.50M sampled. Refused priced passes still
+  cost ~1.1M (capped 0.53M; priced_out 0.56M), and admitted passes' pricing ~1.0M. Snow's whole superseded share
+  is 5.3%, so the gate's margin there is the refused-pass waste: a free refusal that caught all of it would put
+  Snow at ~0.95x units. The heur rollout share per pass is ~0.9+ on every deck (Snow 0.98/0.92/0.92), so this is
+  not the leafless tree outweighing the rollouts.
+- Held-out A/B H1 launched on `g_pb1_plc_prr_prx2_pfr20` (see the checkpoint below).
+
+## Checkpoint (P18d, 2026-11-13 ~09:20 UTC)
+- Candidate: `g_pb1_plc_prr_prx2_pfr20` (bootstrap-exact pass 1, leafless cap, real-remaining cap, refuse-exact at
+  pass 3, free refusal of pass 3 at F=2 on heur's own extrapolation from c1).
+- H1 held-out A/B (heur vs candidate; Hydras 8,000/arm seeds 780000+, Alchemist/EDF/Snow/MB 1,000/arm seeds
+  790000/800000/810000/820000, the 12 broader decks 400/arm seeds 830000+; 33,600 games; weight-ordered; binary
+  `build/scratch/p18d/mtg_d2` = 2b93bb0df): `build/scratch/p18d/H1`, DONE marker `H1/DONE`. Read with
+  `python3 build/scratch/p18d/s9sum.py build/scratch/p18d/H1 heur g_pb1_plc_prr_prx2_pfr20`.
+- Every thread-CPU screen must weight-order its manifest (`"weight": N - index`), or the runner's profile-path sort
+  puts heur last within each deck and the last deck's heur in the batch tail.
+- Open: Snow sits at CPU parity (0.991-1.017x over three batches); the remaining lever is the refused-pass waste
+  (~5% of Snow's work) and the double walk of the committing pass's interior. The cold over-price (a rare improving
+  leaf the 64 samples miss) is a sampling-coverage error; `_prx2`/`_pfr` sidestep it by deciding pass 3 on real costs.
+
 ## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
 - S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
