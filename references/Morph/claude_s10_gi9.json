@@ -1,0 +1,399 @@
+{
+  "seed": 10, "game_index": 9, "win_turn": 5, "won": true,
+  "mulligan": { "count": 1, "bottom": [16] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 5, "name": "Birds of Paradise" }, { "num": 13, "name": "Den Protector" }, { "num": 9, "name": "Blistering Firecat" }, { "num": 1, "name": "Berserk" }, { "num": 10, "name": "Blistering Firecat" }, { "num": 25, "name": "Gruul Turf" }, { "num": 6, "name": "Birds of Paradise" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 56, "name": "Wild Defiance" }, { "num": 50, "name": "Temur Battle Rage" }, { "num": 31, "name": "Ignoble Hierarch" }, { "num": 20, "name": "Forest" }, { "num": 32, "name": "Ignoble Hierarch" }, { "num": 35, "name": "Legion Leadership" }, { "num": 16, "name": "Den Protector" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 56, "name": "Wild Defiance", "win_optimal": true }, { "num": 50, "name": "Temur Battle Rage", "win_optimal": true }, { "num": 31, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 20, "name": "Forest", "win_optimal": true }, { "num": 32, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 35, "name": "Legion Leadership", "win_optimal": true }, { "num": 16, "name": "Den Protector", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 56, "name": "Wild Defiance" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Forest", "cast=Ignoble Hierarch"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 20, "name": "Forest", "cost": "", "mv": 0, "kind": "land" }, { "num": 31, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Forest; cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": "Forest", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=Forest; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Forest", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 4,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "sick": true, "is_land": false, "power": 0, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "sick": true, "is_land": false, "power": 0, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Legion Leadership", "cast=Ignoble Hierarch"], "decision": {
+  "decision_index": 6,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Wild Defiance" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "is_land": true, "taps": "G" }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 35, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=none; cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 2, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "combat", "text": "⚔ attacked: Ignoble Hierarch (2) — 2 to opponent (20→18)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Legion Leadership" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "is_land": true, "taps": "G" }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "is_land": true, "taps": "RW" }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 56, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 1, "summary": "land=none; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 2, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 7, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1, Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership", "Temur Battle Rage"], "cast_order_canonical": ["Legion Leadership", "Temur Battle Rage"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Ignoble Hierarch (2) — 2 to opponent (18→16)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 12,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Blistering Firecat" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "is_land": true, "taps": "G" }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "is_land": true, "taps": "RW" }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 11, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Blistering Firecat", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat" }] },
+    { "index": 1, "summary": "land=none; cast: Blistering Firecat", "declared_order_payability": "not_verified", "land": null, "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat" }] },
+    { "index": 2, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1, Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership", "Temur Battle Rage"], "cast_order_canonical": ["Legion Leadership", "Temur Battle Rage"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 3, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Blistering Firecat (face down)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat", "face_down": 1 }] },
+    { "index": 4, "summary": "land=none; cast: Blistering Firecat (face down)", "declared_order_payability": "not_verified", "land": null, "casts": ["Blistering Firecat"], "actions": [{ "card": "Blistering Firecat", "face_down": 1 }] },
+    { "index": 5, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 7, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 8, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 9, "summary": "land=none; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 10, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blistering Firecat", "idx": 11, "num": 11, "is_land": false, "power": 7, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Blistering Firecat (9) — 9 to opponent (16→7)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Blistering Firecat", "idx": 11, "num": 11, "tapped": true, "is_land": false, "power": 7, "toughness": 1 }, { "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Stomping Ground", "cast=Temur Battle Rage", "cast=Legion Leadership"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Stomping Ground" }],
+  "events": [{ "turn": 4, "kind": "trigger", "text": "⏳ Blistering Firecat -- sacrificed at the beginning of the end step (its own trigger)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "is_land": true, "taps": "G" }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "is_land": true, "taps": "RW" }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 46, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Blistering Firecat"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Stomping Ground; cast: Legion Leadership → Ignoble Hierarch #1, Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Legion Leadership", "Temur Battle Rage"], "cast_order_canonical": ["Legion Leadership", "Temur Battle Rage"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 1, "summary": "land=Stomping Ground; cast: Temur Battle Rage → Ignoble Hierarch #1, Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Temur Battle Rage", "Legion Leadership"], "cast_order_canonical": ["Temur Battle Rage", "Legion Leadership"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 2, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1, Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership", "Temur Battle Rage"], "cast_order_canonical": ["Legion Leadership", "Temur Battle Rage"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 3, "summary": "land=Stomping Ground; cast: Temur Battle Rage → Ignoble Hierarch #1, Wild Defiance", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Temur Battle Rage", "Wild Defiance"], "cast_order_canonical": ["Temur Battle Rage", "Wild Defiance"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Wild Defiance" }] },
+    { "index": 4, "summary": "land=Stomping Ground; cast: Wild Defiance, Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Wild Defiance", "Temur Battle Rage"], "cast_order_canonical": ["Wild Defiance", "Temur Battle Rage"], "actions": [{ "card": "Wild Defiance" }, { "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 5, "summary": "land=Stomping Ground; cast: Legion Leadership → Ignoble Hierarch #1, Wild Defiance", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Legion Leadership", "Wild Defiance"], "cast_order_canonical": ["Legion Leadership", "Wild Defiance"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }, { "card": "Wild Defiance" }] },
+    { "index": 6, "summary": "land=Stomping Ground; cast: Wild Defiance, Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Wild Defiance", "Legion Leadership"], "cast_order_canonical": ["Wild Defiance", "Legion Leadership"], "actions": [{ "card": "Wild Defiance" }, { "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 7, "summary": "land=Stomping Ground; cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 8, "summary": "land=Stomping Ground; cast: Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 9, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 10, "summary": "land=none; cast: Temur Battle Rage → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Temur Battle Rage"], "actions": [{ "card": "Temur Battle Rage", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 11, "summary": "land=none; cast: Legion Leadership → Ignoble Hierarch #1", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 31, "enchant_target_name": "Ignoble Hierarch", "enchant_target_label": "Ignoble Hierarch #1", "trick": true }] },
+    { "index": 12, "summary": "land=Stomping Ground; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 13, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Wild Defiance", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 14, "summary": "land=none; cast: Wild Defiance", "declared_order_payability": "not_verified", "land": null, "casts": ["Wild Defiance"], "actions": [{ "card": "Wild Defiance" }] },
+    { "index": 15, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 16, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 17, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 5,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "is_land": true, "taps": "G" }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "is_land": true, "taps": "RW" }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 46, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Temur Battle Rage", "cost": "{1}{R}", "mv": 2, "kind": "nonpermanent" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Blistering Firecat"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "target",
+  "source": "Temur Battle Rage",
+  "turn": 5,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 11, "num": 46, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 36, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Blistering Firecat"], "library_size": 50, "land_drops_left": 0, "floating_mana": {"R": 1, "wild": 1} },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 8, "label": "Ignoble Hierarch (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 1, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "type": "target",
+  "source": "Legion Leadership",
+  "turn": 5,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 3, "toughness": 4 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 11, "num": 46, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Blistering Firecat", "Temur Battle Rage"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "Ignoble Hierarch (yours)" }, { "kind": "permanent", "index": 8, "label": "Ignoble Hierarch (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 1, "label": "Ignoble Hierarch (yours)", "targets": [{ "kind": "permanent", "index": 8 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "trigger", "text": "Ignoble Hierarch became the target of Temur Battle Rage -- gets +3/+3 (target watcher)" }, { "turn": 5, "kind": "trigger", "text": "Ignoble Hierarch became the target of Legion Leadership -- gets +3/+3 (target watcher)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Forest", "idx": 4, "num": 20, "tapped": true, "is_land": true }, { "name": "Ignoble Hierarch", "idx": 5, "num": 31, "is_land": false, "taps": "BRG", "power": 12, "toughness": 7 }, { "name": "Ignoble Hierarch", "idx": 8, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Legion Stronghold", "idx": 7, "num": 35, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 11, "num": 46, "tapped": true, "is_land": true }, { "name": "Wild Defiance", "idx": 10, "num": 56, "is_land": false }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wild Defiance", "cost": "{2}{G}", "mv": 3, "kind": "permanent" }], "graveyard": ["Blistering Firecat", "Legion Leadership", "Temur Battle Rage"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Ignoble Hierarch (28) — 28 to opponent (7→-21)" }
+  ]
+}
