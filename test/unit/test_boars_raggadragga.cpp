@@ -15,6 +15,7 @@
 #include "core/EffectHandler.h"
 #include "runner/GoldFishRunner.h"
 #include "mtg_test_seam.h"
+#include <set>
 #include <string>
 #include <vector>
 
@@ -194,7 +195,8 @@ TEST_CASE("Raggadragga: the cast trigger reads the mana SPENT (intervening if) a
         for (int k = 0; k < 3; ++k)
         {
             GameState s = board();
-            ScriptedCastTriggerTarget pin(k, s.TurnSeq());
+            // Boars I4c: the untap-pump rank is a per-instance tuple (UntapPumpRankPack); one digit here.
+            ScriptedCastTriggerTarget pin(UntapPumpRankPack({ k }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
             FireOnCastTriggers(s, er, 8);
             for (const Permanent& p : s.battlefield) { if (p.temp_power_bonus == 7) { pumped.push_back(p.card.m_number); } }
         }
@@ -255,4 +257,111 @@ TEST_CASE("Raggadragga: executor and rollout realise the same trigger and the re
     CHECK_FALSE(RNum(exec, 11).tapped);
     CHECK(RNum(exec, 11).temp_power_bonus == 7);
     CHECK(exec.cast_untap_refunds == 1);
+}
+
+// Boars I4c (ledger risk 3): the target is chosen PER TRIGGER INSTANCE -- two qualifying casts in one turn take
+// independent targets (the old whole-turn rank gave both the same rank).
+TEST_CASE("Raggadragga I4c: two qualifying casts in one turn take independent targets")
+{
+    auto board = [] {
+        GameState s = RBase();
+        RPut(s, kRagga, 10);
+        const int sage = RPut(s, "Somberwald Sage", 11);
+        s.battlefield[sage].tapped = true;
+        RPut(s, "Flinthoof Boar", 12);
+        return s;
+    };
+    const CardDefinition& er = RDef("End-Raze Forerunners");
+    SUBCASE("the digit codec")
+    {
+        CHECK(UntapPumpRankPack({ 0, 0 }, 3) == 0);
+        const int k = UntapPumpRankPack({ 2, 5, 1 }, 3);
+        CHECK(UntapPumpRankDigit(k, 0) == 2);
+        CHECK(UntapPumpRankDigit(k, 1) == 5);
+        CHECK(UntapPumpRankDigit(k, 2) == 1);
+        CHECK(UntapPumpRankDigit(k, 3) == 0);
+        CHECK(UntapPumpRankDigit(0, 0) == 0);
+    }
+    SUBCASE("every ordered pair of targets is reachable, including two DIFFERENT ones")
+    {
+        std::set<std::vector<int>> outcomes;
+        for (int d0 = 0; d0 < 3; ++d0)
+        {
+            for (int d1 = 0; d1 < 3; ++d1)
+            {
+                GameState s = board();
+                ScriptedCastTriggerTarget pin(UntapPumpRankPack({ d0, d1 }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
+                FireOnCastTriggers(s, er, 8);
+                FireOnCastTriggers(s, er, 8);
+                CHECK(s.cast_untap_pump_ordinal == 2);
+                outcomes.insert({ RNum(s, 10).temp_power_bonus, RNum(s, 11).temp_power_bonus, RNum(s, 12).temp_power_bonus });
+            }
+        }
+        CHECK(outcomes.count({ 0, 7, 7 }) == 1);    // untap the Sage on the first, pump the Boar on the second
+        CHECK(outcomes.count({ 7, 7, 0 }) == 1);
+        CHECK(outcomes.count({ 7, 0, 7 }) == 1);
+        CHECK(outcomes.count({ 0, 14, 0 }) == 1);   // ...and the same target twice
+        CHECK(outcomes.count({ 0, 0, 14 }) == 1);
+        CHECK(outcomes.count({ 14, 0, 0 }) == 1);
+        CHECK(outcomes.size() == 6u);
+    }
+    SUBCASE("the digit is relative to the pin's install: a later install starts at its own digit 0")
+    {
+        GameState s = board();
+        FireOnCastTriggers(s, er, 8);   // no pin: rank 0 -> the tapped Sage
+        CHECK(RNum(s, 11).temp_power_bonus == 7);
+        // A re-solve installs (2nd digit = Raggadragga) at the current ordinal: its digit 0 is the NEXT trigger.
+        ScriptedCastTriggerTarget pin(UntapPumpRankPack({ 0, 1 }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
+        CHECK(UntapPumpRankFor(s) == 0);
+        CHECK(UntapPumpRankFor(s, 1) == 1);
+    }
+}
+
+// The SEARCH finds a line that needs the two instances on DIFFERENT targets. Two tapped Apex Altisaurs (10/10), a
+// summoning-sick Raggadragga, two Elderscale Wurms in hand and 14 Forests; the opponent at 30. Untapping both Altisaurs
+// (+7/+7 each) attacks for 34 -- lethal. Any single target for both triggers untaps one Altisaur at most (17): under the
+// old shared rank, rank 0 names the Altisaur class on the first trigger and the untapped Altisaur (now first, an
+// attacker) on the second, so the kill was unfindable at any budget.
+TEST_CASE("Raggadragga I4c: the search untaps two different creatures with two qualifying casts")
+{
+    auto board = [] {
+        GameState s = RBase();
+        s.players[1].life = 30;
+        RPut(s, kRagga, 10, 0, /*sick=*/true);
+        const int a1 = RPut(s, "Apex Altisaur", 11);
+        const int a2 = RPut(s, "Apex Altisaur", 12);
+        s.battlefield[a1].tapped = true;
+        s.battlefield[a2].tapped = true;
+        for (int k = 0; k < 14; ++k) { RPut(s, "Forest", 50 + k); }
+        s.players[0].hand.push_back(RCard("Elderscale Wurm", 60));
+        s.players[0].hand.push_back(RCard("Elderscale Wurm", 61));
+        return s;
+    };
+    {
+        GameState s = board();
+        const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, /*is_pre_combat=*/true, /*depth=*/2);
+        TurnSolver::ApplyPlan(s, pick, /*is_pre_combat=*/true);
+        CHECK(s.cast_untap_pump_ordinal == 2);
+        CHECK_FALSE(RNum(s, 11).tapped);
+        CHECK_FALSE(RNum(s, 12).tapped);
+        CHECK(RNum(s, 11).temp_power_bonus == 7);
+        CHECK(RNum(s, 12).temp_power_bonus == 7);
+    }
+    {
+        GameState s = board();
+        AIEngine eng(MulliganProfile::DefaultProfile(), 2, 20);
+        eng.TakeTurn(s, /*is_pre_combat_main=*/true, [](GameState& st) {
+            while (!st.stack.empty())
+            {
+                const StackEntry e = st.stack.back();
+                st.stack.pop_back();
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+                if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+            }
+        });
+        CHECK_FALSE(RNum(s, 11).tapped);
+        CHECK_FALSE(RNum(s, 12).tapped);
+        CHECK(RNum(s, 11).temp_power_bonus == 7);
+        CHECK(RNum(s, 12).temp_power_bonus == 7);
+    }
 }

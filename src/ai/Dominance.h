@@ -621,6 +621,9 @@ static_assert(sizeof(Player) == 216,
 // deck_has_attack_dig_hand). Classification: a MONOTONIC per-game counter read ONLY as a delta against the snapshot
 // a phase's plan took at its start (breakpoint site 9's activation keys); its absolute value never changes a future
 // line, so two states that differ only here are equivalent -- NOTHING TO FOLD (folding it would only split classes).
+// +0 bytes (2026-11-13, Boars I4c -- Raggadragga per-instance target): `cast_untap_pump_ordinal` (a uint8_t beside
+// cast_untap_refunds). Classification: a MONOTONIC per-game counter read ONLY relative to the ordinal saved when the
+// cast-trigger target pin was installed (UntapPumpRankFor) -- NOTHING TO FOLD, the cast_untap_refunds argument.
 static_assert(sizeof(GameState) == 1416,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

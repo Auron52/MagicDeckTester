@@ -4880,7 +4880,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (plan.landfall_target_choice >= 0)
             { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
             if (plan.cast_trigger_target_choice >= 0)
-            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq()); }
+            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -5135,7 +5135,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (x.landfall_target_choice >= 0)
         { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.TurnSeq()); }
         if (x.cast_trigger_target_choice >= 0)
-        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq()); }
+        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal); }
         rs_last = x;
     };
 

@@ -5951,7 +5951,9 @@ inline thread_local int g_cast_trigger_mana_spent_probe = -1;
 // cast site had to state it (the ComputeLordBonus-signature lesson). Every site is in both worlds' shared paths;
 // the executor's CastSpellFromHand and the rollout's apply_one compute it off their lockstep `effective` / `ec`.
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
-                                                 const std::string& src_name, bool untap_pump);   // defined below
+                                                 const std::string& src_name, bool untap_pump,
+                                                 int rank_override);                           // defined below
+inline int UntapPumpRankFor(const GameState& state, int ahead = 0);                              // defined below
 inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
                                    int power, int tough);                                       // defined below
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
@@ -6256,10 +6258,15 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     // play). ORDER vs the other cast triggers (Herald of Ilharg's counters, Decimator's team pump) is the
     // controller's (CR 603.3b) and inert: pumps and counters commute and the untap is independent of both, so a
     // fixed order is a sound identity. After the tokens above, which are then legal targets (a superset).
+    // PER-INSTANCE target (Boars I4c, risk 3): each trigger instance reads ITS OWN digit of the searched rank
+    // (UntapPumpRankFor: the instance ordinal GameState::cast_untap_pump_ordinal, relative to the pin's install), then
+    // advances the ordinal -- so two qualifying casts in one turn take independent targets.
     for (const CardDefinition* rd : untap_pumps)
     {
+        const int rank = UntapPumpRankFor(state);
+        state.cast_untap_pump_ordinal = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal + 1);
         const std::vector<int> nums = ChooseCastTriggerTargets(state, active, 1, /*destroy=*/false,
-                                                               rd->card.m_name.str(), /*untap_pump=*/true);
+                                                               rd->card.m_name.str(), /*untap_pump=*/true, rank);
         if (nums.empty()) { continue; }   // no legal target (every creature shrouded): removed (CR 603.3d)
         ResolveUntapPumpTarget(state, active, rd->card.m_name.str(), nums.front(),
                                rd->params.cast_trigger_untap_pump_power, rd->params.cast_trigger_untap_pump_tough);
@@ -17431,17 +17438,25 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
 //     creature dies through OnCreatureDies (+ FireOppCreatureDies for the opponent's).
 inline thread_local int g_cast_trigger_target_pin      = -1;
 inline thread_local int g_cast_trigger_target_pin_turn = -1;
+// The Raggadragga instance ordinal (GameState::cast_untap_pump_ordinal) when the live pin was installed: the pin's
+// digit j belongs to the j-th untap-pump trigger AFTER the install (Boars I4c). Read only by UntapPumpRankFor.
+inline thread_local int g_cast_trigger_target_pin_base = 0;
 struct ScriptedCastTriggerTarget
 {
-    int saved, saved_turn;
+    int saved, saved_turn, saved_base;
     bool active;
-    ScriptedCastTriggerTarget(int k, int turn_seq)
-        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn), active(k >= 0)
+    ScriptedCastTriggerTarget(int k, int turn_seq, int ordinal = 0)
+        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn),
+          saved_base(g_cast_trigger_target_pin_base), active(k >= 0)
     {
-        if (active) { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; }
+        if (active)
+        { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; g_cast_trigger_target_pin_base = ordinal; }
     }
     ~ScriptedCastTriggerTarget()
-    { if (active) { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; } }
+    {
+        if (active)
+        { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; g_cast_trigger_target_pin_base = saved_base; }
+    }
     ScriptedCastTriggerTarget(const ScriptedCastTriggerTarget&) = delete;
     ScriptedCastTriggerTarget& operator=(const ScriptedCastTriggerTarget&) = delete;
 };
@@ -17449,6 +17464,45 @@ struct ScriptedCastTriggerTarget
 // turn of a round is stale inside that round's extra turn.
 inline int CastTriggerTargetPinFor(const GameState& state)
 { return g_cast_trigger_target_pin_turn == state.TurnSeq() ? g_cast_trigger_target_pin : -1; }
+
+// RAGGADRAGGA'S PER-INSTANCE RANK (Boars I4c -- ledger risk 3). Raggadragga's untap-pump trigger takes ONE target
+// per trigger INSTANCE, and two qualifying casts in one turn must be able to take different ones (a shared whole-turn
+// rank made "untap the Sage on the first, pump the Boar on the second" unfindable at any budget). So the pin is a
+// TUPLE of per-instance ranks, packed self-describing in Plan::cast_trigger_target_choice:
+//     0                         = every instance takes rank 0 (the provider's front) -- the base plan;
+//     (payload << 4) | B, B>=1  = instance j takes digit j = (payload >> (B*j)) & (2^B - 1).
+// Instance j = the j-th untap-pump trigger since the pin was INSTALLED (GameState::cast_untap_pump_ordinal minus the
+// ordinal saved at install), so a breakpoint re-solve's own pin starts at its own digit 0, and a continuation that
+// installs nothing inherits the outer pin's remaining digits -- the same lockstep both worlds already keep for the
+// pin itself (ApplyPlanDirect's _sctt, AIEngine's cast_trigger_target_exec, each installed with the state's ordinal).
+// Only the untap-pump consumer decodes; the Ulamogs read the raw rank exactly as before (byte-identical). B and the
+// digit count come from RaggaUntapPumpAxisWidth / RaggaUntapPumpInstances at variant generation; a digit past the real
+// option count clamps at resolution like every other rank.
+constexpr int kUntapPumpPayloadBits = 27;   // int32 rank storage: 31 value bits minus the 4-bit B field
+inline int UntapPumpRankDigit(int k, int j)
+{
+    if (k <= 0 || j < 0) { return 0; }
+    const int b = k & 15;
+    if (b <= 0 || b * j >= kUntapPumpPayloadBits) { return 0; }
+    return ((k >> 4) >> (b * j)) & ((1 << b) - 1);
+}
+// `ahead`: the instance that many triggers after the next one (the axis reads the base plan's inherited digits).
+inline int UntapPumpRankFor(const GameState& state, int ahead)
+{
+    const int k = CastTriggerTargetPinFor(state);
+    if (k <= 0) { return k; }
+    const int j = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal
+                                            - static_cast<std::uint8_t>(g_cast_trigger_target_pin_base));
+    return UntapPumpRankDigit(k, j + ahead);
+}
+// Pack per-instance digits (each < 2^b) into the rank above. All zero -> 0.
+inline int UntapPumpRankPack(const std::vector<int>& digits, int b)
+{
+    long long payload = 0;
+    for (std::size_t j = 0; j < digits.size(); ++j)
+    { payload |= static_cast<long long>(digits[j]) << (b * static_cast<int>(j)); }
+    return payload == 0 ? 0 : static_cast<int>((payload << 4) | b);
+}
 
 // How many N-target options the classes (sizes `counts`) give: multisets of size n with each class used at
 // most counts[i] times. Exact; used by the axis to size its width.
@@ -17568,8 +17622,10 @@ inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<in
 }
 // THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
 // removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
+// `rank_override` >= -1: use it instead of the live pin (Raggadragga's per-instance digit, UntapPumpRankFor); -2 = the pin.
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
-                                                 const std::string& src_name, bool untap_pump = false)
+                                                 const std::string& src_name, bool untap_pump = false,
+                                                 int rank_override = -2)
 {
     std::vector<std::vector<int>> classes;
     CastTriggerTargetClasses(state, controller, destroy, classes, untap_pump);
@@ -17585,7 +17641,8 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
         }
         return {};
     }
-    std::vector<int> pick = CastTriggerTargetOption(classes, n, CastTriggerTargetPinFor(state));
+    std::vector<int> pick = CastTriggerTargetOption(classes, n,
+                                                    rank_override >= -1 ? rank_override : CastTriggerTargetPinFor(state));
     if (static_cast<int>(pick.size()) != n) { return {}; }
     // HUMAN PLAY: one board-click per target over the FULL legal set (every permanent not yet picked).
     if (g_play_loyalty_chooser)

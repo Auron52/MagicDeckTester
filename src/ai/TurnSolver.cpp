@@ -5950,8 +5950,8 @@ static bool BpCondemnTreasureSitePositiveEnabled()
 // mana costs the Boars pool and its neighbours carry; a deck adding Raggadragga beside buyback / entwine /
 // replicate spells must extend it). NO CAP. Every deck without the card: one battlefield walk, returns 0 -- and the
 // whole axis is behind deck_has_cast_target_trigger anyway.
-//   OWED (surfaced in the ledger): (1) the rank is a WHOLE-TURN policy -- two qualifying casts in one turn share
-// one rank, so "a different target for each" is reachable only where the shared rank happens to name both; (2)
+//   (1) RESOLVED in I4c: the rank is now PER TRIGGER INSTANCE (AppendRaggaInstanceVariants below; one digit per
+// qualifying cast in plan order, decoded by UntapPumpRankFor), so two qualifying casts take independent targets. (2)
 // the axis skips plans that already carry another axis (sac_pins, ...). I4 (Decimator's emerge) does NOT ride
 // sac_pins: its victim is a per-CAST variant (Action::emerge + soulfire_own_targets, the SAC-ANY-CREATURE
 // post-pass), so every emerge plan is a BASE plan and is crossed with this axis like any other (MV 10 reaches
@@ -5961,18 +5961,23 @@ static bool CastSpendMayReach(const CardDefinition& d, int n)
     const ManaCost& m = d.card.m_mana_cost;
     return m.ManaValue() >= n || m.has_x || d.params.kicker_cost.has_value();
 }
-static long long RaggaUntapPumpAxisWidth(const GameState& state, const TurnSolver::Plan& p)
+// `instances` (optional, Boars I4c): the untap-pump trigger INSTANCES the plan's own casts fire, in plan order --
+// qualifying casts x Raggadraggas we control (at least one: the plan may cast it). 0 whenever the width is 0.
+static long long RaggaUntapPumpAxisWidth(const GameState& state, const TurnSolver::Plan& p, int* instances = nullptr)
 {
     const int me = state.active_player_index;
     int min_spent = 0;
+    int raggas = 0;
     long long creatures = 0;
+    if (instances) { *instances = 0; }
     for (const Permanent& q : state.battlefield)
     {
         if (q.card.IsCreature() || q.is_animated) { ++creatures; }
         if (q.controller_index != me || q.def_absent) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
         if (d && d->params.cast_trigger_untap_pump_target_min_spent > 0)
-        { min_spent = min_spent == 0 ? d->params.cast_trigger_untap_pump_target_min_spent
+        { ++raggas;
+          min_spent = min_spent == 0 ? d->params.cast_trigger_untap_pump_target_min_spent
                                      : std::min(min_spent, d->params.cast_trigger_untap_pump_target_min_spent); }
     }
     for (const Action& a : p.actions)
@@ -5986,14 +5991,60 @@ static long long RaggaUntapPumpAxisWidth(const GameState& state, const TurnSolve
                                      : std::min(min_spent, d->params.cast_trigger_untap_pump_target_min_spent); }
     }
     if (min_spent <= 0) { return 0; }
+    int qualifying = 0;
     for (const Action& a : p.actions)
     {
         if (a.kind != Action::Kind::CastFromHand) { continue; }
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
         if (d && d->params.cast_trigger_untap_pump_target_min_spent <= 0 && CastSpendMayReach(*d, min_spent))
-        { return creatures; }
+        {
+            if (instances == nullptr) { return creatures; }
+            ++qualifying;
+        }
     }
-    return 0;
+    if (qualifying == 0) { return 0; }
+    *instances = qualifying * std::max(1, raggas);
+    return creatures;
+}
+
+// RAGGADRAGGA'S PER-INSTANCE TARGET VARIANTS (Boars I4c -- ledger risk 3 RESOLVED). One digit per untap-pump trigger
+// instance the plan's own casts fire (RaggaUntapPumpAxisWidth's `instances`, plan order), each over [0, w) -- w the
+// per-trigger option upper bound above -- packed by UntapPumpRankPack (SpellEffects.h). EVERY tuple is a variant
+// except the one the base plan already plays: all-zero on a fresh turn, else the live pin's REMAINING digits (a
+// breakpoint re-solve / continuation inherits them; clamped to w-1, which resolves identically since w bounds the
+// options) -- the StatePinVariantRanks rule per digit, so every tuple is reachable from every state. Lossless: a digit
+// past the real option count clamps at resolution, and two tuples that land on the same state are folded by the
+// post-apply state dedup (PlanIsAxisVariant), so an instance that never fires costs applies, never a line. Identical
+// targets are already one option (the CastTriggerTargetFoldKey identity fold). No cap; the only bound is the int32
+// storage (27 payload bits: 6 instances at w <= 16) -- 42+ mana of qualifying casts in one turn, out of reach.
+// Instances fired by a breakpoint CONTINUATION's casts are that continuation's own digits: the axis also fans
+// continuation plans (cont_axes_only) for this card, so the instance a site-9 refund makes affordable is searched
+// in the rollout too, not inherited as the front.
+static void AppendRaggaInstanceVariants(const GameState& state, const TurnSolver::Plan& p, long long w, int instances,
+                                        std::vector<TurnSolver::Plan>& extra)
+{
+    if (w <= 1 || instances <= 0) { return; }
+    int b = 1;
+    while ((1LL << b) < w) { ++b; }
+    const int m = std::max(1, std::min(instances, kUntapPumpPayloadBits / b));
+    std::vector<int> inh(static_cast<std::size_t>(m), 0);
+    for (int j = 0; j < m; ++j)
+    { inh[static_cast<std::size_t>(j)] = std::min<int>(std::max(0, UntapPumpRankFor(state, j)), static_cast<int>(w - 1)); }
+    const int inh_k = UntapPumpRankPack(inh, b);
+    std::vector<int> d(static_cast<std::size_t>(m), 0);
+    for (;;)
+    {
+        const int k = UntapPumpRankPack(d, b);
+        if (k != inh_k)
+        {
+            TurnSolver::Plan v = p;
+            v.cast_trigger_target_choice = k;
+            extra.push_back(std::move(v));
+        }
+        std::size_t j = 0;
+        while (j < d.size() && ++d[j] >= w) { d[j] = 0; ++j; }
+        if (j == d.size()) { break; }
+    }
 }
 
 static bool BpSiteAddedMana(const GameState& state)
@@ -66295,7 +66346,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     ScriptedLandfallTarget _slft(plan.landfall_target_choice, state.TurnSeq());
     // ...and the searched CAST-TRIGGER target policy (Plan::cast_trigger_target_choice; Ulamog), the same
     // shape: -1 installs nothing. Lockstep: AIEngine::TakeTurn's cast_trigger_target_exec.
-    ScriptedCastTriggerTarget _sctt(plan.cast_trigger_target_choice, state.TurnSeq());
+    ScriptedCastTriggerTarget _sctt(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal);
     ScriptedSweep _ssw(plan.sweep_choice);            // searched end-of-main-1 sweep; -1 = the rule
     struct LeFirePin { int saved; explicit LeFirePin(int k) : saved(g_le_fire_pin) { g_le_fire_pin = k; }
                        ~LeFirePin() { g_le_fire_pin = saved; } } _lefp(plan.le_fire_choice);
@@ -90159,7 +90210,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // PHASE 3 (Unpredictable Cyclone): a plan whose CYCLE SEED can walk to such a card free-casts it, and its
     // trigger reads the same policy -- so the plan gets the axis too (CycleSeedCastTriggerTargets: the exact
     // hit when the walk is predictable, else every library card of a shared type). Same no-cap rule.
-    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_cast_target_trigger)
+    // BOARS I4c: in a breakpoint CONTINUATION (cont_axes_only) only Raggadragga's per-instance axis runs -- its digits
+    // are per trigger INSTANCE (AppendRaggaInstanceVariants), installed for the continuation's own apply, so a
+    // continuation's qualifying cast is searched rather than inheriting the outer plan's digit. The Ulamog path is
+    // unchanged (outer plans only).
+    if (!HumanPlayActive() && state.deck_has_cast_target_trigger)
     {
         const int me = state.active_player_index;
         std::vector<int> base_counts;
@@ -90184,6 +90239,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 || p.bp_choice >= 0 || p.etbdig_choice >= 0 || p.lackey_choice >= 0 || p.ponder_choice >= 0
                 || p.putback_choice >= 0 || p.tutor_choice >= 0 || p.discard_choice >= 0
                 || p.etbcounter_choice >= 0 || !p.sac_pins.empty()) { continue; }
+            int ragga_inst = 0;
+            const long long ragga_w = RaggaUntapPumpAxisWidth(state, p, &ragga_inst);   // Raggadragga (Boars I3b/I4c)
+            if (cont_axes_only)
+            {
+                AppendRaggaInstanceVariants(state, p, ragga_w, ragga_inst, extra);
+                continue;
+            }
             int n_max = 0, added = p.land_to_play.empty() ? 0 : 1;
             for (const Action& a : p.actions)
             {
@@ -90196,8 +90258,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
             if (const Action* seed = CycleSeedOf(p.actions))
             { n_max = std::max(n_max, CycleSeedCastTriggerTargets(state, p, *seed)); }
-            const long long ragga_w = RaggaUntapPumpAxisWidth(state, p);   // Raggadragga (Boars I3b); 0 = none
             if (n_max <= 0 && ragga_w <= 1) { continue; }
+            if (n_max <= 0)
+            {
+                // Raggadragga only: one searched digit per trigger instance (Boars I4c).
+                AppendRaggaInstanceVariants(state, p, ragga_w, ragga_inst, extra);
+                continue;
+            }
+            // An Ulamog in the same plan: the shared whole-turn rank (unchanged). OWED (no deck runs both): a Ragga
+            // instance then decodes that flat rank as a per-instance tuple.
             long long w = ragga_w;
             if (n_max > 0)
             {
@@ -90210,7 +90279,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const int k : StatePinVariantRanks(CastTriggerTargetPinFor(state), width))
             {
                 TurnSolver::Plan v = p;
-                v.cast_trigger_target_choice = static_cast<std::int16_t>(k);
+                v.cast_trigger_target_choice = static_cast<std::int32_t>(k);
                 extra.push_back(std::move(v));
             }
         }

@@ -1802,8 +1802,9 @@ public:
         // (ScriptedCastTriggerTarget, keyed on GameState::TurnSeq) and folded into every plan key while
         // live. Emitted by AppendSubdecisionAxes for plans that cast a targeted cast-trigger card from
         // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
-        // int16_t: a two-target option list on a wide board exceeds 127.
-        int16_t cast_trigger_target_choice = -1;
+        // int16_t: a two-target option list on a wide board exceeds 127. int32_t since Boars I4c: Raggadragga's
+        // PER-INSTANCE ranks pack one digit per trigger instance (UntapPumpRankPack, SpellEffects.h).
+        int32_t cast_trigger_target_choice = -1;
         // SEARCHED DEMON TRIGGERS (Shadowborn INT-2): Reaper from the Abyss's end-step morbid destroy TARGET
         // (bits 0-7) and Abhorrent Overlord's upkeep sacrifice VICTIM (bits 8-15), each PACKED per trigger
         // ordinal (kDemonPinBits bits, low first) as a RANK into the trigger's resolution-time class list
