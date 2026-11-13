@@ -172,8 +172,11 @@ cards were added). No smoke/regression run (the parent pools one).
 
 ## I2a done (2026-11-13) -- Zhur-Taa Druid
 
-Commit: see `git log` on `boars-analysis` ("Boars I2a: Zhur-Taa Druid", local only, not pushed). Unit tests 2949/2949
-pass (6 new cases, `test/unit/test_boars_zhurtaa.cpp`). No smoke/regression run (the parent pools one).
+Commit: `5739ea267` on `boars-analysis` (local only, not pushed). Unit tests 2949/2949
+pass (6 new cases, `test/unit/test_boars_zhurtaa.cpp`). audit_card_costs rc 0 (611/611); audit_card_fields --update hit
+Scryfall 429s for other cards (rc 1; the Druid was snapshotted), offline rc 0. No smoke/regression run (the parent pools one).
+viewer audit `--no-sweep` on Boars: the new param classifies; it still FAILS on I1's `self_haste_cost` (in BOARD_ACTIVATIONS,
+which the self-guard does not read) -- an I1 leftover for the parent.
 
 **Landed**
 * `Zhur-Taa Druid` (cards.json, oracle verbatim from Scryfall + bracket): `mana_dork`, `produces [G]`, NEW
