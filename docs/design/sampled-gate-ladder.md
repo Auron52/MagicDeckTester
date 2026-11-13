@@ -350,3 +350,24 @@ Dropping the clamp recovers Landfall and Melira quality (net better) but pays th
 (1.27x / 1.05x); Snow drops to 0.88-0.89x. The clamp (S12) and no clamp (S13) bracket the answer: the next arm,
 `_pcr`, credits back only the committing candidate's own leafless walk (the one duplicated cost), so a decision
 overspends by at most the interior it walks twice.
+
+### S14 (S12 seeds; 13,800 games; `build/scratch/p18e/S14`, binary `mtg_e4` = 09aeac874): `_pcr` == `_pnr`
+`g_pb1_plc_pus25_pbk8_pcr` reproduces S13's `_pnr` units on every deck (Hydras 0.969, Alc 0.797, EDF 0.938, Snow
+0.854, MB 1.039, Landfall 1.277, Melira 1.114) and its dturn; CPU 0.986 / 0.754 / 0.848 / 0.890 / 0.949 / 1.266 /
+1.051. So the real-remaining clamp bit ONLY through the pass's own leafless walk: crediting that walk back is the
+same as dropping the clamp. That confirms the double walk as the whole mechanism, and it means the CPU Landfall and
+Melira pay under `_pnr` IS the duplicated interior. Unit tests (sampled_gate, Leafless reads leafed, rollout_from,
+fit_gate; 9 cases, 120 assertions) pass on 09aeac874.
+
+## Checkpoint (P18e, 2026-11-13 ~11:40 UTC) -- no arm passes the train screen
+- Sampling is no longer the problem: cluster sampling in visit order brings ceiling hits to 0-6% of priced passes and
+  skips 23-86% of heur's superseded rollout units (Alc 23% is the weak deck: the refused pass K+1 is priced too).
+- Clamped (`_prr2` / `_pact`): CPU below heur on 6 of 7 decks (Snow 1.00), quality net worse on Landfall/Melira.
+  Unclamped (`_pnr` == `_pcr`): quality net <= 0 except Alchemist +0.0050 (1/3), CPU 0.75-0.99x on five decks but
+  1.27x Landfall, 1.05x Melira. The difference between the two is exactly the double-walked interior.
+- Next (in order): (1) remove the double walk for the COMMITTING pass -- the leafless walk of pass K is needed to price
+  K, but its interior is then walked again with rollouts; candidates: run the committing pass's rollouts INSIDE a
+  re-entry of the leafless tree's no-win frontier (only nodes whose leafless answer depended on a leaf need
+  re-search), or start the commit as a rollout pass and price the NEXT pass from its own leaves; (2) Alchemist's
+  `_pnr` losers (3) -- not yet inspected; (3) then the held-out A/B on fresh seeds (mkH.py shape), and a second
+  independent batch for CPU.
