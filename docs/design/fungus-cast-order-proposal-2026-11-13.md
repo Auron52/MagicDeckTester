@@ -457,4 +457,8 @@ Added 2026-11-13 with §5A/§5B (activations and Saprolings as a cost):
 - **Q12:** "We never search multiple, you take from one source at a time given they act the same which they do. Searching them is too expensive and unnecessary." -> keep the single maker pick (no search); the proposal's default is rejected.
 - **Q13:** "If they are going to die next turn and are equivalently summoning-sick and the same size then yes. If" (message ended there) -> doomed tokens are eaten first only when they otherwise tie with the alternatives (same summoning-sickness, same size); the same-plan Sporecrown part is not yet answered.
 - **Q14:** "This is a tough question. Technically the answer should probably be that we keep the attacker and sacrifice the summoning-sick token if this gives us lethal this turn. Otherwise we keep both alive. This might have to be tested heuristically. But yes, the default would be to tap and keep our critters alive." -> default: tap, keep both; candidate (heuristic, measured): eat a summoning-sick token instead of tapping an attacker only when that attacker is needed for lethal this turn.
-- Q15-Q18: not yet answered.
+- **Q15:** "I can't see why you would want to empty the Burst in a way that kills them. So there is no forced sacrifice. We sacrifice them when it is useful." -> no pre-emptying sacrifice rule; consistent with the decision-14 prune (no activation that kills the Burst's tokens without a death payoff).
+- **Q16:** "Yes" (diagnose the count menu's blind spots first: same-plan Season/Sporecrown, Shroofus, phase).
+- **Q17:** "Yes"
+- **Q18:** "If we end up going with main 2 and the critters are small then yes, but we don't want to sacrifice larger saprolings willy-nilly." -> only under Q6's main-2 window, and only small tokens.
+- Open: Q13's second half (count a same-plan Sporecrown when deciding a token is doomed); the USER's Q13 answer ended mid-sentence ("If").
