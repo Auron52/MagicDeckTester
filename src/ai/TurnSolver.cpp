@@ -98920,6 +98920,10 @@ namespace sfxprobe
 }
 static void RolloutSuffixProbeClear() { sfxprobe::Clear(); rgc::t_map.clear(); }   // + E3's map (same lifetime)
 
+// SAMPLED-GATE cost profile (P18e, `_pus` arms; see p18::Sampler): when set, the OUTERMOST rollout records the units
+// it had spent at the head of each simulated turn, so the sampled-gate price can re-cost that rollout under a tighter
+// cutoff (an incumbent found earlier in the pass's visit order) without running it again. Print/price only.
+namespace p18 { inline thread_local std::vector<std::pair<int, long long>>* t_prof = nullptr; }
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt,
@@ -98961,6 +98965,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
+        if (p18::t_prof != nullptr && g_rollout_nest == 1) { p18::t_prof->emplace_back(state.turn_number, budget ? budget->Used() : 0); }
         if (sfxprobe::t_collect && g_rollout_nest == 1 && state.turn_number > roll_start && first_turn_depth < 0)
         {
             // MUTED: BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
@@ -102172,30 +102177,73 @@ namespace p18
     constexpr double kZ = 2.0;          // decide at this many standard errors of the priced cost
     constexpr double kCvFloor = 0.5;    // per-leaf rollout cost is heavy-tailed: never assume a CV below this
     constexpr int    kMaxSamples = 64;  // the reservoir: a pass with more leaves is priced from at most this many
+    constexpr int    kUsMaxRes = 256;   // _pus: the reservoir's MEMORY bound (GameState copies); the statistical
+                                        // ceiling is the general fraction _pus<pct> of the pass's leaves
     struct Sampler
     {
         long long n = 0;                       // leaves visited
         bool have_first = false;
         GameState first; int first_cut = 0;    // the first leaf the pass reaches (its principal variation)
         std::vector<GameState> res; std::vector<int> cuts;
+        std::vector<long long> pos;            // _pus: each sampled leaf's visit position (1 .. n-1; the first is 0)
         unsigned long long rng = 0;
         int cap = kMaxSamples;
+        // _prr2: the real-remaining cap tightens only once the pass shows its first leaf (a pass with no leaf IS its
+        // tree, so its cap is the admit line itself); tb/tlim arm that, 0 = off.
+        SearchBudget* tb = nullptr; long long tlim = 0;
+        // _pus: CLUSTER sampling in VISIT ORDER. Leaves after the first are cut into consecutive blocks of `blk`;
+        // block 0 (the principal variation's neighbourhood) is always kept, later blocks are reservoir-sampled whole,
+        // so every sampled leaf is priced with the leaves that precede it in the real pass (siblings share rollout paths
+        // through the rollout table, and an incumbent found early cuts the rest). blk 0 = the single-leaf reservoir.
+        struct Blk { std::vector<GameState> s; std::vector<int> cut; std::vector<long long> pos; };
+        int blk = 0;
+        std::vector<Blk> blocks;               // [0] = block 0, then the reservoir slots
+        long long nb_seen = 0;                 // blocks >= 1 seen so far
+        int cur = -1;                          // the slot receiving the current block (-1 = not kept)
         unsigned long long Next() { rng += 0x9E3779B97F4A7C15ULL; unsigned long long z = rng;
                                     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
                                     return z ^ (z >> 31); }
         void Offer(const GameState& s, int cut)
         {
             ++n;
-            if (!have_first) { have_first = true; first = s; first_cut = cut; return; }
+            if (!have_first)
+            {
+                have_first = true; first = s; first_cut = cut;
+                if (tb != nullptr && tlim > 0)
+                { const long long cur = tb->OverrunLimit(); tb->SetOverrunLimit(cur > 0 ? std::min(cur, tlim) : tlim); }
+                return;
+            }
             const long long seen = n - 1;      // leaves after the first
-            if (static_cast<long long>(res.size()) < cap) { res.push_back(s); cuts.push_back(cut); return; }
+            if (blk > 0)
+            {
+                const long long off = seen - 1;
+                if (off == 0) { blocks.emplace_back(); cur = 0; }
+                else if (off >= blk && off % blk == 0)
+                {
+                    ++nb_seen;
+                    const long long capb = std::max(1, cap / blk);
+                    if (static_cast<long long>(blocks.size()) - 1 < capb) { blocks.emplace_back(); cur = static_cast<int>(blocks.size()) - 1; }
+                    else
+                    {
+                        const unsigned long long j = Next() % static_cast<unsigned long long>(nb_seen);
+                        if (j < static_cast<unsigned long long>(capb))
+                        { cur = 1 + static_cast<int>(j); Blk& b = blocks[static_cast<std::size_t>(cur)]; b.s.clear(); b.cut.clear(); b.pos.clear(); }
+                        else { cur = -1; }
+                    }
+                }
+                if (cur >= 0)
+                { Blk& b = blocks[static_cast<std::size_t>(cur)]; b.s.push_back(s); b.cut.push_back(cut); b.pos.push_back(seen); }
+                return;
+            }
+            if (static_cast<long long>(res.size()) < cap) { res.push_back(s); cuts.push_back(cut); pos.push_back(seen); return; }
             const unsigned long long j = Next() % static_cast<unsigned long long>(seen);
-            if (j < static_cast<unsigned long long>(cap)) { res[j] = s; cuts[j] = cut; }
+            if (j < static_cast<unsigned long long>(cap)) { res[j] = s; cuts[j] = cut; pos[j] = seen; }
         }
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0; };
+                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false,
+                         rr2 = false, ul = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102247,6 +102295,23 @@ namespace p18
         // when est_{k-1}^2 / est_{k-2} exceeds F x the admit line, pass k is not priced, pass k-1 runs on rollouts (the
         // commit unless the ladder's own check admits more) and the heuristic ladder decides pass k on real costs.
         o.fx = k.find("_pfx") != std::string::npos;
+        // _prr2 (P18e, implies _prr): the real-remaining cap l <= a R / (1 + a) assumes the commit re-walks the tree and
+        // pays leaves on top; a pass with NO leaf is its tree, so the leafless pass runs to a R and tightens to
+        // a R / (1 + a) at its first leaf, and a leafless pass that completes with no leaf at the ladder's own root cut
+        // is committed directly (the rollout pass would walk the same tree with nothing to roll out, as would every
+        // deeper pass).
+        o.rr2 = k.find("_prr2") != std::string::npos;
+        if (o.rr2) { o.rr = true; }
+        // _pus<pct> (P18e): UNCERTAINTY-SCALED SAMPLING. The price models the incumbent effect (each sampled rollout is
+        // re-costed at the cut the real pass would hand it, from the sampled wins EARLIER in the pass's visit order,
+        // via its per-turn cost profile) and states the uncertainty honestly: the refusal side assumes an unseen
+        // improving leaf at the expected first position of an unobserved event, (n-1)/(m+1), that cuts every later
+        // leaf one turn earlier. Samples are drawn until the verdict clears that interval, never past pct% of the
+        // pass's leaves (the hard ceiling), and at the ceiling the gate decides anyway: _pul admits unless even the
+        // improver-assumed price refuses (lean admit), otherwise the point price decides.
+        { const std::size_t p = k.find("_pus"); if (p != std::string::npos) { o.us = std::atof(k.c_str() + p + 4) / 100.0; } }
+        o.ul = k.find("_pul") != std::string::npos;
+        { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -111008,6 +111073,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         std::vector<double> p18_su(static_cast<std::size_t>(depth) + 2, 0.0);    // sampled-rollout units by pass
         bool p18_free_rx = false;       // _pfx: a free refusal at pass k >= 3 hands the decision to the heuristic ladder
         bool p18_force2 = false;        // _pb1: the heuristic ladder's bootstrap admitted pass 2
+        long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
         for (int k = 1; k <= depth; ++k)
         {
             if (k == 1 && kn.b1 && !unl && !kn.verify)
@@ -111086,13 +111152,25 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const int window_end = state.turn_number + k - 1;
             const int lcut = (wb_prev > 0 && !kn.nobound) ? std::min(root_cut, std::max(wb_prev - 1, window_end)) : root_cut;
             p18::Sampler smp;
+            if (kn.us > 0.0)
+            {
+                // _pus block size: about 1/64 of the pass's expected leaves (the leaf-count growth of the passes below),
+                // at most _pbk<N> (default 8), at least 1 -- a small pass is sampled leaf by leaf.
+                const double ne = (p18_n1 > 0 && p18_n2 > 0) ? static_cast<double>(p18_n1) * p18_n1 / p18_n2
+                                : (p18_n1 > 0 ? static_cast<double>(p18_n1) * kDefaultGrowth : 0.0);
+                smp.blk = std::max(1, std::min(kn.bk, static_cast<int>(ne / 64.0)));
+                smp.cap = p18::kUsMaxRes;
+            }
             smp.rng = state.game_seed ^ (0xA24BAED4963EE407ULL * static_cast<unsigned long long>(state.TurnSeq() * 16 + k));
             const long long u0 = pb ? pb->Used() : 0;
             // _plc: the threshold before the pass bounds the one after it (the remaining only falls), so the cap is sound.
             const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
             const double la = kn.lean * kStartGateAlpha;
             const double rnow = capk ? static_cast<double>(budget->Remaining()) : 0.0;
-            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, kn.rr ? rnow / (1.0 + la) : rnow))) : 0;
+            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, (kn.rr && !kn.rr2) ? rnow / (1.0 + la) : rnow))) : 0;
+            // _prr2: the tight real-remaining cap, armed at the pass's first leaf (Sampler::Offer).
+            const long long tight_abs = (capk && kn.rr2) ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, rnow / (1.0 + la)))) : 0;
+            if (tight_abs > 0) { smp.tb = pb; smp.tlim = tight_abs; }
             // Every leafless pass also carries the ladder's own OVERRUN ceiling (a pass past it is pathological).
             const bool guard = !unl && !kn.verify && pb != nullptr;
             const long long ceil_abs = guard ? (s_overrun_prop ? SearchBudget::SatAdd(u0, SearchBudget::SatMulD(kOverrunBudgetMult, pb->EffectiveLimit()))
@@ -111128,9 +111206,10 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             }
             if (guard) { pb->SetOverrunLimit(ol_saved); }
             const long long lu = (pb ? pb->Used() : 0) - u0;
+            p18_n2 = p18_n1; p18_n1 = smp.n;   // _pus: the leaf-count history that sizes the next pass's blocks
             if (guard && pb->Used() >= ceil_abs && !(capk && cap_abs <= ceil_abs))
             { p16::Rec('W', k, lu, smp.n, 4, pr.win_turn, 0); if (k == 2 && p18_force2) { p18_K = 2; } p18_stop = k; break; }   // overrun
-            if (capk && pb->Used() >= cap_abs)
+            if (capk && pb->Used() >= ((tight_abs > 0 && smp.n > 0) ? tight_abs : cap_abs))
             {
                 p16::Rec('W', k, lu, smp.n, 3, pr.win_turn, 0);   // capped: the tree alone does not fit
                 if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, static_cast<double>(cap_abs - u0), static_cast<double>(lu), 0.0, 0, 0, 0, 0, std::string()}); }
@@ -111165,7 +111244,119 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 if (w <= max_turns && (best == 0 || w < best)) { best = w; }
                 return static_cast<double>(pb->Used() - r0);
             };
-            if (smp.have_first)
+            if (smp.have_first && kn.us > 0.0)
+            {
+                // _pus: UNCERTAINTY-SCALED CLUSTER SAMPLING (see Knobs and Sampler::blk). Every rolled leaf keeps its
+                // visit position, the cut it was entered with, its result and its per-turn cost profile, so the price
+                // is taken in VISIT order: the real pass hands each leaf the incumbent its earlier leaves found, and a
+                // rollout's cost at a tighter cut is read off its profile. A leaf is rolled at the cut it would get from
+                // the leaves rolled so far (later ones can only tighten it, so its profile covers the cut it is priced at).
+                struct UsRoll { long long pos = 0; int slot = 0; int cut0 = 0; int run_cut = 0; int w = 0; double x = 0.0;
+                                std::vector<std::pair<int, long long>> prof; };
+                std::vector<UsRoll> rs;
+                auto fc = [](const UsRoll& r, int c) -> double
+                {
+                    if (c >= r.run_cut) { return r.x; }
+                    for (const std::pair<int, long long>& pm : r.prof) { if (pm.first > c) { return static_cast<double>(pm.second); } }
+                    return r.x;
+                };
+                std::vector<std::size_t> ord;
+                auto sweep = [&](long long upto, auto&& visit) -> int   // visit order; returns the incumbent before `upto`
+                {
+                    ord.resize(rs.size());
+                    for (std::size_t q = 0; q < ord.size(); ++q) { ord[q] = q; }
+                    std::sort(ord.begin(), ord.end(), [&](std::size_t a, std::size_t b2) { return rs[a].pos < rs[b2].pos; });
+                    int b = INT_MAX;
+                    for (const std::size_t q : ord)
+                    {
+                        const UsRoll& r = rs[q];
+                        if (r.pos >= upto) { break; }
+                        const int e = (b == INT_MAX) ? r.cut0 : std::min(r.cut0, b - 1);
+                        visit(r, e);
+                        if (r.w <= max_turns && r.w <= e) { b = std::min(b, r.w); }
+                    }
+                    return b;
+                };
+                auto roll2 = [&](GameState g, long long pos, int slot, int cut0)
+                {
+                    UsRoll r; r.pos = pos; r.slot = slot; r.cut0 = cut0;
+                    const int bi = sweep(pos, [](const UsRoll&, int) {});
+                    const int cut = (bi == INT_MAX) ? cut0 : std::min(cut0, bi - 1);
+                    const long long r0 = pb->Used();
+                    std::vector<std::pair<int, long long>>* const pp = p18::t_prof; p18::t_prof = &r.prof;
+                    int w;
+                    {
+                        FsLineNestGuard _nest; const greedywindow::Frame _gw(0);
+                        const int saved_pd = t_fs_pass_depth; t_fs_pass_depth = k;
+                        const RolloutNarrowScope _narrow;
+                        w = SimulateToEnd(std::move(g), EffectiveFdLeafDepth(), max_turns, pb, cut, second_main, ptt);
+                        t_fs_pass_depth = saved_pd;
+                    }
+                    p18::t_prof = pp;
+                    for (std::pair<int, long long>& pm : r.prof) { pm.second -= r0; }
+                    r.run_cut = cut; r.w = w; r.x = static_cast<double>(pb->Used() - r0);
+                    if (w <= max_turns && (best == 0 || w < best)) { best = w; }
+                    rs.push_back(std::move(r));
+                };
+                // The exact part: the first leaf and block 0, in visit order.
+                roll2(smp.first, 0, 0, smp.first_cut);
+                const long long bsz = std::max(1, smp.blk);
+                if (!smp.blocks.empty())
+                {
+                    p18::Sampler::Blk& b0 = smp.blocks[0];
+                    for (std::size_t q = 0; q < b0.s.size(); ++q) { roll2(std::move(b0.s[q]), b0.pos[q], 0, b0.cut[q]); }
+                }
+                std::vector<std::size_t> slots;
+                for (std::size_t q = 1; q < smp.blocks.size(); ++q) { slots.push_back(q); }
+                for (std::size_t i = slots.size(); i > 1; --i) { const std::size_t j = smp.Next() % i; std::swap(slots[i - 1], slots[j]); }
+                const double rest = static_cast<double>(smp.n - 1);
+                const double nbt = std::max(0.0, (rest - static_cast<double>(bsz)) / static_cast<double>(bsz));   // blocks >= 1
+                const long long mmax = std::max(static_cast<long long>(std::ceil(kn.us * rest)), 3 * bsz);
+                double P = static_cast<double>(lu); bool ceil_hit = false; int nbk = 0;
+                std::vector<double> Y;
+                for (std::size_t i = 0; ; ++i)
+                {
+                    m = static_cast<int>(rs.size()) - 1;
+                    Y.assign(smp.blocks.size() + 1, 0.0);
+                    double E0 = 0.0;
+                    sweep(LLONG_MAX, [&](const UsRoll& r, int e)
+                    { const double y = fc(r, e); if (r.slot == 0) { E0 += y; } else { Y[static_cast<std::size_t>(r.slot)] += y; } });
+                    double sy = 0.0, syy = 0.0;
+                    for (std::size_t q = 0; q < static_cast<std::size_t>(nbk); ++q) { const double y = Y[slots[q]]; sy += y; syy += y * y; }
+                    const double B = static_cast<double>(nbk);
+                    if (nbk > 0)
+                    {
+                        const double mean = sy / B;
+                        P = static_cast<double>(lu) + E0 + nbt * mean;
+                        const double sd = std::max(std::sqrt(std::max(0.0, syy / B - mean * mean)), kn.cvf * mean);
+                        const double fpc = nbt > 1.0 ? std::sqrt(std::max(0.0, 1.0 - (B - 1.0) / (nbt - 1.0))) : 0.0;
+                        se = nbt * sd / std::sqrt(B) * fpc;
+                    }
+                    else { P = static_cast<double>(lu) + E0; se = 0.0; }
+                    if (nbt <= 0.0 || B >= nbt) { fit = (thr > 0.0 && P <= thr) ? 1 : 0; break; }      // exact
+                    if (static_cast<double>(lu) + E0 > thr) { fit = 0; break; }   // the tree and its exact leaves already exceed it
+                    if (nbk >= 2)
+                    {
+                        if (P + kn.z * se <= thr) { fit = 1; break; }
+                        if (B >= std::min(kn.mr, nbt) && P - kn.z * se > thr) { fit = 0; break; }
+                    }
+                    if (static_cast<long long>(m) >= mmax || i >= slots.size())
+                    {
+                        // THE CEILING: decide anyway. _pul leans ADMIT (a wrong refusal costs quality; a wrong admit is
+                        // bounded by the committing pass's overrun ceiling), else the point price decides.
+                        ceil_hit = true;
+                        fit = (thr > 0.0 && (kn.ul || P <= thr)) ? 1 : 0;
+                        break;
+                    }
+                    p18::Sampler::Blk& bl = smp.blocks[slots[i]];
+                    for (std::size_t q = 0; q < bl.s.size(); ++q) { roll2(std::move(bl.s[q]), bl.pos[q], static_cast<int>(slots[i]), bl.cut[q]); }
+                    ++nbk;
+                }
+                est = P;
+                if (p16::On())
+                { char cb[96]; std::snprintf(cb, sizeof cb, "u%d/%lld:b%lld:B%d%s", m, mmax, bsz, nbk, ceil_hit ? ":C" : ""); ck = cb; }
+            }
+            else if (smp.have_first)
             {
                 x_pv = roll(smp.first, smp.first_cut);
                 // shuffle the reservoir (it holds the first `cap` leaves in visit order when n <= cap)
