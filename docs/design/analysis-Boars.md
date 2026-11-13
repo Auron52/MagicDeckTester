@@ -546,4 +546,28 @@ then lower card number. It orders the playout only; inside the window every opti
   deck's undeclared body is itself a source of one of these triggers.
 * Residual (projection only): `ApplyAttackPutProjection` makes the put body an ordinary attacker, so the projection
   could credit a put body's own attack trigger. No Boars put target has one that the projection prices.
-* Items 3 (Ilharg dies clause) and 4 (legend-rule keep choice) remain: `logs/boars-research/I5b-handoff.md`.
+* Items 3 (Ilharg dies clause) and 4 (legend-rule keep choice) remained after items 1-2.
+
+## I5b item 3 done (2026-11-13) -- Ilharg's dies clause, plus an I4 emerge-record fix
+
+* **`1c3871699`:** `dies_to_library_position: 3` on Ilharg. On a nontoken death the newest graveyard copy goes to
+  library position min(3, size+1) from the top (a short library takes it at the bottom); no RNG. The "may" is a
+  SEARCHED branch in both worlds: every cast that kills an Ilharg (Decimator's emerge off Ilharg, a second Ilharg with
+  one on our battlefield, or a second copy the same plan casts) is twinned tuck / leave (`Action::dies_tuck`), and
+  the attack put of a second Ilharg carries it in the put pin. Signature tags only where the rider is live. Human
+  play: the `dig` yes/no ("(dies to library)"). Exile half: D3 PROVISIONAL bracket note.
+* Searched play now OFFERS a second Ilharg: `DuplicateEntryOrDeathHasUpside` counts the card's own death clause (the
+  duplicate-legend prune treated the cast as a tie). Autonomous d0 keeps the prune, as for every other legend.
+* **USER QUESTION -- agent-chosen playout policy:** beyond the search horizon (no pinned answer) the death takes
+  `DecisionProvider::DiesTuckDefault`: TUCK unless a same-name permanent stays on the battlefield. This is a playout
+  default the agent chose, not a USER ruling; it never applies inside the search window.
+* **`8521da210` (I4 lockstep bug found here):** the rollout's breakpoint-continuation cast record did not carry
+  `Action::emerge`, so the executor's replay re-cast a continuation's Decimator as the hard {10} cast (fd-diverge).
+  Fixed; the victim already rode the record. Unit case proves the replay realises the rollout's board exactly.
+* **Identity vs item 2** (20 g d3 b10 seed 9101, sorted wins): Kithkin, Critter Lifegain, Mirrorwing Dragon, Knights
+  IDENTICAL (no other deck holds Decimator or Ilharg). Audits: card_fields, card_costs (616/616 match), viewer
+  decisions (--no-sweep, clean) all rc 0. **Boars 40 g d3 b10: 40/40 avg 5.225**, wins byte-identical
+  to item 2; the tuck fires in 3 of 40 games. **No moved decks.** mtg-test 3002/3002.
+* **Owed:** with two Ilhargs in hand and none on the battlefield, the conditional twins build duplicate plans that
+  fold only at the plan signature (sound, wasteful; an earlier fold needs to know which copy is cast second).
+* Item 4 (legend-rule keep choice) remains: `logs/boars-research/I5b-handoff.md`.

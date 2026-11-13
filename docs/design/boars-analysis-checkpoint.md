@@ -47,7 +47,12 @@ run stands and what to do next.
     movers. Items 2-4 handed off: `logs/boars-research/I5b-handoff.md`.
   * I5b item 2 DONE `b268c794c`: per-attacker "attacks" trigger helpers (both combats + ResolveCombatDamage's
     Leeching/Utvara hooks) take SOURCES from the DECLARED prefix only (CR 508.4); "whenever you attack" unchanged.
-    2994/2994; 24 decks identical vs I5b item 1; Boars 40/40 avg 5.225 byte-identical; no movers. Items 3-4 remain.
+    2994/2994; 24 decks identical vs I5b item 1; Boars 40/40 avg 5.225 byte-identical; no movers. Items 3-4 remained.
+  * I5b item 3 DONE `1c3871699` (+ I4 emerge-record lockstep fix `8521da210`): Ilharg's dies clause
+    (`dies_to_library_position` 3, searched tuck/leave twins in both worlds, dig viewer; searched play now offers a
+    second Ilharg). 3002/3002; Kithkin / Critter Lifegain / Mirrorwing Dragon / Knights identical vs item 2; Boars
+    40/40 avg 5.225 wins byte-identical (tuck fires in 3/40). No movers. Item 4 (legend-rule keep) remains;
+    owed: class-(c) duplicate-plan fold; USER Q: DiesTuckDefault playout policy.
   * I5b TODO (original list; (2) is now done): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
