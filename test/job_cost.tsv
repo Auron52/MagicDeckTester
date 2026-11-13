@@ -1,7 +1,7 @@
 # Per-job work UNITS per game, from the last accepted run of each key (test/lib/job_cost.py).
 # Scheduling only (regression.sh turns it into the job's LPT weight) -- never a result.
 alchemist2hg_smoke_d3_s1001	26439
-alchemist2hg_smoke_d5_s1001	31316
+alchemist2hg_smoke_d5_s1001	31166
 alchemist_overnight_d0_s10010	1
 alchemist_overnight_d0_s4004	1
 alchemist_overnight_d0_s6006	1
@@ -24,8 +24,8 @@ alchemist_regression_d5_s2002	23623
 alchemist_regression_d5_s3003	19284
 alchemist_regression_d5_s30211	70890
 alchemist_smoke_d0_s1001	1
-alchemist_smoke_d3_s1001	21456
-alchemist_smoke_d5_s1001	19081
+alchemist_smoke_d3_s1001	21476
+alchemist_smoke_d5_s1001	19276
 angels2hg_overnight_d5_s4004	5087
 angels2hg_overnight_d5_s5005	4888
 angels2hg_overnight_d5_s6006	3984
@@ -143,7 +143,7 @@ breaching_smoke_d0_s1001	1
 breaching_smoke_d3_s1001	100
 breaching_smoke_d5_s1001	55
 bruna2hg_smoke_d3_s1001	87681
-bruna2hg_smoke_d5_s1001	32402
+bruna2hg_smoke_d5_s1001	32401
 bruna_overnight_d0_s10010	1
 bruna_overnight_d0_s4004	1
 bruna_overnight_d0_s6006	1
@@ -166,8 +166,8 @@ bruna_regression_d5_s2002	14263
 bruna_regression_d5_s3003	13851
 bruna_regression_d5_s30221	1606
 bruna_smoke_d0_s1001	1
-bruna_smoke_d3_s1001	12455
-bruna_smoke_d5_s1001	15792
+bruna_smoke_d3_s1001	12456
+bruna_smoke_d5_s1001	15793
 burn2hg_smoke_d3_s1001	11885
 burn2hg_smoke_d5_s1001	21556
 burn_overnight_d0_s10010	1
@@ -244,7 +244,7 @@ creature_giving_regression_d5_s2002	9340
 creature_giving_regression_d5_s30001	28038
 creature_giving_regression_d5_s3003	8355
 creature_giving_smoke_d0_s1001	1
-creature_giving_smoke_d3_s1001	9355
+creature_giving_smoke_d3_s1001	9356
 creature_giving_smoke_d5_s1001	9000
 critter2hg_smoke_d3_s1001	4889
 critter2hg_smoke_d5_s1001	1176
@@ -272,7 +272,7 @@ critter_regression_d5_s3003	788
 critter_smoke_d0_s1001	1
 critter_smoke_d3_s1001	2219
 critter_smoke_d5_s1001	727
-cyclone2hg_smoke_d3_s1001	54863
+cyclone2hg_smoke_d3_s1001	53861
 cyclone_overnight_d0_s10010	1
 cyclone_overnight_d0_s4004	1
 cyclone_overnight_d0_s6006	1
@@ -295,8 +295,8 @@ cyclone_regression_d5_s2002	54638
 cyclone_regression_d5_s3003	56957
 cyclone_regression_d5_s30031	318953
 cyclone_smoke_d0_s1001	1
-cyclone_smoke_d3_s1001	47099
-cyclone_smoke_d5_s1001	58711
+cyclone_smoke_d3_s1001	46852
+cyclone_smoke_d5_s1001	58880
 dragons2hg_smoke_d3_s1001	5994
 dragons2hg_smoke_d5_s1001	5225
 dragons_overnight_d0_s10010	1
@@ -347,7 +347,7 @@ dragonstorm_regression_d5_s2002	1477
 dragonstorm_regression_d5_s3003	1822
 dragonstorm_regression_d5_s30201	527
 dragonstorm_smoke_d0_s1001	1
-dragonstorm_smoke_d3_s1001	2737
+dragonstorm_smoke_d3_s1001	2735
 dragonstorm_smoke_d5_s1001	1878
 edf2hg_smoke_d3_s1001	8309
 edf2hg_smoke_d5_s1001	8880
@@ -400,7 +400,7 @@ elementals_regression_d5_s30001	19807
 elementals_regression_d5_s3003	17676
 elementals_smoke_d0_s1001	1
 elementals_smoke_d3_s1001	15357
-elementals_smoke_d5_s1001	23112
+elementals_smoke_d5_s1001	23113
 extraturns2hg_overnight_d5_s4004	20918
 extraturns2hg_regression_d5_s2002	17858
 extraturns2hg_smoke_d5_s1001	6493
@@ -427,7 +427,7 @@ fivecolour2hg_overnight_d5_s7007	72132
 fivecolour2hg_regression_d3_s2002	39213
 fivecolour2hg_regression_d5_s2002	102165
 fivecolour2hg_smoke_d3_s1001	35610
-fivecolour2hg_smoke_d5_s1001	87055
+fivecolour2hg_smoke_d5_s1001	87050
 fivecolour_overnight_d0_s10010	1
 fivecolour_overnight_d0_s4004	1
 fivecolour_overnight_d0_s6006	1
@@ -450,8 +450,8 @@ fivecolour_regression_d5_s2002	26685
 fivecolour_regression_d5_s3003	26595
 fivecolour_regression_d5_s30331	17124
 fivecolour_smoke_d0_s1001	1
-fivecolour_smoke_d3_s1001	13565
-fivecolour_smoke_d5_s1001	21373
+fivecolour_smoke_d3_s1001	13562
+fivecolour_smoke_d5_s1001	21371
 fluctuator2hg_overnight_d5_s4004	2290
 fluctuator2hg_overnight_d5_s5005	1350
 fluctuator2hg_overnight_d5_s6006	2602
@@ -617,7 +617,7 @@ hinata2hg_overnight_d5_s7007	47538
 hinata2hg_regression_d3_s2002	39219
 hinata2hg_regression_d5_s2002	65055
 hinata2hg_smoke_d3_s1001	32648
-hinata2hg_smoke_d5_s1001	55205
+hinata2hg_smoke_d5_s1001	55013
 hinata_overnight_d0_s10010	1
 hinata_overnight_d0_s4004	1
 hinata_overnight_d0_s6006	1
@@ -640,8 +640,8 @@ hinata_regression_d5_s2002	62218
 hinata_regression_d5_s30001	438976
 hinata_regression_d5_s3003	78813
 hinata_smoke_d0_s1001	1
-hinata_smoke_d3_s1001	71155
-hinata_smoke_d5_s1001	86493
+hinata_smoke_d3_s1001	71156
+hinata_smoke_d5_s1001	86467
 hydras2hg_overnight_d5_s4004	27323
 hydras2hg_regression_d5_s2002	21319
 hydras2hg_smoke_d5_s1001	36500
@@ -1021,7 +1021,7 @@ niv2hg_overnight_d5_s7007	33611
 niv2hg_regression_d3_s2002	15140
 niv2hg_regression_d5_s2002	27477
 niv2hg_smoke_d3_s1001	12096
-niv2hg_smoke_d5_s1001	25422
+niv2hg_smoke_d5_s1001	25415
 niv_overnight_d0_s10010	1
 niv_overnight_d0_s4004	1
 niv_overnight_d0_s6006	1
@@ -1040,8 +1040,8 @@ niv_regression_d3_s3003	12857
 niv_regression_d5_s2002	29534
 niv_regression_d5_s3003	24020
 niv_smoke_d0_s1001	1
-niv_smoke_d3_s1001	14607
-niv_smoke_d5_s1001	50142
+niv_smoke_d3_s1001	14602
+niv_smoke_d5_s1001	50137
 pd2hg_overnight_d5_s4004	39329
 pd2hg_overnight_d5_s5005	33321
 pd2hg_overnight_d5_s6006	39450
@@ -1079,7 +1079,7 @@ pirates2hg_overnight_d5_s5005	12213
 pirates2hg_overnight_d5_s6006	14559
 pirates2hg_overnight_d5_s7007	15500
 pirates2hg_smoke_d3_s1001	14680
-pirates2hg_smoke_d5_s1001	14268
+pirates2hg_smoke_d5_s1001	14264
 pirates_overnight_d0_s10010	1
 pirates_overnight_d0_s4004	1
 pirates_overnight_d0_s6006	1
@@ -1102,8 +1102,8 @@ pirates_regression_d5_s2002	4329
 pirates_regression_d5_s30001	5382
 pirates_regression_d5_s3003	4685
 pirates_smoke_d0_s1001	1
-pirates_smoke_d3_s1001	6082
-pirates_smoke_d5_s1001	4485
+pirates_smoke_d3_s1001	6080
+pirates_smoke_d5_s1001	4484
 selesnyav22hg_overnight_d5_s4004	6868
 selesnyav22hg_overnight_d5_s5005	4764
 selesnyav22hg_overnight_d5_s6006	5368
