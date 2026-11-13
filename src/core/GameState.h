@@ -1116,6 +1116,14 @@ struct GameState
     // PROVISIONAL deferral. Nothing to fold: it never changes play. DEFAULT FALSE: every other deck (and an
     // unstamped unit-test state) skips the check.
     bool                     deck_has_draw_cap : 1           = false;
+    // 2026-11-13 (Spirits, Usher of the Fallen's BOAST), a BITFIELD in the same byte (sizeof(GameState)
+    // unchanged): the mainboard holds a card with CardParams::activate_only_if_attacked_this_turn. DECK CONSTANT
+    // (StampDeckTraits); arms NoteAttacksDeclared's per-attacker count for such an attacker ONLY (no other
+    // creature's count is ever set, so no key fragments), deliberately NOT deck_has_extra_combat, which also
+    // switches on the rollout's phase stamps and switches off kill-only shortcuts. DEFAULT FALSE: an
+    // unstamped state counts nothing (a unit test sets it). Never folded (deck constant); the count it arms
+    // is folded wherever Moraug's already is (BuildSimKey, dominance::Build, the fungibility keys).
+    bool                     deck_has_attack_count : 1       = false;
     // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
     // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
     // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a

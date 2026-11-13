@@ -4290,6 +4290,12 @@ public:
     // card remains in our library (a SOUND prune: with none, the trade loses a land and finds
     // nothing, and no card in the Spirits 60 reads a land in the graveyard or a land dying).
     bool OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const override;
+    // Usher of the Fallen's BOAST: the narrow post-combat main (BoastSecondMainLive / IsBoastActivation,
+    // DecisionProviders.cpp) -- opened only on a turn an attacked, un-boasted Usher can pay its {1}{W},
+    // and its menu is the boast activations alone (soundness argument at the definition).
+    bool RestrictedSecondMainLive(const GameState& s) const override;
+    bool MayOpenRestrictedSecondMain() const override { return true; }
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
 };
 
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.
@@ -5037,6 +5043,12 @@ inline const DecisionProvider& ResolveProvider(const GameState& s)
 // already plays a full second main: its phase is open anyway, and the restricted menu must not
 // narrow it. One virtual call that returns false for every other provider.
 inline bool ProviderSecondMainLive(const GameState& s);   // below
+// BOAST (Usher of the Fallen; CardParams::activate_only_if_attacked_this_turn on a pay_token_cost source): is a
+// boast live and payable on THIS post-combat state, and is this collected action a boast? The phase test and
+// the menu test of SpiritsProvider's restricted second main (DecisionProviders.cpp, with the soundness
+// argument); shared so a future boast deck's provider reuses the same pure-state predicate.
+bool BoastSecondMainLive(const GameState& s);
+bool IsBoastActivation(const Action& a);
 // Is an ADDITIONAL-COMBAT source (Moraug, Fury of Akoum: landfall_additional_combat) on OUR battlefield? Then
 // THIS turn's post-combat main is live: a land that enters there queues a combat after it, which no main-1
 // line can produce (a main-1 landfall's combat precedes the regular one, and the regular one does not untap

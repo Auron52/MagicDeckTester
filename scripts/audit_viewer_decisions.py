@@ -952,6 +952,7 @@ INERT_PARAMS = {
     "discard_team_pump_toughness": "Stromkirk Condemned pump detail (rides discard_team_pump_power -> discard / activate)",
     "discard_team_pump_subtypes": "Stromkirk Condemned pump recipient filter ('Vampires you control' -- exhaustive, no target)",
     "activate_once_each_turn": "'Activate only once each turn' RESTRICTION (per object) -- a legality gate, not a choice",
+    "activate_only_if_attacked_this_turn": "Boast's 'Activate only if this creature attacked this turn' RESTRICTION (Usher of the Fallen) -- a legality gate on the pay_token_cost activation (offered as a main_phase plan action in the human's main 2), not a choice",
     "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
     "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
     # ---- Kessig Wolf Run (2026-10-22) -- the pump's magnitudes and its keyword rider ----

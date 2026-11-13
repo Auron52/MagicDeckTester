@@ -2260,6 +2260,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     for (const std::string& s : params.value("discard_team_pump_subtypes", json::array()))
         p.discard_team_pump_subtypes.push_back(s);
     p.activate_once_each_turn        = params.value("activate_once_each_turn", false);
+    p.activate_only_if_attacked_this_turn = params.value("activate_only_if_attacked_this_turn", false);
     if (params.contains("tap_blood_cost"))
         p.tap_blood_cost = ManaCostFromString(params["tap_blood_cost"].get<std::string>());
     p.tap_blood_cost_less_per_subtype = params.value("tap_blood_cost_less_per_subtype", std::string{});

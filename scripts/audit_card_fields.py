@@ -162,6 +162,12 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # the same shape as ascend above. Not a keyword tag; grants no evasion and changes no combat
     # legality, so stripping it cannot mask a missing combat keyword.
     "storied",
+    # Boast (CR 702.142, Usher of the Fallen): an ACTIVATED ability with two activation restrictions,
+    # modeled structurally -- pay_token_cost (PermAbilityMode::PayToken) + activate_only_if_attacked_this_turn
+    # + activate_once_each_turn, checked by PermAbilitySourceLive in both worlds. KeywordFromString THROWS on an
+    # unmapped tag, and boast grants no evasion and changes no combat legality, so stripping it cannot mask a
+    # missing combat keyword.
+    "boast",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing: the World rule
 # never fires (one permanent). Legendary (legend rule), Snow (snow mana) and -- since 2026-10-15 --
