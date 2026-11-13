@@ -525,4 +525,25 @@ then lower card number. It orders the playout only; inside the window every opti
   route to a mid-main draw; candidate for a post-combat fold).
 * Exalted is still dropped when more than one creature attacks (lockstep with the current engine) -- I5b.
 * No dedicated real-resolution node: the put is a combat pin like Militia's Pride, chosen before combat.
-* Pre-existing attack-trigger helpers do not yet fire for put creatures (they are undeclared attackers) -- I5b.
+* Pre-existing per-attacker attack-trigger helpers took put creatures as SOURCES (wrong: CR 508.4) -- fixed in I5b item 2.
+
+## I5b items 1-2 done (2026-11-13) -- declared-attacker rules fixes the Ilharg put exposed
+
+* **Item 1 `b8f9c7ba5`:** exalted's "attacks alone" counts the DECLARED attackers (CR 506.5 / 702.83) in both combats
+  and the put projection. 9 decks identical vs I5a; Boars 40/40 avg 5.225 byte-identical.
+* **Item 2 `b268c794c`:** a creature put onto the battlefield attacking (Ilharg's put, Hero/Adeline tokens, Militia's
+  Pride) was never declared (CR 508.4), so every per-attacker "whenever this / a <type> creature attacks" helper now
+  takes its SOURCES from the declared prefix of the attacker list only, in both combats: self pumps (incl. Kragma's
+  matching pump), battle cry (recipients still everyone), annihilator, exile-defender-top, attack draws, Goblin Guide,
+  Jorn's untap, Bogbeast's team pump, Hero's creature-scoped tokens, Bruna's gather, dig-attach, Omnitool's dig,
+  Surtland's fling, and ResolveCombatDamage's Leeching Sliver life loss / Utvara tokens. Raubahn's attach and the
+  fling rebuild the list by number, so the declared count is recounted after them. Player-level "whenever you
+  attack" (Adeline) is unchanged; every attacker still deals combat damage. 4 unit cases; mtg-test 2994/2994.
+* **Identity vs item 1 (20 g d3 b10 seed 9101, sorted wins):** Knights, White Knights, Kithkin, Angels, Soldiers,
+  Goblins, Bruna, Minotaur, Selesnya Lifegain, Snow, Giants, Kitty Equipment, Colossus Hammer, Five Colour, Extra
+  Turns, Dragons, Slivers, Pirates, Jumbo Cactuar, Burn, Hydras, Vampires, Fungus, Stompy Surprise: all IDENTICAL.
+  **Boars 40 g: 40/40 avg 5.225**, byte-identical. **No moved decks, no GT to re-accept** for items 1-2: no suite
+  deck's undeclared body is itself a source of one of these triggers.
+* Residual (projection only): `ApplyAttackPutProjection` makes the put body an ordinary attacker, so the projection
+  could credit a put body's own attack trigger. No Boars put target has one that the projection prices.
+* Items 3 (Ilharg dies clause) and 4 (legend-rule keep choice) remain: `logs/boars-research/I5b-handoff.md`.
