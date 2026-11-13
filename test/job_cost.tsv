@@ -993,7 +993,7 @@ modernrwburn_smoke_d3_s1001	4288
 modernrwburn_smoke_d5_s1001	8282
 morph2hg_overnight_d5_s4004	230688
 morph2hg_regression_d5_s2002	18532
-morph2hg_smoke_d5_s1001	17496
+morph2hg_smoke_d5_s1001	17497
 morph_overnight_d0_s10010	1
 morph_overnight_d0_s4004	1
 morph_overnight_d0_s6006	1
@@ -1013,7 +1013,7 @@ morph_regression_d5_s30001	12633
 morph_regression_d5_s3003	5638
 morph_smoke_d0_s1001	1
 morph_smoke_d3_s1001	5329
-morph_smoke_d5_s1001	5926
+morph_smoke_d5_s1001	5936
 niv2hg_overnight_d5_s4004	36658
 niv2hg_overnight_d5_s5005	25828
 niv2hg_overnight_d5_s6006	30435
