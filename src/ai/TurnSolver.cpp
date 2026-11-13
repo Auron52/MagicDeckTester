@@ -102195,7 +102195,7 @@ namespace p18
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false; double lean = 1.0, mr = 2.0, ppr = 0.0; };
+                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102236,6 +102236,13 @@ namespace p18
         // below (est_{k-1}^2 / est_{k-2}, est_1 = the real pass-1 cost) refuses it outright when it exceeds F x the admit
         // threshold, so a pass the ladder would never start costs no leafless tree. Inert at an unlimited budget.
         num("_ppr", o.ppr);
+        // _pfr<10F>: FREE REFUSAL (with _pb1 + _prx2). Pricing pass 2 serves only pass 3's check, so before pass 2's
+        // leafless tree is built the heuristic ladder's own extrapolation on the one real cost known (c1; c2 ~ c1 x
+        // growth, c3 ~ c2^2/c1) is asked whether pass 3 could fit what pass 2 leaves: when the prediction exceeds F x
+        // the ladder's own admit line the gate prices nothing and hands the decision to the heuristic ladder from pass 2
+        // (pass 2 on rollouts, its real c2^2/c1 check decides pass 3). The refusal costs nothing, and its verdict is
+        // the ladder's own on real costs, so it can only remove pricing. Inert at an unlimited budget.
+        num("_pfr", o.fr);
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -111031,6 +111038,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 p18_force2 = true; priced = static_cast<double>(c1); p18_est[1] = priced;
                 if (p1.win_turn <= max_turns) { wb_prev = p1.win_turn; p18_wb = p1.win_turn; }
                 continue;
+            }
+            if (kn.fr > 0.0 && kn.rx2 && !unl && !kn.verify && k == 2 && p18_force2 && depth >= 3 && p18_est[1] > 0.0)
+            {
+                const double e2 = p18_est[1] * kDefaultGrowth;          // the ladder's bootstrap guess at c2
+                const double e3 = e2 * e2 / p18_est[1];                 // its c3 = c2^2 / c1
+                const double rem3 = std::max(0.0, static_cast<double>(budget->Remaining()) - e2);
+                const bool fits3 = g_reserve_value_pass ? (e3 + e3 <= kn.fr * gate_alpha * rem3) : (e3 <= kn.fr * gate_alpha * rem3);
+                if (!fits3)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({3, 0, 0, gate_alpha * rem3, e3, 0.0, 0, 0, 0, 0, std::string("pfr")}); }
+                    p18_K = 2; p18_stop = 3; break;               // the heuristic ladder decides pass 3 on real costs
+                }
             }
             if (kn.ppr > 0.0 && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
             {
