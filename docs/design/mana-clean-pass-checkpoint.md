@@ -1190,6 +1190,12 @@ fungus 1,880, gods 4,300 (first run).
     line cast Pit Fighter {R} + Markov Baron {2}{B} off Voldaren Estate + Unclaimed Territory + 2 convoke with life
     staying 17 -- the Estate's free {C} paid a colour pip without the 1 life (illegal); the new line casts Pit Fighter
     only, same win turn. Accepted (regression GT); check_gt_logs clean (1146 consistent).
+  * **Gate (PGO, src 3665c5524c7e), one pooled mana_clean run, identity byte-identical on all three:** gods 20000-24999:
+    369 issues (block 15000-19999: 4231; CAPPED-DECISION 3691 -> 258 and CAPPED 356 -> 15 are block variance of the
+    two heavy decisions, ENUM-GAP 111 -> 59, ORACLE-GAP 20 -> 25 = the parked surplus-`wild` class, APPLY-DROP 43 -> 6).
+    prevent_damage 17000-21999: 2823 issues (was 3775 on 3bda5c647e7c; ORACLE-GAP 250 -> 193, top signatures are
+    Ancient Tomb / Manabarbs / Dina, not the costly-colour lands). **vampires 220000-224999: CLEAN (0 issues)** on the
+    new src (was stale-clean). Report logs/mana_clean/20261113-043936/report.md; recorded in test/mana_clean.json.
   * **PARKED (USER QUESTION) -- s30018016 T6 {Careful Study + Magus}, s30018089 T5 [ordered] {Looting + Magus}, and by
     the same shape the rest of the 20 gods ORACLE-GAP flags of gate 15000-19999.** Traced with `MTG_TAPDBG` (TFCD lines). The prepay
     pays the bill ({U} + {1}{U}, resp. {R} + {1}{U}) and books the generic's COLOUR funding as `wild`: s30018016 taps

@@ -3374,6 +3374,53 @@
      "seed": 30015000,
      "src": "a1c7b02fc837de0e5ce235ab90bab04d8b51b527",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 6,
+      "CAPPED": 15,
+      "CAPPED-DECISION": 258,
+      "CONTINUATION-DIFFERS": 343,
+      "DECISION-COST": 1,
+      "DOMINATED-LAND": 1307,
+      "DOMINATED-LIFE": 777,
+      "DROP-COVERED": 560,
+      "ENUM-GAP": 59,
+      "ORACLE-GAP": 25,
+      "PHANTOM": 243,
+      "UNMODELED": 6
+     },
+     "commit": "1e3a6761a81fe69c9e64ed6a0321d07427cd746c",
+     "date": "2026-11-13T05:04:54Z",
+     "decisions": 48832,
+     "deck": "decks/Gods/Gods.cod",
+     "deck_sha": "41dacd51f7cde5d6a34f8b264d5753295eab84d8",
+     "game_index": 20000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 369,
+     "life_breakpoints": [],
+     "ms_off": 13525348,
+     "ms_on": 18222129,
+     "report": "logs/mana_clean/20261113-043936/report.md",
+     "run": "20261113-043936",
+     "seed": 30020000,
+     "src": "3665c5524c7e1861b2cbd576be2171b584c28e00",
+     "verdict": "issues"
     }
    ]
   },
@@ -6911,6 +6958,51 @@
      "seed": 30012000,
      "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 20,
+      "APPLY-DROP-ORDER": 29,
+      "CAPPED": 106,
+      "CONTINUATION-DIFFERS": 85,
+      "DOMINATED-LAND": 9156,
+      "DOMINATED-LIFE": 12822,
+      "DROP-COVERED": 4,
+      "ORACLE-GAP": 193,
+      "PHANTOM": 107,
+      "UNMODELED": 2475
+     },
+     "commit": "1e3a6761a81fe69c9e64ed6a0321d07427cd746c",
+     "date": "2026-11-13T05:04:54Z",
+     "decisions": 49562,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 17000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 2823,
+     "life_breakpoints": [],
+     "ms_off": 3835903,
+     "ms_on": 13796709,
+     "report": "logs/mana_clean/20261113-043936/report.md",
+     "run": "20261113-043936",
+     "seed": 30017000,
+     "src": "3665c5524c7e1861b2cbd576be2171b584c28e00",
+     "verdict": "issues"
     }
    ]
   },
@@ -8776,6 +8868,46 @@
      "run": "due6-20261112",
      "seed": 30215000,
      "src": "fb290380807181e813aaae19a3ef21fd80d759f4",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 648,
+      "DOMINATED-LAND": 126,
+      "DOMINATED-LIFE": 1980,
+      "DROP-COVERED": 585,
+      "PHANTOM": 227
+     },
+     "commit": "1e3a6761a81fe69c9e64ed6a0321d07427cd746c",
+     "date": "2026-11-13T05:04:54Z",
+     "decisions": 37388,
+     "deck": "decks/Vampires/Vampire.cod",
+     "deck_sha": "05203a82cccc57fdd85568e2dd4db39ed04e0528",
+     "game_index": 220000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 559854,
+     "ms_on": 909386,
+     "report": "logs/mana_clean/20261113-043936/report.md",
+     "run": "20261113-043936",
+     "seed": 30220000,
+     "src": "3665c5524c7e1861b2cbd576be2171b584c28e00",
      "verdict": "clean"
     }
    ]
