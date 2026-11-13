@@ -558,3 +558,19 @@ FULLY MODELLED. `fetch_hold_review.required = true` (Flooded Strand, hold modell
     - `martyr_smoke_d0` and `martyr_smoke_d5` changed digest at an UNCHANGED score (6.0680, 5.2500): Lurrus casts now happen at their rank.
     - Searched: slower 1 (the known gods gi19), faster 3, play-changed 80 (+1 vs B). d0 play-changed 920 (+20, martyr).
     - No searched game is slower because of E2.
+
+## Stage 4 — baseline profile + provider (2026-11-13, HEAD after 3cd5102bb)
+`analyze_deck.py --no-rebuild` wrote `decks/Spirits/Spirits.profile.json` (card scores + static/default
+mulligan; no exhaustive keep/bottom table — that is the later, user-initiated stage). `mulligan_flags: []`.
+Cost diagnostic: **COST_NEUTRAL** (the reframe neither helps nor hurts; the generic same-turn credits already
+handle the deck's cost interactions). `provider_audit.py --check`: Spirits → **SpiritsProvider**
+(cert=NotAssessed), rc 0.
+Discard evidence: **DISCARD_UNLABELLED**. 0 real cleanup sheds in 400 d3 games, but 30,685 rollout sheds, all taking
+index 0 of the generic ranking. Next step: bound the axis with `MTG_SHED_WORST=1` vs default, ≥150 games per cell, at d3 and d5.
+
+## Stage 5 — verify_deck.py (2026-11-13, first full run)
+- **PASS:** coverage (23/23 full), card_costs, card_fields (769 vs snapshot), viewer (self-guard + surface sweep), viewer_wiring
+  (bounce, dig, land_entry, tutor_etb, vial_charge), mismatch, play_invariants (8 games / 130 decisions).
+  - mismatch: **0 nonconv / 0 fd-diverge** across seeds 7001/8001 × 60 games, both arms.
+- **FAIL, as expected at this stage:** regression_tiers, suite (not yet in `test/regression_cases.sh`; added at 4-bis/5j).
+- **SKIP:** claude_sweep (running: 16 Sonnet players, seeds 777000+gi, gi 0-15; brief `logs/spirits/sweep/brief.md`).

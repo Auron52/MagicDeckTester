@@ -1,0 +1,94 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      -0.03208269338599212,
+      -0.3480825958702063
+    ],
+    "Azorius Chancery": [
+      -0.12134461009174302
+    ],
+    "Drogskol Captain": [
+      -0.02448604992657799,
+      0.16217948717948705
+    ],
+    "Flooded Strand": [
+      0.23505392613283682,
+      -0.2159567039106145
+    ],
+    "Geist of Saint Traft": [
+      -0.03666769062478892
+    ],
+    "Godless Shrine": [
+      -0.07941881708152554
+    ],
+    "Hallowed Fountain": [
+      0.017788809597682587
+    ],
+    "Island": [
+      -0.04184314599691241
+    ],
+    "Lingering Souls": [
+      -0.1900995024875618
+    ],
+    "Mausoleum Wanderer": [
+      0.30045404047722535,
+      0.14129353233830866
+    ],
+    "Metallic Mimic": [
+      0.02110954395862663
+    ],
+    "Millicent, Restless Revenant": [
+      -0.21959728867623607
+    ],
+    "Patrician Geist": [
+      0.008114427176454164,
+      -0.205741626794258
+    ],
+    "Plains": [
+      -0.016061066592981454
+    ],
+    "Secluded Courtyard": [
+      0.0024087751079973074,
+      -0.07512206600388271
+    ],
+    "Shacklegeist": [
+      -0.10110781713215733
+    ],
+    "Skyclave Apparition": [
+      -0.13361244019138763
+    ],
+    "Spirit of the Labyrinth": [
+      0.06856060606060588
+    ],
+    "Supreme Phantom": [
+      0.1879739978331525,
+      -0.11265684669939979
+    ],
+    "Unclaimed Territory": [
+      0.013368204091157132,
+      0.029092071611253267
+    ],
+    "Usher of the Fallen": [
+      0.2782614829594703,
+      -0.05497805497805519
+    ],
+    "Watery Grave": [
+      -0.103672649460675
+    ],
+    "White Orchid Phantom": [
+      -0.009135088915586564
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
