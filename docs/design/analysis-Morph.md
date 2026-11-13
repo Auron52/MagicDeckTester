@@ -305,6 +305,42 @@ the durable record).
   (worktree morph-exalted). As dealt, Temur Battle Rage gave a second kill on that board under every flag setting:
   Might + Berserk + TBR = (8+1) x2 = 18.
 
+### INT-13 (2026-11-13) -- E lethal-only ADOPTED on USER ruling
+- The question (INT-8, repeated INT-9/10): "E (Berserk first) ... Amend to 'Berserk first within the projected-lethal
+  plans only'?" USER (verbatim, 2026-11-13): **"Berserk is rarely great outside of lethal lines, so sure."**
+- Change (commit `ca701dc62`): `MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY` is now DEFAULT ON (`EnvOn(..., true)`; per-job
+  heurarm slot MORPH_BERSERK_FIRST_LETHAL). `PlanMoveOrderFront` fronts a Berserk plan (or Den Protector regrowing
+  Berserk) only when the plan is projected lethal (`wins_this_turn`). `=0` restores E as first ruled (every Berserk
+  plan fronted). FaceUpRegrowOrder (Den's regrowth order) is unchanged. Unit test: the default is lethal-only and
+  `t_arm=0` gives the unconditional tier. mtg-test 2944/2944, scenarios 509/509.
+- `=0` byte-identity: the morph smoke rows d3, d5 and 2HG d5, run with the flag false, reproduce the pre-change GT
+  digests exactly (5c6ff259 / 5b4eedaa / af1aa158).
+- Held-out A/B on the current tree (HEAD 253fab0d2 + the change: the exalted fix, INT-10 folds and the adopted keep
+  table are all in). Seeds 80000+ morph 1000 / 82000+ morph2hg 300 (no tier or INT-8/9/10 seed), play settings
+  d5 b20, ONE pooled batch with per-job flags, same binary for both arms. OFF = `MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY=0`
+  (the behaviour before this change). Unwon = 9 in the sum. Output: build/scratch/elethal/ab, summary
+  logs/morph/elethal/ (worktree morph-exalted).
+
+  | deck     | games | OFF avg | ON avg | ON faster / slower | sum (turns) | games whose line changed | units ON / OFF |
+  |----------|-------|---------|--------|--------------------|-------------|--------------------------|----------------|
+  | morph    | 1000  | 4.0350  | 4.0350 | 0 / 0              | 0           | 130                      | 5,002,247 / 5,676,338 = 0.881 |
+  | morph2hg | 300   | 4.7300  | 4.7267 | 1 / 0 (gi242 6->5) | -1          | 35                       | 4,761,539 / 5,453,469 = 0.873 |
+
+  No game is slower with ON, so the d8 b0 recovery bar holds trivially (nothing to recover). The amendment is
+  quality-neutral to slightly better, and costs about 12-13% fewer units. INT-9 measured 5-7% fewer units, on a tree
+  without the keep table and the INT-10 folds. Wall ratios (0.82 / 0.99) are not a verdict here: the batch asked for
+  32 workers on a 24-CPU affinity mask, and units are the thread-invariant measure.
+- GT ACCEPTED (smoke + regression, binary `ca701dc62`). ONLY morph / morph2hg rows moved. Every other deck is
+  byte-identical, and so are morph d0 and both budget-0 backstops.
+  Smoke: morph d3 3.9800 = and d5 4.0600 = (play-changed only), morph2hg d5 4.4800 -> 4.4400 (gi11 T5 -> T4).
+  Searched slower 0 / faster 1 / play-changed 31; d0 unchanged.
+  Regression: morph d3 s2002 4.0267 =, d5 s2002 4.0400 =, d5 s3003 4.1200 =, morph2hg d5 4.6800 -> 4.6667 (gi56
+  T7 -> T6). Searched slower 0 / faster 1 / play-changed 50; d0 unchanged.
+  References: 343 ok / 492 repaired / 1 beaten / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap /
+  0 mull-drift / 0 contract-fail (836); REQUIRE-BEAT 2/2. `check_gt_logs.py`: 1146 consistent, 0 stale.
+  A typical line change (smoke 2HG gi5, identical deal): the old line cast a non-lethal Berserk on T2 (opp 30). The new
+  line plays Forest + Might of Old Krosa x2 instead; both win T5. This is the INT-8 gi245 mechanism.
+
 ### Provider routing A/B (2026-11-12, HEAD 2c2dc16f7) -- MorphProvider vs the pre-INT-1 route (AntiLifegain)
 - Same binary, same seeds (930000 block), two concurrent 12-thread batches; arm B pinned with MTG_PROVIDER_DECK to
   decks/Anti-Lifegain (the provider Wooded Foothills routed this list to before INT-1). Avg win turn:
@@ -735,8 +771,8 @@ attack this turn."; each an EnvOn + HeuristicArm slot, off under human play and 
   incomparable). Judgement -- would need a USER ruling and an A/B.
 - P5. 77% of the play-setting units are mulligan bottom TRIALS. Not a branching problem: the keep table the mulligan
   generation is about to produce removes them from play (and from the value-leaf stage after it).
-- Still open from INT-8/9: E lethal-only (recommended), R12's no-second-target TBR at enumeration, R11 for unkicked
-  Vines, C inside continuations, the fetch-rule variance games.
+- Still open from INT-8/9: R12's no-second-target TBR at enumeration, R11 for unkicked Vines, C inside
+  continuations, the fetch-rule variance games. (E lethal-only: CLOSED, adopted on the USER's ruling in INT-13.)
 
 **6. Held-out A/B -- (a) + (b)** (seeds 70000+ morph 1000 / 72000+ morph2hg 300, play settings d5 b20, ONE pooled batch,
 23 threads, per-job flags; base = HEAD 3bd89f38f `build/scratch/int10/mtg.head`, same seeds, its own batch). f/s and sum
@@ -789,7 +825,7 @@ OVERNIGHT not re-run (USER: occasional, not per change).
   judgement prunes, so they are default ON; (a) is the direct extension of "Never pump a creature that can't attack
   this turn." to main 2. Say if you want either off.
 - (c) is an engine identity fold, play-identical on the held-out set.
-- Open from INT-8/9 still: E lethal-only, R12, R11, C in continuations, the fetch-rule variance games.
+- Open from INT-8/9 still: R12, R11, C in continuations, the fetch-rule variance games (E lethal-only: adopted, INT-13).
 
 ### INT-11 result (2026-11-12) -- rebased onto origin/phase-1-2-deck-analyzer 9ba5851a1; GT re-established
 The 27 morph-analysis commits are replayed onto `9ba5851a1`, which adds 45 origin commits: payer and mana-oracle item-6
