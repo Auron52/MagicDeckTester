@@ -21844,6 +21844,84 @@ bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int contro
     return false;
 }
 
+// ---- SpiritsProvider: Usher of the Fallen's BOAST -- the narrow post-combat main ------------------
+//
+// THE GAP. "Boast -- {1}{W}: Create a 1/1 white Human Warrior creature token. (Activate only if this creature
+// attacked this turn and only once each turn.)" The ability is legal only AFTER attackers are declared, and
+// Spirits plays no second main (uses_second_main false), so without a post-combat window the boast was
+// unfindable at any budget. Instant-speed timing collapses to that window's activation pass (the token never
+// attacks this turn wherever it is made, and there is no opponent-turn priority window to spend mana in).
+//
+// THE PHASE OPENS (RestrictedSecondMainLive -- a pure function of the post-combat state, so the executor's
+// TakeTurn gate, the rollout's per-turn main 2, FSLineTail and the branch-site loops all agree; the attack
+// count and once-each-turn bit it reads are folded into every key) only when some Usher we control passes the
+// shared boast gate (PermAbilitySourceLive: attacked this turn, not yet boasted) and the pool can pay its
+// effective {1}{W} (AvailableManaPool, colour-blind about Unclaimed Territory -- a SUPERSET: an over-open phase
+// offers only "pass", never a wrong line; the apply pays through the real creature-ability scope). A lethal
+// attack never reaches it (every post-combat site sits behind OpponentHasLost()).
+//
+// THE MENU (RestrictedSecondMainAdmits) is the boast activations and nothing else. The search still branches
+// over it -- pass, or any subset of the live Ushers -- so this is a provider RESTRICTION, never a pick, and no
+// boast count is ever forced (no max-K prune is applied here; one would need its own dominance proof).
+//
+// WHY THE RESTRICTION LOSES NOTHING (the completeness test: everything stays findable at unlimited budget).
+// Combat creates NO resource in this 60 that main 1 lacked, checked card by card: no land or mana source
+// untaps or is created in combat; nothing is drawn; the opponent's board does not change (Skyclave Apparition /
+// White Orchid Phantom read nothing combat touches). The only permanents combat makes are Geist of Saint Traft's
+// Angel (exiled at end of combat, before this main) and Millicent's combat-damage Spirit tokens, which arrive
+// only while Millicent -- the deck's ONLY affinity card, legendary, one copy -- is already on the battlefield,
+// so they cheapen nothing castable afterwards; Mausoleum Wanderer's until-EOT pump and Metallic Mimic's
+// counters change no cost. No card here keys on the opponent having lost life (no spectacle, no Vampires gate).
+// So every refused cast / activation / Vial put / flashback was payable in main 1 from the same pool, and
+// casting it there is WEAKLY BETTER in a goldfish (a Spirit cast before combat is pumped by the lords, pumps
+// Mausoleum Wanderer, and can be pumped while attacking; an entry trigger lands earlier). Main 1 already
+// enumerates "hold {1}{W} for the boast" against "spend it", and the rollout reaches this same window on every
+// simulated turn, so the hold is priced. GOLDFISH- and LIST-SPECIFIC like the Giada / Speaker folds: re-derive
+// it for a real opponent, and for any card added to this list that creates a resource in combat (then the
+// phase must take the FULL menu, or the deck needs DeckUsesSecondMain).
+namespace
+{
+bool IsBoastDef(const CardDefinition* d)
+{
+    return d != nullptr && d->params.pay_token_cost.has_value() && d->params.activate_only_if_attacked_this_turn;
+}
+}   // namespace
+
+bool BoastSecondMainLive(const GameState& s)
+{
+    if (!s.deck_has_attack_count && !s.deck_has_extra_combat) { return false; }   // no count is ever set
+    const int me = s.active_player_index;
+    bool     built = false;
+    ManaPool have;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent || p.AttacksThisTurn() <= 0) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (!IsBoastDef(d) || !PermAbilitySourceLive(s, me, p.card.m_number, PermAbilityMode::PayToken)) { continue; }
+        if (!built) { have = AvailableManaPool(s); have.AddPool(s.floating_mana); built = true; }
+        if (have.CanPay(EffectiveActivationCost(s, me, p.card, *d->params.pay_token_cost))) { return true; }
+    }
+    return false;
+}
+
+bool IsBoastActivation(const Action& a)
+{
+    if (a.kind != Action::Kind::ActivatePermAbility || a.ability_mode != Action::AbilityMode::PayToken)
+    { return false; }
+    return IsBoastDef(a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name));
+}
+
+bool SpiritsProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    return BoastSecondMainLive(s);
+}
+
+bool SpiritsProvider::RestrictedSecondMainAdmits(const GameState& s, const Action& a) const
+{
+    (void)s;
+    return IsBoastActivation(a);
+}
+
 // The paired baseline is the AntiLifegain route this deck used before onboarding.
 // Ordered opaque casts make a burn spell's damage available before a later
 // spectacle cast, so the enumerator can price that cast at its legal live cost.

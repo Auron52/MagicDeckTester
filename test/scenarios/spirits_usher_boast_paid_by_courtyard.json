@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Unclaimed Territory",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 9,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator D), Usher's boast {1}{W} paid by Secluded Courtyard's {W}: the Courtyard's coloured mana may pay an ability of a creature (colored_creature_ability_ok), Unclaimed Territory's only creature SPELLS (it pays the {1} as {C}). Board: Usher 2/1 + Secluded Courtyard + Unclaimed Territory, filler Unclaimed Territory (the Courtyard is the ONLY {W} that can pay the boast, so one boast a turn). Correct: T3 2, T4 5, T5 9, T6 14 >= 10: win T6. If the Courtyard could not pay the ability there would be no boast at all: 2 a turn, T7. Opponent 10.",
+  "battlefield": [
+    { "name": "Secluded Courtyard" },
+    { "name": "Unclaimed Territory" },
+    { "name": "Usher of the Fallen", "sick": false }
+  ],
+  "hand": [],
+  "expect_win_turn": 6
+}

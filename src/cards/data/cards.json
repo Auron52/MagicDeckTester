@@ -16371,6 +16371,35 @@
    }
   },
   {
+   "name": "Usher of the Fallen",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "Boast — {1}{W}: Create a 1/1 white Human Warrior creature token. (Activate only if this creature attacked this turn and only once each turn.) [BOAST (CR 702.142) is the engine's first, modelled as Slimefoot's {T}-less mana-only token maker (pay_token_cost {1}{W}, PermAbilityMode::PayToken; one 1/1 white Human Warrior) plus the two printed activation RESTRICTIONS (CR 602.5b), both checked by the shared PermAbilitySourceLive gate that the enumeration, the breakpoint activation keys and both apply worlds consult: activate_only_if_attacked_this_turn reads Permanent::AttacksThisTurn() -- bumped at declare-attackers in both worlds (a creature DECLARED as an attacker, CR 508.1) for an attacker carrying this param, armed by the deck stamp deck_has_attack_count (NOT deck_has_extra_combat) -- and activate_once_each_turn reads Permanent::once_per_turn_used (PER OBJECT, set by the activation, reset at our untap in both worlds; four Ushers are four boasts). Both bits are folded into every state key. So no boast exists in main 1 and none twice: a K>1 block or a repeat payment is refused at its second activation. TIMING: the ability is legal only after attackers are declared and Spirits plays no full second main, so SpiritsProvider opens a NARROW post-combat main exactly on the turns an Usher that attacked still has its boast unused and the pool can pay {1}{W} (BoastSecondMainLive, a pure function of the post-combat state read at every post-combat site of both worlds -- executor, rollout, FS line tail, branch sites), and admits only boast activations there; the search branches over them (pass or any subset of the live Ushers -- the count is never forced). That restriction loses nothing: combat creates no resource in this 60 that main 1 lacked (no untap, no draw, no mana; Geist's Angel is gone at end of combat; Millicent's combat tokens arrive only while the one-copy affinity card is already out), so every refused play was payable, and weakly better, in main 1 -- the full argument sits at the definition (DecisionProviders.cpp). Human play keeps its full main 2, where the boast is a plan action. INSTANT-SPEED TIMING is collapsed to that phase's activation pass (the Falkenrath Pit Fighter precedent): a boast during combat or the end step yields the same state -- the token never attacks this turn and there is no opponent-turn priority window. The token is a Human Warrior, NOT a Spirit: no Spirit lord reaches it and it does not feed Millicent's affinity. Usher itself IS a Spirit (the lords pump it, it counts for affinity, Millicent triggers on its combat damage and death). PAYMENT: the {1}{W} is an ability of a CREATURE source, paid under CreatureAbilityPayScope in both worlds, so Secluded Courtyard's coloured mana may pay the {W} (colored_creature_ability_ok) while Unclaimed Territory's may not (creature SPELLS only) and pays only its {C}.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "pay_token_cost": "{1}{W}",
+    "pay_token_count": 1,
+    "pay_token_power": 1,
+    "pay_token_toughness": 1,
+    "pay_token_subtypes": [
+     "Human",
+     "Warrior"
+    ],
+    "pay_token_color": "W",
+    "activate_only_if_attacked_this_turn": true,
+    "activate_once_each_turn": true
+   }
+  },
+  {
    "name": "Millicent, Restless Revenant",
    "mana_cost": "{5}{W}{U}",
    "types": [

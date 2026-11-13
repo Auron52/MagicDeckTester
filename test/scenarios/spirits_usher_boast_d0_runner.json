@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 10,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 0,
+  "max_turns": 9,
+  "lands_played_this_turn": 1,
+  "resume_at": "main1",
+  "_comment": "Spirits (2026-11-13, integrator D), the DEPTH-0 runner (the greedy beyond-horizon policy) on the same board: Usher of the Fallen's BOAST through the real game. Board: Usher 2/1 (not sick) + 4 Plains, nothing castable (Plains filler). The boast is legal only AFTER Usher attacks, so it lives in SpiritsProvider's narrow post-combat main, ONCE per turn. Correct: T3 2 (token 1), T4 2+1 -> 5 (token 2), T5 2+2 -> 9, T6 2+3 -> 14 >= 10: win T6. Without the boast window it is 2 a turn: T7. A boast that could fire TWICE a turn (4 Plains pay two) gives 2, 2+2 -> 6, 2+4 -> 12: T5. A main-1 boast changes nothing (its token is summoning-sick either way). Opponent 10.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Usher of the Fallen", "sick": false }
+  ],
+  "hand": [],
+  "expect_win_turn": 6
+}

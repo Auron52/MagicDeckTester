@@ -376,3 +376,10 @@ not touched (not this scope).
 ## Approved deferrals
 
 (none yet)
+
+### Smoke checkpoint after C2 (orchestrator, 2026-11-13)
+Smoke on 1c7f51311 (C2), run alone: 191 passed, 4 failed — exactly the four gods keys at integrator B's numbers
+(d0 8.7830, d3 5.4000 digest-only, d5 5.2000, 2hg d5 5.3200); searched slower 1 / faster 3 / play-changed 79,
+identical to B's. Every other deck byte-identical. Nothing accepted (GT accepts are batched at the end).
+Live cost audit (`audit_card_costs.py`, 2026-11-13): 599 compared, all match; 7 NON-Spirits cards (Dragonstorm
+rituals etc.) NOT COMPARED on HTTP 429 → rc=2 (incomplete, not a pass); every costed Spirits card compared clean.

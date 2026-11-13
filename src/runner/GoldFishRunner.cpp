@@ -1256,6 +1256,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // BOAST (Usher of the Fallen, 2026-11-13): arm the per-attacker count for an attacker whose ability reads it
+    // (CardParams::activate_only_if_attacked_this_turn). MAINBOARD ONLY, the Moraug reasoning above.
+    state.deck_has_attack_count = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.activate_only_if_attacked_this_turn) { return true; }
+        }
+        return false;
+    }();
     // EXTRA TURNS (Emrakul, the Aeons Torn): MAINBOARD ONLY, the Moraug reasoning above -- this stamp
     // switches OFF the turn-edge prunes, a behaviour, so over-arming would split a screen's arms.
     state.deck_has_extra_turn = [&deck]{

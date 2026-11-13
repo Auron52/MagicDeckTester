@@ -4763,8 +4763,15 @@ struct CardParams
     int                      discard_team_pump_toughness = 0;
     std::vector<std::string> discard_team_pump_subtypes;
     // "Activate only once each turn" (CR 602.5b), PER OBJECT -- Permanent::once_per_turn_used, reset at
-    // our untap in both worlds. Read by the activations that carry it (Stromkirk Condemned's mode 4).
+    // our untap in both worlds. Read by the activations that carry it (Stromkirk Condemned's mode 4; Usher of
+    // the Fallen's boast, PermAbilityMode::PayToken -- PermAbilitySourceLive, set by ApplyPermAbility).
     bool                     activate_once_each_turn = false;
+    // BOAST (CR 702.142; Usher of the Fallen, 2026-11-13): "Activate only if this creature attacked this turn"
+    // -- an activation RESTRICTION (CR 602.5b) on the source's PayToken ability, read off
+    // Permanent::AttacksThisTurn() (declared as an attacker, CR 508.1) by PermAbilitySourceLive, which the
+    // enumeration and both apply worlds consult. The attack count is bumped only for a deck stamped
+    // GameState::deck_has_attack_count (StampDeckTraits) and only on an attacker carrying this param.
+    bool                     activate_only_if_attacked_this_turn = false;
     // Voldaren Estate: "{5}, {T}: Create a Blood token. This ability costs {1} less to activate for
     // each Vampire you control." PermAbilityMode::TapBlood. The reduction is GENERIC only, floor {0},
     // counted AT ACTIVATION (TapBloodCostNow); the {T} remains. Empty subtype = no reduction.

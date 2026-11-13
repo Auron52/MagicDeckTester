@@ -7183,6 +7183,17 @@
     "toughness": null,
     "type_line": "Artifact"
   },
+  "Usher of the Fallen": {
+    "cmc": 1.0,
+    "keywords": [
+      "Boast"
+    ],
+    "mana_cost": "{W}",
+    "oracle_text": "Boast — {1}{W}: Create a 1/1 white Human Warrior creature token. (Activate only if this creature attacked this turn and only once each turn.)",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Spirit Warrior"
+  },
   "Utopia Mycon": {
     "cmc": 1.0,
     "keywords": [],

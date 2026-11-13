@@ -24332,14 +24332,24 @@ inline void UntapOwnCreaturesForCombat(GameState& state, int controller)
 // "...for each time it has attacked this turn": one more declared attack on each DECLARED attacker (CR 508.1;
 // called before any token joins the list, CR 508.4), both worlds at declare-attackers. Only for a deck with an
 // attack-count reader (deck_has_extra_combat), so every other deck's permanents never carry a count.
+// BOAST (Usher of the Fallen, deck_has_attack_count): a deck without the Moraug readers counts ONLY an attacker
+// whose own ability reads the count (CardParams::activate_only_if_attacked_this_turn) -- nothing else reads
+// any other creature's count there, and an unread count would only split transpositions.
 inline void NoteAttacksDeclared(GameState& state, int controller, const std::vector<int>& declared)
 {
-    if (!state.deck_has_extra_combat) { return; }
+    const bool all = state.deck_has_extra_combat;
+    if (!all && !state.deck_has_attack_count) { return; }
     for (int i : declared)
     {
         if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
         Permanent& a = state.battlefield[static_cast<std::size_t>(i)];
-        if (a.controller_index == controller) { a.NoteAttackDeclared(); }
+        if (a.controller_index != controller) { continue; }
+        if (!all)
+        {
+            const CardDefinition* d = a.def_absent ? nullptr : CardDatabase::Instance().LookupCached(a.card);
+            if (d == nullptr || !d->params.activate_only_if_attacked_this_turn) { continue; }
+        }
+        a.NoteAttackDeclared();
     }
 }
 
@@ -32681,6 +32691,19 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
         if (mode == PermAbilityMode::ThresholdLoot
             && state.players[static_cast<std::size_t>(controller)].graveyard.size() < 7)
         { return false; }
+        // BOAST (Usher of the Fallen: "Activate only if this creature attacked this turn and only once each
+        // turn", CR 702.142 / 602.5b) -- both RESTRICTIONS of the PayToken ability, checked before anything is
+        // paid: the count NoteAttacksDeclared bumped at declare-attackers this turn (both worlds), and the
+        // per-object once-each-turn bit ApplyPermAbility sets. So no boast is legal in main 1 (nothing has
+        // attacked yet), and a second one from the same Usher -- a K>1 block, a repeat in
+        // SpendRepeatActivations, a stale plan -- is a clean no-op. Slimefoot / King Darien carry neither param.
+        if (mode == PermAbilityMode::PayToken)
+        {
+            const CardDefinition* bd = CardDatabase::Instance().LookupCached(p.card);
+            if (bd == nullptr) { return false; }
+            if (bd->params.activate_only_if_attacked_this_turn && p.AttacksThisTurn() <= 0) { return false; }
+            if (bd->params.activate_once_each_turn && p.once_per_turn_used) { return false; }
+        }
         // Khalni Heart Expedition: "Remove three quest counters" is part of the COST, so the
         // activation is impossible without them (CR 602.2b / 601.2h) -- checked before anything is
         // paid, exactly like the life gate above. A stale plan (the counters were spent) is a no-op.
@@ -33068,6 +33091,10 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
     if (mode == PermAbilityMode::TapLifegain && d != nullptr && d->params.tap_lifegain_per_subtype.empty()
         && d->params.tap_lifegain_flat > 0)
     { return "gain " + std::to_string(d->params.tap_lifegain_flat) + " life"; }
+    // Usher of the Fallen: the viewer names the BOAST (only Usher's restricted PayToken carries the param, so
+    // Slimefoot's / King Darien's label -- and every reference keyed on it -- is unchanged).
+    if (mode == PermAbilityMode::PayToken && d != nullptr && d->params.activate_only_if_attacked_this_turn)
+    { return "boast: create a creature token"; }
     return PermAbilityLabel(mode);
 }
 
@@ -33693,6 +33720,9 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             // The token goes through CreateToken, so Doubling Season applies at the single
             // chokepoint and one Season makes this {4} produce two Saprolings.
             const int ntok  = d->params.pay_token_count > 0 ? d->params.pay_token_count : 1;
+            // Boast's "only once each turn" (PER OBJECT): spent as the ability is activated; the gate is
+            // PermAbilitySourceLive. Reset at our untap in both worlds. False for Slimefoot / King Darien.
+            if (d->params.activate_once_each_turn) { state.battlefield[idx].once_per_turn_used = true; }
             // King Darien XLVIII: "Put a +1/+1 counter on King Darien and create a 1/1 white Soldier
             // creature token." The counter first (oracle order), through the doubler-aware
             // chokepoint, on the SOURCE (idx is resolved above and nothing has moved yet).

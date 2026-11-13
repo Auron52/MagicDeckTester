@@ -6426,8 +6426,11 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
             && !ActivationDiscardPayable(state, ctrl, std::string())) { continue; }
         if (m.mode == PermAbilityMode::ThresholdLoot
             && state.players[ctrl].graveyard.size() < 7) { continue; }
-        // Bilbo's "Activate only if you have 111 or more life" (the shared gate).
-        if (m.mode == PermAbilityMode::LifeGatedPutCreatures
+        // Bilbo's "Activate only if you have 111 or more life" (the shared gate) -- and boast's
+        // attacked-this-turn / once-each-turn restrictions (Usher of the Fallen; param-gated).
+        if ((m.mode == PermAbilityMode::LifeGatedPutCreatures
+             || (m.mode == PermAbilityMode::PayToken
+                 && (sd.params.activate_only_if_attacked_this_turn || sd.params.activate_once_each_turn)))
             && !PermAbilitySourceLive(state, ctrl, src.card.m_number, m.mode)) { continue; }
         ManaCost cost = EffectiveActivationCost(state, ctrl, src.card, m.cost->value());
         if (m.mode == PermAbilityMode::TapDraw && sd.params.tap_draw_cost_less_per_rad)
@@ -30778,6 +30781,11 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         if (modes[i].mode == PermAbilityMode::ThresholdLoot
             && state.players[ctrl].graveyard.size() < 7) { continue; }
         if (PermAbilityTaps(modes[i].mode) && (p.tapped || !CanTapNow(p, state.battlefield))) { continue; }
+        // Boast (Usher of the Fallen): a PayToken restricted to "attacked this turn / once each turn" is no
+        // option until it is live (the shared gate), so a copy CAST in main 1 presents no new key.
+        if (modes[i].mode == PermAbilityMode::PayToken
+            && (pp.activate_only_if_attacked_this_turn || pp.activate_once_each_turn)
+            && !PermAbilitySourceLive(state, ctrl, num, modes[i].mode)) { continue; }
         // TapBlood's cost is {5} minus our Vampires NOW (TapBloodCostNow) -- price THAT, total-only
         // like ActAffordable; the crack also needs a card to discard (its cost includes one).
         if (modes[i].mode == PermAbilityMode::TapBlood)
@@ -45417,6 +45425,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (m.mode == Action::AbilityMode::LifeGatedPutCreatures
                         && !PermAbilitySourceLive(state, state.active_player_index,
                                                   src.card.m_number, m.mode)) { continue; }
+                    // BOAST (Usher of the Fallen): "only if this creature attacked this turn and only once
+                    // each turn" -- the same shared gate, so a boast is never enumerated in main 1 or twice.
+                    // Param-gated: Slimefoot / King Darien skip the call (byte-identical).
+                    const bool boast_restricted = m.mode == Action::AbilityMode::PayToken
+                        && (sd->params.activate_only_if_attacked_this_turn || sd->params.activate_once_each_turn);
+                    if (boast_restricted
+                        && !PermAbilitySourceLive(state, state.active_player_index,
+                                                  src.card.m_number, m.mode)) { continue; }
                     // CONDEMNING AN ACTIVATION (MTG_BP_CONDEMN_ACTIVATION; USER 2026-09-18:
                     // *"Activation should be able to be condemned."*).
                     //
@@ -45528,6 +45544,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                                 state, src, m.mode,
                                 static_cast<int>(have.Total()) / per_mv);
                         }
+                        // "Only once each turn" (boast): ONE activation per object, so the K axis of this
+                        // source is {1} (a K>1 block would be refused at its second activation anyway).
+                        // An EMPTY menu (nothing affordable / a provider prune) stays empty.
+                        if (sd->params.activate_once_each_turn && m.mode == Action::AbilityMode::PayToken
+                            && !counts.empty())
+                        { counts.assign(1, 1); }
                     }
                     // Staff of Domination: a {T} mode on a source with "{1}: Untap this artifact" is
                     // REPEATABLE too -- each repeat pays the self-untap plus the mode's own cost
