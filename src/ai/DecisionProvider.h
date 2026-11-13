@@ -791,6 +791,14 @@ public:
     // control last (the legend rule), then higher mana value, then lower card number. `cands` is non-empty.
     virtual int AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const;
 
+    // Ilharg, the Raze-Boar's death "may" (CardParams::dies_to_library_position, Boars I5b item 3): the DEFAULT for
+    // an UNPINNED death -- true = put it into the library, false = leave it in the graveyard. ONLY the playout beyond
+    // the horizon / the d0 runner reach it (inside the search window every death a plan causes is pinned by
+    // Action::dies_tuck or Plan::attack_put_choice's tuck bit), and it pre-selects the human's `dig` yes/no when
+    // nothing is pinned. Default (DecisionProviders.cpp): tuck unless another permanent of the same name stays on
+    // `controller`'s battlefield (a legend-rule loser beside its survivor would be redrawn into the same rule).
+    virtual bool DiesTuckDefault(const GameState& s, int controller, const Card& dead) const;
+
     // Search-only dredge menu. Entries are physical graveyard card numbers;
     // zero means take the ordinary draw. The default keeps the complete menu.
     // Human play and the full-search oracle bypass provider restrictions.

@@ -10299,6 +10299,7 @@ inline std::uint64_t ActSig(const Action& a)
     MixA(h, static_cast<std::uint64_t>(a.rock_mana.Total()) * 7 + static_cast<std::uint64_t>(a.splice_count));
     if (a.player_target != 0) { MixA(h, 0x9A7Eull + static_cast<std::uint64_t>(a.player_target)); }   // set -> folded
     if (a.emerge) { MixA(h, 0xE3E6ull + static_cast<std::uint64_t>(a.soulfire_own_targets)); }   // emerge + its victim (set-gated)
+    if (a.dies_tuck != 0) { MixA(h, 0xD1E5ull + static_cast<std::uint64_t>(a.dies_tuck)); }   // Ilharg's death may (set-gated)
     return h;
 }
 struct Seen { const GameState* obj; bool verdict; };
@@ -11266,6 +11267,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         if (a.bestow)    { s += "[bestow]"; }
         if (a.evoke)     { s += "[evoke]"; }
         if (a.emerge)    { s += "[emerge:" + std::to_string(a.soulfire_own_targets) + "]"; }
+        if (a.dies_tuck != 0) { s += a.dies_tuck == 1 ? "[tuck]" : "[leave]"; }
         if (!a.pitch_name.empty()) { s += "[pitch:" + a.pitch_name.str() + "]"; }   // Fury's exiled card
     }
     // The LAND half of the plan is not in `actions` (land_to_play + its searched sub-decisions),
@@ -19636,6 +19638,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, a.kicked ? 1u : 0u);
     if (a.face_down != 0) { FoldMix(h, 0xFD0Dull + static_cast<std::uint64_t>(a.face_down)); }   // morph face-down cast: set-gated (else unchanged)
     if (a.emerge) { FoldMix(h, 0xE3E6ull); }   // emerge cast (Decimator): set-gated (else unchanged)
+    if (a.dies_tuck != 0) { FoldMix(h, 0xD1E5ull + static_cast<std::uint64_t>(a.dies_tuck)); }   // Ilharg's death may (I5b)
     FoldMix(h, static_cast<std::uint64_t>(a.ponder_keep));
     FoldMix(h, static_cast<std::uint64_t>(a.replicate_count));
     FoldMix(h, static_cast<std::uint64_t>(a.devour_count));   // Mycoloth: k is a searched axis
@@ -28706,6 +28709,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (static_cast<long long>(x.evoke) != static_cast<long long>(y.evoke))
     { add("evoke", std::to_string(static_cast<long long>(x.evoke)),
            std::to_string(static_cast<long long>(y.evoke))); }
+    if (x.dies_tuck != y.dies_tuck)
+    { add("dies_tuck", std::to_string(static_cast<int>(x.dies_tuck)), std::to_string(static_cast<int>(y.dies_tuck))); }
     if (x.emerge != y.emerge)
     { add("emerge", std::to_string(static_cast<int>(x.emerge)), std::to_string(static_cast<int>(y.emerge))); }
     if (x.pitch_name != y.pitch_name)
@@ -50252,6 +50257,87 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
     }
 
+    // DIES-TUCK PASS (Ilharg, the Raze-Boar's "When Ilharg dies ..., you may put it into its owner's library third
+    // from the top"; CardParams::dies_to_library_position, Boars I5b item 3). The "may" is a REAL branch: with the
+    // seeded library the tuck changes the draw three turns out (Ilharg instead of the card now third), so both answers
+    // are searched -- every cast that KILLS such a creature is twinned, dies_tuck 1 (tuck) / 2 (leave), and the death
+    // reads the twin's answer (DiesTuckPinScope over the cast in both worlds; the executor's StackEntry for the
+    // resolution). A cast kills one when (a) it is an EMERGE cast whose victim (battlefield or same-plan hand card) has
+    // the clause, or (b) it casts a LEGENDARY card with the clause while a same-name permanent of ours is on the
+    // battlefield (the legend rule dooms one copy whichever is kept -- item 4 owns WHICH). (c) A legendary copy whose
+    // duplicate is only in HAND kills only if the same plan casts that duplicate first: twinned 3 / 4, and
+    // plan_signature tags 3 / 4 only where an earlier cast of the same name precedes it, so a plan casting one copy
+    // folds its inert twins onto one plan. Runs after the sac-victim pass (the emerge victim is pinned by then).
+    // Decision space only for the AUTONOMOUS search: human play answers at the death (the `dig` yes/no), so its menu
+    // carries no twins (the ripple precedent). A deck with no such card emits nothing (one name test per cast).
+    if (!HumanPlayActive())
+    {
+        const int me = state.active_player_index;
+        const Player& tp = state.players[static_cast<std::size_t>(me)];
+        auto tuck_def = [&](int num) -> const CardDefinition*
+        {
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number != num) { continue; }
+                if (q.controller_index != me || q.is_token) { return nullptr; }
+                return CardDatabase::Instance().LookupCached(q.card);
+            }
+            for (const Card& h : tp.hand)
+            { if (h.m_number == num) { return CardDatabase::Instance().LookupCached(h); } }
+            return nullptr;
+        };
+        std::vector<Action> out;
+        bool any = false;
+        for (std::size_t i = 0; i < actions.size(); ++i)
+        {
+            const Action& a = actions[i];
+            int cls = 0;   // 0 none, 1 certain kill, 3 same-plan-conditional kill
+            if (a.kind == Action::Kind::CastFromHand && a.dies_tuck == 0)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (a.emerge && a.soulfire_own_targets > 0)
+                {
+                    const CardDefinition* vd = tuck_def(a.soulfire_own_targets);
+                    if (vd != nullptr && vd->params.dies_to_library_position > 0 && vd->card.IsCreature()) { cls = 1; }
+                }
+                if (cls == 0 && d != nullptr && d->params.dies_to_library_position > 0 && d->card.IsCreature()
+                    && d->card.HasSupertype(Supertype::Legendary))
+                {
+                    for (const Permanent& q : state.battlefield)
+                    {
+                        if (q.controller_index == me && q.card.m_name == a.card_name) { cls = 1; break; }
+                    }
+                    if (cls == 0)
+                    {
+                        for (int h = 0; h < static_cast<int>(tp.hand.size()); ++h)
+                        {
+                            if (h != a.hand_index && tp.hand[static_cast<std::size_t>(h)].m_name == a.card_name)
+                            { cls = 3; break; }
+                        }
+                    }
+                }
+            }
+            if (cls == 0)
+            {
+                if (any) { out.push_back(a); }
+                continue;
+            }
+            if (!any)
+            {
+                any = true;
+                out.reserve(actions.size() + 4);
+                for (std::size_t k = 0; k < i; ++k) { out.push_back(actions[k]); }
+            }
+            Action t = a;
+            t.dies_tuck = static_cast<std::int8_t>(cls);       // tuck
+            out.push_back(std::move(t));
+            Action l = a;
+            l.dies_tuck = static_cast<std::int8_t>(cls + 1);   // leave
+            out.push_back(std::move(l));
+        }
+        if (any) { actions.swap(out); }
+    }
+
     // RIPPLE PIN PASS (Thrumming Stone; Shadowborn INT-3 -- EmitRipplePins has the shape and the folds).
     // Decision space only (a rollout leaf plays the playout policy beyond the horizon, the phyrexian
     // precedent below); human play answers every ripple choice at resolution. deck_has_ripple false ->
@@ -68064,6 +68150,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // never hand one to a later apply_one call that arms none (the karoo-held Aura release, the
         // Aura recast, the alt-payload loop, a cascade hit).
         const CastRiders riders = cast_riders.Take();
+        // Ilharg's death "may" (Action::dies_tuck, Boars I5b item 3): pinned over the WHOLE inline cast + resolution
+        // (an emerge victim at the cast, a legend-rule loser at the resolution). Executor twins: CastSpellFromHand's
+        // scope and the StackEntry copy EffectHandler::Resolve installs.
+        DiesTuckPinScope _dies_tuck(state, riders.dies_tuck);
         const bool     cascade_hit_free = cascade_free;   // ...and the cascade one-shot, likewise
         cascade_free = false;
         const bool     no_cast_record = suppress_cast_record;   // ...and its recording twin (Cyclone R2)
@@ -69095,6 +69185,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.face_down          = riders.face_down;
             rec.devour_count       = cast_devour;
             rec.player_target      = static_cast<std::int8_t>(cast_player_target);
+            rec.dies_tuck          = riders.dies_tuck;   // Ilharg's death "may" (I5b): the replay pins the same answer
             // ...and the RIPPLE chain pins (Shadowborn INT-3): the replayed cast must stamp the same script.
             rec.ripple_pinned      = riders.ripple_pinned;
             rec.ripple_reveals     = riders.ripple_reveals;
@@ -77250,6 +77341,22 @@ inline thread_local Scratch t_scratch;
 // Bucket indices, in the legacy concatenation order; kPlanSigLetters[b] is the separator letter.
 enum : std::uint8_t { kSigV = 0, kSigS, kSigA, kSigG, kSigL, kSigU, kSigM };
 static constexpr char kPlanSigLetters[] = { 'V', 'S', 'A', 'G', 'L', 'U', 'M' };
+// Ilharg's death "may" (Action::dies_tuck, Boars I5b item 3): does this cast's rider change the plan? 1 / 2 always
+// (the cast certainly kills such a creature). 3 / 4 (a legendary copy whose duplicate was only in hand) only when the
+// plan casts ANOTHER copy of the same name -- anywhere in the list, never "an earlier one", so an execution order that
+// differs from the list order can never merge two plans that differ in the rider that actually applies. Otherwise
+// the rider is inert and the twins fold onto one plan (identity fold). Shared by both signature builders.
+static bool DiesTuckTagLive(const std::vector<Action>& acts, const Action& act)
+{
+    if (act.dies_tuck == 0) { return false; }
+    if (act.dies_tuck <= 2) { return true; }
+    for (const Action& o : acts)
+    {
+        if (&o != &act && o.kind == Action::Kind::CastFromHand && o.card_name == act.card_name) { return true; }
+    }
+    return false;
+}
+
 static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
                                      bool cre_host_sig, bool rep_sig)
 {
@@ -77323,6 +77430,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
+                if (DiesTuckTagLive(p.actions, act)) { w.Put((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }   // Ilharg's death (I5b)
                 if (!act.pitch_name.empty()) { w.Put("#EX"); w.Put(act.pitch_name); }   // PITCH EVOKE (Fury)
                 if (d && d->params.etb_return_gy_to_hand) { w.Put("#G"); w.Put(act.tutor_target); }
                 if (d && d->params.etb_return_equipment_from_gy) { w.Put("#FE"); w.Put(act.tutor_target); }
@@ -82768,6 +82876,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // bestow lesson. Gated on the param, so no existing deck moves.
                         if (cd && cd->params.evoke_cost.has_value()) { k += (act.evoke ? "#E1" : "#E0"); }
                         if (cd && cd->params.emerge_cost.has_value()) { k += (act.emerge ? "#EM1" : "#EM0"); }
+                        // Ilharg's death "may" (I5b item 3): tuck / leave are DISTINCT plans where the rider is live.
+                        if (DiesTuckTagLive(p.actions, act)) { k += ((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }
                         // PITCH EVOKE (Fury): WHICH card the evoke exiles -- distinct plans.
                         // Only a pitch variant carries it, so no existing deck moves.
                         if (!act.pitch_name.empty()) { k += "#EX" + act.pitch_name.str(); }
@@ -92155,6 +92265,38 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 { for (const Card& h : hp.hand) { if (h.m_number == inherited) { inh_card = &h; break; } } }
                 for (const Card& c : cands)
                 {
+                    // Ilharg's death "may" (Boars I5b item 3): putting a LEGENDARY card with
+                    // dies_to_library_position beside a same-name permanent (on the battlefield, or cast by this
+                    // plan) dooms a copy -- tuck it or leave it is a second searched answer: the kAttackPutTuckBit
+                    // twin. The plain pin is the explicit "leave".
+                    bool tuck_twin = false;
+                    {
+                        const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                        if (cd != nullptr && cd->params.dies_to_library_position > 0
+                            && cd->card.HasSupertype(Supertype::Legendary) && c.m_number < kAttackPutTuckBit)
+                        {
+                            for (const Permanent& q : state.battlefield)
+                            { if (q.controller_index == me && q.card.m_name == c.m_name) { tuck_twin = true; break; } }
+                            for (const Action& a : p.actions)
+                            {
+                                if (a.kind == Action::Kind::CastFromHand && a.card_name == c.m_name) { tuck_twin = true; break; }
+                            }
+                        }
+                    }
+                    const int tuck_pin = c.m_number | kAttackPutTuckBit;
+                    bool inh_tuck_same = false;   // the base already carries a tuck pin for this NAME (identity fold)
+                    if (inherited > 0 && (inherited & kAttackPutTuckBit) != 0)
+                    {
+                        const int inh_num = inherited & ~kAttackPutTuckBit;
+                        for (const Card& h : hp.hand)
+                        { if (h.m_number == inh_num && h.m_name == c.m_name) { inh_tuck_same = true; break; } }
+                    }
+                    if (tuck_twin && !inh_tuck_same)
+                    {
+                        TurnSolver::Plan v = p;
+                        v.attack_put_choice = static_cast<std::int16_t>(tuck_pin);
+                        extra.push_back(std::move(v));
+                    }
                     if (inherited == c.m_number || (inh_card != nullptr && inh_card->m_name == c.m_name)) { continue; }
                     TurnSolver::Plan v = p;
                     v.attack_put_choice = static_cast<std::int16_t>(c.m_number);

@@ -624,6 +624,10 @@ static_assert(sizeof(Player) == 216,
 // +0 bytes (2026-11-13, Boars I4c -- Raggadragga per-instance target): `cast_untap_pump_ordinal` (a uint8_t beside
 // cast_untap_refunds). Classification: a MONOTONIC per-game counter read ONLY relative to the ordinal saved when the
 // cast-trigger target pin was installed (UntapPumpRankFor) -- NOTHING TO FOLD, the cast_untap_refunds argument.
+// +0 bytes (2026-11-13, Boars I5b item 3 -- Ilharg's death "may"): `dies_tuck_pin` (an int8_t after
+// scripted_combat_transform). Classification: TRANSIENT -- set only inside a DiesTuckPinScope (one cast, one
+// resolution, one attack put) and back to 0 before any node boundary, so two compared states never differ in it --
+// NOTHING TO FOLD.
 static_assert(sizeof(GameState) == 1416,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");

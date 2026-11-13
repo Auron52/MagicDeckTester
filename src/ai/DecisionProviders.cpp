@@ -728,6 +728,10 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
         for (const std::string& w : want) { if (one(w)) { return true; } }
         return false;
     };
+    // The legendary card's OWN death clause (Ilharg, the Raze-Boar: "When Ilharg dies ..., you may put it into its
+    // owner's library third from the top"; Boars I5b item 3): the legend-rule death puts a known card back into the
+    // draws, and the searched "may" (Action::dies_tuck) weighs it -- not the tie the prune assumes.
+    if (def.params.dies_to_library_position > 0) { return true; }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -1127,6 +1131,14 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
 // goldfish, and the only player whose Brainstorm resolves -- so it is read only when `controller` is
 // active; otherwise (never reached today) the hand order stands. Indices are de-duplicated and every
 // hand index the shed order omits is appended in hand order, so the ranking is always total.
+// See DecisionProvider.h. Read only where nothing is pinned (beyond the horizon, the d0 runner, the human pre-select).
+bool DecisionProvider::DiesTuckDefault(const GameState& s, int controller, const Card& dead) const
+{
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == controller && q.card.m_name == dead.m_name) { return false; } }
+    return true;
+}
+
 int DecisionProvider::AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const
 {
     int others = 0;

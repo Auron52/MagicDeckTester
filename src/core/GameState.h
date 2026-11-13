@@ -222,6 +222,11 @@ struct StackEntry
     int                 trick_redirect = 0;         // Spellskite redirect of a solo-target trick (the
                                         // Spellskite's m_number; Action::trick_redirect via CastRiders).
                                         // 0 = none. Read by EffectHandler's ResolveSoloTargetTrick call.
+    std::int8_t         dies_tuck      = 0;         // Ilharg's death "may" (Action::dies_tuck via CastRiders):
+                                        // 0 none, 1 tuck, 2 leave. Stamped by the executor's cast site;
+                                        // EffectHandler::Resolve installs it (DiesTuckPinScope) for the
+                                        // resolution, so a legend-rule loser reads it. The rollout twin is
+                                        // apply_one's scope over the whole inline cast + resolution.
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::
@@ -323,6 +328,10 @@ struct RippleScript
     bool          pinned      = false;  // a plan pin drives this script (false = the playout policy)
     bool          per_name    = false;  // F1: the reveal budget/caps persist across same-name casts
 };
+
+// Plan::attack_put_choice / GameState::scripted_attack_put: the TUCK bit of a positive pin (Ilharg's death "may" for
+// the legend-rule loser the put makes, Boars I5b item 3). Card numbers stay far below it (a deck is ~60-100 cards).
+constexpr int kAttackPutTuckBit = 0x2000;
 
 struct GameState
 {
@@ -1234,6 +1243,13 @@ struct GameState
     // with the combat pins at both turn starts, folded value-gated into the dominance key and the
     // post-apply dedup key. At most 7 sources are addressable (the list runs two Keepers).
     std::int8_t              scripted_combat_transform = -1;
+    // Ilharg, the Raze-Boar's searched death "may" (CardParams::dies_to_library_position, Boars I5b item 3): the
+    // TRANSIENT pin a death reads -- 0 = unpinned (the provider's DiesTuckDefault: the playout beyond the horizon,
+    // the d0 runner), 1 = put it into the library, 2 = leave it in the graveyard. Set ONLY inside a
+    // DiesTuckPinScope (SpellEffects.h): the cast that causes the death (both cast paths, from Action::dies_tuck),
+    // the spell's resolution (StackEntry::dies_tuck, EffectHandler::Resolve) and the attack put's legend rule
+    // (Plan::attack_put_choice's tuck bit). Back to 0 at every node boundary, so nothing folds it.
+    std::int8_t              dies_tuck_pin = 0;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
     // Ilharg, the Raze-Boar's attack put (Plan::attack_put_choice, Boars I5a): a per-turn COMBAT PIN.
@@ -1241,6 +1257,10 @@ struct GameState
     // of the hand card to put. Consumed by the FIRST attack-put trigger (FireAttackPutFromHand); written by
     // WritePostApplyStatePins, cleared with the combat pins at both turn starts, folded value-gated into the
     // dominance and dedup keys.
+    // ...and Ilharg's death "may" for a LEGEND-RULE loser the put makes (Boars I5b item 3): a positive pin with
+    // kAttackPutTuckBit set means "put that card, and TUCK the copy the legend rule kills"; a positive pin without it
+    // means "put it, and LEAVE the dead copy in the graveyard". Both are explicit (the search fans the tuck twin only
+    // where the put dooms a copy with CardParams::dies_to_library_position); -1 leaves both to the defaults.
     std::int16_t             scripted_attack_put = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by

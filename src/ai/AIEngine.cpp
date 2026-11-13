@@ -9852,6 +9852,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     const int      attach_equip_id = riders.attach_equip_id;
     const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
     const InternedName remand_chain_name = riders.remand_chain_by;   // ...and Remand-on-Remand's A
+    // Ilharg's death "may" (Action::dies_tuck, Boars I5b item 3): pinned over the whole cast, so an EMERGE victim
+    // sacrificed below reads it; the spell's own resolution reads the StackEntry copy (EffectHandler::Resolve).
+    // Lockstep twin: apply_one's scope.
+    DiesTuckPinScope _dies_tuck(state, riders.dies_tuck);
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached((*hand_card_p));
@@ -10009,6 +10013,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // "Target player gains N life": the searched player target (0 = us). Read at resolution by
     // ApplyCastLifegain (EffectHandler) -- the rollout twin passes apply_one's rider.
     if (riders.player_target != 0) { entry.player_target = riders.player_target; }
+    entry.dies_tuck = riders.dies_tuck;   // Ilharg's death "may" for this spell's resolution (legend-rule loser)
     if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite
     // Magnetic Theft: the searched Equipment target, read at resolution by the shared
     // ResolveAttachTargetEquipment (the creature target is entry.enchant_target). Param-gated, so no

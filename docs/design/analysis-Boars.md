@@ -489,7 +489,7 @@ Audits: audit_card_costs rc 0 (616/616); audit_card_fields rc 0 after adding the
 rc 0, oracle cross-check clean.
 
 **Landed**
-* cards.json Ilharg (verbatim oracle + bracket notes; dies clause PENDING I5b, exile half D3, trample D2), params
+* cards.json Ilharg (verbatim oracle + bracket notes; dies clause implemented I5b item 3, exile half D3, trample D2), params
   `attack_put_creature_from_hand` / `attack_put_return_at_end_step` (loader throws on return without put), Horn audit.
 * `FireAttackPutFromHand` (SpellEffects.h), ONE body called by both combats right after FireMilitiaPrideTokens: sources
   from the DECLARED prefix only; CR 508.1f declaration tap first; put body tapped through FireEtbWatchers /

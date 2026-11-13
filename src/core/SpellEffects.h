@@ -13665,6 +13665,79 @@ inline void ResolveAthreosExile(GameState& state, const Permanent& leaving)
     }
 }
 
+// ILHARG'S DEATH "MAY" PIN (GameState::dies_tuck_pin, Boars I5b item 3). Installs a searched Action::dies_tuck value
+// (1 / 3 tuck, 2 / 4 leave -- 3 / 4 are the same answers for a same-plan legend duplicate) as the pin 1 / 2 for the
+// dynamic extent of one cast / resolution / attack put and restores the previous value after; a 0 value arms
+// nothing, so a nested scope with no rider never clears an outer one.
+struct DiesTuckPinScope
+{
+    GameState&  s;
+    std::int8_t prev;
+    bool        armed;
+    DiesTuckPinScope(GameState& st, int v) : s(st), prev(st.dies_tuck_pin), armed(v != 0)
+    { if (armed) { s.dies_tuck_pin = static_cast<std::int8_t>((v == 1 || v == 3) ? 1 : 2); } }
+    ~DiesTuckPinScope() { if (armed) { s.dies_tuck_pin = prev; } }
+    DiesTuckPinScope(const DiesTuckPinScope&) = delete;
+    DiesTuckPinScope& operator=(const DiesTuckPinScope&) = delete;
+};
+
+// "When Ilharg dies ..., you may put it into its owner's library third from the top." (CardParams::
+// dies_to_library_position, Boars I5b item 3). A TRIGGER (CR 603.6c / 700.4): the card is in the graveyard (the death
+// site pushed it) and every dies-watcher has fired. The "may":
+//   * human play: the `dig` yes/no (g_play_dig_chooser, one examined card, legal {0}; 0 = tuck, -1 = leave), the
+//     Militia's Pride precedent; pre-selected with the searched pin when present, else the provider default;
+//   * a pinned death (GameState::dies_tuck_pin, from the cast / resolution / attack put that caused it): the pin --
+//     the search branched both answers (Action::dies_tuck twins, Plan::attack_put_choice's tuck bit);
+//   * unpinned (the playout beyond the horizon, the d0 runner): DecisionProvider::DiesTuckDefault.
+// Placement: the newest graveyard copy BY m_number (name fallback) is inserted at library index min(N-1, size) --
+// "if fewer than N-1 cards, the bottom" (the Long-Term Plans clamp; no RNG is drawn, so the seeded draw order of
+// every other card is untouched apart from the shift). NOT a top stack: top_stacked_turn stays unset.
+inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, const Card& dead_card,
+                                         int position)
+{
+    std::vector<Card>& gy = state.players[dead_controller].graveyard;
+    std::size_t hit = gy.size();
+    for (std::size_t g = gy.size(); g-- > 0; )
+    { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
+    if (hit == gy.size())
+    {
+        for (std::size_t g = gy.size(); g-- > 0; )
+        { if (gy[g].m_name == dead_card.m_name) { hit = g; break; } }
+    }
+    if (hit == gy.size()) { return; }   // already gone (nothing to put)
+    const int pin = state.dies_tuck_pin;
+    bool tuck = pin == 1 ? true
+              : pin == 2 ? false
+              : ResolveProvider(state).DiesTuckDefault(state, dead_controller, dead_card);
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+    {
+        const std::vector<Card> examined{ gy[hit] };
+        const std::vector<int>  legal{ 0 };
+        const std::string source = dead_card.m_name.str()
+            + " (dies to library) -- put it into your library " + std::to_string(position)
+            + (position == 1 ? "st" : position == 2 ? "nd" : position == 3 ? "rd" : "th") + " from the top?";
+        tuck = (*g_play_dig_chooser)(state, dead_controller, source, examined, legal, tuck ? 0 : -1) == 0;
+    }
+    if (!tuck) { return; }
+    Card back = gy[hit];
+    gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
+    auto& lib = state.players[dead_controller].library;
+    const std::size_t at = std::min<std::size_t>(static_cast<std::size_t>(position - 1), lib.size());
+    const int num = back.m_number;
+    const std::string nm = back.m_name.str();
+    lib.insert(lib.begin() + static_cast<std::ptrdiff_t>(at), std::move(back));
+    if (RevealVisible())
+    {
+        EmitReveal(state.turn_number, nm + " (dies)", { num }, { nm }, { num }, {},
+                   /*dispositions*/ { "\xE2\x86\x92 library, " + std::to_string(at + 1) + " from the top" });
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      nm + " died -- put into its owner's library " + std::to_string(at + 1) + " from the top");
+    }
+}
+
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters,
                            const std::vector<int>* dwatch,
@@ -13733,6 +13806,15 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                 }
             }
         }
+    }
+    // Ilharg, the Raze-Boar's death clause (Boars I5b item 3): "you may put it into its owner's library third from
+    // the top" -- beside Worldspine (a trigger on the same graveyard copy). Only a CREATURE dies (CR 700.4); a token
+    // ceased to exist (CR 111.7). See ResolveDiesToLibraryPosition.
+    if (!dead_was_token && dead_card.IsCreature())
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.dies_to_library_position > 0)
+        { ResolveDiesToLibraryPosition(state, dead_controller, dead_card, dd->params.dies_to_library_position); }
     }
     // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
     // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
@@ -26891,8 +26973,16 @@ inline std::atomic<long long> g_attack_put_pin_miss{0};
 inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<int>& atk_idx, int& declared_n,
                                   bool live = true)
 {
-    const int pin = state.scripted_attack_put;
+    int pin = state.scripted_attack_put;
     state.scripted_attack_put = -1;
+    // Ilharg's death "may" for the legend-rule loser this put makes (Boars I5b item 3): a positive pin carries it
+    // EXPLICITLY -- kAttackPutTuckBit = tuck, no bit = leave. Unpinned (-1) leaves it to DiesTuckDefault.
+    int pin_tuck = 0;
+    if (pin > 0)
+    {
+        pin_tuck = (pin & kAttackPutTuckBit) ? 1 : 2;
+        pin &= ~kAttackPutTuckBit;
+    }
     const int nd = std::min(declared_n, static_cast<int>(atk_idx.size()));
     std::vector<std::pair<int, const CardDefinition*>> srcs;   // (m_number, def) -- identified before any put
     for (int k = 0; k < nd; ++k)
@@ -26909,6 +26999,7 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
     for (const auto& [src_num, sd] : srcs)
     {
         const int want = first ? pin : -1;
+        const int want_tuck = first ? pin_tuck : 0;
         first = false;
         Player& ap = state.players[controller];
         std::vector<int> cand_hand;
@@ -26979,12 +27070,15 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
                           sd->card.m_name.str() + " attacked -- put " + raw.m_name.str()
                           + " onto the battlefield tapped and attacking");
         }
-        FireEtbWatchers(state, controller, slot);
-        slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
-        if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }
-        slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
-        if (slot >= 0 && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
-        { EnforceLegendRule(state, controller); }
+        {
+            DiesTuckPinScope _dies_tuck(state, want_tuck);   // a legend-rule loser reads the searched "may" (I5b)
+            FireEtbWatchers(state, controller, slot);
+            slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+            if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }
+            slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+            if (slot >= 0 && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
+            { EnforceLegendRule(state, controller); }
+        }
         // Rebuild the attacker list by card number: the declared prefix first, then the undeclared rest, then the
         // put body (if it survived its own cascade and the legend rule).
         std::vector<int> rebuilt;

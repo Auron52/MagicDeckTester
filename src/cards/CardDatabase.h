@@ -3794,6 +3794,16 @@ struct CardParams
     //     end-step sites. Requires attack_put_creature_from_hand (the loader throws otherwise).
     bool attack_put_creature_from_hand = false;
     bool attack_put_return_at_end_step = false;
+    // Ilharg, the Raze-Boar's death clause (Boars I5b item 3): "When [this] dies ..., you may put it into its
+    // owner's library N-th from the top." A TRIGGER (CR 603.6c leaves-the-battlefield; CR 700.4 dies): the card did
+    // reach the graveyard, so every dies-watcher still fires; then, if the "may" is taken, the newest graveyard copy
+    // (by m_number) is inserted at library index min(N-1, size) -- a library shorter than N-1 cards takes it at the
+    // bottom (the Long-Term Plans clamp). 0 = no such clause. Resolved in OnCreatureDies (SpellEffects.h), shared by
+    // both worlds. The "may" is SEARCHED: the cast that causes the death carries Action::dies_tuck (an emerge victim,
+    // a legend-rule loser), an attack put of a legendary duplicate carries it in Plan::attack_put_choice's tuck bit;
+    // human play asks through the `dig` yes/no. The EXILE half ("or is put into exile from the battlefield") is not
+    // wired (D3 PROVISIONAL: nothing in Boars can exile our permanent).
+    int  dies_to_library_position = 0;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the

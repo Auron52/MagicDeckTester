@@ -220,6 +220,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 // end-step RETURN is a hand gain, so it is audited ONLY together with HornTakeFoldHolds' explicit
                 // bounded term (+1 per attack-put source that could attack this turn) -- never on its own.
                 "attack_put_creature_from_hand", "attack_put_return_at_end_step",
+                // Ilharg's death clause (I5b): graveyard -> LIBRARY (third from the top), never the hand.
+                "dies_to_library_position",
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -2047,6 +2049,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.attack_put_return_at_end_step = params.value("attack_put_return_at_end_step", false);
     if (p.attack_put_return_at_end_step && !p.attack_put_creature_from_hand)
         throw std::runtime_error("attack_put_return_at_end_step requires attack_put_creature_from_hand");
+    p.dies_to_library_position = params.value("dies_to_library_position", 0);   // Ilharg's death clause (I5b)
+    if (p.dies_to_library_position < 0)
+        throw std::runtime_error("dies_to_library_position must be >= 0");
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

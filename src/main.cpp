@@ -4482,6 +4482,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                      "listed) to put that card on top of your library BENEATH the one you just chose (it is "
                      "the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick.");
     }
+    else if (source.find("(dies to library)") != std::string::npos)
+    {
+        // Ilharg, the Raze-Boar's death "may" (SpellEffects.h ResolveDiesToLibraryPosition; Boars I5b item 3) reuses
+        // this modal as a yes/no: `examined[0]` is the card that just died (already in the graveyard).
+        d.Note("reply 0 to put this card (which just died and is in your graveyard) into your library at the "
+               "position named in the source (third from the top; the bottom if your library is shorter). Reply "
+               "-1 to leave it in the graveyard. Default = the search's pick when it pinned one, otherwise the AI's "
+               "default (tuck unless another copy stays on your battlefield).");
+    }
     else if (source.find("(attack pay)") != std::string::npos)
     {
         d.Note("reply 0 to pay {W} for this declared nontoken attacker's Militia's Pride trigger. "

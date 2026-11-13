@@ -4775,6 +4775,20 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  // Ilharg, the Raze-Boar's death "may" ("(dies to library)" in the source; Boars I5b): a yes/no on the card that
+  // just died -- tuck it into the library (third from the top) or leave it in the graveyard.
+  if (/\(dies to library\)/.test(d.source||'')) {
+    let h=`<h3>${esc((d.examined&&d.examined[0]&&d.examined[0].name)||'It')} died — put it into your library?</h3>`;
+    h+=`<div class="sub">${esc(d.source||'')}<br/>Third from the top (the bottom if your library has fewer than two cards). Otherwise it stays in your graveyard.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig" data-opt="${c.index}" data-name="${esc(c.name)}" title="Put it into the library">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Into library</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Leave it in the graveyard</button></div>`;
+    return h;
+  }
   if (/\(attack pay\)/.test(d.source||'')) {
     let h=`<h3>Militia's Pride — pay {W} for a Kithkin Soldier?</h3>`;
     h+=`<div class="sub">${esc(d.source||'')}<br/>The 1/1 white Kithkin Soldier enters tapped and attacking now. Each Pride trigger is a separate choice.</div>`;

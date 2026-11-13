@@ -507,6 +507,17 @@ struct Action
     // and is folded into plan_signature / ActionFoldSig only when nonzero, so every other key is
     // unchanged. In the padding after the int8 block above (sizeof(Action) unchanged).
     std::int8_t player_target      = 0;
+    // ILHARG'S DEATH "MAY" (CardParams::dies_to_library_position, Boars I5b item 3): what THIS cast does with an
+    // Ilharg it kills -- the emerge victim it sacrifices, or the legend-rule loser its resolution makes. 0 = the
+    // cast kills no such creature (every other action), 1 = put it into its owner's library third from the top,
+    // 2 = leave it in the graveyard. A SEARCHED axis: the DIES-TUCK post-pass (CollectActions) twins every cast
+    // that kills one; it rides CastRiders into both cast paths (a DiesTuckPinScope over the cast) and the
+    // executor's StackEntry (the resolution's legend rule), and is folded into plan_signature / ActSig /
+    // ActionFoldSig only when nonzero, so every other key is unchanged. 3 / 4 are the same answers (tuck / leave)
+    // for a legendary copy whose duplicate is only in HAND (no copy on the battlefield yet): the death happens only
+    // if the SAME plan casts another copy first, so plan_signature tags 3 / 4 only in that case -- the twins of a
+    // plan casting one copy carry an inert rider and fold onto one plan (a sound identity fold).
+    std::int8_t dies_tuck          = 0;
     // LURRUS OF THE DREAM-DEN (CardParams::gy_cast_permanent_max_mv, 2026-11-10): a CastFromGraveyard
     // cast made under a graveyard CAST PERMISSION -- the permission source's card.m_number (a deck card
     // number, so it fits). -1 for every other action, including a retrace cast (which carries
@@ -1163,11 +1174,15 @@ struct CastRiders
     // Action::emerge (Decimator of the Provinces): pay EmergeCastCost and sacrifice the pinned victim
     // (own_targets) BEFORE the cast triggers fire -- both worlds' cast paths read it here.
     bool     emerge            = false;
+    // Action::dies_tuck (Ilharg's death "may"): installed as GameState::dies_tuck_pin over the cast by both
+    // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
+    std::int8_t dies_tuck      = 0;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
         r.emerge            = a.emerge;
+        r.dies_tuck         = a.dies_tuck;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
@@ -1748,7 +1763,8 @@ public:
         // Ilharg, the Raze-Boar's attack put (Boars I5a): -1 = no pin (the provider's AttackPutDefault), -2 = decline,
         // > 0 = the CARD NUMBER of the creature card to put (a number, not a rank: a cast between plan time and combat
         // re-ranks the hand -- the Flinger reasoning). Rides GameState::scripted_attack_put. Folded wherever
-        // militia_pride_pay_choice is (VALUE-gated: != -1).
+        // militia_pride_pay_choice is (VALUE-gated: != -1). A positive pin may carry kAttackPutTuckBit (GameState.h):
+        // Ilharg's death "may" for the legend-rule loser the put makes (I5b item 3) -- bit = tuck, no bit = leave.
         std::int16_t attack_put_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop

@@ -96,6 +96,9 @@ MANIFEST = {
     # as `dig` "(trigger order)" (ResolveLookTopGroup).
     "enters_look_top_land_or_hand": ("dig",           truthy),
     "attack_nontoken_pay_token_cost": ("dig",       truthy),   # Militia's Pride: pay or decline for each nontoken attacker
+    # Ilharg, the Raze-Boar (Boars I5b): "When Ilharg dies ..., you may put it into its owner's library third from
+    # the top" -- asked as a `dig` yes/no "(dies to library)" (ResolveDiesToLibraryPosition).
+    "dies_to_library_position": ("dig",             positive),
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")

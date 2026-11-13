@@ -276,6 +276,9 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Ilharg's death "may" (StackEntry::dies_tuck, Boars I5b item 3): a legend-rule loser this resolution makes
+    // reads the cast's searched pin. 0 arms nothing. Rollout twin: apply_one's scope over the inline resolution.
+    DiesTuckPinScope _dies_tuck(state, entry.dies_tuck);
     // Own-death decks may pay their last life to activate a mana source. The
     // game ends at the priority boundary, before the paid spell/trigger resolves.
     if (state.own_death_live && SelfHasLost(state)) { return false; }
