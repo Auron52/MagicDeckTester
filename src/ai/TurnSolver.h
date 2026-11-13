@@ -2410,6 +2410,12 @@ public:
     // A positioned reveal outlet whose source is no longer ours on the battlefield: it already ran at
     // its position (or cannot run), so the trailing pass must not pay for it again.
     static bool PositionedRevealOutletSpent(const GameState& state, const Action& a);
+    // MARTYR SAC FIRST's payability half (DecisionProvider::RevealOutletFirstWhenOut, MTG_MARTYR_SAC_FIRST): true when
+    // `ra` is a position-0 reveal outlet the provider placed first (its source out since the turn began) and the
+    // plan's casts (`acts`, realised order) would NOT pay after its mana cost is paid first on a scratch copy -- then
+    // the pre-cast pass skips it and the trailing pass runs it. Read at every pre-cast pass (ApplyPlanDirect's and
+    // its continuation pre-run, AIEngine::TakeTurn's twins) -> lockstep. False for every other action and deck.
+    static bool RevealOutletPrecastSkip(const GameState& state, const std::vector<Action>& acts, const Action& ra);
     // Vampires A2: does this ACTIVATION put a GRAVEYARD-landfall card (Bloodghast) into our graveyard --
     // a pinned discard of one, or a sacrifice of one? Read ONLY by the land-after-ALL-casts (-1) clone
     // emission (EnumeratePlansWithLandUncached), so a plan that discards / sacrifices Bloodghast is

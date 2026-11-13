@@ -3687,6 +3687,12 @@ public:
     virtual bool RevealOutletPinned() const { return false; }
     virtual int  RevealOutletPin(const GameState& /*s*/, const std::vector<Action>& /*plan_actions*/) const
     { return 0; }
+    // RevealOutletFirstWhenOut -- an UNPINNED deck whose reveal outlet, when its source has been on the battlefield
+    // since the turn began, is sacrificed BEFORE the plan's casts whenever the plan casts a card of the outlet's
+    // colour, in place of the searched position fan for that plan -- and only when that order pays (both pre-cast
+    // passes ask TurnSolver::RevealOutletPrecastSkip; an unpayable one runs trailing). A source cast this turn keeps
+    // the fan. Base false. MartyrLifegainProvider: MTG_MARTYR_SAC_FIRST (USER 2026-11-13).
+    virtual bool RevealOutletFirstWhenOut() const { return false; }
 
     // RestrictorFollowsArrangement -- does this deck's ArrangeCastOrder PLACE its cast restrictor (a set-level
     // position rather than a rank)? Then both subset walks count the restrictor's followers -- the

@@ -217,6 +217,64 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
     for (int i = 0; i < 6; ++i) { D[i] += pips[i] * kNdScale / n; }
 }
 
+// CCO HAND DEMAND (MTG_CCO_HAND_DEMAND; CcoHandDemandOn in EngineFlags.h). Once per payment that reaches a WIDE
+// colored_creature_only candidate: `nc_live` = a noncreature nonland card in HAND (castable with what the board
+// has left after this payment -- the ComputeNeedsDemandSupply cap) carries a coloured pip, i.e. the unrestricted
+// sources are owed a demand the restricted land cannot meet; `keep_mask` = the colours the hand's creatures
+// (the card being paid excluded by cost identity, the same cap) need beyond what the
+// unrestricted untapped sources (lands, rocks, ready dorks; per tap) plus the float can make -- the colours
+// only the restricted land can still supply, which is what holding it is for.
+static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost,
+                              bool& nc_live, int& keep_mask)
+{
+    nc_live = false;
+    keep_mask = 0;
+    const ManaPool& fl = state.floating_mana;
+    int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+    int total = fl.white + fl.blue + fl.black + fl.red + fl.green + fl.colorless + static_cast<int>(fl.wild);
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != active || q.tapped || q.def_absent) { continue; }
+        const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+        if (qd == nullptr) { continue; }
+        const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield);
+        if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+        const int amt = std::max(1, ManaProducedPerTap(*qd));
+        total += amt;
+        if (qd->params.colored_creature_only || qd->params.creature_mana_only || BigSpellOnlySource(qd->params))
+        { continue; }
+        int seen = 0;
+        for (Color c : EffectiveProduces(state, active, *qd))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+            seen |= 1 << ci;
+            sup[ci] += amt;
+        }
+    }
+    const int castable = std::max(0, total - cost.ManaValue());
+    int cre[5] = { 0, 0, 0, 0, 0 };
+    bool skipped_self = false;
+    for (const Card& hc : state.players[active].hand)
+    {
+        const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+        if (hd == nullptr || hd->card.IsLand()) { continue; }
+        const ManaCost& m = hd->card.m_mana_cost;
+        if (m.ManaValue() > castable) { continue; }
+        if (!skipped_self && m.generic == cost.generic && m.white == cost.white && m.blue == cost.blue
+            && m.black == cost.black && m.red == cost.red && m.green == cost.green && m.colorless == cost.colorless)
+        { skipped_self = true; continue; }
+        const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
+        if (!hd->card.IsCreature())
+        {
+            for (int ci = 0; ci < 5; ++ci) { if (pips[ci] > 0) { nc_live = true; } }
+            continue;
+        }
+        for (int ci = 0; ci < 5; ++ci) { cre[ci] += pips[ci]; }
+    }
+    for (int ci = 0; ci < 5; ++ci) { if (cre[ci] > sup[ci]) { keep_mask |= 1 << ci; } }
+}
+
 // MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
 // this is read on every payment, and a magic static would add a guard check to each.
 static const bool g_float_trace = EnvOn("MTG_FLOAT_TRACE");
@@ -1640,6 +1698,9 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     if (tapstats::Enabled()) { tapstats::g_pay_once.fetch_add(1, std::memory_order_relaxed); }
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
+    // PAY HAND GENERIC (MTG_PAY_HAND_GENERIC; PayHandPips, SpellEffects.h): which floating colour a generic pip of
+    // THIS payment spends when the line owes no colour -- the hand's least-needed one. Lazy; inert off.
+    PayHandCtxScope _pay_hand(state, active, cost_in);
 
     // Payment-legal produces for the scarcity path. ProducesForPayment: a colored_creature_only
     // land (Unclaimed Territory / Cavern of Souls / Sliver Hive / Secluded Courtyard) makes only
@@ -1953,6 +2014,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // candidate (cco_ready), see the key block in the scarcity loop.
     bool cco_ready = false;
     int  cco_short_mask = 0;
+    // CCO HAND DEMAND (MTG_CCO_HAND_DEMAND): computed lazily at the first wide cco candidate of a creature payment.
+    bool cch_ready = false;
+    bool cch_nc_live = false;
+    int  cch_keep = 0;
     int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2841,6 +2906,28 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         for (Color c : def->params.produces)
                         { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
                         if (mine & cco_short_mask & state.deck_creature_pip_colors) { cco_hold = 1; }
+                    }
+                }
+                // CCO HAND DEMAND (MTG_CCO_HAND_DEMAND, default ON; item C, USER 2026-11-13: "the inflexible spell needs
+                // to be considered early, not late"). For any payment it can fund (a creature spell's pips; any generic
+                // pip as {C} -- a Clue's {2}, a Vial counter), a WIDE colored_creature_only land (the
+                // narrow ones already rank 9 -- NarrowRestrictedMask) reads as a rainbow and is held last of the lands,
+                // so a dual pays and the land that stays up cannot pay the noncreature card in hand. Pirates s30049037
+                // T3: Staunch Crewmate {1}{U} took Spirebluff Canal + Mountain, Unclaimed Territory stayed up, and the
+                // Lightning Bolt {R} Crewmate's dig continuation casts had no legal source. While a noncreature card in
+                // HAND has a coloured pip (CcoHandDemandScan), the land takes the narrow rung (9, ahead of the mono
+                // lands) -- unless a hand creature needs one of its colours beyond the unrestricted supply (cch_keep),
+                // or the line reserve above already holds it. Ordering only; the backtracker runs on any greedy failure.
+                if (kind == 1 && def->params.colored_creature_only && cco_hold == 0
+                    && rank > 9 && rank < 60 && CcoHandDemandOn())
+                {
+                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, cch_nc_live, cch_keep); }
+                    if (cch_nc_live)
+                    {
+                        int mine = 0;
+                        for (Color c : def->params.produces)
+                        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
+                        if ((mine & cch_keep & state.deck_creature_pip_colors) == 0) { rank = 9; }
                     }
                 }
                 // PAY-SAC LINE RESERVE (MTG_PAY_SAC_LINE_RESERVE, default ON). The CCO line reserve's twin for a

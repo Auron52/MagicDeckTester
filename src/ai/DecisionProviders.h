@@ -2462,6 +2462,11 @@ public:
     //     cast moves to the full searched second main GoldFishRunner::DeckUsesSecondMain opens for it.
     bool RestrictsCollectedActions() const override;
     bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    // MARTYR SAC FIRST (MTG_MARTYR_SAC_FIRST, heurarm MARTYR_SAC_FIRST; DEFAULT ON). USER 2026-11-13: "If Martyr is
+    // already out we should for sure. If it isn't the question is much more difficult as I discussed with the
+    // original agent." A Martyr of Sands out since the turn began reveals and sacrifices before the plan's white
+    // casts when that order pays; one cast this turn keeps the searched positions.
+    bool RevealOutletFirstWhenOut() const override;   // DecisionProviders.cpp
 };
 
 // MTG_MARTYR_MAIN_SPLIT's ONE reader (env default OFF + the heurarm slot), shared by the provider's main-1

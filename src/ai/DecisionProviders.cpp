@@ -59385,6 +59385,8 @@ bool MartyrMainSplitOn()
     return heurarm::Flag(heurarm::MARTYR_MAIN_SPLIT, on);
 }
 
+bool MartyrLifegainProvider::RevealOutletFirstWhenOut() const { return MartyrSacFirstOn(); }
+
 bool MartyrLifegainProvider::RestrictsCollectedActions() const
 {
     return MartyrPruneSacsOn() || MartyrMainSplitOn();

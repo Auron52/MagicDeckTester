@@ -43547,6 +43547,90 @@ inline bool ConsumeFloating(ManaPool& floating, Color c)
 // a separate, measured rule and this one only breaks ties among the five colours.
 // `g_line_unpaid_cost` is zero outside a plan application and the gate is LineGenericOrderLive() (human play, or
 // the autonomous lever MTG_AUTO_LINE_GENERIC), so with the lever off rollouts and every autonomous game keep WUBRG.
+// ---- PAY HAND GENERIC (MTG_PAY_HAND_GENERIC; PayHandGenericOn in EngineFlags.h; item I, mana-clean) -----------
+// Which floating COLOUR a generic pip spends when the line owes no colour (the WUBRG fallback of
+// SpendFloatingTowardCost and ConsumeFloatingAny): the colour the HAND needs least. USER 2026-11-13 (item C's rule,
+// "the inflexible spell needs to be considered early, not late", applied to Martyr Lifegain's Basilica float):
+// Martyr Lifegain s30001947 T3 -- Orzhov Basilica floated {W}{B} before its bounce, Martyr of Sands' {1} sacrifice
+// took the {W} (WUBRG), the {B} floated, and the second Speaker of the Heavens {W} that the sacrifice's
+// continuation casts had no mana. The shared payer (TapForCostSharedOnceImpl) installs the context for its own
+// payment; the hand's coloured pips are read lazily, only when a generic pip meets a float of two or more colours:
+// every nonland hand card castable with what is left (the untapped mana sources' yield plus the pool being drained,
+// minus this cost -- the ComputeNeedsDemandSupply cap), the card being paid excluded by cost identity. Colours are
+// then spent by (units floating - hand pips), most surplus first, WUBRG on a tie. A REORDER, never a refusal.
+// Null context (every other caller) or the lever off -> the historical WUBRG, byte-identical.
+struct PayHandCtx
+{
+    const GameState* s = nullptr;
+    int  active = 0;
+    ManaCost cost;
+    bool ready = false;
+    int  pips[5] = { 0, 0, 0, 0, 0 };
+};
+inline thread_local PayHandCtx* t_pay_hand_ctx = nullptr;
+struct PayHandCtxScope
+{
+    PayHandCtx ctx;
+    PayHandCtx* prev;
+    PayHandCtxScope(const GameState& s, int active, const ManaCost& cost) : prev(t_pay_hand_ctx)
+    {
+        ctx.s = &s; ctx.active = active; ctx.cost = cost;
+        t_pay_hand_ctx = PayHandGenericOn() ? &ctx : nullptr;
+    }
+    ~PayHandCtxScope() { t_pay_hand_ctx = prev; }
+    PayHandCtxScope(const PayHandCtxScope&)            = delete;
+    PayHandCtxScope& operator=(const PayHandCtxScope&) = delete;
+};
+// The live context's hand pips (computed once per payment), or nullptr when no context applies or `pool` holds fewer
+// than two colours (nothing to order).
+inline const int* PayHandPips(const ManaPool& pool)
+{
+    PayHandCtx* c = t_pay_hand_ctx;
+    if (c == nullptr || c->s == nullptr) { return nullptr; }
+    const int col[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+    int kinds = 0;
+    for (int i = 0; i < 5; ++i) { if (col[i] > 0) { ++kinds; } }
+    if (kinds < 2) { return nullptr; }
+    if (!c->ready)
+    {
+        c->ready = true;
+        const GameState& s = *c->s;
+        int total = pool.Total();
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.controller_index != c->active || q.tapped || q.def_absent) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd == nullptr) { continue; }
+            const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, s.battlefield, nullptr);
+            if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+            total += std::max(1, ManaProducedPerTap(*qd));
+        }
+        const ManaCost& k = c->cost;
+        const int castable = std::max(0, total - k.ManaValue());
+        bool skipped_self = false;
+        for (const Card& hc : s.players[c->active].hand)
+        {
+            const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
+            if (hd == nullptr || hd->card.IsLand()) { continue; }
+            const ManaCost& m = hd->card.m_mana_cost;
+            if (!skipped_self && m.generic == k.generic && m.white == k.white && m.blue == k.blue
+                && m.black == k.black && m.red == k.red && m.green == k.green && m.colorless == k.colorless)
+            { skipped_self = true; continue; }
+            if (m.ManaValue() > castable) { continue; }
+            c->pips[0] += m.white; c->pips[1] += m.blue; c->pips[2] += m.black;
+            c->pips[3] += m.red;   c->pips[4] += m.green;
+        }
+    }
+    return c->pips;
+}
+// The five colours in hand-surplus order (see above): out[0] is spent first. Stable on WUBRG.
+inline void PayHandColorOrder(const ManaPool& pool, const int* pips, int out[5])
+{
+    const int col[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+    for (int i = 0; i < 5; ++i) { out[i] = i; }
+    std::stable_sort(out, out + 5, [&](int a, int b) { return col[a] - pips[a] > col[b] - pips[b]; });
+}
+
 inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
 {
     static const Color kCFirst[] = { Color::Colorless, Color::White, Color::Blue,
@@ -43576,6 +43660,17 @@ inline bool ConsumeFloatingAny(ManaPool& floating, Color& took)
             && ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
         for (const Ent& x : e)
         { if (ConsumeFloating(floating, x.c)) { took = x.c; return true; } }
+        if (ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
+        return false;
+    }
+    if (const int* hp = PayHandPips(floating))
+    {
+        // PAY HAND GENERIC (above): {C} keeps its tier, the colours go hand-surplus first.
+        if (!g_hold_colorless_in_payment && ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
+        int ord[5];
+        PayHandColorOrder(floating, hp, ord);
+        for (int x : ord)
+        { const Color c = static_cast<Color>(x); if (ConsumeFloating(floating, c)) { took = c; return true; } }
         if (ConsumeFloating(floating, Color::Colorless)) { took = Color::Colorless; return true; }
         return false;
     }
@@ -43946,6 +44041,19 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         for (Ent& x : e) { drain(cost.generic, *x.res); }
         if (hold_c) { drain(cost.generic, reserve.colorless); }
         return;
+    }
+    // PAY HAND GENERIC (MTG_PAY_HAND_GENERIC; see PayHandPips): the colour the hand needs least pays first.
+    if (cost.generic > 0)
+    {
+        if (const int* hp = PayHandPips(reserve))
+        {
+            int* res[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
+            int ord[5];
+            PayHandColorOrder(reserve, hp, ord);
+            for (int x : ord) { drain(cost.generic, *res[x]); }
+            if (hold_c) { drain(cost.generic, reserve.colorless); }
+            return;
+        }
     }
     drain(cost.generic, reserve.white);
     drain(cost.generic, reserve.blue);

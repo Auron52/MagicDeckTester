@@ -719,6 +719,46 @@ inline bool PaySacLineReserveOn()
     return heurarm::Flag(heurarm::PAY_SAC_LINE_RESERVE, env_on);
 }
 
+// MTG_CCO_HAND_DEMAND -- DEFAULT ON; =0 restores the historical rank (item C, mana-clean; USER 2026-11-13 on
+// Pirates: "in mixed lines with a creature-only source we figure out the bolt payment earlier ... In those
+// situations the inflexible spell needs to be considered early, not late"). In any payment it can fund (a creature
+// spell's pips; a generic pip as {C}, e.g. a Clue's {2}), a WIDE
+// colored_creature_only land (Unclaimed Territory / Cavern of Souls in a multi-colour creature base, ranked as a
+// rainbow and so held last of the lands) is spent at the narrow rung (9, ahead of the mono lands) while a
+// noncreature card in HAND has a coloured pip -- that card can only be paid by the UNRESTRICTED sources, so they
+// are the ones to keep -- unless a hand creature needs one of the land's colours beyond what the unrestricted
+// untapped sources can make (then the land's colour is the one to keep). Pirates s30049037 T3: Staunch
+// Crewmate {1}{U} took Spirebluff Canal + Mountain, the Territory stayed up, and the Lightning Bolt {R} that
+// Crewmate's ETB dig continuation casts had no legal source. Ordering only (the backtracker still runs on any
+// greedy failure). Shared payer -> executor and rollout lockstep.
+inline bool CcoHandDemandOn()
+{
+    static const bool env_on = EnvOn("MTG_CCO_HAND_DEMAND", true);
+    return heurarm::Flag(heurarm::CCO_HAND_DEMAND, env_on);
+}
+
+// MTG_PAY_HAND_GENERIC -- DEFAULT ON; =0 restores WUBRG (item I (2), mana-clean). When the line owes no colour, a
+// generic pip paid from a float of two or more colours spends the colour the HAND needs least (PayHandPips,
+// SpellEffects.h): Martyr Lifegain s30001947 T3, Martyr of Sands' {1} took Orzhov Basilica's {W} and stranded the
+// second Speaker of the Heavens. Installed by the shared payer only -> executor and rollout lockstep.
+inline bool PayHandGenericOn()
+{
+    static const bool env_on = EnvOn("MTG_PAY_HAND_GENERIC", true);
+    return heurarm::Flag(heurarm::PAY_HAND_GENERIC, env_on);
+}
+
+// MTG_MARTYR_SAC_FIRST -- DEFAULT ON; =0 -> the searched positions (item I (1); USER 2026-11-13, Martyr Lifegain:
+// "If Martyr is already out we should for sure."). A Martyr of Sands on the battlefield since the turn began
+// is sacrificed BEFORE the plan's casts whenever the plan casts a white card (each one cast first is one card
+// fewer revealed), when that order pays; otherwise it keeps the trailing order. MartyrLifegainProvider::
+// RevealOutletFirstWhenOut; the enumeration's reveal-outlet fan and both pre-cast passes (TurnSolver::
+// RevealOutletFirstPays) read it.
+inline bool MartyrSacFirstOn()
+{
+    static const bool env_on = EnvOn("MTG_MARTYR_SAC_FIRST", true);
+    return heurarm::Flag(heurarm::MARTYR_SAC_FIRST, env_on);
+}
+
 // MTG_PAY_BURST_LEAD (2026-11-04; DEFAULT ON, =0 -> the greedy's WUBRG pip order): a creature payment that will tap a
 // creature-only ONE-COLOUR burst source first (Somberwald Sage, the restricted-first rank) pays the colour that burst
 // should make first, so the burst lands on the colour the UNRESTRICTED sources are shortest of for this payment and the

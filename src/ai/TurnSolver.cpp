@@ -34489,6 +34489,26 @@ bool TurnSolver::RevealSlotCounts(const Action& a)
     return false;
 }
 
+bool TurnSolver::RevealOutletPrecastSkip(const GameState& state, const std::vector<Action>& acts, const Action& ra)
+{
+    if (RevealOutletSlot(ra) != 0 || !ResolveProvider(state).RevealOutletFirstWhenOut()) { return false; }
+    const int me = state.active_player_index;
+    const Permanent* src = nullptr;
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == me && q.card.m_number == ra.sac_source_id) { src = &q; break; } }
+    if (src == nullptr || src->entered_this_turn) { return false; }   // the searched position (not "already out")
+    std::vector<int> ord;
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+    { if (acts[static_cast<std::size_t>(i)].kind == Action::Kind::CastFromHand) { ord.push_back(i); } }
+    if (ord.empty()) { return false; }
+    std::stable_sort(ord.begin(), ord.end(), [&](int x, int y)
+    { return CastOrderLess(state, acts[static_cast<std::size_t>(x)], acts[static_cast<std::size_t>(y)]); });
+    ApplyDeckCastArrangement(state, acts, ord);
+    GameState cp = state;
+    if (!TapForCostDirect(cp, ra.cost, /*for_creature=*/false)) { return true; }
+    return !(OrderPrepaysWholeTurn(cp, acts, ord) || OrderPaysSequentially(cp, acts, ord));
+}
+
 bool TurnSolver::PositionedRevealOutletSpent(const GameState& state, const Action& a)
 {
     if (RevealOutletSlot(a) < 0) { return false; }
@@ -67732,7 +67752,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             for (const Action& ra : cp.actions)
             {
-                if (TurnSolver::RevealOutletSlot(ra) != 0 || TurnSolver::PositionedRevealOutletSpent(state, ra))
+                if (TurnSolver::RevealOutletSlot(ra) != 0 || TurnSolver::PositionedRevealOutletSpent(state, ra)
+                    || TurnSolver::RevealOutletPrecastSkip(state, cp.actions, ra))   // MTG_MARTYR_SAC_FIRST
                 { continue; }
                 if (out_breakpoint && !sink_stack.empty()) { sink_stack.back()->push_back(ra); }
                 apply_trailing_activations(std::vector<Action>{ ra });
@@ -74294,6 +74315,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         {
             if (TurnSolver::RevealOutletSlot(ra) != 0) { continue; }
             if (TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+            if (TurnSolver::RevealOutletPrecastSkip(state, plan.actions, ra)) { continue; }   // MTG_MARTYR_SAC_FIRST
             apply_trailing_activations(std::vector<Action>{ ra });
         }
     }
@@ -89050,9 +89072,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         {
             std::vector<TurnSolver::Plan> twins;
             const std::size_t n_base = all.size();
+            const bool first_when_out = ResolveProvider(state).RevealOutletFirstWhenOut();
             for (std::size_t i = 0; i < n_base; ++i)
             {
-                const TurnSolver::Plan& p = all[i];
+                TurnSolver::Plan& p = all[i];
                 if (p.bp_choice >= 0) { continue; }   // a breakpoint rank variant: its base is twinned
                 if (cont_precast && p.cont_canon) { continue; }   // casts only, in both worlds
                 std::vector<std::size_t> outs;
@@ -89078,6 +89101,39 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     if (d == nullptr) { continue; }
                     for (const std::string& c : cols)
                     { if (CardHasColorNamed(d->card, c)) { counted_nonwatcher = true; break; } }
+                }
+                // MARTYR SAC FIRST (DecisionProvider::RevealOutletFirstWhenOut; MTG_MARTYR_SAC_FIRST, USER 2026-11-13: "If
+                // Martyr is already out we should for sure."). Every outlet of this plan out since the turn began, and
+                // the plan casts a card of the outlet's colour (a watcher or not): the base plan runs them at position 0,
+                // before every cast, in place of the fan -- each card of the colour cast first is one fewer revealed.
+                // "When that order pays": both pre-cast passes ask RevealOutletPrecastSkip and run an unpayable one in
+                // the trailing pass, i.e. the old base order. A source cast this turn keeps the fan (the USER: "If it
+                // isn't the question is much more difficult").
+                if (first_when_out)
+                {
+                    bool all_out = true;
+                    for (std::size_t j : outs)
+                    {
+                        const Permanent* src = nullptr;
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.controller_index == me && q.card.m_number == p.actions[j].sac_source_id) { src = &q; break; } }
+                        if (src == nullptr || src->entered_this_turn) { all_out = false; break; }
+                    }
+                    bool casts_col = false;
+                    for (const Action& a : p.actions)
+                    {
+                        if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard
+                            && a.kind != Action::Kind::ActivateVial) { continue; }
+                        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                        if (d == nullptr) { continue; }
+                        for (const std::string& c : cols) { if (CardHasColorNamed(d->card, c)) { casts_col = true; break; } }
+                        if (casts_col) { break; }
+                    }
+                    if (all_out && casts_col)
+                    {
+                        for (std::size_t j : outs) { p.actions[j].chosen_x = 1; }
+                        continue;
+                    }
                 }
                 // In a continuation only position 0 exists (code 1), and it differs from trailing only when
                 // the continuation casts a counted card (a watcher, or a hand card of the outlet's colour).

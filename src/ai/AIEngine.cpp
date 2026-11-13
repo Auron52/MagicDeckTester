@@ -5745,6 +5745,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& ra : cp.actions)
         {
             if (TurnSolver::RevealOutletSlot(ra) != 0 || TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+            if (TurnSolver::RevealOutletPrecastSkip(state, cp.actions, ra)) { continue; }   // MTG_MARTYR_SAC_FIRST
             exec_trailing_activations(std::vector<Action>{ ra });
         }
     };
@@ -8218,6 +8219,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         {
             if (TurnSolver::RevealOutletSlot(ra) != 0) { continue; }
             if (TurnSolver::PositionedRevealOutletSpent(state, ra)) { continue; }
+            if (TurnSolver::RevealOutletPrecastSkip(state, plan.actions, ra)) { continue; }   // MTG_MARTYR_SAC_FIRST
             exec_trailing_activations(std::vector<Action>{ ra });
         }
     }
