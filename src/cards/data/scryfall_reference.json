@@ -4287,6 +4287,18 @@
     "toughness": null,
     "type_line": "Kindred Enchantment — Kithkin"
   },
+  "Millicent, Restless Revenant": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying",
+      "Affinity"
+    ],
+    "mana_cost": "{5}{W}{U}",
+    "oracle_text": "Affinity for Spirits (This spell costs {1} less to cast for each Spirit you control.)\nFlying\nWhenever Millicent or another nontoken Spirit you control dies or deals combat damage to a player, create a 1/1 white Spirit creature token with flying.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Spirit Soldier"
+  },
   "Mind Stone": {
     "cmc": 2.0,
     "keywords": [],

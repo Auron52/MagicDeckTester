@@ -13691,6 +13691,7 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         if (!wd) { continue; }
         const CardParams& wp = wd->params;
         if (wp.dies_watch_subtype.empty()) { continue; }   // self-only watchers can't fire for others
+        if (wp.dies_watch_nontoken && dead_was_token) { continue; }   // "another NONTOKEN <subtype>" (Millicent)
         if (CardHasSubtype(dead_card, wp.dies_watch_subtype)) { reactions.push_back(wp); }
     }
     // The dead creature's OWN watcher (self death), if it includes itself.
@@ -13699,8 +13700,9 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
         if (dd && dd->params.dies_watch_includes_self)
         {
             const CardParams& dp = dd->params;
-            const bool self_ok = dp.dies_watch_subtype.empty()
-                              || CardHasSubtype(dead_card, dp.dies_watch_subtype);
+            const bool self_ok = (dp.dies_watch_subtype.empty()
+                                  || CardHasSubtype(dead_card, dp.dies_watch_subtype))
+                              && !(dp.dies_watch_nontoken && dead_was_token);
             if (self_ok) { reactions.push_back(dp); }
         }
     }
@@ -19680,6 +19682,7 @@ inline bool DeathOfWouldPay(const GameState& state, int controller, const Perman
                        || (wp.dies_trigger_tokens_per_counter && TotalCountersOn(victim) > 0)
                        || wp.dies_trigger_self_gain > 0 || wp.dies_trigger_impulse_exile;
         if (!pays) { return false; }
+        if (wp.dies_watch_nontoken && victim.is_token) { return false; }   // Millicent: nontoken deaths only
         const bool self_only = wp.dies_watch_subtype.empty();
         if (self_only)
         {
@@ -21737,15 +21740,21 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
         if (src.controller_index != controller) { continue; }
         if (src.def_absent) { continue; }   // see Permanent::def_absent (same `continue`, no call)
         const CardDefinition* sdef = CardDatabase::Instance().LookupCached(src.card);
-        if (!sdef || sdef->params.combat_damage_tokens_per_damage <= 0) { continue; }
+        if (!sdef) { continue; }
+        const int per_damage  = sdef->params.combat_damage_tokens_per_damage;
+        const int per_trigger = sdef->params.combat_damage_tokens_per_trigger;   // Millicent (0 elsewhere)
+        if (per_damage <= 0 && per_trigger <= 0) { continue; }
 
         long long dealt = 0;
+        long long connectors = 0;   // matching creatures that dealt > 0 damage this step: one TRIGGER each
         const std::size_t n = std::min(damaging_idx.size(), damaging_pw.size());
         for (std::size_t k = 0; k < n; ++k)
         {
             const int idx = damaging_idx[k];
             if (idx < 0 || idx >= bf_size) { continue; }
             const Permanent& atk = state.battlefield[static_cast<std::size_t>(idx)];
+            // "another NONTOKEN Spirit" (Millicent): a connecting token never triggers it.
+            if (sdef->params.combat_damage_watch_nontoken && atk.is_token) { continue; }
             bool m = sdef->params.combat_damage_watch_subtypes.empty()
                   || atk.AnimatedAllTypes();   // animated land = every creature type
             for (const std::string& req : sdef->params.combat_damage_watch_subtypes)
@@ -21753,10 +21762,10 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
                 if (m) { break; }
                 if (CardHasSubtype(atk.card, req)) { m = true; }
             }
-            if (m) { dealt += std::max(0, damaging_pw[k]); }
+            if (m && damaging_pw[k] > 0) { dealt += damaging_pw[k]; ++connectors; }
         }
         if (dealt <= 0) { continue; }
-        specs.push_back({ static_cast<int>(dealt * sdef->params.combat_damage_tokens_per_damage),
+        specs.push_back({ static_cast<int>(dealt * per_damage + connectors * per_trigger),
                           sdef->params.combat_damage_token_power,
                           sdef->params.combat_damage_token_toughness,
                           sdef->params.combat_damage_token_subtypes,

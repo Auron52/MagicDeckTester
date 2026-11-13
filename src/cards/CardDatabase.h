@@ -1369,6 +1369,14 @@ struct CardParams
     std::vector<std::string> combat_damage_token_subtypes;
     std::vector<std::string> combat_damage_token_keywords;   // see etb_created_token_keywords
     std::string              combat_damage_token_color;
+    // Millicent, Restless Revenant: "Whenever Millicent or another NONTOKEN Spirit you control ... deals
+    // combat damage to a player, create a 1/1 white Spirit creature token with flying." The FLAT sibling of
+    // the per-damage count above: ONE token per connecting matching creature per combat-damage step (a
+    // double striker triggers in each step it connects), NOT per point of damage. Fired by the same shared
+    // FireCombatDamageTokens (both worlds). `combat_damage_watch_nontoken` skips connecting TOKENS (her own
+    // Spirit tokens and Lingering Souls' never trigger her). Both default off -> Shroofus is unchanged.
+    int                      combat_damage_tokens_per_trigger = 0;
+    bool                     combat_damage_watch_nontoken     = false;
 
     // Firebreathing (activated pump; converts LEFTOVER combat mana -> attacker power = face
     // damage). Applied in the combat step of BOTH worlds (ApplyFirebreathing, SpellEffects.h) so
@@ -3112,6 +3120,10 @@ struct CardParams
     // a spell-target-death rider, unrelated).
     std::string              dies_watch_subtype;
     bool                     dies_watch_includes_self = false;
+    // dies_watch_nontoken -- the dead creature must NOT be a token ("another NONTOKEN Spirit you control
+    //                          dies", Millicent, Restless Revenant). Applied to the watcher walk and the
+    //                          self block of OnCreatureDies and to DeathOfWouldPay. Default off.
+    bool                     dies_watch_nontoken = false;
     int                      dies_trigger_damage = 0;
     // Slimefoot, the Stowaway: "...deals 1 damage to EACH OPPONENT and you gain 1 life."
     //   dies_trigger_damage_each_opponent -- multiply the face damage by OpponentHeads(). NOT an

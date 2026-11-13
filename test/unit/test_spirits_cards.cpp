@@ -119,7 +119,7 @@ TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards,
     for (const std::vector<std::string>& cut :
          std::vector<std::vector<std::string>>{{"Drogskol Captain"}, {"Supreme Phantom"},
                                                {"Geist of Saint Traft"}, {"Patrician Geist"},
-                                               {"Mausoleum Wanderer"},
+                                               {"Mausoleum Wanderer"}, {"Millicent, Restless Revenant"},
                                                {"Drogskol Captain", "Supreme Phantom", "Patrician Geist"}})
     {
         CHECK_MESSAGE(std::string(DetectDecisionProvider(Without(full, cut)).Name()) == "Spirits",
@@ -128,7 +128,8 @@ TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards,
     // ...but a list with NONE of the signature cards is not Spirits (it would ride the generic chain:
     // Flooded Strand's fetch_land_types -> anti). The signature is what routes, not the deck name.
     const Decklist none = Without(full, {"Drogskol Captain", "Supreme Phantom", "Geist of Saint Traft",
-                                         "Patrician Geist", "Mausoleum Wanderer"});
+                                         "Patrician Geist", "Mausoleum Wanderer",
+                                         "Millicent, Restless Revenant"});
     CHECK(std::string(DetectDecisionProvider(none).Name()) != "Spirits");
 }
 

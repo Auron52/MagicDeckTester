@@ -332,6 +332,7 @@ add_executable(mtg-test
     test/unit/test_spirits_cards.cpp
     test/unit/test_spirits_souls.cpp
     test/unit/test_spirits_geist_wanderer.cpp
+    test/unit/test_spirits_millicent.cpp
     test/unit/test_lurrus.cpp
     test/unit/test_jumbo_cactuar.cpp
     test/unit/test_edf_blink_target.cpp

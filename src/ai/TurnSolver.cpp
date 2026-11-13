@@ -8241,6 +8241,63 @@ static bool LeafReducerCreditEnabled()
     return on;
 }
 
+// How many permanents an affinity card `aff` counts (its subtypes_affected) the plan action `a` puts onto OUR
+// battlefield when it resolves. Shared by the enumeration credit below and the executor-side line prepay
+// (MTG_PREPAY_LINE_AFFINITY) so the two cannot drift. Each source, exactly as it lands in both worlds:
+//   * a matching CREATURE cast or Vial-PUT (a Vial action carries no def: looked up by name, the
+//     ActionGyCastReducerAmount shape), plus a pinned replicate count's token copies (Hatchery Sliver);
+//   * a Metallic Mimic-style "is the chosen type" creature, whose chosen type (ChosenCreatureSubtypeId, the
+//     provider FireEtbWatchers asks at its ETB) is appended to the battlefield permanent -- a Mimic naming
+//     Spirit is a Spirit for Millicent's affinity;
+//   * a token-making HAND cast (Lingering Souls: cast_creates_tokens 2 Spirit tokens, ApplyCastCreatesTokens).
+//     Hand only: a flashback / graveyard cast resolves in the TRAILING pass after every hand cast and Vial
+//     put in both apply worlds, so it can never precede the affinity cast (an OPEN ordering hole, see
+//     docs/design/analysis-Spirits.md, integrator C1).
+// Returns 0 for everything else (the caller applies the cast-order test).
+static int AffinityFeedCount(const GameState& state, const Action& a, const CardDefinition& aff)
+{
+    const CardDefinition* dk = a.def;
+    if (dk == nullptr && a.kind == Action::Kind::ActivateVial)
+    { dk = CardDatabase::Instance().LookupInterned(a.card_name); }
+    if (dk == nullptr) { return 0; }
+    const std::vector<std::string>& subs = aff.params.subtypes_affected;
+    int n = 0;
+    if (dk->card.IsCreature())
+    {
+        bool match = false;
+        for (const std::string& sub : subs)
+        {
+            for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
+            if (match) { break; }
+        }
+        if (!match && dk->params.chosen_type_added_to_self)
+        {
+            const uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+                state, state.active_player_index, *dk);
+            for (const std::string& sub : subs)
+            { if (chosen != SubtypeRegistry::kNone && chosen == SubtypeRegistry::Instance().Id(sub)) { match = true; break; } }
+        }
+        // A PINNED replicate count (Hatchery Sliver) puts that many token COPIES of the Sliver onto the battlefield
+        // with it, before the later affinity spell is cast -- each one is a Sliver too. Slivers mana-clean pass 1: {Galerider Sliver + one copy + Thrumming
+        // Hivepool} off three lands (Hivepool {6} less three on board, Galerider and its copy = {1}) read as {3} for
+        // Hivepool and was kept off the menu (ENUM-GAP). Exact for a pinned count, and it can only ADD plans; the
+        // unpinned cast's greedy count is unknown here and keeps the cast-alone credit.
+        if (match)
+        { n += 1 + (a.kind == Action::Kind::ActivateVial ? 0 : std::max(0, a.replicate_count)); }
+    }
+    if (a.kind == Action::Kind::CastFromHand && dk->params.cast_creates_tokens > 0)
+    {
+        bool tmatch = false;
+        for (const std::string& sub : subs)
+        {
+            for (const std::string& ts : dk->params.cast_created_token_subtypes) { if (ts == sub) { tmatch = true; break; } }
+            if (tmatch) { break; }
+        }
+        if (tmatch) { n += dk->params.cast_creates_tokens; }
+    }
+    return n;
+}
+
 static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector<Action>& cands,
                                        const std::vector<int>& sel, int j)
 {
@@ -8251,21 +8308,13 @@ static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector
     for (int k : sel)
     {
         if (k == j) { continue; }
-        const CardDefinition* dk = cands[k].def;
-        if (!dk || !dk->card.IsCreature()) { continue; }
+        const Action& ak = cands[k];
+        const CardDefinition* dk = ak.def;
+        if (dk == nullptr && ak.kind == Action::Kind::ActivateVial)
+        { dk = CardDatabase::Instance().LookupInterned(ak.card_name); }
+        if (!dk) { continue; }
         if (ResolveProvider(state).CastOrderRank(state, *dk) >= j_rank) { continue; }  // cast after -> no credit
-        bool match = false;
-        for (const std::string& sub : dj->params.subtypes_affected)
-        {
-            for (const std::string& cs : dk->card.m_subtypes) { if (cs == sub) { match = true; break; } }
-            if (match) { break; }
-        }
-        // A PINNED replicate count (Hatchery Sliver) puts that many token COPIES of the Sliver onto the battlefield
-        // with it, before the later affinity spell is cast -- each one is a Sliver too. Slivers mana-clean pass 1: {Galerider Sliver + one copy + Thrumming
-        // Hivepool} off three lands (Hivepool {6} less three on board, Galerider and its copy = {1}) read as {3} for
-        // Hivepool and was kept off the menu (ENUM-GAP). Exact for a pinned count, and it can only ADD plans; the
-        // unpinned cast's greedy count is unknown here and keeps the cast-alone credit.
-        if (match) { same_turn += 1 + std::max(0, cands[k].replicate_count); }
+        same_turn += AffinityFeedCount(state, ak, *dj);
     }
     return std::min(same_turn, cands[j].cost.generic);
 }
@@ -62921,18 +62970,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (&r == &a) { continue; }
                 if (r.kind != Action::Kind::ActivateVial && r.kind != Action::Kind::CastFromHand) { continue; }
                 const CardDefinition* rd = r.def != nullptr ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
-                if (rd == nullptr || !rd->card.IsCreature()) { continue; }
+                if (rd == nullptr) { continue; }
                 if (ResolveProvider(state).CastOrderRank(state, *rd) >= a_rank) { continue; }
                 bool in_hand = false;
                 for (const Card& hc : state.players[active].hand) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
                 if (!in_hand) { continue; }
-                bool match = false;
-                for (const std::string& sub : d->params.subtypes_affected)
-                {
-                    for (const std::string& cs : rd->card.m_subtypes) { if (cs == sub) { match = true; break; } }
-                    if (match) { break; }
-                }
-                if (match) { credit += 1 + (r.kind == Action::Kind::CastFromHand ? std::max(0, r.replicate_count) : 0); }
+                // The SAME count the enumeration credits (AffinityFeedCount): matching creatures (Vial puts
+                // included, a Mimic by its chosen type), pinned replicate copies, a token-making hand cast.
+                credit += AffinityFeedCount(state, r, *d);
             }
             ec.generic -= std::min(credit, static_cast<int>(ec.generic));
         }

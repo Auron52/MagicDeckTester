@@ -1384,6 +1384,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.combat_damage_token_power       = params.value("combat_damage_token_power", 0);
     p.combat_damage_token_toughness   = params.value("combat_damage_token_toughness", 0);
     p.combat_damage_token_color       = params.value("combat_damage_token_color", std::string{});
+    p.combat_damage_tokens_per_trigger = params.value("combat_damage_tokens_per_trigger", 0);   // Millicent
+    p.combat_damage_watch_nontoken     = params.value("combat_damage_watch_nontoken", false);
     for (const std::string& s : params.value("combat_damage_watch_subtypes", json::array()))
         p.combat_damage_watch_subtypes.push_back(s);
     for (const std::string& s : params.value("combat_damage_token_subtypes", json::array()))
@@ -1853,6 +1855,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("static_self_pump_subtype_is_noncreature", false);
     p.dies_watch_subtype        = params.value("dies_watch_subtype", std::string());
     p.dies_watch_includes_self  = params.value("dies_watch_includes_self", false);
+    p.dies_watch_nontoken       = params.value("dies_watch_nontoken", false);   // Millicent
     p.dies_trigger_damage       = params.value("dies_trigger_damage", 0);
     p.dies_trigger_damage_each_opponent = params.value("dies_trigger_damage_each_opponent", false);
     p.dies_trigger_self_gain    = params.value("dies_trigger_self_gain", 0);

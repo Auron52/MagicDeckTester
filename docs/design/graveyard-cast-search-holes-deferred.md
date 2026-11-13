@@ -36,6 +36,30 @@ any budget. 8097213a2 fixed the flashback version of this:
 
 **Deck that moves:** TreasureHunt.
 
+## 3. A graveyard cast can never precede a hand cast (completeness; found by integrator C1, Millicent)
+
+**The hole.** Both apply worlds resolve every graveyard cast (flashback, retrace) in the TRAILING pass, after
+every hand cast and Vial put (ApplyPlanDirect's trailing pass; AIEngine::TakeTurn). So a line whose hand
+cast needs something the graveyard cast produces cannot be realised in one main. Spirits example: Lingering
+Souls in the graveyard, Millicent, Restless Revenant in hand. "Flashback Souls ({1}{B}, two Spirit tokens),
+then Millicent two cheaper" is mana-neutral and yields two more tokens. The plan menu offers both casts, but
+the realised order is Millicent first, at the higher price. The same-turn affinity credit therefore
+deliberately does NOT credit a CastFromGraveyard (`AffinityFeedCount`, TurnSolver.cpp). If the credit
+counted it, the plan would be priced at a cost that neither world can pay.
+
+**Reach.** It needs Souls in the graveyard and Millicent (a 1-of) in hand in the same main, with the mana
+tight enough that the order decides affordability. The line is reachable a turn later: flashback this turn,
+Millicent next turn.
+
+**Fix shape.** Sequence graveyard casts at their card's CastOrderRank, as Vial puts already are (USER
+2026-10-06: puts ride the cast sequence). That change touches integrator B's Hole A/B machinery (the
+B1 pending post-pass and SubsetHasNonCanonicalGyCopies) and moves Gods, so it needs its own change set.
+Then credit a CastFromGraveyard token maker in `AffinityFeedCount` when its rank precedes the affinity
+card.
+
+**Prove it first:** a `--budget-ms 0` scenario with Souls in the graveyard, Millicent in hand and the
+lands set so that only flashback-first pays both.
+
 ## Adoption
 
 Both are correctness fixes, not heuristics, so they need no quality bar beyond correctness. They still go
