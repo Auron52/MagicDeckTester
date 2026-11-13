@@ -341,6 +341,129 @@ the durable record).
   A typical line change (smoke 2HG gi5, identical deal): the old line cast a non-lethal Berserk on T2 (opp 30). The new
   line plays Forest + Might of Old Krosa x2 instead; both win T5. This is the INT-8 gi245 mechanism.
 
+### INT-15 (2026-11-13) -- Firecat same-turn hard cast (USER), dead-TBR + P2 folds
+Code commits `eb8c20eda` + `2d4cf8bfa` (worktree morph-exalted, branch morph-exalted, on b8a3b11c8). Scratch: build/scratch/firecat/
+(primary build volume); summaries, manifests and traces: logs/morph/firecat/ (worktree).
+
+**USER rulings (verbatim, 2026-11-13).**
+- P4, answering "Firecat hard cast vs face-down-then-flip in main 1 when both are payable": **"I see. Yeah, if doing it
+  all the same turn I would usually try to keep it face-up, if you have the red. The flip side is that I usually do it
+  over 2 turns instead to allow for maximum pumping on the turn it attacks. The big morph advantage is splitting it up
+  so you can hit lethal in the one attack."**
+- R12 dead TBR: **"I would prune it. No point in wasting the spell or making additional plans that are worse."**
+- P2: **"But returned spells can be cast next turn? The main thing it compares unfavourably to instead is flipping the
+  Protector earlier I would think."** (So P2 removes ONLY a TRAIL variant whose named card cannot be in the graveyard
+  when the flip resolves; returning a spell for next turn, and flipping earlier, stay searched.)
+- P3 (two-copy twin): **"Okay, yeah, I guess we can do 2, though you are right that it isn't very big, which makes
+  sense when firecats cost 4 and 3 mana. That isn't going to happen often."**
+- R11 stays as built; "Den flip inline inside breakpoint continuations" is dropped (no lost line, only budget).
+
+**As built** (each an EnvOn + HeuristicArm slot, DEFAULT ON, off under human play and MTG_UNPRUNED / tricktarget):
+- 1 `MTG_MORPH_SAMETURN_HARD_CAST` (slot MORPH_SAMETURN_HARD_CAST; USER heuristic prune). Subset filter
+  `SubsetSameTurnFaceUpHardPayable` (both walkers, beside the trick-target filter): a subset holding a face-down-and-up
+  cast (face_down 2, the viewer's `facedownup`) of a card the provider names is rejected when the SAME subset with that
+  hand slot's hard cast in its place is jointly payable -- the whole subset's bill (every selected cost, the hard cast
+  substituted) paid by the REAL payer (`TapForCostDirect`) on a scratch copy of the pre-cast board + floating; the flat
+  pool is only a cheap "no". (The first build used the flat pool alone, which books Gruul Turf's {R}{G} as two wild:
+  Turf + Birds read as three red. Regression d0 gi537 then dropped the face-down-and-up Firecat for a hard cast it could
+  not pay, cast it face down instead and won T6 instead of T5. Fixed in `2d4cf8bfa`; unit-tested.) The twin
+  must be on the menu (same hand slot, plain cast), so the survivor always exists. Generic, param-driven
+  (`MorphProvider::SameTurnFaceUpPrefersHardCast`): a plain morph cost (a megamorph flip adds a counter the hard cast
+  lacks) and no turned-face-up trigger. In this list that is Blistering Firecat only: Den Protector is megamorph AND has
+  the regrowth trigger (its face-down-and-up cast is a different permanent, so the generic reading would be wrong for
+  it), and Hystrodon's face-down-and-up is already folded at emission (its hard cast is pip-wise inside the combined
+  bill). Untouched: the face-down cast (face_down 1) -- the two-turn line -- and every flip of a face-down permanent.
+- 2 `MTG_MORPH_TBR_DEAD_FOLD` (slot MORPH_TBR_DEAD_FOLD; sound DOMINANCE fold under R12). `SubsetHasDeadDoubleStrikeGrant`:
+  with k cast-time DS grants in a subset, rejected when (i) no target watcher is on the battlefield or cast in the
+  subset, no redirect twin, every trick takes the cast-time target and nothing else unknown is selected; (ii) a STABLE
+  body exists (can attack, power > 0 or face down, makes no mana, not a redirector -- it keeps a score > 0 all plan); and
+  (iii) k > E, E = own creatures without double strike that have power > 0 or are face down, plus every creature the
+  subset casts. Then at least one grant finds no R12 recipient and its plain pick is a creature that already double
+  strikes -- a no-op; the subset with one copy fewer is enumerated and dominates it.
+- 3 `MTG_FACEUP_TRAIL_STALE_PIN_FOLD` (slot FACEUP_TRAIL_STALE_PIN_FOLD; engine identity fold, EmitFaceUpActions): after
+  combat (no additional combat), a regrowth TRAIL variant naming a HAND solo-target trick that the provider no longer
+  offers (`TrickTargetCandidates` = the sentinel alone: INT-10 (a)) and that no emitted action names (cast, pitch) is
+  not emitted. That card cannot reach the graveyard this turn, so the pin is stale and `ResolveEtbReturnGyToHand` takes
+  the provider's pick -- the TRAIL base. A name the graveyard holds keeps its variant.
+- 4 P3 -- NOT BUILT: already folded for Firecat; Den Protector's twin is refused for a sound reason. See below.
+- Unit tests (test_morph_pumps.cpp): "morph INT-15 (P4)" (3 red + 4 green: face-down-and-up alone is gone, the
+  face-down cast stays, and face-down-and-up + Temur Battle Rage STAYS because hard + TBR needs a fourth red: the joint
+  bill; 2 red: kept; Gruul Turf + Birds: kept (two real red); Den Protector never a candidate), "morph INT-15: a provably dead Temur Battle Rage is not offered"
+  (Firecat + Birds, two TBR: max 1 per plan; lever off 2; a second body or Wild Defiance keeps 2; Firecat already double
+  striking: 0), "morph INT-15 (P2)" (pre-combat both TRAIL twins name Might; post-combat neither, base and a graveyard
+  name stay; lever off restores). mtg-test 2947/2947, scenarios 509/509.
+
+**Identity checks (held-out, inside the A/B batch below: P4 off in all three arms).**
+- P2 alone (`p4off` vs `p4off_p2off`): **digest-identical** on both decks (morph 8f328a76411a8581, 2HG 7cbd4483e0698ab9);
+  units -0.06% / -0.08%. Play-identical, as claimed.
+- Dead TBR alone (`p4off` vs `p4off_tbroff`): same averages, but **1 game per deck changes** (morph gi109, 2HG gi228;
+  0 faster / 0 slower). NOT byte-identical -- root-caused from the game traces (logs/morph/firecat/tbr_traces): in both
+  games the old line CAST THE DEAD TBR. gi109 T4 (lethal): fold-off cast Might + TBR + TBR on a Firecat with only a
+  0-power Birds beside it (the second TBR a no-op); fold-on casts Birds + Might + TBR and keeps the TBR, same T4 win.
+  2HG gi228 T3 (not lethal): fold-off cast TBR + TBR on Den Protector beside two 0-power Hierarchs; fold-on casts one,
+  keeps the other and uses it on T4 (8 damage instead of 4: opponent at -4 instead of 0 at the T6 win). Mechanism: on a
+  value tie (two lethal plans; two lines the horizon cannot separate) the first verified plan commits, and the dominated
+  plan was sometimes first. So the fold is a sound dominance fold, not an identity fold; every line it changes casts one
+  dead spell fewer at the same win turn -- exactly the USER's "no point in wasting the spell". Units -0.09% / -0.13%.
+
+**Held-out A/B -- P4** (seeds 90000+ morph 1000 / 92000+ morph2hg 300, play settings d5 b20, ONE pooled batch, 24
+threads, per-job flags; ON = all three on, OFF = `MTG_MORPH_SAMETURN_HARD_CAST=0` with 2+3 on; unwon = 9 in the sum).
+The first batch (binary eb8c20eda, 8 jobs incl. the identity arms) was re-run for ON and OFF on the fixed binary
+2d4cf8bfa (4 jobs, build/scratch/firecat/ab2); OFF reproduced its digests exactly, and ON moved in 2 morph games
+(gi976, gi996: back to the OFF line). Final numbers (2d4cf8bfa):
+
+| deck     | games | OFF avg | ON avg | ON faster / slower | sum (turns) | games whose line changed | units ON / OFF |
+|----------|-------|---------|--------|--------------------|-------------|--------------------------|----------------|
+| morph    | 1000  | 4.0530  | 4.0530 | 0 / 0              | 0           | 24 (2.4%)                | 5,340,931 / 5,355,336 = 0.997 |
+| morph2hg | 300   | 4.6833  | 4.6833 | 0 / 0              | 0           | 10 (3.3%)                | 4,798,543 / 4,759,158 = 1.008 |
+
+Rule 1 fires as designed: the four changed games re-run with traces (morph gi18, gi67, gi70; 2HG gi21) each swap a T3/T4
+main-1 Firecat cast face down and turned up ({3}{R}{R}) for the hard cast ({1}{R}{R}{R}), nothing else in that main
+differs, and the win turn is the same. No game is slower, so the d8 b0 recovery bar holds trivially (nothing to recover).
+Quality-neutral on both decks (net 0), units -0.3% / +0.8%.
+
+**P3 (item 4) -- the two-copy twin: already folded where it matters; NOT built.** The INT-10 census line ("two hand
+copies cast with DIFFERENT variants", 0.1% of plans) counted plans with MIXED variants, which are legitimate distinct
+multisets; it did not show that the swapped twin survives. `MTG_HAND_COPY_CLASS_FOLD` (chunk P, 2026-10-18) already
+folds identical hand copies whose option lists match member for member -- multi-variant slots included (it exists
+precisely because CONDITION 2 refuses them). Probe (logs/morph/firecat/p3_two_*.json, `MTG_AURA_FOLD_STATS=1`): two
+Blistering Firecats in hand -> "2 enumerations built 2 classes over 4 groups" (=0: none); the swapped Firecat twin is
+NOT enumerated. Two Den Protectors -> 0 classes: refused because the hand-source TRAIL flip names the FIRST copy by
+number (`sac_source_id`), and `ResolveHandSourceActivation` returns that copy whenever it is on the battlefield -- so with
+the TRAIL selected, (A face down, B hard) flips A, while (A hard, B face down) tries to flip the face-up A and plays as
+"no flip": the two positions are NOT symmetric and the refusal is correct. Folding Den's twin would need (a) the
+resolver to fall through to a FACE-DOWN copy of the name entered this turn (it matches `m_name`, which a face-down
+permanent does not carry, so today the fallback cannot find one) -- a play-semantics change that turns the phantom
+position into a real duplicate -- and (b) the class fold to stop treating that number as a reference. About 20 lines,
+but (a) is a resolver change, not a fold, and needs its own A/B; the case (two Dens cast in one main with different
+variants) is rare. Left for the USER: say if you want it.
+
+**Smoke + regression (FULL tiers, binary 2d4cf8bfa, run from the worktree).** Only morph / morph2hg rows moved, and
+every aggregate is unchanged (no game slower or faster anywhere):
+- Smoke: morph d0 4.7380 =, d5 4.0600 =, morph2hg d5 4.4400 = (all play-changed; d3 byte-identical). Searched slower 0 /
+  faster 0 / play-changed 3; d0 0 / 0 / 59. The searched line changes are Firecat hard cast for face-down-and-up at the
+  same win turn (e.g. 2HG gi1, gi10, morph gi67: hand and draws identical).
+- Regression: morph d0 s2002 4.7730 =, d3 s2002 4.0267 =, d5 s2002 4.0400 =, d5 s3003 4.1200 =, morph2hg d5 4.6667 =
+  (all play-changed); both 30001 budget-0 backstops byte-identical. Searched 0 / 0 / 12; d0 0 / 0 / 85. References:
+  343 ok / 492 repaired / 1 beaten / 0 play-drift / 0 shuffle-dead / 0 board-diverged / 0 enum-gap / 0 mull-drift /
+  0 contract-fail (836); REQUIRE-BEAT 2/2.
+- The first tier run (binary eb8c20eda, flat-pool "payable") had one slower game, regression d0 gi537 T5 -> T6; bisected
+  by lever (on / each off / all off) to P4 and root-caused to the Karoo colour over-count above. With the fix it is T5
+  again under every arm, and the tiers above are the re-run.
+- **GT ACCEPTED** (`b159e4370`): the bar is met -- only Morph moved, no slower game (so nothing to recover at d8 b0), and
+  rule 1's held-out A/B is net 0 on both decks. `regression.sh --smoke --accept --deck=morph,morph2hg`, the same for the
+  regression tier, `check_gt_logs.py` 1146 consistent / 0 stale; the regression_gt.txt diff is the 3 smoke + 5
+  regression morph keys only. OVERNIGHT not run (USER: occasional, not per change).
+
+**For the USER (decisions stated; the rules stand as built):**
+- P4 is built as you ruled and is DEFAULT ON. It changes the line in about 2.4% (morph) / 3.3% (2HG) of held-out games
+  and is exactly neutral on the score (0 faster, 0 slower over 1,300 games), so the measurement neither supports nor
+  argues against it; the cost is unchanged (-0.3% / +0.8% units).
+- The dead-TBR fold is sound but not play-identical: in 2 of 1,300 games the old engine really did cast the dead TBR
+  (same win turn); the fold removes exactly that waste.
+- P3: already folded for Firecat by `MTG_HAND_COPY_CLASS_FOLD`; Den Protector's twin needs a resolver change (above).
+  Not built -- say if you want it.
+
 ### Provider routing A/B (2026-11-12, HEAD 2c2dc16f7) -- MorphProvider vs the pre-INT-1 route (AntiLifegain)
 - Same binary, same seeds (930000 block), two concurrent 12-thread batches; arm B pinned with MTG_PROVIDER_DECK to
   decks/Anti-Lifegain (the provider Wooded Foothills routed this list to before INT-1). Avg win turn:
@@ -764,15 +887,19 @@ attack this turn."; each an EnvOn + HeuristicArm slot, off under human play and 
 **Proposals (NOT built; judgement calls or not worth a build tonight).**
 - P2. Den Protector's named TRAIL variants for a hand instant the section can no longer cast (after combat every trick
   is now unoffered, so a TRAIL naming one is a stale pin = a duplicate of the TRAIL base). Small; an identity fold.
+  **CLOSED -- built in INT-15 (`MTG_FACEUP_TRAIL_STALE_PIN_FOLD`), play-identical on 1,300 held-out games.**
 - P3. The two-copy twin (two hand copies of one morph card cast with different variants: the hand-cast fold's
   CONDITION 2 leaves multi-variant slots unfolded) is 0.1% of plans -- not worth an engine change.
 - P4. Blistering Firecat hard cast vs face-down-and-up in main 1 when both are payable: the same permanent for one more
   mana, but NOT a sound fold (the hard cast needs a third red the combined bill does not, so the leftover pools are
-  incomparable). Judgement -- would need a USER ruling and an A/B.
+  incomparable). Judgement -- would need a USER ruling and an A/B. **ANSWERED by the USER (2026-11-13); built and
+  measured in INT-15 (`MTG_MORPH_SAMETURN_HARD_CAST`).**
 - P5. 77% of the play-setting units are mulligan bottom TRIALS. Not a branching problem: the keep table the mulligan
   generation is about to produce removes them from play (and from the value-leaf stage after it).
 - Still open from INT-8/9: R12's no-second-target TBR at enumeration, R11 for unkicked Vines, C inside
   continuations, the fetch-rule variance games. (E lethal-only: CLOSED, adopted on the USER's ruling in INT-13.)
+  (2026-11-13: R12 at enumeration CLOSED -- USER "I would prune it", built in INT-15 `MTG_MORPH_TBR_DEAD_FOLD`; R11 stays
+  as built and "C inside continuations" is dropped, both by the USER -- see INT-15.)
 
 **6. Held-out A/B -- (a) + (b)** (seeds 70000+ morph 1000 / 72000+ morph2hg 300, play settings d5 b20, ONE pooled batch,
 23 threads, per-job flags; base = HEAD 3bd89f38f `build/scratch/int10/mtg.head`, same seeds, its own batch). f/s and sum
@@ -826,6 +953,8 @@ OVERNIGHT not re-run (USER: occasional, not per change).
   this turn." to main 2. Say if you want either off.
 - (c) is an engine identity fold, play-identical on the held-out set.
 - Open from INT-8/9 still: R12, R11, C in continuations, the fetch-rule variance games (E lethal-only: adopted, INT-13).
+  (2026-11-13, INT-15: R12 closed -- built; R11 confirmed as built and C-in-continuations dropped by the USER. Only the
+  fetch-rule variance games remain from this list.)
 
 ### INT-11 result (2026-11-12) -- rebased onto origin/phase-1-2-deck-analyzer 9ba5851a1; GT re-established
 The 27 morph-analysis commits are replayed onto `9ba5851a1`, which adds 45 origin commits: payer and mana-oracle item-6
