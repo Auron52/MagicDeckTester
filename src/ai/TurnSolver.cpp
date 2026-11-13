@@ -102189,7 +102189,7 @@ namespace p18
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false, asym = false, rx = false, b1 = false; double lean = 1.0, mr = 2.0; };
+                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false; double lean = 1.0, mr = 2.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102211,7 +102211,11 @@ namespace p18
         // _pb1: BOOTSTRAP-EXACT -- pass 1 runs on rollouts (as the heuristic ladder runs it; it is the cheapest pass) and
         // the heuristic ladder's own bootstrap check (c1 x growth vs alpha x remaining) decides pass 2 on that real cost;
         // pricing starts at pass 2, and only passes 3+ are admitted on their prices.
-        o.b1 = k.find("_pb1") != std::string::npos;   // _pmr<10m>: a REFUSAL (a shallower commit, the side that measured lossy) needs m samples
+        o.b1 = k.find("_pb1") != std::string::npos;
+        // _plc: LEAFLESS CAP -- a pass whose leafless tree alone outgrows the admit threshold cannot fit (its price is at
+        // least that tree), so its leafless pass stops there and the pass is refused. Re-prices only: the cap is the
+        // budget's own threshold, absent at an unlimited budget.
+        o.lcap = k.find("_plc") != std::string::npos;   // _pmr<10m>: a REFUSAL (a shallower commit, the side that measured lossy) needs m samples
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -110995,6 +110999,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             p18::Sampler smp;
             smp.rng = state.game_seed ^ (0xA24BAED4963EE407ULL * static_cast<unsigned long long>(state.TurnSeq() * 16 + k));
             const long long u0 = pb ? pb->Used() : 0;
+            // _plc: the threshold before the pass bounds the one after it (the remaining only falls), so the cap is sound.
+            const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
+            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(kn.lean * kStartGateAlpha
+                                         * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())))) : 0;
+            const long long ol_saved = capk ? pb->OverrunLimit() : 0;
+            if (capk && (ol_saved == 0 || cap_abs < ol_saved)) { pb->SetOverrunLimit(cap_abs); }
             SearchLine pr;
             {
                 ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
@@ -111002,7 +111012,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 pr = FSLineWin(state, k, max_turns, lcut, second_main, ptt, &p18_leafless_cache, pb);
                 p18::t_smp = prev;
             }
+            if (capk) { pb->SetOverrunLimit(ol_saved); }
             const long long lu = (pb ? pb->Used() : 0) - u0;
+            if (capk && pb->Used() >= cap_abs)
+            {
+                p16::Rec('W', k, lu, smp.n, 3, pr.win_turn, 0);   // capped: the tree alone does not fit
+                if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, static_cast<double>(cap_abs - u0), static_cast<double>(lu), 0.0, 0, 0, 0, 0, std::string()}); }
+                break;
+            }
             p16::Rec('W', k, lu, smp.n, 0, pr.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
             if (!pr.truncated && pr.win_turn <= window_end)
             {
