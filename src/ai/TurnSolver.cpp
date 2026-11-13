@@ -35,6 +35,7 @@
 #include <bit>                      // std::countr_zero -- portable; MSVC has no __builtin_ctz
 #include <charconv>                 // std::to_chars (PlanSignatureFast)
 #include <chrono>
+#include <ctime>                    // MTG_P17_LEDGER: clock_gettime (POSIX)
 #include <deque>
 #include <cstdio>
 #include <cstdint>
@@ -1462,6 +1463,17 @@ static const char* kNames[kSiteCount] = {
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
+// MTG_P17_LEDGER (P17 diagnostic, print-only, default OFF; needs MTG_P16_TRACE): thread-local mirrors of the per-site
+// unit census and of the search's cache traffic, snapshotted per pass into the [p17] decision line so a work ledger
+// can be reconciled pass by pass and site by site between two shapes. Never read by play.
+namespace p17
+{
+    inline bool On() { static const bool v = EnvOn("MTG_P17_LEDGER"); return v; }
+    inline thread_local long long t_site[unitsite::kSiteCount] = {};
+    inline thread_local long long t_nodes = 0, t_glc_w = 0, t_glc_n = 0, t_iw_w = 0, t_iw_n = 0;
+    inline thread_local long long t_idh_look = 0, t_idh_cur = 0, t_idh_prev = 0, t_idh_rot = 0;
+    inline thread_local long long t_rgc_look = 0, t_rgc_hit = 0;
+}
 
 // Defined below; needed by the MTG_IRENCRAG_WASTE gate, which is only sound for a deck whose
 // PLAY order IS the rank order (see the gate's note).
@@ -1994,6 +2006,7 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (p17::On()) { p17::t_site[site] += u; }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
@@ -2035,6 +2048,7 @@ static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long lo
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (p17::On()) { p17::t_site[site] += u; }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
 }
@@ -99926,6 +99940,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     if (rgc_on)
     {
         rgc::g_lookups.fetch_add(1, std::memory_order_relaxed);
+        if (p17::On()) { ++p17::t_rgc_look; }
         const auto it = rgc::t_map.find(rgc::Key(key, sfx_ctx));
         if (it != rgc::t_map.end())
         {
@@ -99933,6 +99948,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             if (e.win)
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_rgc_hit; }
                 if (e.result <= cutoff_turn) { return e.result; }
                 leafeval::Publish(leafeval::kInvalid);   // what a fresh run publishes when it aborts at the cutoff
                 return max_turns + 1;
@@ -99940,6 +99956,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             if (nowin_armed && cutoff_turn <= e.bound)
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_rgc_hit; }
                 if (cutoff_turn >= max_turns) { leafeval::Publish(e.tb); leafeval::PublishLife(e.life); }
                 else                          { leafeval::Publish(leafeval::kInvalid); }
                 return max_turns + 1;
@@ -102060,10 +102077,16 @@ namespace p16
         if (it == m.end() || it->second.T != T || it->second.sm != (sm ? 1 : 0)) { t_o_dead = true; return; }
         t_oracle_K = it->second.K;
     }
+    // MTG_P17_LEDGER (print-only): each recorded pass also carries the delta of the p17 snapshot since the previous
+    // record (or the decision's start), so a decision's passes plus its residual sum to the decision exactly.
+    inline thread_local std::vector<std::vector<long long>> t_px;
+    inline thread_local std::vector<long long> t_p17_last;
+    static void P17Delta(std::vector<long long>& out);   // defined after the counters it reads
     inline void Rec(char kind, int depth, long long units, long long leaf, int status, int win, int dvs)
     {
         if (!On() || t_hyb_nest != 1) { return; }
         t_passes.push_back({kind, depth, units, leaf, status, dvs, win});
+        if (p17::On()) { t_px.emplace_back(); P17Delta(t_px.back()); }
     }
 }
 // Tree-shape diagnostics (same running-counter convention): branch-and-bound prunes at FSLineWin's
@@ -102073,6 +102096,33 @@ inline thread_local long long g_fs_cut_prunes   = 0;
 inline thread_local long long g_fs_hexits       = 0;
 inline thread_local long long g_fs_leaf_wt_sum  = 0;
 inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
+namespace p16
+{
+    // MTG_P17_LEDGER snapshot, in print order: cpu_ns nodes leaf_evals tt_look tt_hit memo_win memo_nowin glc_w glc_n
+    // iw_w iw_n idh_look idh_cur idh_prev idh_rot cut_prunes rgc_look rgc_hit, then units by site (unitsite order).
+    static void P17Take(std::vector<long long>& v)
+    {
+#if defined(_WIN32)
+        const long long cpu_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();   // wall, not thread CPU, on Windows
+#else
+        timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+        const long long cpu_ns = static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#endif
+        v.assign({ cpu_ns, p17::t_nodes, g_fs_leaf_evals,
+                   g_tt_look_n, g_tt_hit_n, g_fs_memo_win_hits, g_fs_memo_nowin_hits, p17::t_glc_w, p17::t_glc_n,
+                   p17::t_iw_w, p17::t_iw_n, p17::t_idh_look, p17::t_idh_cur, p17::t_idh_prev, p17::t_idh_rot,
+                   g_fs_cut_prunes, p17::t_rgc_look, p17::t_rgc_hit });
+        for (int i = 0; i < unitsite::kSiteCount; ++i) { v.push_back(p17::t_site[i]); }
+    }
+    static void P17Delta(std::vector<long long>& out)
+    {
+        P17Take(out);
+        std::vector<long long> now = out;
+        for (std::size_t i = 0; i < out.size() && i < t_p17_last.size(); ++i) { out[i] -= t_p17_last[i]; }
+        t_p17_last.swap(now);
+    }
+}
 // ORDER-FREE WAVE OPPORTUNITY PROBE (MTG_OF_WAVE_PROBE, default off -- counters only, no behaviour).
 // Under SPLIT KEYS a WIN is stored order-exactly, so a permuted twin's win is simply not found and the
 // node re-searches from scratch. That silent miss is the whole residual the split-keys adoption gave up
@@ -102213,6 +102263,12 @@ static inline bool IdOrderHintOn()
     static const bool env = EnvOn("MTG_ID_ORDER_HINT", true);   // DEFAULT ON (interior nodes only); =0 -> the static order
     return heurarm::Flag(heurarm::ID_ORDER_HINT, env);
 }
+// MTG_P17_LEAFLESS_NOHINT (heurarm P17_LEAFLESS_NOHINT, default OFF): a leafless pass leaves no hint at a no-win node.
+static inline bool IdhLeaflessKeep(int win, int max_turns)
+{
+    static const bool env = EnvOn("MTG_P17_LEAFLESS_NOHINT");
+    return !(g_force_constant_leaf && win > max_turns && heurarm::Flag(heurarm::P17_LEAFLESS_NOHINT, env));
+}
 static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win, bool model)
 {
     static const std::size_t cap = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ID_HINT_CAP", 262144)));
@@ -102251,9 +102307,11 @@ static inline const IdHint* IdHintFind(const TranspositionTable::Key& k)
 {
     const bool game = IdHintGameOn();
     if (game) { idhgame::g_lookups.fetch_add(1, std::memory_order_relaxed); }
+    if (p17::On()) { ++p17::t_idh_look; }
     IdHintMap::const_iterator it = g_idh_map->find(k);
     if (it != g_idh_map->end())
     {
+        if (p17::On()) { ++p17::t_idh_cur; }
         if (game) { idhgame::g_cur_hits.fetch_add(1, std::memory_order_relaxed); }
         return &it->second;
     }
@@ -102261,6 +102319,7 @@ static inline const IdHint* IdHintFind(const TranspositionTable::Key& k)
     IdHintMap::const_iterator pt = idhgame::t_prev.find(k);
     if (pt == idhgame::t_prev.end()) { return nullptr; }
     idhgame::g_prev_hits.fetch_add(1, std::memory_order_relaxed);
+    if (p17::On()) { ++p17::t_idh_prev; }
     return &pt->second;
 }
 struct IdHintScope   // installs this decision's hint map unless an enclosing decision root already did
@@ -106029,6 +106088,22 @@ namespace inwin
     inline std::atomic<long long> g_ver_n{0}, g_ver_bad{0}, g_ver_material{0}, g_ver_printed{0};
     inline void Clear() { t_map.clear(); t_bytes = 0; }
     inline TranspositionTable::Key WinKey(TranspositionTable::Key k) { Fold(k, 0x1A7E5C0DE1ULL); return k; }
+    // The key context: gamelc::Tag (leaf, beam, second-main, labeller), or under MTG_P17_INWIN_ANYLEAF the same
+    // context WITHOUT the leaf kind -- an in-window proof reads no leaf (a win inside the window beats every leaf
+    // estimate, which lies past it; a no-win is served only to a query whose cutoff is inside the window).
+    inline TranspositionTable::Key Ctx(TranspositionTable::Key k, const GameState& state)
+    {
+        static const bool env = EnvOn("MTG_P17_INWIN_ANYLEAF");
+        if (!heurarm::Flag(heurarm::P17_INWIN_ANYLEAF, env)) { return gamelc::Tag(k, state); }
+        Fold(k, 0x6A3E0001ULL);
+        Fold(k, 0x5EAFF7EEULL);   // "any leaf"
+        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_width)));
+        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_esc_beam_leafdepth)));
+        Fold(k, g_esc_beam_static ? 1u : 0u);
+        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_simkey_m2coarse)));
+        Fold(k, static_cast<uint64_t>(static_cast<unsigned>(g_unbounded_label_search)));
+        return k;
+    }
     inline TranspositionTable::Key NowinKey(TranspositionTable::Key k) { Fold(k, 0x2B0D17A3F7ULL); return k; }
     struct Reporter
     {
@@ -106054,6 +106129,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const heavyfangate::Frame _hfg(state);
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
+    if (p17::On()) { ++p17::t_nodes; }   // MTG_P17_LEDGER (print-only)
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
@@ -106269,6 +106345,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && (gw->second.order_sig == 0 || gw->second.order_sig == gsig))
             {
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_glc_w; }
                 if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
@@ -106280,6 +106357,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     && cutoff <= gn->second.nowin_bound)
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (p17::On()) { ++p17::t_glc_n; }
                     if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
@@ -106294,16 +106372,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             TranspositionTable::Key kw = key_base;
             const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
             if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-            auto iw = inwin::t_map.find(inwin::WinKey(gamelc::Tag(kw, state)));
+            auto iw = inwin::t_map.find(inwin::WinKey(inwin::Ctx(kw, state)));
             if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
             {
                 inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_iw_w; }
                 if (!inwin::Verify()) { ++g_fs_memo_win_hits; return iw->second.line; }
                 inwin_hit = true; inwin_hit_win = iw->second.win;
             }
             else
             {
-                auto in = inwin::t_map.find(inwin::NowinKey(gamelc::Tag(key_base, state)));
+                auto in = inwin::t_map.find(inwin::NowinKey(inwin::Ctx(key_base, state)));
                 // The query must judge every turn up to its cutoff by the SEARCH MENU, as the proof did: a cutoff past
                 // this node's window would also count wins its leaf finds there, and the rollout plays lines a
                 // provider prunes from the menu (verify, 2026-11-10: FiveColour 2HG, turn 5 depth 1 cutoff 6 -- a
@@ -106311,6 +106390,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (in != inwin::t_map.end() && cutoff <= std::min(in->second.nowin_bound, we))
                 {
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (p17::On()) { ++p17::t_iw_n; }
                     if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
                     inwin_hit = true; inwin_hit_win = max_turns + 1;
                 }
@@ -107142,6 +107222,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 order_perturbed = true;
                 idh_rot = idx;
+                if (p17::On()) { ++p17::t_idh_rot; }
                 if (g_oo_mode != 0) { ooprobe::h_rotated.fetch_add(1, std::memory_order_relaxed); }
                 if (pre_lazy.active) { PbLazyRotateFs(pre, pre_ord, idx); }
                 else
@@ -108202,7 +108283,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             }
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+                            if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
                             if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: the winning slot is this one
                             {
                                 node_vals.push_back(tail.win_turn);
@@ -108643,7 +108724,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                 FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+                if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
                 if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: node_vals already ends at this win
                 {
                     (*rec_map)[key] = node_vals;
@@ -108662,7 +108743,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else
         {
             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+            if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
             if (g_oo_mode == 1 && rec_vals) { (*rec_map)[key] = node_vals; ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
             return best;
         }
@@ -108670,7 +108751,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
-    if (idh_rec && oo_best_idx >= 0 && !deferred_win) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+    if (idh_rec && oo_best_idx >= 0 && !deferred_win && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
     if (rec_vals && !node_vals.empty() && !deferred_win)
     {
         if (g_oo_mode == 1) { ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
@@ -109320,7 +109401,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 TranspositionTable::Key kw = key_base;
                 const std::uint64_t osig = CanonSimKeyOn() ? FsOrderSig(state) : 0ull;
                 if (s_split_keys && CanonSimKeyOn()) { Fold(kw, osig); }
-                const TranspositionTable::Key k = inwin::WinKey(gamelc::Tag(kw, state));
+                const TranspositionTable::Key k = inwin::WinKey(inwin::Ctx(kw, state));
                 if (inwin::t_map.find(k) == inwin::t_map.end() && admit(ApproxFslBytes(best) + 64))
                 {
                     inwin::t_map.emplace(k, inwin::Entry{ best, best.win_turn, std::numeric_limits<int>::max(), osig });
@@ -109331,7 +109412,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             const int b = std::min(win ? best.win_turn - 1 : std::min(cutoff, max_turns + 1), we);
             if (b >= state.turn_number)
             {
-                const TranspositionTable::Key k = inwin::NowinKey(gamelc::Tag(key_base, state));
+                const TranspositionTable::Key k = inwin::NowinKey(inwin::Ctx(key_base, state));
                 auto it = inwin::t_map.find(k);
                 if (it == inwin::t_map.end())
                 {
@@ -110673,7 +110754,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // MTG_P16_ORACLE (measurement only; see p16::Oracle): passes below the recorded K run leafless.
         const int p16K = (p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && !vl_active) ? p16::t_oracle_K : 0;
         // MTG_P16_ORACLE_KEEP=n (default 1): the last n passes below and at K keep their rollouts.
-        static const int s_p16_keep = std::max(1, EnvInt("MTG_P16_ORACLE_KEEP", 1));
+        // (P17: an arm whose deck key holds "oraclek<n>" keeps n, so keep-1 and keep-2 arms pool in ONE batch.)
+        static const int s_p16_keep_env = std::max(1, EnvInt("MTG_P16_ORACLE_KEEP", 1));
+        const std::size_t p17_kp = valuearm::t_deck_key.find("oraclek");
+        const int s_p16_keep = (p16K > 0 && p17_kp != std::string::npos && p17_kp + 7 < valuearm::t_deck_key.size())
+                             ? std::max(1, valuearm::t_deck_key[p17_kp + 7] - '0') : s_p16_keep_env;
         // SKIP-LEAVES LADDER (value_play.rollout_from = s; P16, default off). A pass the ladder will supersede
         // needs no leaf estimate: below s the pass runs leafless (it can still PROVE a win, which commits exactly
         // where the rollout pass would have stopped on it), and the rollout ladder starts at s -- pass s admitted
@@ -111364,12 +111449,20 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
     // MTG_P16_TRACE (print-only): one line per top-level decision, its passes and their rollout units.
     struct P16Decision
     {
-        const GameState& st; SearchBudget* b; int* ocd; long long u0; int lc0; bool sm;
-        P16Decision(const GameState& s_, SearchBudget* b_, int* o_, bool sm_)
-            : st(s_), b(b_), ocd(o_), u0(b_ ? b_->Used() : 0), lc0(0), sm(sm_)
+        const GameState& st; SearchBudget* b; int* ocd; long long u0; int lc0; bool sm; int mt;
+        P16Decision(const GameState& s_, SearchBudget* b_, int* o_, bool sm_, int mt_)
+            : st(s_), b(b_), ocd(o_), u0(b_ ? b_->Used() : 0), lc0(0), sm(sm_), mt(mt_)
         {
             ++p16::t_hyb_nest;
-            if (p16::t_hyb_nest == 1) { p16::t_passes.clear(); p16::OracleBegin(s_.game_seed, s_.turn_number, sm_); }
+            if (p16::t_hyb_nest == 1)
+            {
+                p16::t_passes.clear(); p16::OracleBegin(s_.game_seed, s_.turn_number, sm_);
+                if (p17::On()) { p16::t_px.clear(); p16::P17Take(p16::t_p17_last); }   // MTG_P17_LEDGER (print-only)
+                // MTG_P17_ISOLATE (measurement only): this decision sees nothing an earlier decision searched.
+                static const bool s_iso = EnvOn("MTG_P17_ISOLATE");
+                if (heurarm::Flag(heurarm::P17_ISOLATE, s_iso))
+                { IdHintGameClear(); InWinCacheClear(); RolloutSuffixProbeClear(); GameLineCacheClear(); }
+            }
         }
         ~P16Decision()
         {
@@ -111388,13 +111481,37 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     ln += buf;
                 }
                 ln += '\n';
+                if (p17::On())
+                {
+                    // MTG_P17_LEDGER: the same decision, each pass's counter delta (see p16::P17Take for the field
+                    // order), then Z = the residual after the last pass. h = the decision state's BuildSimKey.h1, so
+                    // two shapes' decisions pair only at the identical state.
+                    std::vector<long long> z; p16::P17Delta(z);
+                    const TranspositionTable::Key hk = BuildSimKey(st, 0, mt, sm);
+                    char hb[512];
+                    std::snprintf(hb, sizeof hb, "[p17] j=%s s=%llu T%d sm=%d h=%016llx |", heurarm::t_job_name ? heurarm::t_job_name : "-",
+                                  static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0,
+                                  static_cast<unsigned long long>(hk.h1));
+                    ln += hb;
+                    auto put = [&](char kind, int d, const std::vector<long long>& v)
+                    {
+                        char b2[32]; std::snprintf(b2, sizeof b2, " %c%d:", kind, d); ln += b2;
+                        for (std::size_t i = 0; i < v.size(); ++i)
+                        { std::snprintf(b2, sizeof b2, i ? ",%lld" : "%lld", v[i]); ln += b2; }
+                    };
+                    for (std::size_t i = 0; i < p16::t_passes.size() && i < p16::t_px.size(); ++i)
+                    { put(p16::t_passes[i].kind, p16::t_passes[i].depth, p16::t_px[i]); }
+                    put('Z', 0, z);
+                    ln += '\n';
+                    p16::t_px.clear();
+                }
                 std::fwrite(ln.data(), 1, ln.size(), stderr);
                 p16::t_passes.clear();
             }
             if (p16::t_hyb_nest == 1) { p16::t_oracle_K = 0; }
             --p16::t_hyb_nest;
         }
-    } _p16dec(state, budget, out_committed_depth, second_main);
+    } _p16dec(state, budget, out_committed_depth, second_main, max_turns);
     // This whole function is planning on state COPIES, but it is called straight from
     // AIEngine::TakeTurn (real-play context) and its single-pass escalation invokes FSLineWin
     // DIRECTLY -- so until 2026-08-25 this was the one planning entry point with NO enclosing

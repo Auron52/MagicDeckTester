@@ -898,6 +898,9 @@ enum Slot : int
     GRANT_HASTE_CAST_CREDIT,  // MTG_GRANT_HASTE_CAST_CREDIT  item 6 (mana-clean, Fungus ENUM-GAP): a hasted creature cast under a LIVE Brightcap Badger grant carries Action::rock_mana = one unit of the grant colour (the hasted-dork stamp for grant-reached bodies). Default ON; =0 -> no stamp
     GRANT_CAP_SKIP_RESERVED,  // MTG_GRANT_CAP_SKIP_RESERVED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE): the backtrack's granted-Saproling cap skips tokens in the caller's reserved (hold) mask before counting, so a held body never takes the slot of a tappable one. Default ON; =0 -> the old count
     FADE_PREFLOAT_DOOMED,     // MTG_FADE_PREFLOAT_DOOMED  item 6 (mana-clean, Fungus s30065330 DOMINATED-CREATURE lead 1): a Saproling Burst activation whose counter removal kills this Burst's tokens first taps each UNTAPPED token that will die and can tap for mana (Brightcap Badger's grant) into the float (CR 605.3a; the body dies either way, mana empties without burn, so it only adds mana and decides no colour). SpellEffects.h, g_fade_prefloat_hook. Default ON; =0 -> the token dies untapped as before
+    P17_INWIN_ANYLEAF,        // MTG_P17_INWIN_ANYLEAF  P17 (default OFF): the in-window proof cache's key does not fold the LEAF kind -- an in-window win / no-win is a property of the menu's in-window lines, which no leaf reads, so a leafless pass's proofs answer a rollout pass and vice versa
+    P17_LEAFLESS_NOHINT,      // MTG_P17_LEAFLESS_NOHINT  P17 (default OFF): a constant-leaf (leafless) pass records no ID hint at a node it leaves as a no-win -- every plan there ties at "no win", so the "best" index carries no order and would only shadow a rollout pass's hint
+    P17_ISOLATE,              // MTG_P17_ISOLATE  P17 MEASUREMENT ONLY (default OFF): each top-level decision starts with the game-persistent search caches empty (game line cache, in-window cache, previous-decision ID hints, E3 rollout cache) -- isolates decisions to price what crosses between them
     COUNT
 };
 
@@ -1740,6 +1743,9 @@ inline const char* Name(int slot)
         "MTG_GRANT_HASTE_CAST_CREDIT",
         "MTG_GRANT_CAP_SKIP_RESERVED",
         "MTG_FADE_PREFLOAT_DOOMED",
+        "MTG_P17_INWIN_ANYLEAF",
+        "MTG_P17_LEAFLESS_NOHINT",
+        "MTG_P17_ISOLATE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
