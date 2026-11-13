@@ -1,6 +1,6 @@
 # Legend-rule keep: the entry routes still resolved by a provider pick inside the search window
 
-Status: LARGELY PURGED (Boars LK, 2026-11-13). Written 2026-11-13 by the Boars I5b item 4 integrator as an
+Status: PURGED on every known route (Boars LK/LK2/LK3, 2026-11-13; LK3 `c8b303062`). Written 2026-11-13 by the Boars I5b item 4 integrator as an
 assessment; the LK update below records what is now searched and what remains.
 
 ## LK update (2026-11-13)
@@ -29,9 +29,22 @@ assessment; the LK update below records what is now searched and what remains.
   (`GameEngine::ResolveStack`; rollout twin `DepletionSbaAtResolution`'s exit), and at the end of the end step
   (`GameEngine::EndStep` / `SimulateEndAndStartNextTurn`; commit `b48089aa9`). RESIDUAL: a resolution nested inside another resolution
   in the rollout (cascade, a free recast) is checked at the outermost exit, the depletion SBA's disclosed residual.
-* **Remaining:** upkeep-only routes (Snow's Marit Lage's Slumber, Emeria) fire before any plan of the turn, so no
-  turn pin is written yet; they need a next-upkeep pin (the `scripted_echo` / BoundaryFan precedent). Unobserved in
-  the census.
+* **Nested-resolution verdict (LK3).** CR 704.3: no SBA mid-resolution; the check comes when a player would receive
+  priority, i.e. after EACH stack object. The executor was already faithful (a free cast made during a resolution goes
+  through `EffectHandler::PushFreeCast` as its own stack entry and is legend-checked before the parent continues). The
+  rollout recursed `apply_one` and checked only at the outermost exit; it now calls `LegendRuleSbaCheckpoint` right
+  after the nested `apply_one` at the cascade, Creative Technique and Breaching Dragonstorm ETB sites. Unpredictable
+  Cyclone's free cast is top-level and was already checked.
+* **Upkeep-only routes (LK3, `c8b303062`).** Duplicates made in the upkeep (Marit Lage's Slumber, Emeria, Defense of
+  the Heart, upkeep arrivals) take their keep from a NEXT-UPKEEP pin: `Plan::upkeep_legend_keep_choice`, a BoundaryFan
+  `ulk_` digit (provider's pick first, then the other copy), packed into `scripted_legend_keep` (bits 2-3 next upkeep,
+  bit 4 window open; opened at both turn starts, closed when the upkeep ends). The executor has its own crossing node
+  (`TurnSolver::ChooseRealCrossingUpkeepLegend`) for a committed line with no pin.
+* **Identity (LK3):** 31-job pooled batch vs the I5b item 4 binary: no result changes, no slower game; logs moved in
+  Galadriel 15/20, Unpredictable Cyclone 2/20, Melira Pod 1/20, Prevent Damage 1/20.
+* **Remaining:** none known inside the search window. Disclosed limitations: one answer per turn / per upkeep; with
+  3+ copies the plan fan offers only all-oldest / all-newest; the depletion-land nested residual. The sections below
+  are the pre-LK assessment, kept for history.
 
 ## Background
 

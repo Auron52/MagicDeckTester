@@ -607,3 +607,36 @@ then lower card number. It orders the playout only; inside the window every opti
 * **USER QUESTION -- width:** a sound DOMINANCE fold (keep-oldest when the old copy is untapped, non-sick or
   haste-irrelevant, has no fewer counters and nothing is attached to either) would remove most of the twin width. Not
   applied without approval.
+
+## LK done (2026-11-13) -- the legend-rule keep purge (NO-GREEDY), and the legend rule as an SBA
+
+Commits: `204cedbe6` (LK WIP), `b48089aa9`, `c58f8b75a`, `aa1450512` (LK2), `c8b303062` (LK3). Full detail:
+`docs/design/legend-rule-keep-remaining-greedy.md`.
+
+* **Searched now, on every route the census or a code read found:** the cast routes (I5b item 4) plus a per-plan
+  TURN-LEVEL keep twin (`Plan::legend_keep_turn`, 0 none / 1 oldest / 2 newest, `AppendSubdecisionAxes`' LEGEND-KEEP
+  TURN FAN) covering legendary land plays, land puts (Galadriel's scry reveal, Risen Reef, land tutors), put effects,
+  nested free casts, token copies and reanimation; and a NEXT-UPKEEP pin (`Plan::upkeep_legend_keep_choice`,
+  BoundaryFan `ulk_` digit, packed into `scripted_legend_keep`) for duplicates made in the upkeep before any plan of
+  the turn runs (Marit Lage's Slumber, Emeria, Defense of the Heart, upkeep arrivals). The executor has its own
+  crossing node (`ChooseRealCrossingUpkeepLegend`) when the committed line set no pin.
+* **Rules fix (CR 704.3 / 704.5j):** the legend rule was a beginning-of-combat event plus a few resolution sites, so
+  a second legendary land played in main 2 survived (both untapped) into the next turn. It is now checked after every
+  land play, every stack resolution and the end step, in both worlds. The rollout also checks after each nested free
+  cast (cascade, Creative Technique, Breaching Dragonstorm's ETB) -- the executor already did, since those go on the
+  stack as their own object.
+* **Executor/rollout lockstep:** the executor now writes the turn's keep pin before its main-1 land drop, as the
+  rollout does.
+* **Identity vs the I5b item 4 binary** (one pooled `--batch` per binary, 20 g d3 b10 seed 9101, full game traces; 28
+  duplicate-legend decks + Stompy Surprise / Treasure Hunt controls + Boars 40 g): **no game changed its result and
+  no game is slower.** Logs moved in Galadriel 15/20 (earlier legend-rule timing on The Grey Havens; a T3 re-rank),
+  Unpredictable Cyclone 2/20, Melira Pod 1/20, Prevent Damage 1/20 -- every win turn identical. Every other deck
+  byte-identical. **Boars 40/40 avg 5.225, byte-identical.** mtg-test 3018/3018.
+* **GT movers to re-accept in the pooled smoke:** Galadriel, Unpredictable Cyclone, Melira Pod, Prevent Damage (logs
+  only; the fingerprints should not move), plus the I1 Heath movers.
+* **Disclosed limitations:** one keep answer per turn and one per upkeep (two different duplicate groups in one turn
+  get both-oldest or both-newest); with 3+ copies only all-oldest / all-newest are offered by the plan fan; the
+  depletion-land nested-resolution sweep residual is unchanged (out of scope).
+* **USER QUESTIONS (unchanged):** the beyond-horizon keep default (`LegendKeepIndex`, keep-oldest plus the
+  CritterLifegain / Mirrorwing / MidrangeBurn overrides) is agent-chosen; a sound dominance fold to cut twin width is
+  not applied without approval.
