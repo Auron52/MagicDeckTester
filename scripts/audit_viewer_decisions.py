@@ -2076,7 +2076,27 @@ def expected_for_card(card, deck_cards=None):
         # cannot surface that prompt, even when Replenish is cast repeatedly.
         if not any("Aura" in (c.get("subtypes") or []) for c in deck_cards):
             exp.discard("target")
+    if "jitte" in exp and deck_cards is not None and not any(_can_double_strike(c) for c in deck_cards):
+        # The combat `jitte` prompt fires ONLY when an equipped attacker has double strike
+        # (src/main.cpp JitteMidStepSpendable: the mid-step spend is the one real combat choice; every
+        # other spend is the main-phase JitteModeAbility plan line, checked as verb:jittemode in
+        # BOARD_ACTIVATIONS, and an unanswered combat spend BANKS -- USER 2026-08-27). A deck with no
+        # double-strike source therefore cannot surface it however long the sweep (Martyr Lifegain
+        # 2026-11-13: a HARD_MISS that was the expectation, not the viewer).
+        exp.discard("jitte")
     return exp, unmapped
+
+
+def _can_double_strike(card):
+    """Conservative: any printed keyword, param or oracle mention of double strike counts.
+    Bracketed implementation notes are not card text (Speaker of the Heavens' note discusses a
+    hypothetical double striker's lifelink), so they are stripped first."""
+    if any("double strike" in str(k).lower() for k in (card.get("keywords") or [])):
+        return True
+    if any("double_strike" in k and v for k, v in (card.get("parameters") or {}).items()):
+        return True
+    text = re.sub(r"\[[^\]]*\]", "", card.get("oracle_text") or "")
+    return "double strike" in text.lower()
 
 
 # ---------------------------------------------------------------------------
