@@ -27,10 +27,10 @@ stamp(){ date -u +%Y-%m-%dT%H:%M:%SZ; }
 say(){ echo "[$(stamp)] $*" | tee -a "$CHAIN"; }
 
 # Cheap decks first so signal arrives early; TH (search-heavy) last.
-ORDER=(slivers_vial Knights treasure_hunt)
+ORDER=(Slivers Knights treasure_hunt)
 declare -A DECKF=(
   [treasure_hunt]=decks/treasure_hunt/treasure_hunt.txt
-  [slivers_vial]=decks/slivers_vial/slivers_vial.txt
+  [Slivers]=decks/Slivers/Slivers.txt
   [Knights]=decks/Knights/Knights.cod
 )
 
@@ -45,11 +45,11 @@ GAMES_DEFAULT=${MM_GAMES:-6000}
 # Per-deck games/seed. User: keep them approximately EVEN, ~5000+ each, deadline (~19:30 PDT) is soft.
 # So 5000/seed for all three = 40k/arm/depth each (8 seeds x 2 depths x 2 arms x 5000). Large, even sample.
 # Est finish ~19:10-19:30 PDT from ~15:16. Clean rates: Sliv ~26ms, Kn ~19ms, TH ~38-45ms/game.
-declare -A GAMES_BY=( [treasure_hunt]=5000 [slivers_vial]=5000 [Knights]=5000 )
+declare -A GAMES_BY=( [treasure_hunt]=5000 [Slivers]=5000 [Knights]=5000 )
 CARDS=src/cards/data/cards.json
 
 say "NEW-vs-OLD full-profile A/B start (HEAD=$(git rev-parse --short HEAD), PID=$$)"
-say "decks[${ORDER[*]}] nseeds=$(echo $SEEDS | wc -w) depths[$DEPTHS] games/seed(TH=${GAMES_BY[treasure_hunt]},Slivers=${GAMES_BY[slivers_vial]},Knights=${GAMES_BY[Knights]})  (both arms: full keep+bottom, MTG_EXHAUSTIVE_BOTTOM=1)"
+say "decks[${ORDER[*]}] nseeds=$(echo $SEEDS | wc -w) depths[$DEPTHS] games/seed(TH=${GAMES_BY[treasure_hunt]},Slivers=${GAMES_BY[Slivers]},Knights=${GAMES_BY[Knights]})  (both arms: full keep+bottom, MTG_EXHAUSTIVE_BOTTOM=1)"
 
 # run <profile> <tag> <deck> <stem>  -> games for every depth/seed to $OUT/<stem>/
 run_arm(){ local prof="$1" tag="$2" deck="$3" stem="$4"; local d s

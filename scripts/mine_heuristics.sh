@@ -23,7 +23,7 @@
 #   ~1.3 slivers, ~2.1 antilife -> ~1700-6300 games/hr; multiply by GAMES x #SEEDS.
 #
 # Examples:
-#   scripts/mine_heuristics.sh decks/slivers_vial.txt
+#   scripts/mine_heuristics.sh decks/Slivers.txt
 #   GAMES=1000 SEEDS="2002 3003 4004" scripts/mine_heuristics.sh decks/NewDeck.cod
 set -euo pipefail
 

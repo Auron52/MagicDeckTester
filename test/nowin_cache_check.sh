@@ -16,7 +16,7 @@ GAMES=${2:-6}
 SEED=${3:-666000}
 K=${K:-3}
 BIN=${BIN:-build/RelWithDebInfo/mtg}
-DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm slivers_vial:slivers_vial treasure_hunt:treasure_hunt Knights:Knights"}
+DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm Slivers:Slivers treasure_hunt:treasure_hunt Knights:Knights"}
 
 OUT=logs/nowincache/$TAG
 mkdir -p "$OUT"

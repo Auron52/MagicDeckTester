@@ -25,7 +25,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 TAG=${1:?tag}; GAMES=${2:-1000}; DEPTH=${3:-5}; BUDGET=${4:-20}
 BIN=${BIN:-$(harness_bin)}
 THREADS=${THREADS:-20}
-DECKS=${DECKS:-"burn Goblins slivers_vial Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata2"}
+DECKS=${DECKS:-"burn Goblins Slivers Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata"}
 
 OUT=logs/nowinmetric/$TAG; mkdir -p "$OUT"
 man="$OUT/ab.manifest.json"

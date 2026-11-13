@@ -19,13 +19,13 @@ from collections import defaultdict
 PRIMARY = os.environ.get("BP_DATA_ROOT", "/workspaces/MagicDeckTester")
 ALL_DECKS = [  # (key, deck, profile) -- test/regression_cases.sh DECK_FILE / DECK_PROF, in that order
     ("fungusv3", "decks/Fungus/Fungus.cod", "decks/Fungus/Fungus.profile.json"),
-    ("slivers", "decks/slivers_vial/slivers_vial.txt", "decks/slivers_vial/slivers_vial.profile.json"),
+    ("slivers", "decks/Slivers/Slivers.txt", "decks/Slivers/Slivers.profile.json"),
     ("burn", "decks/burn/burn.txt", "decks/burn/burn.profile.json"),
     ("th", "decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
     ("knights", "decks/Knights/Knights.cod", "decks/Knights/Knights.profile.json"),
     ("whiteknights", "decks/WhiteKnights/WhiteKnights.cod", "decks/WhiteKnights/WhiteKnights.profile.json"),
     ("antilife", "decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.profile.json"),
-    ("hinata", "decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json"),
+    ("hinata", "decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
     ("dragonstorm", "decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json"),
     ("auras", "decks/Auras/Auras.cod", "decks/Auras/Auras.profile.json"),
     ("goblins", "decks/Goblins/Goblins.cod", "decks/Goblins/Goblins.profile.json"),

@@ -3,7 +3,7 @@
 // carried on MulliganProfile, and WantVialCharge returning false on line 1 when it was unset --
 // silently turned every Aether Vial into a blank three separate times:
 //
-//   * slivers_vial, 2026-08: a screen measured on a DEFAULT profile; cutting two Vials read
+//   * Slivers, 2026-08: a screen measured on a DEFAULT profile; cutting two Vials read
 //     -0.0953 instead of -0.0246 (docs/design/deck-combination-screening.md).
 //   * Pirates, 2026-09: "the Vial never charges, because there is no .profile.json yet"
 //     (docs/design/analysis-Pirates.md).

@@ -23,7 +23,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 TAG=${1:?tag}; GAMES=${2:-20}; SEED=${3:-1001}
 BIN=${BIN:-./build-instr/mtg}
 THREADS=${THREADS:-4}
-DECKS=${DECKS:-"burn Goblins slivers_vial Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata2"}
+DECKS=${DECKS:-"burn Goblins Slivers Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata"}
 
 [ -x "$BIN" ] || { echo "!! need the MTG_PROFILE build: cmake -S . -B build-instr -DCMAKE_BUILD_TYPE=Release -DMTG_PROFILE=ON && cmake --build build-instr"; exit 1; }
 

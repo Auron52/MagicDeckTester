@@ -1,4 +1,4 @@
-// Unit cover for the USER's settled Hinata2 cast order (MTG_HINATA_ORDER_FULL; docs/design/hinata-cast-order.md).
+// Unit cover for the USER's settled Hinata cast order (MTG_HINATA_ORDER_FULL; docs/design/hinata-cast-order.md).
 //
 // USER 2026-10-14, the settled order (TOTAL, all main 1):
 //   land > Sol Ring > Hinata > Reality Spasm > Gamble > Preordain > Ponder > Expressive Iteration > Ornithopter

@@ -11,7 +11,7 @@ card-implementation or AI-decision bugs.
 2. Drag a game-log `.json` onto the page, or click **Open game log**.
 
 Sample logs are in `logs/replay_samples/` (a clean turn-4 combo win, a slow turn-7 grind, and a
-no-win brick — from `decks/Hinata2.cod`, seed 7000).
+no-win brick — from `decks/Hinata.cod`, seed 7000).
 
 ## What you get
 
@@ -44,7 +44,7 @@ Any run with `--log-dir` emits one JSON per game (deterministic by seed + game i
 flagged game is exactly reproducible):
 
 ```
-./build/Release/mtg decks/Hinata2.cod --games 30 --seed 7000 --depth 5 \
+./build/Release/mtg decks/Hinata.cod --games 30 --seed 7000 --depth 5 \
     --budget-ms 20 --max-turns 8 --threads 0 --log-dir logs/hinata_games
 ```
 

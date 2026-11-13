@@ -8,8 +8,8 @@ cells: ship (profile play settings), d3 (d3 b10), d0, dNbM (depth N budget M, e.
 import argparse, json, re
 
 WT = '/workspaces/MagicDeckTester/.claude/worktrees/agent-a4d121dd522b89155'
-DECK = WT + '/decks/Hinata2/Hinata2.cod'
-PROF = WT + '/decks/Hinata2/Hinata2.profile.json'
+DECK = WT + '/decks/Hinata/Hinata.cod'
+PROF = WT + '/decks/Hinata/Hinata.profile.json'
 ap = argparse.ArgumentParser()
 ap.add_argument('--out', required=True)
 ap.add_argument('--game', action='append', required=True)

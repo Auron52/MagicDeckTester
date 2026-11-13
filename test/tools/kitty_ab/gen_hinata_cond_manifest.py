@@ -30,8 +30,8 @@ Blocks match round 1's so the two rounds are directly comparable.
 import json
 import sys
 
-DECK = "decks/Hinata2/Hinata2.cod"
-PROF = "decks/Hinata2/Hinata2.profile.json"
+DECK = "decks/Hinata/Hinata.cod"
+PROF = "decks/Hinata/Hinata.profile.json"
 GAMES = 3000
 
 FULL   = {"MTG_HINATA_ORDER_FULL": True}

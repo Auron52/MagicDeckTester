@@ -29,13 +29,13 @@ mkdir -p "$OUT"
 # Ordered CHEAPEST-FIRST so usable numbers land early instead of all at the end.
 DECKS=(
   "decks/burn/burn.txt|burn|6|20"
-  "decks/slivers_vial/slivers_vial.txt|slivers|5|20"
+  "decks/Slivers/Slivers.txt|slivers|5|20"
   "decks/Knights/Knights.cod|knights|5|20"
   "decks/treasure_hunt/treasure_hunt.txt|treasure_hunt|5|20"
   "decks/Dragonstorm/Dragonstorm.cod|dragonstorm|5|20"
   "decks/Auras/Auras.cod|auras|5|20"
   "decks/Anti-Lifegain/Anti-Lifegain.cod|antilife|5|20"
-  "decks/Hinata2/Hinata2.cod|hinata|5|20"
+  "decks/Hinata/Hinata.cod|hinata|5|20"
   "decks/Goblins/Goblins.cod|goblins|6|40"
 )
 

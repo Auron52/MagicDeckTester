@@ -41,7 +41,7 @@ DECKS=(
   "fungus     decks/Fungus/Fungus.cod"
   "kitty      decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod"
   "th         decks/treasure_hunt/treasure_hunt.txt"
-  "hinata     decks/Hinata2/Hinata2.cod"
+  "hinata     decks/Hinata/Hinata.cod"
   "melira     decks/Melira Pod/Melira Pod.cod"
   "mirrorwing decks/Mirrorwing Dragon/Mirrorwing Dragon.cod"
   "knights    decks/Knights/Knights.cod"

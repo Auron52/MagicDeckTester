@@ -27,7 +27,7 @@ USAGE
 
 `--check` is a HEURISTIC screen, not a verdict: it flags a deck whose provider is neither
 Generic nor a name-similar match. A flag means "explain this", and the explanation may well be
-"intended" -- Knights and slivers_vial both ride VialProvider on purpose. What must never happen
+"intended" -- Knights and Slivers both ride VialProvider on purpose. What must never happen
 is a deck landing on a foreign provider with nobody having decided that.
 """
 import json

@@ -66,7 +66,7 @@ struct RepArms
     ~RepArms() { heurarm::Clear(); }
 };
 
-// slivers_vial, main 1, the land drop made, `hives` Sliver Hives + `territories` Unclaimed Territories
+// Slivers, main 1, the land drop made, `hives` Sliver Hives + `territories` Unclaimed Territories
 // untapped (every one pays any colour for a Sliver spell), the given hand and creatures.
 GameState Board(int hives, int territories, const std::vector<std::string>& hand,
                 const std::vector<std::string>& creatures)

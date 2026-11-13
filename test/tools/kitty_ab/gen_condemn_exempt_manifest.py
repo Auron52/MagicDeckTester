@@ -41,7 +41,7 @@ Blocks match the two earlier Hinata rounds so all three are directly comparable.
 import json
 import sys
 
-HINATA = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
+HINATA = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 AL     = ("decks/Anti-Lifegain/Anti-Lifegain.cod", "decks/Anti-Lifegain/Anti-Lifegain.profile.json")
 KITTY  = ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod", "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json")
 GAMES = 3000

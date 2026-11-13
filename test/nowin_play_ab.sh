@@ -26,7 +26,7 @@ TAG=${1:?tag}; GAMES=${2:-20}; SEED=${3:-1001}
 IBIN=${IBIN:-./build-instr/mtg}          # MTG_PROFILE build: counters
 BBIN=${BBIN:-$(harness_bin)}             # normal Release: batch digest
 THREADS=${THREADS:-4}
-DECKS=${DECKS:-"burn Goblins slivers_vial Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata2"}
+DECKS=${DECKS:-"burn Goblins Slivers Knights treasure_hunt Anti-Lifegain Dragonstorm Auras Hinata"}
 
 [ -x "$IBIN" ] || { echo "!! need the MTG_PROFILE build at $IBIN"; exit 1; }
 

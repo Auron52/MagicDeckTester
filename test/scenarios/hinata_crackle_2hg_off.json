@@ -8,7 +8,7 @@
     "the attacks cannot be fixtured away). If this fixture ever starts winning, the second head",
     "is leaking into a 1-head game."
   ],
-  "deck": "decks/Hinata2/Hinata2.cod",
+  "deck": "decks/Hinata/Hinata.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

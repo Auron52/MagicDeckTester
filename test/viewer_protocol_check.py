@@ -694,7 +694,7 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     no --reveal). `extra` carries reconstructed keyed side-channel args (--firebreathe /
     --storage-hold / --cast-order); safe for every prefix (keyed, applied only when reached).
     max_turns must cover the reference's recorded win turn, else a real saved win (e.g. the
-    Hinata2 T9 game) can never replay. Returns (exit_code, stdout)."""
+    Hinata T9 game) can never replay. Returns (exit_code, stdout)."""
     args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
             "--max-turns", str(max_turns), "--depth", "0", "--profile", prof,
             "--choices", ",".join(str(c) for c in choices)]
@@ -1131,7 +1131,7 @@ def find_plan(recorded, plans, recorded_index=None, prefer=None, mdfc_face=None)
 # Stripped REPEATEDLY, not once: the volatile tail can be one combined group "(4/4, yours)" or
 # separate groups "(4/4) (yours)". 58b3a7e8 (2026-10-01) unified the protocol's P/T label sites on
 # ProtocolPTLabel, which moved the Soulfire target chooser from the first form to the second; a
-# single strip left "(4/4)" behind and reported Hinata2 s1_gi0 as an ENUM-GAP while the recorded
+# single strip left "(4/4)" behind and reported Hinata s1_gi0 as an ENUM-GAP while the recorded
 # five-target option was still offered verbatim.
 _LABEL_VOLATILE = re.compile(r"\s*\((?:\d+/\d+)?(?:,\s*)?(?:yours)?(?:\s*--[^)]*)?\)$")
 
@@ -1523,7 +1523,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     kept = [d for d in ref.get("decisions", [])
             if d["decision"].get("type") not in SIDE_CHANNEL_TYPES
             and not (force is not None and d["decision"].get("type") in FORCED_MULLIGAN_TYPES)]
-    # A reference that won later than the default horizon (Hinata2 s12_gi11 wins T9) needs a
+    # A reference that won later than the default horizon (Hinata s12_gi11 wins T9) needs a
     # horizon that covers it, else the replay can never reach its recorded terminal.
     mt = max(8, ref.get("win_turn") or 0)
 
@@ -1986,7 +1986,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
             # Auxiliary decision (scry / reorder / discard / target / ...). These carry an
             # `options` list whose ENUMERATION ORDER is not part of the contract -- a reference
             # stores each option's full content, so re-anchor by content exactly like plans
-            # (verbatim index only when either side lacks options). Hinata2 s12_gi11's T5
+            # (verbatim index only when either side lacks options). Hinata s12_gi11's T5
             # Preordain scry died on exactly this: pick 1 verbatim placed a different card on top
             # after the option order changed, and the drawn card diverged with NO shuffle involved.
             cur_opts = dec.get("options")
@@ -2179,7 +2179,7 @@ def main():
         # The sample = one ref per deck (archetype coverage) + every PINNED ref. PROMOTE-ON-CATCH:
         # if the OVERNIGHT full sweep ever flags a contract-fail on a ref the sample missed, add that
         # ref's relative path here so regression catches it early. Paths are relative to references/.
-        PINNED = set()   # e.g. {"Hinata2/claude_s1_gi0.json"}  -- grows as overnight surfaces gaps
+        PINNED = set()   # e.g. {"Hinata/claude_s1_gi0.json"}  -- grows as overnight surfaces gaps
         seen, sampled = set(), []
         for p in refs:
             # Key on the full reference DIR, not just the deck segment, so each VERSION of a deck

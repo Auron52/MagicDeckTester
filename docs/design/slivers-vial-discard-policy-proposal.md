@@ -76,7 +76,7 @@ both 1-drops (3 on turn 3) or lords (2 on turn 4)".
 
 Implemented as `VialProvider::CleanupDiscardCandidates` (`src/ai/DecisionProviders.cpp`, on the
 shared `vialcurve` curve fill), behind `MTG_SLIVERS_BUCKET_DISCARD` (default ON; `=0` ->
-`GenericProvider`'s max-MV ranking). Tests: `test/unit/test_slivers_vial_discard.cpp`.
+`GenericProvider`'s max-MV ranking). Tests: `test/unit/test_slivers_discard.cpp`.
 
 SCOPE, checked first: of the seven shipping lists holding Aether Vial (the only `upkeep_adds_charge`
 card), Knights / WhiteKnights / Soldiers route to VialProvider SUBCLASSES that override this hook

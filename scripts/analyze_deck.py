@@ -312,7 +312,7 @@ def SideboardReachability(main_names: list[str], side_names: list[str],
     In this simulator there is no game 2 and no sideboarding, so a sideboard is reachable
     ONLY through a wish effect. That makes reachability a real gate rather than a formality:
     scanning every sideboard unconditionally would hard-fail `--coverage-only` on the five
-    decks whose sideboards are vestigial import residue (Knights, Minotaur, Hinata2, Goblins,
+    decks whose sideboards are vestigial import residue (Knights, Minotaur, Hinata, Goblins,
     Unpredictable Cyclone), while NOT scanning a wish deck's sideboard hides its win condition.
 
     Three detectors, most authoritative first. All three are name/board level -- a wish's type

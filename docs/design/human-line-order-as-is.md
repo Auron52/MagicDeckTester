@@ -390,8 +390,8 @@ The USER ruled on the first three findings; the code follows the rulings, not th
   "matches nothing"), `melira_human_seq_feeder_loop_clicks`, `melira_human_seq_feeder_loop_commit`.
 * **(2) `cast=Remand` claims Remand's rider.** A spell cast with Remand riding it (`remand_by`) is claimed
   by the `cast=Remand` step, so it is not reported as unqueued and not dropped. Low priority per the USER;
-  checked not to regress. Scenarios `hinata2_human_seq_remand_rider_claimed`,
-  `hinata2_human_seq_remand_rider_commit`.
+  checked not to regress. Scenarios `hinata_human_seq_remand_rider_claimed`,
+  `hinata_human_seq_remand_rider_commit`.
 * **(3) A suspend-only card is not castable without suspend -- the fix is in the VIEWER.** USER: Lotus
   Bloom cannot be cast, so the viewer must not write `cast=Lotus Bloom`. The engine stamps `"suspend_only":
   true` on such a hand card; `queueCard` (linebuild.js) turns its thumb into the suspend. No

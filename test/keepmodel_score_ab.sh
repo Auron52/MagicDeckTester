@@ -19,11 +19,11 @@ BIN=./build/Release/mtg; ANALYZE=./build/Release/mtg-analyze
 
 declare -A DECK_FILE=(
   [burn]=decks/burn.txt   [antilife]=decks/Anti-Lifegain.cod [knights]=decks/Knights.cod
-  [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt   [hinata]=decks/Hinata2.cod)
+  [slivers]=decks/Slivers.txt [th]=decks/treasure_hunt.txt   [hinata]=decks/Hinata.cod)
 declare -A DECK_PROF=(
   [burn]=decks/burn.profile.json [antilife]=decks/Anti-Lifegain.profile.json
-  [knights]=decks/Knights.profile.json [slivers]=decks/slivers_vial.profile.json
-  [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata2.profile.json)
+  [knights]=decks/Knights.profile.json [slivers]=decks/Slivers.profile.json
+  [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata.profile.json)
 
 ROOT=logs/keepmodel_score_ab
 mkdir -p "$ROOT"

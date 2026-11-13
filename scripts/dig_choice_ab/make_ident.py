@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import make_dig_ab as M
 
 EXTRA = [("burn", "decks/burn/burn.txt", "decks/burn/burn.profile.json"),
-         ("hinata", "decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json"),
+         ("hinata", "decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
          ("goblins", "decks/Goblins/Goblins.cod", "decks/Goblins/Goblins.profile.json")]
 
 ap = argparse.ArgumentParser()

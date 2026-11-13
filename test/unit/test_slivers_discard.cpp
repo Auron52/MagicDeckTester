@@ -1,5 +1,5 @@
-// Unit tests for the USER-settled slivers_vial cleanup-discard rule (2026-10-09):
-// VialProvider::CleanupDiscardCandidates, implementing the "slivers_vial: SETTLED" block of
+// Unit tests for the USER-settled Slivers cleanup-discard rule (2026-10-09):
+// VialProvider::CleanupDiscardCandidates, implementing the "Slivers: SETTLED" block of
 // docs/design/slivers-vial-discard-policy-proposal.md --
 //   KEEP  coloured land -> anthem -> coloured land -> first unique grant -> curve fill (lords first)
 //         -> 3rd land -> rest of the fill -> soft 4th land

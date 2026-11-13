@@ -1,6 +1,6 @@
 {
  "_comment": "Slivers mana-clean pass 1 (2026-11-03, docs/design/mana-completeness-oracle.md 13.12): Sliver Hive's '{5}, {T}: create a 1/1 Sliver' is an ACTIVATED ABILITY of a land, so creature-spell-only mana cannot pay it -- Ancient Ziggurat ('Spend this mana only to cast a creature spell') pays nothing and Cavern of Souls pays only its {C} face (CR 106.6). The sibling slivers_hive_token_lethal.json is the same board with four Caverns and a Courtyard, where the {5} IS payable and the token is lethal; here four of those lands are Ziggurats, so the only legal {C} is the one Cavern's and the token is unpayable. Muscle Sliver + Cloudshredder Sliver swing for 4 into 6 life: no win this turn. The library filler is a land (another Ziggurat): a Sliver filler is drawn, cast and given haste by Cloudshredder, which wins regardless of the token. Both apply worlds once paid the token as a creature spell (for_creature=true), and the slivers pass-1 ENUM-GAPs were realisations that bought it with Ziggurat mana. The plan stays off the menu either way (the enumeration prices the activation as noncreature), so this fixture pins the board's legality; test_mana_oracle.cpp 'a Sliver Hive token is never paid with creature-spell-only mana' pins the apply itself.",
- "deck": "decks/slivers_vial/slivers_vial.txt",
+ "deck": "decks/Slivers/Slivers.txt",
  "turn": 6,
  "on_the_play": true,
  "max_turns": 6,

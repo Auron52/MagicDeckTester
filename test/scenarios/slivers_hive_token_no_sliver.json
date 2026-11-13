@@ -1,6 +1,6 @@
 {
  "_comment": "NEGATIVE control for slivers_hive_token_line.json, and the case that exposed the verdict-classification bug fixed 2026-08-26. Same board minus the Muscle Sliver, so Sliver Hive's 'Activate only if you control a Sliver' clause is UNSATISFIED and the activation is flatly illegal. It must grade `illegal` with a reason the player can act on -- NOT `legal_not_enumerated`. That distinction is the whole point: legal_not_enumerated is the reachability ALARM (it is what exposed the Jitte's pruned modes), so an illegal line wearing that grade is a false positive in the one gate that catches real engine gaps. Before the fix, CheckLine's stage-2 legality simulation modelled only `spec.casts` and `spec.land`, so EVERY unenumerated activation verb fell through to 'rules-legal, but the search never enumerated this line'.",
- "deck": "decks/slivers_vial/slivers_vial.txt",
+ "deck": "decks/Slivers/Slivers.txt",
  "turn": 6,
  "on_the_play": true,
  "max_turns": 6,

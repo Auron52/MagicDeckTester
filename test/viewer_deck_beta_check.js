@@ -222,11 +222,11 @@ if (py.status === 0) {
   // pySlug must agree with deck_registry.slug for the keys to line up at all.
   const py2 = require('child_process').spawnSync('python3',
     ['-c', 'import sys; sys.path.insert(0,"scripts"); import deck_registry as r; import json;'
-         + ' print(json.dumps([r.slug(s) for s in ["Mirrorwing Dragon","Anti-Lifegain","Creature Giving","burn","slivers_vial"]]))'],
+         + ' print(json.dumps([r.slug(s) for s in ["Mirrorwing Dragon","Anti-Lifegain","Creature Giving","burn","Slivers"]]))'],
     { cwd: ROOT, encoding: 'utf8' });
   if (py2.status === 0) {
     const wantSlugs = JSON.parse(py2.stdout.trim());
-    const gotSlugs = ['Mirrorwing Dragon', 'Anti-Lifegain', 'Creature Giving', 'burn', 'slivers_vial'].map(srv.pySlug);
+    const gotSlugs = ['Mirrorwing Dragon', 'Anti-Lifegain', 'Creature Giving', 'burn', 'Slivers'].map(srv.pySlug);
     ok(JSON.stringify(gotSlugs) === JSON.stringify(wantSlugs),
        'pySlug agrees with deck_registry.slug', JSON.stringify(gotSlugs) + ' vs ' + JSON.stringify(wantSlugs));
   }

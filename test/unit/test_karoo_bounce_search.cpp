@@ -392,7 +392,7 @@ TEST_CASE("Karoo bounce, USER rule: an enchanted land is never the pick, and its
 // ---- THE USER'S HINATA RULE (HinataProvider::BounceUserRulePick, MTG_HINATA_BOUNCE_RULE) ----------
 namespace
 {
-// Hinata2's main-deck SPELLS, so the rule's "colour the deck needs less" is derived from the real
+// Hinata's main-deck SPELLS, so the rule's "colour the deck needs less" is derived from the real
 // list (lands carry no pips; they are left out). Held in the library, where the derivation reads them.
 void HinataLibrary(GameState& s)
 {
@@ -453,7 +453,7 @@ TEST_CASE("Karoo bounce, HINATA rule: 2 Islands + 1 Mountain + Forbidden Orchard
     }
 }
 
-TEST_CASE("Karoo bounce, HINATA rule: 1 Island + 1 Mountain -> the Mountain (red is the colour Hinata2 needs less)")
+TEST_CASE("Karoo bounce, HINATA rule: 1 Island + 1 Mountain -> the Mountain (red is the colour Hinata needs less)")
 {
     LoadCards();
     Arm lever(heurarm::BOUNCE_UNTAPPED_FIRST, true);

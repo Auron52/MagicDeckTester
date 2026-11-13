@@ -4,7 +4,7 @@
 # invocation EXACTLY (same engine, flags, budget) so results are comparable -- only the seed
 # set is widened. Read-only w.r.t. deck profiles; all output under logs/keepmodel_ab_<stem>/.
 #
-#   KM_DECK=decks/slivers_vial.txt KM_FORM=hybrid bash test/keepmodel_ab_widseeds.sh
+#   KM_DECK=decks/Slivers.txt KM_FORM=hybrid bash test/keepmodel_ab_widseeds.sh
 set -u
 BIN=./build/Release/mtg
 DECK=${KM_DECK:?set KM_DECK=decks/<name>.txt}

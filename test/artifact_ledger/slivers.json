@@ -1,5 +1,5 @@
 {
- "deck": "slivers_vial",
+ "deck": "slivers",
  "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
  "entries": [
   {
@@ -18,7 +18,7 @@
     "    VERDICT arm=d6b40 adopt=0 delta=-0.00025 t=-1.53 cost=1.028x cost_basis=units seeds=8 games=8000 seeds_ok=1 why=costs MORE (1.03x) with quality better (-0.00025) -- a TRADE, the user's call",
     "    PICK arm=none why=no candidate is cheaper than live with quality not notably worse",
     "",
-    "=== 2026-10-31T12:42:59  PHASE E.6: no allowance for slivers_vial -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+    "=== 2026-10-31T12:42:59  PHASE E.6: no allowance for slivers -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
   }
  ]

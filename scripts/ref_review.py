@@ -764,7 +764,7 @@ def main():
     b.add_argument("--no-nc-deck", nargs="*", default=None, metavar="DECK",
                    help="skip the non-clairvoyant hint on these decks (deck_registry slugs): the NC search "
                         "has no work ceiling in claude-play and does not finish on some combo decks -- "
-                        "on 2026-10-24 single games of hinata2, accomplishedalchemist and "
+                        "on 2026-10-24 single games of hinata, accomplishedalchemist and "
                         "eldrazidisplacerflicker ran 3.5 h without finishing")
     st = sub.add_parser("status", help="print the review table with verdicts")
     st.add_argument("--verdict", default=None,

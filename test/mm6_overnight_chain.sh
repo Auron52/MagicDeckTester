@@ -20,12 +20,12 @@ while :; do
 done
 say "TH R=40 finished. Starting Slivers R=60."
 
-KM_DECK=decks/slivers_vial/slivers_vial.txt KM_TARGET_R=60 KM_ROUND_R=5 \
+KM_DECK=decks/Slivers/Slivers.txt KM_TARGET_R=60 KM_ROUND_R=5 \
   bash test/exhaustive_chunked_gen.sh
 say "Slivers R=60 done (exit $?). Starting Knights R=60."
 
 KM_DECK=decks/Knights/Knights.cod KM_TARGET_R=60 KM_ROUND_R=5 \
   bash test/exhaustive_chunked_gen.sh
 say "Knights R=60 done (exit $?). mm6 chain COMPLETE."
-say "Staged profiles: logs/slivers_vial_gen/pooled.profile.json, logs/Knights_gen/pooled.profile.json"
+say "Staged profiles: logs/Slivers_gen/pooled.profile.json, logs/Knights_gen/pooled.profile.json"
 say "Validate each (KEEP + confounded BOTTOM A/B) before adopting."

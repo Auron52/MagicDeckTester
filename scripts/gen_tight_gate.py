@@ -22,7 +22,7 @@ Analysis: scripts/paired_wins.py tight_gate.err hinata-off (etc., per deck).
 import json
 
 DECKS = {
-    "hinata": ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json"),
+    "hinata": ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
     "th": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
     "kitty": ("decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod",
               "decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"),

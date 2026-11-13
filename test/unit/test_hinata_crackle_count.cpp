@@ -1,5 +1,5 @@
 // Unit cover for IsCrackleCountSpell (MTG_CRACKLE_COUNT_EXACT, heurarm CRACKLE_COUNT_EXACT) and the two
-// places its answer reaches Hinata2's play (docs/design/reality-spasm-crackle-classification.md):
+// places its answer reaches Hinata's play (docs/design/reality-spasm-crackle-classification.md):
 //   * the predicate itself -- Crackle with Power yes, Reality Spasm NO (the legacy
 //     `x_damage_multiplier > 0` test said yes: CardDatabase defaults the multiplier to 1), an ordinary
 //     {X} burn no;

@@ -230,11 +230,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         {"EldraziDisplacerFlicker", "EldraziFlicker"}, {"FiveColour", "FiveColour"},
         {"Fluctuator", "Fluctuator"},         {"Fungus", "Fungus"},
         {"Giants", "Giants"},                 {"Goblins", "Goblins"},
-        {"Hinata2", "Hinata"},                {"KittyEquipment", "Equipment"},
+        {"Hinata", "Hinata"},                {"KittyEquipment", "Equipment"},
         {"Knights", "Knights"},               {"Melira Pod", "MeliraPod"},
         {"Minotaur", "Minotaur"},             {"Mirrorwing Dragon", "Mirrorwing"},
         {"Snow", "Snow"},                     {"StompySurprise", "Stompy"},
-        {"burn", "Burn"},                     {"slivers_vial", "Vial"},
+        {"burn", "Burn"},                     {"Slivers", "Vial"},
         {"treasure_hunt", "TreasureHunt"},
         // WhiteKnights (adopted 2026-09-26 on the other machine; met this table at the 2026-09-27
         // rebase): the second shipping Knight list, routed by its own signature ABOVE Knights --
@@ -271,7 +271,7 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Lieutenant / Recruitment Officer / Rick params) routes ABOVE goblin (three sac
         // outlets) and anti (two creature tutors) -- and the Angels term it used to trip (Champion of
         // the Parish's self-counter watcher) is now keyed on an ["Angel"] filter. Stage 4a gave it
-        // SoldiersProvider (an empty derivation of VialProvider) so it no longer shares slivers_vial's.
+        // SoldiersProvider (an empty derivation of VialProvider) so it no longer shares Slivers's.
         {"Soldiers", "Soldiers"},
         // Bruna (onboarding 2026-10-05): its own `bruna` signature (Bruna, Light of Alabaster's
         // attack_gather_auras) routes at the TOP -- Open the Armory's and Glittering Wish's

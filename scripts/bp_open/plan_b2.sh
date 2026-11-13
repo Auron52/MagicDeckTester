@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Batch 2 on r2: stage-1 recovery of every slower game of ab_r2 (F1-F4 arm 'nodemote' and all-five arm 'on')
 # + the unlimited-budget exactness cell (x3 = depth 3, budget 0), one pooled manifest.
-#   x3 arms: off / nodemote / on on the cheap decks; off / on on hinata (a d3 b0 Hinata2 game costs >30 CPU-min).
+#   x3 arms: off / nodemote / on on the cheap decks; off / on on hinata (a d3 b0 Hinata game costs >30 CPU-min).
 set -u
 export BP_DATA_ROOT=/workspaces/MagicDeckTester/build/scratch/bp_open/data
 S=/workspaces/MagicDeckTester/.claude/worktrees/agent-a9469f45bff622cfb/scripts/bp_open

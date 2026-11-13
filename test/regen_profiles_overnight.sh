@@ -31,14 +31,14 @@ declare -A SRC=(
   [burn]=decks/test_deck.txt
   [th]=decks/treasure_hunt.txt
   [antilife]="decks/Anti-Lifegain.cod"
-  [slivers]=decks/slivers_vial.txt
+  [slivers]=decks/Slivers.txt
   [knights]=decks/Knights.cod
 )
 declare -A PROF=(
   [burn]=decks/test_deck.profile.json
   [th]=decks/treasure_hunt.profile.json
   [antilife]=decks/Anti-Lifegain.profile.json
-  [slivers]=decks/slivers_vial.profile.json
+  [slivers]=decks/Slivers.profile.json
   [knights]=decks/Knights.profile.json
 )
 

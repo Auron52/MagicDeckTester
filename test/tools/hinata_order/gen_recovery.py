@@ -10,8 +10,8 @@ game_index gi, which reproduces the batch game exactly.
 import argparse, json
 
 WT = '/workspaces/MagicDeckTester/.claude/worktrees/agent-a4d121dd522b89155'
-DECK = WT + '/decks/Hinata2/Hinata2.cod'
-PROF = WT + '/decks/Hinata2/Hinata2.profile.json'
+DECK = WT + '/decks/Hinata/Hinata.cod'
+PROF = WT + '/decks/Hinata/Hinata.profile.json'
 ap = argparse.ArgumentParser()
 ap.add_argument('slower')
 ap.add_argument('--out', required=True)
@@ -27,8 +27,8 @@ for f in a.flag:
     k, v = f.split('=')
     flags[k] = v not in ('0', 'false')
 if a.deck_dir:
-    DECK = a.deck_dir + '/Hinata2.cod'
-    PROF = a.deck_dir + '/Hinata2.profile.json'
+    DECK = a.deck_dir + '/Hinata.cod'
+    PROF = a.deck_dir + '/Hinata.profile.json'
 min_gi = {}
 for spec in [x for x in a.min_gi.split(',') if x]:
     c, n = spec.split('=')

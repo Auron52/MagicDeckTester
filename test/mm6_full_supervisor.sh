@@ -16,7 +16,7 @@ KM_DECK=decks/treasure_hunt/treasure_hunt.txt KM_CHUNK_R=1 KM_ROUND_R=5 \
 say "TH exit=$?"
 
 say "=== [2/3] Slivers R=60 (fresh) ==="
-KM_DECK=decks/slivers_vial/slivers_vial.txt KM_TARGET_R=60 KM_ROUND_R=5 \
+KM_DECK=decks/Slivers/Slivers.txt KM_TARGET_R=60 KM_ROUND_R=5 \
   bash test/exhaustive_chunked_gen.sh
 say "Slivers exit=$?"
 
@@ -25,4 +25,4 @@ KM_DECK=decks/Knights/Knights.cod KM_TARGET_R=60 KM_ROUND_R=5 \
   bash test/exhaustive_chunked_gen.sh
 say "Knights exit=$?"
 
-say "SUPERVISOR COMPLETE. Staged profiles: logs/{treasure_hunt,slivers_vial,Knights}_gen/pooled.profile.json"
+say "SUPERVISOR COMPLETE. Staged profiles: logs/{treasure_hunt,Slivers,Knights}_gen/pooled.profile.json"

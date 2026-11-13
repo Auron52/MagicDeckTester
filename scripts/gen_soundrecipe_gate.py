@@ -26,7 +26,7 @@ delta ~ +3% (read via a separate MTG_ROLLOUT_STATS cell, not this batch).
 import json
 
 DECKS = {
-    "hinata": ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json"),
+    "hinata": ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json"),
     "burn": ("decks/burn/burn.txt", "decks/burn/burn.profile.json"),
     "th": ("decks/treasure_hunt/treasure_hunt.txt", "decks/treasure_hunt/treasure_hunt.profile.json"),
     "dragonstorm": ("decks/Dragonstorm/Dragonstorm.cod", "decks/Dragonstorm/Dragonstorm.profile.json"),

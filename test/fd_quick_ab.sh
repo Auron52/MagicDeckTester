@@ -18,7 +18,7 @@ SEEDS="5005 6006"
 # hard-coded to the pre-move FLAT layout (a decklist directly under decks/) and had been dead
 # ever since; the binary path was likewise Windows-only. Neither script could run here.
 DECKS=(
-  "slivers=$(h_deck slivers_vial)=$(h_profile slivers_vial)"
+  "slivers=$(h_deck Slivers)=$(h_profile Slivers)"
   "burn=$(h_deck burn)=$(h_profile burn)"
   "th=$(h_deck treasure_hunt)=$(h_profile treasure_hunt)"
 )

@@ -21,7 +21,7 @@ depth/units decomposition comes from a separate MTG_ROLLOUT_STATS probe, not thi
 import json
 import sys
 
-H = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
+H = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 
 BASE = {"MTG_HINATA_ORDER_FULL": True, "MTG_BP_NO_GREEDY_CONT": True}
 ARMS = {

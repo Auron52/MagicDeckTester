@@ -631,7 +631,7 @@ def plan_ok(p, used):
         return False
     cards = {a.get("card") for a in p.get("actions") or [] if a.get("card")}
     # "X + Remand on it" casts Remand too (back to hand, draw a card): only the search's if it did
-    # (Hinata2 s4_gi3, 2026-10-26).
+    # (Hinata s4_gi3, 2026-10-26).
     cards |= {a.get("remand_by") for a in p.get("actions") or [] if a.get("remand_by")}
     return bool(cards or p.get("land")) and cards <= used["cards"]
 
@@ -1129,7 +1129,7 @@ def walk(c, prefix, extra, log, from_turn):
                 if d2 is None or k2 != "decision":
                     continue
                 # A plan that does nothing (the same frame comes back): after Irencrag Feat's lock the
-                # viewer still offers thousands of casts (Hinata2 s9_gi8 T5, 2026-10-26).
+                # viewer still offers thousands of casts (Hinata s9_gi8 T5, 2026-10-26).
                 if (d2.get("type") == "main_phase" and (d2.get("turn"), d2.get("phase")) == key
                         and frame_sig(d2) == frame_sig(d)
                         and [q.get("summary") for q in d2.get("plans") or []]
@@ -1237,7 +1237,7 @@ RESCUE_NODES = 160    # main-phase frames rescue() may expand
 
 def rescue(c, extra, start, log, want):
     """-> a pick stream that wins on turn `want`, or None. The guided walk commits one plan per frame, and
-    a viewer plan can execute in a different order from the one it lists (Hinata2 s9_gi8 T5: "Reality
+    a viewer plan can execute in a different order from the one it lists (Hinata s9_gi8 T5: "Reality
     Spasm, Soulfire Eruption, Irencrag Feat" casts Irencrag BEFORE Soulfire, whose cast then spends
     Irencrag's one remaining spell, while the search cast Irencrag after Soulfire's exile) or pay a segment
     from sources the search kept for later (s1_gi0 T6: Cascade Bluffs, the second Reality Spasm's {U}{U}).

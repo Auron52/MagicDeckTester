@@ -1,5 +1,5 @@
 {
-  "deck": "decks/Hinata2/Hinata2.cod",
+  "deck": "decks/Hinata/Hinata.cod",
   "env": {
     "MTG_HUMAN_PLAY": "1"
   },

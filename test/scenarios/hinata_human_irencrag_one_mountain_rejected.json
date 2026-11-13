@@ -1,6 +1,6 @@
 {
-  "comment": "Q37 generic check, Hinata2 (Irencrag Feat {1}{R}{R}{R}, adds seven {R}): one Mountain out, land drop spent. Unlike Cyclone and Dragonstorm (their *_one_mountain_rejected fixtures), Hinata2's human-play menu does not carry this plan (the line is not enumerated; MTG_RITUAL_FLOAT_COLOR_EXACT=0 does not change that), so CheckLine's stage 2 rejects it on its own, before and after the Q37 preview. Pinned so the line stays illegal with a reason naming the cost.",
-  "deck": "decks/Hinata2/Hinata2.cod",
+  "comment": "Q37 generic check, Hinata (Irencrag Feat {1}{R}{R}{R}, adds seven {R}): one Mountain out, land drop spent. Unlike Cyclone and Dragonstorm (their *_one_mountain_rejected fixtures), Hinata's human-play menu does not carry this plan (the line is not enumerated; MTG_RITUAL_FLOAT_COLOR_EXACT=0 does not change that), so CheckLine's stage 2 rejects it on its own, before and after the Q37 preview. Pinned so the line stays illegal with a reason naming the cost.",
+  "deck": "decks/Hinata/Hinata.cod",
   "turn": 1,
   "on_the_play": true,
   "resume_at": "main1",

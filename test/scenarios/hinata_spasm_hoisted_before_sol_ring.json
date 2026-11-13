@@ -1,6 +1,6 @@
 {
  "_comment": [
-  "USER-FOUND, 2026-10-06 (play viewer, Hinata2 seed 5 gi=4 T6, logs/play/rejections/",
+  "USER-FOUND, 2026-10-06 (play viewer, Hinata seed 5 gi=4 T6, logs/play/rejections/",
   "Hinata2_cod_s5_gi4_t6.json): 'cast=Reality Spasm;cast=Sol Ring;cast=Reality Spasm;cast=Crackle",
   "with Power' was refused as 'unsupported' -- no enumerated plan cast Reality Spasm.",
   "",
@@ -20,7 +20,7 @@
   "sub-decisions), every variant carrying all four casts."
  ],
  "env": { "MTG_HUMAN_PLAY": "1", "MTG_UNPRUNED": "1" },
- "deck": "decks/Hinata2/Hinata2.cod",
+ "deck": "decks/Hinata/Hinata.cod",
  "turn": 6,
  "on_the_play": false,
  "max_turns": 6,

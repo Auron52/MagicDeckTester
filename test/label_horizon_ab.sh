@@ -27,7 +27,7 @@ H=${H:-4}
 OUT=logs/labelhorizon/$TAG
 mkdir -p "$OUT"
 
-DECKS=${DECKS:-"burn:burn Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm slivers_vial:slivers_vial treasure_hunt:treasure_hunt Knights:Knights Hinata2:Hinata2"}
+DECKS=${DECKS:-"burn:burn Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm Slivers:Slivers treasure_hunt:treasure_hunt Knights:Knights Hinata:Hinata"}
 
 printf '%-16s %7s %7s %9s %9s   %s\n' deck rows_off rows_on sec_off sec_on 'label movement'
 for spec in $DECKS; do

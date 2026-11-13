@@ -13,6 +13,6 @@ if [[ -n "$FIRST_PID" ]]; then
   while kill -0 "$FIRST_PID" 2>/dev/null; do sleep 60; done
 fi
 # Belt-and-suspenders: ensure no Hinata analyze process is still running before we start.
-while pgrep -f 'mtg-analyze decks/Hinata2' >/dev/null 2>&1; do sleep 60; done
+while pgrep -f 'mtg-analyze decks/Hinata' >/dev/null 2>&1; do sleep 60; done
 echo "=== [$(date -u +%H:%M:%S)] next3: first batch clear; starting seeds 40001007-09 ===" | tee -a "$OUT/driver.log"
 SEEDS="40001007 40001008 40001009" bash scripts/hinata_gen_chunks.sh

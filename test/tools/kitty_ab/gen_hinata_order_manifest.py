@@ -37,8 +37,8 @@ n=3000/cell clears open item 1's ">= 2000 games/block before any default flip".
 import json
 import sys
 
-DECK = "decks/Hinata2/Hinata2.cod"
-PROF = "decks/Hinata2/Hinata2.profile.json"
+DECK = "decks/Hinata/Hinata.cod"
+PROF = "decks/Hinata/Hinata.profile.json"
 GAMES = 3000
 
 FULL   = {"MTG_HINATA_ORDER_FULL": True}

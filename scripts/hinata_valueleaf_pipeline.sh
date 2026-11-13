@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Hinata value-leaf regeneration driver (2026-07-31).
 #
-# WHY: Hinata's shipped value leaf (value_play in decks/Hinata2/Hinata2.value.json -- target_depth 5,
+# WHY: Hinata's shipped value leaf (value_play in decks/Hinata/Hinata.value.json -- target_depth 5,
 # budget_ms 20, heavy, beam W=3/leafdepth=2) is LIVE in every game, but its supporting numbers are
 # stale in three separate ways:
 #   1. its own note says "PROVISIONAL d5 default; revise after mulligan profile + depth table";
@@ -27,10 +27,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 ROWS_B=logs/eval/hinata_value_v2b.rows          # K=3, --max-turns 8  (the volume run)
 ROWS_A=logs/eval/hinata_value_v2.rows           # K=8, default horizon (the fidelity run)
-STAGED=logs/eval/Hinata2.value.STAGED.json
-DECK=decks/Hinata2/Hinata2.cod
-PROF=decks/Hinata2/Hinata2.profile.json
-LIVE=decks/Hinata2/Hinata2.value.json
+STAGED=logs/eval/Hinata.value.STAGED.json
+DECK=decks/Hinata/Hinata.cod
+PROF=decks/Hinata/Hinata.profile.json
+LIVE=decks/Hinata/Hinata.value.json
 
 # ---- STAGE 1: CHUNKED, SELF-RESUMING ROW DUMP ------------------------------------------------
 # Rows are appended as they are produced, so an interruption never loses ROWS -- but it does lose

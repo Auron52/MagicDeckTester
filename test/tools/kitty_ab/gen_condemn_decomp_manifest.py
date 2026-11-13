@@ -47,7 +47,7 @@ pairs on the index intersection across runs.
 import json
 import sys
 
-H = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
+H = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 
 ORD   = {"MTG_HINATA_ORDER_FULL": True}
 NG    = {"MTG_BP_NO_GREEDY_CONT": True}

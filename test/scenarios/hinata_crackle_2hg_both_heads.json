@@ -13,7 +13,7 @@
     "surplus overkill on top of the 30 (the run turn's untap step clears any staged tapped/sick,",
     "so the attack cannot be fixtured away); the WIN needs the second head's 15."
   ],
-  "deck": "decks/Hinata2/Hinata2.cod",
+  "deck": "decks/Hinata/Hinata.cod",
   "turn": 4,
   "on_the_play": true,
   "active_life": 20,

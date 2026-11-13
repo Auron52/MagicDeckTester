@@ -24,9 +24,9 @@ MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 DRY = "--dry-run" in sys.argv[1:]
 DECKS = {
     "Anti-Lifegain": ("decks/Anti-Lifegain.cod", "decks/Anti-Lifegain.profile.json"),
-    "Hinata2":       ("decks/Hinata2.cod",       "decks/Hinata2.profile.json"),
+    "Hinata":       ("decks/Hinata.cod",       "decks/Hinata.profile.json"),
     "Knights":       ("decks/Knights.cod",       "decks/Knights.profile.json"),
-    "slivers_vial":  ("decks/slivers_vial.txt",  "decks/slivers_vial.profile.json"),
+    "Slivers":  ("decks/Slivers.txt",  "decks/Slivers.profile.json"),
     "burn":          ("decks/burn.txt",     "decks/burn.profile.json"),
     "treasure_hunt": ("decks/treasure_hunt.txt", "decks/treasure_hunt.profile.json"),
 }

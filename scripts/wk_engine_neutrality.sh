@@ -18,7 +18,7 @@
 # Stage B replaced THREE open-coded double-strike expressions with one shared oracle
 # (CreatureHasDoubleStrike). Claimed byte-identical -- and this is the arm that is easy to fake:
 #   ONLY TWO DECKS IN THE REPO CONTAIN A DOUBLE-STRIKE SOURCE AT ALL (KittyEquipment: Kor Duelist
-#   + Balan, the two Equipment paths; slivers_vial: Thrumming Hivepool, the grants_double_strike
+#   + Balan, the two Equipment paths; Slivers: Thrumming Hivepool, the grants_double_strike
 #   lord path and hence the bs.ds prefilter). Run without those two, a "0 differ" result on Stage B
 #   means the oracle returned false everywhere and nothing was tested. They are mandatory.
 #
@@ -54,8 +54,8 @@ DECKS = [
     ("knights2hg",  "Knights",        "Knights",        200, True),   # the ONLY heads-gate observer
     ("kitty",       "KittyEquipment", "KittyEquipment", 300, False),  # STAGE B: both Equipment paths
     ("kitty2hg",    "KittyEquipment", "KittyEquipment", 150, True),
-    ("slivers",     "slivers_vial",   "slivers_vial",   300, False),  # STAGE B: the ds LORD + bs.ds
-    ("slivers2hg",  "slivers_vial",   "slivers_vial",   150, True),
+    ("slivers",     "Slivers",   "Slivers",   300, False),  # STAGE B: the ds LORD + bs.ds
+    ("slivers2hg",  "Slivers",   "Slivers",   150, True),
     ("angels",      "Angels",         "Angels",         300, False),  # quest counters/attack triggers
     ("angels2hg",   "Angels",         "Angels",         150, True),
     ("goblins",     "Goblins",        "Goblins",        300, False),  # ApplyAttackSelfPumps' twin

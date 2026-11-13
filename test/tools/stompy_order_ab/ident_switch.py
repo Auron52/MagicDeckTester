@@ -22,8 +22,8 @@ jobs = [
     {"name": "dragonstorm.d3", "deck": os.path.join(WT, "decks/Dragonstorm/Dragonstorm.cod"),
      "profile": os.path.join(WT, "decks/Dragonstorm/Dragonstorm.profile.json"), "games": 30, "seed": S0,
      "depth": 3, "budget_ms": 10, "ignore_play_profile": True},
-    {"name": "hinata.d0", "deck": os.path.join(WT, "decks/Hinata2/Hinata2.cod"),
-     "profile": os.path.join(WT, "decks/Hinata2/Hinata2.profile.json"), "games": 200, "seed": S0,
+    {"name": "hinata.d0", "deck": os.path.join(WT, "decks/Hinata/Hinata.cod"),
+     "profile": os.path.join(WT, "decks/Hinata/Hinata.profile.json"), "games": 200, "seed": S0,
      "depth": 0, "budget_ms": 0, "ignore_play_profile": True},
 ]
 json.dump({"jobs": jobs}, open(sys.argv[1], "w"), indent=1)

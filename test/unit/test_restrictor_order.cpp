@@ -1,4 +1,4 @@
-// Unit cover for MTG_RESTRICTOR_ORDER_EXACT, the d0-runner stall behind Hinata2's 2HG gi 254 and d0 gi 195 /
+// Unit cover for MTG_RESTRICTOR_ORDER_EXACT, the d0-runner stall behind Hinata's 2HG gi 254 and d0 gi 195 /
 // 865 / 1773 (docs/design/reality-spasm-crackle-classification.md, "The d0-runner stall"): the subset walks'
 // Irencrag Feat test ("you can cast only one more spell this turn") also requires the casts ranked before it,
 // and Irencrag itself, to be payable without its own float -- otherwise every payable order casts it earlier

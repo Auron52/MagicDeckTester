@@ -3424,7 +3424,7 @@
     }
    ]
   },
-  "hinata2": {
+  "hinata": {
    "runs": [
     {
      "binary": "PGO",
@@ -3445,7 +3445,7 @@
      "commit": "9ec4732d652c7ab1ace3d6d0e300035bbf20dae4",
      "date": "2026-11-05T04:05:38Z",
      "decisions": 53272,
-     "deck": "decks/Hinata2/Hinata2.cod",
+     "deck": "decks/Hinata/Hinata.cod",
      "deck_sha": "0ac019429c9f8d34a7d71f58ef60491b5ebd873b",
      "game_index": 0,
      "games": 5000,
@@ -3493,7 +3493,7 @@
      "commit": "b5d2a6ef0a7f99d57f45dee77c1a3cb7c0eca258",
      "date": "2026-11-08T20:50:01Z",
      "decisions": 53277,
-     "deck": "decks/Hinata2/Hinata2.cod",
+     "deck": "decks/Hinata/Hinata.cod",
      "deck_sha": "0ac019429c9f8d34a7d71f58ef60491b5ebd873b",
      "game_index": 5000,
      "games": 5000,
@@ -7546,7 +7546,7 @@
     }
    ]
   },
-  "slivers_vial": {
+  "slivers": {
    "runs": [
     {
      "binary": "PGO",
@@ -7564,7 +7564,7 @@
      "commit": "17b0950ff4bdc36d2aeaae66caa57631fae6190b",
      "date": "2026-11-03T06:26:46Z",
      "decisions": 742559,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 0,
      "games": 100000,
@@ -7601,7 +7601,7 @@
      "commit": "97dc0982fc3f4708ba3bd032306f7db3879b0a28",
      "date": "2026-11-08T07:53:35Z",
      "decisions": 37056,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 100000,
      "games": 5000,
@@ -7639,7 +7639,7 @@
      "commit": "ba84ab37b0661036ed5f58a465d8f414cdb888a6",
      "date": "2026-11-08T10:17:04Z",
      "decisions": 37130,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 105000,
      "games": 5000,
@@ -7677,7 +7677,7 @@
      "commit": "9358b0e14eb3d3eabfed77fceec3c9cddee39f17",
      "date": "2026-11-08T14:57:21Z",
      "decisions": 742493,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 110000,
      "games": 100000,
@@ -7715,7 +7715,7 @@
      "commit": "e1d4ef4f5305cd220691bb4c17c6a342bc4955b4",
      "date": "2026-11-12T04:11:26Z",
      "decisions": 37180,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 210000,
      "games": 5000,
@@ -7751,7 +7751,7 @@
      "commit": "c1ed1a922bed82e2e4dbd68a729c0cd22b604536",
      "date": "2026-11-12T05:14:05Z",
      "decisions": 37119,
-     "deck": "decks/slivers_vial/slivers_vial.txt",
+     "deck": "decks/Slivers/Slivers.txt",
      "deck_sha": "5dc06506ec9bf6473190653c54364149ff579cdc",
      "game_index": 215000,
      "games": 5000,

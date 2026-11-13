@@ -1,5 +1,5 @@
 {
- "deck": "hinata2",
+ "deck": "hinata",
  "_doc": "artifact refresh verdicts -- scripts/artifact_queue.py (LEDGER_DIR)",
  "entries": [
   {
@@ -44,7 +44,7 @@
     "    previous live sidecar kept as logs/vlq_hinata2/playset/Hinata2.value.PREV.json",
     "    next: commit it with the deck's smoke + regression GT re-accepted (it changes play).",
     "",
-    "=== 2026-11-11T16:15:32  PHASE E.6: no allowance for hinata2 -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
+    "=== 2026-11-11T16:15:32  PHASE E.6: no allowance for hinata -- no ladder escalations in 1200 games (single-path or trust-dominated); fleet default R = 0"
    ]
   }
  ]

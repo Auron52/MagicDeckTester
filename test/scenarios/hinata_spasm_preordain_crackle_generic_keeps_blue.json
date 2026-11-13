@@ -1,6 +1,6 @@
 {
  "_comment": [
-  "USER frame, 2026-10-06 (play viewer, Hinata2 seed 5 gi=4 T6, logs/play/rejections/",
+  "USER frame, 2026-10-06 (play viewer, Hinata seed 5 gi=4 T6, logs/play/rejections/",
   "Hinata2_cod_s5_gi4_t6.json) -- the residual of the Spasm/Sol Ring fix: with no land drop,",
   "'cast=Reality Spasm;cast=Preordain;cast=Crackle with Power' was still 'unsupported'.",
   "",
@@ -27,7 +27,7 @@
   "MTG_HUMAN_PLAY": "1",
   "MTG_UNPRUNED": "1"
  },
- "deck": "decks/Hinata2/Hinata2.cod",
+ "deck": "decks/Hinata/Hinata.cod",
  "turn": 6,
  "on_the_play": false,
  "max_turns": 6,

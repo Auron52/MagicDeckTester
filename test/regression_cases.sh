@@ -31,7 +31,7 @@ declare -A DECK_FILE=(
   # at decks/Fungus/v1-sporesower-shelldweller/ and decks/Fungus/candidate-b-2026-09/ with their
   # own fitted artifacts, so either can be restored to the suite as its own key if ever needed.
   [fungusv3]=decks/Fungus/Fungus.cod
-  [slivers]=decks/slivers_vial/slivers_vial.txt
+  [slivers]=decks/Slivers/Slivers.txt
   [burn]=decks/burn/burn.txt
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
@@ -41,7 +41,7 @@ declare -A DECK_FILE=(
   [whiteknights]=decks/WhiteKnights/WhiteKnights.cod
   [kithkin]=decks/Kithkin/Kithkin.cod
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod
-  [hinata]=decks/Hinata2/Hinata2.cod
+  [hinata]=decks/Hinata/Hinata.cod
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.cod"
   [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.cod"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.cod
@@ -94,7 +94,7 @@ declare -A DECK_FILE=(
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
-  [slivers]=decks/slivers_vial/slivers_vial.profile.json
+  [slivers]=decks/Slivers/Slivers.profile.json
   [burn]=decks/burn/burn.profile.json
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
@@ -104,7 +104,7 @@ declare -A DECK_PROF=(
   [whiteknights]=decks/WhiteKnights/WhiteKnights.profile.json
   [kithkin]=decks/Kithkin/Kithkin.profile.json
   [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json
-  [hinata]=decks/Hinata2/Hinata2.profile.json
+  [hinata]=decks/Hinata/Hinata.profile.json
   [cyclone]="decks/Unpredictable Cyclone/Unpredictable Cyclone.profile.json"
   [shadowborn]="decks/Shadowborn Apostle/Shadowborn Apostle.profile.json"
   [dragonstorm]=decks/Dragonstorm/Dragonstorm.profile.json

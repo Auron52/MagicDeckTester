@@ -27,7 +27,7 @@ K=${K:-3}
 THREADS=${THREADS:-20}
 BLOCK=${BLOCK:-4}
 BIN=${BIN:-$(harness_bin)}
-DECKS=${DECKS:-"burn:burn Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm slivers_vial:slivers_vial treasure_hunt:treasure_hunt Knights:Knights"}
+DECKS=${DECKS:-"burn:burn Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm Slivers:Slivers treasure_hunt:treasure_hunt Knights:Knights"}
 
 OUT=logs/labelthroughput/$TAG
 mkdir -p "$OUT"

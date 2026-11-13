@@ -10,12 +10,12 @@ LOG=logs/mm6_ab_chain.out
 say(){ echo "[$(date -u +%FT%TZ)] $*" | tee -a "$LOG"; }
 declare -A DECKF=(
   [treasure_hunt]=decks/treasure_hunt/treasure_hunt.txt
-  [slivers_vial]=decks/slivers_vial/slivers_vial.txt
+  [Slivers]=decks/Slivers/Slivers.txt
   [Knights]=decks/Knights/Knights.cod
 )
 say "AB CHAIN start (HEAD=$(git rev-parse --short HEAD), PID=$$)"
 for mode in keep bottom; do
-  for stem in treasure_hunt slivers_vial Knights; do
+  for stem in treasure_hunt Slivers Knights; do
     say "########## $stem $mode A/B START ##########"
     KM_DECK="${DECKF[$stem]}" \
     KM_STATIC="decks/$stem/$stem.profile.json" \

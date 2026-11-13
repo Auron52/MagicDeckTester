@@ -37,7 +37,7 @@ ARM_ORDER=(base node d56 node0 d560)
 DECKS=(
  "mirrorwing|decks/Mirrorwing Dragon/Mirrorwing Dragon.cod|decks/Mirrorwing Dragon/Mirrorwing Dragon.profile.json"
  "kitty|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.cod|decks/KittyEquipment/v1-kemba-balan/KittyEquipment.profile.json"
- "hinata|decks/Hinata2/Hinata2.cod|decks/Hinata2/Hinata2.profile.json"
+ "hinata|decks/Hinata/Hinata.cod|decks/Hinata/Hinata.profile.json"
  "th|decks/treasure_hunt/treasure_hunt.txt|decks/treasure_hunt/treasure_hunt.profile.json"
  "auras|decks/Auras/Auras.cod|decks/Auras/Auras.profile.json"
  "burn|decks/burn/burn.txt|decks/burn/burn.profile.json"

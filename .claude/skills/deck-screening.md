@@ -152,9 +152,9 @@ reading them.
 
 ```json
 {
-  "base":          "decks/slivers_vial/slivers_vial.txt",
-  "profile":       "decks/slivers_vial/slivers_vial.profile.json",
-  "value_profile": "decks/slivers_vial/slivers_vial.value.json",
+  "base":          "decks/Slivers/Slivers.txt",
+  "profile":       "decks/Slivers/Slivers.profile.json",
+  "value_profile": "decks/Slivers/Slivers.value.json",
   "games": 20000, "seed": 910000,
   "play": "quality",
   "combinations": {
@@ -311,7 +311,7 @@ entries it lacks. Merging rather than replacing is what keeps the base arm untou
 | burn, 20,000 paired | Lava Spike (+0.213) | **−0.0001 ±0.0000** | `burn.profile.json` has a **`keep_model`**, which owns the keep decision at every hand size — the `card_scores` gate under it is unreachable, and the model's features never read it |
 | slivers, 6,000 paired | City of Brass (+0.024) | **+0.0022 ±0.0010** (t=+2.1) | legacy static path: the gate is live, and 0.4% of games changed |
 
-Of the 12 committed profiles only **slivers_vial and Knights** have a live gate: three carry keep
+Of the 12 committed profiles only **Slivers and Knights** have a live gate: three carry keep
 models, five have `hand_score_threshold = -1e18` (`NO_GATE`, which is what the analyzer emits today),
 one has no `card_scores`. And slivers' +0.0022 is for a *land*; a Lava Spike-sized score in an
 exposed deck would move more hands. Treat the pooling as **cheap insurance, not a rescue** — and if
@@ -838,7 +838,7 @@ ordinary-looking number. None of them costs a game.
 | guard | what it catches |
 |---|---|
 | entry count vs decklist | the shipped table was generated for a **different decklist** — every coverage answer here assumes they match, and `fallback_rate`'s caps come from the decklist. The count of size-7 cells implied by the decklist must equal the table's entries (exact on all 10 committed tables, K=10..21) |
-| two tables beside one deck | a stale sidecar that **out-ranks** the one you meant. The engine resolves `.gz` before `.json`; `decks/slivers_vial/` holds a gitignored R=1 table beside the committed R=60 `.gz` right now (same buckets, different keeps — that was luck) |
+| two tables beside one deck | a stale sidecar that **out-ranks** the one you meant. The engine resolves `.gz` before `.json`; `decks/Slivers/` holds a gitignored R=1 table beside the committed R=60 `.gz` right now (same buckets, different keeps — that was luck) |
 | per-job completion | a batch that did not finish every game. Pairing on the intersection would just shrink `n` |
 | apparatus fingerprint | a `--confirm` whose screen ran under a different apparatus |
 | per-deck lock | two runs rewriting one deck's arm decklists and `numbering.json` while the other's jobs read them |

@@ -32,7 +32,7 @@ DECKS = {
                         "decks/Creature Giving/Creature Giving.profile.json"),
     "knights": ("decks/Knights/Knights.cod", "decks/Knights/Knights.profile.json"),
     "goblins": ("decks/Goblins/Goblins.cod", "decks/Goblins/Goblins.profile.json"),
-    "slivers": ("decks/slivers_vial/slivers_vial.txt", "decks/slivers_vial/slivers_vial.profile.json"),
+    "slivers": ("decks/Slivers/Slivers.txt", "decks/Slivers/Slivers.profile.json"),
     "fivecolour": ("decks/FiveColour/FiveColour.cod", "decks/FiveColour/FiveColour.profile.json"),
     "stompy": ("decks/StompySurprise/StompySurprise.cod", "decks/StompySurprise/StompySurprise.profile.json"),
     "minotaur": ("decks/Minotaur/Minotaur.cod", "decks/Minotaur/Minotaur.profile.json"),

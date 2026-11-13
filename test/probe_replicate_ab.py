@@ -16,8 +16,8 @@ own heuristic default) so the comparison is like-for-like. Reported per game:
 import subprocess, sys, json, re, os, collections
 
 BIN  = os.environ.get("MTG_BIN", "./build/Release/mtg")
-DECK = "decks/slivers_vial/slivers_vial.txt"
-PROF = "decks/slivers_vial/slivers_vial.profile.json"
+DECK = "decks/Slivers/Slivers.txt"
+PROF = "decks/Slivers/Slivers.profile.json"
 DEC_RE = re.compile(r"<<<CLAUDE_DECISION>>>\n(.*?)\n<<<END_DECISION>>>", re.S)
 RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 

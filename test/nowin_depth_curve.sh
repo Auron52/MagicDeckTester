@@ -22,7 +22,7 @@ TAG=${1:?tag}; GAMES=${2:-100}; BUDGET=${3:-20}; shift 3 2>/dev/null || shift $#
 DEPTHS=${*:-"1 2 3 4 5"}
 BIN=${BIN:-./build-instr/mtg}
 THREADS=${THREADS:-4}
-DECKS=${DECKS:-"Hinata2 treasure_hunt Auras Dragonstorm Goblins"}
+DECKS=${DECKS:-"Hinata treasure_hunt Auras Dragonstorm Goblins"}
 
 [ -x "$BIN" ] || { echo "!! need the MTG_PROFILE build at $BIN"; exit 1; }
 OUT=logs/nowindepth/$TAG; mkdir -p "$OUT"

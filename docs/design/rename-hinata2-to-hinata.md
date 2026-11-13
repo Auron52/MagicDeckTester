@@ -1,4 +1,56 @@
-# Rename the Hinata2 deck to Hinata (queued 2026-10-30)
+# Rename the Hinata2 deck to Hinata (queued 2026-10-30; DONE 2026-11-13, with slivers_vial -> Slivers)
+
+## Status: DONE 2026-11-13 -- and the follow-up it opens
+
+USER 2026-11-13: *"Can you start by renaming Hinata2 to Hinata and slivers_vial to Slivers?"* -- *"A number
+being in it or vial being in the name are especially bad, which is why I singled those out at first. But I
+think it would be good to go for fully consistent naming, with Capitals and spaces once we believe we can do
+so."* -- *"But to start let's just do these two. Then we can see what kind of problems this causes."* The USER
+gave special dispensation to push this one at once (outside the 4-hour shared-branch window), since a rename
+that sits causes the most trouble.
+
+**What moved** (`git mv`, history kept): `decks/Hinata2/` -> `decks/Hinata/` and `decks/slivers_vial/` ->
+`decks/Slivers/` with every sibling stem; `references/Hinata2/` -> `references/Hinata/` and
+`references/slivers_vial/` -> `references/Slivers/` (10 USER games each, moved in the same commit as their
+decks); `test/artifact_ledger/{hinata2,slivers_vial}.json` -> `{hinata,slivers}.json`; the four
+`test/scenarios/hinata2_*.json` -> `hinata_*`; `test/unit/test_slivers_vial_discard.cpp` ->
+`test_slivers_discard.cpp`. Live tools, tests, scripts, skills and `tools/mulligan/decks.js` (regenerated)
+were rewritten; slug-keyed files (`mana_clean.json`, the artifact ledgers) took the new slugs `hinata` /
+`slivers`.
+
+**Deliberately left as history:** `src/` (comments only -- leaving it keeps `HEAD:src`, the PGO stamp and
+every paused generation freeze unchanged), `docs/design/` prose, `scripts/attic/`, GT and `job_cost.tsv`,
+recorded `logs/...` paths, run ids, `artifact-refresh/...` branch names, the value sidecar's changelog note
+(artifact bytes untouched, so the artifact queue's blob hashes do not move), and the finished claims
+`claims/hinata2.json` / `claims/slivers_vial.json` on origin's `artifact-queue` branch (both landed; the
+ledger governs a landed claim, and a missing claim does not queue a regeneration).
+
+**Things the rename exposed (the checklist for the broad rename below):**
+1. `hinata2hg` is NOT the old name: it is the `hinata` case key + the `2hg` format suffix (GT keys, gt_logs,
+   job_cost). Any mechanical rewrite must protect `<key>2hg`.
+2. Two key conventions coexist: the FOLDER name (`references/stable_shuffle_recoverability.json`,
+   `test_pirates_provider.cpp`, `h_deck`, `tools/mulligan/decks.js`) and the deck_registry SLUG
+   (`mana_clean.json`, `ref_bench.json`, `test/artifact_ledger/`, artifact-queue claims). With spaces the
+   slug becomes `creature_giving`-style; a rename changes both.
+3. `deck_registry` seed bases hash the slug (crc32 % 900): a rename gives the deck a new row-dump
+   seed_base (Hinata 335 -> 716, Slivers 784 -> 333). Checked: no OTHER deck's base moved. Re-check this
+   for every batch, since collision probing runs in sorted key order.
+4. `test/ref_bench.json` is rewritten by the running viewer's automatic `--stale-only` bench; do not
+   hand-edit it. `ref_bench.py` drops orphan rows and re-benches under the new key by itself.
+5. A path-keyed cache (`~/.cache/mtg/keeptable`) just misses once per renamed deck.
+6. The artifact-queue tool baselines staleness on the commit that last touched the artifact PATH, so a
+   rename resets the drift clock to the rename commit (under-reports staleness; never triggers a regen).
+
+**QUEUED (USER, not yet scheduled): fully consistent deck names, Capitals and spaces.** Once this rename has
+run a while without trouble, rename the rest to the `Mirrorwing Dragon` / `Creature Giving` shape. Candidates
+on 2026-11-13: `burn` -> `Burn`, `treasure_hunt` -> `Treasure Hunt`, and the CamelCase names
+(`AccomplishedAlchemist`, `BreachingDragonstorm`, `CritterLifegain`, `EldraziDisplacerFlicker`,
+`FiveColour`, `KittyEquipment`, `LandfallElementals`, `LifegainHeliodCombo`, `NivMizzetCombo`,
+`SelesnyaLifegain`, `StompySurprise`, `WhiteKnights`) into spaced words -- the exact spellings are the
+USER's call. `Anti-Lifegain` has a hyphen to decide on. Archived `v<N>-<slug>/` folders and their
+reference folders move with their decks.
+
+---
 
 USER 2026-10-30: *"Another small item I would like to queue up is renaming Hinata2 -> Hinata. The names
 shouldn't have any numbers in them."* Hinata2 is the only deck under `decks/` with a digit in its name, and

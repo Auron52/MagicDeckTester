@@ -8,11 +8,11 @@
 #   usage: GAMES=200 DECKS="hinata burn" SEEDS="2002 3003 4004 5005 6006 7007" scripts/beam_growth_merged_ab.sh
 set -uo pipefail
 COMB=build/Release/mtg; LAD=/tmp/mtg_origin
-declare -A F=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod [hinata]=decks/Hinata2/Hinata2.cod \
-  [th]=decks/treasure_hunt/treasure_hunt.txt [slivers]=decks/slivers_vial/slivers_vial.txt \
+declare -A F=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.cod [hinata]=decks/Hinata/Hinata.cod \
+  [th]=decks/treasure_hunt/treasure_hunt.txt [slivers]=decks/Slivers/Slivers.txt \
   [knights]=decks/Knights/Knights.cod [burn]=decks/burn/burn.txt )
-declare -A P=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json [hinata]=decks/Hinata2/Hinata2.profile.json \
-  [th]=decks/treasure_hunt/treasure_hunt.profile.json [slivers]=decks/slivers_vial/slivers_vial.profile.json \
+declare -A P=( [antilife]=decks/Anti-Lifegain/Anti-Lifegain.profile.json [hinata]=decks/Hinata/Hinata.profile.json \
+  [th]=decks/treasure_hunt/treasure_hunt.profile.json [slivers]=decks/Slivers/Slivers.profile.json \
   [knights]=decks/Knights/Knights.profile.json [burn]=decks/burn/burn.profile.json )
 G=${GAMES:-200}; DECKS=${DECKS:-"hinata burn"}; SEEDS=${SEEDS:-"2002 3003 4004 5005 6006 7007"}; DEPTH=${DEPTH:-5}; BUD=${BUD:-20}
 run() { # $1 bin  $2 deck  $3 seed  $4 env

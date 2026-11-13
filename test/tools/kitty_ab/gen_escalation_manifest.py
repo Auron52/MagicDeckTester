@@ -22,7 +22,7 @@ import json
 import pathlib
 import sys
 
-DECK = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
+DECK = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 BLOCKS = {"train": 5500001, "hold": 6600001}
 ESC_DEPTH, ESC_BUDGET = 6, 2000
 ARMS = {

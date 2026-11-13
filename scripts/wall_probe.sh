@@ -34,7 +34,7 @@ mkdir -p "$OUT/stats"
 RES="$OUT/results.tsv"
 [ -f "$RES" ] || printf 'rep\tdeck\tarm\twall_s\tavg_turns\n' > "$RES"
 
-HIN=(decks/Hinata2/Hinata2.cod --profile decks/Hinata2/Hinata2.profile.json
+HIN=(decks/Hinata/Hinata.cod --profile decks/Hinata/Hinata.profile.json
      --games ${HGAMES:-200} --seed 6600001 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)
 DRG=(decks/Dragonstorm/Dragonstorm.cod --profile decks/Dragonstorm/Dragonstorm.profile.json
      --games ${DGAMES:-200} --seed 2002 --depth 5 --budget-ms 20 --ignore-play-profile --threads 1)

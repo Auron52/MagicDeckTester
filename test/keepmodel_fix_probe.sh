@@ -11,10 +11,10 @@ GAMES=${GAMES:-600}; SEEDS=${SEEDS:-"4004 5005 6006 7007"}; MAXT=${MAXT:-8}; DEP
 DECKS=${DECKS:-"th slivers burn"}
 BIN=${BIN:-./build/Release/mtg}; ANALYZE=${ANALYZE:-./build/Release/mtg-analyze}
 declare -A DECK_FILE=( [burn]=decks/burn.txt [antilife]=decks/Anti-Lifegain.cod
-  [slivers]=decks/slivers_vial.txt [th]=decks/treasure_hunt.txt [hinata]=decks/Hinata2.cod
+  [slivers]=decks/Slivers.txt [th]=decks/treasure_hunt.txt [hinata]=decks/Hinata.cod
   [knights]=decks/Knights.cod)
 declare -A DECK_PROF=( [burn]=decks/burn.profile.json [antilife]=decks/Anti-Lifegain.profile.json
-  [slivers]=decks/slivers_vial.profile.json [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata2.profile.json
+  [slivers]=decks/Slivers.profile.json [th]=decks/treasure_hunt.profile.json [hinata]=decks/Hinata.profile.json
   [knights]=decks/Knights.profile.json)
 ROOT=logs/keepmodel_fix_probe; mkdir -p "$ROOT"
 echo "=== fix probe  genseed=$GENSEED gen=${GEN_GAMES}h eps$EPS iters$ITERS | ab=${GAMES}g d=$DEPTHS seeds=$SEEDS ==="

@@ -26,11 +26,11 @@ mkdir -p "$OUT"
 SEEDS="41041 42042 43043 44044 45045 46046"      # fresh
 {
     for s in $SEEDS; do
-        h_job "hinata_d0_s$s" "$(h_deck Hinata2)" "$(h_profile Hinata2)" 6000 "$s" \
+        h_job "hinata_d0_s$s" "$(h_deck Hinata)" "$(h_profile Hinata)" 6000 "$s" \
               depth=0 budget_ms=0  ignore_play_profile=true
-        h_job "hinata_d3_s$s" "$(h_deck Hinata2)" "$(h_profile Hinata2)"  400 "$s" \
+        h_job "hinata_d3_s$s" "$(h_deck Hinata)" "$(h_profile Hinata)"  400 "$s" \
               depth=3 budget_ms=10 ignore_play_profile=true
-        h_job "hinata_d5_s$s" "$(h_deck Hinata2)" "$(h_profile Hinata2)"  200 "$s" \
+        h_job "hinata_d5_s$s" "$(h_deck Hinata)" "$(h_profile Hinata)"  200 "$s" \
               depth=5 budget_ms=20 ignore_play_profile=true
     done
     # inertness controls: goblins duplicates Muxus (has an enter effect -> must NOT be pruned),

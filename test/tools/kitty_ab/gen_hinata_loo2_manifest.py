@@ -48,7 +48,7 @@ generic tiering, so "recovers X" means "that position was costing X".
 import json
 import sys
 
-H = ("decks/Hinata2/Hinata2.cod", "decks/Hinata2/Hinata2.profile.json")
+H = ("decks/Hinata/Hinata.cod", "decks/Hinata/Hinata.profile.json")
 FULL = {"MTG_HINATA_ORDER_FULL": True}
 
 ARMS = {

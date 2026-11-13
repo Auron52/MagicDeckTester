@@ -21,7 +21,7 @@ TAG=${1:?tag}; GAMES=${2:-40}; SEED=${3:-424000}; shift 3 2>/dev/null || shift $
 DEPTHS=${*:-"1 2 3 4"}
 BIN=${BIN:-$(harness_bin)}
 THREADS=${THREADS:-20}
-DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm treasure_hunt:treasure_hunt Knights:Knights burn:burn slivers_vial:slivers_vial"}
+DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm treasure_hunt:treasure_hunt Knights:Knights burn:burn Slivers:Slivers"}
 
 OUT=logs/laddervl/$TAG; mkdir -p "$OUT"
 printf '%-16s %6s %10s %10s %9s   %s\n' deck depth sec_off sec_on speedup 'result'

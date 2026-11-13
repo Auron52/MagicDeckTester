@@ -68,9 +68,9 @@ Four things it does that a hand-rolled A/B does not:
 Spec format:
 
     {
-      "base":          "decks/slivers_vial/slivers_vial.txt",
-      "profile":       "decks/slivers_vial/slivers_vial.profile.json",   # optional: found beside base
-      "value_profile": "decks/slivers_vial/slivers_vial.value.json",     # optional: found beside base
+      "base":          "decks/Slivers/Slivers.txt",
+      "profile":       "decks/Slivers/Slivers.profile.json",   # optional: found beside base
+      "value_profile": "decks/Slivers/Slivers.value.json",     # optional: found beside base
       "games": 20000, "seed": 910000, "depth": 5, "budget_ms": 20,
       "combinations": {
         "more_leeching": {"Hatchery Sliver": 2, "Leeching Sliver": 4},
@@ -215,7 +215,7 @@ def table_candidates(path):
 
     `.gz` FIRST, because that is what `AttachExhaustiveSidecar` (MulliganProfileIO.h:858) does. This
     list used to be in the opposite order, so the driver could compute coverage from one file while
-    the games ran on another. `decks/slivers_vial/` holds exactly that pair right now: a gitignored
+    the games ran on another. `decks/Slivers/` holds exactly that pair right now: a gitignored
     R=1 table sitting beside the committed R=60 `.gz`. Their buckets happen to be identical (so no
     measurement was affected) but their keep decisions are not -- identical bucketing was luck."""
     if not path:

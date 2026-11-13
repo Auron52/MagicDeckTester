@@ -5,7 +5,7 @@ Screening plays every arm under ONE keep table, fit to the base deck. Reweightin
 (`deck_compare.py`) reproduces the *weighting* half of that fit exactly and for free, but leaves the
 per-cell rollout values estimated on the base deck's library. Bounding that second half by
 regenerating each arm's own table is not affordable: six of the nine shipped tables were themselves
-generated below R=40 (Hinata2 at R=22 over 431k cells), so a "high-R bracket" would mean generating a
+generated below R=40 (Hinata at R=22 over 431k cells), so a "high-R bracket" would mean generating a
 BETTER table than the one we ship, once per arm, per screen.
 
 It does not need generation. A misfit cell only costs anything if it changes a DECISION, and the two

@@ -17,7 +17,7 @@ SEED=${3:-666000}
 K=${K:-3}
 BIN=${BIN:-build/RelWithDebInfo/mtg}
 NOWIN=${NOWIN:-1}
-DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm slivers_vial:slivers_vial treasure_hunt:treasure_hunt Knights:Knights burn:burn"}
+DECKS=${DECKS:-"Goblins:Goblins Anti-Lifegain:Anti-Lifegain Dragonstorm:Dragonstorm Slivers:Slivers treasure_hunt:treasure_hunt Knights:Knights burn:burn"}
 
 OUT=logs/labelbnb/$TAG
 mkdir -p "$OUT"

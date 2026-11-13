@@ -7,7 +7,7 @@ until it is known.
 
 Measuring it does NOT need a table. d is a per-cell quantity, so a SAMPLE of cells settles its typical
 magnitude, and `MTG_SCORE_COMPS` scores chosen compositions at chosen R. The cost is
-(cells x R x 2 decks x 2 pd) rollouts -- INDEPENDENT of the grid, so it is the same price on Hinata2's
+(cells x R x 2 decks x 2 pd) rollouts -- INDEPENDENT of the grid, so it is the same price on Hinata's
 431k-cell table as on burn's 10.9k one. That is the whole point: a full regeneration is unaffordable on
 this deck set (six of the nine shipped tables were themselves generated below R=40), and this is not.
 
@@ -122,7 +122,7 @@ def write_arm_deck(deck_dir, arm_counts_by_name, out):
     scratch directory with the sidecar materialised uncompressed."""
     lst, _, prof = deck_paths(deck_dir)
     # Always emit a .txt: the scorer keys the sidecar off the decklist's STEM, which is preserved, and
-    # a .cod's XML is not a line format. Half the deck set (Hinata2, Knights, ...) ships .cod.
+    # a .cod's XML is not a line format. Half the deck set (Hinata, Knights, ...) ships .cod.
     stem = os.path.basename(lst).rsplit(".", 1)[0] + ".txt"
     os.makedirs(out, exist_ok=True)
     per = {}
@@ -156,7 +156,7 @@ def write_arm_deck(deck_dir, arm_counts_by_name, out):
             if per.get(name):
                 f.write(f"{per[name]} {name}\n")
     # Link the shipped sidecar rather than materialising plain JSON. Now that the scorer resolves
-    # `.gz`, this keeps the fast load path: re-parsing Hinata2's 431k-cell table from expanded JSON
+    # `.gz`, this keeps the fast load path: re-parsing Hinata's 431k-cell table from expanded JSON
     # costs MINUTES per invocation and dwarfs the rollouts the run is trying to measure. The engine's
     # on-disk keep table is keyed by the sidecar's CANONICAL path, so the link shares the shipped
     # table's cache with nothing further to carry along (a stale `.bincache` link is just removed).
