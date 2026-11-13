@@ -304,3 +304,42 @@ TEST_CASE("doubler after exalted: the CR 500.4 probe -- payable in combat from u
         CHECK(t.dbl_pay_turn == -1);
     }
 }
+
+// MTG_EXALTED_DS_PROJECTION: exalted is POWER until end of turn (CR 702.83a), so a double-striking lone
+// attacker (Temur Battle Rage) deals the +E in BOTH damage steps. The combat core folds it into base_pw;
+// the attack projection used to add it once and under-count by E.
+TEST_CASE("exalted ds projection: a double-striking lone attacker's projection counts exalted twice")
+{
+    EnsureCardsDx();
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 1, /*sick=*/true);
+    PutDx(s, "Ignoble Hierarch", 2, /*sick=*/true);
+    const int bear = PutBearDx(s, 3);
+    s.battlefield[static_cast<std::size_t>(bear)].temp_double_strike = true;
+    REQUIRE(CountExalted(s.battlefield, 0) == 2);
+    const int real = LoneDamageDx(s, bear);
+    CHECK(real == 2 * (2 + 2));                                    // (2 power + exalted 2) x 2 strikes
+    CHECK(TurnSolver::ProjectedAttackDamageForTest(s) == real);
+    {
+        ArmDx off(heurarm::EXALTED_DS_PROJECTION, 0);
+        CHECK(TurnSolver::ProjectedAttackDamageForTest(s) == real - 2);   // the old once-only +E
+    }
+    // A single striker is unchanged by the fix: +E once either way.
+    s.battlefield[static_cast<std::size_t>(bear)].temp_double_strike = false;
+    CHECK(TurnSolver::ProjectedAttackDamageForTest(s) == LoneDamageDx(s, bear));
+    CHECK(LoneDamageDx(s, bear) == 4);
+}
+
+TEST_CASE("exalted ds projection: a deferred Berserk on a double striker -- projection == combat")
+{
+    EnsureCardsDx();
+    GameState s = BaseDx();
+    PutDx(s, "Ignoble Hierarch", 1, /*sick=*/true);
+    const int bear = PutBearDx(s, 3);
+    s.battlefield[static_cast<std::size_t>(bear)].temp_double_strike = true;
+    ProbeOk(s, 1);
+    CastDx(s, "Berserk", 3);
+    const int real = LoneDamageDx(s, bear);
+    CHECK(real == 2 * (2 * (2 + 1)));                              // Berserk after exalted, both strikes
+    CHECK(TurnSolver::ProjectedAttackDamageForTest(s) == real);
+}

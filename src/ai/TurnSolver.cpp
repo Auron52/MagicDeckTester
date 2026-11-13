@@ -13062,6 +13062,12 @@ static int PendingAttackDamageImpl(const GameState& state)
     // had the lord and ds halves already -- this projection had neither.
     const BoardSources bs = GatherBoardSources(state.battlefield, active);
     const bool drana_board = !bs.cd_counters.empty();
+    // The LAST counted attacker's power assembly, read by the exalted block below (which only fires with
+    // exactly one attacker, so "last" is "the lone one"): exalted is POWER, so the combat core folds it into
+    // base_pw before the double-strike and Jitte math (Combat.cpp, `base_pw = ... + exalted_bonus`).
+    int last_base_pw = 0;
+    bool last_jitte_bearer = false;
+    struct { int counters = 0, pump = 0, spend = 0; } last_jitte;
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != active) { continue; }
@@ -13089,13 +13095,15 @@ static int PendingAttackDamageImpl(const GameState& state)
                 jitte_bearer = true;
                 const Permanent& je = state.battlefield[jbf];
                 const CardDefinition* jd = CardDatabase::Instance().LookupCached(je.card);
+                const int jspend = ResolveProvider(state).JitteSpendCount(state, je.charge_counters);
                 dmg += JitteDamageMath(base_pw, ds, je.charge_counters,
-                                       jd->params.charge_pump_power,
-                                       ResolveProvider(state).JitteSpendCount(
-                                           state, je.charge_counters)).first;
+                                       jd->params.charge_pump_power, jspend).first;
+                last_jitte = { je.charge_counters, jd->params.charge_pump_power, jspend };
             }
             else { dmg += base_pw * (ds ? 2 : 1); }
         }
+        last_base_pw = base_pw;
+        last_jitte_bearer = jitte_bearer;
         if (drana_board)
         {
             const bool fs = CreatureHasFirstStrike(p, state, &bs.fs);
@@ -13144,13 +13152,31 @@ static int PendingAttackDamageImpl(const GameState& state)
     if (static_cast<int>(attackers.size()) == 1)
     {
         const int ex = CountExalted(state.battlefield, active);
-        dmg += ex;
+        if (!ExaltedDsProjectionOn()) { dmg += ex; }   // =0: the old once-only base bonus (A/B arm only)
         // ...and the trailing doublers cast after it (MTG_DOUBLER_AFTER_EXALTED): their extra is power,
         // so a double striker deals it in both steps, as ResolveCombatDamage does.
+        int bonus = ExaltedDsProjectionOn() ? ex : 0;
         if (ex > 0)
         {
             const int extra = DoublerDeferExaltedExtra(state, *attackers[0], ex);
-            if (extra > 0) { dmg += extra * (CreatureHasDoubleStrike(*attackers[0], state) ? 2 : 1); }
+            if (!ExaltedDsProjectionOn())
+            { if (extra > 0) { dmg += extra * (CreatureHasDoubleStrike(*attackers[0], state) ? 2 : 1); } }
+            else { bonus += extra; }
+        }
+        // MTG_EXALTED_DS_PROJECTION (default ON): exalted's +E (and the doubled extra) is POWER until end of
+        // turn (CR 702.83a), which the combat core adds to base_pw, so a double striker (Temur Battle Rage)
+        // deals it in BOTH steps and a Jitte bearer's closed form sees it. The projection used to add the base
+        // +E once, under-counting a double striker by E -- the projection now agrees with ResolveCombatDamage.
+        if (bonus > 0)
+        {
+            if (last_jitte_bearer)
+            {
+                dmg += JitteDamageMath(last_base_pw + bonus, ds_of[0], last_jitte.counters, last_jitte.pump,
+                                       last_jitte.spend).first
+                     - JitteDamageMath(last_base_pw, ds_of[0], last_jitte.counters, last_jitte.pump,
+                                       last_jitte.spend).first;
+            }
+            else { dmg += bonus * (ds_of[0] ? 2 : 1); }
         }
     }
 
