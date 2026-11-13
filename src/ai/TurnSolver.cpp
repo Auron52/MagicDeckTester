@@ -61278,7 +61278,23 @@ bool PdBatchTimingDominated(const GameState& s, const std::vector<Action>& acts)
             if (dup) { continue; }
         }
         const CardParams& pp = d->params;
-        if (pp.prevent_noncombat_to_self_gain || pp.land_tap_damage_each_player > 0) { return false; }
+        if (pp.prevent_noncombat_to_self_gain) { return false; }
+        if (pp.land_tap_damage_each_player > 0)
+        {
+            // A MANABARBS UNDER A GAIN ENGINE IS MONOTONE (MTG_PD_BATCH_BARBS, DEFAULT ON; =0 a Manabarbs keeps the
+            // batch). Its hit per land tap is a damage event from a noncreature source we control, worth
+            // DamageEventValue(c, barb): with a Tamanoa (or a Purity) already on c0 that is >= 0 to our life
+            // (g >= a) and >= 0 to the opponent's loss, and every monotone cast only raises it -- so a Manabarbs
+            // resolved before a later cast's taps never makes them worth less, and the batch (which pays those
+            // taps before it resolves) is dominated like any other. Without the engine on c0 a barb hit costs us
+            // life and the batch stands. A plan that sacrifices a creature (Dina's outlet) could remove the
+            // engine mid-plan, so it keeps the batch. Prevent Damage mana-clean gate 17000-21999: the
+            // {Manabarbs + Dina} ORACLE-GAP rows (Tamanoa out; the batch spent every pain before Dina resolved).
+            if (!dmgev::BatchBarbsEnabled()) { return false; }
+            const dmgev::ChainV bv = dmgev::DamageEventValue(c0, pp.land_tap_damage_each_player);
+            if (bv.life < 0 || bv.opp < 0) { return false; }
+            for (const Action& b : acts) { if (b.kind == Action::Kind::SacCreatureOutlet) { return false; } }
+        }
         if (!any_improves)
         {
             dmgev::GainChain c1 = c0;

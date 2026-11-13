@@ -534,6 +534,14 @@ inline bool BatchTimingEnabled()
     static const bool v = EnvOn("MTG_PD_BATCH_TIMING", true);
     return heurarm::Flag(heurarm::PD_BATCH_TIMING, v);
 }
+// ...and a Manabarbs in the batch is MONOTONE once a gain engine is on the board (PdBatchTimingDominated): a barb
+// hit is then worth >= 0 to both life totals, so it no longer keeps the batch. Mana-clean item 10 (Prevent Damage
+// {Manabarbs + Dina} ORACLE-GAP). DEFAULT ON; =0 restores "a Manabarbs keeps the batch".
+inline bool BatchBarbsEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_BATCH_BARBS", true);
+    return heurarm::Flag(heurarm::PD_BATCH_BARBS, v);
+}
 
 // PAIN DEFERRAL'S PAYABILITY TEST treats {C} as generic (CapabilityCovers, via PainDeferQuery).
 // DEFAULT ON; =0 restores the WUBRG + C superset test. A source's {C} mode can pay only a {C} PIP

@@ -1032,6 +1032,7 @@ TEST_CASE("Prevent Damage batch timing: the decline is the batch prepay's, and o
     }
     // ...and when the batch holds a NON-monotone card: a Manabarbs makes the later land taps worse
     // before a Tamanoa is out and better after, so the realised order would decide -- keep the batch.
+    // (MTG_PD_BATCH_BARBS exempts a Manabarbs only when the Tamanoa is ALREADY out; here it is in the plan.)
     {
         GameState b = board;
         Put(b, "City of Brass");   // seven mana: Tamanoa {R}{G}{W} + Manabarbs {3}{R}
@@ -1071,6 +1072,68 @@ TEST_CASE("Prevent Damage batch timing + deferral: Vito then Dina with Tamanoa o
     const GameState s = ApplyNamedPlan(S61013T4Board(), line);
     CHECK(Opp(s) == 18);
     CHECK(Me(s) == 14);
+}
+
+// MTG_PD_BATCH_BARBS (mana-clean item 10, gate 17000-21999 {Manabarbs + Dina} ORACLE-GAP): with a Tamanoa already
+// out, a Manabarbs hit is gained back (>= 0 life, >= 0 drain), so a batch holding Manabarbs is dominated like any
+// other: Dina's share of the plan is paid one cast at a time, and the Manabarbs payment's taps land after Dina.
+namespace
+{
+struct BatchBarbsArm
+{
+    std::int8_t prev;
+    explicit BatchBarbsArm(bool on) : prev(heurarm::t_arm[heurarm::PD_BATCH_BARBS])
+    { heurarm::t_arm[heurarm::PD_BATCH_BARBS] = on ? 1 : 0; }
+    ~BatchBarbsArm() { heurarm::t_arm[heurarm::PD_BATCH_BARBS] = prev; }
+};
+GameState BarbsDinaBoard()
+{
+    GameState s = S61013T4Board();   // City of Brass, Ancient Tomb, Tamanoa, Brushland, Reflecting Pool
+    Put(s, "City of Brass");         // six mana: Dina {B}{G} + Manabarbs {3}{R}
+    s.players[0].hand.clear();
+    HandPd(s, "Dina, Soul Steeper");
+    HandPd(s, "Manabarbs");
+    return s;
+}
+}   // namespace
+
+TEST_CASE("Prevent Damage batch timing: a Manabarbs under a Tamanoa no longer keeps the batch (MTG_PD_BATCH_BARBS)")
+{
+    BatchTimingArm timing(true);
+    const GameState board = BarbsDinaBoard();
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(board, true);
+    const TurnSolver::Plan* p = FindCastPlan(plans, { "Dina, Soul Steeper", "Manabarbs" });
+    if (p == nullptr) { p = FindCastPlan(plans, { "Manabarbs", "Dina, Soul Steeper" }); }
+    REQUIRE(p != nullptr);
+    {
+        // CONTROL ARM: the old rule keeps the batch. MUST differ.
+        BatchBarbsArm off(false);
+        GameState s = board;
+        CHECK(TurnSolver::BatchPrepayMainCasts(s, p->actions));
+    }
+    {
+        BatchBarbsArm on(true);
+        GameState s = board;
+        CHECK_FALSE(TurnSolver::BatchPrepayMainCasts(s, p->actions));
+        for (const Permanent& q : s.battlefield) { CHECK_FALSE(q.tapped); }
+    }
+    // Applied: the per-cast line drains the opponent at least once more than the batch (the batch's pain all
+    // lands before Dina exists), and costs us nothing (Tamanoa gains every event back).
+    std::vector<std::string> names;
+    for (const Action& a : p->actions) { names.push_back(a.card_name.str()); }
+    int opp_off = 0, me_off = 0;
+    {
+        BatchBarbsArm off(false);
+        const GameState s = ApplyNamedPlan(board, names);
+        opp_off = Opp(s); me_off = Me(s);
+        CHECK(Opp(s) == 20);
+    }
+    BatchBarbsArm on(true);
+    const GameState s = ApplyNamedPlan(board, names);
+    CHECK(OnBf3Pd(s, "Dina, Soul Steeper"));
+    CHECK(OnBf3Pd(s, "Manabarbs"));
+    CHECK(Opp(s) < opp_off);
+    CHECK(Me(s) >= me_off);
 }
 
 TEST_CASE("Prevent Damage pain deferral: {C} is generic while no {C} pip is live (s61013 T4, lone Vito)")
