@@ -29,7 +29,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED 87078b215 |
 | Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit; per-connecting-nontoken-Spirit combat-damage token; `dies_watch_nontoken` | none | drafted |
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
-| Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIX Hole A (flashback missing from state key / dominance, 3 sites; touches Gods) + Hole B (hand-cast→flashback and 2× flashback in one main unfindable) | A (`flashback_gy`) | drafted |
+| Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
 | Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
 | Skyclave Apparition | 2/3 | new optional ETB exile opp nonland nontoken MV≤4 (opponent spawns are legal targets in 8/10 games) + LTB Illusion | A (`dig` "(may exile)") | drafted |
 | Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
@@ -125,6 +125,75 @@ attributable to this change: 0.
 
 **Provisional deferrals (USER sign-off owed):** Drogskol Captain's hexproof grant; Shacklegeist's tap
 ability, block restriction (and Flying, inert everywhere); Spirit of the Labyrinth's draw cap (guarded).
+
+### Integrator B (2026-11-13): Lingering Souls + the flashback holes
+
+**Card (Tier 2, JSON on existing params).** `cast_creates_tokens 2` (1/1 white Spirit, Flying via
+`cast_created_token_keywords`) + `flashback_cost {1}{B}`, cost/oracle verbatim from live Scryfall
+(`logs/spirits/drafts/scry/souls/`; snapshot row added to `scryfall_reference.json`). The tokens carry the
+Spirit subtype on their own Card: Supreme Phantom makes them 2/2 (unit test).
+
+**Hole A (soundness), all three draft sites verified and fixed.** `DeckGraveyardReaders` (GoldFishRunner.cpp),
+BuildSimKey's graveyard fold (`gy_retraceable`, TurnSolver.cpp) and Dominance.h's named projection keyed only
+`retrace`; they now treat `flashback_cost` the same (the bit `GyR_RetraceNames` = "castable from the
+graveyard"). "Souls still in the graveyard" and "already flashed back" no longer share a TT / memo key or
+compare equal in EOT dominance. **Moves the Gods key** (Faithless Looting, Mystic Retrieval).
+Not fixed, surfaced: `tutor_from_graveyard` (Mystic Retrieval, Reborn Hope, Auroral Procession) has NO reader
+bit either -- a regrowth's target pool is a graveyard reader the stamp does not see (Gods is now partly covered,
+since any flashback card in its graveyard folds the whole graveyard).
+
+**Hole B (completeness).** Verified unfindable at HEAD by two new scenarios at `--depth 3 --budget-ms 0`
+(`spirits_souls_cast_then_flashback_same_main`, `spirits_souls_double_flashback_same_main`: both read win T6,
+the line wins T5). Fix, an ENUMERATOR fix (the USER's Astrolabe ruling: no new breakpoint):
+- B2: CollectActions emits a flashback once per graveyard COPY (retrace stays one per name).
+- B1: a post-pass (after every pass that can drop a hand cast) emits one PENDING `CastFromGraveyard` per hand
+  copy of a flashback card that has a hand cast in the list. Both worlds already apply every graveyard cast
+  after the hand casts (ApplyPlanDirect's trailing pass; AIEngine::TakeTurn), so the card is there. A regrowth
+  flashback's pending cast needs >= 2 targets across graveyard + other hand cards (superset).
+- `SubsetHasNonCanonicalGyCopies` (both enumerators: Solve::consider and EnumeratePlans' eval_and_push, built in
+  SubsetFilterPre on both paths): rejects k flashbacks of a name > graveyard copies + selected hand casts (the
+  surplus finds no card: an identity fold), and, under the odometer fold only, a non-prefix of the identical
+  copies (k copies cost k+1 subsets). Plan signatures key a graveyard cast by name in both builders (no new
+  marker; `check_plan_sig_lockstep.py` output unchanged: only the pre-existing `#BB`). No cap, no greedy pick;
+  inert for every deck without `flashback_cost`. A copy that reaches the graveyard another way mid-plan (a
+  Looting discarding a Looting) is reached through the draw breakpoint's continuation, as before.
+
+**Shared price (for the next integrator).** `GraveyardCastSpellCost(def, state)` (ManaPayment.h/.cpp) is now THE
+graveyard-cast price at every site: CollectActions' retrace/flashback block, the pending post-pass, the Lurrus
+block and its site-9 key, the rollout's apply_one and the executor's `cast_from_graveyard`. **Patrician Geist's
+"{1} less from your graveyard" goes inside it** (generic only, floor 0). Caveat: the executor's LURRUS cast goes
+through `cast_by_name` (hand pricing) and would need the same hook if a Lurrus deck ever plays a Geist.
+
+**Executor drift fixed (found by the B1 unit test).** The executor's `cast_from_graveyard` never counted the cast
+(`spells_cast_this_turn`, `mv_cast_this_turn`, the main-2 stager stamp); the rollout's apply_one always did.
+Every retrace / flashback cast was affected (Gods; TreasureHunt's Throes of Chaos). Log label now "(flashback)".
+
+**Viewer (bucket A, nothing new to wire).** `--claude-play` confirmed: seed 8, choices
+`1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0` (T5) offers `Aether Vial, Lingering Souls (flashback), Lingering Souls
+(flashback)` and `Lingering Souls, Lingering Souls (flashback)`; seed 49, choices
+`1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0` (T6, graveyard empty) offers plan 0 `land=Plains; cast: Lingering
+Souls, Lingering Souls (flashback)`, and choosing it makes four tokens with Souls exiled, no drop.
+**OPEN (human-play payment, not a search hole):** seed 8 T5 plan 5 (`land=Godless Shrine`, shock paid) drops the
+flashback: the hand Souls' {2}{W} is paid with the Shrine instead of an Unclaimed Territory, stranding {B}. The
+autonomous apply pays the same board (scenario variants with Chancery + Territories pass at b0).
+
+**Verification.** New `test/unit/test_spirits_souls.cpp` (8 cases: card + lord, shared price, stamp, dominance,
+B2 per-copy + prefix + both worlds, B1 pending + both worlds, 1 gy + 1 hand, inert deck); `test_gods_coliseum`'s
+Retrieval count updated (the hand copy's pending flashback is a legal 7-mana line). Units 2874/2874; scenarios
+497/497; `gods_plan_menu_check.py` OK; `audit_card_fields.py` rc 0; `provider_audit.py --check` rc 0;
+`audit_viewer_decisions.py --no-sweep` rc 0.
+
+**Smoke (2026-11-13, sequential, alone on the box):** 191 pass, 4 FAIL -- ALL Gods, the expected Hole A/B +
+executor-count movement, a deliberate correctness change: `gods_smoke_d0` 8.7860 -> 8.7830, `gods_smoke_d3`
+5.4000 -> 5.4000 (digest), `gods_smoke_d5` 5.2200 -> 5.2000, `gods2hg_smoke_d5` 5.4000 -> 5.3200. Searched:
+slower 1 / faster 3 / play-changed 79; d0: slower 9 / faster 12. The one searched slower game,
+`gods_smoke_d3_s1001` gi19 (T8 -> unwon at d3 b10), wins **T6 at --depth 5 and --depth 8 --budget-ms 0**
+(budget churn). Every other deck byte-identical. Not accepted (the orchestrator batches GT accepts).
+(`test/explain_game.py` cannot replay Gods: "Unknown keyword: Companion" -- pre-existing.)
+
+**Open (surfaced, not decided):** (1) the human-play payment drop above; (2) `tutor_from_graveyard` has no
+graveyard-reader bit (Hole A's sibling); (3) retrace stays one candidate per NAME, so "retrace Throes twice in
+one main" (two land discards) is still unenumerable -- the same shape as B2, not in this scope.
 
 ## Approved deferrals
 
