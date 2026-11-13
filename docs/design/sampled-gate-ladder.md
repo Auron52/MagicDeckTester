@@ -156,6 +156,61 @@ not charged in units) and allocation contention under 32 workers. S7 (Snow only,
 (`ledcpu.py S7/err.log`). Snow's one loser (game 364): heur K=3 on pass 3 = 14.1k against thr 14.2k; our price
 21.4k (1.5x high: the warm-vs-cold pre-pay factor) refused.
 
+## Iterations 7-8 (S7, S8; P18c): the excess is refused deeper passes, and refuse-exact at pass 3 buys quality
+
+- S7 (Snow): the "52k ns/u" W rate was an accounting artefact (sample units missing from its denominator; ~39k ns/u).
+  Sampler GameState copies are ~225/game, negligible. Most of the measured excess was REFUSED deeper passes (their
+  leafless tree plus samples, refused afterwards): priced_out 0.82M units, capped 0.64M, "thr0_post" 0.59M.
+- Every S6 loser (Hydras 21, 976; Alchemist 15; Snow 364) is a gate K=2 with pass 3 refused where heur's own
+  c2^2/c1 admits pass 3. Mechanism: price = l + n x mean(sampled rollout) assumes each leaf costs a full rollout,
+  but the real pass finds an improving line early and its incumbent cut makes later rollouts nearly free (Snow 364
+  T2: priced 87.6k, heur's real 16.5k). With 64 samples of ~1,000 leaves a rare improving leaf is usually missed,
+  so this is a sampling-coverage error, not a constant in the formula.
+- `_prx2` (refuse-exact at pass 3: when pass 3 is refused, pass 2 runs on rollouts, which is the commit anyway, and
+  heur's real c2^2/c1 decides pass 3) brings quality to net <= 0 on all five train decks (S8).
+- S8 thread-CPU vs heur for `g_pb1_plc_prr_prx2`: 1.029 / 0.762 / 0.920 / 1.167 / 1.051x (Hydras / Alchemist / EDF /
+  Snow / MB). The Snow and MB figures are biased; see Iteration 9.
+
+## Iteration 9 (P18d): the "per-unit CPU gap" was the batch scheduler, not the gate
+
+- The P1 perf pair (Snow, 240 games, heur and gate as two concurrent 16-thread batches): gate 0.990x heur thread-CPU,
+  0.981x units, per-unit +0.9%, and flat, near-identical symbol profiles (no hash-map, malloc or GameState-copy
+  growth). The same 240 games in S8: heur 603k cpu-ms, gate 640k, for byte-identical units.
+- The S8 excess sits in a few heavy games whose work is IDENTICAL in both arms (Snow gi 144: 1,003,088 units in heur
+  and every gate arm): heur 41 s, the five gate arms 62-73 s. Re-run in isolation (6 identical copies, 6 threads),
+  in a 5-game chunk (per-job state), and as 16 heur + 16 gate copies at 32 threads with the S8 trace on: gate == heur
+  every time (26.5 vs 26.4 s; 57.0 vs 57.0 s at 32 threads). So neither the gate's code, its working set,
+  identical-copy contention, per-job state nor the trace instrumentation explains it.
+- Mechanism: `BatchRunner`'s LPT sort orders the work list by (weight, depth, budget, PROFILE PATH, job). Every arm
+  shares depth and budget, so each deck's arms run as contiguous blocks in alphabetical order of their arm dirs:
+  `g_...` arms first, `heur` LAST, and Snow (alphabetically last deck) last overall. S8 completion lines: snow_heur
+  1512-1561 of 1562. heur Snow therefore ran in the batch's draining tail, where SMT siblings are idle and a thread
+  does the same work in about half the CPU time (game 144: 26 s alone vs 57 s at 32 busy threads). "Arms innermost"
+  in the manifest was undone by the runner. That is why the gap was systematic on Snow (and MB, the deck before it)
+  in S3-S8 and shrank in the lighter S7 pool.
+- Fix for measurement: give each job `"weight": N - index`, so the runner keeps manifest order (arms innermost in
+  time), with `MTG_BATCH_PROFILE_CACHE=30` so the interleaved profiles stay resident. S9 is the first screen measured
+  that way. Every earlier thread-CPU comparison is biased against the gate on the last deck(s) of the sort.
+- `_pfr<10F>` FREE REFUSAL (with `_pb1` + `_prx2`): pricing pass 2 serves only pass 3's check, so before pass 2's
+  leafless tree is built, heur's own extrapolation on the one real cost known (c2 ~ c1 x growth, c3 ~ c2^2/c1) asks
+  whether pass 3 could fit what pass 2 leaves. When the prediction exceeds F x the admit line, the gate prices
+  nothing and hands the decision to heur's ladder from pass 2 (its real c2^2/c1 decides pass 3). The refusal is free
+  and its verdict is heur's own on real costs. Inert at an unlimited budget.
+
+### S9 (train seeds as S8; 15,600 games, one pooled batch, 32 workers, weight-ordered, no trace; `build/scratch/p18d/S9`, binary a37c3fe2c)
+thread-CPU vs heur, units vs heur, dturn (better/worse games):
+| arm | Hydras | Alchemist | EDF | Snow | Midrange Burn |
+|---|---|---|---|---|---|
+| g_pb1_plc | 0.908x u0.917 0 (3/3) | 0.801x u0.837 0 (1/1) | 0.907x u0.999 0 | 1.011x u0.981 +0.0025 (0/1) | 1.006x u1.007 -0.0050 (2/0) |
+| _prr_prx2 | 0.990x u1.006 -0.0020 (3/1) | 0.851x u0.885 0 (1/1) | 0.926x u1.027 0 | 1.052x u1.028 0 | 1.052x u1.056 -0.0050 (2/0) |
+| _prr_prx2_pfr10 | 0.956x u0.975 -0.0020 (2/0) | 0.871x u0.916 -0.0025 (1/0) | 0.993x u1.013 0 | 1.016x u1.009 0 | 1.001x u1.025 -0.0025 (1/0) |
+| _prr_prx2_pfr20 | 0.981x u0.993 -0.0020 (2/0) | 0.847x u0.899 -0.0025 (1/0) | 0.935x u1.002 0 | 1.017x u0.989 0 | 0.988x u1.019 -0.0050 (2/0) |
+| _prr_prx2_ppr15_pfr10 | 0.992x u0.997 -0.0020 (2/0) | 0.893x u0.935 0 | 0.999x u1.023 0 | 1.050x u1.015 0 | 0.968x u1.012 0 |
+Units of g_pb1_plc and _prr_prx2 are identical to S8 (the new knob is inert when absent). The scheduler fix alone
+moves Snow g_pb1_plc 1.119x -> 1.011x and _prr_prx2 1.167x -> 1.052x. `_pfr20` has NO worse game on any of the five
+decks and is below heur's CPU on four; Snow reads 1.017x at 0.989x units. S10 (Snow + MB, 2,000 games/arm on fresh
+seeds with a heur A/A arm for the CPU noise floor) checks whether that is real.
+
 ## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
 - S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
