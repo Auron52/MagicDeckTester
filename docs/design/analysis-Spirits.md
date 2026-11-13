@@ -34,7 +34,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | Skyclave Apparition | 2 | new `etb_exile_opp_nonland_nontoken_max_mv` 4 (ResolveEtbExileUpToOne, shared enter cascade: cast + Vial put) + `ltb_exiled_owner_illusion_token` (permanent exile on a NEW link range `kSkyclaveExileBase`, never returned by the Cathar orphan sweep); target = provider identity fold `EtbOptionalExileTargetPick` (largest) | A (`dig` "(may exile)") | IMPLEMENTED 3ddc3c86f |
 | Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
 | White Orchid Phantom | 2 | new `etb_destroy_nonbasic_land_optional` (ResolveEtbDestroyNonbasicLandOptional, both sides); own lands SEARCHED (cast AND Vial-put variants pinned on tutor_target, `#WO`, the basic a land_search_pins ordinal); base = provider fold (opp nonbasic, else none); opponent gets a tapped `Opponent Basic Land`; Spirits prunes own variants with no basic in library | A (`dig` "(may destroy nonbasic land)" + `tutor_etb`) | IMPLEMENTED 3ddc3c86f |
-| Flooded Strand | 1 | Arid Mesa battlefield-fetch schema, Plains/Island; routed to SpiritsProvider (lossless fetch fan, hold kept) | A (fetch, hold, shock) | IMPLEMENTED 87078b215 |
+| Flooded Strand | 1 | Arid Mesa battlefield-fetch schema, Plains/Island; routed to SpiritsProvider (lossless fetch fan, hold kept); a HELD Strand may be cracked first to fund a same-main cast (E1, crack-first plans) | A (fetch, hold, shock) | IMPLEMENTED 87078b215; held-fetch hole FIXED ea8d143e9 |
 | Hallowed Fountain | 1 | Steam Vents schema | A (`land_entry`) | IMPLEMENTED 87078b215 |
 | Drogskol Captain | 1 | `lord_effect` Spirit +1/+1, `lord_excludes_self`; hexproof grant PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
 | Supreme Phantom | 1 | `lord_effect` Spirit +1/+1, excludes self | none | IMPLEMENTED 87078b215 |
@@ -93,7 +93,7 @@ flashback params. Pinned in `test_pirates_provider.cpp`'s every-deck table plus 
   (Burn / FiveColour / Anti decline the hold so FetchResolvesOnPlay is already true; legacy fetches are
   immediate). NOT in human play (viewer menu indices are what references replay by) -- a viewer surface for
   the same line is OPEN. Pinned by `test/scenarios/spirits_strand_fetches_the_blue_source.json`.
-- **OPEN engine hole (not fixed):** a Strand already HELD on the battlefield cannot be cracked to pay for a
+- **OPEN engine hole (FIXED by integrator E1, ea8d143e9 -- see below):** a Strand already HELD on the battlefield cannot be cracked to pay for a
   same-main cast (casts are priced before the trailing crack). Biases any full-timing vs hold measurement
   against the hold. `docs/design/held-fetch-crack-then-cast-hole.md` (repro in `logs/spirits/repro/`).
 - Certificate: NotAssessed (Vial instant puts, lords on tokens/Mimic, Geist's Angel, Wanderer pumps, Usher boast).
@@ -433,6 +433,45 @@ the post-combat hosts append it -- TurnSolver FSLineTail / SolveWithLookahead) a
 the {1} clamp now keeps an EMPTY count menu empty (a provider prune / nothing affordable).
 
 **Smoke.** Run alone on 9176533f0: 191 passed, 4 failed -- exactly the four gods keys at the C2 checkpoint numbers (d0 8.7830, d3 5.4000 digest-only, d5 5.2000, 2hg d5 5.3200); searched slower 1 / faster 3 / play-changed 79, identical to C2. Every other deck byte-identical (no other deck carries the new params). Nothing accepted.
+
+### Integrator E1 (2026-11-13): the held-fetch crack-then-cast hole FIXED (ea8d143e9)
+
+**Fix (shape 1 of `held-fetch-crack-then-cast-hole.md`).** `AppendHeldFetchCrackFirstPlans` (TurnSolver.cpp) on every
+TOP-LEVEL main list (`add_for_land`, the no-drop path of `EnumeratePlansWithLandUncachedBody`, `EnumerateM2PlansBody`):
+for each held crack source NAME whose land enters untapped and EVERY `LandSearchPicks` pick (no prune, no cap), the
+crack is applied on a copy through the shared `ApplyLandSearchActs` (one-entry `ScriptedLandSearch`) and
+`EnumeratePlans` runs on the post-crack board; each plan is emitted with the crack prepended in the PRE-CAST pass
+(`land_search_act_slot` 0, or the pre-cast-subset mask when it cracks another source trailing) and the pick in its
+`land_search_pins` ordinal. Recursive (two held Strands both first). No new Plan field -- both worlds already run
+these at the same point; plan-sig lockstep only `#BB`. Skipped: action-less post-crack plans (identity with the
+trailing crack), human play, breakpoint continuations (no pre-cast pass there). `MTG_HELD_FETCH_CRACK_FIRST=0`
+restores the hole (A/B only). Shapes 2 (breakpoint) / 3 (optimistic mana source) rejected -- reasons in the doc.
+- **It also repairs the rollout's main-2 premise** ("combat creates no new resources, so everything was castable in
+  main 1"): a trailing crack's land was new mana nothing in main 1 could spend; Spirits plays no main 2, so before the
+  fix even "crack in main 1, cast in main 2" was not played.
+- **Residual (OPEN, in the doc):** a breakpoint continuation cannot crack-then-cast what it drew; a non-front
+  crack-first pick does not cross with LATER in-plan land-search ordinals (White Orchid's own-land basic) -- the
+  additive-axes rule every pin variant follows.
+- **Decks that can move:** Spirits (keeps the hold). Burn / Anti-Lifegain / FiveColour decline it, but a fetch they
+  play at <= 3 life is held (`ModernFetchCollapsible`), so those states can move. Legacy-shape fetches never hold;
+  Wilds / Myriad / Khalni find tapped lands.
+- **Viewer: no change needed.** Verified on `--claude-play` (Spirits seed 3, choices `1,2,-1,-1,1,2`): hold the
+  Strand T1; T2 commit "land=Plains; Flooded Strand: sacrifice it ...", answer `tutor_etb` with the Island, and the
+  SAME pre-combat main re-prompts with Plains + Island untapped and Metallic Mimic / Supreme Phantom offered. The
+  play-and-crack line (integrator A's open viewer item) is reachable the same way. The menu is untouched under
+  human play, so no reference's menu index moves.
+
+**Tests (written first; budget 0).** `spirits_held_strand_crack_then_cast` (no-drop path, `resume_at`),
+`..._with_drop` (land-drop path), `spirits_two_held_strands_crack_then_cast`: T5 FAIL with the lever off -> T4 PASS;
+the A repro at `--depth 5 --budget-ms 0` T5 -> T4. Unit `test_held_fetch_crack_first.cpp` (3 cases). Units 2922/2922,
+scenarios 509/509; provider_audit --check, audit_card_fields, audit_viewer_decisions --no-sweep rc 0. Burn's "two Lava
+Spikes off a held Mesa" passes on both arms (Burn plays a main 2).
+
+**Smoke.** Run alone on ea8d143e9: 191 passed, 4 failed -- the four gods keys with digests identical to D's
+(558cea0d / ef690b70 / c3c6b871 / e6f8b68c); searched slower 1 / faster 3 / play-changed 79, unchanged. Every other
+deck byte-identical: nothing in the suite moved. (A first smoke attempt ERRORed one scenario because I rewrote
+cards.json's Strand note mid-run -- my mistake, not the engine; it passes alone and in the rerun.)
+`fetch_hold_review` (USER-owned) can now be measured against a hold that is no longer a turn late.
 
 ## Approved deferrals
 

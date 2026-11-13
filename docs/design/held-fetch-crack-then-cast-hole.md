@@ -1,6 +1,6 @@
 # Held battlefield fetch: "crack, then cast with the fetched land" is unfindable
 
-**Status:** FIXED 2026-11-13 (Spirits integrator E1, commit in the ledger `analysis-Spirits.md`,
+**Status:** FIXED 2026-11-13 (Spirits integrator E1, ea8d143e9; ledger `analysis-Spirits.md`,
 "Integrator E1"): fix shape 1 below, `AppendHeldFetchCrackFirstPlans` (src/ai/TurnSolver.cpp), default ON,
 `MTG_HELD_FETCH_CRACK_FIRST=0` restores the hole for an A/B. Found 2026-11-13 by integrator A.
 
