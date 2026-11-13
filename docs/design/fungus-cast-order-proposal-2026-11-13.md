@@ -452,4 +452,9 @@ Added 2026-11-13 with §5A/§5B (activations and Saprolings as a cost):
 - **Q8:** "Yes."
 - **Q9:** "Yes, we need this for sure when we have haste. It's weird because I'm pretty sure I created an order previously that handled this. Was that for a previous version of the deck?"
   Owner note: the capability the USER remembers is engine-side, not a cast order: breakpoint site 9 (post-entry activation) lets the search pop a Burst in main 1 on the turn it lands; docs/design/fungus-v2-fd-diverge-7021.md (v2 list, Oct) shows a T4 `Badger[adventure] + Saproling Burst x3` continuation hasted by Crossroads. §5A's "a Burst cast in main 1 is popped only in main 2" (TurnSolver.cpp:7220-7266) must be re-checked against site 9 on v3 before building anything.
-- Q10-Q18: not yet answered.
+- **Q10:** "Yes, I could see that, given how many tokens it can produce."
+- **Q11:** "Yes"
+- **Q12:** "We never search multiple, you take from one source at a time given they act the same which they do. Searching them is too expensive and unnecessary." -> keep the single maker pick (no search); the proposal's default is rejected.
+- **Q13:** "If they are going to die next turn and are equivalently summoning-sick and the same size then yes. If" (message ended there) -> doomed tokens are eaten first only when they otherwise tie with the alternatives (same summoning-sickness, same size); the same-plan Sporecrown part is not yet answered.
+- **Q14:** "This is a tough question. Technically the answer should probably be that we keep the attacker and sacrifice the summoning-sick token if this gives us lethal this turn. Otherwise we keep both alive. This might have to be tested heuristically. But yes, the default would be to tap and keep our critters alive." -> default: tap, keep both; candidate (heuristic, measured): eat a summoning-sick token instead of tapping an attacker only when that attacker is needed for lethal this turn.
+- Q15-Q18: not yet answered.
