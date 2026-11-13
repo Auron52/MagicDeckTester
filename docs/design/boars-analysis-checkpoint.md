@@ -59,6 +59,14 @@ run stands and what to do next.
     byte-identical. No movers. Remaining in-window provider picks (land play, puts, nested free casts, token copies):
     `docs/design/legend-rule-keep-remaining-greedy.md`. USER Q: the beyond-horizon keep default.
   * **I5b INTEGRATION COMPLETE (2026-11-13): items 1-4 done, all local commits, nothing pushed.**
+  * **LK (legend-keep greedy purge, NO-GREEDY rule) IN FLIGHT** — the remaining in-window provider keeps
+    (`docs/design/legend-rule-keep-remaining-greedy.md`; suite decks Galadriel / Goblins / Jumbo Cactuar /
+    Unpredictable Cyclone). LK WIP `204cedbe6` = per-plan turn-level keep twin (0/1 old/2 new), 3011/3011, but the
+    twin does NOT reach Galadriel's Grey Havens turn-5 events. **LK2 RUNNING** (Opus agent): (1) legend-rule SBA
+    timing bug (a main-2 legendary land not legend-ruled until next combat), (2) Galadriel bypass root cause,
+    (3) tests + identity vs `build/scratch/boars/mtg.i5b4` on the 4 decks + control + Boars 40. Handoff/repro:
+    `logs/boars-research/LK-handoff.md`. After LK2: LK3 = upkeep-only routes (Snow Marit Lage's Slumber, Emeria),
+    full 28-deck identity run, docs. THEN the post-integration stages below (one pooled smoke covers Heath + LK movers).
   * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
@@ -77,3 +85,16 @@ run stands and what to do next.
 
 D1-D8 in the ledger ("Agent defaults taken"), I3b risk 3 RESOLVED in I4c, plus from I1: the viewer now asks a creature type for
 Urza's Incubator / Mimic / Automaton in other decks; Boars no longer rides AntiLifegainProvider.
+Also: agent-chosen beyond-horizon playout defaults (AttackPutDefault formula; DiesTuckDefault; legend keep
+LegendKeepIndex); Herald of Ilharg cast-order slot (D8); Zhur-Taa 2HG hold-back-to-ping and post-combat lethal ping in
+human play; Herald's two "no decision" manifest rows; Ulamog + 7-mana spell in one plan still shares one target rank
+(no current deck); owed: Zhur-Taa ping + Decimator team pump in the this-turn win projection; Raggadragga per-instance
+target branching cost unmeasured.
+
+## Orchestration notes (for the resumed orchestrator)
+
+* Every integrator agent got a HARD ~250K brief; most still hit it — when one reports >~240K, SendMessage it to commit
+  WIP + write `logs/boars-research/<name>-handoff.md` and stop, then launch a FRESH agent from that file.
+* Snapshots of each stage's binary for identity checks live in `build/scratch/boars/mtg.*` (latest `mtg.i5b4`); identity
+  scripts `build/scratch/boars/i5b4_run.sh` etc. (SORTED win lines or full game logs).
+* Nothing pushed. The shared-branch push (4 h rhythm) happens from the parent after smoke + check_gt_logs.
