@@ -102195,7 +102195,7 @@ namespace p18
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0; };
+                         nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102243,6 +102243,10 @@ namespace p18
         // (pass 2 on rollouts, its real c2^2/c1 check decides pass 3). The refusal costs nothing, and its verdict is
         // the ladder's own on real costs, so it can only remove pricing. Inert at an unlimited budget.
         num("_pfr", o.fr);
+        // _pfx (with _pfr): the same free refusal at EVERY pass k >= 3, on the costs known (c1 real, the priced est_2..):
+        // when est_{k-1}^2 / est_{k-2} exceeds F x the admit line, pass k is not priced, pass k-1 runs on rollouts (the
+        // commit unless the ladder's own check admits more) and the heuristic ladder decides pass k on real costs.
+        o.fx = k.find("_pfx") != std::string::npos;
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
         o.nobound = k.find("_pnobound") != std::string::npos;
@@ -111002,6 +111006,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool p18_fb = false;            // ROBUST-OR-EXACT: a verdict inside the margin band -> the heuristic ladder decides
         std::vector<double> p18_est(static_cast<std::size_t>(depth) + 2, 0.0);   // priced cost by pass
         std::vector<double> p18_su(static_cast<std::size_t>(depth) + 2, 0.0);    // sampled-rollout units by pass
+        bool p18_free_rx = false;       // _pfx: a free refusal at pass k >= 3 hands the decision to the heuristic ladder
         bool p18_force2 = false;        // _pb1: the heuristic ladder's bootstrap admitted pass 2
         for (int k = 1; k <= depth; ++k)
         {
@@ -111049,6 +111054,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 {
                     if (p16::On()) { p18::t_rec.push_back({3, 0, 0, gate_alpha * rem3, e3, 0.0, 0, 0, 0, 0, std::string("pfr")}); }
                     p18_K = 2; p18_stop = 3; break;               // the heuristic ladder decides pass 3 on real costs
+                }
+            }
+            if (kn.fx && kn.fr > 0.0 && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
+            {
+                const double pe = p18_est[static_cast<std::size_t>(k - 1)];
+                const double e3 = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double remk = static_cast<double>(budget->Remaining()) + static_cast<double>(pb->Used() - p18_u0)
+                                    - [&]{ double b = 0.0; for (int j = 1; j < k; ++j) { b += p18_est[static_cast<std::size_t>(j)]; } return b; }();
+                                    // = what the ladder would have left after running passes 1..k-1 on rollouts
+                const bool fitsk = g_reserve_value_pass ? (e3 + e3 <= kn.fr * gate_alpha * std::max(0.0, remk))
+                                                        : (e3 <= kn.fr * gate_alpha * std::max(0.0, remk));
+                if (!fitsk)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remk, e3, 0.0, 0, 0, 0, 0, std::string("pfx")}); }
+                    p18_free_rx = true; p18_stop = k; break;   // p18_K stays k-1: the heuristic ladder continues from it
                 }
             }
             if (kn.ppr > 0.0 && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
@@ -111209,7 +111229,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             p18_K = 0; p18_wb = 0;
             if (!kn.nocredit && pb) { p18_credit = static_cast<double>(pb->Used() - p18_u0); }
         }
-        else if ((kn.rx || (kn.rx2 && p18_K == 2 && p18_stop == 3)) && !kn.verify && !unl && !p18_done && p18_K >= 1)
+        else if ((kn.rx || p18_free_rx || (kn.rx2 && p18_K == 2 && p18_stop == 3)) && !kn.verify && !unl && !p18_done && p18_K >= 1)
         {
             // REFUSE-EXACT: the heuristic ladder's remaining at its next check is the decision's budget less ITS spend
             // (the priced passes below p18_K stand in for its superseded rollout passes) -- not less the pricing spend.
