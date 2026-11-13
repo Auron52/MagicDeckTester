@@ -543,6 +543,7 @@ static std::string FdPlanText(const TurnSolver::Plan& p)
     // committed line whose projection depends on it reads as a plain cast list without this:
     // knights s1115 d3's T3 "Plains + Acclaimed Contender" only wins T4 WITH its recorded Vial.
     if (p.legend_keep_turn != 0) { s += " lkeep" + std::to_string(static_cast<int>(p.legend_keep_turn)); }   // Boars LK
+    if (p.upkeep_legend_keep_choice >= 0) { s += " ulkeep" + std::to_string(static_cast<int>(p.upkeep_legend_keep_choice)); }   // LK3
     if (!p.breakpoint_actions.empty())
     {
         s += " | bp[";
@@ -724,7 +725,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.upkeep_legend_keep_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
@@ -769,7 +770,8 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.militia_pride_pay_choice >= 0
         && s.scripted_militia_pride_pay != p.militia_pride_pay_choice)                               { ok = false; }
     if (p.attack_put_choice != -1 && s.scripted_attack_put != p.attack_put_choice)                 { ok = false; }
-    if (p.legend_keep_turn != 0 && s.scripted_legend_keep != p.legend_keep_turn)                     { ok = false; }
+    if (p.legend_keep_turn != 0 && LegendKeepNow(s) != p.legend_keep_turn)                          { ok = false; }
+    if (p.upkeep_legend_keep_choice >= 0 && LegendKeepUpkeepPin(s) != p.upkeep_legend_keep_choice)   { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
@@ -3240,6 +3242,15 @@ void AIEngine::DecideCrossingFetch(GameState& state)
         state.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin);
         if (horn_pin != 0) { m_committed_line.clear(); }
     }
+    // The NEXT upkeep's legend-rule keep (Boars LK3), when the committed line's crossing recorded none (no-op without
+    // an upkeep entry route beside a legend of ours). A pick other than the provider's deviates from the queued line.
+    const int ulk_pin = TurnSolver::ChooseRealCrossingUpkeepLegend(view, m_lookahead_depth, m_max_turns, &budget,
+                                                                   m_search_post_combat);
+    if (ulk_pin != -2)
+    {
+        SetLegendKeepUpkeepPin(state, ulk_pin);
+        if (ulk_pin != kLegendKeepUpkeepFollow) { m_committed_line.clear(); }
+    }
     // Morph's opponent-end-step flip, when the committed line's crossing recorded none (no-op without a face-down
     // permanent). A pick other than the front deviates from what the queued line assumed, so it clears that line.
     const int fu_pin = TurnSolver::ChooseRealCrossingFaceUp(view, m_lookahead_depth, m_max_turns, &budget,
@@ -4890,7 +4901,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // WritePostApplyStatePins precedes PlayLandByName); without this the executor's drop read the provider's
             // keep (Galadriel seed 9101 gi1/gi2/gi6 T5, MTG_TRACE=legend pinned=0). WritePostApplyStatePins below
             // writes the same value again (idempotent).
-            if (plan.legend_keep_turn != 0) { state.scripted_legend_keep = plan.legend_keep_turn; }
+            if (plan.legend_keep_turn != 0) { SetLegendKeepNow(state, plan.legend_keep_turn); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);

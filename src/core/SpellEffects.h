@@ -8476,6 +8476,44 @@ inline thread_local std::vector<int> g_pending_zero_toughness;
 //     groups). AppendSubdecisionAxes' LEGEND-KEEP TURN FAN twins every plan whose turn can reach such a group.
 //   * UNPINNED (the playout beyond the horizon, the d0 runner, a plan no fan reached): the provider's
 //     LegendKeepIndex (the permitted playout policy).
+// THE SEARCHED LEGEND KEEP'S BYTE (GameState::scripted_legend_keep; Boars LK + LK3, 2026-11-13):
+//   bits 0-1  the keep IN FORCE now (0 none -> the provider, 1 keep the oldest copy, 2 keep the newest): the turn's
+//             Plan::legend_keep_turn in the main phases, the NEXT-UPKEEP pin below while the upkeep runs.
+//   bits 2-3  the NEXT upkeep's keep (Plan::upkeep_legend_keep_choice, a BoundaryFan digit; Boars LK3): 0 uncovered,
+//             1 oldest, 2 newest, 3 COVERED-and-follow-the-provider (the fan's rank 0, so ties keep its pick). Written
+//             by the plan apply / the crossing's Stamp, it SURVIVES the turn boundary like scripted_upkeep_horn.
+//   bit 4     the upkeep window is open with a covering pin (set at the turn start, cleared at the end of the upkeep).
+// An upkeep-only route (Marit Lage's Slumber's token, Emeria / Defense of the Heart puts, an upkeep arrival) fires
+// before any plan of its turn, so the turn pin cannot reach it: LegendKeepOpenUpkeep (both worlds' turn starts,
+// GameEngine::UntapStep / SimulateEndAndStartNextTurn) moves the upkeep pin into the keep in force, and
+// LegendKeepCloseUpkeep (the end of GameEngine::UpkeepTail / just before the rollout's draw) drops it.
+constexpr int kLegendKeepNowMask       = 0x03;
+constexpr int kLegendKeepUpkeepShift   = 2;
+constexpr int kLegendKeepUpkeepMask    = 0x0C;
+constexpr int kLegendKeepUpkeepWindow  = 0x10;
+constexpr int kLegendKeepUpkeepFollow  = 3;     // the upkeep pin's "covered, the provider's own pick"
+inline int LegendKeepNow(const GameState& s) { return s.scripted_legend_keep & kLegendKeepNowMask; }
+inline int LegendKeepUpkeepPin(const GameState& s)
+{ return (s.scripted_legend_keep & kLegendKeepUpkeepMask) >> kLegendKeepUpkeepShift; }
+inline void SetLegendKeepNow(GameState& s, int v)
+{ s.scripted_legend_keep = static_cast<std::int8_t>((s.scripted_legend_keep & ~kLegendKeepNowMask) | (v & kLegendKeepNowMask)); }
+inline void SetLegendKeepUpkeepPin(GameState& s, int v)
+{
+    s.scripted_legend_keep = static_cast<std::int8_t>((s.scripted_legend_keep & ~kLegendKeepUpkeepMask)
+                                                      | ((v & 3) << kLegendKeepUpkeepShift));
+}
+inline void LegendKeepOpenUpkeep(GameState& s)
+{
+    const int u = LegendKeepUpkeepPin(s);
+    s.scripted_legend_keep = static_cast<std::int8_t>(
+        u == 0 ? 0 : (kLegendKeepUpkeepWindow | (u == kLegendKeepUpkeepFollow ? 0 : u)));
+}
+inline void LegendKeepCloseUpkeep(GameState& s) { s.scripted_legend_keep = 0; }
+// The BoundaryFan's probe for the upkeep digit (TurnSolver.cpp): armed only around a crossing that fans it. The first
+// active-player legend rule of the covered upkeep whose copies DIFFER records the provider's own pick (0 = oldest,
+// 1 = newest, 2 = a middle copy); `seen` says one was met (the digit's width is learned from it).
+struct UpkeepLegendKeepProbe { bool seen = false; int provider_pick = 0; };
+inline thread_local UpkeepLegendKeepProbe* t_upkeep_legend_keep_probe = nullptr;
 struct LegendKeepPin
 {
     std::int8_t v = 0;     // 0 none, 1 keep oldest, 2 keep newest
@@ -8559,8 +8597,17 @@ inline int LegendKeepPick(const GameState& state, int controller, const std::vec
     { return g_legend_keep_pin.v == 1 ? dup.front() : dup.back(); }
     // ...else the TURN's searched keep (GameState::scripted_legend_keep, Boars LK): the plan's answer for every
     // legend rule no rider names -- land drops, puts, nested free casts, token / copy entrants, reanimation.
-    if (state.scripted_legend_keep != 0 && controller == state.active_player_index)
-    { return state.scripted_legend_keep == 1 ? dup.front() : dup.back(); }
+    // The upkeep digit's probe (Boars LK3): the provider's own pick for the first differing group of a covered upkeep.
+    if (t_upkeep_legend_keep_probe != nullptr && !t_upkeep_legend_keep_probe->seen
+        && (state.scripted_legend_keep & kLegendKeepUpkeepWindow) != 0 && controller == state.active_player_index
+        && dup.size() >= 2 && !LegendCopiesInterchangeable(state, dup))
+    {
+        const int pk = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
+        t_upkeep_legend_keep_probe->seen = true;
+        t_upkeep_legend_keep_probe->provider_pick = pk == dup.front() ? 0 : pk == dup.back() ? 1 : 2;
+    }
+    if (LegendKeepNow(state) != 0 && controller == state.active_player_index)
+    { return LegendKeepNow(state) == 1 ? dup.front() : dup.back(); }
     int keep = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
     if (g_play_sacrifice_chooser == nullptr || controller != state.active_player_index) { return keep; }
     std::vector<int> nums;
@@ -27471,15 +27518,16 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
             // Auras are NOT compared here (the link is aura->host via aura_attached_to, so it needs
             // a battlefield scan); noted so a "differs=0" is read as "none of these five differ",
             // not as "the copies are provably identical".
-            // pinned=1: a searched rider decided (LegendKeepPinScope); 0: the provider's LegendKeepIndex (or a
-            // human). interch=1: LegendCopiesInterchangeable -- the keep cannot matter.
+            // pinned=1: a searched rider decided (LegendKeepPinScope); 2: the turn's searched keep; 3: the upkeep's
+            // searched keep (Boars LK3); 0: the provider's LegendKeepIndex (or a human). interch=1: LegendCopiesInterchangeable -- the keep cannot matter.
             TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d pinned=%d interch=%d",
                   state.turn_number, g.first.c_str(), g.second.size(),
                   keep == g.second.front() ? "oldest" : "other",
                   d_tap, d_sick, d_dmg, d_ctr, d_pump,
                   (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0,
                   (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == g.first) ? 1
-                  : (state.scripted_legend_keep != 0 && controller_index == state.active_player_index) ? 2 : 0,
+                  : (LegendKeepNow(state) != 0 && controller_index == state.active_player_index)
+                    ? ((state.scripted_legend_keep & kLegendKeepUpkeepWindow) != 0 ? 3 : 2) : 0,
                   LegendCopiesInterchangeable(state, g.second) ? 1 : 0);
         }
         for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }

@@ -406,7 +406,9 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
     state.scripted_attack_put = -1;     // Ilharg's searched attack put (same lockstep)
-    state.scripted_legend_keep = 0;     // the turn's searched legend-rule keep (Boars LK; same lockstep)
+    // The turn's searched legend-rule keep ends; the NEXT-UPKEEP pin (Boars LK3) becomes the keep in force until the end
+    // of the upkeep (LegendKeepCloseUpkeep, the end of UpkeepTail). Lockstep twin in SimulateEndAndStartNextTurn.
+    LegendKeepOpenUpkeep(state);
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
@@ -835,6 +837,9 @@ void GameEngine::UpkeepTail(GameState& state)
     state.scripted_upkeep_tutor = -1;
 
     ResolveStack(state);
+    // The upkeep is over: its searched legend keep (Boars LK3, opened at the untap) stops deciding. Lockstep twin just
+    // before the rollout's draw in SimulateEndAndStartNextTurn.
+    LegendKeepCloseUpkeep(state);
 }
 
 void GameEngine::DrawStep(GameState& state)

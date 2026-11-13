@@ -1065,3 +1065,90 @@ TEST_CASE("LK land: the EXECUTOR's main-1 land drop reads the turn pin (written 
         CHECK(IFind(exec, loser) == nullptr);
     }
 }
+
+// ---- Boars LK3: the upkeep-only legend routes take their keep from the searched next-upkeep pin ------------------
+namespace
+{
+// Turn 5's end: an OLD Marit Lage token (made by an earlier upkeep; untapped, not sick) beside a second Marit Lage's
+// Slumber and ten snow lands, so the next upkeep's Slumber makes a NEW (summoning-sick) Marit Lage: copies that DIFFER.
+GameState SlumberBase(int* old_token)
+{
+    GameState s = IBase();
+    for (int k = 0; k < 10; ++k) { IPut(s, "Snow-Covered Forest", 100 + k); }
+    IPut(s, "Marit Lage's Slumber", 200);
+    PerformUpkeepSlumber(s);   // the first Slumber's token (11 snow -> it triggers), aged below
+    *old_token = 0;
+    for (Permanent& p : s.battlefield)
+    { if (p.is_token && p.card.HasSupertype(Supertype::Legendary)) { p.entered_this_turn = false; *old_token = p.card.m_number; } }
+    REQUIRE(*old_token != 0);
+    IPut(s, "Marit Lage's Slumber", 201);   // 10 lands + this Slumber = 11 snow permanents
+    s.phase = Phase::Ending;
+    return s;
+}
+int MaritLages(const GameState& s, int* survivor)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield)
+    { if (p.is_token && p.card.HasSupertype(Supertype::Legendary)) { ++n; *survivor = p.card.m_number; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("LK3 upkeep: Marit Lage's Slumber's second token reads the NEXT-UPKEEP pin -- both keeps, both worlds agree")
+{
+    for (int pin : { 1, 2 })
+    {
+        CAPTURE(pin);
+        int old_token = 0;
+        GameState base = SlumberBase(&old_token);
+        // The pin rides the plan of the turn that crosses (WritePostApplyStatePins), beside a turn keep it must not touch.
+        TurnSolver::Plan plan;
+        plan.legend_keep_turn = 2;
+        plan.upkeep_legend_keep_choice = static_cast<std::int8_t>(pin);
+        TurnSolver::WritePostApplyStatePins(base, plan);
+        CHECK(LegendKeepNow(base) == 2);
+        CHECK(LegendKeepUpkeepPin(base) == pin);
+        // Rollout: the whole crossing.
+        GameState roll = base;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        // Executor: the untap opens the upkeep pin, the upkeep's Slumber makes the token, the upkeep's end closes it.
+        GameState exec = base;
+        exec.phase = Phase::Beginning;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine ge(eng);
+        MtgTestSeam::GeUntapStep(ge, exec);
+        CHECK(LegendKeepNow(exec) == pin);   // the upkeep pin is the keep in force through the upkeep
+        MtgTestSeam::GeUpkeepStep(ge, exec);
+        for (const GameState* g : { &roll, &exec })
+        {
+            int survivor = 0;
+            REQUIRE(MaritLages(*g, &survivor) == 1);
+            if (pin == 1) { CHECK(survivor == old_token); }    // keep the oldest: the untapped, non-sick 20/20
+            else          { CHECK(survivor != old_token); }    // keep the newest: the fresh token
+            CHECK(g->scripted_legend_keep == 0);               // consumed: no pin leaks into the turn's main phase
+        }
+    }
+}
+
+TEST_CASE("LK3 upkeep: the BoundaryFan fans the upkeep legend keep (provider's pick first, then the other); none without a differing pair")
+{
+    int old_token = 0;
+    GameState base = SlumberBase(&old_token);
+    const auto crossings = TurnSolver::UpkeepLegendBoundaryForTest(base);
+    REQUIRE(crossings.size() == 2);
+    // Rank 0 follows the provider (keep the oldest by default: the non-sick token survives) and records 3; rank 1
+    // records the other answer (keep the newest: the sick token survives).
+    CHECK(crossings[0].first == kLegendKeepUpkeepFollow);
+    CHECK(crossings[0].second == 0);
+    CHECK(crossings[1].first == 2);
+    CHECK(crossings[1].second == 1);
+    // A state whose pin already covers the upkeep is not fanned again.
+    GameState covered = base;
+    SetLegendKeepUpkeepPin(covered, 2);
+    for (const auto& c : TurnSolver::UpkeepLegendBoundaryForTest(covered)) { CHECK(c.first == -2); }
+    // No legend of ours on the battlefield: the Slumber's lone token has nothing to duplicate -> width 1, no pin.
+    GameState lone = base;
+    lone.battlefield.erase(std::remove_if(lone.battlefield.begin(), lone.battlefield.end(),
+                                          [](const Permanent& p) { return p.is_token; }), lone.battlefield.end());
+    for (const auto& c : TurnSolver::UpkeepLegendBoundaryForTest(lone)) { CHECK(c.first == -2); }
+}

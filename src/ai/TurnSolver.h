@@ -1789,6 +1789,13 @@ public:
         // attack_put_choice is, and an axis variant (PlanIsAxisVariantExceptOrder): a twin whose turn met no group
         // lands on its base's state.
         std::int8_t legend_keep_turn = 0;
+        // THE NEXT UPKEEP's legend-rule keep (Boars LK3): an upkeep-only route (Marit Lage's Slumber's token, an
+        // Emeria / Defense of the Heart put, an upkeep arrival) fires before any plan of its turn, so it rides the
+        // boundary: a BoundaryFan digit (rank 0 = 3, covered and the provider's own pick, so ties keep it; then 1 keep
+        // the oldest / 2 keep the newest, whichever the provider did not pick), recorded only where the crossing's
+        // upkeep met a legend group whose copies differ. Rides bits 2-3 of GameState::scripted_legend_keep
+        // (SetLegendKeepUpkeepPin, write-when-set); -1 = none chosen.
+        std::int8_t upkeep_legend_keep_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -2908,6 +2915,14 @@ public:
                                       SearchBudget* budget, bool second_main);
     // Test hook: every crossing the horn axis makes from `state`, as (recorded pin or -2, hand size after it).
     static std::vector<std::pair<int, int>> HornBoundaryForTest(const GameState& state);
+    // ...and the NEXT upkeep's legend-rule keep (Boars LK3): an upkeep legend rule whose copies differ that the
+    // committed line left unpinned is searched at the end of the real turn; the winner goes to bits 2-3 of
+    // state.scripted_legend_keep (-2 = nothing to decide).
+    static int ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int max_turns,
+                                              SearchBudget* budget, bool second_main);
+    // Test hook: every crossing the upkeep-legend digit makes from `state`, as (recorded pin or -2, the kept copy's
+    // summoning-sick flag for the first legendary name with a duplicate in the crossed upkeep... -1 when none).
+    static std::vector<std::pair<int, int>> UpkeepLegendBoundaryForTest(const GameState& state);
     // ...and morph's opponent-end-step flip: an unpinned flip menu (a face-down permanent of ours) is searched at
     // the end of the real turn, one crossing per menu rank; the winner goes to state.scripted_eot_face_up (-2 =
     // nothing to decide: no face-down permanent, or a one-entry menu).
@@ -4073,6 +4088,7 @@ public:
         int boundary_doth = -2;
         int boundary_tutor = -2;
         int boundary_horn = -2;    // ...and Herald's Horn's take/leave mask (Plan::upkeep_horn_choice)
+        int boundary_ulk = -2;     // ...and the next upkeep's legend keep (Plan::upkeep_legend_keep_choice, LK3)
         int boundary_miracle = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
         int boundary_grace = -2;

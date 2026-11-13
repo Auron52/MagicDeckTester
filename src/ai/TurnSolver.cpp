@@ -1613,6 +1613,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
     pl("attackput", first.attack_put_choice != dup.attack_put_choice);
     pl("legendkeep", first.legend_keep_turn != dup.legend_keep_turn);
+    pl("upklegend", first.upkeep_legend_keep_choice != dup.upkeep_legend_keep_choice);
     pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
@@ -28582,6 +28583,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     if (p.attack_put_choice != -1)
     { fold(0x1A630000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_put_choice + 3))); }
     if (p.legend_keep_turn != 0) { fold(0x1E6C7000ull + static_cast<uint64_t>(p.legend_keep_turn)); }   // Boars LK
+    if (p.upkeep_legend_keep_choice >= 0)   // the next upkeep's legend keep (Boars LK3)
+    { fold(0x1E6C7100ull + static_cast<uint64_t>(p.upkeep_legend_keep_choice)); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -28894,7 +28897,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1
-        && p.attack_put_choice == -1 && p.legend_keep_turn == 0
+        && p.attack_put_choice == -1 && p.legend_keep_turn == 0 && p.upkeep_legend_keep_choice == -1
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
@@ -28951,6 +28954,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.militia_pride_pay_choice >= 0
         || p.attack_put_choice != -1
         || p.legend_keep_turn != 0   // the turn's legend-rule keep (Boars LK): an inert twin lands on its base's state
+        || p.upkeep_legend_keep_choice >= 0   // ...and the next upkeep's (LK3, a boundary pin)
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -29901,6 +29905,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     if (p.attack_put_choice != -1)   // Ilharg's attack put (value-gated)
     { h = Mix(h, 0x1A630000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(p.attack_put_choice + 3))); }
     if (p.legend_keep_turn != 0) { h = Mix(h, 0x1E6C7000ull + static_cast<std::uint64_t>(p.legend_keep_turn)); }   // Boars LK
+    if (p.upkeep_legend_keep_choice >= 0)   // the next upkeep's legend keep (Boars LK3)
+    { h = Mix(h, 0x1E6C7100ull + static_cast<std::uint64_t>(p.upkeep_legend_keep_choice)); }
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
     if (p.athreos_coin_choice >= 0)
     { h = Mix(h, 0xA7E05C01ull + static_cast<std::uint64_t>(p.athreos_coin_choice)); }
@@ -56371,6 +56377,7 @@ namespace solvememo
             || a.militia_pride_pay_choice != b.militia_pride_pay_choice
             || a.attack_put_choice != b.attack_put_choice
             || a.legend_keep_turn != b.legend_keep_turn
+            || a.upkeep_legend_keep_choice != b.upkeep_legend_keep_choice
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
@@ -66304,7 +66311,10 @@ struct DepletionSbaAtResolution
         t_resolving.pop_back();
         if (committed && DepletionSbaOn() && !ResolvingOn(st)) { SacrificeDepletedLands(st); }
         // The legend rule (CR 704.5j) at the same post-resolution SBA point as the executor's GameEngine::ResolveStack
-        // (LegendRuleSbaCheckpoint). Not behind MTG_DEPLETION_SBA: it is its own rule.
+        // (LegendRuleSbaCheckpoint). Not behind MTG_DEPLETION_SBA: it is its own rule. A NESTED free cast (cascade,
+        // Creative Technique, Breaching Dragonstorm's enter trigger) is its own stack object in the executor, checked
+        // after it resolves and before the parent continues: those parents call the checkpoint right after the
+        // recursion returns (Boars LK3), at a point where they hold no battlefield index.
         if (committed && !ResolvingOn(st)) { LegendRuleSbaCheckpoint(st); }
     }
     DepletionSbaAtResolution(const DepletionSbaAtResolution&) = delete;
@@ -69022,6 +69032,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                 apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
                           std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
+                LegendRuleSbaCheckpoint(state);   // its own stack object's SBA (Boars LK3; see the cascade site)
             }
             else { state.exile.push_back(std::move(found)); }
         };
@@ -69120,6 +69131,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     cascade_free = true;   // free cast (one-shot, consumed by the recursion)
                     apply_one(hname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1, 0,
                               std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
+                    // NESTED FREE CAST = ITS OWN STACK OBJECT (Boars LK3, CR 704.3): the executor pushes this cast (EffectHandler::PushFreeCast)
+                // and resolves it as a separate stack entry, with the legend-rule SBA after it (GameEngine::ResolveStack's
+                // LegendRuleSbaCheckpoint) and BEFORE the rest of the parent resolves. The recursion's own exit cannot check
+                // (DepletionSbaAtResolution skips a nested exit: parent frames may hold battlefield indices), so the parent
+                // checks HERE, a point where it holds none.
+                LegendRuleSbaCheckpoint(state);
                 }
                 else { ap.library.push_back(std::move(hit)); }   // declined/forbidden: bottomed
             }
@@ -69187,6 +69204,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         cascade_free = true;
                         apply_one(fname, false, false, 0, false, 0, std::string{}, 0, 0, -1, -1,
                                   0, std::string{}, 0, false, -1, 0, 0, 0, false, false, false);
+                        LegendRuleSbaCheckpoint(state);   // its own stack object's SBA (Boars LK3; see the cascade site)
                     }
                     else { EnterHand(state, pe.controller, std::move(found),
                                      HandEntryReason::Reveal); }
@@ -75744,7 +75762,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
     state.scripted_attack_put = -1;                // Ilharg's searched attack put (same lockstep)
-    state.scripted_legend_keep = 0;                // the turn's searched legend-rule keep (Boars LK; same lockstep)
+    LegendKeepOpenUpkeep(state);                   // the turn's legend keep ends; the next-upkeep pin rules the upkeep (LK3)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -76089,6 +76107,8 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
                                       options[static_cast<std::size_t>(pick)].second);
         }
     }
+    // The upkeep is over: its searched legend keep (Boars LK3) stops deciding (lockstep: the end of UpkeepTail).
+    LegendKeepCloseUpkeep(state);
 
     // Draw
     const DrawAttemptResult turn_draw = AttemptDrawIntoHand(state, state.active_player_index,
@@ -94661,6 +94681,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.militia_pride_pay_choice);
             add(pl.attack_put_choice);
             add(pl.legend_keep_turn);
+            add(pl.upkeep_legend_keep_choice);   // Boars LK3
             add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
@@ -94861,6 +94882,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
     if (!(a.attack_put_choice == b.attack_put_choice)) { d += " attack_put_choice"; }
     if (!(a.legend_keep_turn == b.legend_keep_turn)) { d += " legend_keep_turn"; }
+    if (!(a.upkeep_legend_keep_choice == b.upkeep_legend_keep_choice)) { d += " upkeep_legend_keep_choice"; }
     if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
@@ -95114,6 +95136,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
             if (p.attack_put_choice != -1) { s += " | aput" + std::to_string((int)p.attack_put_choice); }
             if (p.legend_keep_turn != 0) { s += " | lkeep" + std::to_string((int)p.legend_keep_turn); }
+            if (p.upkeep_legend_keep_choice >= 0) { s += " | ulkeep" + std::to_string((int)p.upkeep_legend_keep_choice); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -104349,6 +104372,35 @@ static bool HornUncoveredPending(const GameState& state)
     }
     return false;
 }
+// THE NEXT UPKEEP's LEGEND-RULE KEEP (Boars LK3). A legend rule met in the upkeep -- Marit Lage's Slumber's legendary
+// token beside a living Marit Lage, an Emeria / Defense of the Heart / upkeep put of a legend we already control, an
+// upkeep arrival -- fires before any plan of its turn, so no Plan::legend_keep_turn can decide it; it rides the
+// crossing (bits 2-3 of scripted_legend_keep, LegendKeepOpenUpkeep). Live when that pin does not already cover the
+// upkeep and an upkeep entry route of ours is on the battlefield; same scope as the Horn digit (beyond the horizon
+// the provider's LegendKeepIndex is the permitted playout policy; at a constant-leaf edge a deeper pass searches the
+// crossing). The digit's width is learned by the crossing (t_upkeep_legend_keep_probe): an upkeep that met no group
+// whose copies differ has width 1 and records nothing. False for every deck without such a route.
+static bool UpkeepLegendUncoveredPending(const GameState& state)
+{
+    if (LegendKeepUpkeepPin(state) != 0 || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()
+        || EchoEdgeFoldHere(state)) { return false; }
+    bool legend_ours = false, slumber = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+        if (p.card.HasSupertype(Supertype::Legendary)) { legend_ours = true; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.upkeep_sac_token_legendary) { slumber = true; }
+    }
+    // Defense of the Heart can put two copies of one legend at once; every other route needs a legend of ours already.
+    if (state.deck_has_sac_tutor && UpkeepSacTutorsOnBattlefield(state) > 0) { return true; }
+    if (!legend_ours) { return false; }
+    if (slumber) { return true; }
+    if (state.deck_has_upkeep_reanimate) { return true; }
+    for (const SuspendedCard& sc : state.ActivePlayer().suspended_cards)
+    { if (sc.arrive_turn >= 0 && sc.arrive_turn <= state.TurnSeq() + 1) { return true; } }
+    return UpkeepRevealTopEnabled() && UpkeepRevealTopCandidate(state, state.active_player_index) != nullptr;
+}
 // THE HOLD PASS (morph's opponent-end-step flip; Morph INT-2c, 2026-11-12). A main whose enumeration offers
 // a plan offers no PASS unless its land drop is still open (the no-land pass, add_for_land("", "")): the
 // hosts append the pass only when the list is EMPTY (FSLineWin's idle node, SolveWithLookahead's empty
@@ -104435,8 +104487,9 @@ public:
     // which records that pin alone, so no other axis may be iterated beside it).
     BoundaryFan(const GameState& pre, bool with_echo, bool stut_only = false,
                 bool reanim_only = false, bool land_only = false, bool face_up_only = false,
-                bool horn_only = false)
+                bool horn_only = false, bool ulk_only = false)
     {
+        if (ulk_only) { ulk_ = UpkeepLegendUncoveredPending(pre); return; }
         if (horn_only) { horn_ = HornUncoveredPending(pre); return; }
         if (face_up_only) { fu_ = FaceUpUncoveredPending(pre); return; }
         if (stut_only)
@@ -104511,12 +104564,15 @@ public:
         // HERALD'S HORN's upkeep take/leave (Boars I1): a digit whose width (2^residual decisions) is learned per
         // crossing (the Klothys shape). False for every deck without the card.
         horn_ = HornUncoveredPending(pre);
+        // The next upkeep's legend keep (Boars LK3): an inner digit whose menu is learned per crossing (the Horn shape).
+        ulk_ = UpkeepLegendUncoveredPending(pre);
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_ || horn_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_ || horn_ || ulk_; }
     bool FaceUpLive() const { return fu_; }
     bool HornLive() const { return horn_; }
+    bool UpkeepLegendLive() const { return ulk_; }
     bool DothLive() const { return doth_; }
     bool TutorLive() const { return tutor_; }
     bool StutLive() const { return stut_; }
@@ -104537,6 +104593,7 @@ public:
             dredge_incomplete_ = false;
             fu_rank_ = 0; fu_width_ = 1;
             horn_rank_ = 0; horn_width_ = 1;
+            ulk_rank_ = 0; ulk_width_ = 1;
             klothys_rank_ = 0; klothys_width_ = 1;
             keranos_rank_ = 0; keranos_width_ = 1;
             if (!dredge_pending_.empty())
@@ -104554,6 +104611,10 @@ public:
         if (horn_ && horn_rank_ + 1 < horn_width_)
         { ++horn_rank_; return true; }
         horn_rank_ = 0; horn_width_ = 1;
+        // The upkeep legend keep (LK3): the same upkeep, an inner digit beside the Horn's.
+        if (ulk_ && ulk_rank_ + 1 < ulk_width_)
+        { ++ulk_rank_; return true; }
+        ulk_rank_ = 0; ulk_width_ = 1;
         if (klothys_ && klothys_rank_ + 1 < klothys_width_)
         { ++klothys_rank_; return true; }
         klothys_rank_ = 0; klothys_width_ = 1;
@@ -104673,6 +104734,7 @@ public:
         if (keranos_) { sx.scripted_boundary_keranos = keranos_rank_; }
         if (fu_) { sx.scripted_eot_face_up = static_cast<std::int16_t>(fu_rank_); }
         if (horn_) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_rank_); }
+        if (ulk_) { SetLegendKeepUpkeepPin(sx, ulk_menu_[ulk_rank_]); }
     }
     // The crossing itself (SimulateEndAndStartNextTurn), with the probe open when a Defense of the Heart is live
     // so the fan learns the menu sizes this crossing met.
@@ -104716,6 +104778,7 @@ public:
     int KeranosPin() const { return keranos_ && keranos_width_ > 1 ? keranos_rank_ : -2; }
     int FaceUpPin() const { return fu_ && fu_width_ > 1 ? fu_rank_ : -2; }
     int HornPin() const { return horn_ && horn_width_ > 1 ? horn_rank_ : -2; }
+    int UpkeepLegendPin() const { return ulk_ && ulk_width_ > 1 ? ulk_menu_[ulk_rank_] : -2; }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
@@ -104731,13 +104794,15 @@ public:
         if (KeranosPin() != -2) { p.next_keranos_choice = KeranosPin(); }
         if (FaceUpPin() != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(FaceUpPin()); }
         if (HornPin() != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(HornPin()); }
+        if (UpkeepLegendPin() != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(UpkeepLegendPin()); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
     void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin, int stut_pin,
                        int miracle_pin, int grace_pin, int emeria_pin, int land_pin,
                        const std::vector<int>& dredge_pins, int klothys_pin, int keranos_pin,
-                       int face_up_pin = -2, int horn_pin = -2) const
+                       int face_up_pin = -2, int horn_pin = -2, int ulk_pin = -2) const
     {
+        if (ulk_pin != -2) { SetLegendKeepUpkeepPin(sx, ulk_pin); }
         if (horn_pin != -2) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin); }
         if (face_up_pin != -2) { sx.scripted_eot_face_up = static_cast<std::int16_t>(face_up_pin); }
         if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
@@ -104858,6 +104923,10 @@ private:
     bool             horn_ = false;                   // Herald's Horn's upkeep take/leave is decided at this crossing
     int              horn_rank_ = 0;
     int              horn_width_ = 1;
+    bool             ulk_ = false;                    // the next upkeep's legend keep is decided at this crossing (LK3)
+    int              ulk_rank_ = 0;
+    int              ulk_width_ = 1;
+    int              ulk_menu_[3] = { kLegendKeepUpkeepFollow, 1, 2 };   // rank -> pin; [0] = the provider's own pick
     int              fu_rank_ = 0;
     int              fu_width_ = 1;
     std::vector<int> dredge_current_;
@@ -104889,12 +104958,16 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 bool BoundaryFan::Cross(GameState& sx)
 {
     if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_ && !fu_
-        && !horn_)
+        && !horn_ && !ulk_)
     { return SimulateEndAndStartNextTurn(sx); }
     // Herald's Horn: count the residual take/leave decisions this crossing's upkeep meets (the digit's width).
     int horn_residuals = 0;
     int* prior_horn_probe = t_upkeep_horn_probe;
     if (horn_) { t_upkeep_horn_probe = &horn_residuals; }
+    // The upkeep legend keep (LK3): the provider's own pick for the first differing group the covered upkeep meets.
+    UpkeepLegendKeepProbe ulk_probe;
+    UpkeepLegendKeepProbe* prior_ulk_probe = t_upkeep_legend_keep_probe;
+    if (ulk_) { t_upkeep_legend_keep_probe = &ulk_probe; }
     bool ok = false;
     std::vector<int> dredge_offer;
     std::vector<int>* saved_dredge_probe = g_dredge_boundary_first_offer;
@@ -104970,6 +105043,18 @@ bool BoundaryFan::Cross(GameState& sx)
     if (keranos_) { keranos_width_ = std::max(1, keranos_width); }
     t_upkeep_horn_probe = prior_horn_probe;
     if (horn_) { horn_width_ = 1 << std::min(horn_residuals, kHornPinOrdinals); }
+    t_upkeep_legend_keep_probe = prior_ulk_probe;
+    // The menu is learned on the rank-0 crossing (stamped "follow the provider", so the probe reads the provider's own
+    // pick); a later rank re-crosses the same state with the other answers and keeps it.
+    if (ulk_ && ulk_rank_ == 0)
+    {
+        ulk_width_ = 1;
+        if (ulk_probe.seen)
+        {
+            if (ulk_probe.provider_pick != 0) { ulk_menu_[ulk_width_++] = 1; }   // keep the oldest
+            if (ulk_probe.provider_pick != 1) { ulk_menu_[ulk_width_++] = 2; }   // keep the newest
+        }
+    }
     if (stut_)
     {
         s_nobs_ = std::min(stut_probe.n, kSuspendTutorPinOrdinals);
@@ -105316,6 +105401,61 @@ std::vector<std::pair<int, int>> TurnSolver::HornBoundaryForTest(const GameState
         fan.Stamp(sx);
         if (!fan.Cross(sx)) { continue; }
         out.emplace_back(fan.HornPin(), static_cast<int>(sx.players[static_cast<std::size_t>(state.active_player_index)].hand.size()));
+    }
+    return out;
+}
+// The NEXT upkeep's legend keep's crossing node (Boars LK3): the ChooseRealCrossingHorn shape exactly -- iteratively
+// deepened over the digit's crossings, the winner left on the state and returned (-2 = nothing to decide: no upkeep
+// route, a pin already covering the upkeep, or no group whose copies differ on this crossing).
+int TurnSolver::ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int max_turns,
+                                               SearchBudget* budget, bool second_main)
+{
+    if (depth <= 0) { return -2; }
+    BoundaryFan check(state, /*with_echo=*/false, false, false, false, false, false, /*ulk_only=*/true);
+    if (!check.UpkeepLegendLive()) { return -2; }
+    RevealLogPause _rlp;
+    TranspositionTable tt;
+    int chosen = -2;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, false, /*ulk_only=*/true);
+        int best_wt = max_turns + 2, best_pin = -2;
+        bool wide = false;
+        while (fan.Next())
+        {
+            GameState ce = state;
+            fan.Stamp(ce);
+            int wt = max_turns + 1;
+            const int cut = best_wt <= max_turns ? best_wt - 1 : max_turns + 1;
+            if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (fan.UpkeepLegendPin() != -2) { wide = true; }
+            if (wt < best_wt) { best_wt = wt; best_pin = fan.UpkeepLegendPin(); }
+        }
+        if (!wide) { return -2; }
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
+    }
+    if (chosen != -2) { SetLegendKeepUpkeepPin(state, chosen); }
+    return chosen;
+}
+std::vector<std::pair<int, int>> TurnSolver::UpkeepLegendBoundaryForTest(const GameState& state)
+{
+    std::vector<std::pair<int, int>> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        if (!fan.Cross(sx)) { continue; }
+        // The surviving legendary copy of ours: entered this turn (1, the new one) or not (0); -1 when none.
+        int sick = -1;
+        for (const Permanent& p : sx.battlefield)
+        {
+            if (p.controller_index == state.active_player_index && p.card.HasSupertype(Supertype::Legendary) && !p.card.IsLand())
+            { sick = p.entered_this_turn ? 1 : 0; break; }
+        }
+        out.emplace_back(fan.UpkeepLegendPin(), sick);
     }
     return out;
 }
@@ -106978,6 +107118,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             int  best_keranos = -2;
             int  best_face_up = -2;
             int  best_horn = -2;
+            int  best_ulk = -2;
             std::vector<int> best_dredge;
             bool have      = false;
             while (fan.Next())
@@ -107010,6 +107151,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_keranos = fan.KeranosPin();
                     best_face_up = fan.FaceUpPin();
                     best_horn = fan.HornPin();
+                    best_ulk = fan.UpkeepLegendPin();
                     best_dredge = fan.DredgePins();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
@@ -107027,6 +107169,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             best_tail.boundary_keranos = best_keranos;
             best_tail.boundary_face_up = best_face_up;
             best_tail.boundary_horn = best_horn;
+            best_tail.boundary_ulk = best_ulk;
             best_tail.boundary_dredge_pins = std::move(best_dredge);
             return best_tail;
         }
@@ -107059,6 +107202,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     tail_line.boundary_keranos = -2;
     tail_line.boundary_face_up = -2;
     tail_line.boundary_horn = -2;
+    tail_line.boundary_ulk = -2;
     tail_line.boundary_dredge_pins.clear();
     return tail_line;
 }
@@ -107078,6 +107222,7 @@ static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine&
     if (tail.boundary_keranos != -2) { p.next_keranos_choice = tail.boundary_keranos; }
     if (tail.boundary_face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(tail.boundary_face_up); }
     if (tail.boundary_horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(tail.boundary_horn); }
+    if (tail.boundary_ulk != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(tail.boundary_ulk); }
     if (!tail.boundary_dredge_pins.empty()) { p.next_draw_dredge_pins = tail.boundary_dredge_pins; }
 }
 
@@ -115083,7 +115228,7 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 struct BoundaryChoice
 {
     int echo = -2, doth = -2, tutor = -2, stut = -2, miracle = -2, grace = -2, emeria = -2, land = -2;
-    int klothys = -2, keranos = -2, face_up = -2, horn = -2;
+    int klothys = -2, keranos = -2, face_up = -2, horn = -2, ulk = -2;
     std::vector<int> dredge;
 };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
@@ -115101,6 +115246,7 @@ static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
     if (bc.keranos != -2) { p.next_keranos_choice = bc.keranos; }
     if (bc.face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(bc.face_up); }
     if (bc.horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(bc.horn); }
+    if (bc.ulk != -2) { p.upkeep_legend_keep_choice = static_cast<std::int8_t>(bc.ulk); }
 }
 static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
                                               int cutoff, bool second_main, TranspositionTable* tt)
@@ -115131,11 +115277,12 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
             best.dredge = fan.DredgePins(); best.klothys = fan.KlothysPin(); best.keranos = fan.KeranosPin();
             best.face_up = fan.FaceUpPin();
             best.horn = fan.HornPin();
+            best.ulk = fan.UpkeepLegendPin();
         }
     }
     fan.RecordOnState(copy, best.echo, best.doth, best.tutor, best.stut,
                       best.miracle, best.grace, best.emeria, best.land,
-                      best.dredge, best.klothys, best.keranos, best.face_up, best.horn);
+                      best.dredge, best.klothys, best.keranos, best.face_up, best.horn, best.ulk);
     return best;
 }
 
@@ -118667,6 +118814,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     { Fold(k, 0x555054); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_tutor)); }
     if (fold_upkeep_pins && state.scripted_upkeep_horn >= 0)
     { Fold(k, 0x484F52); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_horn)); }
+    if (fold_upkeep_pins && LegendKeepUpkeepPin(state) != 0)   // the next upkeep's legend keep (Boars LK3)
+    { Fold(k, 0x1E6C71); Fold(k, static_cast<uint64_t>(LegendKeepUpkeepPin(state))); }
     if (state.deck_has_miracle)
     {
         Fold(k, 0x4D4952410001ull + static_cast<uint64_t>(state.ActivePlayer().first_draw_card_number_this_turn));
@@ -127281,7 +127430,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
     if (p.attack_put_choice != -1)         { s.scripted_attack_put = p.attack_put_choice; }   // Ilharg (I5a)
-    if (p.legend_keep_turn != 0)           { s.scripted_legend_keep = p.legend_keep_turn; }   // the turn's legend keep (LK)
+    if (p.legend_keep_turn != 0)           { SetLegendKeepNow(s, p.legend_keep_turn); }   // the turn's legend keep (LK)
+    if (p.upkeep_legend_keep_choice >= 0)  { SetLegendKeepUpkeepPin(s, p.upkeep_legend_keep_choice); }   // next upkeep's (LK3)
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)
