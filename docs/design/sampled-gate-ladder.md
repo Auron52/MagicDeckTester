@@ -228,10 +228,17 @@ seeds with a heur A/A arm for the CPU noise floor) checks whether that is real.
   not the leafless tree outweighing the rollouts.
 - Held-out A/B H1 launched on `g_pb1_plc_prr_prx2_pfr20` (see the checkpoint below).
 
+### H1 (held-out A/B, 33,600 games, DONE): `_pfr20` fails the bar
+Pooled CPU 0.938x over 17 decks; quality better on the five screen decks (Hydras -0.0011 14/5, Alchemist -0.0070
+8/1, EDF -0.0030, MB -0.0020, Snow 0) and level on 10 of the 12 broader decks, but Landfall +0.0325 (3/16) and CPU
+above heur on Melira 1.165x, Snow 1.023x, Bruna 1.003x. Landfall's losses are two mechanisms at the T1 decision:
+`_prr`'s cap halving the room for a pass that has no leaves (the tree IS the pass), and the cold over-price at pass 4
+where the refusal is not routed exact. Details and the next arm: `logs/hydras-research/P18d-handoff.md`.
+
 ## Checkpoint (P18d, 2026-11-13 ~09:20 UTC)
 - Candidate: `g_pb1_plc_prr_prx2_pfr20` (bootstrap-exact pass 1, leafless cap, real-remaining cap, refuse-exact at
   pass 3, free refusal of pass 3 at F=2 on heur's own extrapolation from c1).
-- H1 held-out A/B (heur vs candidate; Hydras 8,000/arm seeds 780000+, Alchemist/EDF/Snow/MB 1,000/arm seeds
+- H1 (DONE, see above) held-out A/B (heur vs candidate; Hydras 8,000/arm seeds 780000+, Alchemist/EDF/Snow/MB 1,000/arm seeds
   790000/800000/810000/820000, the 12 broader decks 400/arm seeds 830000+; 33,600 games; weight-ordered; binary
   `build/scratch/p18d/mtg_d2` = 2b93bb0df): `build/scratch/p18d/H1`, DONE marker `H1/DONE`. Read with
   `python3 build/scratch/p18d/s9sum.py build/scratch/p18d/H1 heur g_pb1_plc_prr_prx2_pfr20`.
