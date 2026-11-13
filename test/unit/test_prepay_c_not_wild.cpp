@@ -293,3 +293,62 @@ TEST_CASE("prepay: a Tendo tapped for {C} with its counter kept books physical {
     REQUIRE(TapForCostDirect(s, CostCw("Magus of the Bazaar"), /*for_creature=*/true));
     CHECK(FloatCw(s).Total() == 0);
 }
+
+// The same `wild` {C} through a COSTLY colour mode: Aether Hub ("{T}, Pay {E}: Add one mana of any color"),
+// Tarnished Citadel / Grand Coliseum (the any-colour mode deals damage), Voldaren Estate (pay 1 life). Each
+// lists every colour, so the free-colour exemption booked its {C} -- made by the separate free "{T}: Add {C}"
+// ability -- as `wild`, and a colour pip outside the bill could then take it with the energy / life never
+// spent (CR 106.1b). MTG_PREPAY_COSTLY_C.
+namespace
+{
+GameState CostlyPrepaid(const char* land, int energy)
+{
+    static const VialProvider vp;
+    EnsureCardsCw();
+    GameState s;
+    s.m_provider          = &vp;
+    s.active_player_index = 0;
+    s.turn_number         = 4;
+    s.players[0].life     = 20;
+    s.players[1].life     = 20;
+    s.players[0].energy_counters        = energy;
+    s.players[0].lands_played_this_turn = 1;
+    PutCw(s, "Mountain", 40);
+    PutCw(s, "Island", 41);
+    PutCw(s, land, 42);
+    s.players[0].hand.push_back(CardCw("Faithless Looting", 100));
+    s.players[0].hand.push_back(CardCw("Magus of the Bazaar", 101));
+    for (int k = 0; k < 10; ++k) { s.players[0].library.push_back(CardCw("Island", 900 + k)); }
+    const std::vector<Action> line = { CastCw(s, "Faithless Looting"), CastCw(s, "Magus of the Bazaar") };
+    REQUIRE(TurnSolver::BatchPrepayMainCasts(s, line));
+    for (const Permanent& p : s.battlefield) { CHECK(p.tapped); }
+    return s;
+}
+void CheckCostlyC(const char* land, int energy)
+{
+    CAPTURE(land);
+    GameState s = CostlyPrepaid(land, energy);
+    const int life0 = s.players[0].life, energy0 = s.players[0].energy_counters;
+    const ManaPool f = FloatCw(s);
+    CHECK(f.Total() == 3);
+    CHECK(f.wild == 0);
+    REQUIRE(TapForCostDirect(s, CostCw("Faithless Looting"), /*for_creature=*/false));
+    // Only Island's {U} and the land's {C} are left: a second {R} is not payable without the cost.
+    CHECK_FALSE(TapForCostDirect(s, CostCw("Faithless Looting"), /*for_creature=*/false));
+    REQUIRE(TapForCostDirect(s, CostCw("Magus of the Bazaar"), /*for_creature=*/true));
+    CHECK(FloatCw(s).Total() == 0);
+    CHECK(s.players[0].life == life0);
+    CHECK(s.players[0].energy_counters == energy0);
+}
+}   // namespace
+
+TEST_CASE("prepay: an energy-gated colour land's (Aether Hub) {C} stays {C}")
+{
+    CheckCostlyC("Aether Hub", 1);
+}
+
+TEST_CASE("prepay: a damage-gated colour land's (Tarnished Citadel, Grand Coliseum) {C} stays {C}")
+{
+    CheckCostlyC("Tarnished Citadel", 0);
+    CheckCostlyC("Grand Coliseum", 0);
+}

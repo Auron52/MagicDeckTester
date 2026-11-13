@@ -62681,7 +62681,19 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                       && has_c && bd->params.enters_with_mana_counters > 0
                                       && !bd->params.mana_counters_are_mining
                                       && bp.charge_counters >= bf_snap[static_cast<std::size_t>(bi)].charge_counters;
-            if (!counter_gated_c && (!has_c || colours == 0x1Fu)) { continue; }
+            // The same defect through a COSTLY colour mode: Aether Hub ("{T}, Pay {E}: Add one mana of any
+            // color"), Tarnished Citadel / Grand Coliseum (the any-colour mode deals damage), Voldaren Estate
+            // (pay 1 life). Each lists every colour, but its {C} came from the separate free "{T}: Add {C}"
+            // ability (the cost is paid at tap time only for a colour -- ManaPayment.cpp, PainForTap /
+            // energy_per_colored_tap), so a `wild` {C} would later pay a colour pip with the energy / life
+            // never spent (CR 106.1b, 601.2h). Only a source whose colour mode is FREE (Cavern of Souls,
+            // Sliver Hive, Secluded Courtyard) makes any-colour mana committed at spend. A costly source that
+            // DID tap for a colour is counted too: the Caves of Koilos over-count above (it can only keep
+            // more real {C} as `colorless`). MTG_PREPAY_COSTLY_C (default ON; =0 restores the laundering).
+            static const bool s_costly_c = EnvOn("MTG_PREPAY_COSTLY_C", true);
+            const bool costly_c = heurarm::Flag(heurarm::PREPAY_COSTLY_C, s_costly_c) && has_c
+                               && (bd->params.tap_self_damage > 0 || bd->params.energy_per_colored_tap > 0);
+            if (!counter_gated_c && !costly_c && (!has_c || colours == 0x1Fu)) { continue; }
             const int y = LandAuraColorMask(state, bp) != 0 ? ManaProducedPerTap(*bd)
                                                             : PermanentManaYield(state, bp, *bd);
             pure += (y >= 0 ? y : ManaProducedPerTap(*bd));
