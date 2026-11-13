@@ -60,6 +60,11 @@ struct CardParams
     bool bounce_target_spell = false;          // Sink into Stupor: return a spell from the stack
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
+    // A battlefield fetchland's IN-HAND colour hint (the uncracked-fetchland.md "split the field" step, Boars I1):
+    // the colours a copy in hand stands for in a deck's colour-cover heuristics, kept OFF `produces` so the
+    // permanent can never tap for them. Read only by CreatureGivingProvider's cleanup-discard cover (land_bits),
+    // whose USER-settled rule was written against Windswept Heath's old W/B/R/G hint. Empty = no hint.
+    std::vector<Color> hand_fixing_produces;
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
     // is this card (name + `produces` above); the BACK face is a distinct single-color land the
     // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
@@ -962,7 +967,17 @@ struct CardParams
     // (which DO buff themselves) byte-identical.
     bool lord_excludes_self = false;
     std::string self_pump_if_other_subtype_or_land;
+    // "This creature gets +1/+1 as long as you control a <land subtype>." Read in ComputeLordBonus. With
+    // self_pump_if_other_subtype_or_land (Kumena's Speaker) it is that card's land half; ON ITS OWN
+    // (Flinthoof Boar, "as long as you control a Mountain") it is the whole condition -- one +1/+1 however
+    // many such lands, by CURRENT subtype (LandHasSubtypeNow).
     std::string self_pump_if_land_subtype;
+    // Flinthoof Boar: "{R}: This creature gains haste until end of turn." A SELF keyword grant, enumerated as
+    // a searched main-phase Action::Kind::ActivatePump MODE 6 (ApplyActivatePump sets Permanent::temp_haste)
+    // and offered only while it can matter (SelfHasteActivationLive: the creature could attack only with the
+    // grant, combat still ahead). Deliberately NOT team_pump_grants_haste: that is a Minotaur routing
+    // signature term and feeds the combat firebreathing converter. nullopt = no such ability.
+    std::optional<ManaCost> self_haste_cost;
     bool self_pump_if_opponent_island = false;
 
     // Characteristic-defining ability: this creature's power equals the number of
@@ -2903,6 +2918,13 @@ struct CardParams
     // cards across the controller's zones, i.e. what the deck is actually built around. false =
     // a printed-subtype reducer (Goblin Warchief / Dragonspeaker Shaman) -> byte-identical.
     bool chooses_creature_type = false;
+    // Herald's Horn: "At the beginning of your upkeep, look at the top card of your library. If it's a
+    // creature card of the chosen type, you may reveal it and put it into your hand." The chosen type is
+    // this permanent's chosen_subtype_id (chooses_creature_type). Resolved by PerformUpkeepHornReveal at both
+    // upkeep sites (GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn, lockstep). The
+    // "may" is FOLDED to take where provably dominant (HornTakeFoldHolds) and otherwise SEARCHED
+    // (GameState::scripted_upkeep_horn, Plan::upkeep_horn_choice -- a BoundaryFan digit).
+    bool upkeep_look_top_chosen_type_to_hand = false;
 
     // ---- "As this creature enters, choose a creature type. This creature is the chosen type in
     // addition to its other types." (Metallic Mimic, Adaptive Automaton) -- 2026-09-26, Pirates.
@@ -4989,6 +5011,11 @@ struct CardDefinition
     //     a weaker vanilla token.
     // false for a Register-built definition (no JSON to audit).
     bool upkeep_fold_audited = false;
+    // HERALD'S HORN TAKE FOLD's premise (Boars I1; the proof is at SpellEffects.h HornTakeFoldHolds): every raw
+    // `parameters` key, the template and every keyword are on an audited list of things that can NOT put a card
+    // into its controller's hand during a turn (net of the card's own play). A WHITELIST, like the Overlord
+    // fold's: a param invented tomorrow is NOT audited, and an unaudited card where the fold looks disables it.
+    bool hand_gain_audited = false;
     bool upkeep_fold_keeper  = false;
     // THE SEQUENTIAL-WALK SUPPLY BOUND's card-data premise (TurnSolver.cpp SeqWalkProvablyShort): template,
     // every `parameters` key and every keyword are in the audited set (CardDatabase.cpp, beside the upkeep

@@ -434,6 +434,45 @@ public:
     const char* Name() const override { return "Morph"; }
 };
 
+// =============================================================================================
+// BoarsProvider -- the Boars deck (R/G Boar ramp-tribal; ledger docs/design/analysis-Boars.md). Created by Boars
+// I1 (2026-11-13) because Herald's Horn's creature-type choice is a provider decision.
+//
+// DERIVES FROM DeckProvider (the Generic surface), NOT from the provider the list rode before this branch:
+// AntiLifegainProvider, reached only because the fetchlands' fetch_land_types set the `anti` signature (the
+// Morph precedent, word for word). None of that provider's hooks is about this deck, so they are deliberately
+// not inherited; the change of provider is a play change for a deck with no ground truth yet. The ONE
+// behaviour kept is the shared exalted-aware attack hold (3x Ignoble Hierarch; ExaltedAwareShouldAttack).
+//
+// What it adds:
+//   * ChosenCreatureSubtypeId: Herald's Horn names BOAR. A PROVISIONAL one-option provider prune (Boars D4,
+//     surfaced to the USER): Boar is not provably the best type in every state (a Human-heavy remainder would
+//     favour Human for Somberwald Sage / Zhur-Taa Druid / Raggadragga), so the choice is a narrowing, not a
+//     fold. Human play is offered every creature type the deck carries (the `creature_type` decision).
+//
+// SIGNATURE (DetectDecisionProvider's `boars`): params carried by no other deck. TODAY that is Flinthoof Boar's
+// self_haste_cost alone (the only Boars-specific param implemented when this provider was created). Herald's Horn's
+// upkeep_look_top_chosen_type_to_hand is deliberately EXCLUDED: the Horn is a colourless tribal staple any tribal
+// deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I2-I5): OR in each new Boars-only param
+// -- Herald of Ilharg's cast-creature counters, Raggadragga's, Decimator's emerge/cast pump, Ilharg's attack put
+// -- so one deckbuilding swap cannot lose the routing.
+// =============================================================================================
+class BoarsProvider : public DeckProvider
+{
+public:
+    bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
+    uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                     const CardDefinition& entering) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A sound winless-turn bound must price every attacker that can still swing this "
+               "turn -- Flinthoof's {R} haste, Lightning Greaves, Ilharg's tapped-and-attacking put, Herald of "
+               "Ilharg's counters, End-Raze / Decimator team pumps, Raggadragga's anthem on mana creatures, exalted "
+               "and Zhur-Taa Druid's tap pings -- plus the mana a turn can make (Somberwald Sage's creature-only "
+               "burst, Gruul Turf), before claiming no line wins." }; }
+    const char* Name() const override { return "Boars"; }
+};
+
 // Extra Turns starts with the generic decision surface. Its own provider gives the
 // deck an explicit routing and certificate stance before any pruning is measured.
 class ExtraTurnsProvider : public DeckProvider

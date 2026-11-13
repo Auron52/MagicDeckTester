@@ -39,6 +39,19 @@ uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int c
     return DominantCreatureSubtypeId(state, controller);
 }
 
+// Boars D4 (PROVISIONAL provider one-option prune, surfaced to the USER): Herald's Horn names Boar whenever the
+// deck carries one. Every other chosen-type card (none in this list) keeps the generic deck-derived pick.
+uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                const CardDefinition& entering) const
+{
+    if (entering.params.upkeep_look_top_chosen_type_to_hand)
+    {
+        static const uint16_t boar = SubtypeRegistry::Instance().Id("Boar");
+        for (uint16_t id : DeckCreatureSubtypeMenu(state, controller)) { if (id == boar) { return boar; } }
+    }
+    return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
 uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                    const CardDefinition& entering) const
 {
@@ -8718,6 +8731,14 @@ bool MirrorwingProvider::ShouldAttackWith(const GameState& s, const Permanent& p
 
 // ---- MorphProvider ---------------------------------------------------------
 // The exalted-aware hold (4x Ignoble Hierarch), same rule and switch as Mirrorwing / Anti-Lifegain.
+// The exalted-aware hold (3x Ignoble Hierarch), same rule and switch as Morph / Mirrorwing / Anti-Lifegain.
+bool BoarsProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
+    if (!enabled) { return true; }
+    return ExaltedAwareShouldAttack(s, p);
+}
+
 bool MorphProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
 {
     static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
@@ -19881,6 +19902,11 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
         if (d == nullptr || d->params.reflecting) { return 0u; }
         unsigned b = 0;
         for (Color c : d->params.produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
+        // A battlefield fetchland in hand (Windswept Heath since Boars I1) produces nothing itself: read its
+        // in-hand hint, the W/B/R/G it carried as `produces` when this USER-settled rule was written, so the
+        // rule's cover is unchanged by the fetchland model change.
+        if (d->params.produces.empty())
+        { for (Color c : d->params.hand_fixing_produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } } }
         return b;
     };
     auto land_tier = [](const CardDefinition* d) -> int
@@ -23070,6 +23096,7 @@ namespace
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
+    const BoarsProvider          g_boars;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -25671,6 +25698,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // that signature alone. Params carried by no other deck, OR-ed across six cards (see the class note);
     // INT-2 appends the morph params (morph_cost, megamorph_cost, ...) to the same OR.
     bool morph = false;
+    // BOARS (R/G Boar ramp-tribal; BoarsProvider). MUST return ABOVE `anti`: the fetchlands' fetch_land_types set
+    // that signature alone. Params carried by no other deck (see the class note; I2-I5 append to the OR).
+    bool boars = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -25833,6 +25863,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.endstep_sacrifice_self || p.combat_damage_self_may_draw > 0
             || p.turned_face_up_return_gy_to_hand)
         { morph = true; }
+        // Boars: Flinthoof Boar's self haste (the class note lists what later integrators OR in).
+        if (p.self_haste_cost.has_value())
+        { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
         { gods = true; }
@@ -26377,6 +26410,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // param); its signature is carried by no other deck (see the flag).
     // Morph: FIRST -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
     if (morph)       { return g_morph; }
+    // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
+    if (boars)       { return g_boars; }
     if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
     if (kithkin)     { return g_kithkin; }

@@ -609,7 +609,11 @@ static_assert(sizeof(Player) == 216,
 // +0 bytes (2026-11-12, morph's searched opponent-end-step flip): `scripted_eot_face_up` (an int16_t, in the hole
 // after keranos_first_own_draw_seen). Classification: FUTURE-DETERMINING (set by the turn's plan apply, consumed at
 // the opponent's end step of the crossing), FOLDED in Build() value-gated (and in BuildDedupKey's pending pins).
-static_assert(sizeof(GameState) == 1408,   // verify combined current fields in the integrated build
+// +8 bytes (2026-11-13, Boars I1 -- Herald's Horn's searched upkeep take/leave): `scripted_upkeep_horn` (an int16_t
+// after scripted_upkeep_tutor; no hole there). Classification: FUTURE-DETERMINING (set by the turn's apply / the
+// crossing's Stamp, consumed at the next upkeep by PerformUpkeepHornReveal), FOLDED in Build() value-gated (and in
+// BuildDedupKey's pending pins and the boundary key's tutor slot, value-gated).
+static_assert(sizeof(GameState) == 1416,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -1027,6 +1031,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
     if (s.scripted_upkeep_tutor >= 0)
     { fold(0x555054555400ull + static_cast<std::uint64_t>(s.scripted_upkeep_tutor)); }
+    // Herald's Horn's take/leave mask (Boars I1): the same set-at-apply, consumed-at-next-upkeep class.
+    if (s.scripted_upkeep_horn >= 0)
+    { fold(0x484F524E0000ull + static_cast<std::uint64_t>(s.scripted_upkeep_horn)); }
     if (s.scripted_miracle_choice >= 0)
     { fold(0x4D4952410000ull + static_cast<std::uint64_t>(s.scripted_miracle_choice)); }
     // Profane Tutor's off-suspend fetch (GameState::scripted_suspend_tutor): set at a crossing, consumed at the

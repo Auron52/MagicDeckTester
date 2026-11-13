@@ -2299,6 +2299,15 @@
     "toughness": "1",
     "type_line": "Creature — Elemental Shaman"
   },
+  "Flinthoof Boar": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "This creature gets +1/+1 as long as you control a Mountain.\n{R}: This creature gains haste until end of turn. (It can attack and {T} this turn.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
+  },
   "Fluctuator": {
     "cmc": 2.0,
     "keywords": [],
@@ -2996,6 +3005,15 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Herald's Horn": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells you cast of the chosen type cost {1} less to cast.\nAt the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen type, you may reveal it and put it into your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
   },
   "Hero of Bladehold": {
     "cmc": 4.0,

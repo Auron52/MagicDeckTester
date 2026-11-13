@@ -522,6 +522,20 @@ using EtbKeywordsChooser = std::function<int(const GameState& state, int control
                                              int heuristic_index)>;
 extern thread_local EtbKeywordsChooser* g_play_etb_keywords_chooser;
 
+// ---- Human-play "as this enters, choose a creature type" chooser (Boars I1, 2026-11-13) ------------
+// Herald's Horn / Urza's Incubator (chooses_creature_type) and Metallic Mimic / Adaptive Automaton (the
+// ChoosesCreatureTypeOnEnter family). Asked at the universal enter cascade (FireEtbWatchers) with the
+// entering card's name, the MENU (every creature subtype the controller's deck carries, most common
+// first -- DeckCreatureSubtypeMenu) and the provider pick's index; returns a menu index, anything out of
+// range keeps the provider's pick. Same lifetime and gating as the colour chooser above: set only by
+// RunClaudePlay, nulled by RevealLogPause and skipped under g_tap_speculating, so autonomous play and
+// the rollouts take the provider's pick in lockstep. Names (not interned ids) keep this header light.
+using CreatureTypeChooser = std::function<int(const GameState& state, int controller,
+                                              const std::string& source,
+                                              const std::vector<std::string>& menu,
+                                              int heuristic_index)>;
+extern thread_local CreatureTypeChooser* g_play_creature_type_chooser;
+
 // ---- Human-play Light-Paws tutor-attach chooser (which Aura Light-Paws fetches) -----------
 // Light-Paws, Emperor's Voice: whenever an Aura you CAST resolves, search your library for an Aura
 // (mana value <= the cast Aura's, a name different from every Aura you control, and whose own enchant
@@ -1164,6 +1178,7 @@ inline bool AllPlayHooksNull()
         && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr
         && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr
+        && g_play_creature_type_chooser == nullptr
         && g_play_madness_chooser == nullptr
         && g_play_gy_return_one_chooser == nullptr;
 }
@@ -1232,6 +1247,7 @@ struct RevealLogPause
     // (USER 2026-10-06: "I hadn't even cast him yet").
     EtbColorChooser*    saved_etbcolchooser = nullptr;
     EtbKeywordsChooser* saved_etbkwchooser = nullptr;
+    CreatureTypeChooser* saved_ctchooser = nullptr;
     MadnessChooser*     saved_madchooser = nullptr;   // Vampires A1 madness (fires from ResolvePendingMadness)
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
@@ -1290,6 +1306,7 @@ struct RevealLogPause
         saved_tpchooser = g_play_tap_pref_chooser;
         saved_loychooser = g_play_loyalty_chooser;
         saved_etbcolchooser = g_play_etb_color_chooser; saved_etbkwchooser = g_play_etb_keywords_chooser;
+        saved_ctchooser = g_play_creature_type_chooser;
         saved_madchooser = g_play_madness_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
@@ -1317,6 +1334,7 @@ struct RevealLogPause
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
         g_play_loyalty_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_creature_type_chooser = nullptr;
         g_play_madness_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
@@ -1357,6 +1375,7 @@ struct RevealLogPause
                         g_play_loyalty_chooser = saved_loychooser;
                         g_play_etb_color_chooser = saved_etbcolchooser;
                         g_play_etb_keywords_chooser = saved_etbkwchooser;
+                        g_play_creature_type_chooser = saved_ctchooser;
                         g_play_madness_chooser = saved_madchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
@@ -1397,7 +1416,7 @@ struct ComboOffApplyPause
     BounceChooser* c24; FirebreatheChooser* c25; TapPrefChooser* c26; LoyaltyTargetChooser* c27;
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     LifegainCountersChooser* c31;
-    EtbColorChooser* c32; EtbKeywordsChooser* c33;
+    EtbColorChooser* c32; EtbKeywordsChooser* c33; CreatureTypeChooser* c_ct;
     MadnessChooser* c34;
     XValueChooser* c35;
     GyReturnOneChooser* c36;
@@ -1421,7 +1440,7 @@ struct ComboOffApplyPause
         c29 = g_play_fling_chooser;
         c30 = g_play_treasurify_chooser;
         c31 = g_play_lifegain_counters_chooser;
-        c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
+        c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser; c_ct = g_play_creature_type_chooser;
         c34 = g_play_madness_chooser;
         c35 = g_play_x_value_chooser;
         c36 = g_play_gy_return_one_chooser;
@@ -1444,6 +1463,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = nullptr;
         g_play_lifegain_counters_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_creature_type_chooser = nullptr;
         g_play_madness_chooser = nullptr;
         g_play_x_value_chooser = nullptr;
         g_play_gy_return_one_chooser = nullptr;
@@ -1468,7 +1488,7 @@ struct ComboOffApplyPause
         g_play_fling_chooser = c29;
         g_play_treasurify_chooser = c30;
         g_play_lifegain_counters_chooser = c31;
-        g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
+        g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33; g_play_creature_type_chooser = c_ct;
         g_play_madness_chooser = c34;
         g_play_x_value_chooser = c35;
         g_play_gy_return_one_chooser = c36;

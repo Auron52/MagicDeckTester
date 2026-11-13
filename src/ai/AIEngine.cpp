@@ -723,7 +723,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
@@ -774,6 +774,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_tutor_choice >= 0 && s.scripted_upkeep_tutor != p.upkeep_tutor_choice)            { ok = false; }
+    if (p.upkeep_horn_choice >= 0 && s.scripted_upkeep_horn != p.upkeep_horn_choice)               { ok = false; }
     if (p.miracle_choice >= 0 && s.scripted_miracle_choice != p.miracle_choice)                    { ok = false; }
     if (p.suspend_tutor_choice >= 0 && s.scripted_suspend_tutor != p.suspend_tutor_choice)          { ok = false; }
     if (p.demon_trigger_choice >= 0 && s.scripted_demon_trigger != p.demon_trigger_choice)      { ok = false; }
@@ -3226,6 +3227,15 @@ void AIEngine::DecideCrossingFetch(GameState& state)
     {
         state.scripted_upkeep_land_search = land_pin;
         if (land_pin != 0) { m_committed_line.clear(); }
+    }
+    // Herald's Horn's residual take/leave (Boars I1), when the committed line's crossing recorded none. A leave
+    // deviates from what the queued line assumed (its playout took), so it clears that line.
+    const int horn_pin = TurnSolver::ChooseRealCrossingHorn(view, m_lookahead_depth, m_max_turns, &budget,
+                                                            m_search_post_combat);
+    if (horn_pin != -2)
+    {
+        state.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin);
+        if (horn_pin != 0) { m_committed_line.clear(); }
     }
     // Morph's opponent-end-step flip, when the committed line's crossing recorded none (no-op without a face-down
     // permanent). A pick other than the front deviates from what the queued line assumed, so it clears that line.
@@ -7398,6 +7408,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.gy_exile_mode == 4
                 && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                         a.discard_name.str())) { continue; }
+            // Flinthoof Boar's self haste (mode 6): liveness first -- lockstep twin of the rollout's.
+            if (a.gy_exile_mode == 6
+                && !SelfHasteActivationLive(state, state.active_player_index, a.sac_source_id)) { continue; }
             // Mode 5: the loop-funded team pump (AccomplishedAlchemist; lockstep with ApplyPlanDirect's trailing
             // pass): fund the real cost with the untap loop (FundTeamPumpByLoop, shared), then pay it with this
             // world's payer.
@@ -7435,6 +7448,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     std::string what;
                     if (a.gy_exile_mode == 1)      { what = "pump (discard)"; }
                     else if (a.gy_exile_mode == 3) { what = "self pump + lifelink"; }
+                    else if (a.gy_exile_mode == 6) { what = "gains haste until end of turn"; }
                     else if (a.gy_exile_mode == 4)
                     {
                         // Stromkirk Condemned's discard-cost team pump (Vampires A2).

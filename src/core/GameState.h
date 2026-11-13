@@ -1272,6 +1272,13 @@ struct GameState
     // Index into GameEngine::UpkeepTutorOptions at the NEXT upkeep: 0 holds, positive
     // choices pay for an instant tutor-to-top before the draw. Cleared at that upkeep.
     std::int16_t             scripted_upkeep_tutor = -1;
+    // HERALD'S HORN's searched upkeep "may" (Boars I1; Plan::upkeep_horn_choice, a BoundaryFan digit): bit k = 1
+    // means LEAVE the k-th RESIDUAL take/leave decision of the NEXT upkeep (one whose take is not provably
+    // dominant, HornTakeFoldHolds), 0 = take; -1 = unpinned (every residual takes -- the playout default).
+    // Written at the turn's apply / the crossing's Stamp and consumed + cleared by that upkeep
+    // (PerformUpkeepHornReveal, both worlds). FUTURE-DETERMINING: folded value-gated in dominance::Build(),
+    // BuildDedupKey's pending pins and the boundary keys.
+    std::int16_t             scripted_upkeep_horn = -1;
     // PROFANE TUTOR's off-suspend FETCH (MTG_PROFANE_RESOLVE_FAN, default ON): a suspended tutor_to_hand card
     // arriving at the NEXT upkeep. PACKED kLandSearchPinBits per tutor-search ordinal at that upkeep, in
     // resolution order (a ripple free copy's own search first, then the arrival's), each a rank into the

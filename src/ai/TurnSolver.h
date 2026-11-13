@@ -1889,6 +1889,8 @@ public:
         // Next upkeep's paid tutor-to-top choice: 0 hold, positive index into the
         // live payable source/target menu. The boundary fan chooses it before draw.
         std::int16_t upkeep_tutor_choice = -1;
+        // Herald's Horn's next-upkeep take/leave mask (GameState::scripted_upkeep_horn; -1 = none chosen).
+        std::int16_t upkeep_horn_choice = -1;
         std::int8_t miracle_choice = -1; // first-draw optional cast: 0 decline, 1 cast
         // Provider MOVE-ORDER front tier (DecisionProvider::PlanMoveOrderFront; Morph INT-8 (E): plans that
         // cast or regrow a Berserk-shape doubler are tried first). ORDERING ONLY, sorted below atk_forfeit and
@@ -2841,6 +2843,12 @@ public:
                                                            SearchBudget* budget, bool second_main);
     static int ChooseRealCrossingLand(GameState& state, int depth, int max_turns,
                                       SearchBudget* budget, bool second_main);
+    // ...and Herald's Horn's upkeep "may" (Boars I1): a residual take/leave the committed line left unpinned is
+    // searched at the end of the real turn; the winner goes to state.scripted_upkeep_horn (-2 = nothing to decide).
+    static int ChooseRealCrossingHorn(GameState& state, int depth, int max_turns,
+                                      SearchBudget* budget, bool second_main);
+    // Test hook: every crossing the horn axis makes from `state`, as (recorded pin or -2, hand size after it).
+    static std::vector<std::pair<int, int>> HornBoundaryForTest(const GameState& state);
     // ...and morph's opponent-end-step flip: an unpinned flip menu (a face-down permanent of ours) is searched at
     // the end of the real turn, one crossing per menu rank; the winner goes to state.scripted_eot_face_up (-2 =
     // nothing to decide: no face-down permanent, or a one-entry menu).
@@ -4002,6 +4010,7 @@ public:
         // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
         int boundary_doth = -2;
         int boundary_tutor = -2;
+        int boundary_horn = -2;    // ...and Herald's Horn's take/leave mask (Plan::upkeep_horn_choice)
         int boundary_miracle = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
         int boundary_grace = -2;

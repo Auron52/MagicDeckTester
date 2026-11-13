@@ -6310,7 +6310,12 @@ inline std::pair<int,int> ComputeLordBonus(
             tb += sdef->params.static_artifact_tough;
         }
         // Kumena's Speaker: one bonus if EITHER condition holds, never one per Merfolk.
-        if (sdef && !sdef->params.self_pump_if_other_subtype_or_land.empty())
+        // Flinthoof Boar (Boars I1): the land condition ALONE ("as long as you control a Mountain") -- the
+        // same one-bonus test with the other-subtype half absent. Kumena sets both params, so its path is
+        // the identical sequence of tests (byte-identical); before this the land param was read only
+        // inside Kumena's gate and did nothing on its own.
+        if (sdef && (!sdef->params.self_pump_if_other_subtype_or_land.empty()
+                     || !sdef->params.self_pump_if_land_subtype.empty()))
         {
             bool eligible = false;
             for (const Permanent& q : battlefield)
@@ -6318,9 +6323,11 @@ inline std::pair<int,int> ComputeLordBonus(
                 if (q.controller_index != controller_index) { continue; }
                 if (q.card.IsLand())
                 {
-                    eligible = LandHasSubtypeNow(state, q, sdef->params.self_pump_if_land_subtype);
+                    eligible = !sdef->params.self_pump_if_land_subtype.empty()
+                            && LandHasSubtypeNow(state, q, sdef->params.self_pump_if_land_subtype);
                 }
-                else if (self == nullptr || &q != self)
+                else if (!sdef->params.self_pump_if_other_subtype_or_land.empty()
+                         && (self == nullptr || &q != self))
                 {
                     for (const std::string& st : q.card.m_subtypes)
                         if (st == sdef->params.self_pump_if_other_subtype_or_land) { eligible = true; }
@@ -9345,11 +9352,12 @@ inline bool CardHasSubtypeId(const Card& c, uint16_t sub_id)
 // deck built around two equally-sized tribes is not a case any shipped deck presents. If a deck ever
 // wants a genuine per-copy choice, this becomes a plan sub-decision and Permanent::chosen_subtype_id
 // must then be folded into the sim key as a real searched branch (it already is, see BuildSimKey).
-inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller)
+// The creature-subtype tally DominantCreatureSubtypeId and DeckCreatureSubtypeMenu share (one walk, so the
+// provider's pick and the human menu can never disagree about which types the deck carries). Writes up to
+// 32 (id, count) slots in first-seen order and returns the slot count.
+inline int TallyDeckCreatureSubtypes(const GameState& state, int controller, uint16_t (&ids)[32], int (&counts)[32])
 {
     // Small open-addressed tally: decks carry a handful of distinct creature subtypes.
-    uint16_t ids[32]   = {0};
-    int      counts[32] = {0};
     int      n = 0;
     auto tally = [&](const Card& c)
     {
@@ -9387,6 +9395,15 @@ inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller
         tally((qd && qd->params.chosen_type_added_to_self) ? qd->card : q.card);
     }
 
+    return n;
+}
+
+inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller)
+{
+    uint16_t ids[32]   = {0};
+    int      counts[32] = {0};
+    const int n = TallyDeckCreatureSubtypes(state, controller, ids, counts);
+
     uint16_t best = SubtypeRegistry::kNone;
     int      best_n = 0;
     for (int k = 0; k < n; ++k)
@@ -9395,6 +9412,25 @@ inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller
         { best = ids[k]; best_n = counts[k]; }
     }
     return best;
+}
+
+// The human `creature_type` menu (Boars I1): every creature subtype the controller's deck carries (the same
+// tally), MOST COMMON FIRST, ties on the lower interned id -- so the provider's DominantCreatureSubtypeId pick
+// is entry 0 whenever it is the generic one. A type no card in the deck carries is never listed: choosing it
+// makes both the reduction and any type-keyed effect match nothing (strictly dominated).
+inline std::vector<uint16_t> DeckCreatureSubtypeMenu(const GameState& state, int controller)
+{
+    uint16_t ids[32]   = {0};
+    int      counts[32] = {0};
+    const int n = TallyDeckCreatureSubtypes(state, controller, ids, counts);
+    std::vector<int> order(static_cast<std::size_t>(n));
+    for (int k = 0; k < n; ++k) { order[static_cast<std::size_t>(k)] = k; }
+    std::sort(order.begin(), order.end(), [&](int a, int b)
+    { return counts[a] != counts[b] ? counts[a] > counts[b] : ids[a] < ids[b]; });
+    std::vector<uint16_t> out;
+    out.reserve(order.size());
+    for (int k : order) { out.push_back(ids[k]); }
+    return out;
 }
 
 // The subtype id a reducer permanent actually discounts: its CHOSEN type when the card says "choose
@@ -10295,8 +10331,28 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
         if (ed && ChoosesCreatureTypeOnEnter(ed->params))
         {
-            const uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+            uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
                 state, e.controller_index, *ed);
+            // HUMAN PLAY (the `creature_type` decision, Boars I1): offer every creature type the deck's
+            // creatures carry, the provider's pick as the default. Null in every search / rollout scope
+            // (RevealLogPause) and skipped while speculating, so autonomous play keeps the provider's pick.
+            if (g_play_creature_type_chooser && !g_tap_speculating)
+            {
+                const int ctl = e.controller_index;
+                const std::string src_name = ed->card.m_name.str();
+                std::vector<uint16_t> ids = DeckCreatureSubtypeMenu(state, ctl);
+                int dflt = -1;
+                for (std::size_t k = 0; k < ids.size(); ++k) { if (ids[k] == chosen) { dflt = static_cast<int>(k); break; } }
+                if (dflt < 0 && chosen != SubtypeRegistry::kNone) { ids.push_back(chosen); dflt = static_cast<int>(ids.size()) - 1; }
+                if (!ids.empty())
+                {
+                    std::vector<std::string> names;
+                    names.reserve(ids.size());
+                    for (uint16_t id : ids) { names.push_back(SubtypeRegistry::Instance().Name(id)); }
+                    const int pick = (*g_play_creature_type_chooser)(state, ctl, src_name, names, dflt);
+                    if (pick >= 0 && pick < static_cast<int>(ids.size())) { chosen = ids[static_cast<std::size_t>(pick)]; }
+                }
+            }
             state.battlefield[entered_index].chosen_subtype_id = chosen;
             // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
             // its other types." Written onto the BATTLEFIELD permanent's own Card copy (layer 4),
@@ -18781,6 +18837,31 @@ inline bool DiscardTeamPumpLive(const GameState& state, int controller, int sour
     return false;
 }
 
+// Flinthoof Boar's "{R}: This creature gains haste until end of turn" (CardParams::self_haste_cost,
+// ActivatePump MODE 6, Boars I1). THE ONE LIVENESS PREDICATE, read by the enumeration (CollectActions),
+// breakpoint site 9's key (CollectActivationKeys) and both pay sites (the rollout's trailing pass and the
+// executor) BEFORE anything is paid, so the worlds agree by construction. Live iff the source is ours, a
+// creature with the param, and could attack ONLY with the grant: CanAttackFull says no now and yes once
+// temp_haste is set -- i.e. untapped, not a defender, summoning-sick (entered / gained control this turn)
+// and with no other haste source. Every other activation is a PROVABLE no-op and is never offered (the
+// Wirewood Lodge rule): haste only lifts the summoning-sickness restriction (CR 302.6), and the card has no
+// {T} ability, so a creature that can already attack (or never can) gains nothing. The "combat still
+// ahead" half is the enumerator's (it knows the phase); the apply sites run inside the same main.
+inline bool SelfHasteActivationLive(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.self_haste_cost.has_value()) { return false; }
+        if (p.temp_haste || CanAttackFull(p, state.battlefield, controller)) { return false; }
+        Permanent hasted = p;
+        hasted.temp_haste = true;
+        return CanAttackFull(hasted, state.battlefield, controller);
+    }
+    return false;
+}
+
 // ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
 // One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
 // apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
@@ -18804,6 +18885,9 @@ inline bool DiscardTeamPumpLive(const GameState& state, int controller, int sour
 //             once-each-turn use -> DISCARD (the cost) -> [MADNESS: ResolvePendingMadness] -> the +P/+T on every
 //             matching creature we control AS IT RESOLVES (a madness-cast Vampire is included, the
 //             2016 ruling; one cast later this turn is not, CR 611.2c). k is always 1.
+//   mode 5 -- the LOOP-FUNDED team pump (AccomplishedAlchemist); applied here as mode 2 by both callers.
+//   mode 6 -- SELF HASTE (Flinthoof Boar, CardParams::self_haste_cost): the source gains temp_haste until
+//             end of turn. Both callers check SelfHasteActivationLive before paying. k is always 1.
 inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k,
                              const std::string& discard_pin = std::string())
 {
@@ -18816,6 +18900,16 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
     if (src < 0) { return 0; }   // source left the battlefield: stranded-outlet safe, a full no-op
     const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[src].card);
     if (!sd) { return 0; }
+    if (mode == 6)
+    {
+        // Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn." The mana was paid
+        // by the caller after SelfHasteActivationLive held; the grant is idempotent, so k is always 1.
+        Permanent& s = state.battlefield[src];
+        s.temp_haste = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", s.card.m_name.str() + ": gains haste until end of turn"); }
+        return 1;
+    }
     if (mode == 4)
     {
         // Liveness re-checked HERE as well as by both callers before they pay (no mana is involved,
@@ -45495,6 +45589,122 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n,
         EmitPlayEvent(state.turn_number, "putback",
                       "\xE2\xA4\xB4 " + source + " -- put back on top of the library: " + names
                       + " (top first)");
+    }
+}
+
+// ---- HERALD'S HORN's upkeep reveal (Boars I1, 2026-11-13) ------------------------------------------------
+// "At the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen
+// type, you may reveal it and put it into your hand." One trigger per Horn the active player controls, in
+// battlefield order; each reads the THEN-CURRENT top (an earlier take exposes the next card) against ITS OWN
+// chosen type (Permanent::chosen_subtype_id), the top's type from its DEFINITION (library cards are
+// placeholders). A take is a put-into-hand (HandEntryReason::Reveal), NOT a draw (USER 2026-09-06). Called from
+// GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn at the same point (lockstep), before the
+// draw. Param-gated: one battlefield scan that finds nothing for every deck without the card.
+//
+// THE "MAY". Leaving the creature on top means the draw step draws it anyway (nothing in this engine sits between
+// the upkeep and the draw that reads the library), so TAKE is exactly "LEAVE, plus the next card one draw early":
+// the take world holds every card the leave world holds, plus one. It is worse only when that extra card forces a
+// CLEANUP DISCARD (CR 514.1) the leave world avoids, or through a later shuffle's different library (the USER
+// 2026-10-13 clairvoyant class -- not a regression). So:
+//   * FOLD to take wherever no discard is reachable this turn (HornTakeFoldHolds) -- a sound dominance fold;
+//   * otherwise the take/leave is SEARCHED: GameState::scripted_upkeep_horn (bit k = leave the k-th residual
+//     decision), written from Plan::upkeep_horn_choice / the BoundaryFan horn digit, consumed and cleared here.
+//     Unpinned (beyond the horizon, the d0 runner) a residual takes -- the permitted playout policy.
+//   * human play asks every match through the shared `dig` chooser ("(upkeep reveal)"; 0 = take, -1 = leave).
+inline constexpr int kHornPinOrdinals = 4;   // residual decisions one upkeep can pin (the deck runs 2 Horns)
+// BoundaryFan probe: the number of RESIDUAL decisions the crossing met (TurnSolver's horn digit width = 2^n).
+inline thread_local int* t_upkeep_horn_probe = nullptr;
+// Residual decisions resolved with NO pin (the playout default) -- for tests / census.
+inline std::atomic<long long> g_horn_unpinned{0};
+
+// TAKE IS PROVABLY DOMINANT (no cleanup discard reachable this turn). The take world's hand at cleanup is at most
+// its hand now + 1 (this take) + 1 (the draw step) + `later_triggers` (one card per Horn trigger still to resolve
+// this upkeep) + whatever else could put a card into hand this turn -- and that last term is ZERO when every card
+// that could act this turn is hand_gain_audited (CardDatabase.cpp): the battlefield, the hand, the graveyard and
+// staged cards of the controller, and the library cards the upkeep and draw can still bring (the top
+// 2 + later_triggers). Playing cards only shrinks the hand. So when that bound is within the maximum hand size
+// (unlimited with a no_max_hand_size permanent) no discard can happen and the leave world is the take world minus a
+// card. Anything unaudited makes the bound unknown and the decision is searched instead.
+inline bool HornTakeFoldHolds(const GameState& state, int controller, int later_triggers)
+{
+    const Player& pl = state.players[controller];
+    auto audited = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->hand_gain_audited;
+    };
+    bool unlimited = false;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->hand_gain_audited) { return false; }
+        if (d->params.no_max_hand_size) { unlimited = true; }
+    }
+    for (const Card& c : pl.hand)      { if (!audited(c)) { return false; } }
+    for (const Card& c : pl.graveyard) { if (!audited(c)) { return false; } }
+    for (const StagedCard& sc : pl.staged_cards) { if (!audited(sc.card)) { return false; } }
+    const int look = 2 + later_triggers;
+    int k = 0;
+    for (const Card& c : pl.library)
+    {
+        if (k++ >= look) { break; }
+        if (!audited(c)) { return false; }
+    }
+    if (unlimited) { return true; }
+    return static_cast<int>(pl.hand.size()) + 2 + later_triggers <= 7;
+}
+
+inline void PerformUpkeepHornReveal(GameState& state)
+{
+    const int me = state.active_player_index;
+    const int pin = state.scripted_upkeep_horn;
+    state.scripted_upkeep_horn = -1;   // consumed by this upkeep whatever it finds
+    // Snapshot the Horns first (a take never changes the battlefield, but keep the walk independent of it).
+    std::vector<std::pair<std::string, uint16_t>> horns;   // (name, chosen type)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.upkeep_look_top_chosen_type_to_hand)
+        { horns.emplace_back(p.card.m_name.str(), p.chosen_subtype_id); }
+    }
+    if (horns.empty()) { return; }
+    int residual = 0;   // residual decisions met so far (the pin's bit index)
+    for (std::size_t h = 0; h < horns.size(); ++h)
+    {
+        Player& ap = state.players[me];
+        if (ap.library.empty()) { break; }
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(ap.library.front());
+        const uint16_t chosen = horns[h].second;
+        if (td == nullptr || !td->card.IsCreature() || chosen == SubtypeRegistry::kNone
+            || !CardHasSubtypeId(td->card, chosen)) { continue; }
+        const int later = static_cast<int>(horns.size() - h - 1);
+        bool take = true;
+        if (g_play_dig_chooser && !g_tap_speculating)
+        {
+            const std::vector<Card> examined{ ap.library.front() };
+            const std::vector<int>  legal{ 0 };
+            take = (*g_play_dig_chooser)(state, me, horns[h].first + " (upkeep reveal)", examined, legal, 0) == 0;
+        }
+        else if (!HornTakeFoldHolds(state, me, later))
+        {
+            if (t_upkeep_horn_probe != nullptr) { ++*t_upkeep_horn_probe; }
+            if (pin >= 0 && residual < kHornPinOrdinals) { take = ((pin >> residual) & 1) == 0; }
+            else if (pin < 0) { g_horn_unpinned.fetch_add(1, std::memory_order_relaxed); }
+            ++residual;
+        }
+        if (!take)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "ability", horns[h].first + ": left " + td->card.m_name.str() + " on top"); }
+            continue;
+        }
+        Card c = ap.library.DrawTop();
+        const std::string cname = c.m_name.str();
+        EnterHand(state, me, std::move(c), HandEntryReason::Reveal);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "tutor", horns[h].first + ": revealed " + cname + " into hand"); }
     }
 }
 

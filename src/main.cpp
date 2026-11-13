@@ -1247,6 +1247,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         + " (discard " + (a.discard_name.empty() ? std::string("a card")
                                                                  : a.discard_name.str()) + ")";
                 }
+                else if (a.gy_exile_mode == 6)
+                {
+                    // Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn." The
+                    // source's number names WHICH copy (two summoning-sick Flinthoofs are two options).
+                    tag = a.card_name + " #" + std::to_string(a.sac_source_id) + ": gains haste until end of turn";
+                }
                 else if (a.gy_exile_mode == 3)
                 {
                     // Resplendent Angel's self pump + lifelink. Without this branch it fell into
@@ -4536,6 +4542,27 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
              "for the rest of the game. Default = the AI's pick."); }
 }
 
+// "As this permanent enters, choose a creature type" decision (Boars I1, 2026-11-13: Herald's Horn; also
+// Urza's Incubator, Metallic Mimic, Adaptive Automaton -- every ChoosesCreatureTypeOnEnter card). The type is
+// LOCKED for the permanent's lifetime. Emits the MENU (every creature subtype the deck's creature cards
+// carry, most common first); reply = a menu index, or anything out of range to keep the AI's pick.
+static void WriteCreatureTypeDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
+                                          const std::vector<std::string>& menu, int heuristic_default,
+                                          int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("creature_type").Source(source).Turn(s).Board(s)
+     .HeuristicDefault(heuristic_default);
+    d.Array("types", menu.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": ";
+        JsonStr(os, menu[i]);
+        os << " }";
+    });
+    d.Note("reply a types INDEX to choose that creature type for this permanent for the rest of the game. "
+           "Default = the AI's pick.");
+}
+
 // "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
 // Stalwart; CardParams::etb_choose_keyword_count). The pair is LOCKED for that permanent's lifetime
 // and granted to every Human you control. Emits the enumerated legal pairs; reply = an option INDEX,
@@ -6043,6 +6070,7 @@ g_play_sacrifice_chooser = nullptr;
 g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
 g_play_etb_keywords_chooser = nullptr;
+g_play_creature_type_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_dredge_chooser = nullptr;
 g_play_ei_chooser = nullptr;
@@ -6394,6 +6422,7 @@ struct ClaudePlayHarness
     DigChooser            dig_chooser;
     EtbColorChooser       etb_color_chooser;
     EtbKeywordsChooser    etb_keywords_chooser;
+    CreatureTypeChooser   creature_type_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
@@ -7695,6 +7724,37 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_etb_keywords_chooser = &etb_keywords_chooser;
+
+    // "As this enters, choose a creature type" (Herald's Horn / Urza's Incubator / Metallic Mimic / Adaptive
+    // Automaton). Shares the --choices stream; the reply is a MENU INDEX, anything out of range keeps the
+    // provider's pick. Locked for the permanent's lifetime, so the human is asked (Boars I1).
+    creature_type_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<std::string>& menu, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteCreatureTypeDecisionJson(ss, s, source, menu, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteCreatureTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_creature_type_chooser = &creature_type_chooser;
 
 
     // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it

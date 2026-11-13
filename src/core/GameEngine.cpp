@@ -757,6 +757,8 @@ void GameEngine::UpkeepTail(GameState& state)
     PerformUpkeepGyReanimate(state, emeria_snapshot);
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
+    // Herald's Horn's look-at-top "may" (Boars I1): folded take, else the searched pin. Lockstep twin.
+    PerformUpkeepHornReveal(state);
 
     // Echo (CR 702.29) at TRUE upkeep timing -- BEFORE the draw step, after the other upkeep
     // triggers, mirroring the rollout's position in SimulateEndAndStartNextTurn (lockstep). See

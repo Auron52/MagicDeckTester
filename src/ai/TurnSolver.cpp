@@ -1616,6 +1616,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("dredge", first.dredge_pins != dup.dredge_pins);
     pl("upkreanim", first.upkeep_gy_reanimate_choice != dup.upkeep_gy_reanimate_choice);
     pl("upktutor", first.upkeep_tutor_choice != dup.upkeep_tutor_choice);
+    pl("upkhorn", first.upkeep_horn_choice != dup.upkeep_horn_choice);
     pl("miracle", first.miracle_choice != dup.miracle_choice);
     pl("stut", first.suspend_tutor_choice != dup.suspend_tutor_choice);
     pl("nextdrawdredge", first.next_draw_dredge_choice != dup.next_draw_dredge_choice);
@@ -7121,6 +7122,7 @@ static bool EchoUncoveredPending(const GameState& state);   // fwd (the searched
 static bool DothUncoveredPending(const GameState& state);   // fwd (the searched DotH put list, with BoundaryFan)
 static bool SuspendTutorUncoveredPending(const GameState& state);   // fwd (Profane's fetch, with BoundaryFan)
 static bool FaceUpUncoveredPending(const GameState& state);   // fwd (morph's opponent-end-step flip, with BoundaryFan)
+static bool HornUncoveredPending(const GameState& state);     // fwd (Herald's Horn's upkeep take/leave, with BoundaryFan)
 static bool SecondMainUnproductive(const GameState& state)
 {
     static const bool s_kill  = EnvOn("MTG_NO_M2_PRODUCTIVE");
@@ -28165,6 +28167,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x454D45524941ull); fold(static_cast<uint64_t>(p.upkeep_gy_reanimate_choice)); }   // "EMERIA"
     if (p.upkeep_tutor_choice >= 0)
     { fold(0x5550545554ull); fold(static_cast<uint64_t>(p.upkeep_tutor_choice)); }   // "UPTUT"
+    if (p.upkeep_horn_choice >= 0)
+    { fold(0x484F524Eull); fold(static_cast<uint64_t>(p.upkeep_horn_choice)); }   // "HORN" (Boars I1)
     if (p.miracle_choice >= 0)
     { fold(0x4D495241ull); fold(static_cast<uint64_t>(p.miracle_choice)); }
     if (p.suspend_tutor_choice >= 0)
@@ -28587,7 +28591,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.etbcounter_choice == -1 && p.sweep_choice == -1 && p.le_fire_choice == -1
         && p.vial_charge_choice == -1 && p.saga_target_choice == -1 && p.grace_choice == -1
         && p.athreos_coin_choice == -1
-        && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1 && p.miracle_choice == -1 && p.demon_trigger_choice == -1
+        && p.upkeep_gy_reanimate_choice == -1 && p.upkeep_tutor_choice == -1 && p.upkeep_horn_choice == -1 && p.miracle_choice == -1 && p.demon_trigger_choice == -1
         && p.suspend_tutor_choice == -1
         && p.next_draw_dredge_choice == -1 && p.next_draw_dredge_pins.empty()
         && p.next_klothys_choice == -1 && p.next_keranos_choice == -1
@@ -28643,7 +28647,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.grace_choice >= 0
         || p.athreos_coin_choice >= 0
         || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0
         || p.next_draw_dredge_choice >= 0
         || !p.next_draw_dredge_pins.empty()
         || p.next_klothys_choice >= 0
@@ -29587,6 +29591,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x454Dull + static_cast<std::uint64_t>(p.upkeep_gy_reanimate_choice)); }   // value-gated
     if (p.upkeep_tutor_choice >= 0)
     { h = Mix(h, 0x555054ull + static_cast<std::uint64_t>(p.upkeep_tutor_choice)); }
+    if (p.upkeep_horn_choice >= 0)
+    { h = Mix(h, 0x484F52ull + static_cast<std::uint64_t>(p.upkeep_horn_choice)); }   // Herald's Horn
     if (p.miracle_choice >= 0)
     { h = Mix(h, 0x4D4952ull + static_cast<std::uint64_t>(p.miracle_choice)); }
     if (p.suspend_tutor_choice >= 0)
@@ -31050,7 +31056,10 @@ enum : uint64_t {
     kActLoyaltyUntapContinuation = 215, kActLoyaltyTokenContinuation = 216,
     // Speaker of the Heavens (2026-11-11, MTG_BP_SPEAKER_GATE): a life-gated {T} token source that is
     // LIVE now -- see CollectActivationKeys.
-    kActTapTokenLive = 217
+    kActTapTokenLive = 217,
+    // Flinthoof Boar (Boars I1): the self-haste activation is LIVE (SelfHasteActivationLive) -- a Flinthoof
+    // the plan cast is newly activatable, which opens site 9 so the same main can haste it.
+    kActSelfHaste = 218
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -31414,6 +31423,12 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
     else if ((pp.discard_team_pump_power > 0 || pp.discard_team_pump_toughness > 0)
              && DiscardTeamPumpLive(state, ctrl, num, std::string()))
     { out.push_back(ActKey(num, kActTeamPump)); }
+    // Flinthoof Boar's self haste (ActivatePump mode 6): present exactly while the enumerator would emit it
+    // (the shared liveness predicate) and its {R} fits the total -- so a Flinthoof cast mid-plan presents a
+    // NEW key, and one already live at plan start (a declined haste) arms nothing.
+    if (pp.self_haste_cost.has_value() && SelfHasteActivationLive(state, ctrl, num)
+        && ActAffordable(state, ctrl, p.card, pp.self_haste_cost, total_cache))
+    { out.push_back(ActKey(num, kActSelfHaste)); }
     if (pp.pod_mv_delta != 0 && (!pp.pod_taps || (!p.tapped && CanTapNow(p, state.battlefield)))
         && ActAffordable(state, ctrl, p.card, pp.pod_activation_cost, total_cache))
     { out.push_back(ActKey(num, kActPod)); }
@@ -47718,6 +47733,43 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     PushWithMadnessFan(actions, std::move(a), MadnessFanFor(state, pin, ManaCost{}, src.card.m_name.str()));
                 }
             }
+            // ---- FLINTHOOF BOAR (Boars I1): "{R}: This creature gains haste until end of turn." ActivatePump
+            // MODE 6, a SEARCHED main-phase activation (whether = subset membership; the trailing pass applies it
+            // after the plan's casts, before combat). Offered ONCE (the grant is idempotent: a second activation
+            // sets an already-set flag) and only when it can change anything -- SelfHasteActivationLive (the
+            // creature could attack only with the grant) and PRE-COMBAT (haste granted after the turn's combat
+            // lifts nothing: the card has no {T} ability). Both restrictions remove provable no-ops only (the
+            // Wirewood Lodge rule), never a line. A Flinthoof the plan itself casts is reached through
+            // breakpoint site 9 (kActSelfHaste).
+            if (sd->params.self_haste_cost.has_value() && is_pre_combat
+                && SelfHasteActivationLive(state, state.active_player_index, src.card.m_number))
+            {
+                const ManaCost per = sd->params.self_haste_cost.value();
+                bool payable = true;
+                if (HumanPlayActive())
+                {
+                    // Never offer a human an activation the real payment cannot make (the Minotaur re-prompt
+                    // loop above): same probe and creature-source pay scope as the apply.
+                    GameState scratch = state;
+                    CreatureAbilityPayScope probe_pay_scope(&src.card);
+                    payable = TapForCostDirect(scratch, per, /*for_creature=*/false);
+                }
+                if (payable)
+                {
+                    Action a;
+                    a.kind           = Action::Kind::ActivatePump;
+                    a.card_name      = src.card.m_name;
+                    a.def            = sd;
+                    a.hand_index     = -1;
+                    a.sac_source_id  = src.card.m_number;
+                    a.chosen_x       = 1;
+                    a.gy_exile_mode  = 6;
+                    a.cost           = per;
+                    a.eval           = 1;   // ordering only: the rollout scores the attack it enables
+                    a.is_noncreature = true;
+                    actions.push_back(std::move(a));
+                }
+            }
             // THE LOOP-FUNDED TEAM PUMP (mode 5 -- mode 4 is Stromkirk Condemned; AccomplishedAlchemist, USER 2026-10-20: "No ability to activate
             // Ezuri for the win ... you should just be able to pay it as needed"). The same stacking P/T team pump,
             // offered when the board's mana + float CANNOT pay the lethal count but an Accomplished Alchemist untap
@@ -55836,6 +55888,7 @@ namespace solvememo
             || a.athreos_coin_choice != b.athreos_coin_choice
             || a.upkeep_gy_reanimate_choice != b.upkeep_gy_reanimate_choice
             || a.upkeep_tutor_choice != b.upkeep_tutor_choice
+            || a.upkeep_horn_choice != b.upkeep_horn_choice
             || a.miracle_choice != b.miracle_choice
             || a.suspend_tutor_choice != b.suspend_tutor_choice
             || a.demon_trigger_choice != b.demon_trigger_choice
@@ -72823,6 +72876,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 if (!DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                          a.discard_name.str())) { ++g_trailing_act_skips; continue; }
             }
+            // Flinthoof Boar's self haste (mode 6, Boars I1): liveness FIRST, so a grant that became a no-op
+            // inside this plan (Lightning Greaves equipped onto it first) is never paid for. Executor twin.
+            if (a.gy_exile_mode == 6
+                && !SelfHasteActivationLive(state, state.active_player_index, a.sac_source_id))
+            { ++g_trailing_act_skips; continue; }
             // Mode 5: the loop-funded team pump (AccomplishedAlchemist) -- fund the real cost with the untap
             // loop, then pay it here. Applies as mode 2 (+P/+T to the subtype).
             ManaCost pump_cost = OutletOwnCost(a);
@@ -75337,6 +75395,8 @@ static bool SimulateUpkeepAfterArrivals(GameState& state)
     PerformUpkeepGyReanimate(state, emeria_snapshot);
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
+    // Herald's Horn's look-at-top "may" (Boars I1): folded take, else the searched pin. Lockstep twin.
+    PerformUpkeepHornReveal(state);
 
     // Echo (Mogg War Marshal {1}{R}, Stingscourger {3}{R}): "At the beginning of your upkeep, if this
     // came under your control since your last upkeep, sacrifice it unless you pay its echo cost."
@@ -87240,7 +87300,8 @@ static int AttackAttachAxisWidth(const GameState& state)
         return d != nullptr
             && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
                 || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
-                || d->params.team_pump_grants_haste);
+                || d->params.team_pump_grants_haste
+                || d->params.self_haste_cost.has_value());   // Flinthoof Boar: haste for its own body
     };
     bool haste = false;
     for (const Permanent& p : state.battlefield)
@@ -92427,7 +92488,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             return d != nullptr
                 && (d->params.grants_haste || d->params.equip_grants_haste || d->params.grants_temp_haste
                     || d->params.haste_on_flying_enter || d->params.sac_outlet_grants_haste
-                    || d->params.team_pump_grants_haste);
+                    || d->params.team_pump_grants_haste
+                    || d->params.self_haste_cost.has_value());   // Flinthoof Boar: haste for its own body
         };
         bool haste_reach = false, attacker_now = false;
         for (const Permanent& p : state.battlefield)
@@ -93570,6 +93632,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.grace_choice); add(pl.athreos_coin_choice);
             add(pl.upkeep_gy_reanimate_choice);   // Emeria: in padding, so the size pin cannot catch it
             add(pl.upkeep_tutor_choice);
+            add(pl.upkeep_horn_choice);   // Herald's Horn (Boars I1): in padding, so the size pin cannot catch it
             add(pl.miracle_choice);
             add(pl.suspend_tutor_choice);   // Profane's crossing-recorded fetch: in padding, so the size pin cannot catch it
             add(pl.next_draw_dredge_choice);
@@ -100349,7 +100412,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                          // The searched Defense of the Heart put list, read at the next upkeep (appended:
                          // value-gated, own slot).
                          static_cast<int>(state.scripted_doth_put),
-                         static_cast<int>(state.scripted_upkeep_tutor),
+                         // Herald's Horn's take/leave mask rides the tutor's slot, VALUE-GATED (Boars I1): every
+                         // state without a horn pin keeps its exact key.
+                         static_cast<int>(state.scripted_upkeep_tutor)
+                             + (state.scripted_upkeep_horn >= 0 ? (static_cast<int>(state.scripted_upkeep_horn) + 1) << 16 : 0),
                          static_cast<int>(state.scripted_miracle_choice),
                          // Profane Tutor's crossing-chosen fetch (appended: value-gated, own slot).
                          static_cast<int>(state.scripted_suspend_tutor),
@@ -103241,6 +103307,23 @@ static bool FaceUpUncoveredPending(const GameState& state)
     return state.deck_has_morph && state.scripted_eot_face_up < 0 && g_bp_enum_depth == 0 && !t_rollout_narrow
         && !HumanPlayActive() && !EchoEdgeFoldHere(state) && AnyEotFaceUpCandidate(state);
 }
+// HERALD'S HORN (Boars I1): the next upkeep's take/leave is decided at this crossing when a Horn we control is on
+// the battlefield and the state's pin does not already cover that upkeep. Same scope as the face-up axis above
+// (beyond the horizon the take default is the permitted playout policy; at a constant-leaf edge a deeper pass
+// searches the crossing). The digit's width is learned by the crossing itself (t_upkeep_horn_probe): a crossing
+// whose upkeep meets no RESIDUAL decision (no match on top, or the take fold holds) has width 1 and records nothing.
+static bool HornUncoveredPending(const GameState& state)
+{
+    if (state.scripted_upkeep_horn >= 0 || g_bp_enum_depth != 0 || t_rollout_narrow || HumanPlayActive()
+        || EchoEdgeFoldHere(state)) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.upkeep_look_top_chosen_type_to_hand) { return true; }
+    }
+    return false;
+}
 // THE HOLD PASS (morph's opponent-end-step flip; Morph INT-2c, 2026-11-12). A main whose enumeration offers
 // a plan offers no PASS unless its land drop is still open (the no-land pass, add_for_land("", "")): the
 // hosts append the pass only when the list is EMPTY (FSLineWin's idle node, SolveWithLookahead's empty
@@ -103326,8 +103409,10 @@ public:
     // stut_only: fan ONLY Profane's fetch (the executor's crossing node, TurnSolver::ChooseRealCrossingFetch,
     // which records that pin alone, so no other axis may be iterated beside it).
     BoundaryFan(const GameState& pre, bool with_echo, bool stut_only = false,
-                bool reanim_only = false, bool land_only = false, bool face_up_only = false)
+                bool reanim_only = false, bool land_only = false, bool face_up_only = false,
+                bool horn_only = false)
     {
+        if (horn_only) { horn_ = HornUncoveredPending(pre); return; }
         if (face_up_only) { fu_ = FaceUpUncoveredPending(pre); return; }
         if (stut_only)
         {
@@ -103398,11 +103483,15 @@ public:
         // event of the crossing; its menu is a function of that end-step state alone), its width learned per
         // crossing (the Klothys shape). False for every deck without a morph card.
         fu_ = FaceUpUncoveredPending(pre);
+        // HERALD'S HORN's upkeep take/leave (Boars I1): a digit whose width (2^residual decisions) is learned per
+        // crossing (the Klothys shape). False for every deck without the card.
+        horn_ = HornUncoveredPending(pre);
     }
     // Will the site cross more than once? Decided BEFORE the first crossing, so a live Defense of the Heart counts
     // (its menu is learned on the first crossing): the site then crosses per-crossing copies of its state.
-    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_; }
+    bool Copies() const { return echo_.size() > 1 || doth_ || tutor_ || stut_ || miracle_ || land_ || grace_ || emeria_ || dredge_ || klothys_ || keranos_ || fu_ || horn_; }
     bool FaceUpLive() const { return fu_; }
+    bool HornLive() const { return horn_; }
     bool DothLive() const { return doth_; }
     bool TutorLive() const { return tutor_; }
     bool StutLive() const { return stut_; }
@@ -103422,6 +103511,7 @@ public:
         {
             dredge_incomplete_ = false;
             fu_rank_ = 0; fu_width_ = 1;
+            horn_rank_ = 0; horn_width_ = 1;
             klothys_rank_ = 0; klothys_width_ = 1;
             keranos_rank_ = 0; keranos_width_ = 1;
             if (!dredge_pending_.empty())
@@ -103434,6 +103524,11 @@ public:
         if (fu_ && fu_rank_ + 1 < fu_width_)
         { ++fu_rank_; return true; }
         fu_rank_ = 0; fu_width_ = 1;
+        // Herald's Horn: the upkeep is the LAST event of the crossing that reads it, after the end step, so it
+        // is an inner digit too; its width is learned per crossing.
+        if (horn_ && horn_rank_ + 1 < horn_width_)
+        { ++horn_rank_; return true; }
+        horn_rank_ = 0; horn_width_ = 1;
         if (klothys_ && klothys_rank_ + 1 < klothys_width_)
         { ++klothys_rank_; return true; }
         klothys_rank_ = 0; klothys_width_ = 1;
@@ -103552,6 +103647,7 @@ public:
         if (klothys_) { sx.scripted_boundary_klothys = klothys_rank_; }
         if (keranos_) { sx.scripted_boundary_keranos = keranos_rank_; }
         if (fu_) { sx.scripted_eot_face_up = static_cast<std::int16_t>(fu_rank_); }
+        if (horn_) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_rank_); }
     }
     // The crossing itself (SimulateEndAndStartNextTurn), with the probe open when a Defense of the Heart is live
     // so the fan learns the menu sizes this crossing met.
@@ -103594,6 +103690,7 @@ public:
     int KlothysPin() const { return klothys_ && klothys_width_ > 1 ? klothys_rank_ : -2; }
     int KeranosPin() const { return keranos_ && keranos_width_ > 1 ? keranos_rank_ : -2; }
     int FaceUpPin() const { return fu_ && fu_width_ > 1 ? fu_rank_ : -2; }
+    int HornPin() const { return horn_ && horn_width_ > 1 ? horn_rank_ : -2; }
     void Record(TurnSolver::Plan& p) const
     {
         if (EchoPin() != -2) { p.echo_choice = static_cast<std::int16_t>(EchoPin()); }
@@ -103608,13 +103705,15 @@ public:
         if (KlothysPin() != -2) { p.next_klothys_choice = KlothysPin(); }
         if (KeranosPin() != -2) { p.next_keranos_choice = KeranosPin(); }
         if (FaceUpPin() != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(FaceUpPin()); }
+        if (HornPin() != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(HornPin()); }
     }
     // Write the recorded pins onto a state (the one-rollout hosts re-cross their own copy with the winner).
     void RecordOnState(GameState& sx, int echo_pin, int doth_pin, int tutor_pin, int stut_pin,
                        int miracle_pin, int grace_pin, int emeria_pin, int land_pin,
                        const std::vector<int>& dredge_pins, int klothys_pin, int keranos_pin,
-                       int face_up_pin = -2) const
+                       int face_up_pin = -2, int horn_pin = -2) const
     {
+        if (horn_pin != -2) { sx.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin); }
         if (face_up_pin != -2) { sx.scripted_eot_face_up = static_cast<std::int16_t>(face_up_pin); }
         if (echo_pin != -2) { sx.scripted_echo = static_cast<std::int16_t>(echo_pin); }
         if (doth_pin != -2) { sx.scripted_doth_put = doth_pin; }
@@ -103731,6 +103830,9 @@ private:
     int              keranos_rank_ = 0;
     int              keranos_width_ = 1;
     bool             fu_ = false;                     // morph's opponent-end-step flip is decided at this crossing
+    bool             horn_ = false;                   // Herald's Horn's upkeep take/leave is decided at this crossing
+    int              horn_rank_ = 0;
+    int              horn_width_ = 1;
     int              fu_rank_ = 0;
     int              fu_width_ = 1;
     std::vector<int> dredge_current_;
@@ -103761,8 +103863,13 @@ static void DothStatsFanCounts(long long* fans, long long* crossings)
 { *fans = g_doth_fans.load(); *crossings = g_doth_fan_crossings.load(); }
 bool BoundaryFan::Cross(GameState& sx)
 {
-    if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_ && !fu_)
+    if (!doth_ && !tutor_ && !stut_ && !miracle_ && !land_ && !grace_ && !emeria_ && !dredge_ && !klothys_ && !keranos_ && !fu_
+        && !horn_)
     { return SimulateEndAndStartNextTurn(sx); }
+    // Herald's Horn: count the residual take/leave decisions this crossing's upkeep meets (the digit's width).
+    int horn_residuals = 0;
+    int* prior_horn_probe = t_upkeep_horn_probe;
+    if (horn_) { t_upkeep_horn_probe = &horn_residuals; }
     bool ok = false;
     std::vector<int> dredge_offer;
     std::vector<int>* saved_dredge_probe = g_dredge_boundary_first_offer;
@@ -103836,6 +103943,8 @@ bool BoundaryFan::Cross(GameState& sx)
     if (tutor_) { tutor_width_ = std::max(1, tutor_width); }
     if (klothys_) { klothys_width_ = std::max(1, klothys_width); }
     if (keranos_) { keranos_width_ = std::max(1, keranos_width); }
+    t_upkeep_horn_probe = prior_horn_probe;
+    if (horn_) { horn_width_ = 1 << std::min(horn_residuals, kHornPinOrdinals); }
     if (stut_)
     {
         s_nobs_ = std::min(stut_probe.n, kSuspendTutorPinOrdinals);
@@ -104136,6 +104245,54 @@ int TurnSolver::ChooseRealCrossingLand(GameState& state, int depth, int max_turn
     }
     if (chosen != -2) { state.scripted_upkeep_land_search = chosen; }
     return chosen;
+}
+// Herald's Horn's crossing node (Boars I1): the ChooseRealCrossingLand shape exactly -- iteratively deepened over
+// the horn digit's crossings, the winner left on the state and returned (-2 = nothing to decide: no Horn, a pin
+// already covering the upkeep, or no residual decision on this crossing).
+int TurnSolver::ChooseRealCrossingHorn(GameState& state, int depth, int max_turns,
+                                       SearchBudget* budget, bool second_main)
+{
+    if (depth <= 0) { return -2; }
+    BoundaryFan check(state, /*with_echo=*/false, false, false, false, false, /*horn_only=*/true);
+    if (!check.HornLive()) { return -2; }
+    RevealLogPause _rlp;
+    TranspositionTable tt;
+    int chosen = -2;
+    for (int sub = 0; sub <= depth - 1; ++sub)
+    {
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        BoundaryFan fan(state, /*with_echo=*/false, false, false, false, false, /*horn_only=*/true);
+        int best_wt = max_turns + 2, best_pin = -2;
+        bool wide = false;
+        while (fan.Next())
+        {
+            GameState ce = state;
+            fan.Stamp(ce);
+            int wt = max_turns + 1;
+            const int cut = best_wt <= max_turns ? best_wt - 1 : max_turns + 1;
+            if (fan.Cross(ce)) { wt = SimulateToEnd(std::move(ce), sub, max_turns, budget, cut, second_main, &tt); }
+            if (fan.HornPin() != -2) { wide = true; }
+            if (wt < best_wt) { best_wt = wt; best_pin = fan.HornPin(); }
+        }
+        if (!wide) { return -2; }
+        if (sub > 0 && budget != nullptr && (budget->Exhausted() || budget->Overrun())) { break; }
+        chosen = best_pin;
+    }
+    if (chosen != -2) { state.scripted_upkeep_horn = static_cast<std::int16_t>(chosen); }
+    return chosen;
+}
+std::vector<std::pair<int, int>> TurnSolver::HornBoundaryForTest(const GameState& state)
+{
+    std::vector<std::pair<int, int>> out;
+    BoundaryFan fan(state, /*with_echo=*/false);
+    while (fan.Next())
+    {
+        GameState sx = state;
+        fan.Stamp(sx);
+        if (!fan.Cross(sx)) { continue; }
+        out.emplace_back(fan.HornPin(), static_cast<int>(sx.players[static_cast<std::size_t>(state.active_player_index)].hand.size()));
+    }
+    return out;
 }
 // THE EXECUTOR'S RESOLUTION NODE: a suspended tutor's search the real upkeep
 // meets UNCOVERED -- the committed line's crossing resolved fewer searches, because a ripple free copy (Thrumming
@@ -105795,6 +105952,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             int  best_klothys = -2;
             int  best_keranos = -2;
             int  best_face_up = -2;
+            int  best_horn = -2;
             std::vector<int> best_dredge;
             bool have      = false;
             while (fan.Next())
@@ -105826,6 +105984,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
                     best_klothys = fan.KlothysPin();
                     best_keranos = fan.KeranosPin();
                     best_face_up = fan.FaceUpPin();
+                    best_horn = fan.HornPin();
                     best_dredge = fan.DredgePins();
                     have      = true;
                     // First VERIFIED win -- the m2 loop's shortcut, same horizon edge.
@@ -105842,6 +106001,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
             best_tail.boundary_klothys = best_klothys;
             best_tail.boundary_keranos = best_keranos;
             best_tail.boundary_face_up = best_face_up;
+            best_tail.boundary_horn = best_horn;
             best_tail.boundary_dredge_pins = std::move(best_dredge);
             return best_tail;
         }
@@ -105873,6 +106033,7 @@ static TurnSolver::SearchLine FSLineTail(const GameState& state, int depth, int 
     tail_line.boundary_klothys = -2;
     tail_line.boundary_keranos = -2;
     tail_line.boundary_face_up = -2;
+    tail_line.boundary_horn = -2;
     tail_line.boundary_dredge_pins.clear();
     return tail_line;
 }
@@ -105891,6 +106052,7 @@ static void StampBoundaryPins(TurnSolver::Plan& p, const TurnSolver::SearchLine&
     if (tail.boundary_klothys != -2) { p.next_klothys_choice = tail.boundary_klothys; }
     if (tail.boundary_keranos != -2) { p.next_keranos_choice = tail.boundary_keranos; }
     if (tail.boundary_face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(tail.boundary_face_up); }
+    if (tail.boundary_horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(tail.boundary_horn); }
     if (!tail.boundary_dredge_pins.empty()) { p.next_draw_dredge_pins = tail.boundary_dredge_pins; }
 }
 
@@ -113896,7 +114058,7 @@ static void VampCandCensus(const TurnSolver::Plan& plan, bool is_pre_combat)
 struct BoundaryChoice
 {
     int echo = -2, doth = -2, tutor = -2, stut = -2, miracle = -2, grace = -2, emeria = -2, land = -2;
-    int klothys = -2, keranos = -2, face_up = -2;
+    int klothys = -2, keranos = -2, face_up = -2, horn = -2;
     std::vector<int> dredge;
 };
 static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
@@ -113913,6 +114075,7 @@ static void RecordBoundaryChoice(TurnSolver::Plan& p, const BoundaryChoice& bc)
     if (bc.klothys != -2) { p.next_klothys_choice = bc.klothys; }
     if (bc.keranos != -2) { p.next_keranos_choice = bc.keranos; }
     if (bc.face_up != -2) { p.eot_face_up_choice = static_cast<std::int16_t>(bc.face_up); }
+    if (bc.horn != -2) { p.upkeep_horn_choice = static_cast<std::int16_t>(bc.horn); }
 }
 static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, int max_turns, SearchBudget* budget,
                                               int cutoff, bool second_main, TranspositionTable* tt)
@@ -113942,11 +114105,12 @@ static BoundaryChoice BoundaryChooseByRollout(GameState& copy, int sub_depth, in
             best.land = fan.LandPin();
             best.dredge = fan.DredgePins(); best.klothys = fan.KlothysPin(); best.keranos = fan.KeranosPin();
             best.face_up = fan.FaceUpPin();
+            best.horn = fan.HornPin();
         }
     }
     fan.RecordOnState(copy, best.echo, best.doth, best.tutor, best.stut,
                       best.miracle, best.grace, best.emeria, best.land,
-                      best.dredge, best.klothys, best.keranos, best.face_up);
+                      best.dredge, best.klothys, best.keranos, best.face_up, best.horn);
     return best;
 }
 
@@ -117476,6 +117640,8 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
     { Fold(k, 0xD0E7); Fold(k, static_cast<uint64_t>(state.scripted_doth_put)); }
     if (fold_upkeep_pins && state.scripted_upkeep_tutor >= 0)
     { Fold(k, 0x555054); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_tutor)); }
+    if (fold_upkeep_pins && state.scripted_upkeep_horn >= 0)
+    { Fold(k, 0x484F52); Fold(k, static_cast<uint64_t>(state.scripted_upkeep_horn)); }
     if (state.deck_has_miracle)
     {
         Fold(k, 0x4D4952410001ull + static_cast<uint64_t>(state.ActivePlayer().first_draw_card_number_this_turn));
@@ -125823,7 +125989,7 @@ static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver:
             {"demon_trigger", copy.scripted_demon_trigger}, {"doth_put", copy.scripted_doth_put},
             {"eot_face_up", copy.scripted_eot_face_up},
             {"fb_hold", copy.scripted_fb_hold}, {"echo", copy.scripted_echo},
-            {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"suspend_tutor", copy.scripted_suspend_tutor},
+            {"upkeep_tutor", copy.scripted_upkeep_tutor}, {"upkeep_horn", copy.scripted_upkeep_horn}, {"suspend_tutor", copy.scripted_suspend_tutor},
             {"discard", copy.scripted_discard_choice},
             {"vial", copy.scripted_vial_charge}, {"saga", copy.scripted_saga_target},
             {"attack_land_search", copy.scripted_attack_land_search},
@@ -126049,6 +126215,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // worlds) -- write-when-set, so a main-2 plan without the axis leaves main 1's pin standing.
     if (p.upkeep_gy_reanimate_choice >= 0) { s.scripted_upkeep_gy_reanimate = p.upkeep_gy_reanimate_choice; }
     if (p.upkeep_tutor_choice >= 0) { s.scripted_upkeep_tutor = p.upkeep_tutor_choice; }
+    if (p.upkeep_horn_choice >= 0) { s.scripted_upkeep_horn = p.upkeep_horn_choice; }
     if (p.miracle_choice >= 0) { s.scripted_miracle_choice = p.miracle_choice; }
     // Profane Tutor's fetch, chosen where the turn's line crossed into the next upkeep (BoundaryFan) -- write-when-set.
     if (p.suspend_tutor_choice >= 0) { s.scripted_suspend_tutor = p.suspend_tutor_choice; }

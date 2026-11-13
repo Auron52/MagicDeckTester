@@ -378,6 +378,17 @@ MANIFEST = {
     # is exactly why the human is asked rather than handed the provider's heuristic silently.
     # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
     "etb_choose_color":      ("choose_color",         truthy),
+    # Herald's Horn / Urza's Incubator ("as this enters, choose a creature type") and Metallic Mimic /
+    # Adaptive Automaton (Boars I1, 2026-11-13). The same as-enters shape as Coldsteel Heart: asked at the
+    # universal enter cascade (FireEtbWatchers -> g_play_creature_type_chooser), decision type
+    # `creature_type` (WriteCreatureTypeDecisionJson / creatureTypePanelHtml), the menu = every creature
+    # type the deck's creatures carry. Autonomous play keeps the provider's pick (ChosenCreatureSubtypeId).
+    "chooses_creature_type": ("creature_type",        truthy),
+    "chosen_type_added_to_self": ("creature_type",    truthy),
+    # Herald's Horn's upkeep "you may reveal it and put it into your hand" (Boars I1): the shared `dig`
+    # chooser "(upkeep reveal)", asked at the REAL upkeep only when the top is a creature of the chosen
+    # type (PerformUpkeepHornReveal); 0 = take, -1 = leave it on top.
+    "upkeep_look_top_chosen_type_to_hand": ("dig",    truthy),
     # Rick, Steadfast Leader (Soldiers, 2026-10-04): "As this enters, choose two abilities from among
     # first strike, vigilance, and lifelink." The Coldsteel Heart shape exactly -- an as-enters
     # REPLACEMENT decided at resolution (g_play_etb_keywords_chooser in FireOwnEtbTriggers), its own
@@ -787,6 +798,9 @@ BOARD_ACTIVATIONS = {
     "garth_copy_ability":                        ("activate",       truthy,   None),  # Garth's tap
     "untap_creature_cost":                       ("activate",       truthy,   "untap_creature_cost"),
     "team_pump_cost":                            ("activate",       truthy,   "team_pump_cost"),
+    # Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn" -- ActivatePump mode 6,
+    # offered only while the creature is summoning-sick with combat ahead (SelfHasteActivationLive).
+    "self_haste_cost":                           ("activate",       truthy,   "self_haste_cost"),
     "firebreathing_discard":                     ("activate",       truthy,   "firebreathing_cost"),
     "attach_all_equipment_cost":                 ("verb:attachall", truthy,   "attach_all_equipment_cost"),
     "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
@@ -1218,6 +1232,7 @@ INERT_PARAMS = {
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
+    "hand_fixing_produces": "Windswept Heath: an IN-HAND colour hint for Creature Giving's discard cover; never a mana ability, no choice",
     "mdfc_back_produces": "MDFC back-face mana (colour auto-resolves once the face is picked; the face pick itself rides main_phase via mdfc_back_name)",
     "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
     "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",
@@ -1532,12 +1547,8 @@ INERT_PARAMS = {
     # much to reduce -- so none of them creates a decision to surface.
     "reduces_spell_subtype_amount": "magnitude of the static subtype cost reduction, no choice",
     "reduces_spell_subtype_creature_only": "scope of the static subtype cost reduction, no choice",
-    # Urza's Incubator's "as this enters, choose a creature type". Modelled as a DETERMINISTIC,
-    # deck-derived choice (DominantCreatureSubtypeId -> Permanent::chosen_subtype_id), not a player
-    # decision: the tribe the deck is built around dominates every alternative, and the answer is a
-    # game-constant so no line ever turns on it. If it is ever made a real per-copy searched branch,
-    # this row must move to MANIFEST and get a chooser + GUI branch.
-    "chooses_creature_type": "ETB creature-type choice resolved deterministically from the deck, no player choice",
+    # Urza's Incubator's "as this enters, choose a creature type" MOVED TO MANIFEST (`creature_type`,
+    # Boars I1 2026-11-13): the human is now asked; autonomous play keeps the provider's deck-derived pick.
     # Dragon Tempest's "whenever a creature you control with flying enters, it gains haste until end
     # of turn" -- mandatory, untargeted, and it grants to the creature that just entered. Nothing to
     # pick. Sits beside grants_haste / equip_grants_haste, which are classified the same way.
@@ -1719,7 +1730,7 @@ INERT_PARAMS = {
     # disclosed as known inert gaps: the chosen creature type (from the deck, exactly like
     # chooses_creature_type above) and Daring Buccaneer's reveal-or-pay (auto-reveal; paying is
     # strictly dominated -- consistent with the user's D5 ruling "okay if there is something to reveal").
-    "chosen_type_added_to_self": "Pirates: Metallic Mimic / Adaptive Automaton 'as this enters, choose a creature type ... is the chosen type in addition' -- resolved deterministically from the deck (DominantCreatureSubtypeId), the chooses_creature_type precedent; the deck's tribe weakly dominates every alternative for these cards. No player choice surfaced (disclosed inert gap)",
+    # chosen_type_added_to_self MOVED TO MANIFEST (`creature_type`, Boars I1 2026-11-13).
     "other_chosen_subtype_enters_counters": "Pirates: Metallic Mimic's mandatory as-enters +1/+1 counter replacement (CR 614) on other creatures of the chosen type, no choice",
     "lord_affects_chosen_subtype": "Pirates: Adaptive Automaton's static lord scope (the chosen type), no choice",
     "etb_creates_treasures": "Pirates: Corsair Captain's mandatory ETB Treasure (sac-for-mana is a searched plan action / payment choice)",

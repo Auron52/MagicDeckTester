@@ -23,7 +23,7 @@
 //   Nature's Lore              1 Forest card, untapped                 spell resolution
 //   Skyshroud Claim            2 Forest cards, untapped                spell resolution
 //
-// Arid Mesa and Wooded Foothills now use SacLandSearch: they enter, may be held, and pay one life
+// Arid Mesa, Wooded Foothills and (Boars I1, 2026-11-13) Windswept Heath now use SacLandSearch: they enter, may be held, and pay one life
 // on activation. Legacy fetches still use the immediate PerformFetch collapse. The search spec
 // accepts either printed subtype and includes both in its memo key. Crop Rotation's
 // PerformLandTutorToBattlefield puts ONE card through

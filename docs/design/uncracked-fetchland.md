@@ -8,7 +8,9 @@ mana now)."
 
 ## Current policy and review (2026-11-05)
 
-Arid Mesa and Wooded Foothills now have a battlefield activation model. Most
+Arid Mesa and Wooded Foothills now have a battlefield activation model
+(Windswept Heath joined them on 2026-11-13, Boars I1; it moves play for Anti-Lifegain, Creature
+Giving and Five Colour, which run it). Most
 other fetchlands in current decklists still use the older immediate-on-play
 card data; the deck analyzer reports both cases in `fetch_hold_review` so a
 new deck review must decide whether to add hold and when its provider should

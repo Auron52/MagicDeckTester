@@ -1725,10 +1725,11 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
-   "template": "basic_land",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland (Boars I1, 2026-11-13; the Wooded Foothills / Arid Mesa shape): its entry and searched activation are separate decisions; the activation pays 1 life and sacrifices this land as costs, then searches Forest or Plains (by CURRENT subtype, so a Stomping Ground or a basic Forest qualifies) and shuffles. It cannot tap for mana. Instant-speed activation is collapsed to our searched main-phase activation slots. hand_fixing_produces W/B/R/G is a HAND-only colour hint (Creature Giving's cleanup-discard cover reads it); it is not a mana ability.]",
+   "template": "custom",
    "parameters": {
-    "produces": [
+    "produces": [],
+    "hand_fixing_produces": [
      "W",
      "B",
      "R",
@@ -1737,7 +1738,12 @@
     "fetch_land_types": [
      "Forest",
      "Plains"
-    ]
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1
    }
   },
   {
@@ -16289,6 +16295,42 @@
          ],
          "is_filter": true
       }
+   },
+  {
+   "name": "Flinthoof Boar",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "This creature gets +1/+1 as long as you control a Mountain.\n{R}: This creature gains haste until end of turn. (It can attack and {T} this turn.) [BOTH clauses modelled. Clause 1: self_pump_if_land_subtype Mountain -- a conditional static self-buff (CR 611.3) in the shared ComputeLordBonus, continuously evaluated against the lands you control by CURRENT subtype (LandHasSubtypeNow: a basic Mountain, Stomping Ground's Mountain Forest, a fetched one); one +1/+1 however many Mountains. Clause 2: self_haste_cost {R} -> Action::Kind::ActivatePump MODE 6 (ApplyActivatePump, shared executor+rollout), a SEARCHED main-phase activation setting Permanent::temp_haste (until end of turn, cleared at both cleanup sites). Offered once (the grant is idempotent) and only while this creature is untapped and could attack only WITH the grant (summoning-sick, no other haste source), in a main phase with combat still ahead -- every other activation is a provable no-op (the Wirewood Lodge rule): haste only lifts summoning sickness, and this card has no {T} ability. A Flinthoof cast this main is reached through breakpoint site 9 (kActSelfHaste). Deliberately NOT team_pump_grants_haste (that is the Minotaur routing signature). It is an ability of a creature, not a creature spell, so creature-spell-only mana (Somberwald Sage) cannot pay it.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "self_pump_if_land_subtype": "Mountain",
+    "self_haste_cost": "{R}"
    }
+  },
+  {
+   "name": "Herald's Horn",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells you cast of the chosen type cost {1} less to cast.\nAt the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen type, you may reveal it and put it into your hand. [ALL clauses modelled. Clause 1 (as enters, choose a creature type): chooses_creature_type -> the universal enter cascade (FireEtbWatchers) asks the provider's ChosenCreatureSubtypeId and stores Permanent::chosen_subtype_id (folded into the sim key). [PROVISIONAL provider one-option prune (Boars D4): BoarsProvider names Boar -- not provably best in every state (a Human-heavy remainder would favour Human); a type no card in the deck carries is strictly dominated. Human play is offered every creature type the deck's creatures carry (the creature_type decision).] Clause 2: the Urza's Incubator reducer at amount 1 with reduces_spell_subtype_creature_only -- GENERIC only, floored at 0, stacking per copy; a same-turn Horn is credited by CountSameTurnReducers. Clause 3: upkeep_look_top_chosen_type_to_hand -> the shared PerformUpkeepHornReveal at GameEngine::UpkeepTail and the rollout's upkeep (lockstep, before the draw); one trigger per Horn, each reading the then-current top against ITS OWN chosen type. A take is a put-into-hand (HandEntryReason::Reveal), not a draw. The 'may': TAKE is FOLDED where provably dominant (leaving it means the draw step draws it anyway, so taking is that line plus one card one draw early; it loses only when the extra card forces a cleanup discard, so the fold holds whenever hand + 2 cannot exceed the maximum hand size); otherwise it is SEARCHED (Plan::upkeep_horn_choice, a BoundaryFan digit) and the provider default beyond the horizon is TAKE; human play asks through the dig chooser.]",
+   "template": "custom",
+   "parameters": {
+    "chooses_creature_type": true,
+    "reduces_spell_subtype_amount": 1,
+    "reduces_spell_subtype_creature_only": true,
+    "upkeep_look_top_chosen_type_to_hand": true
+   }
+  }
  ]
 }
