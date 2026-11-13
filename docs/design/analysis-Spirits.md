@@ -756,3 +756,11 @@ push in the 4 h window (check_references_safe, rebase, rebuild, smoke, check_gt_
 **Open USER questions:** cast-order proposal; discard-bucket proposal; Q4 fetch hold; the creature-only-land reading
 (W/U yes, B no) and the basic order (Plains while lib Plains > lib Islands, else Island) in the fetch rule; Labyrinth
 ruling (a capped draw cannot be replaced by dredge/Cyclone).
+
+### Regression tier on a0acbea6b (orchestrator, 2026-11-13 ~22:45 UTC)
+301 passed, 8 failed. Accepted (`--deck=gods,gods2hg,martyr`): the 7 gods/martyr keys, same causes as smoke (B's
+flashback state-key fix, E2's graveyard cast at rank). The one searched-slower game, gods d5 s2002 gi14 T6->T7,
+recovers T6 at d8 b0 (budget churn). NOT accepted: `extraturns_regression_d5_s2002` (same score 4.6467, digest
+moved in ONE game, gi66). Re-played in its own batch, gi66 gives the GT per-game hash 9eb685ab on BOTH the
+pre-change binary (PGO, src b3928644 = 861cfac7b) and HEAD; the tier run's f79a24d2 is pooled-run churn, not a
+code change from this work (kept GT; flag if it recurs -- cf. the thread-dependent batch digest note).

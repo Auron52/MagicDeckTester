@@ -1,7 +1,8 @@
-# Regression ground truth -- commit db21cd6ab  date 2026-11-13
+# Regression ground truth -- commit a0acbea6b  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-13): Spirits integration: gods flashback state-key fix (B 8097213a2; gods d3 gi19 recovers T6 at d5 and d8 b0) and martyr Lurrus graveyard cast at rank (E2 507049f75, unchanged scores)
+# accepted-with-regressions (regression, 2026-11-13): Spirits integration: gods flashback state-key fix (8097213a2; slower gods d5 gi14 T6->T7 recovers T6 at d8 b0) and martyr Lurrus graveyard cast at rank (507049f75, unchanged scores)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -337,10 +338,10 @@ hinata_regression_d0_s2002=6.8040/5dcc7fe0b1de88e0
 hinata_regression_d3_s2002=5.6000/c238dc9d885af207
 hinata_regression_d5_s2002=5.4133/94774e75d5454d3c
 hinata_regression_d5_s3003=5.7067/6c661e03aa9656fd
-gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
-gods_regression_d3_s2002=5.4200/f78b14b908a115f4
-gods_regression_d5_s2002=5.1800/f7d03bd076c8d626
-gods2hg_regression_d5_s2002=5.2200/08832771848c62a7
+gods_regression_d0_s2002=8.7510/e33c8d399b371c42
+gods_regression_d3_s2002=5.4200/6cf6bc0fc84f8f3f
+gods_regression_d5_s2002=5.2000/b387cb8481f0f626
+gods2hg_regression_d5_s2002=5.2200/8f075c7c6b8c5278
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8400/b4b0d953ee5adf3a
 cyclone_regression_d3_s3003=4.9333/437a6de4a37c0d52
@@ -507,9 +508,9 @@ merfolk_regression_d0_s2002=4.4450/dc0269a9f23bc850
 merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
-martyr_regression_d0_s2002=6.0840/70ffec9c403563a6
-martyr_regression_d3_s2002=5.5600/0ee008fe005eb94d
-martyr_regression_d5_s2002=5.5467/caa68c0e088448e1
+martyr_regression_d0_s2002=6.0840/43b0bad1d8ed0c12
+martyr_regression_d3_s2002=5.5600/66f4e6c273c3430d
+martyr_regression_d5_s2002=5.5467/d53b486d3c1f62ec
 martyr_regression_d5_s3003=5.4000/69759b43382fbc5f
 martyr2hg_regression_d5_s2002=5.7333/23b754057d0306da
 
