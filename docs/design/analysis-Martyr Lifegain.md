@@ -125,7 +125,16 @@ rebuild + martyr smoke + regression re-running (farm-rebase2-*.log) before the p
 better (half A -5, half B -14), script verdict KEEP. POOLED with the first run (net -12, 3/15): 24000 paired, 38
 changed, net -31, 5 worse / 33 better; all four halves negative. Nothing to change (GradesNoWinLeaf stays true).
 DONE since: pushed 43b92b447 (CI green), 5h PASS, verify_deck PASS, Stage 6 report (section below).
-RUNNING: mullgen.sh run (03:38 UTC, logs/martyr-lifegain/mullgen.{log,pid,freeze}) ALONE -> then valueleaf.sh run.
+PUSHED 9c2342586 at 08:22 UTC 11-13 (docs+audit commits REPLAYED onto origin 9788547c1 with `git replay`, no working-tree
+change; next shared push >= 12:22 UTC). The PRIMARY checkout is deliberately NOT rebased: its local branch still holds
+the pre-replay copies (ab8d.. e8b8.. 13fcd5a91) on 43b92b447 -- after mullgen finishes, `git pull --rebase` drops them
+as already-applied, then rebuild. Do NOT move HEAD:src while mullgen runs (its validation resolves the engine from it).
+RUNNING: mullgen.sh run (started 03:38 UTC, pid logs/martyr-lifegain/mullgen.pid, driver log mullgen.log, generator log
+logs/Martyr_Lifegain_mullgen/gen.log, freeze mullgen.freeze = src 709a882f). Phase F picked d1 b1 (rho 0.9836,
+0.10x play cost), K=15, recipe fast (cap R=30): written into Martyr Lifegain.profile.json (uncommitted; commit with
+the profile). 08:17 UTC: size-7 floor done (62,954 cells, 251,816 rollouts), sub-tables 22% (19/s), then adaptive
+refine. On exit: read mullgen.log verdicts (keep + confounded-bottom gates) -> commit artifacts -> rebase + rebuild ->
+`bash scripts/valueleaf.sh run "decks/Martyr Lifegain"` ALONE. Status timer cron 0280a824 (session-only, :17 every 2h).
 
 ### Checkpoint (2026-11-12 ~18:45 UTC, history)
 
