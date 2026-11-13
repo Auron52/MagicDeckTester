@@ -574,3 +574,86 @@ index 0 of the generic ranking. Next step: bound the axis with `MTG_SHED_WORST=1
   - mismatch: **0 nonconv / 0 fd-diverge** across seeds 7001/8001 × 60 games, both arms.
 - **FAIL, as expected at this stage:** regression_tiers, suite (not yet in `test/regression_cases.sh`; added at 4-bis/5j).
 - **SKIP:** claude_sweep (running: 16 Sonnet players, seeds 777000+gi, gi 0-15; brief `logs/spirits/sweep/brief.md`).
+
+## Claude-play sweep
+- commit: `35b021047` (play-identical to HEAD: later commits are docs and a default-off A/B lever)
+- seeds: 777000 games: 16 (gi 0-15, one Sonnet player per game; brief `logs/spirits/sweep/brief.md`)
+- flags: 0 unresolved
+- Results: 12 ties, 3 player slower (g0, g2, g5: weak signal), 1 player FASTER (g10: player T5, AI T6).
+  - **g10:** a MULLIGAN difference, not a search defect.
+    - The AI mulligans the player's kept 7 (4 lands, three 3-drops) because of the baseline profile's static `curve_check: "two_drop"`.
+    - Handed that hand (`--choices-then-auto`), the search wins T5 at b20 and at b200.
+    - A `curve_check: none` copy of the profile also wins T5.
+    - This is a USER-owned mulligan decision; the exhaustive keep table (the later stage) supersedes it. Notes: `logs/spirits/g10/notes.md`.
+- Raised and dismissed:
+  1. Metallic Mimic's (and Territory/Courtyard's) creature-type choice is silent: a documented deck-constant simplification (the card notes).
+  2. g7: Lingering Souls listed under `retrace_gy` in the final-state JSON. This is intended: the key lists every graveyard-castable spell (retrace OR flashback), and `flashback_gy` is the subset. Three consumers (index.html, play_invariants.py, viewer_client_check.js) rely on it. Only a stale comment at `src/main.cpp` ~1631 needs rewording.
+- Decision types surfaced across the sweep: mulligan, bottom, main_phase, land_entry, bounce, dig (Skyclave Apparition and White Orchid Phantom), tutor_etb (Flooded Strand), vial_charge. Usher's boast was offered only post-combat after attacking.
+
+## Stage 5b/5c/5i + fetch-hold review — one pooled batch (seed 610000, 2,550 games, 2026-11-13)
+Manifest: `build/scratch/spirits/s5/manifest.json`. Per-game results via `MTG_DUMP_WINS=1`. Every searched game won.
+
+| cell | avg turn | per-game vs paired cell |
+|---|---|---|
+| d0 ×500 | 5.1920 | |
+| d3 b10 ×300 | 4.6500 | vs d0: 145 faster / 1 slower (gi30, greedy churn) |
+| d5 b20 ×300 | 4.6367 | vs d3: 4 faster / 0 slower (monotone) |
+| d5 b200 ×150 | 4.6533 | vs b20: 3 faster (gi20, 28, 76) / 0 slower = mild budget starvation, −0.020t |
+| 2HG d5 b20 ×100 | 5.2700 | 1 game unwon by T8 |
+| `MTG_SHED_WORST` d3 / d5 | 4.6467 / 4.6367 | 1 faster / 0 slower; 0 / 0. **The discard ranking is not load-bearing; no discard ranking can pay.** |
+| hold DECLINED d3 / d5 | 4.6500 / 4.6367 | 1 faster (gi20) / 1 slower (gi66), net 0, at both depths. Cost −9.5% units at d3, −11.1% at d5 |
+
+**Fetch hold, the USER's call:** declining the battlefield hold is quality-neutral on 600 paired games and about 10% cheaper.
+- The default remains "hold offered" (the root default) until the USER decides.
+- `MTG_SPIRITS_NO_FETCH_HOLD` (5e9e03ef3) is the temporary per-job selector.
+
+## RESUME HERE (checkpoint 2026-11-13 ~20:50 UTC, before a context compaction)
+**State.** All 14 cards are implemented. Stages 1-4 are done. verify_deck is green except suite/regression_tiers (pending) and claude_sweep (recorded above: 0 unresolved). HEAD has local commits through 5e9e03ef3 plus this ledger commit.
+- **Shared branch:** NOT pushed. Backup `origin/wip/spirits-analysis` is at cb5e3181e (stale; re-push the wip branch before risky steps).
+- **Shared-branch push owed:** do it in the 4 h window. Run check_references_safe, rebase, rebuild + smoke + check_gt_logs, then a background CI watch.
+
+**Running:** `scripts/leaf_tiebreak_check.py decks/Spirits/Spirits.cod --tag spirits`, output `logs/spirits/tiebreak.log` (Stage 5c2). Read its verdict:
+- KEEP / NEUTRAL: nothing to do.
+- NO SIGN: re-run at the `--blocks` it suggests.
+- OPT OUT: add `GradesNoWinLeaf() false` to SpiritsProvider and record it in `docs/design/horizon-honest-leaf.md`.
+
+**Next steps, in order:**
+1. **Suite admission (Stage 4-bis / 5j)**, one Opus agent following `.claude/skills/regression-testing.md` "Adding a deck":
+   - `suite_gate.py --cost decks/Spirits` (must be ≤3x Hinata), with the box quiet.
+   - Add DECK_FILE/DECK_PROF `[spirits]`, `[spirits2hg]`. Rows on the Merfolk template:
+     - smoke: d0 1001×1000; d3 1001×50 b10; d5 1001×100 b20; 2hg d3 ×50.
+     - regression: d0 2002×1000; d3 2002×75 b10; d5 2002 and 3003 ×150 b20.
+     - overnight ENTRY: d0 4004/6006/8008/10010 ×2000; d3 4004-7007 ×400 b10; d5 4004-7007 ×425 b20.
+   - Screen the unbudgeted backstop rows (regression + overnight halves; method in the skill).
+   - Run each tier `--deck=spirits`, inspect, `--accept --deck=spirits`, then `python3 test/check_gt_logs.py`.
+2. **Orchestrator: full smoke + full regression, then accept.** Expected movement, all explained:
+   - gods d0/d3/d5/2hg (integrator B's flashback state-key fix; the one slower game, gods d3 gi19, recovers T6 at d5 and at d8 b0);
+   - martyr d0/d5 digests at an unchanged score (E2: Lurrus casts at rank).
+   - Overnight gods/martyr keys wait for the periodic overnight run (USER: overnight is occasional).
+3. **Discard bucket policy (5i):** the bound is ~0 (the shed ranking is not load-bearing). Still AUTHOR a bucket proposal from cards.json and REPORT it to the USER; implement only on approval (`MTG_SPIRITS_BUCKET_DISCARD`).
+4. **5e/5g:** the provider's narrowings to verify against the oracle (MTG_UNPRUNED A/B):
+   - the own-nonbasic-land prune when no basic is left in the library;
+   - the Skyclave/White Orchid default target pick;
+   - the boast-only post-combat main.
+   - Optional: `scripts/mine_heuristics.sh` for cast-order candidates.
+5. **Housekeeping:** reword the stale `retrace_gy` comment (`src/main.cpp` ~1631, plus `.claude/skills/claude-play.md`).
+6. **Re-run `verify_deck.py`** to a full green, then the Stage 6 report.
+
+**Queued follow-up:** `MTG_CCO_NONCREATURE_POOL` (stop enumerating Territory-only Lingering Souls lines; a sound collapse, but it changes Pirates/Soldiers/Vampires/Dragonstorm play and viewer menu indices). Needs its own measured change.
+
+**OPEN USER QUESTIONS** (defaults taken; repeat every one in the final report):
+1. PROVISIONAL deferrals:
+   - Drogskol hexproof grant;
+   - Labyrinth draw cap (abort guard);
+   - Wanderer sac-counter;
+   - Shacklegeist tap ability, block restriction and flying;
+   - White Orchid flying;
+   - Skyclave/Orchid default autonomous target;
+   - the opponent-basic placeholder for White Orchid's opponent search.
+2. SpiritsProvider derives from DeckProvider (not VialProvider).
+3. FetchCandidates returns ALL targets (widens the 2026-08-21 one-option rule).
+4. The fetch-hold policy: declining is quality-neutral and ~10% cheaper.
+5. Cast order: C1's generic rank-25 affinity tier puts Millicent last.
+6. Usher: the boast-only post-combat main (main 1 vs main 2 is the USER's per-deck call).
+7. The mulligan `curve_check: two_drop` loses g10's 4-land/three-3-drop keep (the keep table supersedes it).
+8. Second-main / lord EvalCard under-ranking at d0 (a cast-order hook would be a USER call).
