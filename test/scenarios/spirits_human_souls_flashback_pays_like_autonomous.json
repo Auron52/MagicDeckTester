@@ -1,0 +1,24 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 5,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 4,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 7,
+  "env": { "MTG_HUMAN_PLAY": "1" },
+  "_comment": "Spirits integrator E3 (2026-11-13): a HUMAN commit of an offered plan realises it the way the autonomous executor does. Board Azorius Chancery ({W}{U}) + Unclaimed Territory x2 ({C} for a noncreature spell); hand Godless Shrine + Lingering Souls. The offered line `land=Godless Shrine; cast: Lingering Souls, Lingering Souls (flashback)` pays {2}{W} with Chancery + a Territory and the flashback's {1}{B} with the Shrine + the other Territory. Before the fix the human commit (MTG_LINE_SPARE_GENERIC_FIRST was autonomous-only) paid the hand Souls' generic with the Shrine, stranded the {B} and dropped the flashback: two tokens, opponent 4 survives T6, win T7. Autonomous play of the same board won T6. Now four 1/1 fliers swing T6 for exactly 4.",
+  "battlefield": [
+    { "name": "Azorius Chancery" },
+    { "name": "Unclaimed Territory" },
+    { "name": "Unclaimed Territory" }
+  ],
+  "hand": [ "Godless Shrine", "Lingering Souls" ],
+  "human_lines": [ "land=Godless Shrine;cast=Lingering Souls;retrace=Lingering Souls" ],
+  "expect_human_summary_contains": "cast: Lingering Souls, Lingering Souls (flashback)",
+  "expect_dropped": [],
+  "expect_win_turn": 6
+}

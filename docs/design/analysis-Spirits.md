@@ -473,6 +473,58 @@ deck byte-identical: nothing in the suite moved. (A first smoke attempt ERRORed 
 cards.json's Strand note mid-run -- my mistake, not the engine; it passes alone and in the rerun.)
 `fetch_hold_review` (USER-owned) can now be measured against a hold that is no longer a turn late.
 
+### Integrator E3 (2026-11-13): human-play payment drop FIXED; every offered plan now realised as offered
+
+**The bug (B's OPEN item).** Repro on the current tree: `test/scenarios/spirits_human_souls_flashback_pays_like_autonomous.json`
+(Azorius Chancery + Unclaimed Territory x2, hand Godless Shrine + Lingering Souls, the human commits `land=Godless
+Shrine; cast: Lingering Souls, Lingering Souls (flashback)`). B's exact seed-8 prefix no longer reaches that board
+(later cards changed the game), so the fixture reproduces B's board directly. **Why the paths differed:** the human
+commit and the autonomous executor share the same payer (TapForCostSharedOnce), but `MTG_LINE_SPARE_GENERIC_FIRST`
+(2f013bb75: a colour-short line's generic pip taps a SPARE source -- one whose mana no later pip of the line owes,
+here a Territory's {C} -- before a coloured one) was gated `!HumanPlayActive()`. Autonomous play paid {2}{W} with
+Chancery + Territory and the flashback with Shrine + Territory; the human commit paid a generic with the Shrine and
+stranded {B}. With the flag =0 autonomous play drops the flashback too (verified), so this was the WHOLE difference.
+**Fix:** the gate is removed (ManaPayment.cpp produce_impl) -- the rule fires only on a colour-short declared line and
+only spends a source no later pip of that line can use, so it can never cost the line a cast; the human float hold
+still runs whenever it does not fire. Fixture: FAIL (flashback dropped, T7) with `MTG_LINE_SPARE_GENERIC_FIRST=0`,
+PASS (no drop, T6) now.
+
+**The general class -- offered plans that cannot be realised.** New `test/human_plan_realised_check.py` (wired into
+`test/viewer_checks.sh`): walks Spirits games through `--claude-play`, COMMITS EVERY OFFERED main-phase plan and
+asserts the commit's `dropped_casts` equals the plan's own `drops` label. Before: seeds 1-12 = 195 of 748 commits
+dropped a cast the menu did not disclose; seeds 13-40 = 6 more. Three causes, all fixed in `TurnSolver.cpp`
+EnumeratePlans / EnumeratePlansWithLand (viewer-only, `MTG_HUMAN_DROP_PROBE_ALL`, default ON, =0 restores):
+1. **One-ordering plans were never probed** (only multi-hand-cast sets and the mana-suspend case): a hand cast +
+   flashback, a Vial put + cast, or a single cast read `not_verified`. Dominant source: the colored_creature_only
+   noncreature-pool optimism (`MTG_CCO_NONCREATURE_POOL` off, disclosed in Unclaimed Territory's note) offers
+   Lingering Souls / its flashback off a Territory's "any colour". Now every human-menu plan is probed once.
+2. **The probe played a GREEDY land** for a plan whose land is not stamped yet (`land_decided` false): "land=none;
+   cast: Aether Vial" (seed 22 T2) read `drops` because the greedy Chancery bounced the Vial's only land, yet
+   committed clean. The single-ordering probe now plays no land (the enumeration state already holds the plan's).
+   The MULTI-ordering probe has the same shape but also dedups orderings by its end state, so changing it could
+   change which orderings the menu shows; left as is (no mislabel seen in 40 seeds) -- **OPEN**, surfaced.
+3. **Karoo earlier-position clones** (`karoo_before`) inherited the after-the-casts plan's label: "land=Azorius
+   Chancery (before Aether Vial)" bounces a Territory whose restricted mana does not float. Each clone is probed.
+A dropping plan is LABELLED, never deleted (the g_order_drop_label history: deletion moved Dragonstorm GT and broke a
+StompySurprise reference). After: seeds 1-12 = 557 commits / 12 labelled / 0 mismatches; seeds 13-40 = 1489 / 11 / 0.
+
+**Not changed (surfaced):** the Territory any-colour noncreature optimism itself still OFFERS those plans (now
+labelled). Turning `MTG_CCO_NONCREATURE_POOL` on would remove them from the menu and from the search's wasted
+branches, but moves menu indices and every Territory deck's (Pirates, Soldiers, Vampires, Dragonstorm) search --
+a separate, measured change.
+
+**Verification.** Units 2927/2927; scenarios 511/511 (+1); `cast_order_truth_check`, `human_line_order_check`,
+`gods_plan_menu_check`, `combo_off_check.sh` (50/50) pass. **Reference replay gate** (`viewer_protocol_check.py
+--strict --threads 30`, all 827 refs, every deck -- the payment change reaches every deck's human path): 336 ok, 490
+repaired, 1 beaten, **0 play-drift, 0 board-diverged, 0 enum-gap**, rc 0. **Smoke** (alone, on the final binary):
+189 passed, 6 failed -- the same six keys with digests byte-identical to E2's (gods 558cea0d / ef690b70 / c3c6b871
+/ e6f8b68c; martyr a89c64fb / d4ca095a); searched slower 1 / faster 3 / play-changed 80, unchanged. Autonomous play
+is untouched by construction (both changes are HumanPlayActive-only).
+
+**Housekeeping (E2 follow-up).** Stale "every graveyard cast applies after the hand casts" comments refreshed
+(BuildGyCopyRuns header, the B1 post-pass, the Retrieval target note); Millicent's bracket note "OPEN ordering hole,
+disclosed" -> "ordering hole FIXED 507049f75".
+
 ## Approved deferrals
 
 (none yet)
