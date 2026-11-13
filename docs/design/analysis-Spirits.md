@@ -30,7 +30,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 | Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit + generic AFFINITY cast-order tier 25 + same-turn credit for Vial puts / token-making hand casts / a Spirit-named Mimic (`AffinityFeedCount`); new `combat_damage_tokens_per_trigger` + `combat_damage_watch_nontoken` (shared FireCombatDamageTokens); new `dies_watch_nontoken` (OnCreatureDies both walks, DeathOfWouldPay) | none (legend_keep for a 2nd copy) | IMPLEMENTED 55c43ab8a |
 | Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | IMPLEMENTED 9176533f0 |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
-| Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
+| Spirit of the Labyrinth | 3 | 3/1 body (87078b215); per-turn draw cap `each_player_draw_cap_per_turn` MODELLED in both worlds (core/DrawCap.h, choke point AttemptDrawIntoHand; integrator F, USER ruling Q1) | none (a rule, not a choice) | IMPLEMENTED 7421628b0 |
 | Skyclave Apparition | 2 | new `etb_exile_opp_nonland_nontoken_max_mv` 4 (ResolveEtbExileUpToOne, shared enter cascade: cast + Vial put) + `ltb_exiled_owner_illusion_token` (permanent exile on a NEW link range `kSkyclaveExileBase`, never returned by the Cathar orphan sweep); target = provider identity fold `EtbOptionalExileTargetPick` (largest) | A (`dig` "(may exile)") | IMPLEMENTED 3ddc3c86f |
 | Shacklegeist | 1 | vanilla 2/2 flier (NO flash per live oracle); tap ability / block restriction PROVISIONAL inert | none | IMPLEMENTED 87078b215 |
 | White Orchid Phantom | 2 | new `etb_destroy_nonbasic_land_optional` (ResolveEtbDestroyNonbasicLandOptional, both sides); own lands SEARCHED (cast AND Vial-put variants pinned on tutor_target, `#WO`, the basic a land_search_pins ordinal); base = provider fold (opp nonbasic, else none); opponent gets a tapped `Opponent Basic Land`; Spirits prunes own variants with no basic in library | A (`dig` "(may destroy nonbasic land)" + `tutor_etb`) | IMPLEMENTED 3ddc3c86f |
@@ -51,7 +51,7 @@ Scryfall note: concurrent research agents 429'd the single-card API; texts came 
 (`logs/spirits/drafts/scry/`) and web pages. The cost + field audits (2d-bis) are the authoritative re-check.
 
 ### Open questions (USER-owned marked)
-- **[USER, PROVISIONAL default taken]** Spirit of the Labyrinth's draw cap deferred as inert (no draw in the 60), with an abort guard if any second draw ever happens under it.
+- ~~**[USER, PROVISIONAL default taken]** Spirit of the Labyrinth's draw cap deferred as inert~~ -- USER rejected the deferral (Q1); MODELLED by integrator F, 7421628b0.
 - **[USER, PROVISIONAL]** Skyclave Apparition's exile target folded to one default (opponent's largest creature, Brutal Cathar convention) in autonomous play — all choices outcome-equivalent vs the goldfish; the human sees all.
 - **[USER, PROVISIONAL]** Shacklegeist's tap ability + blocking restriction, flying (no blocking anywhere) deferred as inert.
 - **[USER, PROVISIONAL]** White Orchid Phantom: the opponent's "may search for a basic" is modelled as an `Opponent Basic Land` placeholder entering tapped (integrator C2 took the draft's faithful option instead of the Path no-op; nothing reads it).
@@ -686,3 +686,28 @@ Drogskol Captain -> Usher, Spirit of the Labyrinth, Shacklegeist, Geist of Saint
 Lingering Souls (hand, then flashback) -> White Orchid Phantom -> Millicent. All main 1 except Usher's boast.
 Why: Mimic's counter on every later Spirit incl. Souls tokens; Patrician's {1} off a same-turn flashback; Souls
 tokens feed Millicent's affinity; White Orchid late so an own nonbasic it destroys has already made its mana.
+
+### Integrator F (2026-11-13): Spirit of the Labyrinth's draw cap, MODELLED (7421628b0)
+USER (Q1): *"Probably best to implement to avoid getting caught off-guard later as this can impact a list that has
+any draw in it."* The abort guard is gone; `handentry::NoteFirstDraw` is miracle-only again (its pre-guard form).
+- **Rule (core/DrawCap.h):** with any permanent carrying `each_player_draw_cap_per_turn` on the battlefield, a
+  player's Draw/DrawStep past the cap this turn is IGNORED (counts draws made before the Spirit entered; no
+  deck-out; no replacement -- tested before dredge, and `CycleDrawReplacer` offers no Cyclone walk; non-draw hand
+  entries untouched; a loot's discard still happens). Deck-gated on `deck_has_draw_cap`.
+- **Choke point:** `AttemptDrawIntoHand` (every draw in both worlds: draw step, DrawIntoHand[Detailed], TrickDraw,
+  PerformDrawX, dig/cycle loops, upkeep draws). Counter fixes so the count is current before each draw: modal
+  draws (EffectHandler + TurnSolver twin) and Braingeyser now count per draw; Howling Mine / Horn of Greed test
+  the cap before their empty-library loss.
+- **Turns:** `drawcap::TurnBoundary` at our untap and at the start of the opponent's notional turn, in both worlds;
+  the opponent's notional draw is counted under a cap (so their Howling Mine draw is capped); Asylum Visitor's
+  count restore is skipped under a cap. Opponent `ForcedDraw` clamps; `ForcedDrawLethalX` reads the clamp.
+- **Search side:** `BuildSimKeyBase` folds `cards_drawn_this_turn` for a cap deck (Dominance already folded it);
+  plan signatures need nothing (no new action). Predictors: the Fists kill projection uses `drawcap::Allowed`.
+  Draw-step-based predictors (keep model, mulligan/ideal-order tiers, Combat's next-turn draw projection) are
+  unaffected: the draw step is a turn's first draw. Over-inclusive "this card draws" classifiers (breakpoint /
+  hand-entry gates) were left as is -- they can only add work, never hide a line.
+- **Verification:** unit 2935/2935 (new `test_spirit_labyrinth.cpp`, 9 cases, both worlds); scenarios 513/513
+  (new `spirits_labyrinth_caps_howling_mine` T5 + control twin T4); `check_plan_sig_lockstep` only the known `#BB`;
+  `audit_viewer_decisions.py --no-sweep` rc 0 (INERT_PARAMS text updated). Play-neutrality: Spirits 50 games
+  seed 610000 d3 b10, per-game logs byte-identical vs `build/PGO/mtg` (stamped HEAD:src). Smoke not run (orchestrator).
+
