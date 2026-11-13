@@ -27547,6 +27547,42 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total); }
 }
 
+// Does `controller` control two legendary permanents with the same name? Allocation-free; the cheap guard the
+// LEGEND-RULE SBA CHECKPOINTS below test before paying EnforceLegendRule's grouping.
+inline bool HasDuplicateLegend(const GameState& state, int controller)
+{
+    const std::size_t n = state.battlefield.size();
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const Permanent& a = state.battlefield[i];
+        if (a.controller_index != controller || !a.card.HasSupertype(Supertype::Legendary)) { continue; }
+        for (std::size_t j = i + 1; j < n; ++j)
+        {
+            const Permanent& b = state.battlefield[j];
+            if (b.controller_index == controller && b.card.m_name == a.card.m_name
+                && b.card.HasSupertype(Supertype::Legendary)) { return true; }
+        }
+    }
+    return false;
+}
+
+// THE LEGEND RULE AS A STATE-BASED ACTION (CR 704.3 / 704.5j; Boars LK, 2026-11-13). SBAs are checked whenever a
+// player would receive priority -- after every land play, every resolution, and in the end step -- not only at the
+// beginning of combat. Until this checkpoint the engine enforced the rule only where a LEGENDARY spell resolved
+// (EffectHandler::Resolve / the rollout's cast twins), at a handful of put sites, and at the beginning of combat.
+// Every other entry kept both copies until the next combat: a second The Grey Havens played in MAIN 2 survived the
+// opponent's turn and untapped beside the first, so BOTH tapped for mana in the next main 1 (and a GSZ-put second
+// Surrak, an end-step return, likewise). Run at the land drop (LandPlay.cpp, both worlds' one chokepoint), after
+// every stack resolution (GameEngine::ResolveStack / the rollout's apply_one exit, DepletionSbaAtResolution), and at
+// the end of the end step (GameEngine::EndStep / SimulateEndAndStartNextTurn). The keep is LegendKeepPick's: the
+// turn's searched pin (Plan::legend_keep_turn) for the active player. Every player is checked (SBAs are global);
+// a no-op without a duplicate.
+inline void LegendRuleSbaCheckpoint(GameState& state)
+{
+    for (int c = 0; c < static_cast<int>(state.players.size()); ++c)
+    { if (HasDuplicateLegend(state, c)) { EnforceLegendRule(state, c); } }
+}
+
 // "You gain N life" / "TARGET PLAYER gains N life" as a spell's own resolution (Feed the Clan; Heroes'
 // Reunion and Rest for the Weary, CardParams::cast_lifegain_target_player), with the ferocious or
 // landfall upgrade. ONE shared resolver, called identically by the executor (EffectHandler::ResolveImpl's

@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
+#include "ai/LandPlay.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -806,7 +807,18 @@ TEST_CASE("LK land: a legendary land drop beside a same-name land is twinned; a 
     }
 }
 
-TEST_CASE("LK land: the turn pin decides the beginning-of-combat keep -- the rollout and the executor read it alike")
+namespace {
+// The executor's land drop: the shared chokepoint (LandPlay.cpp) its TryPlaySpecificLand reaches.
+void LkExecDrop(GameState& exec, const TurnSolver::Plan& plan, int number)
+{
+    TurnSolver::WritePostApplyStatePins(exec, plan);   // before the plan's actions, as AIEngine::TakeTurn
+    std::size_t hi = 0;
+    while (exec.players[0].hand[hi].m_number != number) { ++hi; }
+    REQUIRE(PlayLandFromHand(exec, hi, IDef(kHavens), LandPlayOptions{}));
+}
+}   // namespace
+
+TEST_CASE("LK land: the turn pin decides the land drop's legend rule -- the rollout and the executor read it alike")
 {
     for (int keep : { 0, 1, 2 })
     {
@@ -816,14 +828,9 @@ TEST_CASE("LK land: the turn pin decides the beginning-of-combat keep -- the rol
         GameState roll = LkHavensBoard();
         TurnSolver::ApplyPlan(roll, plan, /*is_pre_combat=*/true);
         CHECK(roll.scripted_legend_keep == keep);
-        REQUIRE(IFind(roll, 20) != nullptr);   // the drop is legend-ruled at the beginning-of-combat SBA
-        EnforceLegendRule(roll, 0);
-        // The executor writes the same state pin (WritePostApplyStatePins) before it plays the plan.
+        // CR 704.3: the duplicate is legend-ruled at the land play itself, before any combat SBA.
         GameState exec = LkHavensBoard();
-        TurnSolver::WritePostApplyStatePins(exec, plan);
-        exec.players[0].hand.pop_back();
-        IPut(exec, kHavens, 20);
-        EnforceLegendRule(exec, 0);
+        LkExecDrop(exec, plan, 20);
         const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;   // 0: the provider keeps the oldest
         for (const GameState* g : { &roll, &exec })
         {
@@ -919,4 +926,108 @@ TEST_CASE("LK copy: a token copy of our legend (Twinflame) is twinned")
     CHECK(LkTurnKeeps(s, base) == std::vector<int>{ 1, 2 });
     GameState t = IBase();   // no legend of ours: nothing to copy into a group
     CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });
+}
+
+// ---- THE LEGEND RULE IS A STATE-BASED ACTION (CR 704.3 / 704.5j): checked at the land play, after every resolution and
+// in the end step -- not first at the next beginning of combat (LegendRuleSbaCheckpoint). ----
+TEST_CASE("LK SBA: a MAIN-2 second Grey Havens is legend-ruled at the drop -- only one copy untaps next turn")
+{
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        TurnSolver::Plan plan = LkLandPlan(kHavens);
+        plan.legend_keep_turn = static_cast<std::int8_t>(keep);
+        GameState roll = LkHavensBoard();
+        roll.phase = Phase::PostCombatMain;
+        TurnSolver::ApplyPlan(roll, plan, /*is_pre_combat=*/false);
+        GameState exec = LkHavensBoard();
+        exec.phase = Phase::PostCombatMain;
+        LkExecDrop(exec, plan, 20);
+        const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;
+        for (GameState* g : { &roll, &exec })
+        {
+            CHECK(IFind(*g, survivor) != nullptr);
+            CHECK(IFind(*g, loser) == nullptr);
+            CHECK(InGraveyard(*g, loser));
+        }
+        // ...so the next turn untaps ONE Havens: two copies can never both tap for mana in its main 1.
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        CHECK(std::count_if(roll.battlefield.begin(), roll.battlefield.end(),
+                            [](const Permanent& p) { return p.card.m_name == kHavens; }) == 1);
+    }
+}
+
+namespace {
+// Surrak #10 on the battlefield, a second Surrak #20 in the library, Green Sun's Zenith #30 in hand, seven Forests.
+GameState LkGszBoard()
+{
+    GameState s = IBase();
+    s.phase = Phase::PostCombatMain;
+    IPut(s, kSurrak, 10);
+    s.players[0].library.push_back(ICard(kSurrak, 20));
+    for (int k = 0; k < 7; ++k) { IPut(s, "Forest", 40 + k); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("LK SBA: a non-legendary resolution's put (GSZ -> a second Surrak) is legend-ruled at the resolution, both worlds")
+{
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;
+        {   // the rollout: a main-2 GSZ (no combat follows in this apply)
+            GameState roll = LkGszBoard();
+            roll.players[0].hand.push_back(ICard("Green Sun's Zenith", 30));
+            Action gsz = ICast("Green Sun's Zenith", 0);
+            gsz.chosen_x     = 6;
+            gsz.tutor_target = InternedName(kSurrak);
+            TurnSolver::Plan plan = IPlan({ gsz });
+            plan.land_decided     = true;
+            plan.legend_keep_turn = static_cast<std::int8_t>(keep);
+            TurnSolver::ApplyPlan(roll, plan, /*is_pre_combat=*/false);
+            CHECK(IFind(roll, survivor) != nullptr);
+            CHECK(IFind(roll, loser) == nullptr);
+        }
+        {   // the executor: GameEngine::ResolveStack's post-resolution SBA
+            GameState exec = LkGszBoard();
+            exec.scripted_legend_keep = static_cast<std::int8_t>(keep);
+            StackEntry e;
+            e.source           = ICard("Green Sun's Zenith", 30);
+            e.controller_index = 0;
+            e.chosen_x         = 6;
+            e.tutor_target     = kSurrak;
+            exec.stack.push_back(e);
+            AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+            GameEngine ge(eng);
+            MtgTestSeam::GeResolveStack(ge, exec);
+            CHECK(IFind(exec, survivor) != nullptr);
+            CHECK(IFind(exec, loser) == nullptr);
+        }
+    }
+}
+
+TEST_CASE("LK SBA: a duplicate left at the end step is legend-ruled there (executor and rollout), by the turn's pin")
+{
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;
+        GameState base = IBase();
+        base.phase = Phase::Ending;
+        IPut(base, kSurrak, 10);
+        IPut(base, kSurrak, 20, 0, /*sick=*/true);   // as an end-step return / put would leave it
+        base.scripted_legend_keep = static_cast<std::int8_t>(keep);
+        GameState exec = base;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine ge(eng);
+        MtgTestSeam::GeEndStep(ge, exec);
+        GameState roll = base;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(roll));
+        for (const GameState* g : { &exec, &roll })
+        {
+            CHECK(IFind(*g, survivor) != nullptr);
+            CHECK(IFind(*g, loser) == nullptr);
+        }
+    }
 }

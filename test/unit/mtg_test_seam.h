@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ai/AIEngine.h"
+#include "core/GameEngine.h"
 
 #include <string>
 
@@ -105,4 +106,7 @@ struct MtgTestSeam
     static bool UseSurplusLandAbilities(AIEngine& e, GameState& s, const std::function<void(GameState&)>& resolve,
                                         int dig_choice, const Action* seed)
     { return e.UseSurplusLandAbilities(s, resolve, dig_choice, seed); }
+    // GameEngine's private executor steps (Boars LK: the legend-rule SBA checkpoints).
+    static void GeResolveStack(GameEngine& g, GameState& s) { g.ResolveStack(s); }
+    static void GeEndStep(GameEngine& g, GameState& s) { g.EndStep(s); }
 };

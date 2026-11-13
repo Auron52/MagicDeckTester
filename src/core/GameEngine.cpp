@@ -1376,6 +1376,10 @@ void GameEngine::EndStep(GameState& state)
     // twin in TurnSolver::SimulateEndAndStartNextTurn; deck-gated -> inert elsewhere.
     PerformEndStepMorbidDestroy(state, morbid_triggers);
     PerformEndStepDiscardHands(state, state.active_player_index);
+    // CR 704.3: the end step's SBA check -- a legend an end-step trigger returned or put (a delayed return,
+    // Abiding Grace) is legend-ruled before cleanup, not at the next turn's combat. Lockstep twin in
+    // TurnSolver::SimulateEndAndStartNextTurn, same position.
+    LegendRuleSbaCheckpoint(state);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
@@ -1535,6 +1539,9 @@ void GameEngine::ResolveStack(GameState& state)
         // before the next stack object or turn action can see the new hand.
         ResolvePendingMiracle(state, m_logger);
         CheckStateBasedActions(state);
+        // CR 704.5j after EVERY resolution, not only a legendary spell's (EffectHandler::Resolve): a GSZ-put second
+        // Surrak, a reanimated copy. Rollout twin: DepletionSbaAtResolution's exit (TurnSolver.cpp).
+        LegendRuleSbaCheckpoint(state);
     }
 }
 

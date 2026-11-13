@@ -66303,6 +66303,9 @@ struct DepletionSbaAtResolution
     {
         t_resolving.pop_back();
         if (committed && DepletionSbaOn() && !ResolvingOn(st)) { SacrificeDepletedLands(st); }
+        // The legend rule (CR 704.5j) at the same post-resolution SBA point as the executor's GameEngine::ResolveStack
+        // (LegendRuleSbaCheckpoint). Not behind MTG_DEPLETION_SBA: it is its own rule.
+        if (committed && !ResolvingOn(st)) { LegendRuleSbaCheckpoint(st); }
     }
     DepletionSbaAtResolution(const DepletionSbaAtResolution&) = delete;
     DepletionSbaAtResolution& operator=(const DepletionSbaAtResolution&) = delete;
@@ -75505,6 +75508,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     // Reaper's morbid destroy + Sire's discard (lockstep twin of GameEngine::EndStep, same position/order).
     PerformEndStepMorbidDestroy(state, morbid_triggers);
     PerformEndStepDiscardHands(state, state.active_player_index);
+    LegendRuleSbaCheckpoint(state);   // the end step's legend-rule SBA (lockstep twin of GameEngine::EndStep)
 
     // End step to cleanup is a separate mana boundary in both executor and rollout.
     CrossManaBoundary(state, state.active_player_index);
