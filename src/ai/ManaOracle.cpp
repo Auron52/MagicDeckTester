@@ -2111,8 +2111,11 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         pe.whole_float = whole_float;
         pe.want        = max_opts;
         pe.memo_on = memo;
-        // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 4096, the historical constant; diagnostic sizing only).
-        { static const int s_pc = std::max(1, EnvInt("MTG_ORACLE_PAY_PROBES", 4096)); pe.cap = static_cast<std::size_t>(s_pc); }
+        // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 65536; it was 4096). With the tap memo a probe is a
+        // DISTINCT post-tap board, so what is left past 4096 is real breadth -- Prevent Damage seed 30020166 T8 paid
+        // {2}{R} into 1,666 distinct results. The gate's 326 flagged games (play byte-identical in every arm): ceiling
+        // 4096 -> UNMODELED 430, 16384 -> 56, 65536 -> 20; oracle CPU +13% / +16%. A pre-tap memo hit is not a probe.
+        { static const int s_pc = std::max(1, EnvInt("MTG_ORACLE_PAY_PROBES", 65536)); pe.cap = static_cast<std::size_t>(s_pc); }
         // MTG_ORACLE_SCALED_AHEAD (DEFAULT ON; =0 the one-extra-tap table alone): audit-only, see ExtendScaledAhead.
         static const bool s_ahead = EnvOn("MTG_ORACLE_SCALED_AHEAD", true);
         if (!whole_float && s_ahead) { pe.ahead = ScaledAheadClasses(state, srcs, sac_victim); }
