@@ -32,7 +32,10 @@ run stands and what to do next.
     7-mana cast trigger on the searched cast-trigger rank, refund -> site 9). 2966/2966 unit tests; Unpredictable
     Cyclone / Snow / Stompy Surprise byte-identical vs I3a; Boars 40/40 at d3 b10. OPEN USER Q: per-cast target rank
     (risk 3; recommend building it in I4). I4 must not ride emerge on `sac_pins` through the cast-trigger axis skip.
-  * I4 TODO: Decimator emerge.
+  * I4 DONE `2e2356e2e` (code `ccf358f45`): Decimator emerge (per-victim cast variant, victim on per-cast
+    `soulfire_own_targets` not `sac_pins`) + cast-trigger team pump. 2975/2975 unit tests; Shadowborn Apostle /
+    Landfall Elementals / Melira Pod byte-identical vs I3b; Boars 40/40 avg 5.325 at d3 b10 (was 5.525). Owed:
+    this-turn win estimate ignores the team pump; risk 3 per-cast Ragga rank left for the next integrator.
   * I5 TODO: Ilharg (+ exalted declared-count fix, put creatures not firing attack triggers,
     legend-rule keep choice in the viewer).
   * Every integrator: add its Boars-only params to the BoarsProvider signature; whitelist its card

@@ -386,3 +386,47 @@ without a `--update` round trip, to avoid the 429s I1-I3a hit.
   the rank in both pin consumers. Until the USER answers, the agent default is to proceed with I4 and build it there.
 * D2: Raggadragga's trample grant inert, PROVISIONAL. D6: main 2 opens on a Raggadragga turn with an untapped mana
   creature post-combat (pure-board proxy).
+
+## I4 done (2026-11-13) -- Decimator of the Provinces
+
+Commits: `ccf358f45` (WIP, code) + `2e2356e2e` (tested; audit fixes) on `boars-analysis` (local only, not pushed).
+Unit tests 2975/2975 pass (`test/unit/test_boars_decimator.cpp`, 9 cases, passed as first compiled; no engine bug
+found). Byte-identity vs the I3b binary (`--games 20 --seed 9101 --depth 3 --budget-ms 10 --ignore-play-profile`,
+sorted `[win]` lines): Shadowborn Apostle, Landfall Elementals, Melira Pod all IDENTICAL, 20/20 each. Boars 40 games at
+d3 b10: rc 0, 40/40, **avg 5.325** (1 x T4, 26 x T5, 12 x T6, 1 x T7; was 5.525 before emerge), no assert, wall ~1 min
+(no slowdown visible). Game logs: 17 Decimator casts in 40 games, ALL emerge (paid {G}{G}{G} .. {5}{G}{G}{G}).
+Audits: audit_card_costs rc 0 (615/615); audit_card_fields rc 0 after adding `emerge` to MODELED_ELSEWHERE_KEYWORDS
+(structural via `emerge_cost`, the kicker/morph shape) and writing the Decimator snapshot entry from
+`build/scratch/boars/scry/DecimatoroftheProvinces.json` (no `--update` round trip); audit_viewer_decisions
+`--no-sweep` rc 0, oracle cross-check clean, expected decisions now include `sacrifice`.
+
+**Landed** (detail in `logs/boars-research/I4-handoff.md`)
+* cards.json: `emerge_cost {6}{G}{G}{G}`, `cast_trigger_team_pump_power/_tough` 2, `_trample` (inert, D2); keywords
+  Trample, Haste; bracket note.
+* Emerge = an alternative-cost cast variant PER VICTIM CLASS (board readiness reps + hand victims), emitted beside the
+  hard cast by the sac-any-creature post-pass, searched (no victim pick outside the branch). Bill =
+  `EmergeCastCost(def, state, victim_mv)`: generic reduced by the victim's MV, floored at 0, then Herald's Horn
+  stacks. The victim taps for this very cast, then is sacrificed after the card leaves hand and BEFORE
+  `FireOnCastTriggers(mana_spent = bill)`, in both worlds. A same-plan hand victim is cast first via
+  `IsDependentAttachSpell` (structural dependency, not a rank change).
+* Risk 2 (I3b): the victim rides per-cast `soulfire_own_targets`, NOT `sac_pins`, so emerge plans are crossed with the
+  Raggadragga cast-trigger target axis rather than silently taking rank 0.
+* Team pump: `TriggerKind::CastTeamPump` -- +2/+2 (trample recorded only) to creatures we control at RESOLUTION, i.e.
+  never Decimator itself (still on the stack; CR 608.2h/611.2c locks the affected set), both worlds.
+* Plan signatures carry `#EM`/victim; BoarsProvider signature ORs the new params; Horn take-fold whitelist; viewer
+  `emerge_cost` -> MANIFEST `sacrifice` (human chooser asked before the bill), main-phase emerge mode sub, DECISIONS.md
+  rows.
+
+**Owed / deviations**
+* **This-turn win estimate ignores Decimator's team pump** (`ProjectPlanWalk` / the kWalkPump flag, TurnSolver
+  ~14033): an underestimate (conservative); `xw_nowin` only matters for X spells (none in Boars). Fix: add
+  `cast_trigger_team_pump_power` to kWalkPump + a pump step before the body enters.
+* Castability probes (`HandCardLegalToCast` etc.) still price printed {10} (ordering/gating heuristics only; the
+  post-pass emits emerge regardless, unit-tested).
+* `CastSpendMayReach` (Ragga axis width) uses printed MV 10 -> widens the axis needlessly for a cheap emerge (sound).
+* Chandra nested-cast serializer does not carry `emerge` (no pool combines them); `EmergeVictimMv` ignores face-down
+  MV 0 (no morph in Boars).
+* Ilharg as emerge victim / D6 main-2 put-body condition: I5.
+* Viewer GUI walk of the emerge mode + pre-payment board click NOT done (Stage 5h).
+* Risk 3 (per-cast Raggadragga target rank) NOT built here: brief ruling "do NOT do the Raggadragga per-cast target
+  change (next integrator)". Still an OPEN USER question.
