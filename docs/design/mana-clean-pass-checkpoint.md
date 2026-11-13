@@ -1341,3 +1341,17 @@ fungus 1,880, gods 4,300 (first run).
   stays `wild` (its colours). Detector: single-colour units booked `wild` 21,889 -> 0 (real games), 0 in search;
   overflow 0. Held-out A/B 51 decks x 500-1500 games/arm: 0 slower games, hinata net -1, all others 0. =0 is
   byte-identical (smoke 199/199). Handoff: logs/mana-clean-chain/A-wild-handoff.md (round 3 at top).
+* **Queue item A round 4 (2026-11-13): literal route (a) REGRESSION ACCEPTED (26c9f5f74, local).** Smoke's one slower
+  searched game cyclone_smoke_d5 gi56 (T5->T6) recovers to T5 at `--depth 8 --budget-ms 0`. Regression (Release ==
+  3d9488ca9 src): searched slower 0 / faster 0 / 27 play-changed same score, every one lever-attributed (alone,
+  LITERAL=0 reproduces the GT digest and =1 the new one, 27/27). d0: cyclone 4 slower / 3 faster (draws diverge =
+  variance); hinata d5 s30001 backstop gi1 now finishes T5 (was abandoned). check_gt_logs clean (1146).
+  **OPEN (d0 runner, not blocking): alchemist_regression_d0_s2002 gi83 (seed 2085, d0) 6->7 with the SAME draws.** At T6
+  (Living Wish, Weather the Storm, Crab Umbra, Staff of Domination off a prepaid float) the tag arm pays all four from
+  the float; under LITERAL `MTG_TAPDBG` shows Living Wish and Weather the Storm each tapping an extra Forest
+  (`[paydbg] cost={1}{G} ... taps: Forest`), the Staff's {3} later taps the Alchemist (yield 6) instead, and the
+  combo route ("combo route: win") is missed. Board after T6 main 1: tag = 6 Forests tapped / Alchemist untapped;
+  literal = 5 Forests / Alchemist tapped. The host land Forest#20 carries 3 Utopia Sprawl + Wild Growth (a
+  multi-colour, multi-unit tap), so suspect the literal booking or the fund[] drain for that tap. Not a legality
+  issue (tag arm viol=0); a mana-efficiency loss in the greedy runner. Repro: build/scratch/wildA4/a83.json
+  (`MTG_PREPAY_WILD_LITERAL=0` vs default, `MTG_TAPDBG=1`).
