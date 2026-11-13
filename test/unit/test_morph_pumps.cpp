@@ -750,14 +750,19 @@ TEST_CASE("morph INT-8 (E): Berserk plans are fronted; Den Protector's regrowth 
     cands[2].kind = Action::Kind::ActivatePermAbility;
     cands[2].ability_mode = Action::AbilityMode::TurnFaceUpLate;
     cands[2].tutor_target = std::string("Berserk");
+    // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY (USER 2026-11-13, INT-13): DEFAULT ON -- the tier only for a plan projected
+    // lethal. t_arm = -1 reads the env default (unset in the test environment).
+    heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = -1;
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 0 }, false));
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1, 2 }, false));
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }, true));
+    CHECK(mp.PlanMoveOrderFront(s, cands, { 1, 2 }, true));      // Den Protector regrowing Berserk, lethal plan
+    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }, true));
+    // =0 (t_arm 0): E as first ruled -- every Berserk plan fronted, lethal or not.
+    heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = 0;
     CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }, false));
     CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }, false));
     CHECK(mp.PlanMoveOrderFront(s, cands, { 1, 2 }, false));     // Den Protector regrowing Berserk
-    // INT-9 arm MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY (DEFAULT OFF): the tier only for a plan projected lethal.
-    heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = 1;
-    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 0 }, false));
-    CHECK(mp.PlanMoveOrderFront(s, cands, { 0 }, true));
-    CHECK_FALSE(mp.PlanMoveOrderFront(s, cands, { 1 }, true));
     heurarm::t_arm[heurarm::MORPH_BERSERK_FIRST_LETHAL] = -1;
     std::vector<std::string> names = { "Forest", "Blistering Firecat", "Temur Battle Rage", "Vines of Vastwood",
                                        "Legion Leadership", "Might of Old Krosa", "Berserk" };

@@ -8978,14 +8978,16 @@ bool MorphProvider::RedirectTargetedPumpsAsGroup() const
 static bool MorphBerserkFirstOn()
 { static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST", true); return heurarm::Flag(heurarm::MORPH_BERSERK_FIRST, on); }
 
-// INT-9, the PROPOSED amendment to E (NOT a USER ruling; DEFAULT OFF until the USER answers): front a Berserk plan
-// only when it is projected lethal -- R9 "If we can find lethal we don't need to search it, I guess it's true we could
-// just rank and test it first". INT-8 found the unconditional tier also acts as a TIE-BREAK among horizon-tied plans,
-// so on a non-lethal turn it commits a wasted Berserk (gi245) or spends the budget on fronted non-lethal Berserk plans
-// (regression gi18). MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY=1 -> lethal plans only. The regrowth ORDER is unaffected.
+// E amended to "Berserk first within the projected-lethal plans only" -- USER ruling 2026-11-13 (INT-13): "Berserk is
+// rarely great outside of lethal lines, so sure." It refines R9 ("If we can find lethal we don't need to search it, I
+// guess it's true we could just rank and test it first"): INT-8 found the unconditional tier also acts as a TIE-BREAK
+// among horizon-tied plans, so on a non-lethal turn it commits a wasted Berserk (gi245) or spends the budget on fronted
+// non-lethal Berserk plans (regression gi18). Measured INT-9 (arm) and INT-13 (adoption A/B), docs/design/analysis-Morph.md.
+// The regrowth ORDER is unaffected. MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY=0 -> the tier fronts every Berserk plan (E as
+// first ruled).
 static bool MorphBerserkFirstLethalOnly()
 {
-    static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY");   // DEFAULT OFF; =1 -> the amendment
+    static const bool on = EnvOn("MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY", true);   // DEFAULT ON; =0 -> unconditional tier
     return heurarm::Flag(heurarm::MORPH_BERSERK_FIRST_LETHAL, on);
 }
 

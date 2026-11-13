@@ -2915,8 +2915,8 @@ public:
     // PlanMoveOrderFront -- a MOVE-ORDER tier (MoveOrderLess, below wins_this_turn / pump_waste / atk_forfeit,
     // above value): a plan this answers true for is TRIED FIRST among its peers. ORDER only -- nothing is
     // removed, and a strictly better plan still wins its pass. Default false. `projected_lethal` is the plan's
-    // wins_this_turn projection, so a provider may confine the tier to the lethal plans (Morph INT-9's
-    // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY arm).
+    // wins_this_turn projection, so a provider may confine the tier to the lethal plans (Morph's
+    // MTG_MORPH_BERSERK_FIRST_LETHAL_ONLY, default ON since INT-13).
     virtual bool PlanMoveOrderFront(const GameState& s, const std::vector<Action>& cands,
                                     const std::vector<int>& sel, bool projected_lethal) const
     { (void)s; (void)cands; (void)sel; (void)projected_lethal; return false; }
