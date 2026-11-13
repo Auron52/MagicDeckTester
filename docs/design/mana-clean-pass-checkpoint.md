@@ -1395,3 +1395,22 @@ fungus 1,880, gods 4,300 (first run).
   s2002 (gi389 6->5, gi402/gi759 unwon->6, gi642 7->5) and d5 s2002 gi216 play-changed same score. Every moved row is
   reproduced exactly by MTG_FADE_NO_DEAD_ACT=0 alone; (a)/(d) moved nothing. check_gt_logs clean (1146). Not covered
   (none in the Fungus pool): a lord entering by a NON-cast route mid-plan (tutor-put, Vial).
+* **Queue items C+I (2026-11-13): Pirates Bolt-vs-creature-only land + Martyr Basilica/sac order -- martyr_lifegain
+  CLEAN, pirates 246 -> 93 (e4aa5c3ce levers; GT 4c892d477 smoke + 3b19b6cb8 regression; local).** Three heurarm levers,
+  default ON: MTG_CCO_HAND_DEMAND (a wide creature-only land ranks at the narrow rung while a castable noncreature hand
+  card has a coloured pip; USER: "the inflexible spell needs to be considered early"), MTG_PAY_HAND_GENERIC (a generic
+  pip paid from a 2+-colour float spends the colour the hand needs least: Basilica {W}{B}), MTG_MARTYR_SAC_FIRST (USER:
+  "If Martyr is already out we should for sure": a Martyr out since turn start is sacrificed before a white-casting
+  plan's casts, trailing when that order does not pay). Held-out A/B 71,400 games (seed 88500000, all off vs on,
+  logs/mana-clean-chain/itemCI/ab_report.txt): searched slower 0; martyr 3000/arm net -2, niv -1, every other deck 0
+  (pirates 3000 + pirates2hg 1000 byte-equal outcomes). Smoke 17 rows / regression 22 rows moved, all reproduced by the
+  three levers =0 (smoke off-arm 199/199 byte-identical); searched slower: smoke alchemist d5 gi3 7->8 (draws diverge
+  T6; d8 b0 wins T6 in both arms = churn), regression 0. d0: hinata smoke gi724 7->loss, niv regression gi486 6->7
+  (greedy d0 runner). check_gt_logs clean (1146). Gates (PGO c3e08706c7d0, oracle-off byte-identical):
+  martyr_lifegain 5000-9999 CLEAN (0; was 10); pirates 64000-68999 93 APPLY-DROP (was 246), all "dropped Lightning
+  Bolt", two shapes: (1) T3 vial:Staunch Crewmate plans (Bolt cast in the continuation; oracle pays the vial line with
+  the creature-only land and keeps Canal/Mountain R for Bolt -- "reaching a board the other order does not"), repro
+  s30064129 / s30067717 / s30064439 T3; (2) T4 Forerunner + Bolt with Courtyard{C} + Mountain + Treasure{B} for
+  Forerunner and Canal for Bolt, repro s30066580 T4 (27 flags, 1 game). Report logs/mana_clean/20261113-225845/report.md.
+  Disclosed narrowing kept from agent #1: for a Martyr-out white-casting plan the after-watcher position twins are not
+  emitted (position 0, else trailing).
