@@ -1048,3 +1048,20 @@ TEST_CASE("LK put: Galadriel of Lothlorien's scry-reveal land put of a second Gr
         CHECK(LkTurnKeeps(t, base) == std::vector<int>{ 0 });
     }
 }
+
+TEST_CASE("LK land: the EXECUTOR's main-1 land drop reads the turn pin (written before the drop, as the rollout does)")
+{
+    for (int keep : { 1, 2 })
+    {
+        CAPTURE(keep);
+        TurnSolver::Plan plan = LkLandPlan(kHavens);
+        plan.legend_keep_turn = static_cast<std::int8_t>(keep);
+        GameState exec = LkHavensBoard();
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, plan, true);
+        eng.TakeTurn(exec, true, IResolveStack);
+        const int survivor = keep == 2 ? 20 : 10, loser = keep == 2 ? 10 : 20;
+        CHECK(IFind(exec, survivor) != nullptr);
+        CHECK(IFind(exec, loser) == nullptr);
+    }
+}

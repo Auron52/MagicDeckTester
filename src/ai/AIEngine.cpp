@@ -4884,6 +4884,13 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
             if (plan.cast_trigger_target_choice >= 0)
             { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal); }
+            // The turn's searched legend-rule keep (Plan::legend_keep_turn) BEFORE the land drop: the legend rule is an
+            // SBA at the drop itself (LegendRuleSbaCheckpoint), and the drop's ETBs can put a duplicate (The Grey Havens'
+            // scry -> Galadriel of Lothlorien's reveal put). The rollout writes it before its drop (ApplyPlanDirect's
+            // WritePostApplyStatePins precedes PlayLandByName); without this the executor's drop read the provider's
+            // keep (Galadriel seed 9101 gi1/gi2/gi6 T5, MTG_TRACE=legend pinned=0). WritePostApplyStatePins below
+            // writes the same value again (idempotent).
+            if (plan.legend_keep_turn != 0) { state.scripted_legend_keep = plan.legend_keep_turn; }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
