@@ -3421,6 +3421,50 @@
      "seed": 30020000,
      "src": "3665c5524c7e1861b2cbd576be2171b584c28e00",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 18,
+      "CAPPED": 87,
+      "CONTINUATION-DIFFERS": 203,
+      "DOMINATED-LAND": 1286,
+      "DOMINATED-LIFE": 738,
+      "DROP-COVERED": 346,
+      "ENUM-GAP": 106,
+      "ORACLE-GAP": 8,
+      "PHANTOM": 258
+     },
+     "commit": "4f6bde8b60034f11aeb32f798b28aa1d84ed4cb9",
+     "date": "2026-11-13T17:53:20Z",
+     "decisions": 48653,
+     "deck": "decks/Gods/Gods.cod",
+     "deck_sha": "41dacd51f7cde5d6a34f8b264d5753295eab84d8",
+     "game_index": 25000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 219,
+     "life_breakpoints": [],
+     "ms_off": 11023527,
+     "ms_on": 16187477,
+     "report": "logs/mana_clean/20261113-173816/report.md",
+     "run": "20261113-173816",
+     "seed": 30025000,
+     "src": "b36c621464046ce6c3dc47316502a4fb46ffa2a7",
+     "verdict": "issues"
     }
    ]
   },

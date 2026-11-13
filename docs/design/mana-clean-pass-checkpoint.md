@@ -1355,3 +1355,13 @@ fungus 1,880, gods 4,300 (first run).
   multi-colour, multi-unit tap), so suspect the literal booking or the fund[] drain for that tap. Not a legality
   issue (tag arm viol=0); a mana-efficiency loss in the greedy runner. Repro: build/scratch/wildA4/a83.json
   (`MTG_PREPAY_WILD_LITERAL=0` vs default, `MTG_TAPDBG=1`).
+  **Gods gate (PGO, src b36c62146404 == 26c9f5f74, games 25000-29999, run 20261113-173816): 219 issues** (was 369 on
+  20000-24999, src 3665c5524c7e), identity byte-identical. By issue class (prev -> now): ENUM-GAP 59 -> 106, APPLY-DROP
+  6 -> 18, CAPPED 15 -> 87, CAPPED-DECISION 258 -> 0, ORACLE-GAP 25 -> 8, UNMODELED 6 -> 0. Disclosed: DOMINATED-LIFE
+  777 -> 738, DOMINATED-LAND 1307 -> 1286, PHANTOM 243 -> 258, CONTINUATION-DIFFERS 343 -> 203, DROP-COVERED 560 -> 346.
+  The wild-mana ORACLE-GAP class is gone: the 8 left (6 signatures) are still prepaid {Careful Study / Faithless Looting
+  + Magus of the Bazaar} bills but none floats a single-colour unit as `wild`; they are Cephalid Coliseum / Tendo /
+  City of Brass shapes (engine-vs-oracle life 18 vs 17 or 20 vs 19, float {G} vs {W}, a `{*x1}` float the oracle cannot
+  represent): s30029388 T5 x3, s30027045 T5 x3, s30029896 T5, and one T6 (same Looting + Magus + Coliseum shape).
+  Not classified yet. CAPPED-DECISION / CAPPED / ENUM-GAP swings are block variance of the heavy decisions, as on the
+  earlier gates. Report logs/mana_clean/20261113-173816/report.md.
