@@ -39,8 +39,14 @@ run stands and what to do next.
   * I4c DONE `07e71e938`: Raggadragga target PER TRIGGER INSTANCE (risk 3 RESOLVED): packed per-instance rank +
     `GameState::cast_untap_pump_ordinal`; also fans breakpoint continuations. 2977/2977; Extra Turns / Unpredictable
     Cyclone / Stompy Surprise / Angels byte-identical vs I4; Boars 40/40 avg 5.325 (identical to I4).
-  * I5 TODO: Ilharg (+ exalted declared-count fix, put creatures not firing attack triggers,
-    legend-rule keep choice in the viewer).
+  * I5a DONE `5be6f80bf`: Ilharg attack put from hand (searched pin, every name explicit incl. the default's) +
+    end-step return, projection, Horn fold term, D6 clause. 2987/2987; Knights / Goblins / Anti-Lifegain
+    byte-identical vs I4c; Boars 40/40 avg 5.225 at d3 b10 (was 5.325). USER Q: AttackPutDefault playout formula.
+  * I5b TODO: (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
+    declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
+    ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
+    / ApplyGoblinGuideAttackTriggers / AttackUntapSnowFires / ApplyAttackLifegainTeamPump must iterate the declared
+    prefix for SOURCES; (4) legend-rule keep choice in the viewer (EnforceLegendRule asks a human only for Chandra).
   * Every integrator: add its Boars-only params to the BoarsProvider signature; whitelist its card
     for the Herald's Horn take-fold (Ilharg's end-step return needs a bounded term instead); unit
     tests; build; audits; commit locally; HARD 250K context limit (I1 ran to 466K).

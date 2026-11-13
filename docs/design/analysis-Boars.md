@@ -475,3 +475,54 @@ then the untapped Altisaur again (17 at most).
 * Variant count is w^m for a plan with m qualifying casts (no cap, per the completeness rule); in Boars m >= 2 needs
   >= 14 mana in one turn, so the cost is rare. Not measured beyond the 40-game run.
 
+
+## I5a done (2026-11-13) -- Ilharg, the Raze-Boar (attack put + end-step return)
+
+Commit `5be6f80bf` on `boars-analysis` (local only, not pushed). Unit tests **2987/2987** (10 cases in
+`test/unit/test_boars_ilharg.cpp`). Byte-identity vs the I4c binary (`build/scratch/boars/mtg.i4c`, `--games 20 --seed
+9101 --depth 3 --budget-ms 10 --ignore-play-profile`, sorted `[win]` lines, `build/scratch/boars/i5a_ident.sh`):
+**Knights** (Adeline / Hero tokens), **Goblins** (Lackey `lackey_put`), **Anti-Lifegain** all IDENTICAL, 20/20 each.
+Boars 40 games d3 b10: rc 0, 40/40, **avg 5.225** (1 x T4, 30 x T5, 8 x T6, 1 x T7), no fd-diverge; wall 13.1 s vs
+20.6 s for the I4c binary on the same command (I4c's binary reads 5.275 today: it sees Ilharg as a vanilla 6/6).
+Audits: audit_card_costs rc 0 (616/616); audit_card_fields rc 0 after adding the Ilharg snapshot from
+`build/scratch/boars/scry/IlhargtheRazeBoar.json` (advisory oracle divergence only); audit_viewer_decisions `--no-sweep`
+rc 0, oracle cross-check clean.
+
+**Landed**
+* cards.json Ilharg (verbatim oracle + bracket notes; dies clause PENDING I5b, exile half D3, trample D2), params
+  `attack_put_creature_from_hand` / `attack_put_return_at_end_step` (loader throws on return without put), Horn audit.
+* `FireAttackPutFromHand` (SpellEffects.h), ONE body called by both combats right after FireMilitiaPrideTokens: sources
+  from the DECLARED prefix only; CR 508.1f declaration tap first; put body tapped through FireEtbWatchers /
+  FireOwnEtbTriggers + legend rule, NOT cast; atk_idx rebuilt by number. `Permanent::return_at_end_step` +
+  `PerformEndStepDelayedReturns` (both end steps; an emerged-away body is not returned, CR 603.7c), folded at every
+  destroy_at_end_if_attacked site.
+* Searched pin `Plan::attack_put_choice` -> `GameState::scripted_attack_put` (-1 unpinned, -2 decline, >0 card number),
+  mirrored at every militia_pride_pay_choice site; sizeof(Plan) 656 -> 664.
+* Projection addend `ApplyAttackPutProjection` (put body + End-Raze ETB pump priced), Herald's Horn take-fold `+1` per
+  returning card (conservative), D6 main-2 clause (return body on bf + emerge card in hand), viewer `lackey_put` with
+  `"trigger":"attack"`, BoarsProvider signature.
+
+**Completeness fix (this integrator).** The WIP axis skipped the variant equal to the provider's `AttackPutDefault`,
+relying on the unpinned base plan to make that put. That was lossy: the base resolves the default at COMBAT time, and
+the default's formula reads the battlefield (own creature count for End-Raze's pump; a legend already in play), which
+this plan's own casts change -- so the plan-time front could differ from the realised one and the skipped put was
+unreachable. The axis now emits DECLINE plus an explicit pin for EVERY candidate name, the default's included. The only
+fold left is the inherited state pin's NAME (the base carries that pin to combat unchanged: provably the same put).
+Test: "the put axis emits an EXPLICIT variant for every name, the default's included".
+
+**Where AttackPutDefault is consulted** (none of it is an in-window pick): beyond the horizon (the playout -- the
+permitted greedy), by the unpinned base plan at combat (one EXTRA line beside the explicit pins, never a stand-in for
+one), on a pin miss (`g_attack_put_pin_miss`, the pinned card left hand), and as the human chooser's pre-selection.
+**USER QUESTION (agent default):** the playout policy is agent-chosen -- the highest power counting End-Raze's ETB pump
+(`power + etb_other_creatures_pump_power * own creatures`), a legend we already control last, then higher mana value,
+then lower card number. It orders the playout only; inside the window every option is branched.
+
+**Deviations / residuals**
+* A creature card that enters the hand AFTER plan time (a mid-main draw) is reachable only through the unpinned base
+  (the default), because breakpoint continuations do not re-fan combat pins (cont_axes_only). No card in Boars adds a
+  card to hand mid-main (Herald's Horn takes in upkeep, before the plan); a deck that does would need a rank pin.
+* The unpinned base usually duplicates its default's explicit variant (a small redundancy, kept because it is the only
+  route to a mid-main draw; candidate for a post-combat fold).
+* Exalted is still dropped when more than one creature attacks (lockstep with the current engine) -- I5b.
+* No dedicated real-resolution node: the put is a combat pin like Militia's Pride, chosen before combat.
+* Pre-existing attack-trigger helpers do not yet fire for put creatures (they are undeclared attackers) -- I5b.
