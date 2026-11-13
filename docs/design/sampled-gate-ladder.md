@@ -270,3 +270,61 @@ Follow-up, VERBATIM: "There shouldn't be cases where it is so uncertain it just 
 cut out a significant chunk of it." So the sample count has a hard ceiling at a general fraction of the pass's
 estimated rollout cost, and at the ceiling the gate decides anyway (recommended: lean admit, bounded by the overrun
 ceiling, since wrong refusals are what cost quality).
+
+## Iteration 10 (P18e): uncertainty-scaled CLUSTER sampling, no hand-off (`_pus`, `_pbk`, `_prr2`)
+
+Built under the USER's 2026-11-13 rulings (more rollouts when less certain, never the whole ladder, decide at a
+ceiling). Commit aa3209ae0 (+ the cluster rewrite after it); screening knobs in the arm key, default off. `_prx2` /
+`_pfr` are NOT used.
+- **Rollout cost profiles.** The outermost rollout records the units spent at the head of each simulated turn
+  (`p18::t_prof`), so a sampled rollout can be re-costed at any tighter cut without running it again.
+- **Visit-order pricing (the incumbent effect).** Every rolled leaf keeps its visit position. The price is taken in
+  visit order: each leaf is costed at the cut the real pass would hand it (the best win among the rolled leaves
+  BEFORE it), read off its profile. A leaf is rolled at the cut it gets from the leaves rolled so far; later samples
+  can only tighten that, so its profile always covers the cut it is priced at.
+- **Cluster sampling in visit order.** Leaves after the first are cut into consecutive blocks; block 0 (the PV's
+  neighbourhood) is always rolled, later blocks are reservoir-sampled WHOLE and rolled in order. Siblings share
+  rollout paths through the rollout table and an early incumbent cuts its neighbours, so a block prices each leaf
+  with the leaves that precede it -- which individually sampled leaves cannot (they are each priced cold). Block
+  size ~ 1/64 of the pass's expected leaves (leaf-count growth of the passes below), capped at `_pbk<N>` (8), >= 1.
+- **Honest interval, uncertainty-scaled count.** The block totals give the SE (with the CV floor 0.5 as the heavy-tail
+  prior, finite-population corrected). Blocks are drawn until `P + 2 se <= thr` (admit) or `P - 2 se > thr`
+  (refuse), so a verdict far from the threshold costs 2 blocks and a close one more.
+- **Hard ceiling.** Never more than `_pus<pct>` (25%) of the pass's leaves (at least 3 blocks), and never more than
+  the 256-leaf reservoir (a memory bound). At the ceiling the gate decides anyway: `_pul` admits, otherwise the point
+  price decides.
+- **`_prr2`.** The real-remaining cap `l <= a R/(1+a)` is armed only at the pass's first leaf; before it the cap is
+  the admit line `a R`. NOT done: committing a no-leaf leafless pass directly. A leafless pass whose subtrees are
+  answered from the game-line cache (or the leafed entries it reads) offers no leaves for them, so `n == 0` does not
+  prove the rollout pass would roll nothing out; committing it would not be exact.
+- A first version (T1) priced individually sampled leaves and stated the refusal side with an "unseen improver"
+  bound (an improving leaf at the expected first position of an unobserved event cutting every later leaf one
+  turn). That bound was not credible: on short horizons one turn is most of a rollout, so it collapsed to the bare
+  tree, 35-40% of Snow's priced passes hit the ceiling, and lean-admit there cost Snow 1.39-1.54x CPU. Dropped.
+
+### T1 / T2 (traced subsets, 100 games/deck, Hydras 200; train seeds = the first games of S12)
+| arm | Hyd cpu | Alc | EDF | Snow | MB | Landfall | Melira | ceiling hits / priced pass |
+|---|---|---|---|---|---|---|---|---|
+| T1 `pus25` (single leaves, point) | 0.986 | 0.724 | 0.782 | 1.080 | 0.991 | 0.899 +0.01 (1/2) | 0.662 +0.02 (0/2) | Snow 0.35, Alc 0.20, MB 0.11 |
+| T1 `pus25_pul` | 1.094 | 0.798 | 0.802 | 1.535 | 1.004 | 0.933 +0.01 | 0.673 +0.02 | same |
+| T2 `pus25_pbk8` (clusters, point) | 0.932 | 0.680 +0.01 (0/1) | 0.878 | 1.041 | 0.926 | 0.907 +0.01 (1/2) | 0.666 +0.02 (0/2) | Snow 0.057, Alc 0.057, EDF 0.041, MB 0.021, Hyd 0.022, Landfall 0.005, Melira 0 |
+| T2 `pus25_pbk16` | 0.938 | 0.686 | 0.877 | 1.028 | 0.937 | 0.918 | 0.661 | about the same |
+| T2 `pus25_pbk8_pul` | 0.924 | 0.678 | 0.885 | 1.035 | 0.933 | 0.904 | 0.662 | about the same |
+(traced, so CPU is indicative only.) Cluster sampling cut the ceiling-hit rate about 6x, and with it most of the
+lean-admit cost. Every remaining loss is a T1 SHALLOWER decision, and the two inspected are not sampling errors:
+Melira 728014 T1 (heur's pass 3 cost 26.8k on an 18k budget, admitted on c2^2/c1 = 12.3k; the gate's leafless
+pass 3 hit the `_prr` cap at 9.3k, since its interior alone is ~18k and the commit re-walks it) and Landfall
+727004-class decisions (over-priced lower passes shrink the deeper pass's `rem0 - priced` threshold).
+
+### S12 (train seeds; 18,400 games, one pooled batch, 32 workers, weight-ordered, untraced; `build/scratch/p18e/S12`, binary `mtg_e2` = aa3209ae0)
+Hydras 1000 @710000, Alchemist/EDF/Snow/MB 400 @720000-723000, Landfall 1000 @727000, Melira 1000 @728000.
+thread-CPU vs heur, units, dturn (better/worse):
+| arm | Hydras | Alchemist | EDF | Snow | MB | Landfall | Melira |
+|---|---|---|---|---|---|---|---|
+| `g_pb1_plc_prr2_pus25_pbk8` | 0.983 u0.957 -0.0010 (3/2) | 0.813 u0.851 0 (1/1) | 0.929 u1.020 0 | 1.002 u0.982 +0.0025 (0/1) | 0.920 u1.028 -0.0050 (2/0) | 0.728 u0.819 **+0.0140 (13/27)** | 0.746 u0.813 **+0.0060 (10/16)** |
+| `..._pbk8_pul` | 0.981 -0.0010 (3/2) | 0.811 0 (1/1) | 0.928 0 | 1.004 +0.0025 (0/1) | 0.951 -0.0050 (2/0) | 0.726 **+0.0140 (12/26)** | 0.748 **+0.0060 (10/16)** |
+| `g_pb1_plc_pus25_pbk8_pact` | 0.995 u0.969 -0.0010 (3/2) | 0.793 0 (1/1) | 0.915 +0.0025 (0/1) | 1.018 u0.998 0 | 0.992 u1.121 -0.0025 (1/0) | 0.857 u0.954 **+0.0050 (18/23)** | 0.811 u0.885 **+0.0040 (10/14)** |
+No arm passes: Landfall and Melira (the two held-out failures of H1) stay net worse, every loss T1-shallower class.
+Lean-admit at the ceiling changes almost nothing now (the ceiling is rarely reached). `_pact` (the deeper pass's
+threshold on the decision's REAL remaining budget instead of `rem0 - sum of priced lower passes`, and no `_prr`
+cap) cuts Landfall's loss by two thirds at a CPU cost (Landfall 0.73 -> 0.86x, MB 0.92 -> 0.99x, Snow 1.00 -> 1.02x).

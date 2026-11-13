@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
+                         rr2 = false, ul = false, nr = false; int bk = 8; double lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102311,6 +102311,10 @@ namespace p18
         // improver-assumed price refuses (lean admit), otherwise the point price decides.
         { const std::size_t p = k.find("_pus"); if (p != std::string::npos) { o.us = std::atof(k.c_str() + p + 4) / 100.0; } }
         o.ul = k.find("_pul") != std::string::npos;
+        // _pnr (P18e): the admit line and the leafless cap read the heuristic ladder's remaining (rem0 less the priced
+        // passes below) with no clamp to the decision's REAL remaining. The gate's leafless walks are real spend the
+        // heuristic ladder never makes; clamping on them refuses interior-heavy passes the ladder admits (Landfall T1).
+        o.nr = k.find("_pnr") != std::string::npos;
         { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
@@ -111167,7 +111171,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
             const double la = kn.lean * kStartGateAlpha;
             const double rnow = capk ? static_cast<double>(budget->Remaining()) : 0.0;
-            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, (kn.rr && !kn.rr2) ? rnow / (1.0 + la) : rnow))) : 0;
+            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, (kn.nr ? rem0 - priced : std::min(rem0 - priced, (kn.rr && !kn.rr2) ? rnow / (1.0 + la) : rnow)))) : 0;
             // _prr2: the tight real-remaining cap, armed at the pass's first leaf (Sampler::Offer).
             const long long tight_abs = (capk && kn.rr2) ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, rnow / (1.0 + la)))) : 0;
             if (tight_abs > 0) { smp.tb = pb; smp.tlim = tight_abs; }
@@ -111226,7 +111230,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // (2) PRICE rollout pass k from sampled rollouts, one at a time, until the gate's question is decided.
             // The heuristic ladder's admit line: alpha x its remaining budget (less the priced passes below) -- and never
             // more than what this decision really has left, since the committing pass is paid in real units.
-            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
+            // _pnr: no real-remaining clamp -- the heuristic ladder's own admit line (its budget less its estimated spend),
+            // the committing pass's real overspend bounded by its overrun ceiling as the heuristic ladder's is.
+            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, kn.nr ? rem0 - priced : std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
             const long long su0 = pb->Used();
             double x_pv = 0.0, sx = 0.0, sxx = 0.0; int m = 0; int best = 0;
             double est = static_cast<double>(lu), se = 0.0; int fit = -1; std::string ck;
