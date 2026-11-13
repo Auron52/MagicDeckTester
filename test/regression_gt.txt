@@ -1,6 +1,7 @@
-# Regression ground truth -- commit dd00cbb6d  date 2026-11-12
+# Regression ground truth -- commit db21cd6ab  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-10): Full 2026-11-10 rebaseline: 120/588 keys changed; searched overlap 64 faster, 6 slower, net 60 scored turns faster, no searched win became unwon. Five slowdowns recover at 4x budget; Modern RW Burn 2HG s7007 gi58 recovers at unlimited budget. 583 same-score searched line changes reviewed by mechanical grouping and samples. Full oracle: 588/588 matching fingerprints, 0 nonconv, 54 off-by-one fd-diverge, 3 severe flags from 2 distinct preexisting Treasure Hunt seeds (5216, 8468); legacy per-turn search wins T6, current committed-line result is unwon/T7, and disabling batch payment does not fix it. Prior Angels, Angels2HG, and Bruna small searched slowdowns remain follow-ups.
+# accepted-with-regressions (smoke, 2026-11-13): Spirits integration: gods flashback state-key fix (B 8097213a2; gods d3 gi19 recovers T6 at d5 and d8 b0) and martyr Lurrus graveyard cast at rank (E2 507049f75, unchanged scores)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -13,10 +14,10 @@ extraturns_smoke_d0_s1001=5.7010/9e9ef02893ea694c
 extraturns_smoke_d3_s1001=4.7200/76322f02352e42d8
 extraturns_smoke_d5_s1001=4.7300/4d9437f84cea6f3d
 extraturns2hg_smoke_d5_s1001=4.6000/cc399f1a95984da0
-gods_smoke_d0_s1001=8.7860/e5c758deb4dcf261
-gods_smoke_d3_s1001=5.4000/d76344c4961ba53e
-gods_smoke_d5_s1001=5.2200/b66c23c5ed87a275
-gods2hg_smoke_d5_s1001=5.4000/7995557e1f24928f
+gods_smoke_d0_s1001=8.7830/558cea0d96d28a94
+gods_smoke_d3_s1001=5.4000/ef690b70f2191dc1
+gods_smoke_d5_s1001=5.2000/c3c6b8710a0db927
+gods2hg_smoke_d5_s1001=5.3200/e6f8b68c6dfac4bf
 merfolk_smoke_d0_s1001=4.4960/8ecc0b71dee90a10
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -196,9 +197,9 @@ alchemist2hg_smoke_d5_s1001=5.1400/c93023e46ecbe419
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.0680/e28de619033d4cd1
+martyr_smoke_d0_s1001=6.0680/a89c64fb80146498
 martyr_smoke_d3_s1001=5.1800/f52e2a549a880fcd
-martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
+martyr_smoke_d5_s1001=5.2500/d4ca095ade01985a
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
