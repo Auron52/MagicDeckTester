@@ -95399,8 +95399,21 @@ namespace plancache
     // Keep the original RAM-sized GLOBAL pool. Exact keys, isolated derivation
     // channels and hit-equals-miss pricing make plan-cache admission a wall-only
     // decision; a fixed per-thread quota is not required for that contract.
+    inline thread_local bool t_diag_refused = false;   // MTG_PLAN_REFUSE_MOD: the last forced refusal, consumed by the bp store
     inline bool Fits(long long add)
     {
+        // DIAGNOSTIC (MTG_PLAN_REFUSE_MOD=m, MTG_PLAN_REFUSE_SEED=s): refuse a deterministic pseudo-random 1/m of the
+        // admission checks on this thread, to emulate the pooled run's residency-dependent refusals in one game.
+        static const int s_ref_mod = EnvInt("MTG_PLAN_REFUSE_MOD", 0);
+        if (s_ref_mod > 0)
+        {
+            static const int s_ref_seed = EnvInt("MTG_PLAN_REFUSE_SEED", 0);
+            static thread_local std::uint64_t s_ref_n = 0;
+            std::uint64_t z = (++s_ref_n) * 0x9E3779B97F4A7C15ULL + static_cast<std::uint64_t>(s_ref_seed) * 0xBF58476D1CE4E5B9ULL;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL; z ^= z >> 31;
+            if (z % static_cast<std::uint64_t>(s_ref_mod) == 0)
+            { Refused().fetch_add(1, std::memory_order_relaxed); t_diag_refused = true; return false; }
+        }
         const long long b = BudgetBytes();
         if (b <= 0) { return true; }                 // 0/unset = unbounded = byte-identical, unchanged
         if (PoolUsed().load(std::memory_order_relaxed) + add <= b) { return true; }
@@ -120615,9 +120628,11 @@ static BpEnumEntry* BpEnumEntryFor(const GameState& state, bool is_pre_combat,
         // continuation list costs far more to re-derive than an enumeration, so the memo gives way.
         // The memo's entries are byte-identical recomputations: evicting them changes work, never a
         // list. Only this thread's own memo is evicted; the pool is global.
+        const bool diag_ref = std::exchange(plancache::t_diag_refused, false);
         if (plancache::t_enum_bytes > 0 && enummemo::t_body_depth == 0
-            && plancache::BudgetBytes() > 0 && psz <= plancache::BudgetBytes()
-            && plancache::PoolUsed().load(std::memory_order_relaxed) + psz > plancache::BudgetBytes())
+            && ((plancache::BudgetBytes() > 0 && psz <= plancache::BudgetBytes()
+                 && plancache::PoolUsed().load(std::memory_order_relaxed) + psz > plancache::BudgetBytes())
+                || diag_ref))
         {
             enummemo::t_cache.clear();
             plancache::Release(plancache::t_enum_bytes);

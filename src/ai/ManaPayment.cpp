@@ -513,9 +513,9 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
     // TEMP DIAGNOSTIC (MTG_TAPDBG, default off): every real tap with source, colour and energy.
     { static const bool s_tapdbg = EnvOn("MTG_TAPDBG");
       if (s_tapdbg && TapDbgReal())
-      { std::fprintf(stderr, "[tapdbg] tap %s col=%d energy=%d\n",
-                     def.card.m_name.str().c_str(), (int)col,
-                     state.players[active].energy_counters); } }
+      { std::fprintf(stderr, "[tapdbg] tap %s#%d col=%d energy=%d chg=%d\n",
+                     def.card.m_name.str().c_str(), p.card.m_number, (int)col,
+                     state.players[active].energy_counters, p.charge_counters); } }
     p.tapped = true;
     // Rollback audit (count-only, real play): this tap and the alternatives it had.
     if (payledger::On() && g_real_resolution)

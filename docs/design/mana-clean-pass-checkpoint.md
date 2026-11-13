@@ -1107,6 +1107,45 @@ fungus 1,880, gods 4,300 (first run).
     --profile decks/Fungus/Fungus.profile.json --games 1 --seed 30075725 --game-index 75725` (DOMINATED-CREATURE on
     the `{Forest|Ancient Tomb + Utopia Mycon + Doubling Season + act x1}` candidates). We have not yet counted what
     share of the gate's 119 DOMINATED-CREATURE flags have this shape.
+* **Round 18 (eighteenth agent, 2026-11-13): gods ORACLE-GAP 63 + queue item 9 (ET pooled flake). Both PARKED,
+  diagnosis advanced; diagnostics committed (play-neutral, smoke 0 changed).**
+  * **gods ORACLE-GAP: the differing field is Tendo Ice Bridge #54's `charge_counters`. Not a key defect.** DiffText now
+    names an unlisted field by GRAFTING each engine field onto the oracle state and reporting which graft makes the cores
+    agree (`engine graft that equalizes: battlefield,#54`); `MTG_ORACLE_GAP_FIELD_DUMP=1` prints every permanent's
+    scalars and `MTG_ORACLE_GAP_ALL=1` lists every oracle outcome. Repro (s30014741 T4, the plan
+    `{no land + cast:Faithless Looting + cast:Magus of the Bazaar}`, root Vivid Creek #57 c1 / Tendo #53 c0 / Reflecting
+    Pool #41, hand 13 45 27 25 30 49 19, float 0): the engine's realisation ends with #57, #53, #41 and the newly played
+    #54 all TAPPED, float empty, **#54 still holding its charge counter** (and #57 its one counter), Magus #30 still in
+    hand, Looting #14 in hand. All 16 oracle outcomes of that line pay `pay2` (3 mana, one of them {R}, i.e. the
+    flashback-shaped {2}{R}) with a second coloured mana that costs a counter (#54:R, or #57:R). The engine's taps are
+    R (Pool) + U (Creek, base face) + C (#53, counterless) + C (#54, base face, `MTG_TAPDBG` `tap Tendo Ice Bridge#54
+    col=5 chg=1`), i.e. ONE red, where the oracle needs two. Charge counters are real game state, so the oracle key is
+    right to separate them; the open question is engine-side: what that line's second {R} cost was paid with. This
+    happens in 3 of the 8 EngineApply calls of the plan at that root (`[tapdbg] ORACLE-ENGINE-APPLY ... END board:`
+    now prints each own permanent's tapped/charge state and the root's hand/float at START): the first apply casts
+    Magus and spends #54's counter legally (that is the real game's line); the 3 gap applies leave Magus in hand.
+    Creek/#53/Pool are tapped by the backtracker DFS (SpellEffects TapForCostBacktrack, no counter-spend line hit) in
+    those applies, #54 by TapSourceIntoFloat for {C}. **Next step:** trace which actions the 3 gap applies actually
+    resolve (e.cast drops? a flashback/retrace with a cost reduction? a mana-cache or prepay replay), e.g. break on
+    `TapForCostDirect` (TurnSolver.cpp ~60456) inside `g_tapdbg_oracle_apply > 0` and print the cost each call pays.
+    Repro: `MTG_TAPDBG=1 MTG_MANA_ORACLE=3 MTG_MANA_ORACLE_TURN=4 build/Release/mtg decks/Gods/Gods.cod --profile
+    decks/Gods/Gods.profile.json --games 1 --seed 30014741 --game-index 14741` (lines ~200-215 of stderr). No gods
+    re-gate: nothing was fixed, so a fresh block would re-measure the same defect (gods is not due on this src).
+  * **Item 9, Extra Turns pooled-batch flake: NOT reproduced; PARKED.** extraturns_regression_d5_s2002 gi66 (seed 2068,
+    gi 66, d5 b20; GT `66 5 9eb685abbd3ea948`) gives the GT digest in every single-game configuration tried:
+    (1) solo `--threads 1`; (2) after its SAME-SEED twin on the same worker (`--threads 1`, weights forcing order:
+    extraturns d0 s2002 gi66, d3 s2002 gi66, 2HG d5 s2002 gi66 each run first) -- the same-seed learned-state class
+    (HybridLearnedStateClear) does not recur; (3) the new diagnostic `MTG_PLAN_REFUSE_MOD=m MTG_PLAN_REFUSE_SEED=s`
+    (plancache::Fits refuses a deterministic pseudo-random 1/m of admissions on the thread, the bp cache clears and the
+    enum-memo eviction fires, emulating a pooled run's residency-dependent refusals) for m = 2, 5, 20, 100 x 3-4 seeds
+    (3 to ~1,000 refusals per game): every one GT. So neither thread history with its twin nor plan-pool refusals
+    move this game. Ruled out by reading: wall-clock deadlines (none armed in GT tiers), the calibration late-limit
+    (abandon only, VOID), the mana cache (boards with charge-counter lands bail out of it), tier-2 (refused=0 in the
+    tier runs), CardDatabase (immutable during play), the ET provider (only env statics). Remaining suspects: the
+    history of OTHER decks' games on the worker plus a cross-deck thread_local that is not reset per game, and the TT /
+    FSL tier-1 refusals (per-thread, so history-only). Next: when it recurs, rerun the exact pooled manifest with
+    `MTG_PLAN_POOL_STATS=1` and record which worker played gi66 and what it played before (the batch's per-slot order),
+    then replay that worker's sequence at `--threads 1`.
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating

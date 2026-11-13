@@ -3046,7 +3046,70 @@ std::string DiffText(const GameState& e, const GameState& o)
     { add(std::string("early-crack pin engine ") + (e.scripted_early_ondemand_crack ? "set" : "spent") + " oracle "
           + (o.scripted_early_ondemand_crack ? "set" : "spent")); }
     if (CoreKey(e) == CoreKey(o)) { add("same core"); }
-    else if (s.empty()) { add("core keys differ in a field not listed here"); }
+    else if (s.empty())
+    {
+        // Name the field by SUBSTITUTION: graft one engine field onto a copy of the oracle state and see which graft
+        // makes the cores agree (each test is one key build; this text is built only for a reported gap).
+        const std::uint64_t ek = CoreKey(e);
+        std::string hit;
+        auto test = [&](const char* nm, auto&& graft)
+        {
+            GameState t = o;
+            graft(t);
+            if (CoreKey(t) == ek) { hit += (hit.empty() ? "" : ",") + std::string(nm); }
+        };
+        test("player", [&](GameState& t) { t.players[a] = e.players[a]; });
+        test("hand", [&](GameState& t) { t.players[a].hand = e.players[a].hand; });
+        test("graveyard", [&](GameState& t) { t.players[a].graveyard = e.players[a].graveyard; });
+        test("library", [&](GameState& t) { t.players[a].library = e.players[a].library; });
+        test("opponent", [&](GameState& t) { t.players[1 - a] = e.players[1 - a]; });
+        test("battlefield", [&](GameState& t) { t.battlefield = e.battlefield; });
+        test("exile", [&](GameState& t) { t.exile = e.exile; });
+        test("player-zones-kept", [&](GameState& t)
+        {
+            Player p = e.players[a];
+            p.hand = t.players[a].hand; p.graveyard = t.players[a].graveyard; p.library = t.players[a].library;
+            t.players[a] = p;
+        });
+        test("state-scalars", [&](GameState& t)
+        {
+            GameState x = e;
+            x.players = t.players; x.battlefield = t.battlefield; x.exile = t.exile;
+            t = x;
+        });
+        for (const Permanent& p : e.battlefield)
+        {
+            test(("#" + std::to_string(p.card.m_number)).c_str(), [&](GameState& t)
+            { for (Permanent& q : t.battlefield) { if (q.card.m_number == p.card.m_number) { q = p; } } });
+        }
+        if (EnvOn("MTG_ORACLE_GAP_FIELD_DUMP"))   // DIAGNOSTIC: the scalar fields of every differing permanent
+        {
+            auto dump = [](const Permanent& p)
+            {
+                char b[512];
+                std::snprintf(b, sizeof b, "ctl%d own%d tap%d tok%d new%d anim%d hold%d skip%d etbtap%d echo%d"
+                              " dmg%d pt%d/%d eq%d au%d pair%d chg%d stor%d ice%d age%d fade%d cby%d lx%d ctr{%s}"
+                              " cardnum%d",
+                              p.controller_index, p.owner_index, p.tapped, p.is_token, p.entered_this_turn,
+                              p.is_animated, p.storage_hold_this_turn, p.skip_next_untap, p.etb_tap_pending,
+                              p.echo_resolved, p.damage, p.temp_power_bonus, p.temp_tough_bonus, p.equipped_to,
+                              p.aura_attached_to, p.paired_with, p.charge_counters, p.storage_counters,
+                              p.ice_counters, p.age_counters, p.fade_counters, p.created_by_number,
+                              p.linked_exile_number, p.counters.KeyFragment().c_str(), p.card.m_number);
+                return std::string(b);
+            };
+            for (std::size_t i = 0; i < e.battlefield.size() && i < o.battlefield.size(); ++i)
+            {
+                const std::string de = dump(e.battlefield[i]), dd = dump(o.battlefield[i]);
+                add("[" + std::to_string(i) + "] " + e.battlefield[i].card.m_name.str() + " E{" + de + "}"
+                    + (de == dd && e.battlefield[i].card.m_name == o.battlefield[i].card.m_name
+                           ? std::string(" O=same")
+                           : " O " + o.battlefield[i].card.m_name.str() + "{" + dd + "}"));
+            }
+        }
+        add("core keys differ in a field not listed here (engine graft that equalizes: "
+            + (hit.empty() ? std::string("none") : hit) + ")");
+    }
     add("float engine " + PoolText(e.floating_mana, e.floating_haste_c) + " oracle " + PoolText(o.floating_mana, o.floating_haste_c));
     return s;
 }
@@ -3346,9 +3409,36 @@ EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& 
     RouteTape* const saved_tape = t_route_tape;
     t_route_tape = tape.get();
     static const bool s_tdbg = EnvOn("MTG_TAPDBG");
-    if (s_tdbg) { std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY T%d plan={%s}\n", root.turn_number, PlanText(plan).c_str()); ++g_tapdbg_oracle_apply; }
+    if (s_tdbg)
+    {
+        std::string b;
+        for (const Permanent& p : root.battlefield)
+        {
+            if (p.controller_index != root.active_player_index) { continue; }
+            b += " #" + std::to_string(p.card.m_number) + (p.tapped ? "T" : "") + "c" + std::to_string(p.charge_counters);
+        }
+        std::string h;
+        for (const Card& c : root.ActivePlayer().hand) { h += " " + std::to_string(c.m_number); }
+        std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY T%d plan={%s} root:%s hand:%s float=%d/%d/%d/%d/%d/%d pre=%d spells=%d\n",
+                     root.turn_number, PlanText(plan).c_str(), b.c_str(), h.c_str(), root.floating_mana.white,
+                     root.floating_mana.blue, root.floating_mana.black, root.floating_mana.red, root.floating_mana.green,
+                     root.floating_mana.colorless, pre ? 1 : 0, root.spells_cast_this_turn);
+        ++g_tapdbg_oracle_apply;
+    }
     TurnSolver::ApplyPlan(e.st, plan, pre);
-    if (s_tdbg) { --g_tapdbg_oracle_apply; std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY END\n"); }
+    if (s_tdbg)
+    {
+        --g_tapdbg_oracle_apply;
+        std::string b;
+        for (const Permanent& p : e.st.battlefield)
+        {
+            if (p.controller_index != e.st.active_player_index) { continue; }
+            b += " #" + std::to_string(p.card.m_number) + (p.tapped ? "T" : "") + "c" + std::to_string(p.charge_counters);
+        }
+        std::fprintf(stderr, "[tapdbg] ORACLE-ENGINE-APPLY END board:%s float=%d/%d/%d/%d/%d/%d\n", b.c_str(),
+                     e.st.floating_mana.white, e.st.floating_mana.blue, e.st.floating_mana.black,
+                     e.st.floating_mana.red, e.st.floating_mana.green, e.st.floating_mana.colorless);
+    }
     t_route_tape = saved_tape;
     g_play_dropped_cast_sink = saved_cast;
     g_act_drop_sink          = saved_act;
@@ -4219,6 +4309,15 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             if (!o.Full() || o.line != e_line) { continue; }
             why += " -- nearest " + ScriptText(o.script) + ": " + DiffText(e, o.st);
             break;
+        }
+        if (EnvOn("MTG_ORACLE_GAP_ALL"))   // DIAGNOSTIC: every outcome, not just the first same-line one
+        {
+            int k = 0;
+            for (const Outcome& o : r.outcomes)
+            {
+                why += " ## o" + std::to_string(k++) + (o.Full() ? "" : "(partial)")
+                     + (o.line == e_line ? "" : "(other line)") + " " + ScriptText(o.script) + ": " + DiffText(e, o.st);
+            }
         }
         Emit(C_ORACLE_GAP, root, pre, plan, why + "; engine ended " + BoardText(e));
         return;
