@@ -43583,7 +43583,10 @@ struct PayHandCtxScope
 };
 // The live context's hand pips (computed once per payment), or nullptr when no context applies or `pool` holds fewer
 // than two colours (nothing to order).
-inline const int* PayHandPips(const ManaPool& pool)
+// `owed` (>= 0): what this payment still owes against `pool` + the untapped sources at the call (SpendFloatingTowardCost
+// passes its live remainder -- its coloured pips are already out of `pool`, so subtracting the whole cost again
+// counted them twice: MTG_PAY_HAND_SURPLUS_FIRST); -1 -> the whole cost.
+inline const int* PayHandPips(const ManaPool& pool, int owed = -1)
 {
     PayHandCtx* c = t_pay_hand_ctx;
     if (c == nullptr || c->s == nullptr) { return nullptr; }
@@ -43606,7 +43609,7 @@ inline const int* PayHandPips(const ManaPool& pool)
             total += std::max(1, ManaProducedPerTap(*qd));
         }
         const ManaCost& k = c->cost;
-        const int castable = std::max(0, total - k.ManaValue());
+        const int castable = std::max(0, total - (owed >= 0 ? owed : k.ManaValue()));
         bool skipped_self = false;
         for (const Card& hc : s.players[c->active].hand)
         {
@@ -44045,11 +44048,29 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // PAY HAND GENERIC (MTG_PAY_HAND_GENERIC; see PayHandPips): the colour the hand needs least pays first.
     if (cost.generic > 0)
     {
-        if (const int* hp = PayHandPips(reserve))
+        static const bool s_surplus_first = EnvOn("MTG_PAY_HAND_SURPLUS_FIRST", true);
+        const bool surplus_first = heurarm::Flag(heurarm::PAY_HAND_SURPLUS_FIRST, s_surplus_first);
+        if (const int* hp = PayHandPips(reserve, surplus_first ? cost.ManaValue() : -1))
         {
             int* res[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
             int ord[5];
             PayHandColorOrder(reserve, hp, ord);
+            // SURPLUS BEFORE DEMAND (MTG_PAY_HAND_SURPLUS_FIRST, default ON; item D, mana-clean). The order alone
+            // drained the first colour to ZERO, its hand-demanded units included, before touching the next one:
+            // Shadowborn s30053678 T4, Sire of Insanity {4}{B}{R} on Lake crack {B}x5 + Lotus Bloom {R}{R}{R} --
+            // after the pips the float was {B}{B}{B}{B}{R}{R}, black led on surplus (4-1 vs 2), the four generic
+            // ate all four black and Demonic Tutor's {B} was stranded on {R}{R}. So each colour first pays only
+            // its SURPLUS over the hand's pips (in the same order), and only then the demanded remainder (same
+            // order). Same total spent; only which units float on changes. =0 -> the single drain.
+            // (The same lever makes the castable cap above count this bill once.)
+            if (surplus_first)
+            {
+                for (int x : ord)
+                {
+                    int spare = std::max(0, *res[x] - hp[x]);
+                    while (cost.generic > 0 && spare > 0) { --cost.generic; --*res[x]; --spare; }
+                }
+            }
             for (int x : ord) { drain(cost.generic, *res[x]); }
             if (hold_c) { drain(cost.generic, reserve.colorless); }
             return;

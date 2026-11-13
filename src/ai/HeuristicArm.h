@@ -924,6 +924,7 @@ enum Slot : int
     CCO_HAND_DEMAND,          // MTG_CCO_HAND_DEMAND  item C (mana-clean, USER 2026-11-13 on Pirates: "in mixed lines with a creature-only source we figure out the bolt payment earlier ... the inflexible spell needs to be considered early, not late"): in any payment it can fund (creature pips, or a generic pip as {C}), a WIDE colored_creature_only land (Unclaimed Territory) ranks as the narrow rung (9, ahead of the mono lands) while a noncreature card in HAND has a coloured pip, unless a hand creature needs one of its colours beyond the unrestricted untapped supply. Ordering only. Default ON; =0 -> the historical rank
     PAY_HAND_GENERIC,         // MTG_PAY_HAND_GENERIC  item I (2), mana-clean: when the line owes no colour, a generic pip paid from a float of two or more colours spends the colour the HAND needs least (castable hand cards' pips), WUBRG on a tie. Martyr Lifegain s30001947 T3 (Basilica {W}{B}: the sac's {1} took the {W}, the second Speaker {W} stranded). Default ON; =0 -> WUBRG
     MARTYR_SAC_FIRST,         // MTG_MARTYR_SAC_FIRST  item I (1), USER 2026-11-13 ("If Martyr is already out we should for sure."): a Martyr of Sands on the battlefield since the turn began is sacrificed before the plan's casts when the plan casts a white card and that order pays (else trailing); replaces the searched position fan for those plans. Martyr Lifegain only. Default ON; =0 -> the fan
+    PAY_HAND_SURPLUS_FIRST,   // MTG_PAY_HAND_SURPLUS_FIRST  item D, mana-clean: under PAY_HAND_GENERIC each float colour pays generic out of its SURPLUS over the hand's pips first (in hand-surplus order), then the demanded remainder. Shadowborn s30053678 T4 (Sire {4}{B}{R} ate four {B}, Demonic Tutor's {B} stranded on {R}{R}). Default ON; =0 -> the single drain
     COUNT
 };
 
@@ -1792,6 +1793,7 @@ inline const char* Name(int slot)
         "MTG_CCO_HAND_DEMAND",
         "MTG_PAY_HAND_GENERIC",
         "MTG_MARTYR_SAC_FIRST",
+        "MTG_PAY_HAND_SURPLUS_FIRST",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

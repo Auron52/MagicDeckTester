@@ -147,6 +147,34 @@ TEST_CASE("Pay hand generic: the {1} spends the float colour the hand does not n
     CHECK(off.floating_mana.black == 1);
 }
 
+TEST_CASE("Pay hand surplus first: Sire's generic spends the red, the black stays for Demonic Tutor")
+{
+    // Shadowborn s30053678 T4 (item D): Sire of Insanity {4}{B}{R} on a float of {B}x5 {R}x3, Demonic Tutor
+    // {1}{B} in hand. After the pips the float is {B}x4 {R}x2; the single drain ate all four black, so the
+    // Tutor's {B} was stranded on {R}{R}. Surplus first leaves {B}{R}.
+    auto run = [](int lever) -> GameState
+    {
+        ArmHD gen(heurarm::PAY_HAND_GENERIC, 1);
+        ArmHD arm(heurarm::PAY_HAND_SURPLUS_FIRST, lever);
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 4;
+        s.floating_mana.black = 5;
+        s.floating_mana.red   = 3;
+        HandHD(s, "Sire of Insanity", 39);
+        HandHD(s, "Demonic Tutor", 40);
+        const ManaCost sire = DefHD("Sire of Insanity").card.m_mana_cost;
+        REQUIRE(TapForCostDirect(s, sire, /*for_creature=*/true));
+        return s;
+    };
+    const GameState on = run(1);
+    CHECK(on.floating_mana.black == 1);
+    CHECK(on.floating_mana.red == 1);
+    const GameState off = run(0);
+    CHECK(off.floating_mana.black == 0);
+    CHECK(off.floating_mana.red == 2);
+}
+
 TEST_CASE("Martyr sac first: the pre-cast pass skips an order that does not pay, and only for a Martyr already out")
 {
     static const MartyrLifegainProvider prov;
