@@ -91824,9 +91824,165 @@ static void AppendMiraclePlanVariants(const GameState& state,
         plans.push_back(std::move(decline));
     }
 }
+// THE HELD-FETCH CRACK-FIRST PLANS (Spirits integrator E1, 2026-11-13; docs/design/held-fetch-crack-then-cast-hole.md).
+// A land-search activation whose land enters UNTAPPED (Flooded Strand / Arid Mesa / Wooded Foothills:
+// {T}, pay 1 life, sacrifice, find one land) that is HELD on the battlefield -- it was there before this
+// enumeration's land drop -- could not fund a cast in the same main at ANY budget: the casts below are
+// enumerated against the board BEFORE any activation (the fetch makes no mana), the crack runs in the
+// trailing pass, and the position twins (Plan::land_search_act_slot) are twins of plans whose casts were
+// already priced without the fetched land. So "crack the Strand for the Island, cast Drogskol Captain with
+// it" was not a plan (test/scenarios/spirits_held_strand_crack_then_cast.json: T5 instead of T4 at
+// --budget-ms 0 --depth 5).
+//
+// The fix enumerates the casts on the POST-CRACK board (fix shape 1 of the design doc -- the add_for_land
+// shape applied to an activation): for every held crackable source NAME (copies of one name are the same
+// move -- the identity fold LandSearchActsMasked's subsets already use) and EVERY pick k of its
+// LandSearchPicks list (the pick axis's own width -- every distinct legal target, no provider prune, no
+// cap), the crack is applied on a copy through the SAME body the apply uses (ApplyLandSearchActs under a
+// one-entry ScriptedLandSearch pin) and EnumeratePlans runs on the result. Each plan comes back with the
+// crack(s) PREPENDED, run in the pre-cast pass (land_search_act_slot 0, or the pre-cast SUBSET mask when
+// the post-crack plan cracks a further source in the trailing pass) and the pick pinned in its ordinal
+// (land_search_pins: the pre-cast pass resolves first). Recursive, so two held fetches can both precede
+// the casts. Every field it sets already exists and is already applied by BOTH worlds at the same point
+// (ApplyPlanDirect's pre-cast pass / AIEngine::TakeTurn's twin) and folded into every plan key -- nothing
+// new rides the plan.
+//
+// Exactness: the plan's casts were priced on exactly the board the apply hands them (land-first drop,
+// then the pre-cast crack with the same pin). A post-crack plan with NO action is skipped: crack(s) then
+// nothing is the trailing-crack plan the base enumeration already holds (an identity fold). Everything
+// else is emitted; a crack-first plan whose applied board duplicates an earlier one is an axis variant
+// (PlanIsAxisVariant: slot != -1) and the post-apply dedup skips it without a rollout.
+// Not in HUMAN PLAY: the human orders the crack and the casts himself (the main phase re-prompts after
+// every step), and the viewer's menu indices are what saved references replay by.
+// MTG_HELD_FETCH_CRACK_FIRST -- DEFAULT ON; =0 restores the hole (A/B / bisection only).
+static bool HeldFetchCrackFirstOn()
+{
+    static const bool on = EnvOn("MTG_HELD_FETCH_CRACK_FIRST", true);   // DEFAULT ON; =0 disables
+    return on;
+}
+
+// Does `d`'s activated land search put at least one land onto the battlefield UNTAPPED -- i.e. can its
+// crack fund a cast in the same main? (Evolving Wilds / Myriad Landscape / Khalni Heart Expedition find
+// tapped lands: their position is the landfall / reader axis's business, never mana.)
+static bool CrackPutsUntappedLand(const CardDefinition& d)
+{
+    const CardParams& p = d.params;
+    if (!p.land_search_activation_cost.has_value() || p.land_search_count <= 0) { return false; }
+    const LandSearchSpec spec = LandSearchSpecOf(p);
+    return !spec.tapped && spec.count - spec.to_hand >= 1;
+}
+
+// `plans` = EnumeratePlans(copy); `state` = the board before this enumeration's land drop (it decides
+// which sources are HELD -- a fetch played by this very drop is FetchCrackOnPlayOffered's business).
+// Appends the crack-first plans to `plans`.
+static void AppendHeldFetchCrackFirstPlans(const GameState& state, const GameState& copy, bool is_pre_combat,
+                                           std::vector<TurnSolver::Plan>& plans)
+{
+    // TOP-LEVEL lists only: a breakpoint continuation's activations keep the trailing order (its apply has
+    // no pre-cast pass -- ApplyPlanDirect arms the positions for the top-level plan's section only), so a
+    // crack-first continuation would crack after its casts. (The residual hole: docs/design/
+    // held-fetch-crack-then-cast-hole.md, "What is left".)
+    if (!copy.deck_has_land_search || g_bp_enum_depth != 0 || HumanPlayActive() || !HeldFetchCrackFirstOn())
+    { return; }
+    const int me = copy.active_player_index;
+    auto held = [&](int num)
+    {
+        for (const Permanent& q : state.battlefield)
+        { if (q.card.m_number == num && q.controller_index == me) { return true; } }
+        return false;
+    };
+    // One crack TEMPLATE per held source name, taken from the actions the enumerator itself emitted on
+    // `copy` -- so the activation's legality (life, the dominated-crack gates, any provider prune) is
+    // exactly the base enumeration's: a source it does not offer is not cracked first either.
+    std::vector<std::pair<std::string, Action>> tmpl;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        for (const Action& a : p.actions)
+        {
+            if (!TurnSolver::IsLandSearchActivation(a) || a.def == nullptr
+                || a.ability_mode != Action::AbilityMode::SacLandSearch || !CrackPutsUntappedLand(*a.def)
+                || !held(a.sac_source_id)) { continue; }
+            const std::string nm = a.card_name.str();
+            bool seen = false;
+            for (const auto& e : tmpl) { if (e.first == nm) { seen = true; break; } }
+            if (!seen) { tmpl.emplace_back(nm, a); }
+        }
+    }
+    if (tmpl.empty()) { return; }
+    // The cracks below are hypothetical (enumeration), like every trial apply: no play event, no chooser
+    // (EnumerateM2PlansBody is not itself under a pause).
+    RevealLogPause _rlp;
+    std::sort(tmpl.begin(), tmpl.end(), [](const auto& x, const auto& y) { return x.first < y.first; });
+    std::vector<TurnSolver::Plan> out;
+    std::vector<Action> prefix;
+    std::vector<int> pins;
+    // Sources are taken in name order (min_t) so a pair of cracks is one ordering, never both.
+    std::function<void(const GameState&, std::size_t)> expand = [&](const GameState& cur, std::size_t min_t)
+    {
+        for (std::size_t t = min_t; t < tmpl.size(); ++t)
+        {
+            int num = 0;
+            for (const Permanent& q : cur.battlefield)
+            {
+                if (q.controller_index != me || q.tapped || q.card.m_name.str() != tmpl[t].first) { continue; }
+                if (!held(q.card.m_number) || !CanTapNow(q, cur.battlefield)) { continue; }
+                if (!PermAbilitySourceLive(cur, me, q.card.m_number, tmpl[t].second.ability_mode)) { continue; }
+                num = q.card.m_number;
+                break;
+            }
+            if (num == 0) { continue; }
+            Action act = tmpl[t].second;
+            act.sac_source_id = num;
+            const int w = std::max<int>(1, static_cast<int>(
+                LandSearchPicksMemo(cur, me, LandSearchSpecOf(act.def->params)).size()));
+            for (int k = 0; k < w; ++k)
+            {
+                GameState next = cur;
+                {
+                    const std::vector<int> pin{ k };
+                    ScriptedLandSearch _sls(pin);
+                    TurnSolver::ApplyLandSearchActs(next, std::vector<Action>{ act });
+                }
+                bool cracked = true;
+                for (const Permanent& q : next.battlefield) { if (q.card.m_number == num) { cracked = false; break; } }
+                if (!cracked) { continue; }   // stranded (nothing paid it): the apply would do nothing either
+                prefix.push_back(act);
+                pins.push_back(k);
+                std::vector<TurnSolver::Plan> sub = EnumeratePlans(next, is_pre_combat);
+                for (TurnSolver::Plan& p2 : sub)
+                {
+                    if (p2.actions.empty()) { continue; }   // == the trailing-crack plan (identity fold)
+                    if (p2.land_search_act_slot != -1 || !p2.land_search_pins.empty()) { continue; }   // never set pre-axes
+                    int more = 0;
+                    for (const Action& a : p2.actions) { if (TurnSolver::IsLandSearchActivation(a)) { ++more; } }
+                    TurnSolver::Plan v = std::move(p2);
+                    v.actions.insert(v.actions.begin(), prefix.begin(), prefix.end());
+                    v.land_search_act_slot = more == 0
+                        ? TurnSolver::kLandSlotFirst
+                        : TurnSolver::LandSearchActSlotForMask((1 << prefix.size()) - 1);
+                    // Pick 0 == the provider's front == an absent entry: trailing zeros are dropped, so the
+                    // all-front plan stays a BASE for every other axis (land_search_pins empty).
+                    v.land_search_pins = pins;
+                    while (!v.land_search_pins.empty() && v.land_search_pins.back() == 0)
+                    { v.land_search_pins.pop_back(); }
+                    out.push_back(std::move(v));
+                }
+                expand(next, t);   // a further held source (this name's next copy included) before the casts
+                prefix.pop_back();
+                pins.pop_back();
+            }
+        }
+    };
+    expand(copy, 0);
+    plans.insert(plans.end(), std::make_move_iterator(out.begin()), std::make_move_iterator(out.end()));
+}
+
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state, PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
+    // The post-combat main's crack-first plans of every held untapped-land fetch (no land drop here: the board
+    // is its own pre-drop state). See AppendHeldFetchCrackFirstPlans.
+    AppendHeldFetchCrackFirstPlans(state, state, /*is_pre_combat=*/false, plans);
     // Wave-0 bp_choice variants BEFORE the axes, mirroring the m1 host's order
     // (AppendBreakpointVariants first, axes second -- the axes' base-plan filters skip
     // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
@@ -92517,6 +92673,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // back to greedy land play for these searched plans. Human play: still offer Land's Edge
         // as a standalone line here (this is the post-Treasure-Hunt breakpoint, drop already used).
         std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, is_pre_combat);
+        // ...and the crack-first plans of every HELD untapped-land fetch -- this path above all (the drop
+        // is used, main 2, the executor's post-draw re-solve), see AppendHeldFetchCrackFirstPlans.
+        AppendHeldFetchCrackFirstPlans(state, state, is_pre_combat, plans);
         AppendHumanPlayLandsEdgePlans(state, plans);
         AppendHumanPlayDigPlans(state, plans);
         for (TurnSolver::Plan& p : plans) { p.land_decided = true; }
@@ -93114,6 +93273,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         {
             KarooDropEnumScope _kd(karoo_drop, karoo_num);   // the host signature reads it (EnumeratePlans)
             plans = EnumeratePlans(copy, is_pre_combat);
+            // ...and the crack-first plans of every HELD untapped-land fetch, enumerated on the post-crack
+            // board (AppendHeldFetchCrackFirstPlans; the held-fetch crack-then-cast hole).
+            AppendHeldFetchCrackFirstPlans(state, copy, is_pre_combat, plans);
         }
         for (TurnSolver::Plan& p : plans)
         {

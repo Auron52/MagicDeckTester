@@ -1,0 +1,32 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 2,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 8,
+  "lands_played_this_turn": 0,
+  "_comment": "Spirits (2026-11-13, integrator E1), the HELD-fetch crack-then-cast hole (docs/design/held-fetch-crack-then-cast-hole.md). Board: two Plains + a Flooded Strand HELD from an earlier turn (a new turn: the drawn Plains is this turn's land drop, so the crack-first plans ride the LAND-DROP enumeration path); hand: Drogskol Captain ({1}{W}{U}); library: Plains filler with exactly one Island. Crack the Strand for the Island FIRST, cast the Captain with it T3, attack T4 for 2 -> win T4. Before the fix the casts were priced on the pre-crack board (the Strand makes no mana) and the crack ran in the trailing pass, so this was a T5 win at --budget-ms 0 --depth 5. Budget 0: the line must be findable at any budget.",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Flooded Strand"
+    }
+  ],
+  "hand": [
+    "Drogskol Captain"
+  ],
+  "library": [
+    "Island"
+  ],
+  "expect_win_turn": 4
+}
