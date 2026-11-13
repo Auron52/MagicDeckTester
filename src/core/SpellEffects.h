@@ -1585,6 +1585,7 @@ inline std::atomic<long long> g_pwt_violation_units{0};   // colour pips a wrong
 inline std::atomic<long long> g_pwt_refused_units{0};     // colour pips the drain refused (lever on)
 inline std::atomic<long long> g_pwt_booked_units{0};      // restricted units the prepay booked
 inline std::atomic<long long> g_pwt_inconsistent{0};      // a record larger than its pool's wild at load
+inline std::atomic<long long> g_pwt_overflow{0};          // restricted units beyond the record's slots (released)
 inline std::atomic<long long> g_pwt_violation_real{0};    // ...of the violations, in the REAL game (g_real_resolution)
 inline std::atomic<long long> g_pwt_refused_real{0};      // ...of the refusals, in the REAL game
 // Per-game twins on the playing thread (reset by the batch runner at game start; MTG_PREPAY_WILD_AUDIT prints them
@@ -1597,17 +1598,18 @@ struct PrepayWildAuditDump
     {
         if (PrepayWildAuditLevel() <= 0) { return; }
         std::fprintf(stderr, "PREPAY_WILD_AUDIT lever=%d booked=%lld violations=%lld (real %lld) refused=%lld (real %lld) "
-                     "inconsistent=%lld %s\n",
+                     "inconsistent=%lld overflow=%lld %s\n",
                      PrepayWildTrueOn() ? 1 : 0, g_pwt_booked_units.load(), g_pwt_violation_units.load(),
                      g_pwt_violation_real.load(), g_pwt_refused_units.load(), g_pwt_refused_real.load(),
-                     g_pwt_inconsistent.load(),
+                     g_pwt_inconsistent.load(), g_pwt_overflow.load(),
                      g_pwt_violation_units.load() == 0 ? "(CLEAN)" : "<-- a pip outside the bill paid with another colour's mana");
     }
 };
 inline PrepayWildAuditDump g_prepay_wild_audit_dump;
-// The drain's view of the record for the reserve it is draining (5 ints, W,U,B,R,G): null = no record (every
+// The drain's view of the record for the reserve it is draining (WildTrueRec, below): null = no record (every
 // caller but the shared payer and PayCostFromFloat). `t_wild_true_enforce` false = count only (lever off).
-inline thread_local int* t_wild_true = nullptr;
+struct WildTrueRec;
+inline thread_local WildTrueRec* t_wild_true = nullptr;
 // The payment's ORIGINAL cost while the payer tries its hybrid assignments one flat expansion at a time
 // (ExpandHybrids drops the pairs): the drain reads its pairs, so a {W} unit still pays an {R/W} pip expanded as {R}.
 inline thread_local const ManaCost* t_wild_true_hybrid = nullptr;
@@ -1622,54 +1624,75 @@ struct WildTrueHybridScope
 inline thread_local bool t_wild_true_enforce = false;
 struct WildTrueScope
 {
-    int* prev_p; bool prev_e;
-    WildTrueScope(int* p, bool enforce) : prev_p(t_wild_true), prev_e(t_wild_true_enforce)
+    WildTrueRec* prev_p; bool prev_e;
+    WildTrueScope(WildTrueRec* p, bool enforce) : prev_p(t_wild_true), prev_e(t_wild_true_enforce)
     { t_wild_true = p; t_wild_true_enforce = enforce; }
     ~WildTrueScope() { t_wild_true = prev_p; t_wild_true_enforce = prev_e; }
     WildTrueScope(const WildTrueScope&) = delete;
     WildTrueScope& operator=(const WildTrueScope&) = delete;
 };
-// Load the live record of one pool (0 = floating_mana, 1 = floating_creature_mana) into out[5]; false (out zeroed)
-// when there is none (stale stamp, nothing restricted, or tracking off). Clamped to the pool's wild: a record larger
-// than the wild means some path outside the scoped drains spent restricted units without saying which; the
-// largest colours are dropped first (counted, MTG_PREPAY_WILD_AUDIT).
-inline bool PrepayWildTrueLoad(const GameState& s, int which, int out[5])
+// The drain's working form of one pool's record: the colour MASK (bit c = W,U,B,R,G) of each restricted unit, the
+// units sorted least flexible first (PrepayWildTrueStore's canonical order). A unit of mask {c} is fixed mana of
+// colour c (a Forest, Vivid Creek's free {U}, a bundle's {U}); a unit of mask {U,R} came from a source whose tap
+// could have made either (a dual, an Ignoble Hierarch, a tri-land) and is committed at spend to ONE of them (USER:
+// any-colour mana is committed at spend). A unit of every colour is not restricted and is never recorded.
+struct WildTrueRec
 {
-    for (int i = 0; i < 5; ++i) { out[i] = 0; }
+    static constexpr int kCap = 16;
+    std::uint8_t m[kCap] = {};
+    int n = 0;
+    int Count(unsigned mask) const { int k = 0; for (int i = 0; i < n; ++i) { k += m[i] == mask; } return k; }
+    void Erase(int i) { for (int j = i; j + 1 < n; ++j) { m[j] = m[j + 1]; } --n; }
+    void Push(unsigned mask) { if (n < kCap) { m[n++] = static_cast<std::uint8_t>(mask & 0x1Fu); } }
+};
+inline int PwtPop(unsigned m) { return std::popcount(m & 0x1Fu); }
+// Canonical order: fewest colours first, then the mask; so equal records compare and key equal.
+inline void PwtCanon(WildTrueRec& r)
+{
+    std::sort(r.m, r.m + r.n, [](std::uint8_t a, std::uint8_t b)
+              { const int pa = PwtPop(a), pb = PwtPop(b); return pa != pb ? pa < pb : a < b; });
+}
+// Load the live record of one pool (0 = floating_mana, 1 = floating_creature_mana) into `out`; false (out empty)
+// when there is none (stale stamp, nothing restricted, or tracking off). Clamped to the pool's wild: a record larger
+// than the wild means some path outside the scoped drains spent restricted units without saying which; the most
+// flexible units are released first (counted, MTG_PREPAY_WILD_AUDIT).
+inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
+{
+    out.n = 0;
     if (s.prepay_wild_true.stamp != PrepayCStampNow(s) || !PrepayWildTrack()) { return false; }
     const std::uint8_t* r = which == 0 ? s.prepay_wild_true.gen : s.prepay_wild_true.cre;
     const int wild = which == 0 ? s.floating_mana.wild : s.floating_creature_mana.wild;
-    int sum = 0;
-    for (int i = 0; i < 5; ++i) { out[i] = r[i]; sum += r[i]; }
-    if (sum == 0) { return false; }
-    if (sum > wild)
+    for (int i = 0; i < GameState::PrepayWildTrue::kSlots; ++i) { if (r[i] != 0) { out.Push(r[i]); } }
+    if (out.n == 0) { return false; }
+    if (out.n > wild)
     {
         g_pwt_inconsistent.fetch_add(1, std::memory_order_relaxed);
-        while (sum > wild)
-        {
-            int best = 0;
-            for (int i = 1; i < 5; ++i) { if (out[i] > out[best]) { best = i; } }
-            --out[best]; --sum;
-        }
+        out.n = std::max(0, wild);   // canonical order: the tail is the most flexible
     }
-    return sum > 0;
+    return out.n > 0;
 }
-inline void PrepayWildTrueStore(GameState& s, int which, const int in[5])
+inline void PrepayWildTrueStore(GameState& s, int which, WildTrueRec in)
 {
     std::uint8_t* r = which == 0 ? s.prepay_wild_true.gen : s.prepay_wild_true.cre;
-    for (int i = 0; i < 5; ++i) { r[i] = static_cast<std::uint8_t>(std::max(0, std::min(255, in[i]))); }
+    // Every-colour units are not restrictions.
+    for (int i = 0; i < in.n; ) { if ((in.m[i] & 0x1Fu) == 0x1Fu || in.m[i] == 0) { in.Erase(i); } else { ++i; } }
+    PwtCanon(in);
+    constexpr int kS = GameState::PrepayWildTrue::kSlots;
+    if (in.n > kS) { g_pwt_overflow.fetch_add(in.n - kS, std::memory_order_relaxed); }
+    for (int i = 0; i < kS; ++i) { r[i] = i < in.n ? in.m[i] : std::uint8_t{0}; }
 }
 // Restricted units still live in both pools (0 when stale): the main-phase key folds it (value-gated).
 inline std::uint64_t PrepayWildTrueKey(const GameState& s)
 {
     if (!PrepayWildTrueOn()) { return 0; }
-    int g[5], c[5];
+    WildTrueRec g, c;
     const bool a = PrepayWildTrueLoad(s, 0, g), b = PrepayWildTrueLoad(s, 1, c);
     if (!a && !b) { return 0; }
-    std::uint64_t k = 0;
-    for (int i = 0; i < 5; ++i) { k = (k << 6) | static_cast<std::uint64_t>(g[i] & 63); }
-    for (int i = 0; i < 5; ++i) { k = (k << 6) | static_cast<std::uint64_t>(c[i] & 63); }
-    return k + 1;
+    std::uint64_t k = 0x9E3779B97F4A7C15ull;
+    auto mix = [&k](std::uint64_t v) { k ^= v + 0x9E3779B97F4A7C15ull + (k << 6) + (k >> 2); };
+    mix(static_cast<std::uint64_t>(g.n)); for (int i = 0; i < g.n; ++i) { mix(g.m[i]); }
+    mix(0xC5ull + static_cast<std::uint64_t>(c.n)); for (int i = 0; i < c.n; ++i) { mix(c.m[i]); }
+    return k | 1ull;
 }
 
 // BACKTRACKER FLEX LABELS (Permanent::mana_flex; written by TapForCostBacktrackWorker's activate() and the mana
@@ -1684,11 +1707,27 @@ struct BtFlexCollectScope
     BtFlexCollectScope(const BtFlexCollectScope&) = delete;
     BtFlexCollectScope& operator=(const BtFlexCollectScope&) = delete;
 };
-// Pack: 0 = no any-colour unit; else (n << 3) | col, n in 1..31 units of colour col (0..4 = W,U,B,R,G).
-inline std::uint8_t BtFlexPack(int n, int col)
+// Pack: 0 = no flexible unit; else n (1..3) units booked in colour col (0..4 = W,U,B,R,G) whose tap could have made
+// any colour of `mask` (2+ colours, col among them): 1 + ((n-1)*5 + col)*16 + the four other colours' bits (<= 240).
+// More than 3 units of one colour from a single choice tap keep 3 flexible and the rest fixed (a legal subset).
+inline std::uint8_t BtFlexPack(int n, int col, unsigned mask)
 {
     if (n <= 0 || col < 0 || col > 4) { return 0; }
-    return static_cast<std::uint8_t>((std::min(n, 31) << 3) | col);
+    mask = (mask & 0x1Fu) | (1u << col);
+    if (PwtPop(mask) < 2) { return 0; }
+    unsigned o = 0;
+    for (int c = 0, b = 0; c < 5; ++c) { if (c == col) { continue; } if ((mask >> c) & 1u) { o |= 1u << b; } ++b; }
+    return static_cast<std::uint8_t>(1 + ((std::min(n, 3) - 1) * 5 + col) * 16 + static_cast<int>(o));
+}
+inline void BtFlexUnpack(std::uint8_t lab, int& n, int& col, unsigned& mask)
+{
+    n = 0; col = 0; mask = 0;
+    if (lab == 0) { return; }
+    const int v = lab - 1, q = v >> 4;
+    const unsigned o = static_cast<unsigned>(v & 15);
+    col = q % 5; n = q / 5 + 1;
+    mask = 1u << col;
+    for (int c = 0, b = 0; c < 5; ++c) { if (c == col) { continue; } if ((o >> b) & 1u) { mask |= 1u << c; } ++b; }
 }
 
 // HOLD BACK {C} INSIDE THE PAYMENT'S OWN LOCAL POOL (human play only).
@@ -7758,12 +7797,12 @@ inline bool PayCostFromFloat(GameState& state, const ManaCost& cost)
     // The prepay's colour-restricted `wild` (GameState::prepay_wild_true): an activation paid from the float may
     // not spend another colour's unit on a colour pip either. A refusal leaves the pip unpaid -> false, with the
     // float restored (CanPay above is colour-blind to the record).
-    int pwt[5];
+    WildTrueRec pwt;
     const bool pwt_live = PrepayWildTrueLoad(state, 0, pwt);
     const ManaPool fm_pre = state.floating_mana;
     const GameState::PrepayWildTrue pwt_pre = state.prepay_wild_true;
     {
-        WildTrueScope _wt(pwt_live ? pwt : nullptr, PrepayWildTrueOn());
+        WildTrueScope _wt(pwt_live ? &pwt : nullptr, PrepayWildTrueOn());
         SpendFloatingTowardCost(state.floating_mana, remaining);
     }
     if (pwt_live)
@@ -43091,9 +43130,12 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     // wild->colour payments here is therefore useless as an assertion: it reads ~1M per 200 healthy
     // Hinata games. The audit lives at the two producers instead (MTG_WILD_PIP_AUDIT).
     //    ...EXCEPT the prepay's colour-restricted units (t_wild_true, GameState::prepay_wild_true): a unit whose
-    //    true colour is X pays a pip of X (taken first, so the any-colour units are kept), never another colour's
-    //    (CR 106.1b). Lever off (t_wild_true_enforce false) the units still pay -- counted as the violation.
-    int* const wt = t_wild_true;
+    //    source could make only the colours of its mask pays a pip of one of those colours, never another's
+    //    (CR 106.1b). The pips are MATCHED to the units (a maximum bipartite matching, least flexible unit first),
+    //    so a {U,R} dual's unit and a {U,B} one pay a {U} and a {B} in either order; any pip the restricted units
+    //    cannot cover takes an unrestricted (any-colour) unit. Lever off (t_wild_true_enforce false) the units
+    //    still pay -- counted as the violation.
+    WildTrueRec* const wt = t_wild_true;
     if (wt == nullptr)
     {
         drain(cost.white, reserve.wild);
@@ -43102,62 +43144,96 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         drain(cost.red,   reserve.wild);
         drain(cost.green, reserve.wild);
     }
-    else
+    else if (reserve.wild > 0 && (cost.white | cost.blue | cost.black | cost.red | cost.green) != 0)
     {
         int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };
+        // Lever off: exactly the plain drain's payments (W..G while wild lasts) -- only the record is attributed.
+        // Lever on: every pip a restricted or any-colour unit may legally pay, W..G priority.
+        constexpr int kMaxP = 64;
+        std::uint8_t pm[kMaxP]; int pc[kMaxP]; int np = 0;
+        for (int x = 0; x < 5; ++x)
+        { for (int k = 0; k < *pips[x] && np < kMaxP; ++k) { pm[np] = static_cast<std::uint8_t>(1u << x); pc[np] = x; ++np; } }
         // A HYBRID pip ({R/W}: Figure of Destiny) rides the flat ints as ONE of its colours (Card.h), so a unit of
         // the pair's OTHER colour pays it too -- once per pair.
-        bool hyb_used[6] = { false, false, false, false, false, false };
         const ManaCost& hsrc = (cost.hybrid_count == 0 && t_wild_true_hybrid != nullptr) ? *t_wild_true_hybrid : cost;
-        auto hybrid_alt = [&hsrc, &hyb_used, wt](int x) -> int
+        for (int h = 0; h < hsrc.hybrid_count && h < 6; ++h)
         {
-            for (int h = 0; h < hsrc.hybrid_count && h < 6; ++h)
+            const int ha = hsrc.hybrid_pair[h] >> 4, hb = hsrc.hybrid_pair[h] & 0xF;
+            if (ha > 4 || hb > 4) { continue; }
+            for (int i = 0; i < np; ++i)
             {
-                if (hyb_used[h]) { continue; }
-                const int a = hsrc.hybrid_pair[h] >> 4, b = hsrc.hybrid_pair[h] & 0xF;
-                const int y = a == x ? b : (b == x ? a : -1);
-                if (y >= 0 && y < 5 && wt[y] > 0) { hyb_used[h] = true; return y; }
+                if (pm[i] == (1u << ha) || pm[i] == (1u << hb)) { pm[i] = static_cast<std::uint8_t>((1u << ha) | (1u << hb)); break; }
             }
-            return -1;
-        };
-        for (int x = 0; x < 5; ++x)
+        }
+        // Kuhn's matching, pips in W..G order onto units in canonical (least flexible first) order.
+        int pip_of[WildTrueRec::kCap]; int unit_of[kMaxP];
+        for (int u = 0; u < wt->n; ++u) { pip_of[u] = -1; }
+        for (int i = 0; i < np; ++i) { unit_of[i] = -1; }
+        auto try_pip = [&](auto&& self, int i, unsigned& seen) -> bool
         {
-            while (*pips[x] > 0 && reserve.wild > 0)
+            for (int u = 0; u < wt->n; ++u)
             {
-                const int restricted = wt[0] + wt[1] + wt[2] + wt[3] + wt[4];
-                int alt = -1;
-                if (wt[x] > 0) { --wt[x]; }
-                else if (reserve.wild > restricted) { /* an any-colour unit */ }
-                else if ((alt = hybrid_alt(x)) >= 0) { --wt[alt]; }
-                else if (t_wild_true_enforce)
+                if ((wt->m[u] & pm[i]) == 0 || ((seen >> u) & 1u)) { continue; }
+                seen |= 1u << u;
+                if (pip_of[u] < 0 || self(self, pip_of[u], seen)) { pip_of[u] = i; unit_of[i] = u; return true; }
+            }
+            return false;
+        };
+        int free_any = std::max(0, reserve.wild - wt->n);
+        int wild_left = reserve.wild;
+        bool paid[kMaxP];
+        if (t_wild_true_enforce)
+        {
+            for (int i = 0; i < np; ++i) { unsigned seen = 0; try_pip(try_pip, i, seen); }
+            for (int i = 0; i < np; ++i)
+            {
+                paid[i] = unit_of[i] >= 0 || free_any > 0;
+                if (unit_of[i] < 0 && free_any > 0) { --free_any; }
+                if (!paid[i])
                 {
                     g_pwt_refused_units.fetch_add(1, std::memory_order_relaxed);
                     if (g_real_resolution) { g_pwt_refused_real.fetch_add(1, std::memory_order_relaxed); ++t_pwt_game_refused; }
-                    break;
                 }
-                else
-                {
-                    g_pwt_violation_units.fetch_add(1, std::memory_order_relaxed);
-                    if (g_real_resolution) { g_pwt_violation_real.fetch_add(1, std::memory_order_relaxed); ++t_pwt_game_viol; }
-                    int best = 0;
-                    for (int k = 1; k < 5; ++k) { if (wt[k] > wt[best]) { best = k; } }
-                    --wt[best];
-                }
-                --*pips[x]; --reserve.wild;
             }
         }
+        else
+        {
+            // The plain drain pays the first min(np, wild) pips in W..G order; match only those.
+            const int npay = std::min(np, wild_left);
+            for (int i = 0; i < np; ++i) { paid[i] = i < npay; }
+            for (int i = 0; i < npay; ++i) { unsigned seen = 0; try_pip(try_pip, i, seen); }
+            for (int i = 0; i < npay; ++i)
+            {
+                if (unit_of[i] >= 0) { continue; }
+                if (free_any > 0) { --free_any; continue; }
+                // A wrong-colour restricted unit pays it: the violation. Take an unmatched one.
+                g_pwt_violation_units.fetch_add(1, std::memory_order_relaxed);
+                if (g_real_resolution) { g_pwt_violation_real.fetch_add(1, std::memory_order_relaxed); ++t_pwt_game_viol; }
+                for (int u = wt->n - 1; u >= 0; --u) { if (pip_of[u] < 0) { pip_of[u] = i; unit_of[i] = u; break; } }
+            }
+        }
+        for (int i = 0; i < np; ++i) { if (paid[i] && wild_left > 0) { --*pips[pc[i]]; --wild_left; } }
+        reserve.wild = wild_left;
+        for (int u = wt->n - 1; u >= 0; --u) { if (pip_of[u] >= 0) { wt->Erase(u); } }
     }
     // A generic pip paid from `wild` spends a restricted unit before an any-colour one (the most flexible mana
-    // survives); the largest restricted colour first. Same unit count either way -- only the record differs.
+    // survives): the fewest-colours unit first, the most numerous of those first. Same unit count either way --
+    // only the record differs.
     auto drain_wild_generic = [&reserve, wt](int& pip)
     {
         while (pip > 0 && reserve.wild > 0)
         {
-            if (wt != nullptr)
+            if (wt != nullptr && wt->n > 0)
             {
-                int best = -1;
-                for (int k = 0; k < 5; ++k) { if (wt[k] > 0 && (best < 0 || wt[k] > wt[best])) { best = k; } }
-                if (best >= 0) { --wt[best]; }
+                int best = 0, best_n = wt->Count(wt->m[0]);
+                for (int u = 1; u < wt->n; ++u)
+                {
+                    if (PwtPop(wt->m[u]) != PwtPop(wt->m[0])) { break; }   // canonical: fewest colours first
+                    if (wt->m[u] == wt->m[u - 1]) { continue; }
+                    const int c = wt->Count(wt->m[u]);
+                    if (c > best_n) { best = u; best_n = c; }
+                }
+                wt->Erase(best);
             }
             --pip; --reserve.wild;
         }

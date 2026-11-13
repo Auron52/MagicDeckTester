@@ -206,21 +206,95 @@ TEST_CASE("prepay wild-true: a white-restricted unit pays a hybrid {R/W} pip, ne
     REQUIRE(fig.hybrid_count == 1);
     {
         ManaPool r; r.wild = 1;
-        int wt[5] = { 1, 0, 0, 0, 0 };                   // the unit is really {W}
+        WildTrueRec wt; wt.Push(1u << 0);                // the unit is really {W}
         ManaCost c = fig;
-        WildTrueScope _s(wt, /*enforce=*/true);
+        WildTrueScope _s(&wt, /*enforce=*/true);
         SpendFloatingTowardCost(r, c);
         CHECK(c.ManaValue() == 0);
         CHECK(r.wild == 0);
-        CHECK(wt[0] == 0);
+        CHECK(wt.n == 0);
     }
     {
         ManaPool r; r.wild = 1;
-        int wt[5] = { 1, 0, 0, 0, 0 };
+        WildTrueRec wt; wt.Push(1u << 0);
         ManaCost c; c.red = 1;
-        WildTrueScope _s(wt, /*enforce=*/true);
+        WildTrueScope _s(&wt, /*enforce=*/true);
         SpendFloatingTowardCost(r, c);
         CHECK(c.red == 1);                               // refused: {R} needs red mana
         CHECK(r.wild == 1);
+    }
+}
+
+// A DUAL's unit is mana of either of its colours, committed at spend (USER: no per-colour branching; the approved
+// route (a): "a unit from a genuinely multi-colour source stays any-of-its-colours"). Razorverge Thicket {G}/{W}
+// funding Sinew's {1}: whichever colour the solve tapped it for, a replicate copy's {W} may take it -- and a {B}
+// may not.
+TEST_CASE("prepay wild-true: a dual's unit (Razorverge Thicket) pays either of its colours, never a third")
+{
+    {
+        GameState s = SliverPrepaid("Razorverge Thicket");
+        REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        CHECK(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        CHECK(FloatWt(s).Total() == 0);
+    }
+    {
+        GameState s = SliverPrepaid("Razorverge Thicket");
+        REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        REQUIRE(TapForCostDirect(s, CostWt("Plated Sliver"), /*for_creature=*/true));
+        ManaCost b; b.black = 1;
+        CHECK_FALSE(TapForCostDirect(s, b, /*for_creature=*/true));
+        ManaCost g; g.green = 1;
+        CHECK(TapForCostDirect(s, g, /*for_creature=*/true));
+    }
+}
+
+// The drain MATCHES pips to restricted units: {U,R} + {U,B} pay {U} and {B} (and {U} and {R}) whatever the order the
+// pips are read in; {R} and {B} together too. {G} is refused.
+TEST_CASE("prepay wild-true: pips are matched to dual units, not taken first-fit")
+{
+    const unsigned UR = (1u << 1) | (1u << 3), UB = (1u << 1) | (1u << 2);
+    auto pay = [&](int u, int b, int r, int g) -> ManaCost
+    {
+        ManaPool pool; pool.wild = 2;
+        WildTrueRec wt; wt.Push(UR); wt.Push(UB);
+        ManaCost c; c.blue = u; c.black = b; c.red = r; c.green = g;
+        WildTrueScope _s(&wt, /*enforce=*/true);
+        SpendFloatingTowardCost(pool, c);
+        return c;
+    };
+    CHECK(pay(1, 1, 0, 0).ManaValue() == 0);
+    CHECK(pay(1, 0, 1, 0).ManaValue() == 0);
+    CHECK(pay(0, 1, 1, 0).ManaValue() == 0);
+    CHECK(pay(0, 0, 0, 1).green == 1);
+    // Generic spends the least flexible unit first: one {U} unit and one Birds unit (unrecorded) -> the {U} goes.
+    {
+        ManaPool pool; pool.wild = 2;
+        WildTrueRec wt; wt.Push(1u << 1);
+        ManaCost c; c.generic = 1;
+        WildTrueScope _s(&wt, /*enforce=*/true);
+        SpendFloatingTowardCost(pool, c);
+        CHECK(wt.n == 0);
+        ManaCost w; w.white = 1;
+        SpendFloatingTowardCost(pool, w);
+        CHECK(w.white == 0);
+    }
+}
+
+TEST_CASE("prepay wild-true: the flex label round-trips (mask, colour, count)")
+{
+    for (int col = 0; col < 5; ++col)
+    {
+        for (unsigned m = 0; m < 32; ++m)
+        {
+            if (((m >> col) & 1u) == 0 || PwtPop(m) < 2) { continue; }
+            for (int n = 1; n <= 3; ++n)
+            {
+                int n2 = 0, c2 = 0; unsigned m2 = 0;
+                BtFlexUnpack(BtFlexPack(n, col, m), n2, c2, m2);
+                CHECK(n2 == n); CHECK(c2 == col); CHECK(m2 == m);
+            }
+        }
+        CHECK(BtFlexPack(1, col, 1u << col) == 0);   // one colour: fixed, no label
     }
 }

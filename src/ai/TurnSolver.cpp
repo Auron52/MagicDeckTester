@@ -64348,7 +64348,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                      + combined.red + combined.green + combined.colorless;
     static const bool s_true_colours = EnvOn("MTG_PREPAY_TRUE_COLOURS", true);
     int c_funded_kept = 0;   // generic-funding {C} kept as `colorless` (a physical {C}, below)
-    int pwt_restricted[5] = { 0, 0, 0, 0, 0 };   // the pre-load's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE)
+    WildTrueRec pwt_restricted;   // the pre-load's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE)
     if (!s_true_colours)
     {
         pool.wild = produced.Total() - pinned;
@@ -64443,40 +64443,70 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         // {U} of Vivid Creek (no counter removed) / Reflecting Pool. So the record (GameState::prepay_wild_true) says
         // how many of those units are really which colour; the drain lets one pay a generic pip or its own colour's
         // pip only (SpendFloatingTowardCost). The bill pays exactly as before.
-        // A unit out of a source whose tapped mode could make ANY colour (Birds, Cavern of Souls, Sliver Hive,
-        // Mana Confluence, a Vivid land that removed its counter: Permanent::mana_flex, labelled by the solve) is
-        // any-colour mana committed at spend (USER: no per-colour branching) and stays unrestricted. Within one
-        // colour the pins take the labelled-fixed units first, so the any-colour units are what is left to fund.
+        // A unit out of a source whose tapped mode could make more than one colour (a dual, Ignoble Hierarch, a
+        // tri-land: its colours; Birds, Cavern of Souls, Sliver Hive, Mana Confluence, a Vivid land that removed its
+        // counter: any colour -- Permanent::mana_flex, labelled by the solve) is mana of that SET committed at spend
+        // (USER: no per-colour branching), so it is recorded by its mask, and an every-colour unit not at all.
+        // Within one colour the pins take the fixed units first, then the least flexible; the funding takes the
+        // most flexible first, so the units left to fund are as free as the solve's taps allow.
         if (PrepayWildTrack())
         {
-            int flex_b[5] = { 0, 0, 0, 0, 0 };
+            // Per colour: the flexible units the solve booked there, by mask (count per mask).
+            int flex_n[5][32] = {};
             const int nbf = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
             for (int bi = 0; bi < nbf; ++bi)
             {
                 const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
                 if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.mana_flex == 0) { continue; }
                 if (bp.card.m_number != bf_snap[static_cast<std::size_t>(bi)].card.m_number) { continue; }
-                flex_b[bp.mana_flex & 7] += bp.mana_flex >> 3;
+                int fn = 0, fc = 0; unsigned fm = 0;
+                BtFlexUnpack(bp.mana_flex, fn, fc, fm);
+                flex_n[fc][fm] += fn;
             }
             const int prod_c[5] = { produced.white, produced.blue, produced.black, produced.red, produced.green };
             const int pin_c[5]  = { combined.white, combined.blue, combined.black, combined.red, combined.green };
-            int restricted[5], rsum = 0;
+            WildTrueRec rec;
+            int rsum = 0;
             for (int c = 0; c < 5; ++c)
             {
-                const int nonflex   = std::max(0, prod_c[c] - flex_b[c]);
-                const int flex_pins = std::max(0, pin_c[c] - nonflex);
-                const int free_flex = std::max(0, flex_b[c] - flex_pins);
-                restricted[c] = fund_col[c] - std::min(fund_col[c], free_flex);
-                rsum += restricted[c];
+                if (fund_col[c] == 0) { continue; }
+                int flex_tot = 0;
+                for (int m = 0; m < 32; ++m) { flex_tot += flex_n[c][m]; }
+                flex_tot = std::min(flex_tot, prod_c[c]);
+                const int fixed = prod_c[c] - flex_tot;
+                // Pins: fixed first, then the least flexible masks.
+                int pins_left = std::max(0, pin_c[c] - fixed);
+                int left[32];
+                for (int m = 0; m < 32; ++m) { left[m] = flex_n[c][m]; }
+                for (int pop = 2; pop <= 5 && pins_left > 0; ++pop)
+                {
+                    for (int m = 0; m < 32 && pins_left > 0; ++m)
+                    {
+                        if (PwtPop(static_cast<unsigned>(m)) != pop) { continue; }
+                        const int t = std::min(pins_left, left[m]);
+                        left[m] -= t; pins_left -= t;
+                    }
+                }
+                // Funding: the most flexible first, then fixed {c}.
+                int fund_left = fund_col[c];
+                for (int pop = 5; pop >= 2 && fund_left > 0; --pop)
+                {
+                    for (int m = 31; m >= 0 && fund_left > 0; --m)
+                    {
+                        if (PwtPop(static_cast<unsigned>(m)) != pop) { continue; }
+                        const int t = std::min(fund_left, left[m]);
+                        fund_left -= t;
+                        if (m != 0x1F) { for (int k = 0; k < t; ++k) { rec.Push(static_cast<unsigned>(m)); ++rsum; } }
+                    }
+                }
+                for (int k = 0; k < fund_left; ++k) { rec.Push(1u << c); ++rsum; }
             }
-            while (rsum > pool.wild)
-            {
-                int best = 0;
-                for (int c = 1; c < 5; ++c) { if (restricted[c] > restricted[best]) { best = c; } }
-                --restricted[best]; --rsum;
-            }
-            for (int c = 0; c < 5; ++c) { pwt_restricted[c] = restricted[c]; }
-            if (rsum > 0) { g_pwt_booked_units.fetch_add(rsum, std::memory_order_relaxed); }
+            // Never more restricted units than the pool's wild (the most flexible are released first).
+            PwtCanon(rec);
+            rec.n = std::min(rec.n, std::max(0, pool.wild));
+            pwt_restricted = rec;
+            if (rec.n > 0) { g_pwt_booked_units.fetch_add(rec.n, std::memory_order_relaxed); }
+            (void)rsum;
         }
         // AUDIT (MTG_WILD_PIP_AUDIT): the invariant this fix establishes is that prepaid `wild`
         // covers the batch's GENERIC requirement and nothing else -- generic pips are colour-blind,
@@ -64572,13 +64602,14 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             int pure_left = pure_c_tapped();
             prepay_c_kept = 0;   // the staged pools replace the pre-load above
             // MTG_PREPAY_WILD_TRUE: the stage's colour-funded `wild` keeps its true colour too (stage_restricted).
-            // Which stage tapped which labelled any-colour source is not kept, so here every colour-funded unit is
-            // booked as its own colour -- a legal subset of the real choices (the creature-only-source mixed batch
-            // is rare; the single pre-load above does the exact split).
-            int stage_restricted[5] = { 0, 0, 0, 0, 0 };
+            // Which stage tapped which labelled flexible source (a dual, Birds) is not kept, so here every
+            // colour-funded unit is booked as its own colour only -- a legal subset of the real choices, which may
+            // refuse a pip the dual could have paid (KNOWN CONSERVATIVE CORNER: the creature-only-source mixed batch,
+            // Somberwald Sage; the single pre-load above does the exact split).
+            WildTrueRec stage_restricted;
             auto stage_pool = [&pure_left, &c_must_stay, &prepay_c_kept, &stage_restricted](const ManaCost& c, const ManaPool& prod) -> ManaPool
             {
-                for (int k = 0; k < 5; ++k) { stage_restricted[k] = 0; }
+                stage_restricted.n = 0;
                 ManaPool pl;
                 pl.white = c.white; pl.blue = c.blue; pl.black = c.black;
                 pl.red = c.red; pl.green = c.green; pl.colorless = c.colorless;
@@ -64594,7 +64625,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                     int best = -1;
                     for (int i = 0; i < 5; ++i) { if (free_[i] > 0 && (best < 0 || free_[i] > free_[best])) { best = i; } }
                     if (best < 0) { break; }
-                    --free_[best]; --need; ++stage_restricted[best];
+                    --free_[best]; --need; stage_restricted.Push(1u << best);
                 }
                 pl.wild = c.generic - need;
                 {
@@ -64614,8 +64645,9 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             state.floating_creature_mana.AddPool(stage_pool(c_crea, mixed_p_crea));
             if (PrepayWildTrack())
             {
-                int cre[5];
-                for (int k = 0; k < 5; ++k) { cre[k] = state.prepay_wild_true.cre[k] + stage_restricted[k]; }
+                WildTrueRec cre = stage_restricted;
+                for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k)
+                { if (state.prepay_wild_true.cre[k] != 0) { cre.Push(state.prepay_wild_true.cre[k]); } }
                 PrepayWildTrueStore(state, 1, cre);
             }
         }
@@ -64638,9 +64670,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             // ...and the general float's colour-restricted `wild` moves with it (MTG_PREPAY_WILD_TRUE).
             if (PrepayWildTrack())
             {
-                int cre[5];
-                for (int k = 0; k < 5; ++k)
-                { cre[k] = state.prepay_wild_true.cre[k] + state.prepay_wild_true.gen[k]; state.prepay_wild_true.gen[k] = 0; }
+                WildTrueRec cre;
+                for (int k = 0; k < GameState::PrepayWildTrue::kSlots; ++k)
+                {
+                    if (state.prepay_wild_true.cre[k] != 0) { cre.Push(state.prepay_wild_true.cre[k]); }
+                    if (state.prepay_wild_true.gen[k] != 0) { cre.Push(state.prepay_wild_true.gen[k]); }
+                    state.prepay_wild_true.gen[k] = 0;
+                }
                 PrepayWildTrueStore(state, 1, cre);
             }
         }

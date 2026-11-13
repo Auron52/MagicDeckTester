@@ -1792,9 +1792,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // The prepay's colour-restricted `wild` (GameState::prepay_wild_true; MTG_PREPAY_WILD_TRUE): each float drain
     // below reads and maintains its pool's record, so a pip outside the bill cannot spend another colour's unit.
     const GameState::PrepayWildTrue pwt_pre = state.prepay_wild_true;   // restored with the float
-    int pwt_gen[5], pwt_cre[5];
+    WildTrueRec pwt_gen, pwt_cre;
     const bool pwt_gen_live = PrepayWildTrueLoad(state, 0, pwt_gen);
     const bool pwt_cre_live = PrepayWildTrueLoad(state, 1, pwt_cre);
+    const WildTrueRec pwt_gen0 = pwt_gen, pwt_cre0 = pwt_cre;   // MTG_PREPAY_WILD_AUDIT=2's line
     const bool pwt_enforce  = PrepayWildTrueOn();
     const int  pwt_audit0   = PrepayWildAuditLevel() >= 2
         ? static_cast<int>(g_pwt_violation_units.load(std::memory_order_relaxed) + g_pwt_refused_units.load(std::memory_order_relaxed)) : 0;
@@ -1816,7 +1817,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                   : state.floating_creature_mana.colorless;
         GenericCFirstScope _gcf(cap);
         {
-            WildTrueScope _wt(pwt_cre_live ? pwt_cre : nullptr, pwt_enforce);
+            WildTrueScope _wt(pwt_cre_live ? &pwt_cre : nullptr, pwt_enforce);
             SpendFloatingTowardCost(state.floating_creature_mana, cost);
         }
         if (pwt_cre_live) { PrepayWildTrueStore(state, 1, pwt_cre); }
@@ -1847,7 +1848,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         {
             GenericCFirstScope _gcf(cap);
             {
-                WildTrueScope _wt(pwt_gen_live ? pwt_gen : nullptr, pwt_enforce);
+                WildTrueScope _wt(pwt_gen_live ? &pwt_gen : nullptr, pwt_enforce);
                 SpendFloatingTowardCost(state.floating_mana, cost);
             }
             if (pwt_gen_live) { PrepayWildTrueStore(state, 0, pwt_gen); }
@@ -1860,11 +1861,27 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                            + g_pwt_refused_units.load(std::memory_order_relaxed));
             if (now != pwt_audit0)
             {
-                std::fprintf(stderr, "[pwt] T%d phase=%d cost=W%dU%dB%dR%dG%dC%d+%d creature=%d units=%d %s gen=%d%d%d%d%d\n",
+                // The records BEFORE this payment, one mask per unit (WUBRG letters), general | creature-only.
+                auto masks = [](const WildTrueRec& r, char* out)
+                {
+                    int o = 0;
+                    for (int u = 0; u < r.n && o < 100; ++u)
+                    {
+                        if (u > 0) { out[o++] = ','; }
+                        for (int c = 0; c < 5; ++c) { if ((r.m[u] >> c) & 1u) { out[o++] = "WUBRG"[c]; } }
+                    }
+                    out[o] = 0;
+                };
+                char gbuf[128], cbuf[128];
+                masks(pwt_gen0, gbuf); masks(pwt_cre0, cbuf);
+                std::fprintf(stderr, "[pwt] T%d phase=%d cost=W%dU%dB%dR%dG%dC%d+%d creature=%d units=%d %s "
+                             "pool=W%dU%dB%dR%dG%dC%dwild%d cpool_wild=%d gen=[%s] cre=[%s]\n",
                              state.turn_number, static_cast<int>(state.phase), cost_in.white, cost_in.blue,
                              cost_in.black, cost_in.red, cost_in.green, cost_in.colorless, cost_in.generic,
                              for_creature ? 1 : 0, now - pwt_audit0, pwt_enforce ? "REFUSED" : "ILLEGAL",
-                             pwt_gen[0], pwt_gen[1], pwt_gen[2], pwt_gen[3], pwt_gen[4]);
+                             reserve_pre.white, reserve_pre.blue, reserve_pre.black, reserve_pre.red,
+                             reserve_pre.green, reserve_pre.colorless, reserve_pre.wild, cre_reserve_pre.wild,
+                             gbuf, cbuf);
             }
         }
         if (cpip_deck && state.floating_prepay_c != 0) { SetPrepayKeptC(state, prepay_c); }

@@ -4787,12 +4787,14 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             } _restricted_big_path(BigSpellOnlySource(def->params));
             state.players[active].energy_counters -= energy_spend;
             state.battlefield[i].tapped = true;
-            // ANY-COLOUR LABEL (Permanent::mana_flex; the whole-turn prepay's MTG_PREPAY_WILD_TRUE booking): this
-            // tap's OWN units (`next` minus `floating`, before any land Aura's bonus) are any-colour mana iff the
-            // mode offered every colour -- `produces` here is already stripped of what this payment may not use
-            // (a Cavern's colours for a noncreature spell, a spent-out Aether Hub) -- and a counter-gated source
-            // (Vivid Creek, Tendo Ice Bridge) paid its counter for it. One colour only (a domain / bundle /
-            // any-combination source's units are each fixed, so they are not labelled).
+            // FLEX LABEL (Permanent::mana_flex; the whole-turn prepay's MTG_PREPAY_WILD_TRUE booking): this tap's OWN
+            // units (`next` minus `floating`, before any land Aura's bonus), all of one colour, could have been any
+            // colour of the mode's offer -- `produces` here is already stripped of what this payment may not use (a
+            // Cavern's colours for a noncreature spell, a spent-out Aether Hub) -- so they are mana of THAT set,
+            // committed at spend (USER: no per-colour branching): a dual's {U} is {U,R}, a Birds' any colour. A
+            // counter-gated source (Vivid Creek, Tendo Ice Bridge) offers its other colours only when it paid the
+            // counter. Not labelled (fixed): a one-colour offer, a bundle (two colours at once: a Signet, a Karoo),
+            // and a domain / any-combination source.
             if (t_bt_flex_collect && out_full_pool != nullptr)
             {
                 std::uint8_t lab = 0;
@@ -4800,7 +4802,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 for (Color pc : produces) { if (static_cast<int>(pc) < 5) { have |= 1u << static_cast<int>(pc); } }
                 const bool counter_gated = def->params.enters_with_mana_counters > 0
                                         && !def->params.mana_counters_are_mining;
-                if (have == 0x1Fu && (!counter_gated || mana_counter_spend)
+                if (PwtPop(have) >= 2 && (!counter_gated || mana_counter_spend)
                     && !def->params.produces_any_combination && !def->params.domain_mana)
                 {
                     const int d[5] = { next.white - floating.white, next.blue - floating.blue,
@@ -4808,7 +4810,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                                        next.green - floating.green };
                     int k = 0, col = -1, n = 0;
                     for (int c = 0; c < 5; ++c) { if (d[c] > 0) { ++k; col = c; n = d[c]; } }
-                    if (k == 1) { lab = BtFlexPack(n, col); }
+                    if (k == 1 && ((have >> col) & 1u)) { lab = BtFlexPack(n, col, have); }
                 }
                 state.battlefield[i].mana_flex = lab;
             }

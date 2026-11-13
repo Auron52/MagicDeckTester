@@ -557,9 +557,9 @@ struct Permanent
     // battlefield snapshot, and ZERO at every decision boundary (a flush clears it;
     // MTG_DMG_EVENT_VERIFY asserts it). Never written while dmg_events_armed is false.
     uint8_t   mana_tap_mark          = 0;
-    // ANY-COLOUR LABEL of this permanent's last tap inside a whole-turn prepay solve (MTG_PREPAY_WILD_TRUE;
-    // BtFlexPack, SpellEffects.h): how many of the units it made, and in which colour the solve booked them, are
-    // mana of ANY colour (the tapped mode could make every colour). SCRATCH: written only while the prepay collects
+    // FLEX LABEL of this permanent's last tap inside a whole-turn prepay solve (MTG_PREPAY_WILD_TRUE;
+    // BtFlexPack, SpellEffects.h): how many of the units it made, in which colour the solve booked them, and the
+    // SET of colours the tapped mode could have made instead (a dual's two, Birds' five). SCRATCH: written only while the prepay collects
     // (t_bt_flex_collect) and read only by that same call, for the permanents it newly tapped -- whose label its
     // own solve (or the mana cache's replay of it) has just written. Never read anywhere else, so never folded.
     uint8_t   mana_flex              = 0;

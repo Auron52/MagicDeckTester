@@ -618,7 +618,10 @@ static_assert(sizeof(Player) == 216,
 // this Build() never keys across), FUTURE-DETERMINING within the phase -> value-gated into the main-phase key
 // (TurnSolver, PrepayWildTrueKey) and the mana oracle's refine hash. Permanent::mana_flex (in padding, size
 // unchanged) is SCRATCH read only inside the BatchPrepayMainCasts call that wrote it: never folded.
-static_assert(sizeof(GameState) == 1448,   // verify combined current fields in the integrated build
+// +8 bytes (2026-11-13, mana-clean item A round 2; 1424 -> 1432 on its own): `prepay_wild_true` grows to 17 bytes (8 one-byte colour MASKS
+// per pool instead of 5 per-colour counts: a dual's unit is {U,R}, committed at spend -- the approved route (a)).
+// Same classification and the same value-gated fold (PrepayWildTrueKey now mixes the canonical masks).
+static_assert(sizeof(GameState) == 1456,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

@@ -574,12 +574,16 @@ struct GameState
     // could make ANY colour (Cavern, Sliver Hive, Birds, a counter-paid Vivid land) really is any-colour mana; one
     // funded from a Forest / a dual / Vivid Creek's free {U} is NOT, yet `wild` pays any colour pip -- so a spend
     // OUTSIDE the bill (a replicate copy, a response cast, a flashback after a breakpoint draw) could pay {R} with
-    // a {U} (Gods s30018016 / s30018089). gen[c] / cre[c] = how many of floating_mana.wild /
-    // floating_creature_mana.wild are such units of TRUE colour c (W,U,B,R,G): they pay a generic pip or a pip of
-    // colour c only (SpendFloatingTowardCost via t_wild_true). Honoured only in the turn + phase stamped. A subset
-    // count, never larger than the pool's wild. FUTURE-DETERMINING within the phase: value-gated into the
-    // main-phase key (TurnSolver, beside floating_prepay_c).
-    struct PrepayWildTrue { std::uint8_t gen[5] = {0,0,0,0,0}; std::uint8_t cre[5] = {0,0,0,0,0};
+    // a {U} (Gods s30018016 / s30018089). gen[] / cre[] = the restricted units of floating_mana.wild /
+    // floating_creature_mana.wild, one byte each: the MASK of colours (bit c = W,U,B,R,G) the unit's source could
+    // have made -- {c} for a Forest / Vivid Creek's free {U}, {U,R} for a dual (committed at spend, USER), 0 = empty
+    // slot; canonical order (fewest colours first), so equal records are byte-equal. Such a unit pays a generic pip
+    // or a pip of a colour in its mask only (SpendFloatingTowardCost via t_wild_true). Honoured only in the turn +
+    // phase stamped. A subset of the pool's wild, never larger. Units beyond kSlots are released (any colour:
+    // counted, MTG_PREPAY_WILD_AUDIT). FUTURE-DETERMINING within the phase: value-gated into the main-phase key
+    // (TurnSolver, beside floating_prepay_c).
+    struct PrepayWildTrue { static constexpr int kSlots = 8;
+                            std::uint8_t gen[kSlots] = {}; std::uint8_t cre[kSlots] = {};
                             std::uint8_t stamp = 0xFF; };
     PrepayWildTrue           prepay_wild_true;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):
