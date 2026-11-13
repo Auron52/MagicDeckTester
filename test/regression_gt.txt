@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 28c1ab254  date 2026-11-13
+# Regression ground truth -- commit 9a4a995c3  date 2026-11-13
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -62,8 +62,8 @@ hinata_smoke_d0_s1001=6.7660/f23e3092c86cd33a
 hinata_smoke_d3_s1001=5.5400/f48347782875679d
 hinata_smoke_d5_s1001=5.4600/c36b0e2553be82d5
 cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
-cyclone_smoke_d3_s1001=4.9400/e9b5a5cf0a9bf3b6
-cyclone_smoke_d5_s1001=4.7300/1450bd6d2e40ee7a
+cyclone_smoke_d3_s1001=4.9400/24a5049e7d284df5
+cyclone_smoke_d5_s1001=4.7300/fdc0b98da559c49d
 cyclone2hg_smoke_d3_s1001=5.0000/ef6ee839320ad79d
 shadowborn_smoke_d0_s1001=7.3860/2605bf276a143ca3
 shadowborn_smoke_d3_s1001=5.0000/9e3b52ff67b25d5a
@@ -111,7 +111,7 @@ critter_smoke_d5_s1001=4.3314/c706116a79d79229
 lhc_smoke_d0_s1001=5.0110/dba88905a52d074b
 lhc_smoke_d3_s1001=4.6200/29747fc604328541
 lhc_smoke_d5_s1001=4.6400/6129ae996f1d300b
-melira_smoke_d0_s1001=6.2590/5cd002237b4163a2
+melira_smoke_d0_s1001=6.2590/c2e5970fa9ef29b1
 melira_smoke_d3_s1001=4.7600/ee8834d9e2cf5313
 melira_smoke_d5_s1001=4.6200/0bb099f0f0ccbe82
 angels_smoke_d0_s1001=5.2600/7b9b092ba94cc19d
@@ -182,9 +182,9 @@ galadriel_smoke_d0_s1001=6.9400/9894f279fe8c85d9
 galadriel_smoke_d3_s1001=4.8200/27c8079c8746ce2a
 galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
 galadriel2hg_smoke_d5_s1001=4.8933/c5dceba1c36445b0
-niv_smoke_d0_s1001=6.0760/5bd2bccf65b42618
+niv_smoke_d0_s1001=6.0760/ea8867ba6d0b07a0
 niv_smoke_d3_s1001=4.5200/15071e9523de702d
-niv_smoke_d5_s1001=4.6500/3e1a2364e143159e
+niv_smoke_d5_s1001=4.6500/5b894d06bcdfdab2
 niv2hg_smoke_d5_s1001=4.4800/c148692d2f9b1b99
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.2800/5928c76b96dbd120
