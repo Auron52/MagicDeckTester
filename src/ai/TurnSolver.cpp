@@ -102066,6 +102066,24 @@ unsigned long long TurnSolver::TruncEvents() { return g_fs_trunc_events; }
 // current decision's search (deterministic). g_fs_leaf_evals is a running counter; per-pass deltas are the
 // per-depth leaf counts, snapshotted by FullSearchLine into g_probe_leaves while g_probe_recording is set.
 inline thread_local long long g_fs_leaf_evals   = 0;
+// MTG_P16_TRACE (P16 diagnostic, print-only, default OFF): per-decision split of the hybrid's units into its
+// passes, and of each pass into horizon-rollout units (FSLineWin's depth-0 SimulateToEnd) vs the rest (tree).
+// One stderr line per top-level FullSearchLineHybrid call. Never read by play.
+namespace p16
+{
+    inline bool On() { static const bool v = EnvOn("MTG_P16_TRACE"); return v; }
+    inline thread_local long long t_leaf_units = 0;   // running: units charged inside horizon rollouts
+    inline thread_local int t_hyb_nest = 0;           // FullSearchLineHybrid nesting (record at 1 only)
+    struct Pass { char kind; int depth; long long units; long long leaf; int status; int dvs; int win; };
+    inline thread_local std::vector<Pass> t_passes;
+    // kind: H rollout ladder pass | P leafless ladder pass | C calibration | F FIT pass | L FIT climb pass
+    // status: 0 completed | 1 overrun, rolled back | 2 overrun, anytime-rescued
+    inline void Rec(char kind, int depth, long long units, long long leaf, int status, int win, int dvs)
+    {
+        if (!On() || t_hyb_nest != 1) { return; }
+        t_passes.push_back({kind, depth, units, leaf, status, dvs, win});
+    }
+}
 // Tree-shape diagnostics (same running-counter convention): branch-and-bound prunes at FSLineWin's
 // entry, in-horizon early exits, and the sum of leaf win turns -- what the leaf VALUE feeds back into
 // the tree's shape. Per-pass deltas, read by the emulated ladder's same-depth comparison.
@@ -106222,7 +106240,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         int w;
         {
             const RolloutNarrowScope _narrow;   // the tail rollout beyond the horizon: see MTG_ROLLOUT_FAN_NARROW
+            const long long p16u0 = budget ? budget->Used() : 0;   // MTG_P16_TRACE (print-only)
             w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+            if (budget) { p16::t_leaf_units += budget->Used() - p16u0; }
         }
         g_fs_leaf_wt_sum += w;
         return { w, {} };
@@ -110427,6 +110447,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const long long cuts0 = g_fs_cut_prunes, hex0 = g_fs_hexits, wt0 = g_fs_leaf_wt_sum;
             const long long mw0 = g_fs_memo_win_hits, mn0 = g_fs_memo_nowin_hits, mo0 = g_fs_memo_order_miss, ms0 = g_fs_memo_stale;
             const long long tl0 = g_tt_look_n, th0 = g_tt_hit_n;
+            const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
             if (bounded)
             {
                 const long long beta_ceiling = static_cast<long long>(kOverrunBeta * limit);
@@ -110454,6 +110475,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (budget != nullptr) { budget->SetOverrunLimit(0); }
             cost   = (budget ? budget->Used() : 0) - used_before;
             leaves = g_fs_leaf_evals - leaves_before;
+            if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only): X rollout / W warm-up pass
+            { p16::Rec(heuristic ? 'X' : 'W', d, cost, p16::t_leaf_units - p16_l0, over ? 1 : 0, out.win_turn,
+                       g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
             if (!over && d >= 0 && d < 17)
             {
                 PassShape& ps = heuristic ? shape_h[d] : shape_v[d];
@@ -110796,6 +110820,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         long long used_before = budget ? budget->Used() : 0;
         const long long pr_before = workctr::t_priced;   // priced start gate (see above)
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
+        const long long p16_leaf0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
         const long long lad_tl0 = g_tt_look_n, lad_th0 = g_tt_hit_n;
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
         // the ceiling it is pathological -- abort and keep the best line we hold (see the anytime
@@ -110847,6 +110872,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                   state.turn_number, pass_depth,
                   budget ? budget->Used() : 0, budget ? budget->Limit() : 0,
                   rescued ? pass_depth : prev_committed, rescued ? " (anytime rescue)" : "");
+            if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
+            { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, budget->Used() - used_before, p16::t_leaf_units - p16_leaf0,
+                       rescued ? 2 : 1, attempt.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
             if (rescued) { line = attempt;    committed_depth = pass_depth; escstats::t_esc_rescued_main = true; }
             else         { line = prev_line;  committed_depth = prev_committed; }
             break;
@@ -110902,6 +110930,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
         TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
               state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
+        if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
+        { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, cost, p16::t_leaf_units - p16_leaf0, 0, line.win_turn,
+                   g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
@@ -111401,6 +111432,28 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         bool allow_chain_tape)
 {
     const treereuse::Decision _treereuse_decision(state.turn_number);   // MTG_TREE_REUSE_PROBE (read-only)
+    // MTG_P16_TRACE (print-only): one line per top-level decision, its passes and their rollout units.
+    struct P16Decision
+    {
+        const GameState& st; SearchBudget* b; int* ocd; long long u0; int lc0; bool sm;
+        P16Decision(const GameState& s_, SearchBudget* b_, int* o_, bool sm_)
+            : st(s_), b(b_), ocd(o_), u0(b_ ? b_->Used() : 0), lc0(0), sm(sm_)
+        { ++p16::t_hyb_nest; if (p16::t_hyb_nest == 1) { p16::t_passes.clear(); } }
+        ~P16Decision()
+        {
+            if (p16::On() && p16::t_hyb_nest == 1)
+            {
+                std::fprintf(stderr, "[p16] k=%s s=%llu T%d sm=%d used=%lld limit=%lld cd=%d n=%zu |",
+                             valuearm::t_deck_key.c_str(), static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0,
+                             (b ? b->Used() : 0) - u0, b ? b->Limit() : 0LL, ocd ? *ocd : -1, p16::t_passes.size());
+                for (const p16::Pass& q : p16::t_passes)
+                { std::fprintf(stderr, " %c%d:%lld/%lld/%d/%d/%d", q.kind, q.depth, q.units, q.leaf, q.status, q.dvs, q.win); }
+                std::fprintf(stderr, "\n");
+                p16::t_passes.clear();
+            }
+            --p16::t_hyb_nest;
+        }
+    } _p16dec(state, budget, out_committed_depth, second_main);
     // This whole function is planning on state COPIES, but it is called straight from
     // AIEngine::TakeTurn (real-play context) and its single-pass escalation invokes FSLineWin
     // DIRECTLY -- so until 2026-08-25 this was the one planning entry point with NO enclosing
@@ -111679,6 +111732,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c2, budget);
             h1 = (budget ? budget->Used() : 0) - u0;
         }
+        p16::Rec('C', 1, t1 + h1, 0, 0, 0, 0);   // MTG_P16_TRACE (print-only); its rollout half = h1 - t1 approx
         if (l1 > 0 && h1 > t1) { g_single_R = static_cast<double>(h1 - t1) / static_cast<double>(l1); g_single_R_n = 1; }
         else { g_single_R = (escalation_r > 0.0) ? escalation_r : 120.0; g_single_R_n = 1; }
         // Telemetry (MTG_HYBRID_STATS): this calibration is per GAME and runs BEFORE the probe, so it
@@ -112018,9 +112072,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 const long long pr_before_fit = workctr::t_priced;
                 const long long used_before = budget->Used();
                 budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
                 hl = FSLineWinComplete(state, dpass, max_turns, max_turns + 1, second_main, single_tt1, &attempt_cache, budget);
                 const bool over = budget->Overrun();
                 budget->SetOverrunLimit(0);
+                p16::Rec('F', dpass, budget->Used() - used_before, p16::t_leaf_units - p16_l0, over ? 1 : 0, hl.win_turn, 0);
                 g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
                 fit_roll_units += budget->Used() - used_before;
                 if (!over)
@@ -112081,10 +112137,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     const long long pr_before_climb = workctr::t_priced;
                     const long long ub = budget->Used();
                     budget->SetOverrunLimit(SearchBudget::SatAdd(ub, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                    const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
                     SearchLine att = FSLineWinComplete(state, d, max_turns, max_turns + 1, second_main, single_tt1, &climb_cache, budget);
                     const bool over = budget->Overrun();
                     budget->SetOverrunLimit(0);
                     const long long cost = budget->Used() - ub;
+                    p16::Rec('L', d, cost, p16::t_leaf_units - p16_l0, over ? 1 : 0, att.win_turn, 0);
                     fit_roll_units += cost;
                     g_sres_units.fetch_add(cost, std::memory_order_relaxed);
                     if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   CLIMB d=%d units=%lld win=%d over=%d\n", d, cost, att.win_turn, over ? 1 : 0); }
