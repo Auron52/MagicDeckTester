@@ -1382,3 +1382,16 @@ fungus 1,880, gods 4,300 (first run).
   and its prepaid share floats; the oracle (per-cast payments, typed set-asides, never `wild`) cannot reproduce that
   leftover (an any-colour CoB unit floats `wild` legitimately; a Forest/Coliseum tapped only for the dropped cast).
   Engine life >= oracle life in every flag; no illegal tap (Tendo counters checked). Not fixed (analyzer completeness).
+* **Queue item B (2026-11-13): 0/0 audit fixes (a-e) + USER decision 14 -- FIXED (7776b8f62 + e404d1362, GT
+  9af0bf256 smoke + the regression accept commit after it; local).** (a) MTG_LORD_LEAVE_SBA: a 0-toughness token dies
+  to SBA when a lord leaves (devour deaths, sacrifice, until-EOT shrink of a lord); (b) MTG_SAC_NO_PHANTOM_FLOAT lever +
+  float-first legacy skirk branch DELETED (byte-identical); (c) CheckLine positional pre-tap check (human play only);
+  (d) MTG_FADE_FODDER_LIVE; (e) MTG_FADE_NO_DEAD_ACT = decision 14: no Saproling Burst activation that makes a token at
+  0 toughness, counting lords on board AND in hand (a same-plan Sporecrown cast keeps the token alive). All default ON.
+  Units 2974/2974. Held-out A/B (seeds 88400000+, all three off vs on, logs/mana-clean-chain/itemB/ab2_report.txt):
+  fungusv3 3000/arm net -5, candidate-b 1500/arm net -8, v1 byte-identical; searched slower 0 everywhere; d0 candb
+  gi540/gi554 slower (greedy d0 runner, not searched). Smoke: fungusv3 d0/d3/d5 + fungusv32hg d5 moved -- searched
+  slower 0 / 4 play-changed same score (more T5 overkill), d0 gi655 unwon->T6, gi857 6->5. Regression: fungusv3 d0
+  s2002 (gi389 6->5, gi402/gi759 unwon->6, gi642 7->5) and d5 s2002 gi216 play-changed same score. Every moved row is
+  reproduced exactly by MTG_FADE_NO_DEAD_ACT=0 alone; (a)/(d) moved nothing. check_gt_logs clean (1146). Not covered
+  (none in the Fungus pool): a lord entering by a NON-cast route mid-plan (tutor-put, Vial).
