@@ -155,6 +155,36 @@ bool CastOrderLess(const GameState& state, const Action& a, const Action& b);
 int  CastOrderKeyOf(const GameState& state, const Action& a);
 bool OrderingOpaque(const std::string& name);
 
+// GRAVEYARD CASTS RIDE THE CAST SEQUENCE (Spirits integrator E2, 2026-11-13;
+// docs/design/graveyard-cast-search-holes-deferred.md section 3). A graveyard cast (flashback, a Lurrus
+// permission cast) is sequenced at its card's CastOrderRank in every RANK-ORDERED cast section of BOTH
+// apply worlds -- exactly as Aether Vial puts ride it (USER 2026-10-06) -- instead of trailing every hand
+// cast. Before this, "flashback Lingering Souls (two Spirit tokens), then Millicent two cheaper by
+// affinity" was unfindable at any budget: the plan menu offered both casts but both worlds realised
+// Millicent first. It TRAILS still (the old pass, unchanged) when:
+//   * the section is not rank-ordered (an explicit / searched order, or an opaque set without
+//     OpaqueCastOrderActive -- callers gate that);
+//   * the card is a breakpoint class (OrderingOpaque: retrace, draw, cascade...; or
+//     TurnSolver::ParamKeyedDrawClass) -- its draw partitions the section, and at the end of the section
+//     the partition drops nothing (Faithless Looting's flashback, Throes of Chaos's retrace);
+//   * the card READS the graveyard (tutor_from_graveyard, Mystic Retrieval): a hand cast earlier in the
+//     plan can only add targets, so the end of the section dominates.
+// MTG_GY_CAST_IN_SEQUENCE=0 restores the trailing pass for every graveyard cast (A/B lever, default ON).
+bool GyCastInSequenceEnabled();
+bool GyCastRidesCastSequence(const GameState& state, const Action& a);
+// Append every graveyard cast of `acts` that rides the sequence to `order` (the caller decides whether
+// the section is rank-ordered). Shared by every ordered section in both worlds.
+void AppendSequencedGyCasts(const GameState& state, const std::vector<Action>& acts, std::vector<int>& order);
+// Is the action at `i` a graveyard cast this section sequences (a member of `order`)? The trailing
+// graveyard pass of the same section skips exactly these.
+bool OrderHoldsGyCast(const std::vector<Action>& acts, const std::vector<int>& order, std::size_t i);
+// STRUCTURAL, last (inside ApplyPayableCastOrder / ApplyPayableCastOrderAt): a graveyard cast of a name
+// with no copy in the graveyard yet at its position (integrator B's PENDING flashback of a card the plan
+// casts from hand this main) moves to just after the hand cast that puts the copy there. The rank sort
+// already does this (same card, same rank, plan order); this keeps it true under any later reorder.
+void ApplyGraveyardCastDependencyOrder(const GameState& state, const std::vector<Action>& acts,
+                                       std::vector<int>& order);
+
 // The deck's SET-level arrangement of a comparator-sorted cast order (DecisionProvider::
 // ArrangeCastOrder; a no-op for every provider that does not override it). Called right after the
 // CastOrderLess sort at every site that realises or projects a cast order -- the executor

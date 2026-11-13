@@ -8124,15 +8124,18 @@ static bool LeafReducerCreditEnabled()
 //   * a Metallic Mimic-style "is the chosen type" creature, whose chosen type (ChosenCreatureSubtypeId, the
 //     provider FireEtbWatchers asks at its ETB) is appended to the battlefield permanent -- a Mimic naming
 //     Spirit is a Spirit for Millicent's affinity;
-//   * a token-making HAND cast (Lingering Souls: cast_creates_tokens 2 Spirit tokens, ApplyCastCreatesTokens).
-//     Hand only: a flashback / graveyard cast resolves in the TRAILING pass after every hand cast and Vial
-//     put in both apply worlds, so it can never precede the affinity cast (an OPEN ordering hole, see
-//     docs/design/analysis-Spirits.md, integrator C1).
+//   * a token-making cast (Lingering Souls: cast_creates_tokens 2 Spirit tokens, ApplyCastCreatesTokens),
+//     from HAND or from the GRAVEYARD (its flashback). A graveyard cast counts only when it rides the cast
+//     sequence (GyCastRidesCastSequence, Spirits integrator E2): then both apply worlds cast it at its card's
+//     rank, so "flashback Souls, then Millicent two cheaper" is realised as priced. A graveyard cast that
+//     TRAILS (a breakpoint class, a graveyard reader) resolves after every hand cast and counts 0 -- for a
+//     creature too.
 // Returns 0 for everything else (the caller applies the cast-order test).
 static int AffinityFeedCount(const GameState& state, const Action& a, const CardDefinition& aff)
 {
+    if (a.kind == Action::Kind::CastFromGraveyard && !GyCastRidesCastSequence(state, a)) { return 0; }
     const CardDefinition* dk = a.def;
-    if (dk == nullptr && a.kind == Action::Kind::ActivateVial)
+    if (dk == nullptr && (a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::CastFromGraveyard))
     { dk = CardDatabase::Instance().LookupInterned(a.card_name); }
     if (dk == nullptr) { return 0; }
     const std::vector<std::string>& subs = aff.params.subtypes_affected;
@@ -8160,7 +8163,8 @@ static int AffinityFeedCount(const GameState& state, const Action& a, const Card
         if (match)
         { n += 1 + (a.kind == Action::Kind::ActivateVial ? 0 : std::max(0, a.replicate_count)); }
     }
-    if (a.kind == Action::Kind::CastFromHand && dk->params.cast_creates_tokens > 0)
+    if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
+        && dk->params.cast_creates_tokens > 0)
     {
         bool tmatch = false;
         for (const std::string& sub : subs)
@@ -8185,7 +8189,7 @@ static int SameTurnAffinityDiscountFor(const GameState& state, const std::vector
         if (k == j) { continue; }
         const Action& ak = cands[k];
         const CardDefinition* dk = ak.def;
-        if (dk == nullptr && ak.kind == Action::Kind::ActivateVial)
+        if (dk == nullptr && (ak.kind == Action::Kind::ActivateVial || ak.kind == Action::Kind::CastFromGraveyard))
         { dk = CardDatabase::Instance().LookupInterned(ak.card_name); }
         if (!dk) { continue; }
         if (ResolveProvider(state).CastOrderRank(state, *dk) >= j_rank) { continue; }  // cast after -> no credit
@@ -8230,9 +8234,12 @@ struct SameTurnReducerCounts
     std::unordered_map<uint16_t, int> sub;
     std::unordered_map<uint16_t, int> sub_creature;
     // Patrician Geist (reduces_graveyard_cast_generic) entering this plan, summed: discounts each
-    // GRAVEYARD cast in the subset. Exact, not optimistic: both apply worlds resolve every graveyard
-    // cast after the hand casts and Vial puts (ApplyPlanDirect's trailing pass; AIEngine::TakeTurn).
+    // GRAVEYARD cast in the subset that resolves after it. A graveyard cast that TRAILS (the trailing pass
+    // of both apply worlds) follows every Geist; one that RIDES the cast sequence (GyCastRidesCastSequence,
+    // Spirits integrator E2) follows the Geists whose cast-order key is <= its own (`gy_cast_keys`: key,
+    // amount -- a key tie falls to plan order, credited optimistically, which can only ADD plans).
     int gy_cast = 0;
+    std::vector<std::pair<int, int>> gy_cast_keys;
     bool Any() const
     { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty() || gy_cast > 0; }
 };
@@ -8268,7 +8275,8 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
     uint16_t chosen = SubtypeRegistry::kNone;   // lazily resolved; deck-constant
     for (int j : sel)
     {
-        rc.gy_cast += ActionGyCastReducerAmount(cands[j]);   // Patrician Geist (0 elsewhere)
+        if (const int gya = ActionGyCastReducerAmount(cands[j]); gya > 0)   // Patrician Geist (0 elsewhere)
+        { rc.gy_cast += gya; rc.gy_cast_keys.emplace_back(CastOrderKeyOf(state, cands[j]), gya); }
         const CardDefinition* d = cands[j].def;
         if (!d) { continue; }
         if (!d->params.reduces_spell_subtype.empty() || d->params.chooses_creature_type)
@@ -8305,7 +8313,7 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
 // SameTurnReducerGenericCredit so the SEQUENCED ritual walk can price an individual accelerant
 // exactly as the subset's combined cost is priced -- see the soundness note on
 // SequencedRitualCredit.
-static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
+static int SameTurnReducerDiscountFor(const GameState& state, const SameTurnReducerCounts& rc,
                                       const std::vector<Action>& cands, int j)
 {
     const CardDefinition* dj = cands[j].def;
@@ -8314,7 +8322,15 @@ static int SameTurnReducerDiscountFor(const SameTurnReducerCounts& rc,
     int reducers = 0;
     // A graveyard cast gets every same-plan Geist's "{1} less" (a Geist already on the battlefield is in
     // its a.cost; the min() below caps the total at what generic is left).
-    if (cands[j].kind == Action::Kind::CastFromGraveyard) { reducers += rc.gy_cast; }
+    if (cands[j].kind == Action::Kind::CastFromGraveyard && rc.gy_cast > 0)
+    {
+        if (!GyCastRidesCastSequence(state, cands[j])) { reducers += rc.gy_cast; }   // trails every Geist
+        else
+        {
+            const int kj = CastOrderKeyOf(state, cands[j]);
+            for (const auto& [kg, amt] : rc.gy_cast_keys) { if (kg <= kj) { reducers += amt; } }
+        }
+    }
     if (mc.red   > 0) { reducers += rc.red; }
     if (mc.white > 0) { reducers += rc.white; }
     if (mc.blue  > 0) { reducers += rc.blue; }
@@ -8359,7 +8375,7 @@ static int SameTurnReducerGenericCredit(const GameState& state, const std::vecto
     const SameTurnReducerCounts rc = CountSameTurnReducers(state, cands, sel);
     if (!rc.Any()) { return 0; }
     int credit = 0;
-    for (int j : sel) { credit += SameTurnReducerDiscountFor(rc, cands, j); }
+    for (int j : sel) { credit += SameTurnReducerDiscountFor(state, rc, cands, j); }
     return credit;
 }
 
@@ -51549,7 +51565,7 @@ static int SequencedRitualCredit(const ManaPool& pool, const std::vector<Action>
         ManaCost c = cands[j].cost;
         if (!use_disc || c.generic <= 0) { return c; }
         int d = 0;
-        if (rcounts.Any()) { d += SameTurnReducerDiscountFor(rcounts, cands, j); }
+        if (rcounts.Any()) { d += SameTurnReducerDiscountFor(*st_disc, rcounts, cands, j); }
         d += SameTurnAffinityDiscountFor(*st_disc, cands, sel, j);
         if (d > 0) { c.generic = std::max(0, c.generic - d); }
         return c;
@@ -61279,12 +61295,16 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             for (const Action& r : acts)
             {
                 if (&r == &a) { continue; }
-                if (r.kind != Action::Kind::ActivateVial && r.kind != Action::Kind::CastFromHand) { continue; }
+                // ...and a graveyard cast that rides the cast sequence (Lingering Souls' flashback; Spirits
+                // integrator E2) -- still pending while its card is in the GRAVEYARD, not the hand.
+                const bool gy_feed = r.kind == Action::Kind::CastFromGraveyard && GyCastRidesCastSequence(state, r);
+                if (r.kind != Action::Kind::ActivateVial && r.kind != Action::Kind::CastFromHand && !gy_feed) { continue; }
                 const CardDefinition* rd = r.def != nullptr ? r.def : CardDatabase::Instance().LookupInterned(r.card_name);
                 if (rd == nullptr) { continue; }
                 if (ResolveProvider(state).CastOrderRank(state, *rd) >= a_rank) { continue; }
                 bool in_hand = false;
-                for (const Card& hc : state.players[active].hand) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
+                const std::vector<Card>& zone = gy_feed ? state.players[active].graveyard : state.players[active].hand;
+                for (const Card& hc : zone) { if (hc.m_name == r.card_name) { in_hand = true; break; } }
                 if (!in_hand) { continue; }
                 // The SAME count the enumeration credits (AffinityFeedCount): matching creatures (Vial puts
                 // included, a Mimic by its chosen type), pinned replicate copies, a token-making hand cast.
@@ -69946,6 +69966,21 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         { return (rec_unlock && out_breakpoint != nullptr && !sink_stack.empty()) ? sink_stack.back() : nullptr; };
         CastSectionUnlock _unlock(state, acts, unlock_sink());
         auto fire_unlock = [&]() { _unlock.Fire(unlock_sink()); };
+        // A graveyard cast sequenced at its rank (GyCastRidesCastSequence, the rank-ordered branches below):
+        // dispatched exactly as the trailing graveyard pass does, plus the cast-section unlock a hand cast
+        // fires; `gy_in_seq` makes that trailing pass skip it. AIEngine::TakeTurn's twins: the same calls.
+        std::set<size_t> gy_in_seq;
+        auto apply_gy_in_seq = [&](int i)
+        {
+            const Action& a = acts[static_cast<std::size_t>(i)];
+            gy_in_seq.insert(static_cast<size_t>(i));
+            line_order_trace("retrace", a);
+            karoo_pre_hook(a);
+            const bool tb = bp_truncate;
+            cast_riders = CastRiders::Of(a); apply_one(a.card_name, false, true, a.discard_lands, false, 0, std::string{}, a.chosen_x, a.soulfire_own_targets, a.ponder_keep, a.crackle_targets, a.splice_count, a.chosen_float_color, a.enchant_target, a.bestow, a.replicate_count, a.convoke_green, a.convoke_other, a.phyrexian_life, a.evoke, a.adventure, a.kicked);
+            fire_unlock();
+            slot_hook(a, tb);
+        };
         // The continuation's own line (cont_line_armed), for the rest of this cast section.
         std::optional<LineUnpaidCostScope>  _cont_luc;
         std::optional<LineOpensUnseenScope> _cont_lou;
@@ -70543,6 +70578,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || is_ordered_garth(a) || is_put(a))
                     { ord.push_back(i); }
                 }
+                // GRAVEYARD CASTS RIDE THE RANK-ORDERED SEQUENCE (GyCastRidesCastSequence; Spirits
+                // integrator E2): only when this opaque set IS rank-sorted -- in plan order they trail, as
+                // before. Lockstep twin: AIEngine::TakeTurn's opaque loop.
+                if (OpaqueCastOrderActive(state)) { AppendSequencedGyCasts(state, acts, ord); }
                 if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, ord); }   // land position: ties
                 if (OpaqueCastOrderActive(state))
                 {
@@ -70560,6 +70599,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { line_order_trace("garth", a); apply_garth(a); continue; }
+                    if (a.kind == Action::Kind::CastFromGraveyard) { apply_gy_in_seq(i); continue; }
                     line_order_trace(is_put(a) ? "vial" : a.sacrifice_land ? "sacland" : "cast", a);
                     karoo_pre_hook(a);
                     const bool tb = bp_truncate;
@@ -70600,8 +70640,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 for (int i = 0; i < static_cast<int>(acts.size()); ++i)
                 {
                     // SacLandCastsInOrder: a sac-land cast joins the sequence at its rank (TakeTurn twin).
+                    // ...and a graveyard cast at its card's rank (GyCastRidesCastSequence; TakeTurn twin).
                     if ((acts[i].kind == Action::Kind::CastFromHand && (!acts[i].sacrifice_land || sac_in_order))
-                        || is_ordered_garth(acts[i]) || is_put(acts[i]))
+                        || is_ordered_garth(acts[i]) || is_put(acts[i]) || GyCastRidesCastSequence(state, acts[i]))
                     { order.push_back(i); }
                 }
                 if (slot_order) { TurnSolver::LandSlotWatchersFirst(acts, order); }   // land position: ties
@@ -70621,6 +70662,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 {
                     const Action& a = acts[i];
                     if (is_ordered_garth(a)) { line_order_trace("garth", a); apply_garth(a); continue; }
+                    if (a.kind == Action::Kind::CastFromGraveyard) { apply_gy_in_seq(i); continue; }
                     line_order_trace(is_put(a) ? "vial" : a.sacrifice_land ? "sacland" : "cast", a);
                     karoo_pre_hook(a);
                     const bool tb = bp_truncate;
@@ -70651,7 +70693,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
         for (size_t ai = 0; ai < acts.size(); ++ai)
         {
-            if (v2_did(ai)) { continue; }
+            if (v2_did(ai) || gy_in_seq.count(ai)) { continue; }   // ...or already cast at its rank
             const Action& a = acts[ai];
             if (a.kind == Action::Kind::CastFromGraveyard)
             {

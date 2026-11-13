@@ -420,3 +420,92 @@ TEST_CASE("Millicent DeathOfWouldPay: a nontoken Spirit victim pays, a Spirit to
     CHECK(DeathOfWouldPay(s, 0, s.battlefield[ph]));
     CHECK_FALSE(DeathOfWouldPay(s, 0, s.battlefield.back()));
 }
+
+// ---- graveyard casts ride the cast sequence (integrator E2; graveyard-cast-search-holes-deferred.md section 3) ----
+
+TEST_CASE("GyCastRidesCastSequence: a flashback Souls rides; a breakpoint class or a graveyard reader trails")
+{
+    GameState s = MlBoard({});
+    auto gy = [&](const char* name) {
+        Action a;
+        a.kind      = Action::Kind::CastFromGraveyard;
+        a.card_name = name;
+        a.def       = &MlDef(name);
+        return a;
+    };
+    CHECK(GyCastRidesCastSequence(s, gy(kSouls)));                // a token maker: rides at its rank
+    CHECK_FALSE(GyCastRidesCastSequence(s, gy("Faithless Looting")));   // draws: a breakpoint class, trails
+    CHECK_FALSE(GyCastRidesCastSequence(s, gy("Mystic Retrieval")));    // reads the graveyard: trails
+    CHECK_FALSE(GyCastRidesCastSequence(s, gy("Throes of Chaos")));     // retrace + cascade: trails
+    Action hand = gy(kSouls);
+    hand.kind = Action::Kind::CastFromHand;
+    CHECK_FALSE(GyCastRidesCastSequence(s, hand));                // only graveyard casts are asked
+}
+
+TEST_CASE("ApplyGraveyardCastDependencyOrder: a PENDING flashback follows the hand cast that puts its copy there")
+{
+    GameState s = MlBoard({});   // empty graveyard
+    std::vector<Action> acts(3);
+    acts[0].kind = Action::Kind::CastFromGraveyard; acts[0].card_name = kSouls; acts[0].def = &MlDef(kSouls);
+    acts[1].kind = Action::Kind::CastFromHand;      acts[1].card_name = kMill;  acts[1].def = &MlDef(kMill);
+    acts[2].kind = Action::Kind::CastFromHand;      acts[2].card_name = kSouls; acts[2].def = &MlDef(kSouls);
+    std::vector<int> order{ 0, 1, 2 };
+    ApplyGraveyardCastDependencyOrder(s, acts, order);
+    CHECK(order == std::vector<int>{ 1, 2, 0 });
+    // A copy already in the graveyard: nothing moves.
+    s.players[0].graveyard.push_back(MlZone(kSouls, 40));
+    order = { 0, 1, 2 };
+    ApplyGraveyardCastDependencyOrder(s, acts, order);
+    CHECK(order == std::vector<int>{ 0, 1, 2 });
+}
+
+TEST_CASE("Millicent SAME TURN: FLASHBACK Souls first discounts her -- flashback {1}{B} + Millicent {W}{U} on FOUR lands, both worlds")
+{
+    // Three Spirits out, Souls in the GRAVEYARD. Flashback {1}{B} (two Spirit tokens), then Millicent {5}{W}{U} - 5
+    // = {W}{U}: four lands. Millicent first is {2}{W}{U} and leaves nothing for the flashback, so the pair exists
+    // only with the graveyard cast at its rank (20, before the AFFINITY tier 25) in BOTH worlds and credited by
+    // AffinityFeedCount. Before the fix both worlds cast it in the trailing pass and the enumerator did not
+    // credit it: the pair was unenumerable at any budget.
+    GameState s = MlBoard({ "Godless Shrine", "Hallowed Fountain", "Island", "Plains" });
+    MlPut(s, "Supreme Phantom", 1);
+    MlPut(s, "Mausoleum Wanderer", 2);
+    MlPut(s, "Shacklegeist", 3);
+    s.players[0].graveyard.push_back(MlZone(kSouls, 40));
+    s.players[0].hand.push_back(MlZone(kMill, 31));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* both = MlFindPlan(plans, {{Action::Kind::CastFromGraveyard, kSouls},
+                                                      {Action::Kind::CastFromHand, kMill}});
+    REQUIRE(both != nullptr);
+    MlCheckBothWorlds(s, *both, 2, 4);
+}
+
+TEST_CASE("Millicent after a flashback is not a free lunch: THREE lands cannot pay flashback Souls + Millicent")
+{
+    GameState s = MlBoard({ "Godless Shrine", "Hallowed Fountain", "Island" });
+    MlPut(s, "Supreme Phantom", 1);
+    MlPut(s, "Mausoleum Wanderer", 2);
+    MlPut(s, "Shacklegeist", 3);
+    s.players[0].graveyard.push_back(MlZone(kSouls, 40));
+    s.players[0].hand.push_back(MlZone(kMill, 31));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    CHECK(MlFindPlan(plans, {{Action::Kind::CastFromGraveyard, kSouls}, {Action::Kind::CastFromHand, kMill}}) == nullptr);
+}
+
+TEST_CASE("Millicent SAME TURN: hand Souls + its PENDING flashback + Millicent on SEVEN lands -- the flashback still follows its own hand cast")
+{
+    // Three Spirits out, Souls and Millicent in hand, empty graveyard. Souls {2}{W} (2 tokens), its flashback
+    // {1}{B} (2 more), Millicent {5}{W}{U} - 7 = {W}{U}: 3 + 2 + 2 = 7 lands. The pending flashback ranks with
+    // its own hand cast (20) and stays after it; both precede Millicent (25).
+    GameState s = MlBoard({ "Godless Shrine", "Hallowed Fountain", "Island", "Plains", "Plains", "Plains", "Swamp" });
+    MlPut(s, "Supreme Phantom", 1);
+    MlPut(s, "Mausoleum Wanderer", 2);
+    MlPut(s, "Shacklegeist", 3);
+    s.players[0].hand.push_back(MlZone(kSouls, 30));
+    s.players[0].hand.push_back(MlZone(kMill, 31));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* all3 = MlFindPlan(plans, {{Action::Kind::CastFromHand, kSouls},
+                                                      {Action::Kind::CastFromGraveyard, kSouls},
+                                                      {Action::Kind::CastFromHand, kMill}});
+    REQUIRE(all3 != nullptr);
+    MlCheckBothWorlds(s, *all3, 4, 7);
+}
