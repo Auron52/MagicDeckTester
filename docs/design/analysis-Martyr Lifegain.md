@@ -124,8 +124,8 @@ rebuild + martyr smoke + regression re-running (farm-rebase2-*.log) before the p
 5c2 TIE-BREAK DONE -- VERDICT KEEP (default ON). Extension (blocks s2200000.., 12000 paired): net -19, 2 worse / 18
 better (half A -5, half B -14), script verdict KEEP. POOLED with the first run (net -12, 3/15): 24000 paired, 38
 changed, net -31, 5 worse / 33 better; all four halves negative. Nothing to change (GradesNoWinLeaf stays true).
-NEXT: push -> 5h audit_viewer_decisions -> verify_deck --write-ledger -> Stage 6 report -> mullgen.sh run (alone)
--> valueleaf.sh run.
+DONE since: pushed 43b92b447 (CI green), 5h PASS, verify_deck PASS, Stage 6 report (section below).
+RUNNING: mullgen.sh run (03:38 UTC, logs/martyr-lifegain/mullgen.{log,pid,freeze}) ALONE -> then valueleaf.sh run.
 
 ### Checkpoint (2026-11-12 ~18:45 UTC, history)
 
@@ -281,6 +281,44 @@ NEXT after landing: regression + overnight tiers for martyr (accept --deck=marty
 verify_deck.py --write-ledger -> Stage 6 report (USER: amended split, Ranger-Captain, Farm prune's literal 30 in 2HG
 (start 30, Speaker gate 37), Jitte one-gain-per-plan gap, Innocence order, discard buckets, deferrals) -> THEN the
 mulligan profile (mullgen.sh run, alone on the box). Cron 7869914f (session-only) stays until the end.
+
+## Stage 6 -- report (2026-11-13)
+
+STATE: pushed 43b92b447 to phase-1-2-deck-analyzer (CI green: ubuntu, windows, determinism parity) + local ledger /
+audit commits (next push window ~06:46 UTC). verify_deck --write-ledger: GATE PASS (table below, generated block).
+
+Ground truth (accepted): smoke s1001 d0 6.0680 / d3 5.1800 / d5 5.2500, 2HG d5 5.4400; regression s2002 d0 6.0840 /
+d3 5.5400 / d5 5.5400, s3003 d5 5.4000, s30201 d3 5.4000 / d5 5.2000 (budget-0 backstop), 2HG d5 5.7333; overnight 15
+keys (accepted 11-12, d3/d5 possibly stale after the Farm amendment -- left to the periodic run, USER). Cost gate PASS,
+0.69x Hinata. References 10/10 (human 5.2 = search 5.2).
+
+Stage 5: 5a mismatch PASS (7001/8001 x60). 5b monotone (d3 >= d5 on every paired game). 5c2 tie-break KEEP (24000
+paired, net -31, 5 worse / 33 better). 5d Claude-play sweep 16 games, 0 unresolved flags (at d6b1c6b12 -- BEFORE the
+split/tutor-prune/Farm changes, which narrow search but change no card model; not re-run). 5h PASS -- the Jitte
+HARD_MISS was the audit's expectation (combat `jitte` prompt needs a double striker; fixed in the script), Swords /
+Unexpectedly Absent UNVERIFIED by the goldfish ruling (never cast). 5i discard buckets: proposal below, NOT built.
+
+OPEN USER DECISIONS (each surfaced; the current setting stands until answered):
+1. Farm Animals tutor amendment (MTG_MARTYR_TUTOR_FARM + _DRY) landed DEFAULT ON by the agent on the USER's "prune it
+   in more cases?": ab7 dry vs literal 0 slower / 0 faster std+2HG, units +0.04%; regression gi0 T6 -> T5.
+   `MTG_MARTYR_TUTOR_FARM=0` restores the USER's literal three-card rule.
+2. Amended main-1/main-2 split (MTG_MARTYR_SPLIT_AMEND): ab4 std net +5 / 2HG net -5, 4 slower games do NOT recover at
+   d8 b0 (std gi436/458/462, 2HG gi74) -> default OFF.
+3. Ranger-Captain of Eos in main 1 with a fetch target (agent extension of "Hawk and Ranger of Eos").
+4. Jitte one-gain-per-plan gap (gi14: "gain 2 x2 -> Serra 6/6 -> exact lethal" not found even at budget 0).
+5. Farm sac prune's literal 30 in 2HG (start 30, Speaker gate 37).
+6. Enduring Innocence cast order.
+7. 5i discard buckets (proposal below).
+8. PROVISIONAL deferrals: Lurrus companion inert; {X} permanents never Lurrus-castable (none in list); Squadron Hawk
+   takes the full count; end-step Clue not crackable that turn; Kami / Farm instant-speed activation not modelled.
+9. Speaker of the Heavens cards.json note is stale (describes pre-breakpoint behaviour) -- doc only.
+
+6a DISCLOSURE: unbudgeted d5 has a degenerate tail on this deck (7/80 backstop games abandoned at 2M units; the chosen
+backstop blocks all finish); Claude sweep predates the later provider changes (above); overnight d3/d5 keys may be
+stale; removal never cast (goldfish ruling).
+
+NEXT: mullgen.sh run (started 03:38 UTC, pid in logs/martyr-lifegain/mullgen.pid, log mullgen.log; freeze in
+mullgen.freeze) ALONE -> valueleaf.sh run.
 
 ## Stage 5b -- multi-depth sanity (2026-11-12)
 
