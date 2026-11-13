@@ -4149,12 +4149,36 @@ ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& 
                                     const ManaCost& alternate_base)
 { return EffectiveSpellCostImpl(def, state, 1, &alternate_base); }
 
+int GraveyardCastGenericDiscount(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd != nullptr) { n += pd->params.reduces_graveyard_cast_generic; }
+    }
+    return n;
+}
+
 ManaCost GraveyardCastSpellCost(const CardDefinition& def, const GameState& state, int copies)
 {
-    if (!def.params.flashback_cost.has_value()) { return EffectiveSpellCostImpl(def, state, copies, nullptr); }
-    CardDefinition pay_def = def;
-    pay_def.card.m_mana_cost = *def.params.flashback_cost;
-    return EffectiveSpellCostImpl(pay_def, state, copies, nullptr);
+    ManaCost cost;
+    if (!def.params.flashback_cost.has_value()) { cost = EffectiveSpellCostImpl(def, state, copies, nullptr); }
+    else
+    {
+        CardDefinition pay_def = def;
+        pay_def.card.m_mana_cost = *def.params.flashback_cost;
+        cost = EffectiveSpellCostImpl(pay_def, state, copies, nullptr);
+    }
+    // Patrician Geist: "Spells you cast from your graveyard cost {1} less" -- per Geist the CASTER
+    // controls, generic only, one more floored reduction (max(0, max(0, g - a) - b) == max(0, g - a - b),
+    // so applying it after EffectiveSpellCost's own reductions is CR 601.2f's single floor). The walk
+    // runs only for a graveyard cast, which only a retrace / flashback / Lurrus deck makes, and adds 0
+    // wherever no permanent carries the param -- byte-identical for every other deck.
+    const int disc = GraveyardCastGenericDiscount(state, state.active_player_index);
+    if (disc > 0) { cost.generic = std::max(0, cost.generic - disc); }
+    return cost;
 }
 
 int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)

@@ -1642,6 +1642,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.reduces_spell_subtype_amount = params.value("reduces_spell_subtype_amount", 1);
     p.reduces_spell_subtype_creature_only =
         params.value("reduces_spell_subtype_creature_only", false);
+    p.reduces_graveyard_cast_generic =
+        params.value("reduces_graveyard_cast_generic", 0);   // Patrician Geist
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
     p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
     p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
@@ -1848,6 +1850,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("own_creature_enters_lifegain_toughness", false);
     p.own_creature_enters_self_counters =
         params.value("own_creature_enters_self_counters", 0);
+    p.own_creature_enters_self_temp_power =
+        params.value("own_creature_enters_self_temp_power", 0);   // Mausoleum Wanderer
+    p.own_creature_enters_self_temp_tough =
+        params.value("own_creature_enters_self_temp_tough", 0);
     p.other_nontoken_enters_counter_haste =
         params.value("other_nontoken_enters_counter_haste", 0);
     p.any_creature_enters_self_counters_power =

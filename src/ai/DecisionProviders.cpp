@@ -727,6 +727,8 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
             && (wp.own_creature_enters_lifegain > 0
                 || wp.own_creature_enters_lifegain_toughness
                 || wp.own_creature_enters_self_counters > 0
+                || wp.own_creature_enters_self_temp_power > 0   // Mausoleum Wanderer (until-EOT pump
+                || wp.own_creature_enters_self_temp_tough > 0   //  survives the legend-rule death)
                 || wp.own_creature_enters_draw > 0
                 || wp.own_creature_enters_opp_life_loss > 0))   // Forerunner of the Coalition
         { return true; }
@@ -25443,7 +25445,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (Flooded Strand's fetch_land_types), `goblin` (a Spirit dies-watcher such as Millicent's) and
     // `vial && slivers` (Millicent's affinity_for_subtype) -- the archetype-neutral misroute class
     // again; it rode `vial` before its own cards landed. Signature = Spirit-KEYED gated params OR'd
-    // across FOUR different cards, so one deckbuilding swap cannot lose it:
+    // across FIVE different cards, so one deckbuilding swap cannot lose it:
     //   * a lord whose subtypes_affected names "Spirit" -- Drogskol Captain, Supreme Phantom and
     //     Patrician Geist (keyed on the SUBTYPE, the Knights discipline: subtypes_affected is
     //     archetype-neutral on its own, every tribal lord sets it);
@@ -25456,8 +25458,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // (colourless or tribal-land staples every Vial tribal deck runs -- Kithkin, Pirates, Soldiers);
     // Spirit of the Labyrinth's each_player_draw_cap_per_turn (a white hatebear any W list may add);
     // the fetch / shock lands; Lingering Souls' token / flashback params (a generic W/B token card).
-    // Later integrators: Mausoleum Wanderer's enter watcher keyed on enters_watch_subtypes "Spirit"
-    // would make a fifth term; add it with its param.
+    //   * Mausoleum Wanderer's until-EOT enter pump (own_creature_enters_self_temp_*) watching "Spirit",
+    //     on a Spirit card (integrator B2, 2026-11-13).
     bool spirits = false;
     for (const Card& c : deck.mainboard)
     {
@@ -25498,8 +25500,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             const bool spirit_lord = std::find(p.subtypes_affected.begin(), p.subtypes_affected.end(),
                                                std::string("Spirit")) != p.subtypes_affected.end();
             const bool is_spirit = CardHasSubtype(def->card, "Spirit");
+            // Mausoleum Wanderer: a SPIRIT whose until-EOT enter pump watches Spirits (its param is
+            // carried by no other card; conjoined with both Spirit tests all the same).
+            const bool spirit_watcher = is_spirit
+                && (p.own_creature_enters_self_temp_power > 0 || p.own_creature_enters_self_temp_tough > 0)
+                && std::find(p.enters_watch_subtypes.begin(), p.enters_watch_subtypes.end(),
+                             std::string("Spirit")) != p.enters_watch_subtypes.end();
             if (spirit_lord || (is_spirit && p.attack_token_exile_end_of_combat)
-                || (is_spirit && p.affinity_for_subtype))
+                || (is_spirit && p.affinity_for_subtype) || spirit_watcher)
             { spirits = true; }
         }
         // + A1: Falkenrath Gorger's madness grant KEYED ON THE VAMPIRE SUBTYPE (a madness-granter for

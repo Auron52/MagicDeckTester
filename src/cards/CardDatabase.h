@@ -2917,6 +2917,15 @@ struct CardParams
     //
     bool reduces_spell_subtype_creature_only = false;
 
+    // Patrician Geist: "Spells you cast from your graveyard cost {N} less to cast." Per permanent you
+    // control carrying it (stacks per copy), GENERIC only, floored at 0 (CR 601.2f), applied to EVERY
+    // graveyard cast -- flashback, retrace, a Lurrus-style permission cast -- inside the shared
+    // GraveyardCastSpellCost (ManaPayment.cpp), so the enumeration, the rollout apply and the executor
+    // price it identically. A Geist cast / Vial-put earlier in the same plan is credited per subset by
+    // TurnSolver's SameTurnReducer* (gy_cast). Deliberately NOT reduces_spell_subtype: that param is a
+    // Goblins signature term and a different effect. 0 = inert.
+    int reduces_graveyard_cast_generic = 0;
+
     // "As this permanent enters, choose a creature type" (Urza's Incubator). When true the reducer's
     // subtype is NOT the printed reduces_spell_subtype (which stays empty) but the type chosen at
     // ETB and carried on Permanent::chosen_subtype_id -- so the card is generic and works in ANY
@@ -3786,6 +3795,12 @@ struct CardParams
     // counters MERGE into one entry -- BuildSimKey folds each Counter entry separately, so
     // un-merged entries would split the transposition key for boards that are actually identical.
     int  own_creature_enters_self_counters = 0;
+    // Mausoleum Wanderer: "Whenever another <enters_watch_subtypes> you control enters, this creature
+    // gets +P/+T until end of turn." The until-EOT twin of own_creature_enters_self_counters: the payload
+    // goes to temp_power_bonus / temp_tough_bonus (cleared by both cleanup sites), NOT a counter. Fired
+    // from FireCreatureEnterWatchers; a DefHasCreatureEnterWatcher term. 0 = inert.
+    int  own_creature_enters_self_temp_power = 0;
+    int  own_creature_enters_self_temp_tough = 0;
     // Surrak and Goreclaw: the trigger puts counters on another nontoken
     // creature entering under this permanent's controller and grants haste.
     int  other_nontoken_enters_counter_haste = 0;
@@ -4986,6 +5001,8 @@ inline bool DefHasCreatureEnterWatcher(const CardParams& p)
         || p.own_creature_enters_lifegain > 0
         || p.own_creature_enters_lifegain_toughness
         || p.own_creature_enters_self_counters > 0
+        || p.own_creature_enters_self_temp_power > 0     // Mausoleum Wanderer (2026-11-13)
+        || p.own_creature_enters_self_temp_tough > 0
         || p.other_nontoken_enters_counter_haste > 0
         || p.any_creature_enters_self_counters_power
         || p.opp_creature_enters_life_loss > 0

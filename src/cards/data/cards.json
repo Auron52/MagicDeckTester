@@ -16261,7 +16261,7 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "Create two 1/1 white Spirit creature tokens with flying.\nFlashback {1}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.) [FULLY MODELLED. TOKENS: cast_creates_tokens 2 on the shared cast_created_token_* spec (1/1, white, Spirit, Flying) -> ApplyCastCreatesTokens, the same helper in the executor and the rollout; each token enters through CreateToken, so a Spirit lord (Drogskol Captain, Supreme Phantom) pumps it via the subtype on the token's own Card and an enter watcher sees each token. FLASHBACK: flashback_cost {1}{B} -> a CastFromGraveyard plan action (viewer label '(flashback)', the graveyard tile is clickable via flashback_gy), paid at {1}{B} through the shared GraveyardCastCost and exiled on leaving the stack in both worlds. SAME-MAIN LINES: one flashback candidate per graveyard COPY plus one PENDING candidate per hand copy (legal only beside that hand cast; every graveyard cast applies after the hand casts in both worlds), so 'cast it, then flash it back' and 'flash back two' are both plans at every budget; identical copies are collapsed to a prefix. Flying on the tokens: carried; evasion is inert vs the passive goldfish (it never blocks). [PARTIAL: Patrician Geist's 'spells you cast from your graveyard cost {1} less' is NOT applied yet (the next integrator's card; its one site is GraveyardCastCost) -- ONE-WAY AGAINST THIS CARD until it lands.] [PARTIAL and ONE-WAY AGAINST THIS CARD: EvalCard has no default branch for cast_creates_tokens (MTG_EVAL_CAST_TOKENS is default OFF, refuted on Fungus) and scores the cast as a cantrip at d0 / in the playout ordering; the search itself plays the tokens out, so this only under-rates the card where EvalCard IS the policy.]]",
+   "oracle_text": "Create two 1/1 white Spirit creature tokens with flying.\nFlashback {1}{B} (You may cast this card from your graveyard for its flashback cost. Then exile it.) [FULLY MODELLED. TOKENS: cast_creates_tokens 2 on the shared cast_created_token_* spec (1/1, white, Spirit, Flying) -> ApplyCastCreatesTokens, the same helper in the executor and the rollout; each token enters through CreateToken, so a Spirit lord (Drogskol Captain, Supreme Phantom) pumps it via the subtype on the token's own Card and an enter watcher sees each token. FLASHBACK: flashback_cost {1}{B} -> a CastFromGraveyard plan action (viewer label '(flashback)', the graveyard tile is clickable via flashback_gy), paid at {1}{B} through the shared GraveyardCastCost and exiled on leaving the stack in both worlds. SAME-MAIN LINES: one flashback candidate per graveyard COPY plus one PENDING candidate per hand copy (legal only beside that hand cast; every graveyard cast applies after the hand casts in both worlds), so 'cast it, then flash it back' and 'flash back two' are both plans at every budget; identical copies are collapsed to a prefix. Flying on the tokens: carried; evasion is inert vs the passive goldfish (it never blocks). PATRICIAN GEIST's '{1} less from your graveyard' applies inside GraveyardCastSpellCost (flashback {B} per Geist on the battlefield) and through the same-turn credit for a Geist cast or Vialed earlier in the plan. [PARTIAL and ONE-WAY AGAINST THIS CARD: EvalCard has no default branch for cast_creates_tokens (MTG_EVAL_CAST_TOKENS is default OFF, refuted on Fungus) and scores the cast as a cantrip at d0 / in the playout ordering; the search itself plays the tokens out, so this only under-rates the card where EvalCard IS the policy.]]",
    "template": "custom",
    "parameters": {
     "cast_creates_tokens": 2,
@@ -16275,6 +16275,57 @@
      "Flying"
     ],
     "flashback_cost": "{1}{B}"
+   }
+  },
+  {
+   "name": "Patrician Geist",
+   "mana_cost": "{2}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit",
+    "Knight"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "Flying\nOther Spirits you control get +1/+1.\nSpells you cast from your graveyard cost {1} less to cast. [CLAUSE 2 MODELLED: lord_effect, subtypes_affected [\"Spirit\"], +1/+1, lord_excludes_self -- ComputeLordBonus on LIVE subtypes (Spirit tokens and a Metallic Mimic that chose Spirit count; 'Other' by permanent address, so copies buff each other). CLAUSE 3 MODELLED: reduces_graveyard_cast_generic 1 -- every spell cast FROM THE GRAVEYARD (flashback, retrace, a graveyard-cast permission) costs {1} less GENERIC per Geist you control, floored at 0, coloured pips never reduced (CR 601.2f), applied inside the shared GraveyardCastSpellCost, i.e. at every graveyard-cast price/pay site in both worlds (enumeration, rollout apply, executor flashback/retrace and Lurrus casts). SAME TURN: a Geist cast or Aether-Vialed earlier in the plan discounts a flashback in that plan (both apply worlds resolve every graveyard cast after the hand casts and Vial puts; the enumerator credits it per subset, and the mana prune bound and selection gate stand down for it), so Geist + flashback Lingering Souls on four lands ({2}{U} + {B}) is a plan at every budget. In this list it turns Lingering Souls' flashback {1}{B} into {B}; two Geists still leave {B}. Being a KNIGHT is faithful and read by nothing here. Nothing deferred. FLYING is carried in keywords and is inert: the opponent never blocks.]",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Spirit"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "reduces_graveyard_cast_generic": 1
+   }
+  },
+  {
+   "name": "Mausoleum Wanderer",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Spirit"
+   ],
+   "keywords": [
+    "Flying"
+   ],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "Flying\nWhenever another Spirit you control enters, this creature gets +1/+1 until end of turn.\nSacrifice this creature: Counter target instant or sorcery spell unless its controller pays {X}, where X is this creature's power. [CLAUSE 2 MODELLED: own_creature_enters_self_temp_power 1 / own_creature_enters_self_temp_tough 1 + enters_watch_subtypes [\"Spirit\"], fired from FireCreatureEnterWatchers (the universal enter cascade shared by the executor and the rollout) into temp_power_bonus / temp_tough_bonus, which both cleanup sites clear -- an UNTIL-END-OF-TURN pump, NOT a counter. 'Another' is the loop's entrant skip (a Wanderer never pumps itself on its own entry); 'you control' is the controller test (opponent spawns never trigger it). Spirit TOKENS (Lingering Souls, Millicent), Aether Vial puts and a Metallic Mimic that chose Spirit all trigger it; several Wanderers each trigger; a duplicate legendary Spirit that dies to the legend rule still pumps it. Every pump only adds, so trigger order is inert; mandatory and untargeted, so nothing to surface. [PARTIAL, PROVISIONAL (user sign-off owed): the SACRIFICE/counter ability is not modelled. The passive opponent casts nothing, so its only targets are our own Lingering Souls casts. Letting the counter happen (not paying) is strictly dominated by not activating (lose Wanderer and both Souls tokens, gain at most one token; flashback availability unchanged). Paying X is strictly dominated UNLESS Millicent, Restless Revenant is on the battlefield, when it trades Wanderer + X mana for a 1/1 flying Spirit token (better only in narrow cases: the token takes a Metallic Mimic counter Wanderer lacks, or its entry pumps other Wanderers before combat). So the gap is live only for Millicent (1-of) + a Souls cast + X spare mana.] FLYING is carried in keywords and is inert: the opponent never blocks.]",
+   "template": "custom",
+   "parameters": {
+    "own_creature_enters_self_temp_power": 1,
+    "own_creature_enters_self_temp_tough": 1,
+    "enters_watch_subtypes": [
+     "Spirit"
+    ]
    }
   }
  ]

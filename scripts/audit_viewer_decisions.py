@@ -1338,6 +1338,8 @@ INERT_PARAMS = {
     "enters_watch_subtypes": "subtype FILTER on an automatic enter trigger (Bishop of Wings / Seraph Sanctuary / Righteous Valkyrie) -- legality, not a choice",
     "own_creature_enters_lifegain_toughness": "automatic enter trigger whose AMOUNT is computed from the entering creature's live toughness (Righteous Valkyrie) -- mandatory, untargeted, nothing to pick",
     "own_creature_enters_self_counters": "automatic enter trigger putting +1/+1 counters on ITS OWN source (Youthful Valkyrie) -- mandatory, and the source is not a target",
+    "own_creature_enters_self_temp_power": "automatic enter trigger pumping ITS OWN source +N/+0 until end of turn (Mausoleum Wanderer) -- mandatory, untargeted",
+    "own_creature_enters_self_temp_tough": "automatic enter trigger pumping ITS OWN source +0/+N until end of turn (Mausoleum Wanderer) -- mandatory, untargeted",
     "life_above_start_anthem_life": "conditional static team anthem keyed on life vs STARTING life (Righteous Valkyrie) -- continuous, no activation, no choice",
     "life_above_start_anthem_power": "anthem spec constant", "life_above_start_anthem_tough": "anthem spec constant",
     "other_subtype_enters_counters_subtype": "as-enters +1/+1 counter REPLACEMENT effect (Giada, CR 614) -- mandatory, applies itself, nothing to pick",
@@ -1516,6 +1518,7 @@ INERT_PARAMS = {
     "mana_per_creature_feeder_generic": "Three Tree scaled-mana activation feeder cost detail (rides mana_per_creature_subtype)",
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
+    "reduces_graveyard_cast_generic": "static graveyard-spell cost reducer (Patrician Geist, {1} less), no choice",
     # The three riders below are MAGNITUDE/SCOPE on that same static reduction (Dragonspeaker Shaman
     # and Urza's Incubator read "{2} less"; the Incubator's applies to creature spells only). A cost
     # reduction is applied by the engine at payment time -- the player never chooses whether or how

@@ -113,20 +113,22 @@ TEST_CASE("Spirits routing: the list resolves to SpiritsProvider, not anti (Floo
     CHECK(std::string(DetectDecisionProvider(d).Name()) == "Spirits");
 }
 
-TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards, and both lords at once")
+TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards, and all three lords at once")
 {
     const Decklist full = SpiritsDeck();
     for (const std::vector<std::string>& cut :
          std::vector<std::vector<std::string>>{{"Drogskol Captain"}, {"Supreme Phantom"},
-                                               {"Geist of Saint Traft"},
-                                               {"Drogskol Captain", "Supreme Phantom"}})
+                                               {"Geist of Saint Traft"}, {"Patrician Geist"},
+                                               {"Mausoleum Wanderer"},
+                                               {"Drogskol Captain", "Supreme Phantom", "Patrician Geist"}})
     {
         CHECK_MESSAGE(std::string(DetectDecisionProvider(Without(full, cut)).Name()) == "Spirits",
                       "cutting ", cut.front());
     }
     // ...but a list with NONE of the signature cards is not Spirits (it would ride the generic chain:
     // Flooded Strand's fetch_land_types -> anti). The signature is what routes, not the deck name.
-    const Decklist none = Without(full, {"Drogskol Captain", "Supreme Phantom", "Geist of Saint Traft"});
+    const Decklist none = Without(full, {"Drogskol Captain", "Supreme Phantom", "Geist of Saint Traft",
+                                         "Patrician Geist", "Mausoleum Wanderer"});
     CHECK(std::string(DetectDecisionProvider(none).Name()) != "Spirits");
 }
 
