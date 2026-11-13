@@ -72,6 +72,12 @@ Damage, Shadowborn Apostle, Slivers, Snow, Soldiers, Unpredictable Cyclone, Vamp
 `Anti-Lifegain` (keep the prefix hyphen, recommended), "Lifegain" as one word (recommended; Martyr Lifegain
 already does), and the archived `v<N>-<slug>/` folders (recommended: leave -- they are version labels).
 
+**USER RULING 2026-11-13: *"The names you mentioned look good."*** Read as approving the "proposed" column
+above -- and explicitly *"I prefer Niv-Mizzet Combo."* *"(because the dash is in the actual name)"* -- the general rule:
+a name taken from a card keeps the card's own spelling and punctuation -- keeping `Anti-Lifegain`'s
+hyphen, "Lifegain" as one word, leaving the archived `v<N>-<slug>/` folders as they are, and aligning the two
+stems to their folders (`Soldiers.cod`, `Vampires.cod`). Not yet scheduled: the USER wants other work first.
+
 Hazards specific to this batch: (a) `burn` -> `Burn` and `treasure_hunt` -> `Treasure Hunt` are the
 cheapest (slugs unchanged) but `burn` is a CASE-ONLY rename, and the checkout sits on a case-insensitive
 Windows mount: do it as two moves (`burn` -> `burn.tmp` -> `Burn`) and expect every Windows clone to need
