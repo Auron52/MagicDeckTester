@@ -589,6 +589,9 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                           def.params.tap_opponent_lifegain * gamesetup::OpponentHeads(),
                           def.card.m_name.str());
     }
+    // Zhur-Taa Druid: every tap FOR MANA deals its ping to each opponent (no mode is painless). One read of
+    // an int for every other source.
+    ApplyTapManaPing(state, active, def);
     // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
     // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
     // promised. Crediting `amt` of the single matched colour would lose the second colour --
@@ -7600,6 +7603,7 @@ int SeedPaySourceSig(const Permanent& p, int me)
         || q.creature_mana_only || q.colored_creature_only || q.mana_only_spell_min_mv > 0
         || q.domain_mana || q.mana_colors_of_graveyard_legends || q.gy_land_exile_mana
         || !q.mana_requires_land_subtype.empty() || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+        || q.tap_mana_damage_each_opponent > 0   // Zhur-Taa: its tap moves the opponent's life
         || q.energy_per_colored_tap > 0 || p.is_animated)
     { return kSeedSourceUnsupported; }
     if (q.is_filter || q.land_search_activation_cost.has_value() || q.sacrifice_draw_cost.has_value())

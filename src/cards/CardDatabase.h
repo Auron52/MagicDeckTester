@@ -1619,6 +1619,14 @@ struct CardParams
     // at tap time, mirroring tap_self_damage. Gated > 0 so other decks are unaffected.
     int tap_opponent_lifegain = 0;
 
+    // Per-tap-for-mana damage to EACH opponent (Zhur-Taa Druid: "{T}: Add {G}. Whenever you tap this
+    // creature for mana, it deals 1 damage to each opponent."). The Grove drip with the sign flipped:
+    // every tap FOR MANA (any payment, both worlds, the backtracker, the mana-cache replay) deals this
+    // much x OpponentHeads() via ApplyTapManaPing. Tapping for any other reason (attacking, convoke) does
+    // not. A leftover untapped Druid is tapped for its free ping at the end step (PingDorkEndSweep), and
+    // a lethal set is tapped right after combat damage (PingDorkFinish). 0 for every other card.
+    int tap_mana_damage_each_opponent = 0;
+
     // Fetchland (Windswept Heath etc.): "{T}, pay 1 life, sacrifice this land: search your
     // library for a land whose subtype is in this list, put it onto the battlefield, then
     // shuffle." When non-empty the land is resolved by PerformFetch (SpellEffects.h) instead

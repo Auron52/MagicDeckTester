@@ -74731,6 +74731,7 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     // Walking Ballista's post-combat-damage lethal finish (shared; executor twin: GameEngine::CombatPhase).
     CounterPingFinish(state, active);
     if (jorn_untap) { UntapSnowPermanents(state, active); }   // Jorn, see above
+    PingDorkFinish(state, active);   // Zhur-Taa's lethal finish (executor twin: GameEngine::CombatPhase)
 
     // Combat is over for this simulated turn: everything until SimulateEndAndStartNextTurn is the
     // post-combat main. The rollout historically never maintained GameState::phase (the executor
@@ -74890,6 +74891,10 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     const std::vector<int> grace_snapshot = SnapshotEndStepGraceTargets(state);
     // Reaper's morbid snapshot -- lockstep twin of GameEngine::EndStep's.
     const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
+    // Zhur-Taa Druid's free end-step ping -- lockstep twin of GameEngine::EndStep's. A lethal sweep stops
+    // HERE, before the counter advances, so every caller's OpponentHasLost check reports THIS turn (the
+    // opponent_decked precedent below). No-op without a ping dork.
+    if (PingDorkEndSweep(state, state.active_player_index) > 0 && OpponentHasLost(state)) { return true; }
     PerformAthreosCoinEndStep(state, state.active_player_index);
 
     // "Exile those tokens at the beginning of the next end step" (Twinflame token copies,

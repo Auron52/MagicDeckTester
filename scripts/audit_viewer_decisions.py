@@ -1217,6 +1217,7 @@ INERT_PARAMS = {
     "etb_opponent_lifegain": "automatic ETB", "opponent_lifegain": "automatic",
     "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
     "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",
+    "tap_mana_damage_each_opponent": "automatic on tap (end-step free ping: no decision)",
     "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",

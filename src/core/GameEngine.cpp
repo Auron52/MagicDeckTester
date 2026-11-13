@@ -1257,6 +1257,9 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
     CounterPingFinish(state, state.active_player_index);
     if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
+    // Zhur-Taa Druid's post-combat lethal finish (shared; rollout twin: SimulateOneCombat). No-op unless
+    // ready ping dorks alone are lethal -- i.e. for every deck without one.
+    PingDorkFinish(state, state.active_player_index);
     const int total_combat_dmg = combat.total_damage;
     const int trigger_life_loss = combat.trigger_life_loss;
 
@@ -1305,6 +1308,10 @@ void GameEngine::EndStep(GameState& state)
     // begins, with its trigger (CR 603.4) -- snapshotted here, before any beginning-of-step effect below.
     // Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; 0 for every deck without it.
     const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
+    // Zhur-Taa Druid's free end-step ping (a sound dominance fold; lockstep twin at the same position in
+    // TurnSolver::SimulateEndAndStartNextTurn). A lethal one is a win THIS turn: PlayOutFrom reads
+    // CheckWinCondition right after RunTurn, before the counter advances. No-op without a ping dork.
+    PingDorkEndSweep(state, state.active_player_index);
     // Our coin trigger can resolve before our delayed sacrifice/exile triggers.
     // That order preserves a marked Bronze-Blooded put through Athreos's return.
     PerformAthreosCoinEndStep(state, state.active_player_index);

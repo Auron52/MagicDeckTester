@@ -74,7 +74,8 @@ inline bool SwapEligible(const CardDefinition& d)
     const CardParams& q = d.params;
     if (!(d.tmpl == CardTemplate::BasicLand || d.tmpl == CardTemplate::ManaDork || q.mana_rock)) { return false; }
     if (IsManaConversionSource(q) || IsPaySacSource(d) || q.storage_land) { return false; }
-    if (q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0 || q.energy_per_colored_tap > 0
+    if (q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0 || q.tap_mana_damage_each_opponent > 0
+        || q.energy_per_colored_tap > 0
         || q.gy_land_exile_mana || q.enters_tapped_with_depletion > 0 || q.taps_spawn_opp_token
         || q.untap_creature_cost.has_value()) { return false; }
     return ManaProducedPerTap(d) == 1;

@@ -7653,5 +7653,14 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Zhur-Taa Druid": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{G}",
+    "oracle_text": "{T}: Add {G}.\nWhenever you tap this creature for mana, it deals 1 damage to each opponent.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Druid"
   }
 }

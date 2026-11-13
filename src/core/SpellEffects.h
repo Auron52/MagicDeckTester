@@ -1772,6 +1772,35 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
     }
 }
 
+// ZHUR-TAA DRUID's tap-for-mana ping (CardParams::tap_mana_damage_each_opponent): "Whenever you tap this
+// creature for mana, it deals 1 damage to each opponent." Called at EVERY tap-for-mana choke point --
+// TapSourceIntoFloat (the greedy payer and the human pre-tap), the backtracking payer's activate() and the
+// mana cache's hit replay -- so both worlds charge it exactly once per committed tap, and a creature tapped
+// twice in a turn (untapped by Raggadragga) pings twice. Returns the damage dealt (0 for every other card).
+// RAW life loss + the opponent-lost-life flag, deliberately: those are exactly the two fields every payment
+// rollback snapshots (the backtracker's opp_life_snap / oll_snap, the payer's NoncombatStateSnapshot), so a
+// failed branch undoes it completely. It does NOT route through the armed damage-event model or
+// RecordNoncombatDamageToPlayer (whose queue a mid-payment branch could not undo); no deck pairs a ping dork
+// with a damage-prevention / noncombat-damage card (disclosed in the card's oracle bracket).
+// 2HG: "each opponent" -> once per opposing head into the shared team pool.
+inline int ApplyTapManaPing(GameState& state, int active, const CardDefinition& def)
+{
+    const int per = def.params.tap_mana_damage_each_opponent;
+    if (per <= 0) { return 0; }
+    const int dmg = per * gamesetup::OpponentHeads();
+    const int opp = 1 - active;
+    const int before = state.players[opp].life;
+    state.players[opp].life -= dmg;
+    state.opponent_lost_life_this_turn = true;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage", def.card.m_name.str() + ": tapped for mana, "
+                      + std::to_string(dmg) + " damage to opponent (" + std::to_string(before)
+                      + "\xE2\x86\x92" + std::to_string(state.players[opp].life) + ")");
+    }
+    return dmg;
+}
+
 // The ALT-COST lifegain payload ("rather than pay this spell's mana cost, you may have ... gain N
 // life"), def-aware for the wording split (see CardParams::alt_lifegain_each_player):
 //   * "an opponent gains N"          (Invigorate)                   -> ONE gain, always.
@@ -29888,6 +29917,7 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
         if (d == nullptr || !is_src(p, *d)) { continue; }
         const CardParams& q = d->params;
         if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+            || q.tap_mana_damage_each_opponent > 0   // Zhur-Taa ping: a side effect, like the drip
             || q.storage_land || q.domain_mana || q.colored_creature_only) { continue; }
         bool depletion = false;
         for (const Counter& c : p.counters)
@@ -33042,6 +33072,65 @@ inline void CounterPingFinish(GameState& state, int active)
         if (state.players[1 - active].life <= 0) { break; }
     }
     g_counter_ping_target_pin = saved_target;
+}
+
+// ---- ZHUR-TAA DRUID: the two whole-turn ping folds (CardParams::tap_mana_damage_each_opponent) ----
+// An own, untapped ping dork that may {T} now (summoning sickness / haste: CanTapNow). Its ping is
+// ApplyTapManaPing's. The mana it makes is not floated: nothing after either call site can spend it.
+inline bool PingDorkReady(const GameState& state, const Permanent& q, int active, const CardDefinition** out)
+{
+    if (q.controller_index != active || q.tapped || q.def_absent || !q.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    if (d == nullptr || d->params.tap_mana_damage_each_opponent <= 0) { return false; }
+    if (!CanTapNow(q, state.battlefield)) { return false; }
+    if (out) { *out = d; }
+    return true;
+}
+// Taps every ready ping dork (stopping once the opponent is dead); returns how many it tapped.
+inline int TapReadyPingDorks(GameState& state, int active)
+{
+    int n = 0;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        if (state.players[1 - active].life <= 0) { break; }
+        const CardDefinition* d = nullptr;
+        if (!PingDorkReady(state, state.battlefield[i], active, &d)) { continue; }
+        state.battlefield[i].tapped = true;
+        ApplyTapManaPing(state, active, *d);
+        ++n;
+    }
+    return n;
+}
+// THE END-STEP FREE PING, first thing in OUR end step in BOTH worlds (GameEngine::EndStep /
+// TurnSolver's SimulateEndAndStartNextTurn) and in human play. A SOUND DOMINANCE FOLD, not a pick: the
+// last main phase is over, there is no mana burn and the passive opponent never attacks, so neither the
+// untapped body nor the {G} can be used for anything after this point, and tapping it adds the ping at
+// no cost -- tapping weakly dominates not tapping. (It is NOT at end of main 1, where the drip/pain
+// sweeps sit: a Druid there may still attack, or be untapped by Raggadragga's attack trigger and tap
+// again.) A lethal sweep wins THIS turn: the rollout's caller returns before the turn counter advances.
+inline int PingDorkEndSweep(GameState& state, int active)
+{
+    if (state.players[1 - active].life <= 0 || state.players[active].life <= 0) { return 0; }
+    return TapReadyPingDorks(state, active);
+}
+// THE POST-COMBAT LETHAL FINISH (CounterPingFinish's twin, called right after it in both worlds): when
+// the ready ping dorks' pings alone cover the opponent's remaining life, tap them right after combat
+// damage -- a proven kill at the check point the search already reads, so the win is seen at combat
+// rather than only at the end step. Autonomous play only (the human's end step sweeps them anyway).
+inline void PingDorkFinish(GameState& state, int active)
+{
+    if (HumanPlayActive()) { return; }
+    const int opp_life = state.players[1 - active].life;
+    if (opp_life <= 0 || state.players[active].life <= 0) { return; }
+    int reach = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        const CardDefinition* d = nullptr;
+        if (PingDorkReady(state, q, active, &d))
+        { reach += d->params.tap_mana_damage_each_opponent * gamesetup::OpponentHeads(); }
+    }
+    if (reach == 0 || reach < opp_life) { return; }
+    TapReadyPingDorks(state, active);
 }
 
 // K counter pings beyond the first (the repeatable CounterPing's K-1, both worlds' repeat dispatch).
@@ -38005,7 +38094,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
             { if (c == Color::Colorless) { pain_c = true; break; } }
         }
         if (q.gy_land_exile_mana || (q.tap_self_damage > 0 && !pain_c)
-            || q.tap_opponent_lifegain > 0
+            || q.tap_opponent_lifegain > 0 || q.tap_mana_damage_each_opponent > 0
             || q.storage_land || q.domain_mana || q.colored_creature_only
             || IsManaConversionSource(q)) { continue; }
         bool depletion = false;

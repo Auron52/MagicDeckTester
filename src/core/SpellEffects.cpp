@@ -4846,6 +4846,10 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 OpponentGainsLife(state, active,
                                   def->params.tap_opponent_lifegain * gamesetup::OpponentHeads());
             }
+            // Zhur-Taa Druid's tap ping: raw opponent life + the lost-life flag, both restored below on
+            // failure from opp_life_snap / oll_snap (ApplyTapManaPing's contract). The mana cache counts it
+            // per tap and replays it per tap, apart from the drip (ManaCacheEntry::drip_life).
+            ApplyTapManaPing(state, active, *def);
             // LAND AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}").
             // Credited HERE, at the single choke point every tap branch funnels through, rather
             // than in each of the six places that build `next` -- one site cannot drift out of
@@ -6822,6 +6826,9 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 // inline copy of this scan because it also needs the slot for its undo; the two use the
                 // same ZoneCard(...).IsLand() first-match predicate and must stay that way.)
                 if (td->params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, hit_active); }
+                // Zhur-Taa Druid: its ping has no painless mode, so it replays per tap, exactly as
+                // activate() applied it (the entry's drip_life excludes it -- see the store below).
+                ApplyTapManaPing(state, hit_active, *td);
             }
             // Drip (Grove of the Burnwillows): one aggregate call -- order-independent, and going
             // through OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board flips the
@@ -7043,10 +7050,14 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             if (out_leftover)  { e.leftover = *out_leftover; }
             const int active = state.active_player_index;
             const int n = static_cast<int>(state.battlefield.size());
-            // Only drip moves the OPPONENT's life during a payment (tap_self_damage hits the active
-            // player), so the magnitude of that one diff is the total drip the solve applied -- and
-            // magnitude is all the replay needs, since OpponentGainsLife re-derives the sign.
-            e.drip_life = std::abs(state.players[1 - active].life - mc_opp_life_pre);
+            // Two things move the OPPONENT's life during a payment (tap_self_damage hits the active
+            // player): the Grove drip and the Zhur-Taa ping. The ping is counted per tap in the loop below
+            // (every mana tap of a ping dork pings, there is no painless mode) and REPLAYED per tap, so the
+            // drip is the observed diff with the pings added back -- its magnitude is all the replay needs,
+            // since OpponentGainsLife re-derives the sign. (Before the ping existed this was the bare diff,
+            // which a Druid tap would have replayed as the opponent GAINING life.) Set after the loop.
+            const int mc_opp_life_post = state.players[1 - active].life;
+            int mc_ping_total = 0;
             // Painland self-damage: the observed active-life delta (taps are the only thing a solve
             // does to our life). Aggregate, because per-tap replay cannot see which MODE paid.
             e.self_life = mc_life_pre - state.players[active].life;
@@ -7069,6 +7080,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 {
                     const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                     if (!McAllSources() && !McSimpleTap(pd)) { storable = false; break; }
+                    if (pd) { mc_ping_total += pd->params.tap_mana_damage_each_opponent * gamesetup::OpponentHeads(); }
                     int burn = 0;
                     if (pd && pd->params.storage_land)
                     {
@@ -7086,6 +7098,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                     e.taps.push_back({ desc, slot, burn, p.mana_tap_mark });
                 }
             }
+            e.drip_life = std::abs(mc_opp_life_post - mc_opp_life_pre + mc_ping_total);
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }

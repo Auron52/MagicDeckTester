@@ -191,6 +191,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         //     hand is not larger than before it was played (net 0). A Karoo put from the LIBRARY needs a
         //     non-land-typed land search, which is no audited card's;
         //   * Lightning Greaves' equip keys, Flinthoof Boar's static pump and self haste;
+        //   * Zhur-Taa Druid's tap_mana_damage_each_opponent (Boars I2a): its ping deals damage, it never moves a card;
         //   * Herald's Horn's own keys: its upkeep take is COUNTED explicitly by the fold (one card per trigger).
         // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
         {
@@ -203,6 +204,7 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
                 "self_pump_if_land_subtype", "self_haste_cost",
                 "chooses_creature_type", "reduces_spell_subtype_amount", "reduces_spell_subtype_creature_only",
                 "upkeep_look_top_chosen_type_to_hand",
+                "tap_mana_damage_each_opponent",   // Zhur-Taa Druid: damage only, never a card
             };
             static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
             static const char* const kHandBenignKeywords[] = {
@@ -1501,6 +1503,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.discard_random_after_tutor = params.value("discard_random_after_tutor", false);
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
+    p.tap_mana_damage_each_opponent = params.value("tap_mana_damage_each_opponent", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))
         p.fetch_land_types.push_back(s);
     p.target_own_creature       = params.value("target_own_creature", false);

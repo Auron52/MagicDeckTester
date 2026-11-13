@@ -169,3 +169,49 @@ cards were added). No smoke/regression run (the parent pools one).
 * Is the provider move AntiLifegain -> BoarsProvider OK (no GT for Boars yet, so nothing to rebaseline)?
 * The `creature_type` prompt now also fires for Urza's Incubator (Dragons), Metallic Mimic / Adaptive Automaton
   (Pirates, Kithkin) in the viewer -- a viewer-only change; autonomous play is untouched.
+
+## I2a done (2026-11-13) -- Zhur-Taa Druid
+
+Commit: see `git log` on `boars-analysis` ("Boars I2a: Zhur-Taa Druid", local only, not pushed). Unit tests 2949/2949
+pass (6 new cases, `test/unit/test_boars_zhurtaa.cpp`). No smoke/regression run (the parent pools one).
+
+**Landed**
+* `Zhur-Taa Druid` (cards.json, oracle verbatim from Scryfall + bracket): `mana_dork`, `produces [G]`, NEW
+  `tap_mana_damage_each_opponent` 1.
+* ONE helper `ApplyTapManaPing` (SpellEffects.h, beside OpponentGainsLife) at every tap-for-mana choke point:
+  `TapSourceIntoFloat` (greedy payer + human pre-tap), the backtracker's `activate()` (undone by its existing
+  opp_life_snap / oll_snap), and the mana cache's HIT replay (per tap). Raw life loss + `opponent_lost_life_this_turn`
+  x OpponentHeads() (2HG: 2 to the team). It deliberately bypasses the armed dmgev model and
+  RecordNoncombatDamageToPlayer (a mid-payment branch could not undo their queues); no deck pairs them (disclosed).
+* **Mana-cache sign hazard FIXED:** the store took the whole opponent-life diff as `drip_life` and replayed it via
+  OpponentGainsLife, so a cached Druid tap made the opponent GAIN 1. Now the store counts the solve's newly-tapped
+  ping dorks and records `drip_life = |diff + pings|`; the ping replays per tap. Unit test: hit gives 19, not 21; a
+  Druid+Grove {R}{G} solve agrees store vs hit. `MTG_MANA_CACHE_VERIFY=1` on Boars (40 games d3 b10): 466,440 checks,
+  0 mismatches.
+* Side-effect-free fast paths now exclude the Druid like the drip: `PayRollback::SwapEligible`, the ManaPayment seed
+  source, `RitualTapAheadIntoFloat`, `EtbUntapTapAheadIntoFloat` (the other `tap_opponent_lifegain` predicates are
+  land-only or armed-only).
+* D5 END-STEP FREE PING `PingDorkEndSweep`: first thing in our end step, lockstep in `GameEngine::EndStep` and
+  `SimulateEndAndStartNextTurn` (also human play: a "no decision" DECISIONS.md row). Taps every untapped Druid that
+  CanTapNow. A lethal sweep returns before the rollout's turn counter advances (the opponent_decked precedent), so the
+  win is credited to THIS turn in both worlds (the executor's PlayOutFrom reads CheckWinCondition before advancing).
+  Unit-tested (lethal: turn stays 4).
+* POST-COMBAT LETHAL FINISH `PingDorkFinish` right after `CounterPingFinish` in both combats (autonomous only): taps
+  the ready Druids when their pings alone cover the remaining life.
+* No once-per-turn assumption (a re-untapped Druid pings again; tested). BoarsProvider signature ORs in the new param;
+  the param is in `kHandAuditedParams` (Horn take-fold whitelist); `audit_viewer_decisions.py` classifies it.
+
+**Byte-identity** (I1 binary vs I2a, same cwd, `--games 20 --seed 9101 --depth 3 --budget-ms 10
+--ignore-play-profile --threads 32`, `[win]` lines): Anti-Lifegain (Grove of the Burnwillows) IDENTICAL 20/20,
+Angels IDENTICAL 20/20. (The primary checkout's binary predates I1, which intentionally moves Anti-Lifegain via
+Windswept Heath, so the baseline was the I1 build.) Boars itself, 40 games: 1 faster / 0 slower vs I1.
+
+**Deviations / not done**
+* Draft item E (this-turn projection credit for the ping in the `wins` projection) NOT implemented: the projection is
+  only the beyond-horizon Solve's; an exact per-Druid attack-vs-ping split needs AttackTapLoss internals. OWED if a
+  measurement shows the playout misjudging Druid turns.
+* Draft item F (2HG: Druid contested on the dork attack/hold axis) left to the provider / USER (Q2 of the draft).
+
+**Open questions (surfaced, not blocking)**
+* Draft Q3: the post-combat finish skips human play (the CounterPingFinish precedent); the end-step sweep runs there.
+* Draft Q2 (2HG attack vs ping) as above.

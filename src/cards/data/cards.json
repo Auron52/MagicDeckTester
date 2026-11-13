@@ -1885,6 +1885,28 @@
    }
   },
   {
+   "name": "Zhur-Taa Druid",
+   "mana_cost": "{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {G}.\nWhenever you tap this creature for mana, it deals 1 damage to each opponent. [FULLY MODELED. mana_dork producing G (summoning sickness applies to its {T}; haste lifts it). tap_mana_damage_each_opponent 1: EVERY tap FOR MANA -- any payment (spells, equip, activations), the greedy payer, the backtracking payer and its mana-cache replay, in both the executor and the rollout -- deals 1 damage x OpponentHeads() at the tap (ApplyTapManaPing; 2HG = 2 to the team). The trigger uses the stack; resolving it at the tap is an inert timing collapse vs a passive opponent. No once-per-turn assumption: an untapped-again Druid (Raggadragga) pings again. Tapping for a non-mana reason (attacking, convoke) does not ping. END-STEP FREE PING (PingDorkEndSweep, a sound dominance fold, both worlds and human play, first thing in the end step): every untapped Druid that can tap is tapped for its ping -- no mana burn, and nothing after the last main can use the body or the mana. POST-COMBAT LETHAL FINISH (PingDorkFinish, both worlds, autonomous play only): right after combat damage, when the untapped Druids' pings cover the opponent's remaining life they are tapped then. Not modelled: the ping does not feed the armed damage-event model or noncombat-damage trackers (no deck pairs them).]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "tap_mana_damage_each_opponent": 1
+   }
+  },
+  {
    "name": "Skyshroud Cutter",
    "mana_cost": "{3}{G}",
    "types": [
