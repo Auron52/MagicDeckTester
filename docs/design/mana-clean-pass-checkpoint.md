@@ -1383,7 +1383,7 @@ fungus 1,880, gods 4,300 (first run).
   leftover (an any-colour CoB unit floats `wild` legitimately; a Forest/Coliseum tapped only for the dropped cast).
   Engine life >= oracle life in every flag; no illegal tap (Tendo counters checked). Not fixed (analyzer completeness).
 * **Queue item B (2026-11-13): 0/0 audit fixes (a-e) + USER decision 14 -- FIXED (7776b8f62 + e404d1362, GT
-  9af0bf256 smoke + the regression accept commit after it; local).** (a) MTG_LORD_LEAVE_SBA: a 0-toughness token dies
+  9af0bf256 smoke + 666d34e02 regression; local).** (a) MTG_LORD_LEAVE_SBA: a 0-toughness token dies
   to SBA when a lord leaves (devour deaths, sacrifice, until-EOT shrink of a lord); (b) MTG_SAC_NO_PHANTOM_FLOAT lever +
   float-first legacy skirk branch DELETED (byte-identical); (c) CheckLine positional pre-tap check (human play only);
   (d) MTG_FADE_FODDER_LIVE; (e) MTG_FADE_NO_DEAD_ACT = decision 14: no Saproling Burst activation that makes a token at
