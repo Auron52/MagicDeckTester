@@ -3624,7 +3624,14 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
     // "listed only UA variants with no explicit pass entry"). Index -1 is the pass the note has
     // always documented; the viewer's own Pass buttons submit the same value.
     os << "  \"pass\": { \"index\": -1, \"summary\": \"pass -- cast nothing this phase\" },\n";
-    os << "  \"note\": \"reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line\"\n";
+    // REPLY WITH THE `index` FIELD, NEVER THE ARRAY POSITION. The list above is a capped, collapsed
+    // subset of the engine's plans (kMaxEmittedPlans + the diversity order, hide_bundle), each under
+    // its REAL engine index, so it has gaps by design (saved references' picks stay stable). This note
+    // used to say "reply with one plan index (0-based)" -- the wording of an array position -- and an
+    // agent replying with position 55 committed engine plan 55 (Berserk + Might + Temur Battle Rage)
+    // instead of the line it read there (index 88, Might + Berserk x2): Morph seed 8 T5, 2026-11-13,
+    // misdiagnosed at first as a plan-dedup fold. test/claude_play_menu_index_check.py.
+    os << "  \"note\": \"reply with the chosen plan's \\\"index\\\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line\"\n";
     os << "}\n";
 }
 

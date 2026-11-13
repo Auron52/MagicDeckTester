@@ -137,6 +137,12 @@ deterministic game applying the prior `--choices`, then prints the next decision
   `--choices` selects a proposal and may execute only its playable subset.
 - Choose exactly ONE plan index, **append** it to the CSV, re-invoke with the FULL
   accumulated CSV (e.g. ``→`"2"`→`"2,0"`→`"2,0,1"`…). Never drop earlier choices.
+- **The plan index is each plan's `"index"` FIELD, never its position in the `plans`
+  array.** The array is a capped, collapsed subset of the engine's plans (`plans_total` /
+  `plans_hidden` say so), each listed under its real engine index, so it has GAPS. Never
+  `enumerate()` it. Morph seed 8 T5 (2026-11-13): the line Might + Berserk x2 sat at array
+  position 55 with `"index": 88`; replying 55 committed engine plan 55, a Temur Battle Rage
+  line, and the resulting `step_dropped` warnings were misread as a plan-dedup fold.
 - `-1` passes (cast nothing). When you see `<<<CLAUDE_RESULT>>> { "win_turn": N … }`
   `<<<END_RESULT>>>` (exit 0) the game is over.
 - **Each decision has a `type`.** `"main_phase"` (the default — reply a plan index as
