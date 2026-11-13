@@ -18,5 +18,5 @@ newly unwon, 536 newly won).
 
 Reading: the keep table's searched gain is real and matches the refresh's own measurement. Its d0 cost is small
 and not significant, and the refresh never measured d0 (it measures at play settings only), so the TRADE verdict
-did not mention it. Hinata plays at d5 b30; d0 is the depth-0 runner tier. Surfaced to the USER 2026-11-13; the
-recommendation is to keep the table.
+did not mention it. Hinata plays at d5 b30; d0 is the depth-0 runner tier. Surfaced to the USER 2026-11-13. **USER ruling 2026-11-13: keep the table** ("Okay, we'll keep the Hinata
+result.").
