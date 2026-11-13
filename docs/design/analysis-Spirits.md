@@ -28,7 +28,7 @@ Research fan-out (2026-11-13): five Opus agents, read-only, grouped by mechanic;
 |---|---|---|---|---|
 | Geist of Saint Traft | 2 | Hero-of-Bladehold attack token (self-attack only, flat 1), 4/4 white flying Angel (`attack_token_keywords` + `created_token_color`), new `attack_token_exile_end_of_combat`: FireAttackCreateTokens reports the token numbers, shared `ExileEndOfCombatTokens` at EndCombat in BOTH executor (GameEngine::CombatPhase) and rollout (SimulateOneCombatAfterTitan) | none (legend_keep for a 2nd copy) | IMPLEMENTED 87078b215 |
 | Millicent, Restless Revenant | 2 | `affinity_for_subtype` Spirit + generic AFFINITY cast-order tier 25 + same-turn credit for Vial puts / token-making hand casts / a Spirit-named Mimic (`AffinityFeedCount`); new `combat_damage_tokens_per_trigger` + `combat_damage_watch_nontoken` (shared FireCombatDamageTokens); new `dies_watch_nontoken` (OnCreatureDies both walks, DeathOfWouldPay) | none (legend_keep for a 2nd copy) | IMPLEMENTED 55c43ab8a |
-| Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | drafted |
+| Usher of the Fallen | 3 | first BOAST: `pay_token_cost {1}{W}` + new `activate_only_if_attacked_this_turn` + `activate_once_each_turn`; a post-combat main opened only when a boast is live | A (main-2 plan action) | IMPLEMENTED 9176533f0 |
 | Lingering Souls | 2 | `cast_creates_tokens 2` Spirit fliers + `flashback_cost {1}{B}`; FIXED Hole A (flashback in DeckGraveyardReaders / BuildSimKey / Dominance; moves Gods) + Hole B (per-copy + PENDING flashback candidates, `SubsetHasNonCanonicalGyCopies`); shared `GraveyardCastSpellCost`; executor cast-count drift fixed | A (`flashback_gy`, `main_phase` plans incl. hand cast + flashback) | IMPLEMENTED 8097213a2 |
 | Spirit of the Labyrinth | 1 | 3/1 body; draw cap inert in this 60 (no card draws) + fail-closed abort guard `each_player_draw_cap_per_turn` (deck constant `deck_has_draw_cap`, handentry::NoteFirstDraw) | none | IMPLEMENTED 87078b215 |
 | Skyclave Apparition | 2 | new `etb_exile_opp_nonland_nontoken_max_mv` 4 (ResolveEtbExileUpToOne, shared enter cascade: cast + Vial put) + `ltb_exiled_owner_illusion_token` (permanent exile on a NEW link range `kSkyclaveExileBase`, never returned by the Cathar orphan sweep); target = provider identity fold `EtbOptionalExileTargetPick` (largest) | A (`dig` "(may exile)") | IMPLEMENTED 3ddc3c86f |
@@ -60,6 +60,7 @@ Scryfall note: concurrent research agents 429'd the single-card API; texts came 
 - **[USER, PROVISIONAL]** Mausoleum Wanderer's "sacrifice: counter target instant/sorcery unless its controller pays {X}" deferred. Only target is our own Lingering Souls; it can beat keeping Wanderer only with Millicent on the battlefield (sac → nontoken Spirit dies → 1/1 token), a narrow window disclosed here. Tier-3 alternative: a Remand-style pay-branch rider.
 - **[USER]** Fast playouts / d0 may under-rank lords (`EvalCard` scores a lord by its own body). The search's combat applies the bonus correctly; a cast-order hook would be a user call.
 - Flash is inert engine-wide (no off-main-phase casting window); weakly dominated vs a passive goldfish.
+- **[USER, PROVISIONAL]** Usher of the Fallen's boast lives in SpiritsProvider's narrow boast-only post-combat main (main 1 vs main 2 is the user's per-deck call; the boast is illegal before attackers, so this window is its only reach; no flag). Alternative: a full second main (`uses_second_main`). See Integrator D.
 
 ### Integrator A (2026-11-13): SpiritsProvider + seven cards
 
@@ -372,6 +373,66 @@ the variant also covers nonbasics in hand and is pruned by a PROVIDER hook (not 
 search is the placeholder, not the no-op. Skyclave's hook is a root default rather than a Spirits override (the
 draft's design). Stale comments the draft flagged (Fulminator / Acidic Slime "the opponent controls no land")
 not touched (not this scope).
+
+### Integrator D (2026-11-13): Usher of the Fallen, the engine's first BOAST (9176533f0)
+
+**Card.** Live Scryfall (`logs/spirits/drafts/scry/usher/usher.json`): `{W}`, cmc 1, Spirit Warrior 2/1, keyword
+Boast: "{1}{W}: Create a 1/1 white Human Warrior creature token. (Activate only if this creature attacked this turn
+and only once each turn.)" Template `vanilla_creature`; snapshot row in `scryfall_reference.json`; `boast` added to
+`audit_card_fields.py` MODELED_ELSEWHERE_KEYWORDS (KeywordFromString throws on it; no combat effect).
+
+**Model.** Slimefoot's `pay_token_cost` (PermAbilityMode::PayToken, {T}-less, paid under the creature-ability
+scope, so Secluded Courtyard may pay the {W} and Unclaimed Territory only {C}) + NEW
+`activate_only_if_attacked_this_turn` + EXISTING `activate_once_each_turn` (per object, `once_per_turn_used`, set by
+ApplyPermAbility's PayToken branch). Both restrictions are checked in the shared `PermAbilitySourceLive`, which the
+enumeration (CollectActions), the breakpoint activation keys (CollectActivationKeys), BpAvailablePermAbilityModes,
+both apply worlds and SpendRepeatActivations' per-iteration recheck consult; param-gated, so Slimefoot / King
+Darien are byte-identical. A once-each-turn PayToken's K axis is {1} per source (two Ushers: K over pass / either /
+both, searched; no max-K prune).
+- **Attack count:** NEW deck stamp `GameState::deck_has_attack_count` (bitfield in the `deck_has_draw_cap` byte,
+  sizeof unchanged), StampDeckTraits mainboard scan. `NoteAttacksDeclared` (both declare sites, GameEngine +
+  TurnSolver) now counts, when `deck_has_extra_combat` is off, ONLY attackers carrying the param (no key
+  fragmentation); the count and `once_per_turn_used` were already folded into BuildSimKey / dominance / fold keys
+  and reset at our untap in both worlds. `deck_has_extra_combat` NOT widened.
+- **Post-combat window = SpiritsProvider's restricted second main** (the Speaker / Giada precedent):
+  `RestrictedSecondMainLive` = `BoastSecondMainLive` (an own attacked, un-boasted Usher whose {1}{W} the available
+  pool can pay -- colour-blind superset, so an over-open phase offers only the pass), `RestrictedSecondMainAdmits`
+  = boast activations only, `MayOpenRestrictedSecondMain` true. Already plumbed through `ProviderSecondMainLive`
+  at every post-combat site of both worlds (executor TakeTurn gate, rollout m2, FSLineTail, branch sites). The
+  rollout m2 is SEARCHED (SolveSecondMainInSearch), and every post-combat host appends the pass, so the boast
+  count is searched and holding {1}{W} in main 1 is priced. Human play keeps its FULL main 2 (use_external),
+  where the boast is a plan action; it is never offered in main 1.
+- **Soundness of the boast-only menu (VERDICT: lossless for this 60, goldfish):** combat creates no resource main 1
+  lacked -- no untap, no draw, no mana; the opponent's board is unchanged; Geist's Angel is exiled at end of
+  combat; Millicent's combat tokens arrive only while the one-copy affinity card is already out; Wanderer's EOT
+  pump and Mimic counters change no cost; nothing keys on the opponent having lost life. So every refused play was
+  payable, and weakly better, in main 1. Full argument at `BoastSecondMainLive` (DecisionProviders.cpp).
+  Re-derive it for a real opponent or if a combat-resource card joins the list.
+- **[USER, PROVISIONAL] main 1 vs main 2 is the user's call per deck.** The narrow boast-only post-combat main
+  is the ONLY place the boast is reachable (the restriction makes a main-1 boast illegal), so it is not a
+  cast-order choice. No `MTG_*` flag was added (a default-off lever would make the boast unfindable). If the user
+  wants Spirits to play a FULL second main instead, that is `uses_second_main`, a profile setting.
+- Viewer: label `boast: create a creature token` (PermAbilityLabelFor, only for the param, so Slimefoot's /
+  King Darien's label and their references are unchanged); `activate_only_if_attacked_this_turn` in
+  `audit_viewer_decisions.py` INERT_PARAMS (a legality gate); `pay_token_cost` already maps to `main_phase`.
+
+**Tests.** `test/unit/test_spirits_usher.cpp` (8 cases, 354 assertions: params; gate attacked/once;
+NoteAttacksDeclared counts only the Usher and nothing unstamped; never enumerated in main 1; post-combat K<=1 per
+Usher, sick Usher none, two Ushers K in {1,2} + the host's pass; both worlds make two Human Warriors and a hand-built
+K=2 block on one Usher fires once; restricted m2 opens/closes, admits only boasts, never narrows a full m2;
+Courtyard pays the {W}, Territory x2 does not). Scenarios `spirits_usher_boast_once_after_attack` (T6; T7 without
+the window, T5 if it fired twice), `spirits_usher_boast_paid_by_courtyard` (T6), `spirits_usher_boast_d0_runner`
+(the d0 runner reaches the window: T6). Unit 2919/2919, scenarios 506/506. Audits: card fields rc 0,
+provider_audit --check rc 0, viewer --no-sweep rc 0, plan-sig lockstep only the pre-existing `#BB`.
+**Real `--claude-play`** (`logs/spirits/integratorD/cp_usher.py`, seed 101 gi 3, HOLD=3): no boast plan in any
+pre_main; T3 post_main offered 10 boast plans (1 Usher payable), T4 133 plans of which 56 with one boast and 3
+with two (two attacked Ushers); after a boast the same turn's next post_main offers only the pass.
+
+**Review fixes (D2).** The unit test's pass-offered asserts were wrong (EnumerateMainPlans never emits the pass;
+the post-combat hosts append it -- TurnSolver FSLineTail / SolveWithLookahead) and a bitfield bound to `bool&`;
+the {1} clamp now keeps an EMPTY count menu empty (a provider prune / nothing affordable).
+
+**Smoke.** Run alone on 9176533f0: 191 passed, 4 failed -- exactly the four gods keys at the C2 checkpoint numbers (d0 8.7830, d3 5.4000 digest-only, d5 5.2000, 2hg d5 5.3200); searched slower 1 / faster 3 / play-changed 79, identical to C2. Every other deck byte-identical (no other deck carries the new params). Nothing accepted.
 
 ## Approved deferrals
 
