@@ -313,6 +313,25 @@ inline int DealDamageEvent(GameState& s, int src_ctrl, bool src_is_creature, boo
 
 // Turn every mana_tap_mark on the board into its triggers and resolve them (see THE MODEL, step 2).
 // Idempotent: a board with no marks is a no-op, so a redundant flush (the backstops) costs one scan.
+// FLOATED PAIN (MTG_PD_FLOAT_FLUSH, default ON; =0 = a payment's pain is ONE batch). Mana-clean gate,
+// Prevent Damage, seed 30026406 T5: life 5, Tamanoa + Vito out, plan {Beseech the Queen, Rolling
+// Earthquake X=1}. The only Beseech payment that leaves {1}{R} for the Quake is Tarnished Citadel:B (3)
+// + Reflecting Pool:B + Ancient Tomb:CC (2): 5 pain, which the batch model reads as LETHAL (the SBA
+// runs before any Tamanoa gain). But a mana ability can be activated whenever we hold priority
+// (CR 605.3a) and its mana stays in the pool until the step ends (CR 500.4), so a player taps the Tomb
+// (5 -> 3), lets the Tamanoa trigger resolve (-> 5, Vito drains 2), taps the Citadel (-> 2), lets that
+// one resolve (-> 5), and only then casts with the floating mana. With a Tamanoa out every tap is paid
+// back before the next, so only the largest SINGLE tap has to fit under our life (the same per-event
+// rule CastTriggerBill already applies to cast triggers). The engine pays every armed payment while
+// holding priority (casts and activations; no resolution-time mana payment in an armed deck).
+// The realisation is only ever DIFFERENT where the batch would kill us: otherwise the same gains,
+// drains and barbs resolve with the same totals (an opponent dying earlier is the same win).
+inline bool FloatFlushEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_FLOAT_FLUSH", true);   // DEFAULT ON; =0 = one batch
+    return heurarm::Flag(heurarm::PD_FLOAT_FLUSH, v);
+}
+
 inline void FlushDamageEvents(GameState& s)
 {
     if (!s.dmg_events_armed) { return; }
@@ -320,6 +339,59 @@ inline void FlushDamageEvents(GameState& s)
     int barb_amt[16];
     const int nbarb = ManabarbsAmounts(s, barb_amt, 16);
     const int tam   = CountTamanoa(s, ctrl);
+    // FLOATED PAIN (above): the batch would kill us, a Tamanoa pays each tap back, and the taps can be
+    // re-sequenced one at a time, smallest first (life never falls between taps, so smallest-first is
+    // as good as any order). Undo the recorded pain, then resolve tap by tap: pain, SBA, its gains,
+    // its barbs.
+    if (tam > 0 && s.players[ctrl].life <= 0 && s.players[ctrl].life > kLostLife && !WonLocked(s)
+        && FloatFlushEnabled())
+    {
+        struct Ev { int pain; bool prevented; bool land; };
+        std::vector<Ev> evs;
+        int undo = 0;
+        bool ok = true;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.mana_tap_mark == 0) { continue; }
+            const CardDefinition* d = Def(p);
+            if (d && d->params.tap_is_life_payment) { ok = false; break; }   // a cost, not a damage event
+            const std::uint8_t m = p.mana_tap_mark;
+            const int pain = m >> kMarkPainShift;
+            const bool prev = (m & kMarkPrevented) != 0;
+            if (pain > 0 && !prev) { undo += pain; }
+            evs.push_back({ pain, prev, (m & kMarkLand) && p.controller_index == ctrl });
+        }
+        if (ok && s.players[ctrl].life + undo > 0)
+        {
+            for (Permanent& p : s.battlefield) { p.mana_tap_mark = 0; }
+            std::stable_sort(evs.begin(), evs.end(), [](const Ev& a, const Ev& b)
+                             { return (a.prevented ? 0 : a.pain) < (b.prevented ? 0 : b.pain); });
+            s.players[ctrl].life += undo;
+            if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+            {
+                EmitPlayEvent(s.turn_number, "trigger", "⚡ Tamanoa x" + std::to_string(tam)
+                              + ": mana floated one tap at a time, each trigger resolved before the next (CR 605.3a)");
+            }
+            std::vector<int> g, b;
+            for (const Ev& e : evs)
+            {
+                g.clear(); b.clear();
+                if (e.pain > 0)
+                {
+                    if (e.prevented) { g.push_back(e.pain); }
+                    else
+                    {
+                        s.players[ctrl].life -= e.pain;
+                        for (int k = 0; k < tam; ++k) { g.push_back(e.pain); }
+                    }
+                }
+                if (e.land) { for (int k = 0; k < nbarb; ++k) { b.push_back(barb_amt[k]); } }
+                ResolveQueued(s, ctrl, g, b);   // SBA first, then the gains, then the barbs
+                if (SbaCheckpoint(s)) { return; }
+            }
+            return;
+        }
+    }
     std::vector<int> gains, barbs;
     bool any = false;
     int prevented = 0, pain_events = 0, land_taps = 0;
@@ -437,7 +509,7 @@ inline bool PaymentPainSafe(const GameState& s, int ctrl)
 {
     if (PurityProtects(s, ctrl)) { return true; }
     int life0 = s.players[ctrl].life;
-    int potential = 0;
+    int potential = 0, largest = 0;
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != ctrl) { continue; }
@@ -445,8 +517,15 @@ inline bool PaymentPainSafe(const GameState& s, int ctrl)
         { life0 += p.mana_tap_mark >> kMarkPainShift; }
         if (p.tapped && p.mana_tap_mark == 0) { continue; }
         const CardDefinition* d = Def(p);
-        if (d && d->params.tap_self_damage > 0) { potential += d->params.tap_self_damage; }
+        if (d && d->params.tap_self_damage > 0)
+        {
+            potential += d->params.tap_self_damage;
+            largest = std::max(largest, d->params.tap_self_damage);
+        }
     }
+    // FLOATED PAIN (FloatFlushEnabled): with a Tamanoa out each tap is its own event, paid back before
+    // the next, so only the largest single tap has to fit (FlushDamageEvents realises it that way).
+    if (FloatFlushEnabled() && CountTamanoa(s, ctrl) > 0) { return life0 - largest > 0; }
     return life0 - potential > 0;
 }
 

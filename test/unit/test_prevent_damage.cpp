@@ -327,11 +327,16 @@ TEST_CASE("Prevent Damage pain-aware payment: a COLOURED payment never pays itse
     // CONTROL ARM (the lever off = the pain-blind payer): Dina's {B}{G} goes on both Citadels in
     // their coloured mode, 3 + 3 = 6 >= 5 -- the SBA kills us before either Tamanoa gain resolves.
     // This arm MUST lose, or the test below has no power.
+    // MTG_PD_FLOAT_FLUSH is pinned OFF here: floated one tap at a time (3 -> gain -> 3 -> gain) the
+    // pain-blind payment survives too (that lever's own test is "floated pain" below).
     {
         PainPayArm off(false);
+        const auto prev_ff = heurarm::t_arm[heurarm::PD_FLOAT_FLUSH];
+        heurarm::t_arm[heurarm::PD_FLOAT_FLUSH] = 0;
         GameState s = Gi9Board();
         REQUIRE(Pay(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1)));
         CHECK(SelfHasLost(s));
+        heurarm::t_arm[heurarm::PD_FLOAT_FLUSH] = prev_ff;
     }
     // The fix: the same payment survives (a Citadel + the painless Pool, or Coliseum + a Citadel),
     // and -- a gain engine being out -- it still takes pain, which Tamanoa pays back and Vito drains.
@@ -1544,4 +1549,46 @@ TEST_CASE("Prevent Damage: a payment AFTER Dina sacrifices the last Tamanoa is p
         CHECK(Me(s) == me);
         CHECK(Opp(s) == 14);
     }
+}
+
+// ---- FLOATED PAIN (MTG_PD_FLOAT_FLUSH): mana-clean gate, seed 30026406 T5 ----
+// Life 5, Tamanoa + Vito out, {B}{2} paid by Tarnished Citadel:B (3) + Ancient Tomb:CC (2): 5 pain at once is
+// lethal before any gain, but the taps can be activated one at a time before the cast (CR 605.3a), each Tamanoa
+// trigger resolving in between: Tomb 5 -> 3 -> 5 (Vito drains 2), Citadel 5 -> 2 -> 5 (Vito drains 3).
+TEST_CASE("Prevent Damage: floated pain -- a Tamanoa pays each tap back before the next (seed 30026406 T5)")
+{
+    PainPayArm pay(true);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 5;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 5;
+        Put(s, "Tamanoa");
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        Put(s, "Tarnished Citadel");
+        Put(s, "Ancient Tomb");
+        return s;
+    };
+    bool control_dies = false;
+    {
+        HeurArmSet off(heurarm::PD_FLOAT_FLUSH, false);
+        GameState s = board();
+        control_dies = !Pay(s, Cost(2, 0, /*b=*/1)) || SelfHasLost(s);
+    }
+    HeurArmSet on(heurarm::PD_FLOAT_FLUSH, true);
+    GameState s = board();
+    const int opp0 = Opp(s);
+    REQUIRE(Pay(s, Cost(2, 0, /*b=*/1)));
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(Me(s) == 5);
+    CHECK(Opp(s) == opp0 - 5);
+    for (const Permanent& p : s.battlefield) { CHECK(p.mana_tap_mark == 0); }   // flushed
+    CHECK(control_dies);   // the control arm reproduces the lethal batch (else this test has no power)
+
+    // A single tap at least our life still kills: at 3 life the Citadel's 3 cannot be floated.
+    GameState d = board();
+    d.players[0].life = 3;
+    const bool paid = Pay(d, Cost(2, 0, /*b=*/1));
+    CHECK((!paid || SelfHasLost(d)));
 }

@@ -907,6 +907,7 @@ enum Slot : int
     PD_HARM_LINE_REPAIR,      // MTG_PD_HARM_LINE_REPAIR  item 10 (mana-clean, Prevent Damage APPLY-DROP s30024638 T3 {Living Wish + Rolling Earthquake X=1}): the pain-HARMFUL payment's exact path, when BOTH the minimum-damage assignment and the historical one strand a later cast of the line, re-pays holding each source either of them tapped (one at a time, capped at the survivable room) and keeps the least-damage payment that leaves the line payable (dmgev::PainAwarePay). Default ON; =0 -> the stranding minimum stands
     DOUBLER_AFTER_EXALTED,    // MTG_DOUBLER_AFTER_EXALTED  USER 2026-11-13 ("Anything doubler cast at the end will be assumed to be in the attack phase"): a pre-combat main's trailing run of power doublers (trick_double_power: Berserk, Legion Leadership) counts as cast in the declare-attackers step after exalted, so a lone attacker's doubled power includes exalted's +E (SpellEffects.h DoublerDeferExaltedExtra), when the plan-start probe finds the run payable in combat with main's floating mana gone (CR 500.4; TurnSolver::NoteDoublerDeferPayable). A modelling correction. Default ON; =0 -> doublers resolve before exalted as before
     EXALTED_DS_PROJECTION,    // MTG_EXALTED_DS_PROJECTION  2026-11-13 modelling fix: the attack projection (PendingAttackDamageImpl) folds a lone attacker's exalted +E into its power as the combat core does, so a double striker (Temur Battle Rage) deals it in both steps and a Jitte bearer's closed form sees it. Default ON; =0 -> the old once-only +E
+    PD_FLOAT_FLUSH,           // MTG_PD_FLOAT_FLUSH  item 10 (mana-clean, Prevent Damage APPLY-DROP-ORDER s30026406 T5 {Beseech + Rolling Earthquake X=1}): with a Tamanoa out, a payment's pain taps are realised as mana abilities activated ONE AT A TIME BEFORE the cast (CR 605.3a, mana stays floating, CR 500.4), each Tamanoa trigger resolving before the next tap -- so only the largest SINGLE tap has to fit under our life, not the sum. DamageEvents.h FlushDamageEvents (sequential realisation when the batch would be lethal) + PaymentPainSafe (max single tap). Default ON; =0 -> a payment's pain is one batch, checked as a sum
     COUNT
 };
 
@@ -1758,6 +1759,7 @@ inline const char* Name(int slot)
         "MTG_PD_HARM_LINE_REPAIR",
         "MTG_DOUBLER_AFTER_EXALTED",
         "MTG_EXALTED_DS_PROJECTION",
+        "MTG_PD_FLOAT_FLUSH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
