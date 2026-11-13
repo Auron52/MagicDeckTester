@@ -67,7 +67,14 @@ empty budget (Hydras 67 of 1696 decisions, Snow 43/1063, Alchemist 25/841). Fixe
 threshold <= 0 never fits; the threshold is capped by the real remaining budget; a pass 1 that does not fit stops
 the ladder; at least 2 sampled rollouts before a verdict; the bound carries forward).
 
-## Next steps (checkpoint)
+## Next steps (checkpoint, 2026-11-13 ~05:45 UTC)
 
-- S1 screen running: `build/scratch/p18/S1` (heur vs g / g_pact / g_pnoasp / g_pz10, Hydras 1000 + four decks x 400,
-  train seeds), DONE marker `S1/DONE`. Summaries: `jobsum.py S1/out.log`, `parity.py S1/err.log <deck> <arm>`.
+- S2 (iteration 1 + the exhausted-budget fix; heur / g / g_pact / g_pz10 on the S1 seeds) is QUEUED on the box lock
+  behind another agent's 176,808-game batch: `build/scratch/p18/S2`, DONE marker `S2/DONE`, binary `mtg_b3`
+  (`dae1250e5`). Read with `jobsum.py S2/out.log`, `parity.py`, `attrib.py`, `split.py`.
+- Offline: heur's formula applied to the PRICED costs reproduces heur's K worse (Hydras T1 31-43% parity) than the
+  direct rule (72%): emulation through samples is dead.
+- If S2 is still net worse: (a) ROBUST-OR-EXACT -- keep the priced verdict only when it clears the threshold by a
+  margin factor F, else run heur's own rollout ladder for that decision (exact parity there); sweep F. (b) root-cause
+  the deeper divergences that lost in S1.
+- Handoff: `logs/hydras-research/P18-handoff.md` (primary checkout).
