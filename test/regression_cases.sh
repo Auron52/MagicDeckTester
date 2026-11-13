@@ -90,6 +90,7 @@ declare -A DECK_FILE=(
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
   [hydras]=decks/Hydras/Hydras.cod
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
+  [spirits]=decks/Spirits/Spirits.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -142,6 +143,7 @@ declare -A DECK_PROF=(
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
   [hydras]=decks/Hydras/Hydras.profile.json
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
+  [spirits]=decks/Spirits/Spirits.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -702,6 +704,12 @@ SMOKE_CASES=(
   "martyr     3  1001    50 10"
   "martyr     5  1001   100 20"
   "martyr2hg  5  1001    25 20"
+  # Spirits: pre-keep-table ENTRY set on the Merfolk template (d5/b20 play setting, no value_play block).
+  # spirits2hg is the small searched 2HG canary (no card scales with opponents or reads starting life).
+  "spirits     0 1001 1000 0"
+  "spirits     3 1001   50 10"
+  "spirits     5 1001  100 20"
+  "spirits2hg  3 1001   50 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -839,6 +847,11 @@ REGRESSION_CASES=(
   "snow             5 30001   3 0"
   "soldiers         3 30001  20 0"
   "soldiers         5 30001  20 0"
+  # spirits: added 2026-11-13 with the deck. Screened 12 twenty-game blocks (30001..30221 step 20, d3+d5, budget 0,
+  # abandon_units 2000000, MTG_SLOW_GAME_MS=5000, 32 threads): 10 of 469 games hit the cap (blocks 30001/30021/30041/
+  # 30101/30161/30221). 30181 finished every game with none over 5 s at either depth (19.2 + 4.4 core-s, 0.87M units).
+  "spirits          3 30181  20 0"
+  "spirits          5 30181  20 0"
   "stompy           3 30001  20 0"
   "stompy           5 30001  20 0"
   "th               3 30001  20 0"
@@ -1134,6 +1147,11 @@ REGRESSION_CASES=(
   "martyr     5  2002   150 20"
   "martyr     5  3003   150 20"
   "martyr2hg  5  2002    75 20"
+  # Spirits: pre-keep-table ENTRY set on the Merfolk template; most searched games use play settings.
+  "spirits 0 2002 1000 0"
+  "spirits 3 2002   75 10"
+  "spirits 5 2002  150 20"
+  "spirits 5 3003  150 20"
 
 )
 
@@ -1295,6 +1313,10 @@ OVERNIGHT_CASES=(
   "snow             5 30211   3 0"
   "soldiers         3 30101  20 0"
   "soldiers         5 30101  20 0"
+  # spirits: same 2026-11-13 screen (see the REGRESSION half). 30081 finished every game at both depths; its first
+  # 10 games (seeds 30081..30090) were all under 5 s (its one slow game, gi14 at d3 ~13 s, is outside the row).
+  "spirits          3 30081  10 0"
+  "spirits          5 30081  10 0"
   "stompy           3 30101  20 0"
   "stompy           5 30101  20 0"
   "jumbo            3 30101  20 0"
@@ -1995,5 +2017,18 @@ OVERNIGHT_CASES=(
   "martyr2hg  5  5005   75 20"
   "martyr2hg  5  6006   75 20"
   "martyr2hg  5  7007   75 20"
+  # Spirits: pre-keep-table overnight ENTRY set on the Merfolk template.
+  "spirits 0  4004 2000 0"
+  "spirits 0  6006 2000 0"
+  "spirits 0  8008 2000 0"
+  "spirits 0 10010 2000 0"
+  "spirits 3  4004  400 10"
+  "spirits 3  5005  400 10"
+  "spirits 3  6006  400 10"
+  "spirits 3  7007  400 10"
+  "spirits 5  4004  425 20"
+  "spirits 5  5005  425 20"
+  "spirits 5  6006  425 20"
+  "spirits 5  7007  425 20"
 
 )

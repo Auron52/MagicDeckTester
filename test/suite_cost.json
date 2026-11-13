@@ -203,11 +203,11 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 6424.24,
+   "cost_per_game_ms": 4449.9333,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 2189437,
+   "total_core_ms": 1990556,
    "worst_case": "hinata2hg_regression_d5_b30"
   },
   "hydras": {
@@ -407,6 +407,15 @@
    "tier": "regression",
    "total_core_ms": 30727,
    "worst_case": "soldiers_regression_d3_b10"
+  },
+  "spirits": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 1380.7933,
+   "jobs": 6,
+   "key": "spirits",
+   "tier": "regression",
+   "total_core_ms": 501971,
+   "worst_case": "spirits_regression_d5_b20"
   },
   "stompy": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
