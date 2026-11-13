@@ -902,6 +902,77 @@ inline bool HarmLineRepairEnabled()
     return heurarm::Flag(heurarm::PD_HARM_LINE_REPAIR, v);
 }
 
+// DEEPER HOLDS IN BOTH LINE REPAIRS (MTG_PD_LINE_HOLD_SEARCH, default ON; =0 = single holds only).
+// Mana-clean gate, Prevent Damage 27000-31999. Holding ONE tapped source at a time is not always enough,
+// because the payer replaces it with another source the rest of the line needs just as much:
+//  * useful mode, s30029561 T6, plan {land, Tamanoa {R}{G}{W}, Beseech {B}{B}{B}}: pain-first takes the
+//    {R} from a Citadel (3 pain) and the {W} from Battlefield Forge; held, the Citadel is replaced by the
+//    Reflecting Pool, then by the other Citadel. Only Forge {R} + Brushland {G} + Brushland {W} (all three
+//    {B} sources held) leaves Beseech payable.
+// When every single hold still strands the line, the repair searches hold SETS breadth-first: a child of
+// a stranding attempt holds one more of the sources IT tapped (each set tried once, depth <= 4 sources,
+// <= 48 retries per payment, only on a payment that strands). Acceptance is the single pass's (useful:
+// the first that leaves the line payable; harmful: the least damage that does and survives, within the
+// first layer that has one). Layer 1 is the single pass, unchanged. It can only turn a payment that drops
+// a cast into one that does not; where a single hold or nothing repairs, the result is unchanged.
+// The harmful mode runs the same search for symmetry; no gate repro exercises it yet (s30027719 T6, the
+// harmful-looking {Dina, Beseech BBB, Pyrohemia} drop, is the activation hold reserving Karplusan for
+// Pyrohemia's {R} -- ActLineHoldMask, ManaPayment.cpp -- which no hold search can release).
+inline bool LineHoldSearchEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_LINE_HOLD_SEARCH", true);   // DEFAULT ON; =0 = single holds only
+    return heurarm::Flag(heurarm::PD_LINE_HOLD_SEARCH, v);
+}
+
+// The breadth-first part of the hold search (LineHoldSearchEnabled). `layer` = the single pass's
+// stranding attempts as (hold, taps). `try_hold(hold, taps)` re-pays holding `hold` (on top of the
+// caller's t_pay_hold): 1 = accepted, 0 = paid but strands (`taps` = what it tapped), -1 = unpayable.
+// `first_wins`: return on the first acceptance (the state is that attempt's); else finish the layer.
+struct HoldTry { std::uint64_t hold, taps; };
+template <class Try>
+inline bool LineHoldSearch(std::vector<HoldTry> layer, bool first_wins, Try&& try_hold)
+{
+    constexpr int kMaxDepth = 4, kMaxTries = 48;
+    std::vector<std::uint64_t> tried;
+    for (const HoldTry& h : layer) { tried.push_back(h.hold); }
+    int tries = 0;
+    for (int depth = 2; depth <= kMaxDepth && !layer.empty(); ++depth)
+    {
+        std::vector<HoldTry> next;
+        bool any = false;
+        for (const HoldTry& h : layer)
+        {
+            for (std::uint64_t m = h.taps & ~h.hold; m != 0; m &= m - 1)
+            {
+                const std::uint64_t h2 = h.hold | (m & (~m + 1));
+                if (std::find(tried.begin(), tried.end(), h2) != tried.end()) { continue; }
+                tried.push_back(h2);
+                if (++tries > kMaxTries) { return any; }
+                std::uint64_t t2 = 0;
+                const int r = try_hold(h2, t2);
+                if (r == 1) { any = true; if (first_wins) { return true; } }
+                else if (r == 0) { next.push_back({ h2, t2 }); }
+            }
+        }
+        if (any) { return true; }
+        layer.swap(next);
+    }
+    return false;
+}
+
+// Battlefield-index bits of the permanents tapped since `pre` (0 when the board changed shape).
+inline std::uint64_t TappedSince(const GameState& s, const std::vector<Permanent>& pre)
+{
+    std::uint64_t m = 0;
+    if (s.battlefield.size() != pre.size()) { return 0; }
+    for (std::size_t i = 0; i < s.battlefield.size() && i < 64; ++i)
+    {
+        if (s.battlefield[i].tapped && !pre[i].tapped && s.battlefield[i].card.m_number == pre[i].card.m_number)
+        { m |= (1ull << i); }
+    }
+    return m;
+}
+
 // The board's damage -> lifegain -> drain chain, read off card params (never names).
 struct GainChain
 {
@@ -1193,6 +1264,7 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
             PayAttemptSnap strand_post;
             strand_post.Take(s, available);
             const PayDmgCap cap = t_pay_cap;
+            std::vector<HoldTry> layer;   // the stranding single holds (the deeper search's layer 1)
             for (std::uint64_t m = tapped; m != 0; m &= m - 1)
             {
                 pre_line.Restore(s, available);
@@ -1200,7 +1272,22 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
                 bool r;
                 { PayHoldScope hs(t_pay_hold | (m & (~m + 1))); r = attempt(); }
                 if (r && line_ok(false) == 1) { paystats::Inc(paystats::kLineRepaired); return true; }
+                if (r) { layer.push_back({ m & (~m + 1), TappedSince(s, pre_line.bf) }); }
             }
+            // DEEPER HOLDS (LineHoldSearchEnabled): no single hold repairs -> hold sets, breadth-first.
+            if (LineHoldSearchEnabled()
+                && LineHoldSearch(layer, /*first_wins=*/true, [&](std::uint64_t h, std::uint64_t& taps) -> int
+                   {
+                       pre_line.Restore(s, available);
+                       t_pay_cap = cap;
+                       bool r;
+                       { PayHoldScope hs(t_pay_hold | h); r = attempt(); }
+                       if (!r) { return -1; }
+                       if (line_ok(false) == 1) { return 1; }
+                       taps = TappedSince(s, pre_line.bf);
+                       return 0;
+                   }))
+            { paystats::Inc(paystats::kLineRepaired); return true; }
             strand_post.Restore(s, available);
             t_pay_cap = cap;
             return true;
@@ -1314,18 +1401,29 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
                 paystats::Inc(paystats::kLineStrand);
                 PayAttemptSnap best_post;
                 int best = -1;
-                for (std::uint64_t m = strand_taps; m != 0; m &= m - 1)
+                // One retry holding `hold`: 1 = repaired (kept if the least damage so far), 0 = paid but
+                // strands (`taps` = its taps), -1 = unpayable.
+                auto try_hold = [&](std::uint64_t hold, std::uint64_t& taps) -> int
                 {
                     pre_line.Restore(s, available);
                     t_pay_cap = { true, base + (life0 - 1), barbs, /*pain_first=*/false, barb_total };
                     bool r;
-                    { HoldScope hs(t_pay_hold | (m & (~m + 1))); r = attempt(); }
-                    if (!r || line_ok(false) != 1) { continue; }
+                    { HoldScope hs(t_pay_hold | hold); r = attempt(); }
+                    if (!r) { return -1; }
+                    if (line_ok(false) != 1) { taps = TappedSince(s, pre_line.bf); return 0; }
                     const int dmg = PaymentDamage(s, ctrl, barbs) - base;
-                    if (life0 - dmg <= 0 || (best >= 0 && dmg >= best)) { continue; }
-                    best = dmg;
-                    best_post.Take(s, available);
+                    if (life0 - dmg <= 0) { return -1; }
+                    if (best < 0 || dmg < best) { best = dmg; best_post.Take(s, available); }
+                    return 1;
+                };
+                std::vector<HoldTry> layer;   // the stranding single holds (the deeper search's layer 1)
+                for (std::uint64_t m = strand_taps; m != 0; m &= m - 1)
+                {
+                    std::uint64_t taps = 0;
+                    if (try_hold(m & (~m + 1), taps) == 0) { layer.push_back({ m & (~m + 1), taps }); }
                 }
+                // DEEPER HOLDS (LineHoldSearchEnabled): no single hold repairs -> hold sets, breadth-first.
+                if (best < 0 && LineHoldSearchEnabled()) { LineHoldSearch(layer, /*first_wins=*/false, try_hold); }
                 if (best >= 0)
                 {
                     paystats::Inc(paystats::kLineRepaired);

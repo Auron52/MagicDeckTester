@@ -1258,6 +1258,13 @@ fungus 1,880, gods 4,300 (first run).
     s30029561 T6 (16): useful-mode repair holds ONE source at a time; Tamanoa {R}{G}{W} needs Citadel AND Reflecting Pool
     both held (the pain-first base taps Citadel, the kept deferral taps Pool) to leave Beseech's {B}{B}{B}.
     CAPPED 351 is analyzer cost in 24 games (4 T8 games = 201). ORACLE-GAP 138 in 17 games, not yet re-diagnosed.
+    **CORRECTION, s30027719:** not a missing line check -- ActLineHoldMask (MTG_ACT_LINE_HOLD) reserves Karplusan, the
+    narrowest {R} provider, for Pyrohemia's activation, so Dina's {G} must come off a {B} source; the held attempt
+    succeeds, so the reservation is never released. Candidate fix in handoff #4 (rank providers by whether the line
+    demands their other colours). **ENGINE WIP (committed, NOT validated): MTG_PD_LINE_HOLD_SEARCH** (default ON) --
+    both PainAwarePay line repairs search hold SETS breadth-first when every single hold strands (depth <= 4, <= 48
+    retries). s30029561: AD 16 -> 0 (=0 -> 16). Units 2934/2934. OWED: held-out A/B (manifest build/scratch/item10/ab4),
+    smoke + regression accept, re-gate 32000-36999 (handoff #4).
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
   ORACLE-GAP 6, UNMODELED 357,908 mostly "scripted payment did not pay {1}{U}{G}" / "set-aside exceeds the floating

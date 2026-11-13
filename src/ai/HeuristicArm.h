@@ -908,6 +908,7 @@ enum Slot : int
     DOUBLER_AFTER_EXALTED,    // MTG_DOUBLER_AFTER_EXALTED  USER 2026-11-13 ("Anything doubler cast at the end will be assumed to be in the attack phase"): a pre-combat main's trailing run of power doublers (trick_double_power: Berserk, Legion Leadership) counts as cast in the declare-attackers step after exalted, so a lone attacker's doubled power includes exalted's +E (SpellEffects.h DoublerDeferExaltedExtra), when the plan-start probe finds the run payable in combat with main's floating mana gone (CR 500.4; TurnSolver::NoteDoublerDeferPayable). A modelling correction. Default ON; =0 -> doublers resolve before exalted as before
     EXALTED_DS_PROJECTION,    // MTG_EXALTED_DS_PROJECTION  2026-11-13 modelling fix: the attack projection (PendingAttackDamageImpl) folds a lone attacker's exalted +E into its power as the combat core does, so a double striker (Temur Battle Rage) deals it in both steps and a Jitte bearer's closed form sees it. Default ON; =0 -> the old once-only +E
     PD_FLOAT_FLUSH,           // MTG_PD_FLOAT_FLUSH  item 10 (mana-clean, Prevent Damage APPLY-DROP-ORDER s30026406 T5 {Beseech + Rolling Earthquake X=1}): with a Tamanoa out, a payment's pain taps are realised as mana abilities activated ONE AT A TIME BEFORE the cast (CR 605.3a, mana stays floating, CR 500.4), each Tamanoa trigger resolving before the next tap -- so only the largest SINGLE tap has to fit under our life, not the sum. DamageEvents.h FlushDamageEvents (sequential realisation when the batch would be lethal) + PaymentPainSafe (max single tap). Default ON; =0 -> a payment's pain is one batch, checked as a sum
+    PD_LINE_HOLD_SEARCH,      // MTG_PD_LINE_HOLD_SEARCH  item 10 (mana-clean, Prevent Damage APPLY-DROP s30027719 T6 {Dina + Beseech BBB} harmful, s30029561 T6 {Tamanoa + Beseech BBB} useful): when every SINGLE-source hold of a line repair still strands a later cast, search hold SETS breadth-first (a child holds one more source its stranding parent tapped; depth <= 4, <= 48 retries; dmgev::PainAwarePay, both modes; same acceptance as the single pass). Default ON; =0 -> single holds only
     COUNT
 };
 
@@ -1760,6 +1761,7 @@ inline const char* Name(int slot)
         "MTG_DOUBLER_AFTER_EXALTED",
         "MTG_EXALTED_DS_PROJECTION",
         "MTG_PD_FLOAT_FLUSH",
+        "MTG_PD_LINE_HOLD_SEARCH",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

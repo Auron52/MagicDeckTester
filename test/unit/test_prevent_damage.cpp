@@ -1451,6 +1451,55 @@ TEST_CASE("Prevent Damage harmful-mode payment: the rest of the line stays payab
     CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
 }
 
+TEST_CASE("Prevent Damage line repair: a deeper hold set when every single hold strands (useful, seed 30029561 T6)")
+{
+    // Citadel, Forge, Brushland, Vito, Citadel, Brushland, Tamanoa, Reflecting Pool; 8 life. Line: Tamanoa
+    // {R}{G}{W}, then Beseech the Queen paid {B}{B}{B}. Only the two Citadels and the Pool make {B}, so the
+    // Tamanoa must be Forge + Brushland + Brushland (both the Citadel and the Pool held).
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts    = 2;
+    t.cast_mv_total = 6;
+    t.cast_pips[0]  = 1;   // W
+    t.cast_pips[2]  = 3;   // B
+    t.cast_pips[3]  = 1;   // R
+    t.cast_pips[4]  = 1;   // G
+    PlanTraitsScope ts(&t);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 6;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 8;
+        Put(s, "Tarnished Citadel");
+        Put(s, "Battlefield Forge");
+        Put(s, "Brushland");
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        Put(s, "Tarnished Citadel");
+        Put(s, "Brushland");
+        Put(s, "Tamanoa");
+        Put(s, "Reflecting Pool");
+        return s;
+    };
+    EnsureCardsPd();
+    const CardDefinition* tam = CardDatabase::Instance().Lookup("Tamanoa");
+    REQUIRE(tam != nullptr);
+    bool control_strands = false;
+    {
+        HeurArmSet off(heurarm::PD_LINE_HOLD_SEARCH, false);
+        GameState s = board();
+        { SpellSubtypePayScope sc(&tam->card); REQUIRE(Pay(s, Cost(0, /*w=*/1, 0, /*r=*/1, /*g=*/1))); }
+        control_strands = !Pay(s, Cost(0, 0, /*b=*/3));
+    }
+    HeurArmSet on(heurarm::PD_LINE_HOLD_SEARCH, true);
+    GameState s = board();
+    { SpellSubtypePayScope sc(&tam->card); REQUIRE(Pay(s, Cost(0, /*w=*/1, 0, /*r=*/1, /*g=*/1))); }
+    CHECK_FALSE(TappedNamed(s, "Reflecting Pool"));
+    CHECK(Pay(s, Cost(0, 0, /*b=*/3)));
+    CHECK_FALSE(SelfHasLost(s));
+    CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
+}
+
 // ---- USER ruling 2026-11-04: damage is useful only if a Tamanoa is on the battlefield WHEN it is dealt ----
 // The payer's mode (SelfDamageUseful -> dmgev::SelfDamageGainEngine) and the deferral's Now chain read the
 // LIVE battlefield at the payment; the deferral's After chain is the board at the end-of-main-1 sweep (a
