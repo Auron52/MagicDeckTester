@@ -335,6 +335,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Martyr Lifegain (onboarding 2026-11-10): its own MartyrLifegainProvider, an empty derivation
         // of EquipmentProvider (the provider Umezawa's Jitte routed it to), routed above `equipment`.
         {"Martyr Lifegain", "MartyrLifegain"},
+        // Spirits (onboarding 2026-11-13): its own SpiritsProvider (an empty-of-judgement DeckProvider
+        // derivation holding a lossless fetch surface), routed above `anti` (Flooded Strand's
+        // fetch_land_types), `goblin` and `vial && slivers` by the Spirit-keyed lords / Geist of Saint
+        // Traft's end-of-combat Angel / affinity for Spirits. It rode Vial (Aether Vial) before its own
+        // cards landed.
+        {"Spirits", "Spirits"},
     };
 
     namespace fs = std::filesystem;

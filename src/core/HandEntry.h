@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 
 // ================================================================================================
 // ONE CHOKE POINT FOR EVERY CARD THAT ENTERS A HAND
@@ -213,16 +214,51 @@ namespace handentry
         }
     }
 
+    // Spirit of the Labyrinth ("Each player can't draw more than one card each turn"; Spirits
+    // 2026-11-13). The cap is NOT modelled -- no card in the Spirits list draws, so it can never bind
+    // there (PROVISIONAL deferral, docs/design/analysis-Spirits.md). This is the FAIL-CLOSED guard that
+    // keeps that deferral honest: a SECOND draw by one player in one turn while a cap permanent is on
+    // the battlefield ABORTS, so a list edit that adds a draw cannot silently over-draw. Reached only
+    // when the deck constant deck_has_draw_cap is set (StampDeckTraits), so every other deck skips it.
+    [[noreturn]] inline void DrawCapUnmodelledAbort(const GameState& state, int player_index,
+                                                    const char* cap_name)
+    {
+        std::fprintf(stderr, "FATAL: draw cap unmodelled -- player %d drew a second card on turn %d "
+                     "while %s (each_player_draw_cap_per_turn) is on the battlefield. The cap is a "
+                     "PROVISIONAL inert deferral that holds only for a list with no draw effect; "
+                     "model the cap before running this list.\n",
+                     player_index, state.turn_number, cap_name);
+        std::abort();
+    }
+    inline void CheckDrawCap(const GameState& state, int player_index)
+    {
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(perm.card);
+            if (d && d->params.each_player_draw_cap_per_turn > 0)
+            { DrawCapUnmodelledAbort(state, player_index, perm.card.m_name.str().c_str()); }
+        }
+    }
+
     inline void NoteFirstDraw(GameState& state, int player_index, const Card& card,
                               HandEntryReason why)
     {
-        if (!state.deck_has_miracle
+        if (!(state.deck_has_miracle || state.deck_has_draw_cap)
             || (why != HandEntryReason::Draw && why != HandEntryReason::DrawStep)) { return; }
         Player& p = state.players[player_index];
-        if (p.first_draw_card_number_this_turn != 0) { return; }
+        if (p.first_draw_card_number_this_turn != 0)
+        {
+            // A second draw this turn (the first set the marker below; reset at both untap sites).
+            if (state.deck_has_draw_cap) { CheckDrawCap(state, player_index); }
+            return;
+        }
         p.first_draw_card_number_this_turn = card.m_number;
-        // The trigger is inspected only after the enclosing draw effect finishes.
-        p.pending_miracle_card_number = card.m_number;
+        // The trigger is inspected only after the enclosing draw effect finishes. Miracle decks only:
+        // a draw-cap deck uses the marker above purely as its "already drew this turn" bit (the marker
+        // is folded into the keys only for miracle decks, and for a cap deck it can change nothing but
+        // the abort).
+        if (state.deck_has_miracle) { p.pending_miracle_card_number = card.m_number; }
     }
 }
 

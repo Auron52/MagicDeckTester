@@ -1071,6 +1071,12 @@ struct GameState
     // cards, so a DB-wide constant would always be true; this per-game stamp is the real gate. Same
     // discipline: mainboard + sideboard, Garth holds it open, DEFAULT TRUE for an unstamped state.
     bool                     deck_has_chosen_color_pump : 1  = true;  // Gauntlet of Power
+    // 2026-11-13 (Spirits), a BITFIELD in the same byte (sizeof(GameState) unchanged): the deck holds a card
+    // with each_player_draw_cap_per_turn (Spirit of the Labyrinth). DECK CONSTANT (StampDeckTraits, mainboard
+    // + sideboard); arms ONLY the fail-closed abort in handentry::NoteFirstDraw -- the cap itself is an inert,
+    // PROVISIONAL deferral. Nothing to fold: it never changes play. DEFAULT FALSE: every other deck (and an
+    // unstamped unit-test state) skips the check.
+    bool                     deck_has_draw_cap : 1           = false;
     // Does the deck hold an upkeep SAC-TUTOR (CardParams::upkeep_sac_tutor_creatures: Defense of the Heart)?
     // DECK CONSTANT, stamped by StampDeckTraits (mainboard + sideboard, Garth holding it open); gates the
     // searched put-list fan (MTG_DOTH_AXIS) so every deck without one never walks its battlefield for a

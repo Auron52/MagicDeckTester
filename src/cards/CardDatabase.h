@@ -1176,6 +1176,28 @@ struct CardParams
     // token half. DEFAULT false = the historical player-scoped behaviour, so Adeline is
     // byte-identical; Hero sets it true.
     bool                     attack_tokens_require_self_attacking = false;
+    // Geist of Saint Traft (Spirits, 2026-11-13): "create a 4/4 white Angel creature token WITH FLYING
+    // that's tapped and attacking. EXILE THAT TOKEN AT END OF COMBAT."
+    //   attack_token_keywords            -- the token's printed keywords (BuildTokenProto's token-legal
+    //                                       subset); the token's colour is the shared created_token_color.
+    //                                       Both empty (Adeline, Hero) = the historical colourless,
+    //                                       keyword-less token, byte-identical.
+    //   attack_token_exile_end_of_combat -- every token this source's trigger made is exiled at the END OF
+    //                                       COMBAT step (CR 511.1-2), after combat damage and before any
+    //                                       post-combat main, in BOTH worlds (GameEngine::CombatPhase and
+    //                                       TurnSolver's SimulateOneCombatAfterTitan) through the shared
+    //                                       ExileEndOfCombatTokens. NOT Twinflame's Permanent::exile_at_end,
+    //                                       which is swept at the END STEP and would leave the 4/4 on the
+    //                                       board through main 2. The token numbers live only inside the
+    //                                       combat function (no search node sits between the token block
+    //                                       and the sweep), so there is no new state to fold into a key.
+    // Spirit of the Labyrinth: "Each player can't draw more than one card each turn" (the per-turn cap;
+    // 0 = none). NOT MODELLED as a restriction -- inert in the Spirits list, which has no draw effect --
+    // and GUARDED: GameState::deck_has_draw_cap arms an abort on any second draw in a turn while such a
+    // permanent is on the battlefield (handentry::NoteFirstDraw). See docs/design/analysis-Spirits.md.
+    int                      each_player_draw_cap_per_turn = 0;
+    std::vector<std::string> attack_token_keywords;
+    bool                     attack_token_exile_end_of_combat = false;
 
     // "Whenever ONE OR MORE <matching> creatures you control attack, create <token>" (Mavren Fein,
     // Dusk Apostle; Vampires 2026-10-18). A PLAYER-scoped trigger that fires ONCE per combat (CR

@@ -889,6 +889,10 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Spirits (2026-11-13): Geist of Saint Traft's Angel and Spirit of the Labyrinth's guard.
+    "attack_token_keywords": "token spec constant (Geist of Saint Traft's Angel 'with flying') -- printed keywords on a mandatory attack-trigger token; no choice",
+    "attack_token_exile_end_of_combat": "mandatory delayed exile of the attack-trigger token at end of combat (Geist of Saint Traft) -- no 'may', no target, no choice",
+    "each_player_draw_cap_per_turn": "static draw restriction (Spirit of the Labyrinth), NOT modelled -- a fail-closed abort guard only (no draw in the Spirits list); no choice",
     "extra_turns_on_resolve": "mandatory extra turn after successful resolution; target-player choice is separate",
     "awaken_counters": "printed number of +1/+1 counters put on the chosen land; land choice is awaken_cost",
     "athreos_passage": "mandatory trigger for another owned creature's death; with one passive opponent, its pay-three-life choice has no human decision",

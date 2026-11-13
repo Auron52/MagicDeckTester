@@ -30,6 +30,9 @@ bool DecisionUnpruned();
 
 // Shared land-drop policy, read by both plan enumeration and its executor.
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
+// The immediate-crack variants offered BESIDE a kept hold (see the .cpp), and the apply's test for one.
+bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land);
+bool FetchCrackOnPlayPinned(const GameState& state, const CardDefinition& land, const std::string& target);
 
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a
@@ -4162,6 +4165,56 @@ public:
 //     ON; =0 restores the generic ranking). docs/design/pirates-discard-policy-proposal.md.
 //   * CastOrderRank -- deliberately NOT overridden: cast order is a USER review per deck, and the
 //     proposals (Malcolm vs Mimic, Buccaneer first, Forerunner first) sit in the ledger unadopted.
+// SPIRITS (W/U(/b) Spirit tribal on Aether Vial: Drogskol Captain / Supreme Phantom / Patrician Geist
+// lords, Geist of Saint Traft, Lingering Souls, Millicent; onboarding 2026-11-13,
+// docs/design/analysis-Spirits.md). Stage 4a, decided BEFORE the deck's first measurement.
+//
+// ROUTING TODAY (probe 2026-11-13, only the nine already-implemented cards in cards.json): provider=Vial
+// -- Aether Vial's upkeep_adds_charge. The incoming cards would each capture it elsewhere: Flooded
+// Strand's fetch_land_types sets `anti` (AntiLifegainProvider: a one-pick 4-colour fetch ranking and
+// ConsiderFetchHold hard-wired false), Millicent's affinity_for_subtype sets `slivers`, and a
+// dies_watch_subtype / reduces_spell_subtype term would set `goblin`. So the deck gets its own
+// signature (DetectDecisionProvider's `spirits`) routed ABOVE all three.
+//
+// WHY DeckProvider AND NOT VialProvider (the provider it routes to today). VialProvider holds exactly
+// two non-root hooks: the Knights cast-order clauses (keyed on cast_trigger_creates_tokens with a
+// subtype and on etb_dig_requires_subtypes -- no Spirits card carries either, so inert here) and
+// slivers_vial's USER-settled cleanup-discard buckets, which the routing chain's own note says a NEW
+// Vial deck must not inherit (they are authored for Slivers; discard buckets are a per-deck USER
+// decision, analyze-deck 5i). The Aether Vial charge policy is the ROOT default
+// (GenericProvider::WantVialCharge), so nothing Vial-specific is lost. Deriving from DeckProvider
+// therefore differs from VialProvider ONLY by not importing another deck's discard rule -- the
+// Kithkin / Merfolk / Pirates precedent. The deck had never been measured on either, so there is no
+// ground truth to keep byte-identical.
+//
+// Hooks held (everything else inherits the root byte-for-byte):
+//   * Certificate -- NotAssessed (see the body for what a sound one must model).
+//   * FetchCandidates / FetchSearchCandidates -- LOSSLESS: every distinct legal Flooded Strand target,
+//     and the search fans over all of them. No colour-need ranking (that is a judgement hook that
+//     needs a measurement and the USER's call). ConsiderFetchHold is NOT overridden: the root
+//     default (true) keeps the battlefield hold and the later searched activation, whose pick is
+//     itself searched (LandSearchPicks). Note FetchSearchCandidates is consulted only on the
+//     collapse-on-play path (FetchResolvesOnPlay), which the hold-true default never takes for a
+//     modern fetch; the override keeps the provider lossless if a hold POLICY is ever adopted.
+class SpiritsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Combat looks like the only route to the "
+               "opponent's life (no burn, no drain), but a sound winless-this-turn bound must price: "
+               "Aether Vial's instant-speed puts (bodies that the lords pump the same turn), the three "
+               "Spirit lords' +1/+1 on every Spirit including Lingering Souls / Millicent tokens and a "
+               "Metallic Mimic naming Spirit, Geist of Saint Traft's 4/4 attacking Angel (exiled only at "
+               "end of combat), Mausoleum Wanderer's until-EOT pumps from Spirits entering, and Usher of "
+               "the Fallen's post-combat boast token." }; }
+    const char* Name() const override { return "Spirits"; }
+    std::vector<std::string> FetchCandidates(const GameState& s, int controller,
+                                             const CardParams& fetch_pp) const override;
+    std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller,
+                                                   const CardParams& fetch_pp,
+                                                   const std::vector<std::string>& ranked) const override;
+};
+
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.
 // The root provider already supplies the shared hand-aware Aether Vial charge policy;
 // VialProvider also carries a Slivers-specific discard rule that Merfolk must not inherit.

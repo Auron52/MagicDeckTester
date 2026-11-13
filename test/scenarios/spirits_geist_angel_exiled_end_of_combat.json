@@ -1,0 +1,22 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 4,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 14,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "lands_played_this_turn": 1,
+  "_comment": "Spirits (2026-11-13), Geist of Saint Traft: 'create a 4/4 Angel that's tapped and attacking. Exile that token at end of combat.' Board: a non-sick Geist and three Plains, empty hand, Plains filler. Each attack deals 2 + 4 = 6: T4 14->8, T5 8->2, T6 win. If the Angel survived combat (an end-step or never exile) it would attack again on T5 for 2+4+4 = 10 >= 8 and win T5. Pins the end-of-combat exile in the executor and the rollout.",
+  "battlefield": [
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Geist of Saint Traft" }
+  ],
+  "hand": [],
+  "expect_win_turn": 6
+}

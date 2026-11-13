@@ -1272,6 +1272,17 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    // Spirit of the Labyrinth's fail-closed draw-cap guard (handentry::NoteFirstDraw). Mainboard AND
+    // sideboard: a wished-in cap card would be just as unmodelled.
+    state.deck_has_draw_cap = [&deck]{
+        for (const auto* zone : {&deck.mainboard, &deck.sideboard})
+            for (const Card& c : *zone)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.each_player_draw_cap_per_turn > 0) { return true; }
+            }
+        return false;
+    }();
     // The Ulamogs' targeted cast triggers: MAINBOARD ONLY (the stamp opens a searched axis -- a behaviour).
     state.deck_has_cast_target_trigger = [&deck]{
         for (const Card& c : deck.mainboard)

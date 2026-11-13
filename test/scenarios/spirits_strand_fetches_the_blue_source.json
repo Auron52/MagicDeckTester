@@ -1,0 +1,30 @@
+{
+  "deck": "decks/Spirits/Spirits.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 2,
+  "library_filler": "Plains",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 50,
+  "max_turns": 8,
+  "lands_played_this_turn": 0,
+  "_comment": "Spirits (2026-11-13), Flooded Strand's target is SEARCHED, not the first library match. Board: two Plains; hand: Flooded Strand + Drogskol Captain ({1}{W}{U}); library: Plains filler with exactly one Island (the deck's only blue source left). Play the Strand, crack it for the ISLAND, cast the Captain T3, attack T4 for 2 -> win T4. A first-in-library-order pick (Plains) would leave the Captain uncastable for the whole game (no other blue source, Plains draws only). Also pins the crack-on-play variant offered BESIDE the kept hold (FetchCrackOnPlayOffered): with only the hold, the Strand's activation ran in the trailing pass after the casts and this was a T5 win at every budget (measured at --budget-ms 0 --depth 5).",
+  "battlefield": [
+    {
+      "name": "Plains"
+    },
+    {
+      "name": "Plains"
+    }
+  ],
+  "hand": [
+    "Flooded Strand",
+    "Drogskol Captain"
+  ],
+  "library": [
+    "Island"
+  ],
+  "expect_win_turn": 4
+}
