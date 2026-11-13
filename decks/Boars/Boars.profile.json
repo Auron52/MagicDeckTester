@@ -1,0 +1,82 @@
+{
+  "card_scores": {
+    "Birds of Paradise": [
+      0.1880410314598926,
+      -0.08492003046458496
+    ],
+    "Decimator of the Provinces": [
+      0.026124719707076416,
+      -0.2322704081632656
+    ],
+    "End-Raze Forerunners": [
+      -0.04898289646796883
+    ],
+    "Flinthoof Boar": [
+      -0.09023416581471189,
+      -0.23724550898203667
+    ],
+    "Forest": [
+      0.12446126303625071,
+      0.11649537076361138
+    ],
+    "Gruul Turf": [
+      -0.008958469232441146
+    ],
+    "Herald of Ilharg": [
+      -0.08931060012194081
+    ],
+    "Herald's Horn": [
+      -0.14914773858144859
+    ],
+    "Ignoble Hierarch": [
+      0.18880520121322952
+    ],
+    "Ilharg, the Raze-Boar": [
+      0.10697107777988712,
+      -0.22584541062801922
+    ],
+    "Lightning Greaves": [
+      0.0715391532478602
+    ],
+    "Mountain": [
+      -0.12803030303030294
+    ],
+    "Raggadragga, Goreguts Boss": [
+      -0.016724143192846874
+    ],
+    "Rootbound Crag": [
+      0.14541825440028955
+    ],
+    "Somberwald Sage": [
+      0.20256731523959548,
+      0.057951368296195405
+    ],
+    "Stomping Ground": [
+      0.19890772128060252,
+      0.08447761194029901
+    ],
+    "Windswept Heath": [
+      -0.0036058863658512408
+    ],
+    "Wooded Foothills": [
+      0.038696377736330057,
+      -0.17731204258150335
+    ],
+    "Zhur-Taa Druid": [
+      0.032395807601369064,
+      -0.26118067978533066
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}
