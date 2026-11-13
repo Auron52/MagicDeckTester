@@ -1949,6 +1949,19 @@
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
   },
+  "End-Raze Forerunners": {
+    "cmc": 8.0,
+    "keywords": [
+      "Haste",
+      "Trample",
+      "Vigilance"
+    ],
+    "mana_cost": "{5}{G}{G}{G}",
+    "oracle_text": "Vigilance, trample, haste\nWhen this creature enters, other creatures you control get +2/+2 and gain vigilance and trample until end of turn.",
+    "power": "7",
+    "toughness": "7",
+    "type_line": "Creature — Boar"
+  },
   "Enduring Innocence": {
     "cmc": 3.0,
     "keywords": [

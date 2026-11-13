@@ -252,3 +252,52 @@ audit_card_costs rc 0 (612/612); audit_card_fields --update hit Scryfall 429s (r
 * INERT_PARAMS rows for the two Herald params need the USER's OK (viewer paperwork).
 * D8: Herald's cast-order rank is USER-owned. The draft suggests Herald goes after the dorks and before the other creatures.
   Not encoded.
+
+## I3a done (2026-11-13) -- End-Raze Forerunners, `temp_vigilance`, combat-kept-mana main 2
+
+Commit: `93f3154b0` on `boars-analysis` (local only, not pushed); snapshot + ledger in the commit after it. Unit tests 2960/2960 pass
+(`test/unit/test_boars_endraze.cpp`, 6 cases). Byte-identity vs the I2b binary (`--games 20 --seed 9101 --depth 3
+--budget-ms 10 --ignore-play-profile`, `[win]` lines): Stompy Surprise (Craterhoof), Angels (vigilance + Giada m2),
+Snow (Jorn, the predicate the new clause extends) IDENTICAL 20/20. Boars 40 games at d3 b10 run clean (End-Raze cast on
+23 turns; main 2 opened on 6 of them). audit_card_costs rc 0 (613/613). audit_card_fields --update hit Scryfall 429s
+(207 cards incl. End-Raze); End-Raze's snapshot entry was written from the already-fetched Scryfall JSON
+(`build/scratch/boars/scry/EndRazeForerunners.json`, the same fields do_update writes); offline rc 0.
+`audit_viewer_decisions.py decks/Boars/Boars.cod --no-sweep` rc 0.
+
+**Landed**
+* **End-Raze Forerunners** (cards.json, cost/oracle verbatim from Scryfall + bracket; `template custom`; keywords
+  Vigilance/Trample/Haste): `etb_other_creatures_pump_power` 2 / `_tough` 2 / `etb_other_creatures_grant_vigilance`.
+  ETB in the shared `FireOwnEtbTriggersBody` right after Craterhoof (both worlds, every enter route): every OTHER own
+  creature / animated permanent at resolution gets +2/+2 (temp bonuses) and `temp_vigilance`; play event `etb`. Also in
+  the mass-put `late_own_etb` pass (simultaneous entrants are pumped). Printed vigilance/haste were already live keywords.
+* **NEW `Permanent::temp_vigilance`** (bool in existing padding; sizeof(Permanent) still 328): read by
+  `CreatureHasVigilance` (both attack-tap sites); cleared at BOTH cleanup sites; mirrored at every `temp_double_strike`
+  site -- sim key bit 1<<26, `AtCleanBoundary` refusal (boundary assertion), ManaPayment lockstep checker, the provider
+  whole-state signature, the LandfallTargetFold refusal + label, StealAttackBodyKey clear+mix, the permanent string key
+  (`|vig`, gated), the fold-census refusal, the dedupe labels, the dominance equality, the packed key (bit 41), the TT
+  fold, and the `--scenario` loader. All set-gated -> byte-identical elsewhere.
+* **Dork attack/hold providers see the grant** (`|| p.temp_vigilance` beside the printed-keyword reads at the four
+  DecisionProviders sites), so a granted dork is attacked with freely and not contested as if attacking tapped it.
+* **D6 second main, per-turn**: `UntapSecondMainLive` gained a second clause, `CombatKeptManaCreature` -- an own
+  creature with `produces` non-empty, `temp_vigilance`, untapped post-combat. `StampDeckTraits` stamps
+  `deck_has_attack_untap` for a mainboard card with `etb_other_creatures_grant_vigilance` (name historical; comment
+  updated). Every site already reading the predicate (executor + all search post-combat sites) follows. **For I3b
+  (Raggadragga): add the attack-untap clause in the same predicate and stamp the same constant.**
+* Attack projection (`MTG_ATTACK_TEAM_PUMP_ETB` walk): End-Raze's +2/+2 to the OTHER creatures beside Craterhoof's.
+* BoarsProvider signature ORs in `etb_other_creatures_grant_vigilance`; all three params in `kHandAuditedParams` (Horn
+  take-fold whitelist). Viewer: three INERT_PARAMS rows + a DECISIONS.md no-decision row.
+
+**Deviations / not done**
+* The m2 clause does not check that the dork ATTACKED (attack counts are tracked only for extra-combat decks). A granted
+  untapped dork that stayed home also opens main 2 -- sound (opening main 2 only adds lines), slightly wider.
+* Printed-vigilance mana creatures are NOT in the clause (would move Faeburrow-style decks); D2 trample inert.
+* **Owed to I5 (Ilharg), not implemented:** Ilharg may put End-Raze onto the battlefield tapped and attacking after
+  attackers are declared. The put helper must (a) apply the CR 508.1f declaration tap to every already-declared
+  non-vigilant attacker BEFORE the put (otherwise the mid-combat `temp_vigilance` grant would wrongly leave Ilharg and
+  every declared attacker untapped, since this engine defers the attack tap to `ResolveCombatDamage`), (b) fire
+  `FireEtbWatchers` + `FireOwnEtbTriggers` on the put body so End-Raze's +2/+2 lands before the damage loop reads power,
+  in both combats, and (c) use the declared count for exalted.
+
+**Open questions (surfaced, not blocking)**
+* D6 for End-Raze: main 2 opens on the turns a granted mana creature is untapped post-combat (agent default per D6).
+* D2: End-Raze's trample (printed and granted) inert, PROVISIONAL.
