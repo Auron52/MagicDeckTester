@@ -20,7 +20,16 @@ T4   new: Thrumming Stone; Dark Ritual; Shadowborn Apostle; ATTACK   [opp 14]
 T5   new: land Swamp; ATTACK       [opp -1]
 ```
 
-Suspected mechanism (UNVERIFIED): `496b4ae35` (`ShadowbornProvider::ArrangeCastOrder`, USER 2026-11-11, "Dark
+**RESOLVED 2026-11-13: draw variance, not a defect.** On the overnight GT binary, `MTG_SB_RITUAL_AFTER_STONE=0`
+alone restores the T4 win, so the rule is the cause. Mechanism: with the Stone out, the Ritual gets ripple 4; its
+reveal hit no Ritual and bottomed the top four, two of them Apostles (cards 37, 35) that the old order's Apostle
+ripple had cast free. Two fewer Apostles = two fewer ripple triggers, so the chain ended early and fetched
+Abhorrent Overlord instead of Jetmir (2 damage, not 16). The library is hidden, so bottoming four unknown cards
+is EV-neutral for the chain that follows, and a Ritual hit is a free gain: the reveal is weakly positive in
+expectation, which the rule's held-out A/B confirms (d5 4.8013 -> 4.7817). The old win needed those two
+Apostles on top (a clairvoyant win), so no amendment is proposed. Repro: `build/scratch/sb/rep.sh`.
+
+Original note: Suspected mechanism (UNVERIFIED): `496b4ae35` (`ShadowbornProvider::ArrangeCastOrder`, USER 2026-11-11, "Dark
 Ritual after Thrumming Stone when mana allows") moves the Ritual after the Stone, so the Ritual is cast with
 ripple active. The ripple reveal then changes what the Apostle cast finds (the old order kept the Ritual
 off the ripple chain). Confirm with `496b4ae35^` vs `496b4ae35` on this one game, and read the two T4 logs
