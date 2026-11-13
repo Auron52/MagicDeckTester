@@ -62,11 +62,14 @@ run stands and what to do next.
   * **LK (legend-keep greedy purge, NO-GREEDY rule) IN FLIGHT** — the remaining in-window provider keeps
     (`docs/design/legend-rule-keep-remaining-greedy.md`; suite decks Galadriel / Goblins / Jumbo Cactuar /
     Unpredictable Cyclone). LK WIP `204cedbe6` = per-plan turn-level keep twin (0/1 old/2 new), 3011/3011, but the
-    twin does NOT reach Galadriel's Grey Havens turn-5 events. **LK2 RUNNING** (Opus agent): (1) legend-rule SBA
-    timing bug (a main-2 legendary land not legend-ruled until next combat), (2) Galadriel bypass root cause,
-    (3) tests + identity vs `build/scratch/boars/mtg.i5b4` on the 4 decks + control + Boars 40. Handoff/repro:
-    `logs/boars-research/LK-handoff.md`. After LK2: LK3 = upkeep-only routes (Snow Marit Lage's Slumber, Emeria),
-    full 28-deck identity run, docs. THEN the post-integration stages below (one pooled smoke covers Heath + LK movers).
+    twin does NOT reach Galadriel's Grey Havens turn-5 events. **LK2 DONE** (3016/3016): `b48089aa9` the legend rule
+    is an SBA (land drop, every resolution, end step; both worlds) -- a main-2 second Havens had survived to the next
+    turn and both copies tapped for mana; `c58f8b75a` Galadriel root cause = the fan's route list had no land-put
+    terms (Galadriel's scry-reveal put); `aa1450512` the executor wrote the turn pin AFTER its main-1 land drop. Repro:
+    every Havens event now `pinned=2`. Identity vs i5b4: Boars 0/40 (5.225), Goblins / Jumbo Cactuar / Stompy Surprise
+    0/20; Galadriel 15/20 and Unpredictable Cyclone 2/20 moved, 0 result changes (SBA timing + T3 re-rank), no slower
+    game. Handoff: `logs/boars-research/LK-handoff.md`. NEXT (LK3): full 28-deck identity on `mtg.lk2b` (moved decks
+    = GT to re-accept), upkeep-only routes (Snow Marit Lage's Slumber, Emeria), ledger "LK done" section. THEN the post-integration stages below (one pooled smoke covers Heath + LK movers).
   * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers

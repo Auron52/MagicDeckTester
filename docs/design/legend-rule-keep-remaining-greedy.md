@@ -1,6 +1,37 @@
 # Legend-rule keep: the entry routes still resolved by a provider pick inside the search window
 
-Status: DEFERRED (assessment only, nothing fixed here). Written 2026-11-13 by the Boars I5b item 4 integrator.
+Status: LARGELY PURGED (Boars LK, 2026-11-13). Written 2026-11-13 by the Boars I5b item 4 integrator as an
+assessment; the LK update below records what is now searched and what remains.
+
+## LK update (2026-11-13)
+
+* **One generic representation** covers routes 1-5: `TurnSolver::Plan::legend_keep_turn` (0 unpinned / 1 keep oldest /
+  2 keep newest) rides `GameState::scripted_legend_keep` (written by `WritePostApplyStatePins` in both worlds, cleared
+  at both turn starts) and is read by `LegendKeepPick` after the name-scoped cast pin. `AppendSubdecisionAxes`'
+  LEGEND-KEEP TURN FAN twins every plan whose turn can make a duplicate (`LegendKeepTurnFanLive`). One answer per
+  turn (a disclosed limitation: two different un-ridered groups in one turn get both-oldest / both-newest).
+* **The Galadriel miss (route 1 was not the route).** The T5 Grey Havens duplicates of seed 9101 (gi1, gi2, gi6) were
+  NOT land drops: Galadriel of Lothlorien's "whenever you scry, reveal the top card; a land is put onto the
+  battlefield tapped" (`scry_reveal_land_to_battlefield`) put the second Havens. The fan's entry-route list
+  (`LegendEntryRouteParams`) had no land-put terms, so no plan of that turn was twinned and the provider decided
+  (`pinned=0`). The list now carries every EnterLand route that can find a non-basic land: the scry reveal, Risen
+  Reef's look-top, the land tutors to the battlefield, `tutor_to_battlefield`, and a non-basic battlefield land search.
+  Second half: the executor (`AIEngine::TakeTurn`) played the committed plan's main-1 land BEFORE writing its
+  post-apply pins, while the rollout writes them first; with the legend rule an SBA at the drop the executor read the
+  provider's keep. It now writes `scripted_legend_keep` before the drop. After both fixes every Havens event in the
+  repro reads `pinned=2` (commits `c58f8b75a`, `aa1450512`).
+* **The legend rule is now a state-based action (CR 704.3), not a beginning-of-combat event.** Before LK it ran only
+  where a LEGENDARY spell resolved, at a handful of put sites, and at the beginning of combat, so a second Havens
+  played in main 2 (or put by a non-legendary resolution, or returned in the end step) kept both copies through the
+  opponent's turn: both untapped and both tapped for mana in the next main 1 (seen in Galadriel seed 9101 gi0: T3,
+  two untapped non-sick Havens at combat). `LegendRuleSbaCheckpoint` (SpellEffects.h) now runs at the land drop (the
+  shared `PlayLandFromHand` / `PlayLandFromLibraryTop`, both worlds), after every stack resolution
+  (`GameEngine::ResolveStack`; rollout twin `DepletionSbaAtResolution`'s exit), and at the end of the end step
+  (`GameEngine::EndStep` / `SimulateEndAndStartNextTurn`; commit `b48089aa9`). RESIDUAL: a resolution nested inside another resolution
+  in the rollout (cascade, a free recast) is checked at the outermost exit, the depletion SBA's disclosed residual.
+* **Remaining:** upkeep-only routes (Snow's Marit Lage's Slumber, Emeria) fire before any plan of the turn, so no
+  turn pin is written yet; they need a next-upkeep pin (the `scripted_echo` / BoundaryFan precedent). Unobserved in
+  the census.
 
 ## Background
 
