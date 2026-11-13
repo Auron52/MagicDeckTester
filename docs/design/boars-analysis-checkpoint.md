@@ -59,17 +59,15 @@ run stands and what to do next.
     byte-identical. No movers. Remaining in-window provider picks (land play, puts, nested free casts, token copies):
     `docs/design/legend-rule-keep-remaining-greedy.md`. USER Q: the beyond-horizon keep default.
   * **I5b INTEGRATION COMPLETE (2026-11-13): items 1-4 done, all local commits, nothing pushed.**
-  * **LK (legend-keep greedy purge, NO-GREEDY rule) IN FLIGHT** — the remaining in-window provider keeps
-    (`docs/design/legend-rule-keep-remaining-greedy.md`; suite decks Galadriel / Goblins / Jumbo Cactuar /
-    Unpredictable Cyclone). LK WIP `204cedbe6` = per-plan turn-level keep twin (0/1 old/2 new), 3011/3011, but the
-    twin does NOT reach Galadriel's Grey Havens turn-5 events. **LK2 DONE** (3016/3016): `b48089aa9` the legend rule
-    is an SBA (land drop, every resolution, end step; both worlds) -- a main-2 second Havens had survived to the next
-    turn and both copies tapped for mana; `c58f8b75a` Galadriel root cause = the fan's route list had no land-put
-    terms (Galadriel's scry-reveal put); `aa1450512` the executor wrote the turn pin AFTER its main-1 land drop. Repro:
-    every Havens event now `pinned=2`. Identity vs i5b4: Boars 0/40 (5.225), Goblins / Jumbo Cactuar / Stompy Surprise
-    0/20; Galadriel 15/20 and Unpredictable Cyclone 2/20 moved, 0 result changes (SBA timing + T3 re-rank), no slower
-    game. Handoff: `logs/boars-research/LK-handoff.md`. NEXT (LK3): full 28-deck identity on `mtg.lk2b` (moved decks
-    = GT to re-accept), upkeep-only routes (Snow Marit Lage's Slumber, Emeria), ledger "LK done" section. THEN the post-integration stages below (one pooled smoke covers Heath + LK movers).
+  * **LK (legend-keep greedy purge, NO-GREEDY rule)**: LK WIP `204cedbe6` (turn-level keep twin); LK2 DONE `b48089aa9`
+    (legend rule after every land play / resolution / end step, both worlds), `c58f8b75a` (land-put routes incl.
+    Galadriel's scry-reveal put), `aa1450512` (executor pins the keep before its main-1 land), docs `979616d91`. 3016/3016.
+    Identity vs mtg.i5b4: Boars 0/40 (5.225), Goblins / Jumbo Cactuar / Stompy 0/20, Galadriel 15/20 + Unpredictable
+    Cyclone 2/20 moved (no result change, none slower). **LK3 RUNNING** (Opus, fresh): upkeep-only routes (Snow Marit
+    Lage's Slumber, Emeria), nested-resolution SBA parity verdict, full duplicate-legend identity, ledger "LK done".
+    Handoff: `logs/boars-research/LK-handoff.md`. Post-integration (2026-11-13, pre-LK3): Stage 3 coverage 19/19 full,
+    0 missing; cost audit 616/616 match; field audit clean; provider_audit --check rc 0 (Boars unaudited until Stage 4
+    writes its profile). THEN Stage 4 and the rest below (one pooled smoke covers Heath + LK movers).
   * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
