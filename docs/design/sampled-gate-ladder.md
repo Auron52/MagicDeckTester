@@ -264,5 +264,9 @@ where the refusal is not routed exact. Details and the next arm: `logs/hydras-re
 "I would rather it doesn't do exactly that. My preferred vision would be that it uses less rollouts when more certain
 and more when less certain. So, it would be closer to the heuristic rollout, but would still bank savings."
 So `_prx2` / `_pfr` (hand the refusal to heur's real-cost check) are NOT the design. The sample count must grow
-continuously with the verdict's uncertainty, up to the whole pass (heur's exact cost) in the limit. Next: make the
+continuously with the verdict's uncertainty, but never up to the whole pass. Next: make the
 price's uncertainty honest (the 2-SE stop under-states it on heavy-tailed passes; no fixed sample cap), then re-screen.
+Follow-up, VERBATIM: "There shouldn't be cases where it is so uncertain it just runs the ladder." / "It should at least
+cut out a significant chunk of it." So the sample count has a hard ceiling at a general fraction of the pass's
+estimated rollout cost, and at the ceiling the gate decides anyway (recommended: lean admit, bounded by the overrun
+ceiling, since wrong refusals are what cost quality).
