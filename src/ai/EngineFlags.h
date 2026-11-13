@@ -70,6 +70,21 @@ inline bool LethalCutVerifyEnabled()
 // run of power-doubler casts of a pre-combat main counts as cast in the declare-attackers step after exalted
 // resolves (GameState::dbl_defer_* note, SpellEffects.h DoublerDeferExaltedExtra). Read by the shared marker
 // and combat helper (both worlds) and by TurnSolver::NoteDoublerDeferPayable (both plan appliers).
+// MTG_REPEAT_EXTRAS_RESERVE (2026-11-13, Snow plan-payment shortfall fix (b); DEFAULT ON, =0 restores the old
+// pay-the-extras-first apply for the A/B arm). A repeatable {T}-less sink asked for K activations (Rimefeather Owl's
+// "{1}{S}: ice counter", chosen_x = K) carries ONE activation on the subset's books; the K-1 extras are paid at
+// apply out of what is left (SpendRepeatActivations). The trailing pass runs in the provider's order, so a sink
+// ranked before the plan's other activations (Snow: the Owl before Frost Augur / Scrying Sheets) let its extras
+// spend the mana and the {T} sources those NAMED steps were owed: the plan the search committed to was not the
+// line the apply made. With this on, the extras are capped at the most that leaves the pass's later owed
+// activations payable (TurnSolver::RepeatExtrasBesideOwed, shared by both worlds -> lockstep). Lossless: every
+// line the old apply realised is the realisation of an honest plan the enumeration still offers ([Owl xK] alone).
+inline bool RepeatExtrasReserveOn()
+{
+    static const bool env = EnvOn("MTG_REPEAT_EXTRAS_RESERVE", true);
+    return heurarm::Flag(heurarm::REPEAT_EXTRAS_RESERVE, env);   // per-job override (one pooled A/B batch)
+}
+
 inline bool DoublerAfterExaltedOn()
 {
     static const bool env = EnvOn("MTG_DOUBLER_AFTER_EXALTED", true);

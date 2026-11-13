@@ -18639,6 +18639,89 @@ std::vector<int> TurnSolver::ActivationTapReserve(const GameState& state,
 // See the header. EMPTY means "nothing to add" -- the callers then install no scope at all, which is
 // what keeps the lever byte-identical when off (an empty PlanSourceReserveScope is NOT a no-op: it
 // would clear an outer reservation for the duration of an inline activation).
+int TurnSolver::RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
+                                       const std::vector<Action>& trailing)
+{
+    if (want <= 0 || a.def == nullptr || !RepeatExtrasReserveOn()) { return want; }
+    const Action* base = trailing.data();
+    if (&a < base || &a >= base + trailing.size()) { return want; }
+    const int ctl = state.active_player_index;
+    // The owed set: every LATER trailing step's first activation (its own K-1 extras are best-effort too), the
+    // same bill LineJointPayOracle prices -- its {T} source set aside, its mana cost summed. A step whose source
+    // is already gone or tapped cannot fire whatever the extras do, so it is owed nothing.
+    ManaCost owed{};
+    std::vector<int> owed_taps;
+    bool any = false;
+    auto add = [&owed](const ManaCost& c) -> bool
+    {
+        if (c.has_x || c.x_pips != 0 || c.twobrid_count != 0 || c.phyrexian_count != 0) { return false; }
+        if (owed.hybrid_count + c.hybrid_count > 6) { return false; }
+        for (int i = 0; i < c.hybrid_count; ++i) { owed.hybrid_pair[owed.hybrid_count++] = c.hybrid_pair[i]; }
+        owed.generic += c.generic; owed.white += c.white; owed.blue += c.blue; owed.black += c.black;
+        owed.red += c.red; owed.green += c.green; owed.colorless += c.colorless;
+        owed.snow_pips = static_cast<std::uint8_t>(owed.snow_pips + c.snow_pips);
+        return true;
+    };
+    for (std::size_t i = static_cast<std::size_t>(&a - base) + 1; i < trailing.size(); ++i)
+    {
+        const Action& o = trailing[i];
+        if (!IsTrailingActivation(o.kind)) { continue; }
+        if (o.kind == Action::Kind::ActivatePermAbility || o.kind == Action::Kind::UntapCreature)
+        {
+            const bool taps = o.kind == Action::Kind::UntapCreature || PermAbilityTaps(o.ability_mode);
+            if (o.kind == Action::Kind::ActivatePermAbility
+                && !PermAbilitySourceLive(state, ctl, o.sac_source_id, o.ability_mode, &o.discard_name.str()))
+            { continue; }
+            if (taps)
+            {
+                const Permanent* p = nullptr;
+                for (const Permanent& q : state.battlefield)
+                { if (q.card.m_number == o.sac_source_id && q.controller_index == ctl) { p = &q; break; } }
+                if (p == nullptr || p->tapped) { continue; }
+                owed_taps.push_back(o.sac_source_id);
+            }
+            const ManaCost oc = OutletOwnCost(o);
+            if (oc.ManaValue() > 0 && !add(oc)) { return want; }
+            any = any || taps || oc.ManaValue() > 0;
+        }
+        else if (o.cost.ManaValue() > 0)
+        {
+            if (!add(o.cost)) { return want; }
+            any = true;
+        }
+    }
+    if (!any) { return want; }
+    RevealLogPause quiet;            // a scratch probe: no log line, no chooser, no play event
+    TapSpeculationScope speculating;
+    // Can the owed set still be paid after `e` extras? Paid on a scratch board by the real repeat payer, then the
+    // owed {T} sources set aside (an extra that tapped one for mana fails here) and the owed bill paid as one cost.
+    auto owed_ok = [&](int e) -> bool
+    {
+        GameState c = state;
+        if (e > 0) { SpendRepeatActivations(c, ctl, src_id, a.ability_mode, *a.def, e); }
+        for (const int id : owed_taps)
+        {
+            for (Permanent& p : c.battlefield)
+            {
+                if (p.card.m_number != id || p.controller_index != ctl) { continue; }
+                if (p.tapped) { return false; }
+                p.tapped = true;
+            }
+        }
+        if (owed.ManaValue() == 0) { return true; }
+        return TapForCostDirect(c, owed, /*for_creature=*/false);
+    };
+    if (owed_ok(want)) { return want; }
+    if (!owed_ok(0)) { return want; }   // owed is short anyway: holding the extras back buys nothing
+    int lo = 0, hi = want - 1;          // owed_ok(lo) holds; the largest e that keeps it
+    while (lo < hi)
+    {
+        const int mid = (lo + hi + 1) / 2;
+        if (owed_ok(mid)) { lo = mid; } else { hi = mid - 1; }
+    }
+    return lo;
+}
+
 std::vector<int> TurnSolver::ActivationTapReserveUnion(const GameState& state,
                                                       const std::vector<Action>& acts)
 {
@@ -74086,8 +74169,12 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         }
                         else
                         {
+                            // MTG_REPEAT_EXTRAS_RESERVE: the extras never take what the pass still owes
+                            // its later named activations (executor twin: AIEngine, same helper).
                             SpendRepeatActivations(state, state.active_player_index, src_id,
-                                                   a.ability_mode, *a.def, a.chosen_x - 1);
+                                                   a.ability_mode, *a.def,
+                                                   TurnSolver::RepeatExtrasBesideOwed(
+                                                       state, src_id, a, a.chosen_x - 1, trailing_acts));
                         }
                     }
                     // Staff of Domination: a {T} mode's K-1 repeats, each after "{1}: Untap this

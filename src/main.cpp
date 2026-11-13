@@ -10312,6 +10312,26 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                                                                      : GameEngine::ResumeAt::Main2);
     g_reveal_logger = scen_saved_reveal;
     logger.EndGame(win_turn);
+    // "expect_line_pay_short": 0 -- how many REAL committed plans had a payment-short step (MTG_LINE_PAY_AUDIT's
+    // short_plans counter; the fixture must set "env": {"MTG_LINE_PAY_AUDIT": "1"}). Pins that the line the search
+    // committed to is the line the apply paid, whichever line it chose.
+    if (j.contains("expect_line_pay_short"))
+    {
+        if (!LinePayAuditOn())
+        {
+            std::cerr << "scenario: \"expect_line_pay_short\" needs \"env\": {\"MTG_LINE_PAY_AUDIT\": \"1\"}\n";
+            return 2;
+        }
+        const long got = g_lpa[0][LPA_SHORT_PLANS].load();
+        const long want = j.at("expect_line_pay_short").get<long>();
+        if (got != want)
+        {
+            for (const std::string& l : logger.ActionLines()) { std::cout << "scenario:   log " << l << "\n"; }
+            std::cout << "scenario: FAIL " << got << " committed plan(s) payment-short, expected " << want << "\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (line pay short = " << got << ")\n";
+    }
     // "expect_log_sequence": ["T2 MAIN_1 CAST_SPELL Brainstorm", "REVEAL Brainstorm (put back): Toxic Deluge", ...]
     // -- an ORDERED subsequence of the game log's action lines (GameLogger::ActionLines), each entry a substring
     // of its line. Pins WHICH line the autonomous search chose at the fixture's budget, not just its win turn.

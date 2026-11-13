@@ -7550,9 +7550,12 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             : (a.ability_mode == Action::AbilityMode::FadeSaproling)
                             ? SpendFadeActivations(state, state.active_player_index,
                                                    src_id, *a.def, a.chosen_x - 1)
+                            // MTG_REPEAT_EXTRAS_RESERVE: capped so the pass's later owed activations
+                            // stay payable (rollout twin: apply_trailing_activations, same helper).
                             : SpendRepeatActivations(state, state.active_player_index,
                                                    src_id, a.ability_mode, *a.def,
-                                                   a.chosen_x - 1);
+                                                   TurnSolver::RepeatExtrasBesideOwed(
+                                                       state, src_id, a, a.chosen_x - 1, trailing_acts));
                         if (m_logger)
                         {
                             for (int i = 0; i < extra; ++i)

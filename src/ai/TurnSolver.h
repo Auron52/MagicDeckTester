@@ -3606,6 +3606,15 @@ public:
     static std::vector<int> ActivationTapReserveUnion(const GameState& state,
                                                       const std::vector<Action>& acts);
 
+    // MTG_REPEAT_EXTRAS_RESERVE (EngineFlags.h): how many of a K-repeat sink's `want` EXTRA activations the
+    // trailing pass may pay without leaving the activations still owed after `a` in `trailing` (the pass's
+    // ordered list; `a` must be an element of it) unpayable. Probes the real SpendRepeatActivations on a scratch
+    // board, so a grant the extras themselves make (the Owl's ice counter turning a land snow) is seen. Returns
+    // `want` when the lever is off, nothing priced is owed, or the owed set is unpayable even with no extras.
+    // Shared by the executor and the rollout trailing passes (lockstep).
+    static int RepeatExtrasBesideOwed(const GameState& state, int src_id, const Action& a, int want,
+                                      const std::vector<Action>& trailing);
+
     // The union both apply paths install (unlock pieces + colour-critical + activation taps). One
     // function so the executor and the rollout cannot drift on which sources are held.
     static std::vector<int> PlanReserveSources(const GameState& state,

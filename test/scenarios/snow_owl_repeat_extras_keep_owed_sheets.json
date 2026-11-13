@@ -1,0 +1,93 @@
+{
+ "_comment": [
+  "SNOW REPEAT-SINK EXTRAS vs THE PLAN'S OWED ACTIVATIONS (MTG_REPEAT_EXTRAS_RESERVE, 2026-11-13; from Snow seed 61066",
+  "gi 66 T5 main 2, the board after Jorn's attack untapped it). Rimefeather Owl's '{1}{S}: ice counter' is a {T}-less",
+  "repeatable sink: a plan asking for it K times carries ONE activation on the subset's books and the K-1 extras are",
+  "paid at apply out of what is left. Snow's activation order runs the Owl before the tap-draws, so the search's",
+  "[Scrying Sheets(act), Rimefeather Owl(act)x3] (books: 4 of 6 non-Sheets mana) spent all six on three Owl",
+  "activations and the Sheets look came up unpaid -- the committed plan was not the line played. With the lever",
+  "the extras stop at what leaves the Sheets payable (Owl x2 + the look). MTG_REPEAT_EXTRAS_RESERVE=0 -> 1 short plan."
+ ],
+ "deck": "decks/Snow/Snow.cod",
+ "profile": "decks/Snow/Snow.profile.json",
+ "turn": 5,
+ "on_the_play": true,
+ "active_life": 20,
+ "opponent_life": 9,
+ "resume_at": "main2",
+ "lands_played_this_turn": 1,
+ "battlefield": [
+  {
+   "name": "Snow-Covered Forest",
+   "controller": 0
+  },
+  {
+   "name": "Boreal Druid",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Snow-Covered Island",
+   "controller": 0
+  },
+  {
+   "name": "Jorn, God of Winter",
+   "controller": 0,
+   "sick": false
+  },
+  {
+   "name": "Rimewood Falls",
+   "controller": 0
+  },
+  {
+   "name": "Arcum's Astrolabe",
+   "controller": 0
+  },
+  {
+   "name": "Snow-Covered Mountain",
+   "controller": 0
+  },
+  {
+   "name": "Coldsteel Heart",
+   "controller": 0,
+   "color": "U"
+  },
+  {
+   "name": "Scrying Sheets",
+   "controller": 0
+  },
+  {
+   "name": "Rimefeather Owl",
+   "controller": 0,
+   "sick": true
+  },
+  {
+   "name": "Mountain",
+   "controller": 1
+  },
+  {
+   "name": "Mountain",
+   "controller": 1
+  },
+  {
+   "name": "Mountain",
+   "controller": 1
+  },
+  {
+   "token": true,
+   "power": 3,
+   "toughness": 3,
+   "controller": 1
+  }
+ ],
+ "hand": [],
+ "library_filler": "Snow-Covered Island",
+ "library_size": 30,
+ "depth": 5,
+ "budget_ms": 20,
+ "max_turns": 5,
+ "env": {
+  "MTG_LINE_PAY_AUDIT": "1"
+ },
+ "expect_line_pay_short": 0
+}
