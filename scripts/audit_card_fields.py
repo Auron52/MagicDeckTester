@@ -162,6 +162,12 @@ MODELED_ELSEWHERE_KEYWORDS = {
     # the same shape as ascend above. Not a keyword tag; grants no evasion and changes no combat
     # legality, so stripping it cannot mask a missing combat keyword.
     "storied",
+    # Emerge (CR 702.119, Decimator of the Provinces): modeled structurally via the `emerge_cost`
+    # param -- an alternative-cost cast variant per sacrifice victim (bill = emerge cost reduced by
+    # the victim's MV, generic only) beside the hard cast, the same shape as kicker / morph. Not a
+    # keyword tag; grants no evasion and changes no combat legality, so stripping it cannot mask a
+    # missing combat keyword.
+    "emerge",
 }
 # Supertypes the engine does NOT model because they are inert in goldfishing: the World rule
 # never fires (one permanent). Legendary (legend rule), Snow (snow mana) and -- since 2026-10-15 --
