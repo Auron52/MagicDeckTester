@@ -12830,6 +12830,48 @@ void TurnSolver::FaceUpInlineTrailDue(const GameState& state, const std::vector<
     }
 }
 
+std::vector<std::size_t> TurnSolver::FaceUpDisplayOrder(const GameState* state, const Plan& plan)
+{
+    std::vector<std::size_t> ord(plan.actions.size());
+    for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = i; }
+    auto is_flip = [](const Action& a)
+    { return a.kind == Action::Kind::ActivatePermAbility && IsTurnFaceUpMode(a.ability_mode); };
+    if (state == nullptr || !state->deck_has_morph
+        || std::none_of(plan.actions.begin(), plan.actions.end(), is_flip)
+        || (plan.human_sequence && plan.human_action_order && plan.searched_order))
+    { return ord; }
+    // FaceUpInlineTrailDue's gate: a named trail flip runs right after the cast that puts its target in the
+    // graveyard (the provider's FaceUpTrailFlipAfterTargetCast, never under human play); else the trailing pass.
+    const bool inline_trail = !HumanPlayActive() && ResolveProvider(*state).FaceUpTrailFlipAfterTargetCast();
+    std::vector<std::size_t> out, tail;
+    std::vector<char> placed(plan.actions.size(), 0);
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::TurnFaceUp)
+        { out.push_back(i); placed[i] = 1; }
+    }
+    for (std::size_t i = 0; i < plan.actions.size(); ++i)
+    {
+        const Action& a = plan.actions[i];
+        if (placed[i] || is_flip(a)) { continue; }
+        out.push_back(i);
+        placed[i] = 1;
+        if (!inline_trail || (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)) { continue; }
+        for (std::size_t j = 0; j < plan.actions.size(); ++j)
+        {
+            const Action& t = plan.actions[j];
+            if (placed[j] || !is_flip(t) || t.ability_mode != Action::AbilityMode::TurnFaceUpLate
+                || t.tutor_target.empty() || t.tutor_target.str() != a.card_name.str()) { continue; }
+            out.push_back(j);
+            placed[j] = 1;
+        }
+    }
+    for (std::size_t i = 0; i < plan.actions.size(); ++i) { if (!placed[i]) { tail.push_back(i); } }
+    out.insert(out.end(), tail.begin(), tail.end());
+    return out;
+}
+
 void TurnSolver::SectionForgetRegrown(std::vector<int>& snapshot, const std::vector<int>& hand_before,
                                       const GameState& state)
 {
@@ -121301,8 +121343,11 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
     }
     int le_count = 0;
     std::vector<std::string> cast_names;
-    for (const Action& a : p.actions)
+    // In the order the actions RUN (a Morph LEAD flip before the casts it precedes; identity for every plan
+    // without a turn-face-up flip) -- this is the history line of an accepted viewer line (matched_summary).
+    for (const std::size_t ai_ : TurnSolver::FaceUpDisplayOrder(st, p))
     {
+        const Action& a = p.actions[ai_];
         if (a.kind == Action::Kind::DiscardToLandsEdge) { le_count += a.discard_lands; }
         else if (a.kind == Action::Kind::DigDraw)
         { cast_names.push_back((a.dig_sacrifice ? "sacrifice " : "cycle ") + a.card_name); }
@@ -125330,9 +125375,9 @@ void TurnSolver::ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool 
     plan.breakpoint_actions = std::move(records);
 }
 
-std::string TurnSolver::PlanLineSummary(const Plan& plan, const GameState& state)
+std::string TurnSolver::PlanLineSummary(const Plan& plan, const GameState& state, bool swap_in_combat)
 {
-    return LineSummaryOfPlan(plan, &state);
+    return LineSummaryOfPlan(plan, &state, swap_in_combat);
 }
 
 // The human menu's half of the land_slot twin fold (Landfall claude-play sweep flag 2; the search's

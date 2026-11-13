@@ -2736,7 +2736,15 @@ public:
     static std::vector<Plan> UntapLoopKillPlans(const GameState& state, bool is_pre_combat);
     // The viewer's one-line summary of a plan on `state` (LineSummaryOfPlan) -- the AccomplishedAlchemist
     // COMBO OFF route narrates each link it plays with it, so the history lists the actions, not a macro.
-    static std::string PlanLineSummary(const Plan& plan, const GameState& state);
+    static std::string PlanLineSummary(const Plan& plan, const GameState& state, bool swap_in_combat = false);
+    // THE ORDER A PLAN'S TURN-FACE-UP FLIPS REALLY RUN IN, for DISPLAY (Morph; USER 2026-11-13: "It worked, but
+    // the history still shows the other order for some reason."). Plan-vector indices: every LEAD flip
+    // (TurnFaceUp -- ApplyFaceUpLeadActs, before every cast) first; a TRAIL flip (TurnFaceUpLate) right after the
+    // cast of its regrowth target where that inline position applies (FaceUpInlineTrailDue's conditions), else
+    // after everything (the trailing pass); every other action in vector order. Identity for a plan with no flip,
+    // a deck without morph, and a human "**" sequence (human_sequence + human_action_order + searched_order: the
+    // flips run at their queued steps). Read by both plan summaries (LineSummaryOfPlan, main.cpp SummarizePlan).
+    static std::vector<std::size_t> FaceUpDisplayOrder(const GameState* state, const Plan& plan);
     static void              ApplyPlan(GameState& state, const Plan& plan, bool is_pre_combat);
     // Build the real dynamic replay script while applying a fixed plan, for executor parity tests.
     static void ApplyPlanWithRecordsForTest(GameState& state, Plan& plan, bool is_pre_combat);

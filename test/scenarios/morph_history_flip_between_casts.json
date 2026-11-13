@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 18,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Berserk",
+    "Berserk"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "land=Forest;cast=Berserk;face_up=Blistering Firecat;cast=Berserk;seq=land=Forest|cast=Berserk|face_up=Blistering Firecat|cast=Berserk",
+  "expect_verdict": "accept",
+  "expect_matched_summary": "land=Forest; cast: Berserk, Blistering Firecat (Face-down): turn it face up, Berserk",
+  "comment": "Companion of morph_history_lead_flip_first (USER 2026-11-13: \"It worked, but the history still shows the other order for some reason.\"): a flip queued BETWEEN the two Berserks runs there under the \"**\" sequence, so the history (matched_summary) lists it there -- the human's order, not the enumerated plan's and not a generic lead-first rule."
+}

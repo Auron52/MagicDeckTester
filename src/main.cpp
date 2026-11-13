@@ -477,6 +477,9 @@ static std::string AuraHostLabel(const GameState& s, int m_number)
 // menu is byte-identical); identity otherwise.
 static std::vector<std::size_t> DisplayActionOrder(const GameState& s, const TurnSolver::Plan& plan)
 {
+    // MORPH: a LEAD turn-face-up flip runs before every cast, so it is listed first (the plan vector holds it
+    // after the casts); a TRAIL flip where it runs. Identity for every plan without a flip (TurnSolver's note).
+    if (s.deck_has_morph) { return TurnSolver::FaceUpDisplayOrder(&s, plan); }
     std::vector<std::size_t> ord(plan.actions.size());
     for (std::size_t i = 0; i < ord.size(); ++i) { ord[i] = i; }
     // Midrange Burn's canonical cast ranks make Bolt precede spectacle and
@@ -5825,11 +5828,26 @@ static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSol
     std::vector<std::string> ord{ "**" };
     ord.insert(ord.end(), spec.sequence.begin(), spec.sequence.end());
     std::optional<TurnSolver::Plan> first_unpaid;
-    auto problems = [&](int idx) -> std::vector<std::string>
+    // THE HISTORY LINE IS THE LINE THE COMMIT PLAYS (Morph; USER 2026-11-13: "It worked, but the history still
+    // shows the other order for some reason."). The viewer writes an accepted line's matched_summary (or the
+    // committed variant's label) into its history, and both were the ENUMERATED plan's summary -- the plan's own
+    // action order -- while the commit plays the pinned plan (pv.plan: the queued steps in queue order, with
+    // whatever nobody queued placed by ApplyHumanSequencePin). So both are relabelled from pv.plan. Display only:
+    // plan_index, the verdict and every recorded field are untouched.
+    auto relabel = [&](int idx, const TurnSolver::Plan& pinned, std::string& label)
+    {
+        const TurnSolver::Plan& orig = plans[static_cast<std::size_t>(idx)];
+        const bool swap = is_pre && TurnSolver::HumanSwapDefersToCombat(s, orig) >= 0;
+        const std::string was = TurnSolver::PlanLineSummary(orig, s, swap);
+        if (label.compare(0, was.size(), was) != 0) { return; }   // not a summary-prefixed label: leave it
+        label = TurnSolver::PlanLineSummary(pinned, s, swap) + label.substr(was.size());
+    };
+    auto problems = [&](int idx, std::string* label = nullptr) -> std::vector<std::string>
     {
         std::vector<std::string> out;
         if (idx < 0 || idx >= static_cast<int>(plans.size())) { return out; }
         const HumanCommitPreview pv = PrepareHumanCommit(s, plans[static_cast<std::size_t>(idx)], ord, is_pre, true);
+        if (label != nullptr && pv.sequence && !pv.fallback) { relabel(idx, pv.plan, *label); }
         if ((pv.unpayable || !pv.dropped.empty()) && !first_unpaid) { first_unpaid = pv.plan; }
         out = pv.errors;
         if (!pv.unpayable)   // (an unpayable order's errors already name each cast it cannot pay)
@@ -5855,16 +5873,25 @@ static void ValidateHumanSequence(const GameState& s, bool is_pre, const TurnSol
     };
     if (chk.verdict == Vd::Accept)
     {
-        const std::vector<std::string> why = problems(chk.plan_index);
-        if (!why.empty()) { reject(why); }
+        std::string label = chk.matched_summary;
+        const std::vector<std::string> why = problems(chk.plan_index, &label);
+        if (!why.empty()) { reject(why); return; }
+        // ...and the accepted variant's label (the "— <sub-decisions>" suffix kept), so the two never disagree.
+        for (TurnSolver::LineVariant& v : chk.variants)
+        {
+            if (v.plan_index == chk.plan_index && v.label.compare(0, chk.matched_summary.size(), chk.matched_summary) == 0)
+            { v.label = label + v.label.substr(chk.matched_summary.size()); }
+        }
+        chk.matched_summary = label;
         return;
     }
     std::vector<TurnSolver::LineVariant> keep;
     std::vector<std::string> first_why;
     for (const TurnSolver::LineVariant& v : chk.variants)
     {
-        const std::vector<std::string> why = problems(v.plan_index);
-        if (why.empty()) { keep.push_back(v); }
+        std::string label = v.label;
+        const std::vector<std::string> why = problems(v.plan_index, &label);
+        if (why.empty()) { keep.push_back(v); keep.back().label = label; }
         else if (first_why.empty()) { first_why = why; }
     }
     if (keep.empty()) { reject(first_why); return; }
@@ -9867,6 +9894,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                   << (chk.reason.empty() ? "" : (" reason=\"" + chk.reason + "\"")) << "\n";
         for (const TurnSolver::LineVariant& lv : chk.variants)
         { std::cout << "scenario:   variant " << lv.plan_index << " " << lv.label << "\n"; }
+        if (chk.verdict == Vd::Accept) { std::cout << "scenario:   matched_summary " << chk.matched_summary << "\n"; }
         if (want != got)
         {
             std::cout << "scenario: FAIL expected line verdict " << want << ", got " << got << "\n";
@@ -9908,6 +9936,18 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                               << " does not contain \"" << need << "\": " << lv.label << "\n";
                     return 1;
                 }
+            }
+        }
+        // Optional HISTORY assertion: an accepted line's matched_summary (the viewer's history entry) equals
+        // this exactly -- the order the commit plays (Morph, USER 2026-11-13: "It worked, but the history still
+        // shows the other order for some reason.").
+        if (j.contains("expect_matched_summary"))
+        {
+            const std::string need = j.at("expect_matched_summary").get<std::string>();
+            if (chk.matched_summary != need)
+            {
+                std::cout << "scenario: FAIL matched_summary \"" << chk.matched_summary << "\" != \"" << need << "\"\n";
+                return 1;
             }
         }
         std::cout << "scenario: PASS (line " << got << ")\n";

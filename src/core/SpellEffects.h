@@ -27703,16 +27703,34 @@ inline bool ResolveSoloTargetTrick(GameState& state, int controller, const CardD
     std::vector<int> strive_pick;   // human-chosen strive extras (battlefield indices), else empty
     if (g_play_target_chooser != nullptr)
     {
+        // THE RECOMMENDATION (the prompt's heuristic_default; Morph, USER 2026-11-13: "I kept getting targeting
+        // recommendations to target the tapped Ignoble Hierarch rather than the Den Protector. Obviously, that was a
+        // terrible suggestion."). Under human play the menu offers every target variant, and the human's line (no
+        // target in a `cast=` step) matches the FIRST one enumerated, so the declared target is arbitrary -- s2 gi1
+        // T3 declared the tapped 0-power Hierarch for all three pumps. The recommendation is instead the creature
+        // that deals the most combat damage this turn: the cast-time pick the autonomous kTrickBestOwnTarget path
+        // uses (FindBestOwnAttackerForTrick: can attack, ranked by the provider's own-pump order -- MorphProvider:
+        // LargestAttackerScore, ties in battlefield order), Spellskite excluded for a redirect twin as there. Not for
+        // a haste grant or a token copy, whose best recipient is precisely one that CANNOT attack yet. No attacker:
+        // the declared target stays. Display only: the human still picks any legal target, and this branch never
+        // runs in autonomous play (the chooser is null there).
+        int rec = ti;
+        if (ti >= 0 && !def.params.grants_temp_haste && !def.params.token_copy_of_target)
+        {
+            int best = (redirect_to != 0) ? FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/true, def) : -1;
+            if (best < 0) { best = FindBestOwnAttackerForTrick(state, controller, /*exclude_redirector=*/false, def); }
+            if (best >= 0) { rec = best; }
+        }
         std::vector<ChosenTarget> heur;
-        if (ti >= 0) { heur.push_back({ 1, ti, 0 }); }
-        const int extras = (ti >= 0) ? std::max(0, strive_extras) : 0;
+        if (rec >= 0) { heur.push_back({ 1, rec, 0 }); }
+        const int extras = (rec >= 0) ? std::max(0, strive_extras) : 0;
         if (extras > 0)
         {
             // Mirror the autonomous pick below: the extras the heuristic would take (by power).
             std::vector<std::pair<int, int>> ranked;
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
             {
-                if (i == ti) { continue; }
+                if (i == rec) { continue; }
                 const Permanent& p = state.battlefield[i];
                 if (p.controller_index != controller || !p.card.IsCreature()) { continue; }
                 ranked.push_back({ p.card.m_power.value_or(0), i });

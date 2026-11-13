@@ -1,0 +1,43 @@
+{
+  "deck": "decks/Morph/Morph.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 18,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {
+      "name": "Blistering Firecat (Face-down)",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Gruul Turf",
+      "controller": 0,
+      "tapped": false
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0,
+      "tapped": false
+    }
+  ],
+  "hand": [
+    "Forest",
+    "Berserk",
+    "Berserk"
+  ],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 1,
+  "budget_ms": 50,
+  "max_turns": 4,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "validate_line": "land=Forest;face_up=Blistering Firecat;cast=Berserk;cast=Berserk;seq=land=Forest|face_up=Blistering Firecat|cast=Berserk|cast=Berserk",
+  "expect_verdict": "accept",
+  "expect_matched_summary": "land=Forest; cast: Blistering Firecat (Face-down): turn it face up, Berserk, Berserk",
+  "comment": "USER 2026-11-13 (references/Morph/claude_s1_gi0.json T4, verbatim): \"It worked, but the history still shows the other order for some reason.\" The human queued 'land=Forest | face_up=Blistering Firecat | cast=Berserk | cast=Berserk' and the commit plays it in that order, but the viewer's history entry (the validation's matched_summary) was the enumerated plan's summary, which lists the plan's LEAD flip after the casts. matched_summary is now the summary of the plan the commit applies (the pinned \"**\" sequence), so it lists the flip first."
+}

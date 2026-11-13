@@ -1020,3 +1020,114 @@ TEST_CASE("morph INT-10: Den Protector's unpinned LEAD flip is folded into its n
     CHECK(count(false, false) == 1);
     heurarm::t_arm[heurarm::FACEUP_LEAD_PIN_FOLD] = -1;
 }
+
+// USER 2026-11-13 (Morph s2 gi1 T3, verbatim): "I kept getting targeting recommendations to target the tapped
+// Ignoble Hierarch rather than the Den Protector. Obviously, that was a terrible suggestion." The human-play
+// board-click prompt's DEFAULT (heuristic_default) is the creature that deals the most combat damage this turn,
+// not the matched plan's arbitrary first-enumerated target; the human's pick still wins.
+TEST_CASE("morph viewer: a pump's recommended target is the largest ATTACKER, never a tapped dork")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    const int den = PutM(s, "Den Protector (Face-down)", 13);
+    const int hier = PutM(s, "Ignoble Hierarch", 31);
+    s.battlefield[static_cast<std::size_t>(hier)].tapped = true;   // tapped for mana: cannot attack
+    std::vector<ChosenTarget> seen;
+    int reply = -1;   // -1 = take the default, else a battlefield index
+    TargetChooser tc = [&](const GameState&, const CardDefinition&, int, int, int,
+                           const std::vector<ChosenTarget>& heur) -> std::vector<ChosenTarget>
+    {
+        seen = heur;
+        if (reply < 0) { return heur; }
+        return { ChosenTarget{ 1, reply, 0 } };
+    };
+    TargetChooser* const saved = g_play_target_chooser;
+    g_play_target_chooser = &tc;
+    // The plan declared the Hierarch (#31); the recommendation is the Den Protector, and the default lands there.
+    Cast(s, "Might of Old Krosa", 31);
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].index == den);
+    CHECK(Power(s, den) == 6);
+    // The pumps already resolved count (Berserk doubles the 6), and the human can still pick the Hierarch.
+    Cast(s, "Berserk", 31);
+    CHECK(seen[0].index == den);
+    CHECK(Power(s, den) == 12);
+    reply = hier;
+    Cast(s, "Legion Leadership", 31);
+    CHECK(seen[0].index == den);
+    CHECK(Power(s, den) == 12);                               // the human's pick went to the Hierarch
+    // No creature can attack: the declared target stays the recommendation.
+    reply = -1;
+    s.battlefield[static_cast<std::size_t>(den)].tapped = true;
+    Cast(s, "Might of Old Krosa", 31);
+    CHECK(seen[0].index == hier);
+    // A haste grant keeps the declared target (its best recipient is precisely one that cannot attack yet).
+    s.battlefield[static_cast<std::size_t>(den)].tapped = false;
+    Cast(s, "Expedite", 31);
+    CHECK(seen[0].index == hier);
+    g_play_target_chooser = saved;
+}
+
+// USER 2026-11-13 (Morph s1 gi0 T4, verbatim): "It worked, but the history still shows the other order for some
+// reason." A LEAD flip runs before every cast (ApplyFaceUpLeadActs), so the summaries list it first.
+TEST_CASE("morph viewer: plan summaries list turn-face-up flips where they really run")
+{
+    EnsureCardsMorph();
+    static const MorphProvider mp;
+    GameState s = BaseM();
+    s.m_provider = &mp;
+    s.deck_has_morph = true;
+    PutM(s, "Blistering Firecat (Face-down)", 10);
+    PutM(s, "Den Protector (Face-down)", 31);
+    auto trick = [](const std::string& n, int tgt)
+    {
+        Action a;
+        a.kind = Action::Kind::CastFromHand;
+        a.card_name = n;
+        a.def = &DefM(n);
+        a.enchant_target = tgt;
+        return a;
+    };
+    auto flip = [](const std::string& face, int num, Action::AbilityMode m)
+    {
+        Action a;
+        a.kind = Action::Kind::ActivatePermAbility;
+        a.card_name = face;
+        a.def = &DefM(face);
+        a.sac_source_id = num;
+        a.ability_mode = m;
+        return a;
+    };
+    TurnSolver::Plan p;
+    p.actions = { trick("Berserk", 10), trick("Berserk", 10),
+                  flip("Blistering Firecat (Face-down)", 10, Action::AbilityMode::TurnFaceUp) };
+    using V = std::vector<std::size_t>;
+    CHECK(TurnSolver::FaceUpDisplayOrder(&s, p) == V{ 2, 0, 1 });
+    const std::string sum = TurnSolver::PlanLineSummary(p, s);
+    CHECK(sum.find("turn it face up") < sum.find("Berserk"));
+    // The human's "**" sequence runs at its queued steps: identity.
+    TurnSolver::Plan h = p;
+    h.human_sequence = h.human_action_order = h.searched_order = true;
+    CHECK(TurnSolver::FaceUpDisplayOrder(&s, h) == V{ 0, 1, 2 });
+    // A deck without morph never fronts anything (ApplyFaceUpLeadActs is a no-op there).
+    GameState nm = s;
+    nm.deck_has_morph = false;
+    CHECK(TurnSolver::FaceUpDisplayOrder(&nm, p) == V{ 0, 1, 2 });
+    // A named TRAIL flip (Den Protector regrowing the Might): right after the Might's cast where the inline
+    // position applies (MorphProvider, autonomous), else after everything (the trailing pass).
+    Action den = flip("Den Protector (Face-down)", 31, Action::AbilityMode::TurnFaceUpLate);
+    den.tutor_target = std::string("Might of Old Krosa");
+    TurnSolver::Plan t;
+    t.actions = { den, trick("Might of Old Krosa", 10), trick("Berserk", 10) };
+    CHECK(TurnSolver::FaceUpDisplayOrder(&s, t) == V{ 1, 0, 2 });
+    GameState np = s;
+    np.m_provider = nullptr;
+    CHECK(TurnSolver::FaceUpDisplayOrder(&np, t) == V{ 1, 2, 0 });
+    // No flip: identity.
+    TurnSolver::Plan q;
+    q.actions = { trick("Berserk", 10), trick("Might of Old Krosa", 10) };
+    CHECK(TurnSolver::FaceUpDisplayOrder(&s, q) == V{ 0, 1 });
+}
