@@ -47,6 +47,17 @@ struct CardParams
     bool damage_cant_be_prevented_this_turn = false;
     bool attack_defending_player_reveal_land_to_hand = false;
     int damage_per_nonbasic_land = 0; // each player takes their own live nonbasic-land count
+    // SUNSPINE LYNX. The ETB twin of damage_per_nonbasic_land: "When this creature enters, it deals
+    // damage to each player equal to the number of nonbasic lands that player controls" (x the value),
+    // resolved by the shared ResolveNonbasicLandDamage in the universal own-ETB cascade -- so it hits US
+    // for our own nonbasic lands. Arms own_death_live (GoldFishRunner). 0 for every other card.
+    int etb_damage_each_player_per_nonbasic_land = 0;
+    // ...and its two STATICS, live while the permanent is on the battlefield (the permanent forms of
+    // Skullcrack's this-turn flags above): "Players can't gain life." (GainLife / OpponentGainsLife via
+    // PlayersCantGainLifeNow) and "Damage can't be prevented." (every modelled prevention site via
+    // DamageCantBePreventedNow). Deck-gated by GameState::deck_has_static_life_locks.
+    bool static_players_cant_gain_life  = false;
+    bool static_damage_cant_be_prevented = false;
     bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
     bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
     int draw         = 0;
@@ -2572,6 +2583,15 @@ struct CardParams
     // the Timeless Witness shape); resolved by ResolveEtbReturnGyEquipment (SpellEffects.h).
     bool etb_return_equipment_from_gy           = false;
     std::optional<ManaCost> eternalize_cost;
+    // UNEARTH (CR 702.84a; Hellspark Elemental): "{cost}: Return this card from your graveyard to the
+    // battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave
+    // the battlefield. Unearth only as a sorcery." An ACTIVATED ability of the graveyard card (never a
+    // cast): Action::Kind::Unearth, one action per graveyard copy (interchangeable copies folded to a
+    // canonical prefix), applied by the shared ApplyUnearth (SpellEffects.h) in both worlds. The returned
+    // permanent carries Permanent::unearthed: swept to exile at the beginning of the end step
+    // (PerformEndStepUnearthExiles) and exiled INSTEAD at the shared sacrifice chokepoint
+    // (SacrificePermanentAt -- a CR 614 replacement). Unset (nullopt) for every other card.
+    std::optional<ManaCost> unearth_cost;
     std::optional<ManaCost> transmute_cost;
     std::optional<ManaCost> life_gated_put_creatures_cost;
     int  activate_min_life                      = 0;

@@ -687,6 +687,16 @@ struct Permanent
     // byte (sizeof unchanged). FLIPS MID-TURN: folded wherever sac_at_end_step is. Never set for any
     // other card -> byte-identical.
     bool      destroy_at_end_if_attacked : 1 = false;
+    // UNEARTH (CR 702.84a; CardParams::unearth_cost -- Hellspark Elemental): this OBJECT was returned by
+    // its unearth ability. Two consequences, both keyed on this bit: "exile it at the beginning of the
+    // next end step" (PerformEndStepUnearthExiles, top of BOTH end-step sites in lockstep) and "if it
+    // would leave the battlefield, exile it instead of putting it anywhere else" (the CR 614 replacement
+    // at the shared SacrificePermanentAt). PER OBJECT on purpose: any zone change makes a new Permanent
+    // with the bit clear, so an effect that itself exiles the creature and later returns it (champion)
+    // returns a new object no longer under unearth (Scryfall ruling). A fourth bit of this second byte
+    // (sizeof unchanged). FLIPS MID-TURN: folded wherever sac_at_end_step is. Never set for any other
+    // card -> byte-identical elsewhere.
+    bool      unearthed            : 1 = false;
     // "As this permanent enters, choose a color" (Coldsteel Heart), CardParams::etb_choose_color.
     // The colour is LOCKED FOR THE PERMANENT'S LIFETIME -- it is a per-OBJECT property, which is
     // exactly why it cannot live on the CardDefinition like every other `produces`: four Coldsteel

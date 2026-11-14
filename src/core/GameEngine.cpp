@@ -1361,6 +1361,9 @@ void GameEngine::EndStep(GameState& state)
             ResolveAthreosExile(state, leaving);
         }
     }
+    // Unearth's "exile it at the beginning of the next end step" (Permanent::unearthed). Lockstep twin
+    // at the same position in TurnSolver::SimulateEndAndStartNextTurn; no-op without the bit.
+    PerformEndStepUnearthExiles(state);
     // Incandescent Soulstoke's put: "Sacrifice it at the beginning of the next end step"
     // (Permanent::sac_at_end_step). Lockstep twin at the same position in
     // TurnSolver::SimulateEndAndStartNextTurn; no-op for every deck that never sets the flag.

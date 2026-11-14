@@ -512,9 +512,9 @@ TEST_CASE("human sequence: EVERY action kind is claimable by the token the viewe
     // TurnSolver::HumanStepVerbFor is one entry per kind behind a static_assert on the enum's end, so a
     // new kind cannot reach a "**" line without a verb; this claims one action of every kind through it,
     // so a verb that does not actually claim its kind (the orphan rule would drop it) fails here.
-    // The LAST enumerator (ActivateUntap, appended after AuraSwap upstream): a new kind already fails to
+    // The LAST enumerator (Unearth, appended after ActivateUntap): a new kind already fails to
     // compile in HumanStepVerbFor (-Wswitch is an error there); extend this bound with it.
-    for (int ki = 0; ki <= static_cast<int>(K::ActivateUntap); ++ki)
+    for (int ki = 0; ki <= static_cast<int>(K::Unearth); ++ki)
     {
         const K k = static_cast<K>(ki);
         const std::string verb = TurnSolver::HumanStepVerbFor(k);

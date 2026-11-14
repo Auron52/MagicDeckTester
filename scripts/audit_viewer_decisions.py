@@ -865,7 +865,8 @@ BOARD_ACTIVATIONS = {
     "channel_cost":                              ("verb:channel",   truthy,   "channel_cost"),
     # Dimir House Guard's Transmute rides the Channel kind and its verb (a from-HAND activation).
     "transmute_cost":                            ("verb:channel",   truthy,   "transmute_cost"),
-    # NOT listed (deliberately): Timeless Witness's eternalize_cost (activated from the GRAVEYARD --
+    # NOT listed (deliberately): unearth_cost, for the eternalize reason below (a graveyard activation:
+    # "source reached play" is the wrong evidence). Timeless Witness's eternalize_cost (activated from the GRAVEYARD --
     # "source reached play" is the wrong evidence for it, so this check would read every sweep where
     # the Witness was cast but never died as a hard miss) and Bilbo's life_gated_put_creatures_cost
     # (gated on 111 life, not on mana, so "affordable but never offered" is the NORMAL case). Both are
@@ -930,6 +931,9 @@ INERT_PARAMS = {
     "attack_exile_defender_top": "Ulamog, the Ceaseless Hunger exiles the defending player's top N cards on attack; mandatory trigger, no player choice (trigger event only)",
     # Midrange Burn: fixed arithmetic/cost semantics; the existing cast/tap actions own timing.
     "damage_per_nonbasic_land": "Price of Progress deals its printed multiple to EACH player from the live nonbasic count; no targets or chosen amount",
+    "etb_damage_each_player_per_nonbasic_land": "Sunspine Lynx's ETB: damage to EACH player from that player's live nonbasic-land count (Price of Progress's resolver); untargeted, no chosen amount",
+    "static_players_cant_gain_life": "Sunspine Lynx's static rule effect while on the battlefield; no player choice",
+    "static_damage_cant_be_prevented": "Sunspine Lynx's static rule effect while on the battlefield; no player choice",
     "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
     # ---- Unpredictable Cyclone phase 2 (2026-10-27) -- PROVISIONAL, pending the user's OK ----
     "cast_trigger_extra_turns": "Emrakul's 'take an extra turn after this one' -- MANDATORY cast trigger, no choice (display only: the turn bar's 'Turn N (extra k)', an event line, extra_turn/turn_seq in the decision JSON)",
@@ -1886,6 +1890,7 @@ MAINPHASE_PARAMS = {
     "ping_all_cost":       "mana-only, no-{T} repeatable sweeper ping = a main_phase board activation (ActivatePermAbility/PingAll); K rides chosen_x",
     "evoke_cost":          "EVOKE vs hard cast (Reveillark, Shriekmaw) = two main_phase CastFromHand variants of one hand slot (Action::evoke, #E1/#E0 in the plan signature, the CheckLine `evoke` sub in the choose-variant dialog) -- the choice is surfaced at queue/commit time, not at resolution",
     "transmute_cost":      "Dimir House Guard Transmute = a from-HAND {1}{B}{B}-discard activation (Channel kind, channel= verb) = a main_phase plan action; the FOUND card is one searched variant per legal MV-4 library name autonomously, and the shared tutor chooser at resolution in human play",
+    "unearth_cost":        "Unearth (Hellspark Elemental) = a from-GRAVEYARD sorcery-speed activation = a main_phase plan action (Action::Kind::Unearth, unearth= verb, the viewer's graveyard click via unearth_gy; one action per graveyard copy); returns with haste, exiled at end step / if it would leave -- no further choice",
     "eternalize_cost":     "Timeless Witness Eternalize = a from-GRAVEYARD {5}{G}{G} activation = a main_phase plan action (Action::Kind::Eternalize, eternalize= verb, the viewer's graveyard click); the token's ETB return is the `dig` decision (etb_return_gy_to_hand)",
     "life_gated_put_creatures_cost": "Bilbo's {2}{W}{B}{G},{T},exile activation at >= 111 life = a main_phase board activation (ActivatePermAbility/LifeGatedPutCreatures, `activate`); WHICH creatures is the multi-pick `dragon` chooser at resolution (provider pick preselected). Not in BOARD_ACTIVATIONS: the life gate makes never-offered the normal case",
     # Rolling Earthquake: X is a main_phase PLAN VARIANT (chosen_x), every X from 0..max offered

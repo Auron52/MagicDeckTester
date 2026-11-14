@@ -2597,7 +2597,7 @@ function renderBoard() {
     if(p.target && p.kind==='activate'){ return; }
     // 'channel' is a from-HAND ability: the card is discarded for an effect, so like an activation it
     // puts nothing onto the battlefield and belongs in the spells row, not the planned-permanents row.
-    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
+    if(p.kind==='retrace'||p.kind==='nonpermanent'||p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='unearth'||p.kind==='cycle'){ plannedSpells.push(plannedThumb(p,i,ord[i])); return; }
     if(p.target){ return; }   // a queued aura with a target -> drawn overlapping its host (below)
     // The CAST half of a from-hand cast-and-equip: its equip half is already drawn on the host, so
     // drawing this too would put the same card in two places on the field.
@@ -2794,7 +2794,12 @@ function renderBoard() {
     const fbset = new Set(me.flashback_gy||[]);
     const gset = new Set(me.gycast_gy||[]);    // graveyard permanents castable via Lurrus of the Dream-Den
     const eset = new Set(me.eternalize_gy||[]); // graveyard creatures with Eternalize (Timeless Witness)
-    const gyThumbs = me.graveyard.map(n => eset.has(n)
+    const uset = new Set(me.unearth_gy||[]);    // graveyard creatures with Unearth (Hellspark Elemental)
+    const gyThumbs = me.graveyard.map(n => uset.has(n)
+      ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-unearth="1" title="click to UNEARTH from the graveyard (it returns with haste; exiled at the next end step or if it would leave)">`+
+        `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
+        `<span class="rtbadge" title="Unearth — activate from here">⟳</span><em>${esc(n)}</em></span>`
+      : eset.has(n)
       ? `<span class="thumb spell retrace-src" data-name="${esc(n)}" data-eternalize="1" title="click to ETERNALIZE from the graveyard (pay {5}{G}{G}, exile it: a 4/4 black Zombie token copy)">`+
         `<img loading="lazy" src="${scryImg(n,'small')}" alt="${esc(n)}" onerror="this.style.opacity=.15"/>`+
         `<span class="rtbadge" title="Eternalize — activate from here">⟳</span><em>${esc(n)}</em></span>`
@@ -2876,7 +2881,7 @@ function renderPlanbar() {
         `<span class="nm" data-name="${esc(p.name)}">⛏ ${p.sac?'sac':'tap'} ${esc(p.name)} → ${esc(preTapFaceText(p.color))}${ac.length?` +{${esc(ac.join('} +{'))}}`:''}</span>`+
         `<span class="x" data-rm="${i}">✕</span></span>`;
     }
-    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='cycle')?'act':(p.kind==='land'?'land':'spell');
+    const cls = p.kind==='vial'?'vial':p.kind==='retrace'?'retrace':(p.kind==='activate'||p.kind==='channel'||p.kind==='suspend'||p.kind==='eternalize'||p.kind==='unearth'||p.kind==='cycle')?'act':(p.kind==='land'?'land':'spell');
     // A board activation names WHAT it does where the verb already says so — "⟳ ability" on four
     // chips reading "Bonesplitter / Shadowspear / Balan / Stoneforge" tells you nothing about which
     // of them equips, attaches everything, or puts a card from hand.
@@ -2884,6 +2889,7 @@ function renderPlanbar() {
               : p.kind==='suspend' ? ' ⌛ suspend (exile)'
               : p.kind==='cycle' ? ' ↻ cycle (discard)'
               : p.kind==='eternalize' ? ' ⟳ eternalize (from graveyard)'
+              : p.kind==='unearth' ? ' ⟳ unearth (from graveyard)'
               : p.kind!=='activate' ? ''
               : p.verb==='gyexile'   ? ' ⟳ ' + (p.mode===2 ? 'exile a creature, gain 2' : 'exile an instant/sorcery, drain 2')
               : p.verb==='gyreturn'  ? ' ⟳ sac → return ' + (p.name==='@random' ? 'a creature at random' : p.name)
@@ -3277,6 +3283,9 @@ function wireBoard() {
   // click an Eternalize card in the graveyard (Timeless Witness) to queue its eternalize
   $('board').querySelectorAll('.thumb[data-eternalize]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); eternalizeCard(t.dataset.name); });
+  // click an Unearth card in the graveyard (Hellspark Elemental) to queue an unearth of one copy
+  $('board').querySelectorAll('.thumb[data-unearth]').forEach(t =>
+    t.onclick = e => { e.stopPropagation(); unearthCard(t.dataset.name); });
   // click a permanent with a sacrifice-to-draw ability to sacrifice it for a card
   $('board').querySelectorAll('.thumb[data-sacdig]').forEach(t =>
     t.onclick = e => { e.stopPropagation(); const nm=t.dataset.sacdig;
@@ -3403,6 +3412,22 @@ function eternalizeCard(name) {
   if (existing >= 0) { S.plan.splice(existing,1); renderBoard(); return; }
   S.plan.push({name, kind:'eternalize'});
   flashHint(`Eternalizing ${name} from the graveyard (a 4/4 black Zombie token copy). Commit to resolve.`);
+  renderBoard();
+}
+
+// Click an Unearth card in the graveyard (Hellspark Elemental) to queue "{cost}: return it with haste;
+// exile it at the next end step or if it would leave". Each copy is its own activation: a click queues
+// one more while the graveyard holds an unqueued copy, and once every copy is queued it clears them.
+// The engine offers it only when affordable (and only in a main phase -- sorcery speed).
+function unearthCard(name) {
+  if (S.over || !S.decision || S.decision.type!=='main_phase') return;
+  hideVerdict();
+  const me = S.decision.me || {};
+  const copies = (me.unearth_gy||[]).filter(n=>n===name).length || 1;
+  const queued = S.plan.filter(p=>p.kind==='unearth' && p.name===name).length;
+  if (queued >= copies) { S.plan = S.plan.filter(p=>!(p.kind==='unearth' && p.name===name)); renderBoard(); return; }
+  S.plan.push({name, kind:'unearth'});
+  flashHint(`Unearthing ${name} (${queued+1} of ${copies}) -- it returns with haste and is exiled at the end step. Commit to resolve.`);
   renderBoard();
 }
 

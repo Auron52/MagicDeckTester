@@ -1748,6 +1748,11 @@ struct GameState
     //     that would find nothing).
     bool                     deck_has_morph               = false;
     bool                     deck_has_endstep_self_sac    = true;
+    // SUNSPINE LYNX (Red Elementals, 2026-11-14), the same hole. A DECK CONSTANT, never folded: the list
+    // holds a static_players_cant_gain_life / static_damage_cant_be_prevented card, so PlayersCantGainLifeNow
+    // and DamageCantBePreventedNow walk the battlefield for one. DEFAULT TRUE, the safe direction (it only
+    // skips a walk that would find nothing).
+    bool                     deck_has_static_life_locks   = true;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

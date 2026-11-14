@@ -197,6 +197,12 @@ enum class Keyword
     // your hand" special action never apply. No engine code reads this enumerator; it exists so Scryfall's
     // keywords array can be pasted VERBATIM (KeywordFromString throws on an unmapped keyword -- see Jump).
     Companion,
+    // Unearth (Hellspark Elemental): an INERT keyword-ability tag -- the mechanic is modelled
+    // structurally via CardParams::unearth_cost (Action::Kind::Unearth + ApplyUnearth, the
+    // Permanent::unearthed exile replacement). No engine code reads this enumerator; it exists so
+    // Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an unmapped
+    // keyword -- see Jump's note).
+    Unearth,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

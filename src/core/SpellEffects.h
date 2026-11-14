@@ -1237,7 +1237,11 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 // battlefield put, defined far below; the default for `minus_counters` is added at the definition.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
                                   const std::string& source_name, int minus_counters = 0,
-                                  bool as_noncreature_enchantment = false, int owner = -1);
+                                  bool as_noncreature_enchantment = false, int owner = -1,
+                                  bool unearthed = false);
+// Sunspine Lynx's ETB (etb_damage_each_player_per_nonbasic_land) reaches Price of Progress's shared
+// resolver, defined far below.
+inline void ResolveNonbasicLandDamage(GameState& state, int controller, int multiplier);
 inline void ApplyBlink(GameState&, int controller, int source_id, int target_id,
                        bool returns_tapped, bool permanents_ok);
 inline void FireLeavesBattlefieldTriggers(GameState&, int controller, const Card& left);
@@ -1978,6 +1982,29 @@ inline thread_local bool g_tap_speculating = false;
 struct TapSpeculationScope { bool prev; TapSpeculationScope() : prev(g_tap_speculating) { g_tap_speculating = true; } ~TapSpeculationScope() { g_tap_speculating = prev; } };
 inline bool TapSpeculatingNow() { return g_tap_speculating; }
 
+// "Players can't gain life" / "Damage can't be prevented": Skullcrack's THIS-TURN flags, or Sunspine
+// Lynx's STATIC forms while one is on the battlefield (CardParams::static_players_cant_gain_life /
+// static_damage_cant_be_prevented). The static is read live, so it ends the moment the Lynx leaves.
+// The walk is gated on the deck constant GameState::deck_has_static_life_locks (default true = scan), so
+// every deck without the card pays one bool test -> byte-identical.
+inline bool StaticLifeLockOnBattlefield(const GameState& state, bool want_no_gain)
+{
+    if (!state.deck_has_static_life_locks) { return false; }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (want_no_gain ? d->params.static_players_cant_gain_life : d->params.static_damage_cant_be_prevented)
+        { return true; }
+    }
+    return false;
+}
+inline bool PlayersCantGainLifeNow(const GameState& state)
+{ return state.players_cant_gain_life_this_turn || StaticLifeLockOnBattlefield(state, true); }
+inline bool DamageCantBePreventedNow(const GameState& state)
+{ return state.damage_cant_be_prevented_this_turn || StaticLifeLockOnBattlefield(state, false); }
+
 // Damage events / own death / lifegain replacement (Prevent Damage). Included HERE, mid-header, on
 // purpose: it needs TapSpeculatingNow() above and must precede the first pain site below
 // (TapDripLandsIfUseful). Inert unless GameState::dmg_events_armed -- see the header.
@@ -1987,7 +2014,7 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
                               const std::string& source = std::string())
 {
     if (amount <= 0) { return; }
-    if (state.players_cant_gain_life_this_turn) { return; }
+    if (PlayersCantGainLifeNow(state)) { return; }
     int opp = 1 - controller_index;
     const bool remedied = RemedyActive(state, controller_index);
     // MTG_LIFE_TRACE=1 (diagnosis only): per-event ledger of every opponent gain/flip with source
@@ -8499,7 +8526,7 @@ inline void FireOppCreatureDies(GameState& state, int dead_controller)
 inline void GainLife(GameState& state, int player, int amount)
 {
     if (amount <= 0) { return; }
-    if (state.players_cant_gain_life_this_turn) { return; }
+    if (PlayersCantGainLifeNow(state)) { return; }
     // Lifegain REPLACEMENT (Rhox Faithmender x2, Bilbo +1) -- armed decks only; identity otherwise.
     // Applied to the EVENT before anything reads it, so life_gained_this_turn and the watchers (Vito's
     // "that much") all see the replaced amount, as the rules say they must (CR 614.1).
@@ -9922,7 +9949,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.unearthed
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
@@ -12737,6 +12764,25 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
                           + std::to_string(before - face_dmg) + ")");
         }
     }
+    // (2c) SUNSPINE LYNX: "it deals damage to each player equal to the number of nonbasic lands that
+    //      player controls" -- Price of Progress's shared resolver, so it hits US for our own nonbasics
+    //      (Fiery Islet, an MDFC land face) and our own death can end the game (own_death_live is armed by
+    //      the param); the passive opponent takes one per 'Opponent Nonbasic Land' placeholder (0-3 by
+    //      game index). Param-gated -> byte-identical elsewhere.
+    if (p.etb_damage_each_player_per_nonbasic_land > 0)
+    {
+        const int me_before  = state.players[controller].life;
+        const int opp_before = state.players[opp].life;
+        ResolveNonbasicLandDamage(state, controller, p.etb_damage_each_player_per_nonbasic_land);
+        if (g_play_event_sink)
+        {
+            EmitPlayEvent(state.turn_number, "damage",
+                          "\xF0\x9F\x94\xA5 " + def->card.m_name.str()
+                          + ": damage per nonbasic land -- you " + std::to_string(me_before - state.players[controller].life)
+                          + " (" + std::to_string(me_before) + "\xE2\x86\x92" + std::to_string(state.players[controller].life)
+                          + "), opponent " + std::to_string(opp_before - state.players[opp].life));
+        }
+    }
     if (p.etb_damage_each_opponent > 0)
     {
         // Ping each opponent creature; remove any that die (opponent has creatures only from spawn
@@ -13237,7 +13283,7 @@ inline bool GyEnterCleanerActive(const GameState& state, int controller, int vic
 // like the tutor-to-battlefield put. Returns the new battlefield index, or -1.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
                                   const std::string& source_name, int minus_counters,
-                                  bool as_noncreature_enchantment, int owner)
+                                  bool as_noncreature_enchantment, int owner, bool unearthed)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     Permanent perm;
@@ -13258,6 +13304,15 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
     if (minus_counters > 0)
     {
         perm.counters.Add(Counter{Counter::Type::MinusOneMinusOne, minus_counters});
+    }
+    // UNEARTH (ApplyUnearth): the object is under its unearth ability from the moment it enters -- set
+    // BEFORE the enter cascade, so an ETB that removes it already meets the exile replacement -- and
+    // "it gains haste" (temp_haste: the object is exiled at this turn's end step, before cleanup clears
+    // the flag, so an until-end-of-turn grant is exact). false for every other caller.
+    if (unearthed)
+    {
+        perm.unearthed  = true;
+        perm.temp_haste = true;
     }
     state.battlefield.push_back(perm);
     const int idx = static_cast<int>(state.battlefield.size()) - 1;
@@ -17023,6 +17078,105 @@ inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::s
     return CanonicalSacVictim(state, controller, outlet_id, need_sub) >= 0;
 }
 
+// ==== UNEARTH (CR 702.84a; CardParams::unearth_cost -- Hellspark Elemental) =========================
+// "{cost}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the
+// beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery."
+//
+// The graveyard copy a plan's Unearth action names: the pinned copy (`number`, the action's
+// sac_source_id) while it is still in the graveyard, else ANY copy of the name -- copies are
+// interchangeable, and both worlds resolve the same index from the same state. -1 = none (a stale plan:
+// the apply is a no-op and pays nothing).
+inline int UnearthGraveyardIndex(const GameState& state, int controller, const std::string& name, int number)
+{
+    const std::vector<Card>& gy = state.players[controller].graveyard;
+    int any = -1;
+    for (int g = 0; g < static_cast<int>(gy.size()); ++g)
+    {
+        const Card& c = gy[static_cast<std::size_t>(g)];
+        if (c.m_name.str() != name) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->params.unearth_cost.has_value()) { continue; }
+        if (number > 0 && c.m_number == number) { return g; }
+        if (any < 0) { any = g; }
+    }
+    return any;
+}
+
+// Resolve an unearth whose cost the CALLER has paid (both worlds: AIEngine's trailing pass and
+// TurnSolver::ApplyPlanDirect's). An ACTIVATED ability, not a cast: no cast triggers, no storm, no
+// prowess. The card leaves the graveyard and enters through the shared PutCardOntoBattlefield (both
+// enter cascades -- Metallic Mimic's +1/+1 counter, Risen Reef, the card's own ETB -- under
+// GraveyardEnterScope, it comes from the graveyard) carrying Permanent::unearthed + haste. Returns false
+// (nothing happens) when no copy is left.
+inline bool ApplyUnearth(GameState& state, int controller, const std::string& name, int number = 0)
+{
+    const int gi = UnearthGraveyardIndex(state, controller, name, number);
+    if (gi < 0) { return false; }
+    Player& pl = state.players[controller];
+    const Card c = pl.graveyard[static_cast<std::size_t>(gi)];
+    pl.graveyard.erase(pl.graveyard.begin() + gi);
+    GraveyardEnterScope from_gy;
+    PutCardOntoBattlefield(state, controller, c, "unearth: haste; exiled at the next end step or if it would leave",
+                           0, false, controller, /*unearthed=*/true);
+    return true;
+}
+
+// Take an UNEARTHED permanent off the battlefield to EXILE (the end-step delayed trigger, or the
+// leave-the-battlefield replacement). Attachments fall off (CR 301.5c). Returns the departed object so
+// the caller can fire what its departure fires, in its own order (UnearthedLeftBattlefield).
+inline Permanent RemoveUnearthedToExile(GameState& state, int idx)
+{
+    const Permanent leaving = state.battlefield[static_cast<std::size_t>(idx)];
+    const int num = leaving.card.m_number;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to      == num) { q.equipped_to      = 0; }
+        if (q.aura_attached_to == num) { q.aura_attached_to = 0; }
+    }
+    state.exile.push_back(RevealedCard(leaving.card));
+    state.battlefield.erase(state.battlefield.begin() + idx);
+    return leaving;
+}
+// It LEFT the battlefield but did not DIE (it never reached a graveyard): leaves-the-battlefield
+// triggers and the board refreshes fire; dies / morbid watchers do not. Athreos's coin return also
+// covers exile ("dies or is put into exile").
+inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
+{
+    FireLeavesBattlefieldTriggers(state, leaving.controller_index, leaving.card);
+    RefreshDevotionCreatures(state);
+    RefreshReconfigureCreatures(state);
+    ResolveAthreosExile(state, leaving);
+}
+
+// "Exile it at the beginning of the next end step": every unearthed permanent, at the TOP of BOTH
+// end-step sites in lockstep (GameEngine::EndStep and TurnSolver's SimulateEndAndStartNextTurn), beside
+// the Twinflame sweep and BEFORE the creature's own end-step sacrifice (Hellspark's) -- the controller's
+// order for two simultaneous triggers; either order ends in exile because of the replacement. Unearth is
+// sorcery-speed, so "the next end step" is always this turn's. Re-found by m_number after each exile (an
+// LTB trigger may append or remove permanents). No-op (one bit test per permanent) for every other deck.
+inline void PerformEndStepUnearthExiles(GameState& state)
+{
+    std::vector<int> due;
+    for (const Permanent& p : state.battlefield) { if (p.unearthed) { due.push_back(p.card.m_number); } }
+    for (int num : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != num || !q.unearthed) { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "trigger",
+                              "\xE2\x8F\xB3 " + q.card.m_name.str()
+                              + " -- exiled at the beginning of the end step (unearth)");
+            }
+            const Permanent leaving = RemoveUnearthedToExile(state, i);
+            UnearthedLeftBattlefield(state, leaving);
+            break;
+        }
+    }
+}
+
 // Sacrifice the permanent at battlefield index `idx`: to the graveyard, off the battlefield, then
 // its death-watchers (Pashalik ping / Rundvelt impulse / Mogg death token). Factored out because
 // the sac-outlet paths below each open-coded it, and the human-victim override needs to sacrifice
@@ -17030,6 +17184,23 @@ inline bool MakeSameLineSacFodder(GameState& state, int controller, const std::s
 inline void SacrificePermanentAt(GameState& state, int controller, int idx)
 {
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    // UNEARTH'S REPLACEMENT (CR 614; Permanent::unearthed): "if it would leave the battlefield, exile it
+    // instead of putting it anywhere else". It is still SACRIFICED (sacrifice watchers fire) but goes to
+    // exile and does not die (no dies / morbid watchers). Covers every sacrifice routed here: Hellspark's
+    // own end-step trigger, Soulstoke / Thunderkin delayed sacrifices, sac outlets.
+    if (state.battlefield[static_cast<std::size_t>(idx)].unearthed)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          state.battlefield[static_cast<std::size_t>(idx)].card.m_name.str()
+                          + " -- sacrificed, EXILED instead (unearth)");
+        }
+        const Permanent leaving = RemoveUnearthedToExile(state, idx);
+        FireSacrificeWatchers(state, controller);
+        UnearthedLeftBattlefield(state, leaving);
+        return;
+    }
     const Card dead     = state.battlefield[idx].card;
     const bool was_tok  = state.battlefield[idx].is_token;
     const int  dead_m1  = MinusCountersOn(state.battlefield[idx]);
@@ -47519,7 +47690,7 @@ inline bool SacLandTwins(const GameState& state, const Permanent& a, const Perma
         if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
             || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
             || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
-            || p->destroy_at_end_if_attacked || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
+            || p->destroy_at_end_if_attacked || p->unearthed || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
             || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
     }
     for (const Permanent& q : state.battlefield)
@@ -50818,7 +50989,8 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.once_per_turn_used ? 4194304 : 0)   // Stromkirk Condemned's once-each-turn activation
         | (p.sac_at_end_step ? 8388608 : 0)
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0)   // Scythecat Cub
-        | (p.destroy_at_end_if_attacked ? 67108864 : 0));   // Berserk's delayed destroy
+        | (p.destroy_at_end_if_attacked ? 67108864 : 0)     // Berserk's delayed destroy
+        | (p.unearthed ? 134217728 : 0));                   // unearth's end-step / leave exile
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);

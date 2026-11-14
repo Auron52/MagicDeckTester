@@ -1225,6 +1225,9 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::Eternalize:
                 tag = a.card_name + ": eternalize from graveyard (4/4 black Zombie token copy)";
                 break;
+            case Action::Kind::Unearth:
+                tag = a.card_name + ": unearth from graveyard (haste; exiled at end step or if it would leave)";
+                break;
             case Action::Kind::ActivatePump:
             {
                 const int k = std::max(1, a.chosen_x);
@@ -1690,6 +1693,18 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
             if (d && d->params.eternalize_cost.has_value()) { et.push_back(c.m_name); }
         }
         if (!et.empty()) { std::sort(et.begin(), et.end()); os << ", \"eternalize_gy\": "; JsonNameArray(os, et); }
+    }
+    // Unearth (Hellspark Elemental): graveyard cards with an unearth cost -- the GUI makes them clickable
+    // in the graveyard zone (the `unearth=` verb), one entry per COPY (each copy is its own activation).
+    // Absent when there are none, so every other deck's state JSON is byte-identical.
+    {
+        std::vector<std::string> ue;
+        for (const Card& c : me.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.unearth_cost.has_value()) { ue.push_back(c.m_name); }
+        }
+        if (!ue.empty()) { std::sort(ue.begin(), ue.end()); os << ", \"unearth_gy\": "; JsonNameArray(os, ue); }
     }
     os << ", \"library_size\": " << me.library.size();
     // THE REVEALED LIBRARY TOP (Courser of Kruphix: "Play with the top card of your library
@@ -2697,7 +2712,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 || k == Action::Kind::GraveyardReturnAbility
                 || k == Action::Kind::GraveyardPlayAbility
                 || k == Action::Kind::AnimateLand   || k == Action::Kind::TapForTokenPay
-                || k == Action::Kind::Eternalize
+                || k == Action::Kind::Eternalize || k == Action::Kind::Unearth
                 // An activated untapper names its SOURCE permanent (a Crab Umbra, a Staff, a
                 // Witch, or Galvanic's paired creature) -- never a hand cast.
                 || k == Action::Kind::ActivateUntap;
@@ -3226,6 +3241,9 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             // (so no `activate` flag) and not a cast -- its own verb, reached from the GUI's
             // graveyard zone (the `eternalize_gy` list in the state JSON).
             if (ac.kind == Action::Kind::Eternalize) { os << ", \"verb\": \"eternalize\""; }
+            // UNEARTH (Hellspark Elemental): the same from-the-GRAVEYARD shape -- its own verb, reached
+            // from the GUI's graveyard zone (the `unearth_gy` list in the state JSON).
+            if (ac.kind == Action::Kind::Unearth) { os << ", \"verb\": \"unearth\""; }
             if (ac.bestow)                        { os << ", \"bestow\": true"; }
             // Phyrexian variant ({G/P}): the life paid in place of pips -- the key is what lets
             // the choose dialog tell the pay-mana and pay-2-life variants of one cast/activation
@@ -5700,6 +5718,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
         }
         else if (key == "ooze")      { ls.ooze_exiles.push_back(val); }   // Scavenging Ooze exile
         else if (key == "eternalize") { ls.eternalizes.push_back(val); }  // Timeless Witness (graveyard)
+        else if (key == "unearth")    { ls.unearths.push_back(val); }     // Hellspark Elemental (graveyard)
         // "tap=<name>#<m_number>:<W|U|B|R|G|C>" (or a filter's multi-letter output, ":UR"): the MANUAL
         // TAP/PAY fallback -- tap this source for this face into the float before the line's payments
         // run. Parsed by the SHARED reader
