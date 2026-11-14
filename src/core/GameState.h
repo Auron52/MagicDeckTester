@@ -2,6 +2,7 @@
 #include "Player.h"
 #include "Permanent.h"
 #include "ManaPool.h"
+#include "MihailPayChoices.h"
 #include "DiscardPolicy.h"
 #include <array>
 #include <map>
@@ -1046,6 +1047,9 @@ struct GameState
     // walk finds nothing (dead-code elimination, no lever). DEFAULT TRUE == walk, so an unstamped
     // GameState (the scenario harness, a unit test) can never silently lose a Courser. Only ever err true.
     bool                     deck_has_top_land_play          = true;  // Courser of Kruphix
+    // Deeproot Pilgrimage's tap-event watcher. Default true keeps hand-built scenario
+    // states faithful; StampDeckTraits clears it only when the deck cannot contain one.
+    bool                     deck_has_deeproot_pilgrimage   = true;
     // ...and the LAND-SEARCH cluster (core/LandSearch.h; Rampant Growth, Cultivate, Search for
     // Tomorrow, Evolving Wilds, Myriad Landscape, Khalni Heart Expedition, Primeval Titan): stamped
     // from `land_search_count > 0`, the master gate every land-search param hangs off, so a clear bit
@@ -1266,6 +1270,8 @@ struct GameState
     std::int8_t              scripted_combat_transform = -1;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
+    MihailPayChoices        scripted_mihail_pay_choice; // one entry per trigger in resolution order
+    std::size_t             scripted_mihail_trigger_ordinal = 0;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.
@@ -1479,6 +1485,12 @@ struct GameState
     // each trigger reads ordinal 0 and shifts the rest down; MTG_LACKEY_PIN_FOLD spends whatever is left at
     // the end of combat damage.
     int                      scripted_cheat_choice = -1;
+    // Wanderwine Prophets: one resolution-time sacrifice rank per combat-damage
+    // trigger this turn. -2 declines, -1 uses the front legal Merfolk; nonnegative
+    // ranks select a legal permanent after earlier triggers have resolved.
+    std::vector<int>          scripted_prophets_sac;
+    int                       scripted_prophets_sac_cursor = 0;
+    bool                      deck_has_prophets = false;
     // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
     // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the
     // ranked default (FlingVictimCandidates' front). Same state-pin shape as

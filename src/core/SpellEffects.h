@@ -12,6 +12,7 @@
 #include "EnvFlags.h"
 #include "GameSetup.h"                 // OpponentHeads(): 2HG second-face targeting + "each opponent"
 #include "GameState.h"
+#include "CreatureTypeCatalog.h"
 #include "HandEntry.h"                 // EnterHand: THE choke point every hand entry routes through
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
@@ -2434,6 +2435,28 @@ inline bool LibraryTopVisible(const GameState& s)
     return false;
 }
 
+inline bool MayCastTopMerfolk(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.cast_merfolk_from_library_top) { return true; }
+    }
+    return false;
+}
+
+inline int PlayableTopMerfolkNumber(const GameState& s)
+{
+    if (!MayCastTopMerfolk(s) || s.ActivePlayer().library.empty()) { return 0; }
+    const Card& top = s.ActivePlayer().library.front();
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+    if (!d || d->card.IsLand()) { return 0; }
+    for (const std::string& sub : d->card.m_subtypes)
+    { if (sub == "Merfolk") { return top.m_number; } }
+    return 0;
+}
+
 // THE SAMPLED UNSEEN FUTURE (the non-clairvoyant search, honest labels, the blind search; 2026-11-11, queue 5c):
 // re-randomise only what the active player does NOT know. Library::ShuffleUnseen keeps the cards he placed
 // (put-backs, keep-on-top, the placed bottom block); a top shown by a continuous reveal (Courser of Kruphix,
@@ -2442,7 +2465,7 @@ inline bool LibraryTopVisible(const GameState& s)
 inline void NoteVisibleLibraryTop(GameState& s)
 {
     Library& lib = s.ActivePlayer().library;
-    if (!lib.empty() && LibraryTopVisible(s)) { lib.NoteKnownAt(0); }
+    if (!lib.empty() && (LibraryTopVisible(s) || MayCastTopMerfolk(s))) { lib.NoteKnownAt(0); }
 }
 inline void ShuffleUnseenFuture(GameState& s, uint64_t seed)
 {
@@ -6205,6 +6228,7 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
     }
 }
 
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
@@ -6369,6 +6393,28 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             }
             if (subtype_match)
             {
+                if (def->params.cast_subtype_pay_token_cost)
+                {
+                    // Mihail says "you cast": an opponent's spell never earns this trigger.
+                    if (p.controller_index != active) { continue; }
+                    const ManaCost& cost = *def->params.cast_subtype_pay_token_cost;
+                    const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
+                    bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
+                    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+                    {
+                        GameState probe = state;
+                        if (!TapForCostDirect(probe, cost, false)) { pay = false; }
+                        else
+                        {
+                            const std::vector<Card> examined{cast_def.card};
+                            const std::vector<int> legal{0};
+                            pay = (*g_play_dig_chooser)(state, active,
+                                def->card.m_name.str() + " (Merfolk cast pay {1})",
+                                examined, legal, pay ? 0 : -1) == 0;
+                        }
+                    }
+                    if (!pay || !TapForCostDirect(state, cost, false)) { continue; }
+                }
                 to_create.push_back({def->params.cast_trigger_creates_tokens,
                                      def->params.cast_token_power,
                                      def->params.cast_token_toughness,
@@ -9150,6 +9196,7 @@ inline TokenProto BuildTokenProto(int                              power,
         // first token spec in cards.json to carry it, so every existing token is byte-identical.
         else if (kw == "Lifelink")  { token.card.AddKeyword(Keyword::Lifelink); }
         else if (kw == "Deathtouch") { token.card.AddKeyword(Keyword::Deathtouch); }
+        else if (kw == "Hexproof") { token.card.AddKeyword(Keyword::Hexproof); }
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
@@ -9236,6 +9283,62 @@ inline void CreateToken(
     // The card is identical for all 2^N replicas -- build it once (see TokenProto).
     const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
     for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller_index, proto); }
+}
+
+// Deeproot Pilgrimage watches a TAP EVENT, not each Merfolk in that event. Call
+// once after the participating permanents have become tapped; attacks are one
+// event while each mana ability and each {T} activation is its own event. The
+// caller determines whether at least one *untapped*, nontoken Merfolk changed
+// state, so the token itself can never recursively trigger this watcher.
+inline bool PilgrimageTapSource(const Permanent& p, int controller)
+{
+    return p.controller_index == controller && !p.tapped && !p.is_token
+        && (p.card.IsCreature() || p.is_animated)
+        && (p.AnimatedAllTypes() || CardHasSubtype(p.card, "Merfolk"));
+}
+
+inline int DeeprootPilgrimageCount(const GameState& state, int controller)
+{
+    if (!state.deck_has_deeproot_pilgrimage) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_name == "Deeproot Pilgrimage") { ++n; } }
+    return n;
+}
+
+inline void ResolveDeeprootPilgrimageTap(GameState& state, int controller)
+{
+    const int n = DeeprootPilgrimageCount(state, controller);
+    for (int i = 0; i < n; ++i)
+    { CreateToken(state, controller, 1, 1, {"Merfolk"}, "U", {"Hexproof"}); }
+}
+
+// A spell payment can try and roll back several tap allocations before it
+// commits one. Compare the final board with the pre-payment untapped Merfolk
+// set, then resolve one trigger per mana ability only after the full payment.
+inline std::vector<int> PilgrimageUntappedBeforePayment(const GameState& state, int controller)
+{
+    std::vector<int> ids;
+    if (DeeprootPilgrimageCount(state, controller) == 0) { return ids; }
+    for (const Permanent& p : state.battlefield)
+    { if (PilgrimageTapSource(p, controller)) { ids.push_back(p.card.m_number); } }
+    return ids;
+}
+
+inline void ResolvePilgrimagePaymentTaps(GameState& state, int controller,
+                                         const std::vector<int>& before)
+{
+    if (before.empty()) { return; }
+    for (int id : before)
+    {
+        bool tapped = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == id && p.controller_index == controller && p.tapped)
+            { tapped = true; break; }
+        }
+        if (tapped) { ResolveDeeprootPilgrimageTap(state, controller); }
+    }
 }
 
 // Pharika targets a physical creature card in either graveyard. The token belongs
@@ -10634,10 +10737,27 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     {
         const Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
-        if (ed && ChoosesCreatureTypeOnEnter(ed->params))
+        if (ed && ChoosesCreatureTypeOnEnter(ed->params)
+            && e.chosen_subtype_id == SubtypeRegistry::kNone)
         {
-            const uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+            uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
                 state, e.controller_index, *ed);
+            if (g_play_etb_type_chooser && !g_tap_speculating)
+            {
+                std::vector<std::string> menu;
+                menu.reserve(kCreatureTypeCatalog.size());
+                int default_index = 0;
+                for (std::string_view type : kCreatureTypeCatalog)
+                {
+                    if (SubtypeRegistry::Instance().Id(type) == chosen)
+                    { default_index = static_cast<int>(menu.size()); }
+                    menu.emplace_back(type);
+                }
+                const int picked = (*g_play_etb_type_chooser)(
+                    state, e.controller_index, ed->card.m_name.str(), menu, default_index);
+                if (picked >= 0 && picked < static_cast<int>(menu.size()))
+                { chosen = SubtypeRegistry::Instance().Id(menu[static_cast<std::size_t>(picked)]); }
+            }
             state.battlefield[entered_index].chosen_subtype_id = chosen;
             // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
             // its other types." Written onto the BATTLEFIELD permanent's own Card copy (layer 4),
@@ -12005,6 +12125,28 @@ inline std::vector<int> VoraciousFightTargets(const GameState& state, int contro
 
 // The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
+inline thread_local const std::vector<int>* g_prophets_champion_pins = nullptr;
+inline thread_local int g_prophets_champion_cursor = 0;
+inline thread_local std::vector<int> g_prophets_active_champion_entries;
+struct ScriptedProphetsChampion
+{
+    const std::vector<int>* saved;
+    int saved_cursor;
+    explicit ScriptedProphetsChampion(const std::vector<int>& pins)
+        : saved(g_prophets_champion_pins), saved_cursor(g_prophets_champion_cursor)
+    { g_prophets_champion_pins = pins.empty() ? nullptr : &pins; g_prophets_champion_cursor = 0; }
+    ~ScriptedProphetsChampion()
+    { g_prophets_champion_pins = saved; g_prophets_champion_cursor = saved_cursor; }
+};
+inline int ConsumeProphetsChampionPin()
+{
+    const int ordinal = g_prophets_champion_cursor++;
+    return g_prophets_champion_pins != nullptr
+        && ordinal < static_cast<int>(g_prophets_champion_pins->size())
+        ? (*g_prophets_champion_pins)[static_cast<std::size_t>(ordinal)]
+        : g_prophets_champion_pins != nullptr ? -2 : -1;
+}
+inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
                                    const std::string& chosen_tutor, int etb_kx)
 {
@@ -12017,6 +12159,18 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    if (p.champion_merfolk)
+    {
+        const int self_number = state.battlefield[entered_index].card.m_number;
+        ResolveMerfolkChampion(state, controller, entered_index);
+        // Exiling an earlier permanent shifts the saved slot. Re-find the
+        // entrant by its copy ID before the other ETBs read it.
+        entered_index = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == self_number) { entered_index = i; break; } }
+        if (entered_index < 0) { return; }
+    }
 
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." Derived at
     // ENTRY (here, the shared own-ETB site every enter route reaches -- cast, Vial put, a graveyard
@@ -13426,9 +13580,44 @@ inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int contro
 // watcher family in BOTH directions: it fires on ANY leave (death, sacrifice-as-cost, the exile
 // half of a Felidar flicker), and it is the LEFT card's own ability, not another permanent's
 // watch. Called from OnCreatureDies (every death site funnels there) and from ApplyBlink.
+// Champion links use a separate exile marker from Brutal Cathar's opponent-only
+// return. The low bit records the exiled card's owner; the remaining bits carry
+// the champion's copy ID. Tokens never receive this marker because they cease
+// to exist after exile.
+constexpr int kMerfolkChampionExileBase = -0x20000000;
+inline bool IsMerfolkChampionExile(const Card& c)
+{ return !c.m_is_staged && c.m_staged_expiry <= kMerfolkChampionExileBase
+         && c.m_staged_expiry > kMerfolkChampionExileBase - 0x08000000; }
+inline int MerfolkChampionSource(const Card& c)
+{ return (kMerfolkChampionExileBase - c.m_staged_expiry) / 2; }
+inline int MerfolkChampionOwner(const Card& c)
+{ return (kMerfolkChampionExileBase - c.m_staged_expiry) & 1; }
+inline void ReturnMerfolkChampion(GameState& state, int source_number)
+{
+    std::vector<std::pair<Card, int>> returning;
+    for (std::size_t i = 0; i < state.exile.size(); )
+    {
+        if (!IsMerfolkChampionExile(state.exile[i])
+            || MerfolkChampionSource(state.exile[i]) != source_number) { ++i; continue; }
+        const int owner = MerfolkChampionOwner(state.exile[i]);
+        Card back = state.exile[i];
+        back.m_staged_expiry = 0;
+        state.exile.erase(state.exile.begin() + static_cast<long>(i));
+        returning.emplace_back(std::move(back), owner);
+    }
+    // Returning a Prophets can immediately exile another card under a new
+    // instance of this same physical card. This leaves trigger must return only
+    // the cards linked when it began resolving.
+    for (const auto& [back, owner] : returning)
+    {
+        PutCardOntoBattlefield(state, owner, back, "Wanderwine Prophets");
+    }
+}
+
 inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, const Card& left)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
+    if (d && d->params.champion_merfolk) { ReturnMerfolkChampion(state, left.m_number); }
     // Brutal Cathar // Moonrage Brute (either face): "until this creature leaves the battlefield"
     // ends NOW (CR 610.3) -- the linked card returns at the leave, not at the next day/night turn
     // boundary (which stays as the backstop sweep for leave paths that bypass this hook). And a
@@ -17184,6 +17373,103 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
     // A sacrificed LORD drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
     if (LordLeaveSbaOn() && CardIsLord(dead)) { SweepZeroToughnessSba(state); }
+}
+
+inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index)
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const int self = state.battlefield[entered_index].card.m_number;
+    const bool repeated_unpinned_entry = g_prophets_champion_pins == nullptr
+        && g_play_flicker_chooser == nullptr
+        && std::find(g_prophets_active_champion_entries.begin(),
+                     g_prophets_active_champion_entries.end(), self)
+            != g_prophets_active_champion_entries.end();
+    g_prophets_active_champion_entries.push_back(self);
+    struct PopChampionEntry
+    {
+        ~PopChampionEntry() { g_prophets_active_champion_entries.pop_back(); }
+    } pop_entry;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index == controller && q.card.m_number != self
+            && q.card.IsCreature()
+            && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk")))
+        { legal.push_back(i); }
+    }
+    // A player may decline champion even with a legal Merfolk. The searched
+    // pin and human chooser override this front option at resolution.
+    const int pin = ConsumeProphetsChampionPin();
+    // A speculative unpinned first-victim walk can cycle through returned
+    // Prophets forever. Decline when that same physical source re-enters its
+    // own unresolved chain; searched pins and human choices remain available.
+    int choice = legal.empty() || repeated_unpinned_entry ? -1 : (pin == -2 ? -1 : pin >= 0
+        ? std::min(pin, static_cast<int>(legal.size()) - 1) : 0);
+    if (g_play_flicker_chooser != nullptr && !legal.empty())
+    { choice = (*g_play_flicker_chooser)(state, controller, "Wanderwine Prophets champion", legal, choice); }
+    if (choice < 0 || choice >= static_cast<int>(legal.size()))
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == self) { SacrificePermanentAt(state, controller, i); break; } }
+        return;
+    }
+    const int victim_index = legal[static_cast<std::size_t>(choice)];
+    const Permanent victim = state.battlefield[victim_index];
+    const int victim_number = victim.card.m_number;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to == victim_number) { q.equipped_to = 0; }
+        if (q.aura_attached_to == victim_number) { q.aura_attached_to = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + victim_index);
+    if (!victim.is_token)
+    {
+        Card exiled = victim.card;
+        exiled.m_staged_expiry = kMerfolkChampionExileBase
+            - (2 * self + victim.owner_index);
+        state.exile.push_back(exiled);
+        for (Permanent& q : state.battlefield)
+        { if (q.card.m_number == self) { q.linked_exile_number = victim_number; break; } }
+    }
+    // The champion exile finishes before the exiled permanent's leaves trigger
+    // resolves. A returning Prophets may champion this entrant and must find its
+    // newly linked card in exile when the entrant leaves.
+    FireLeavesBattlefieldTriggers(state, victim.controller_index, victim.card);
+}
+
+// One trigger for each Prophets combat-damage event, including each strike of
+// double strike. The connector IDs are captured at damage assignment, so a
+// sacrifice made by an earlier trigger cannot erase a later trigger already
+// placed on the stack.
+inline void ResolveProphetsCombatDamage(GameState& state, int controller,
+                                         const std::vector<int>& connector_ids)
+{
+    for (int source_id : connector_ids)
+    {
+        (void)source_id; // the trigger survives even if a previous trigger sacrificed its source
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == controller && q.card.IsCreature()
+                && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk")))
+            { legal.push_back(i); }
+        }
+        int pick = legal.empty() ? -2 : 0;
+        if (state.scripted_prophets_sac_cursor < static_cast<int>(state.scripted_prophets_sac.size()))
+        {
+            const int pin = state.scripted_prophets_sac[
+                static_cast<std::size_t>(state.scripted_prophets_sac_cursor)];
+            if (pin == -2 || pin >= 0) { pick = pin; }
+        }
+        ++state.scripted_prophets_sac_cursor;
+        if (g_play_fling_chooser != nullptr && !legal.empty())
+        { pick = (*g_play_fling_chooser)(state, controller, "Wanderwine Prophets", legal, pick); }
+        if (pick < 0 || pick >= static_cast<int>(legal.size())) { continue; }
+        SacrificePermanentAt(state, controller, legal[static_cast<std::size_t>(pick)]);
+        state.QueueExtraTurn(controller);
+    }
 }
 
 // ---- PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile a red card from your hand") ----
@@ -29890,8 +30176,7 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 // "{2}, {T}: Choose a color. Add an amount of mana of that color equal to the number of creatures
 // you control of the chosen type." Modelled as an activated mana ability that pays a generic feeder
 // ({2}) + taps the land, then adds N mana of a SEARCH-CHOSEN single colour where N = creatures you
-// control. The chosen creature TYPE is simplified to "any creature you control" (Cavern of Souls
-// precedent for single-tribe decks). The basic "{T}: Add {C}" mode lives in `produces` (handled by
+// control of the type chosen as this copy entered. The basic "{T}: Add {C}" mode lives in `produces` (handled by
 // the normal source path). A card is a scaled-mana land iff it declares a subtype AND a positive
 // feeder cost; empty subtype -> not a scaled land, so every non-Three-Tree deck stays byte-identical.
 inline bool IsScaledManaLand(const CardDefinition& def)
@@ -29900,14 +30185,38 @@ inline bool IsScaledManaLand(const CardDefinition& def)
         && def.params.mana_per_creature_feeder_generic > 0;
 }
 
-// N = creatures the active player controls (simplified any-creature count -- the chosen TYPE is
-// collapsed to "any creature" per the analysis-goblins spec). This is the raw yield of one scaled tap.
-inline int ScaledManaCreatureCount(const GameState& state)
+// N = creatures the active player controls of this source's chosen type. This is the raw yield of
+// one scaled tap; a source pointer is required when multiple copies chose different types.
+inline int ScaledManaCreatureCount(const GameState& state, const Permanent* source = nullptr)
 {
     const int active = state.active_player_index;
+    uint16_t chosen = source ? source->chosen_subtype_id : SubtypeRegistry::kNone;
+    if (chosen == SubtypeRegistry::kNone && source)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source->card);
+        if (d && IsScaledManaLand(*d))
+        { chosen = SubtypeRegistry::Instance().Id(d->params.mana_per_creature_subtype); }
+    }
+    if (chosen == SubtypeRegistry::kNone)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (p.controller_index == active && d && IsScaledManaLand(*d))
+            {
+                chosen = p.chosen_subtype_id != SubtypeRegistry::kNone ? p.chosen_subtype_id
+                       : SubtypeRegistry::Instance().Id(d->params.mana_per_creature_subtype);
+                break;
+            }
+        }
+    }
     int n = 0;
     for (const Permanent& p : state.battlefield)
-    { if (p.controller_index == active && p.card.IsCreature()) { ++n; } }
+    {
+        if (p.controller_index == active && p.card.IsCreature()
+            && chosen != SubtypeRegistry::kNone
+            && (p.AnimatedAllTypes() || p.card.m_subtypes.HasId(chosen))) { ++n; }
+    }
     return n;
 }
 
@@ -29948,11 +30257,12 @@ inline int ScaledManaFeederMana(const GameState& state)
 // creatures" for the {2} feeder), and the extra colourless->colour upgrade makes net-1 strictly
 // better even at the tie. Returns the net WILD mana (>= 1, colour is search-chosen) when beneficial
 // AND a {feeder}-capable feeder exists, else 0 (the source falls back to its basic {C} tap).
-inline int ScaledManaNetYield(const GameState& state, const CardDefinition& def)
+inline int ScaledManaNetYield(const GameState& state, const CardDefinition& def,
+                             const Permanent* source = nullptr)
 {
     if (!IsScaledManaLand(def)) { return 0; }
     const int feeder = def.params.mana_per_creature_feeder_generic;
-    const int net    = ScaledManaCreatureCount(state) - feeder;
+    const int net    = ScaledManaCreatureCount(state, source) - feeder;
     if (net < 1) { return 0; }                              // net <= 0 -> basic {C} is no worse
     if (ScaledManaFeederMana(state) < feeder) { return 0; } // cannot pay the {feeder} generic
     return net;
@@ -32933,6 +33243,26 @@ inline bool TapTargetPumpTargetLegal(const GameState& s, const Permanent& q, int
     return true;
 }
 
+inline bool TapTargetPumpTargetLegalFor(const GameState& s, const Permanent& q, int controller,
+                                        const CardDefinition& source)
+{
+    if (source.params.tap_target_pump_targets_land)
+    { return q.card.IsLand() && !LandHasShroud(q, s)
+          && !(q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)); }
+    return TapTargetPumpTargetLegal(s, q, controller)
+        && (source.params.tap_target_pump_requires_subtype.empty()
+            || q.AnimatedAllTypes()
+            || CardHasSubtype(q.card, source.params.tap_target_pump_requires_subtype));
+}
+
+inline bool SeahunterLibraryCandidate(const Card& card)
+{
+    if (!CardHasSubtype(card, "Merfolk")) { return false; }
+    return card.IsCreature() || card.IsLand() || card.HasType(CardType::Artifact)
+        || card.HasType(CardType::Enchantment) || card.HasType(CardType::Planeswalker)
+        || card.HasType(CardType::Battle);
+}
+
 inline bool UntapLandTargetLegal(const GameState& s, const Permanent& q, int controller)
 {
     return q.card.IsLand() && !LandHasShroud(q, s)
@@ -34309,6 +34639,23 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             }
             else if (CountSacNamed(state, controller, p.card.m_name) < n) { return false; }
         }
+        if (mode == PermAbilityMode::TapTutorPut)
+        {
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
+            if (ad == nullptr || !ad->params.tap_tutor_put_cost.has_value()) { return false; }
+            const std::string* target = g_sac_named_pin.target;
+            if (target != nullptr && *target != kTutorDeclineTarget)
+            {
+                bool found = false;
+                for (const Card& c : state.players[controller].library)
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                    if (c.m_name.str() == *target && SeahunterLibraryCandidate(cd ? cd->card : c))
+                    { found = true; break; }
+                }
+                if (!found) { return false; }
+            }
+        }
         // Kessig Wolf Run: "target creature" is chosen as the ability is activated (CR 601.2c via
         // 602.2b), so the activation is impossible without a legal target -- checked here, before the
         // {T} or the mana is paid. Pinned (the searched variant): THAT creature must still be a legal
@@ -34325,7 +34672,7 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             for (const Permanent& q : state.battlefield)
             {
                 if (want != 0 && q.card.m_number != want) { continue; }
-                if (TapTargetPumpTargetLegal(state, q, controller)) { target_ok = true; break; }
+                if (TapTargetPumpTargetLegalFor(state, q, controller, *td)) { target_ok = true; break; }
             }
             if (!target_ok) { return false; }
         }
@@ -34473,6 +34820,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapTargetPump:
         case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
         case PermAbilityMode::UntapLand:      return "untap target land";
+        case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
@@ -34595,6 +34943,14 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
         && d != nullptr && (d->params.tap_target_pump_cost.has_value()
                             || d->params.target_pump_cost.has_value()))
     {
+        if (d->params.tap_target_pump_taps_target_land) { return "tap target land"; }
+        if (d->params.tap_target_pump_sets_island) { return "target land becomes an Island until end of turn"; }
+        if (d->params.tap_target_pump_grants_unblockable)
+        { return d->params.tap_target_pump_requires_subtype.empty()
+              ? "target creature can't be blocked this turn"
+              : "target Merfolk creature can't be blocked this turn"; }
+        if (!d->params.tap_target_pump_power_per_subtype.empty())
+        { return "target creature gets -X/-0 until end of turn (X = your Merfolk and Faeries)"; }
         const bool per_x = mode == PermAbilityMode::TapTargetPump
             && d->params.tap_target_pump_cost->has_x;
         auto amt = [per_x](int n) -> std::string
@@ -35560,6 +35916,14 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             PerformTutorToBattlefield(state, controller, d->params, /*max_puts=*/1, pref, src_name);
             break;
         }
+        case PermAbilityMode::TapTutorPut:
+        {
+            std::vector<std::string> preferred;
+            if (g_sac_named_pin.target != nullptr && !g_sac_named_pin.target->empty())
+            { preferred.push_back(*g_sac_named_pin.target); }
+            PerformTutorToBattlefield(state, controller, d->params, 1, preferred, src_name);
+            break;
+        }
         case PermAbilityMode::TransformSelf:
         {
             // Bloodline Keeper: "{B}: Transform this creature." The {B} was paid by the caller under
@@ -35595,7 +35959,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
             {
                 const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (!TapTargetPumpTargetLegal(state, q, controller)) { continue; }
+                if (!TapTargetPumpTargetLegalFor(state, q, controller, *d)) { continue; }
                 if (pin.target != 0)
                 {
                     if (q.card.m_number == pin.target) { ti = i; break; }
@@ -35607,9 +35971,37 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             if (pin.target == 0 && !HumanPlayActive() && greedywindow::InWindow(0))
             { g_tap_target_pump_unpinned.fetch_add(1, std::memory_order_relaxed); }
             if (ti < 0) { break; }   // unreachable after PermAbilitySourceLive: never a phantom pump
+            if (mode == PermAbilityMode::TapTargetPump && d->params.tap_target_pump_targets_land)
+            {
+                Permanent& land = state.battlefield[static_cast<std::size_t>(ti)];
+                if (d->params.tap_target_pump_taps_target_land) { land.tapped = true; }
+                if (d->params.tap_target_pump_sets_island)
+                { land.islandize_target = land.card.m_number; }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "ability", src_name + " targets "
+                                  + land.card.m_name.str());
+                }
+                if (d->card.IsCreature() && !state.battlefield[idx].is_token
+                    && CardHasSubtype(d->card, "Merfolk"))
+                { ResolveDeeprootPilgrimageTap(state, controller); }
+                break;
+            }
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
             const int x  = (pin.x == kTapTargetPumpXAll) ? 0 : std::max(0, pin.x);
-            const int pp = TapTargetPumpPowerAt(*d, x);
+            int pp = TapTargetPumpPowerAt(*d, x);
+            if (!d->params.tap_target_pump_power_per_subtype.empty())
+            {
+                int count = 0;
+                for (const Permanent& own : state.battlefield)
+                {
+                    if (own.controller_index == controller
+                        && (own.AnimatedAllTypes()
+                            || CardHasSubtype(own.card, d->params.tap_target_pump_power_per_subtype)
+                            || CardHasSubtype(own.card, "Faerie"))) { ++count; }
+                }
+                pp *= count;
+            }
             const int pt = TapTargetPumpToughAt(*d, x);
             // Until end of turn: temp_power_bonus / temp_tough_bonus, which both cleanup sites zero
             // (CR 514.2) and the sim key folds. TRAMPLE is not applied -- structurally inert here
@@ -35625,6 +36017,10 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               + (d->params.tap_target_pump_grants_trample ? " and trample" : "")
                               + " until end of turn");
             }
+            if (mode == PermAbilityMode::TapTargetPump
+                && d->card.IsCreature() && !state.battlefield[idx].is_token
+                && CardHasSubtype(d->card, "Merfolk"))
+            { ResolveDeeprootPilgrimageTap(state, controller); }
             break;
         }
         case PermAbilityMode::UntapLand:
@@ -43654,13 +44050,13 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         return;
     }
     // Three Tree City scaled ability: "{2},{T}: add N of a chosen colour", N = creatures you control
-    // (any-creature simplification). Modelled like a ramp filter but with a {feeder}-generic feed and
+    // of the type chosen by this copy. Modelled like a ramp filter but with a {feeder}-generic feed and
     // a board-count yield: when a feeder can pay the {feeder} and the net (N - feeder) beats the basic
     // {C} tap, this source contributes that net as WILD (the colour is search-chosen). Otherwise it
     // falls through to its basic "{T}: Add {C}" produces below. Empty subtype -> never taken here.
     if (IsScaledManaLand(def))
     {
-        if (int net = ScaledManaNetYield(state, def)) { pool.wild += net; return; }
+        if (int net = ScaledManaNetYield(state, def, perm)) { pool.wild += net; return; }
     }
     // Untap-land burst (Wirewood Lodge): one tap is worth (best scaled-Elf yield - 1) of the feed
     // colour when a live 2+ target exists (see UntapBurstBestYield's net-cancellation model). That
@@ -47744,6 +48140,12 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     { perm.charge_counters = def.params.enters_with_mana_counters
                            << DoublerShift(state, perm.controller_index, /*for_tokens=*/false); }
     state.battlefield.push_back(perm);
+    // Ordinary land entry does not otherwise visit the universal watcher cascade.
+    // A chosen creature type is an as-enters choice, so resolve it before scry,
+    // landfall, or any later trigger can inspect this land.
+    if (ChoosesCreatureTypeOnEnter(def.params))
+    { FireEtbWatchers(state, state.active_player_index,
+                      static_cast<int>(state.battlefield.size()) - 1, false); }
     // The landfall HISTORY bit, set HERE and not only in OnLandEntered, because a put with
     // fire_landfall=false (Genesis Wave's simultaneous batch) reaches OnLandEntered only when a landfall
     // watcher exists -- the Wave's legacy order never calls it -- and the condition must see the entry
@@ -49592,7 +49994,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     int b = SourceMaxNet(pp, dd);
     // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
     if (IsScaledManaLand(dd))
-    { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+    { b = std::max(b, ScaledManaCreatureCount(state, &pp) - dd.params.mana_per_creature_feeder_generic); }
     // Scaled DORK (Priest of Titania / Elvish Archdruid): the static bound reads 1; the real one-tap
     // yield is the live subtype count.
     if (IsScaledManaDork(dd))
@@ -49662,7 +50064,7 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
     amt = SourceMaxNetLive(state, pp, dd, nullptr, reserved_mask);
     if (dd.params.is_filter)    { amt = std::max(amt, 2); }
     if (dd.params.ramp_filter || dd.params.any_color_filter) { amt = std::max(amt, 1); }
-    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state)); }
+    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state, &pp)); }
     if (dd.params.untap_creature_cost.has_value())
     {
         amt = std::max(amt, UntapBurstBestYield(state, pp.controller_index, dd,

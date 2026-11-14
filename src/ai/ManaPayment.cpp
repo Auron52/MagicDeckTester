@@ -4542,7 +4542,9 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
                 // The chosen type (Incubator) or the printed one (Warchief/Dragonspeaker).
                 const uint16_t rs = ReducerSubtypeId(*pd, p);
                 // Per-reducer step: Warchief 1, Dragonspeaker/Incubator 2 ("cost {2} less").
-                if (def.card.m_subtypes.HasId(rs))
+                if (def.card.m_subtypes.HasId(rs)
+                    || (!pp.reduces_spell_subtype_also.empty()
+                        && CardHasSubtype(def.card, pp.reduces_spell_subtype_also)))
                 { generic_reduction += std::max(1, pp.reduces_spell_subtype_amount); }
             }
             // (3) Ragemonger-style SUBTYPE COLOURED cost reduction: "Minotaur spells you cast cost
@@ -9811,9 +9813,20 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 }
 } // namespace
 
+static thread_local int t_pilgrimage_pay_depth = 0;
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    // Record the committed mana-ability taps only after the full payment has
+    // succeeded. The payer tries and rolls back alternate allocations; creating
+    // tokens inside TapSourceIntoFloat or the backtracker would turn trial taps
+    // into real triggers and invalidate their battlefield references.
+    const bool outer_pilgrimage_pay = t_pilgrimage_pay_depth++ == 0;
+    const int pilgrimage_controller = state.active_player_index;
+    const std::vector<int> pilgrimage_before = outer_pilgrimage_pay
+        ? PilgrimageUntappedBeforePayment(state, pilgrimage_controller) : std::vector<int>{};
+    const bool paid = [&]() -> bool {
     // Outermost payments only: a nested payment, a refine probe, the oracle's float-only pass and its own
     // scripted copy each pay as they always have (they never see a crack the outer payment did not make).
     if (!state.deck_has_ondemand_sac || t_pay_nest != 0 || t_pay_refining || manaoracle::t_float_only
@@ -10004,6 +10017,11 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco);
     }
     return false;
+    }();
+    --t_pilgrimage_pay_depth;
+    if (paid && outer_pilgrimage_pay)
+    { ResolvePilgrimagePaymentTaps(state, pilgrimage_controller, pilgrimage_before); }
+    return paid;
 }
 
 // MANA ORACLE -- one scripted payment on the oracle's own copy (ManaOracle.h). The script entry's taps
@@ -11425,7 +11443,7 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     // filter. Offered only while N >= 1, as the backtracker requires: N = 0 pays {2} for nothing.
     if (IsScaledManaLand(*def))
     {
-        const int n = ScaledManaCreatureCount(state);
+        const int n = ScaledManaCreatureCount(state, &p);
         if (n >= 1)
         {
             o.feed = "{" + std::to_string(q.mana_per_creature_feeder_generic) + "}";
@@ -11657,6 +11675,7 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
     const std::vector<int>* aura_pick = t.aura_colors.empty() ? nullptr : &t.aura_colors;
     // Captured now: a sacrifice erases the permanent, and `found` with it.
     const int found_num = found->card.m_number;
+    const bool pilgrimage_source = PilgrimageTapSource(*found, active);
     using Route = HumanPreTapOffer::Route;
     if (fed_face)
     {
@@ -11691,7 +11710,7 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
                           + offer.feed + " first");
         }
         // N for a scaled land, read BEFORE the tap (tapping a land changes no creature count).
-        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state) : 0;
+        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state, found) : 0;
         TapConversionSource(state, *found);
         if (scaled_n > 0) { state.floating_mana.Add(static_cast<Color>(t.color), scaled_n); }
         else if (combo)   { for (int c : t.combo) { state.floating_mana.Add(static_cast<Color>(c), 1); } }
@@ -11728,6 +11747,10 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
         TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
                            state.floating_mana, /*available=*/nullptr, /*for_creature=*/false, aura_pick);
     }
+    // A manual mana activation is a complete, separate tap event. Its trigger
+    // resolves now, after the selected ability has finished making its mana.
+    if (pilgrimage_source && t_pilgrimage_pay_depth == 0)
+    { ResolveDeeprootPilgrimageTap(state, active); }
     if (tracing)
     {
         const ManaPool& f = state.floating_mana;

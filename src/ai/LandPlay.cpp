@@ -170,6 +170,11 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     { perm.charge_counters = fdef.params.enters_with_mana_counters
                            << DoublerShift(state, perm.controller_index, /*for_tokens=*/false); }
     state.battlefield.push_back(perm);
+    // Land drops bypass FireEtbWatchers. Three Tree City's as-enters type
+    // choice still needs the same human chooser and per-copy stored subtype.
+    if (ChoosesCreatureTypeOnEnter(fdef.params))
+    { FireEtbWatchers(state, state.active_player_index,
+                      static_cast<int>(state.battlefield.size()) - 1, false); }
     // ASCEND (Ocelot Pride): a land drop raises the permanent count, and land drops deliberately do
     // NOT route through FireEtbWatchers (see the snow-watcher note below), so the city's-blessing
     // state trigger is checked here too. Placed on the RISE -- before the ETBs below -- so a Karoo

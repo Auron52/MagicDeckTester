@@ -393,6 +393,8 @@ void GameEngine::UntapStep(GameState& state)
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.scripted_prophets_sac.clear();
+    state.scripted_prophets_sac_cursor = 0;
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)
@@ -408,6 +410,8 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
+    state.scripted_mihail_pay_choice.Clear();
+    state.scripted_mihail_trigger_ordinal = 0;
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
@@ -1471,6 +1475,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
         p.temp_indestructible   = false;
+        if (p.islandize_target == p.card.m_number) { p.islandize_target = 0; }
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it
     }

@@ -1282,7 +1282,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && (d->params.cast_trigger_extra_turns > 0
-                      || d->params.extra_turns_on_resolve > 0)) { return true; }
+                      || d->params.extra_turns_on_resolve > 0
+                      || d->params.combat_damage_sac_merfolk_extra_turn)) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_prophets = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.champion_merfolk) { return true; }
         }
         return false;
     }();
@@ -1291,6 +1300,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && d->params.miracle_cost.has_value()) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_deeproot_pilgrimage = [&deck]{
+        for (const auto* zone : {&deck.mainboard, &deck.sideboard})
+        {
+            for (const Card& c : *zone)
+            { if (c.m_name == "Deeproot Pilgrimage") { return true; } }
         }
         return false;
     }();
@@ -1687,7 +1704,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.land_tap_bonus > 0)          { land_aura = true; land_tap_bonus = true; }
-                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island) { islandize = true; }
+                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island
+                    || d->params.tap_target_pump_sets_island) { islandize = true; }
                 if (d->params.chosen_color_pump_power != 0
                     || d->params.chosen_color_pump_tough != 0) { chosen_color_pump = true; }
                 // Horn watches the land PLAY, so casting it before the drop is
