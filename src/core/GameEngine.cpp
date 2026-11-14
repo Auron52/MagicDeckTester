@@ -354,6 +354,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // provider's front). Lockstep twin: SimulateEndAndStartNextTurn's opponent_turn. Deck-gated.
         PerformEndStepSelfSacrifices(state);
         PerformOpponentEndStepFaceUp(state);
+        opponentdeck::EndOfTurnCleanup(state);
         DayNightTurnBoundary(state);
     };
     while (state.NextExtraTurnIsOpponent() && !state.opponent_decked)

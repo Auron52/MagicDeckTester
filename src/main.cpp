@@ -1850,6 +1850,28 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     if (s.opponent_library_dealt)
     {
         os << ", \"library_size\": " << s.players[opp].library.size();
+        os << ", \"hand_size\": " << s.players[opp].hand.size();
+        std::vector<std::string> opp_gy;
+        for (const Card& c : s.players[opp].graveyard) { opp_gy.push_back(c.m_name.str()); }
+        std::sort(opp_gy.begin(), opp_gy.end());
+        os << ", \"graveyard\": "; JsonNameArray(os, opp_gy);
+        if (std::string(ResolveProvider(s).Name()) == "Mill")
+        {
+            std::vector<std::string> opp_exile;
+            for (const Card& c : s.exile)
+            { if (c.m_number >= opponentdeck::kNumberBase) { opp_exile.push_back(c.m_name.str()); } }
+            std::sort(opp_exile.begin(), opp_exile.end());
+            os << ", \"exile\": "; JsonNameArray(os, opp_exile);
+            const opponentdeck::DeckSpec& deck = opponentdeck::Selected(s.game_seed);
+            os << ", \"starting_deck\": { \"name\": "; JsonStr(os, deck.name);
+            os << ", \"slot\": " << (s.game_seed % opponentdeck::Pool().size()) << ", \"cards\": [";
+            for (size_t i = 0; i < deck.cards.size(); ++i)
+            {
+                if (i) { os << ", "; }
+                os << '['; JsonStr(os, deck.cards[i].first); os << ", " << deck.cards[i].second << ']';
+            }
+            os << "] }";
+        }
         if (s.opponent_decked) { os << ", \"decked\": true"; }
     }
     os << " },\n";

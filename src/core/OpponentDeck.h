@@ -137,6 +137,20 @@ inline void EndOfTurnDraw(GameState& state)
     if (state.deck_has_draw_cap) { ++opp.cards_drawn_this_turn; }
 }
 
+// The passive opponent's cleanup, after all of its notional draws and end-step effects.
+// It makes no discard decisions: repeatedly move the first card in hand to its graveyard.
+// Keeping this separate from EndOfTurnDraw also covers extra draws such as Howling Mine.
+inline void EndOfTurnCleanup(GameState& state)
+{
+    if (!state.opponent_library_dealt || state.opponent_decked) { return; }
+    Player& opp = state.players[1];
+    while (opp.hand.size() > 7)
+    {
+        opp.graveyard.push_back(opp.hand.front());
+        opp.hand.erase(opp.hand.begin());
+    }
+}
+
 // THE mill / exile-from-library primitive: take `n` cards off the top of the opponent's library
 // into the shared exile zone (CR 406.1). Returns the number actually taken.
 //

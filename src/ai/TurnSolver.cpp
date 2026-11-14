@@ -77565,6 +77565,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
         PerformOpponentEndStepFaceUp(state);
+        opponentdeck::EndOfTurnCleanup(state);
         DayNightTurnBoundary(state);
         return true;
     };
