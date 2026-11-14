@@ -1438,3 +1438,21 @@ fungus 1,880, gods 4,300 (first run).
   of the USER's "after if mana allows, before if not" Ritual rule. Unrooted (listed, not diagnosed): s30050028 T7 Lotus
   Bloom left untapped with an Intent dropped; "lost action not declared" drops (s30050302 x14, s30051054, s30052752,
   s30050049); need-later colour commit (s30050825 / s30052035, parked behind floatseq). Next block 60000-64999.
+* **Queue item D rounds 3-4 (2026-11-14): shadowborn_apostle 44 (55000-59999) -> 9 (60000-64999) (4d61483ac lever + oracle;
+  GT f0fbe75fc; local).** MTG_ONDEMAND_KEEP_COLOUR (heurarm, default ON; ManaPayment.cpp TapForCostShared): with an
+  on-demand LAND crack (Lake of the Dead) the ordinary held payment is skipped when it would leave a coloured pip of the
+  line's rest with no source; the plain/crack ladder and tap-first pins run under the same no-strand test (Shadowborn only).
+  Oracle only: a ripple-rotated library counts its missing cards as hidden (ENUM-GAP -> HIDDEN-INFO), and an order that
+  pays only off a hidden card is HIDDEN-INFO. Units 3068/3068, scenarios 530/530. Smoke: only shadowborn d0 s1001 moved
+  (1 d0 game faster, lever=0 reproduces the old digest); regression 322/322 unchanged; check_gt_logs clean (1170).
+  Held-out A/B (seed 89200000, 3000/arm, lever off vs on, logs/mana-clean-chain/itemD3/ab_report.txt): shadowborn d5b20
+  net 0, d3b10 -1, 2HG d3b10 0; searched slower 0. Gate sb-D3-20261114 (PGO f1872334858c, oracle-off byte-identical):
+  9 issues (ENUM-GAP 2, APPLY-DROP 5 / 4 sigs, APPLY-DROP-ORDER 2, ORACLE-GAP 0), report
+  logs/mana_clean/sb-D3-20261114/report.md: x3 s30064104 T4 m1 {Intent (+Apostle act)} drops Sire (Lotus {B} vs Blood
+  Crypt {R}); s30060524 T4 Intent x2 drops Culling; s30062510 T6 Culling+Sire+Profane depth-2 rollback; ADO x2
+  s30061517 T4 {Lake + Apostle + Culling + Stone + Intent}; ENUM-GAP s30061713 T5, s30062801 T4. Census: need_later 4,
+  reorder 2, off-menu 2, depth3+ 4. **PARKED (round 3, not fixed):** need-later across the Diabolic Intent tutor
+  breakpoint (sb-D2 s30055052 x12 / s30057046 x6: the post-tutor continuation needs the colour the pre-breakpoint
+  payment spent; no payment rule can see it, needs a SEARCHED Lotus early-crack colour pin = floatseq class); ENUM-GAP
+  s30059630 (Ritual paid before Intent's shuffle, truly hidden). Culling victim fallback stays a USER DECISION
+  (round 1). Next block 65000-69999.
