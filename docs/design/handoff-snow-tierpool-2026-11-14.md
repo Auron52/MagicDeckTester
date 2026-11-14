@@ -58,3 +58,15 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
 - **Owed, suite:** Morph's overnight rows are still the ENTRY set (d5 4x300 is under the 425 floor). Resize them at the next periodic overnight, with the table hidden for the resize accept. Martyr's rows look the same but were not checked.
 - **Stale cost entry:** `test/suite_cost.json` still says Morph is 1.72x Hinata (measured before the keep table). It is about 0.46x now, measured in the same run as Hinata. Refill it with `suite_gate.py --measure-all`.
 - **Owed:** a Morph claude-play sweep, because play changed after INT-8..17. Morph's value leaf is on HOLD until the weekend (USER).
+
+## 5. Other outstanding items
+
+- **Snow, unfixed:** the 3 continuation re-plans (class CONT: g30 T4, g42 T3, g120 T5). They need tie-aware continuation choices; see the ledger `docs/design/snow-continuation-pay.md`. The selesnyav2/edf producer-cast shortfalls belong to the mana agent's session.
+- **Worktree cleanup, ONLY when the USER asks.** Candidates once their work is on origin:
+  - misc-config, morph, morph-dblprobe, morph-dblsplit, morph-exalted, morph-histfix, morph-integ, morph-merge, morph-payer, morph-viewer
+  - tier-pool-old (the detached baseline for the timing A/B)
+  - snow-contpay and tier-pool, after they land
+  - Run `python3 scripts/check_references_safe.py` first, then `scripts/safe_worktree_remove.sh <path>`. Show the dry-run list (`scripts/worktree_audit.py`) before removing.
+- **Not ours, do not touch:**
+  - The primary checkout (`/workspaces/MagicDeckTester2`, branch `morph-integ`) has uncommitted edits belonging to the artifact-queue session: CLAUDE.md, the `artifact-staleness-queue.md` / `cross-decision-tree-reuse.md` docs, `test/ref_bench.json`, a deleted `logs/.gitkeep`, and the untracked `scripts/artifact_queue.*` and `docs/design/artifact-queue-for-agents.md`. The artifact queue itself is PAUSED by the USER (11-11).
+  - The mana items A and I(2) from the overnight are with the mana agent (`docs/design/handoff-mana-overnight-2026-11-14.md`).
