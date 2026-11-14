@@ -21,13 +21,15 @@ fallback passed its smoke row; a VPC sample recorded zero stateless
 fallbacks in 1,339 interactive steps; and the simulated no-FIFO fallback
 passed its smoke row (544 scenarios, three game jobs). These results are in
 `build/scratch/tier-pool/` in the primary checkout.
+The pooled harness and corrected backstop comment were committed as
+`03ac480d5` and pushed to `origin/phase-1-2-deck-analyzer`.
 
 Cyclone backstop decision: **keep the fixed 30031..30033 block**. Seed 30033
 now hits the two-million-unit cap, which is exactly the regression signal
 specified by `.claude/skills/regression-testing.md`; re-screening would hide it.
 The stale `test/regression_cases.sh` comment was corrected.
 
-## 1. Snow package (branch `snow-contpay`, worktree `.claude/worktrees/snow-contpay`, LOCAL, not pushed)
+## 1. Snow package (historical pre-landing snapshot; current status above)
 
 - **Branch state:** rebased onto origin `bca756347` at 10:2x UTC. It carries 10 commits ending at `6ad20e507`. The pre-rebase backup is branch `backup/snow-contpay-pre-rebase`.
 - **What it contains:**
@@ -59,7 +61,7 @@ The stale `test/regression_cases.sh` comment was corrected.
 - **Smoke result (11:30 UTC): 7 cases changed, none slower; Jumbo d0 has one game faster.** Besides the 3 Snow rows, play moved in `pd_smoke_d5` (gi33, still a loss), `edf_smoke_d0` (gi551, opponent 1 life higher at T5, same T6 win), and in `jumbo_smoke_d0` and `lhc_smoke_d0`. A single-game run with each flag off shows `MTG_REPEAT_EXTRAS_RESERVE` causes the PD and EDF changes; the other two flags change neither game. That reserve is generic: it applies to any {T}-less K-repeat activation (for example PD's Pyrohemia), so this is a play change reaching other decks, not a leak. The earlier held-out A/B (section 5.1) covered Snow, Selesnya v2 d6, EDF d5 and Kithkin d6, but not the d0 rows or PD. **Before accepting:** run ONE pooled held-out A/B over every deck the smoke and regression tiers moved, package off vs default. Every deck must be net <= 0. Data: `build/scratch/snowcp/mv/`. Both branches are also on origin as `wip/snow-contpay` and `wip/tier-pool`.
 - **After landing:** the `MTG_RESCUE_TAP_SOURCE` re-test goes to the MANA agent (below).
 
-## 2. Tier pooling harness (branch `tier-pool`, worktree `.claude/worktrees/tier-pool`; backed up on origin as `wip/tier-pool`)
+## 2. Tier pooling harness (historical pre-landing snapshot; current status above)
 
 - **Commits:**
   - `f9dc6404d`: WIP. Jobserver tokens, a persistent `--interactive` replay child per reference, xargs-parallel scenarios, VPC beside the batch, and `--both` combined smoke+regression.
