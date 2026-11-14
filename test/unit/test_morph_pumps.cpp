@@ -895,13 +895,14 @@ TEST_CASE("morph INT-9: Wooded Foothills cracks on play and fetches Stomping Gro
     c = mp.FetchCandidates(s, 0, foothills.params);
     REQUIRE(c.size() == 2);
     CHECK(c[0] == "Forest");
-    // The lever off: library order, and the hold stays a searched choice.
+    // The lever off: library order, and the hold falls to the base default -- since USER 2026-11-14 that is
+    // NO hold ("Only very specific decks care about the hold"), so the fetch still resolves on play.
     s.players[0].library.push_back(CardM("Stomping Ground", 202));
     heurarm::t_arm[heurarm::MORPH_FETCH_RULE] = 0;
     c = mp.FetchCandidates(s, 0, foothills.params);
     CHECK(c[0] == "Forest");
-    CHECK(mp.ConsiderFetchHold(s, foothills));
-    CHECK_FALSE(FetchResolvesOnPlay(s, foothills));
+    CHECK_FALSE(mp.ConsiderFetchHold(s, foothills));
+    CHECK(FetchResolvesOnPlay(s, foothills));
     heurarm::t_arm[heurarm::MORPH_FETCH_RULE] = -1;
 }
 

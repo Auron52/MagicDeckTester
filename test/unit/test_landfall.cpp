@@ -212,8 +212,26 @@ TEST_CASE("Landfall: a fetchland's drop is TWO landfall triggers -- the fetchlan
     s.players[0].hand.push_back(HandLf("Wooded Foothills", 2));
     s.players[0].library.push_back(HandLf("Forest", 3));
     s.players[0].library.push_back(HandLf("Mountain", 4));
+    const int life0 = s.players[0].life;
     REQUIRE(PlayLandFromHand(s, 0, DefLf("Wooded Foothills"), LandPlayOptions{}));
-    // The fetchland now ENTERS (a real battlefield fetch): its own entry is the first landfall...
+    // Default policy (USER 2026-11-14: no fetch hold unless a deck opts in): the fetch resolves ON PLAY. It still
+    // ENTERS first, so the drop is two landfalls -- the fetchland's own entry and the fetched land's.
+    CHECK(CountNamed(s, "4/4 Beast Token") == 2);
+    CHECK(s.players[0].life == life0 - 1);
+    for (const Permanent& p : s.battlefield) { CHECK(p.card.m_name != "Wooded Foothills"); }
+}
+
+TEST_CASE("Landfall: a HELD battlefield fetch is two landfalls too -- its entry, then its searched activation")
+{
+    EnsureCardsLoadedLf();
+    GameState s = FreshLf();
+    PutLf(s, kBaloths, 1);
+    s.players[0].life = 3;                       // the engine keeps the hold at 3 life or less (FetchResolvesOnPlay)
+    s.players[0].hand.push_back(HandLf("Wooded Foothills", 2));
+    s.players[0].library.push_back(HandLf("Forest", 3));
+    s.players[0].library.push_back(HandLf("Mountain", 4));
+    REQUIRE(PlayLandFromHand(s, 0, DefLf("Wooded Foothills"), LandPlayOptions{}));
+    // The fetchland ENTERS (a real battlefield fetch): its own entry is the first landfall...
     CHECK(CountNamed(s, "4/4 Beast Token") == 1);
     // ...and its searched activation ({T}, pay 1 life, sacrifice) puts the fetched land: the second.
     int src = -1;

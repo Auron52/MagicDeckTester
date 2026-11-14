@@ -486,9 +486,11 @@ public:
     // Search policy for a fetchland played from hand/top. True keeps the legal
     // battlefield hold and later activation; false resolves the zero-mana,
     // one-life fetch on play. Human play and the unpruned audit always keep the
-    // hold. Decks without a reviewed policy keep the full timing choice.
+    // hold. DEFAULT FALSE (USER 2026-11-14: "We shouldn't fetch hold for the
+    // decks. Only very specific decks care about the hold."): a deck whose line
+    // genuinely needs the deferred crack opts in by overriding this to true.
     virtual bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
-    { (void)s; (void)fetch; return true; }
+    { (void)s; (void)fetch; return false; }
 
     // CanAutoFireAltPayload -- auto-fire safe alt payload: per-card predicate (the engine keeps the
     // deterministic re-scan loop; only the "is this free payload safe to fire" decision

@@ -84656,7 +84656,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
 // budget: the turn's plan cracked last and cast nothing the fetched land paid for, and a deck without a
 // searched second main (DeckUsesSecondMain) has no later main to recover it. It surfaced when Boars I1
 // moved Windswept Heath onto the battlefield model for providers that keep the hold
-// (DecisionProvider::ConsiderFetchHold, default true: Creature Giving, Boars); FetchResolvesOnPlay's
+// (DecisionProvider::ConsiderFetchHold, then default true; default FALSE since USER 2026-11-14); FetchResolvesOnPlay's
 // immediate collapse (Anti-Lifegain, Five Colour, Modern RW Burn) does the crack at the land drop, before
 // the walk, so it never had the gap -- except at 3 life or less, where every fetch keeps the hold.
 //
