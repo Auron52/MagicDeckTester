@@ -492,3 +492,58 @@ TEST_CASE("Profane fetch: the executor's resolution node decides an UNCOVERED se
         CHECK(TurnSolver::ChooseRealResolutionFetch(s, 0, pp, card, ctx, 0, 8, nullptr, true) == -1);
     }
 }
+
+TEST_CASE("On-demand Lake: a held payment that strands the line's {R} gives way to a payment that keeps it")
+{
+    // MTG_ONDEMAND_KEEP_COLOUR (item D round 3): Shadowborn s30055067 T8 {Sire of Insanity + Dark Ritual} on Lake of
+    // the Dead + Blood Crypt. Ritual's {B} is paid first; holding the Lake put it on the Crypt, the deck's only {R}
+    // (and the Lake's only crack victim), so Sire's {R} had no source left.
+    auto run = [](bool lever) -> GameState
+    {
+        ArmScope arm(heurarm::ONDEMAND_KEEP_COLOUR, lever);
+        GameState s = BaseLp();
+        s.deck_has_ondemand_sac = true;
+        s.battlefield.push_back(PermLp("Lake of the Dead", 80));
+        s.battlefield.push_back(PermLp("Blood Crypt", 81));
+        ManaCost line; line.generic = 4; line.black = 2; line.red = 1;   // Ritual {B} + Sire {4}{B}{R}
+        LineUnpaidCostScope hold(line);
+        REQUIRE(PayLp(s, 0, 1));
+        return s;
+    };
+    // The searched early crack (the Lake pinned to crack at its first payment) keeps the {R} the same way.
+    {
+        ArmScope arm(heurarm::ONDEMAND_KEEP_COLOUR, true);
+        GameState e = BaseLp();
+        e.deck_has_ondemand_sac = true;
+        e.scripted_early_ondemand_crack = true;
+        e.battlefield.push_back(PermLp("Lake of the Dead", 80));
+        e.battlefield.push_back(PermLp("Blood Crypt", 81));
+        ManaCost line; line.generic = 4; line.black = 2; line.red = 1;
+        LineUnpaidCostScope hold(line);
+        REQUIRE(PayLp(e, 0, 1));
+        CHECK(e.floating_mana.red == 1);
+        CHECK(e.floating_mana.black == 3);
+    }
+    // On: the crack is tried before the stranding plain tap (step 3), its unpinned victim colour ({B}) strands the
+    // {R} too, so the victim pin taps the Crypt for {R} before the Lake eats it: {R} + {B}{B}{B}{B}, less the {B}.
+    const GameState on = run(true);
+    CHECK(CountPerm(on, "Blood Crypt") == 0);
+    CHECK(on.battlefield[0].tapped);
+    CHECK(on.floating_mana.red == 1);
+    CHECK(on.floating_mana.black == 3);
+    const GameState off = run(false);
+    CHECK(off.battlefield[1].tapped);        // the historical held payment: the Crypt's {B}
+    CHECK_FALSE(off.battlefield[0].tapped);
+
+    // No coloured pip at risk (the rest owes only black, which the Lake's crack makes): the held payment stands.
+    ArmScope arm(heurarm::ONDEMAND_KEEP_COLOUR, true);
+    GameState b = BaseLp();
+    b.deck_has_ondemand_sac = true;
+    b.battlefield.push_back(PermLp("Lake of the Dead", 80));
+    b.battlefield.push_back(PermLp("Blood Crypt", 81));
+    ManaCost line; line.generic = 1; line.black = 2;
+    LineUnpaidCostScope hold(line);
+    REQUIRE(PayLp(b, 0, 1));
+    CHECK(b.battlefield[1].tapped);
+    CHECK_FALSE(b.battlefield[0].tapped);
+}

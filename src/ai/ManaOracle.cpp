@@ -3687,6 +3687,11 @@ std::multiset<std::string> UsedFromHand(const GameState& root, const GameState& 
 // could plan on when the plan was chosen, because the library's ORDER is hidden (a top card Courser of Kruphix
 // reveals is not). Selesnya / Landfall eg1, 11 ENUM-GAPs: Genesis Wave, then Feed the Clan / Rampant Growth off the
 // lands the Wave put onto the battlefield (Forest #21, Brushland #19, Wirewood Lodge #60...). `what`: the card.
+static bool s_run_wrap()
+{
+    static const bool v = EnvOn("MTG_ORACLE_HIDDEN_SCALED", true);
+    return v;
+}
 bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
 {
     const int a = root.active_player_index;
@@ -3713,6 +3718,37 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
             if (!run) { continue; }
             for (std::size_t i = 0; i < j; ++i) { top.insert(lib0.RawAt(i).m_number); }
             break;
+        }
+    }
+    // ...and when the reveals WRAPPED the library (a long Thrumming Stone ripple chain reveals four cards per Apostle
+    // and puts the rest on the bottom, so it cycles a ~50-card library and the end library starts with cards it
+    // already put back: no unbroken run from any depth survives). With no SHUFFLE the end library is still the root
+    // library's order with cards taken out, ROTATED -- each reveal moves its top cards to the bottom in reveal order --
+    // so its cards' root positions ascend with at most one wrap. A search shuffles (Diabolic Intent, a fetch land),
+    // which breaks that order, so a library that keeps it lost every missing card off the TOP. Shadowborn gate
+    // sb-D2-20261114, ENUM-GAP s30055462 T3 {Ritual, Stone, Apostle, Ritual, Stone}: the second hand Ritual's ripple
+    // cast a library Ritual after the Apostles' chain had cycled the library, and the second Stone's {5} was paid
+    // from that hidden float. (MTG_ORACLE_HIDDEN_SCALED=0 also drops this test.)
+    if (s_run_wrap() && top.empty() && lib1.size() >= 4)
+    {
+        std::unordered_map<int, std::size_t> pos;
+        for (std::size_t i = 0; i < lib0.size(); ++i) { pos.emplace(lib0.RawAt(i).m_number, i); }
+        bool ok = true;
+        int wraps = 0;
+        std::size_t first = 0, prev = 0;
+        for (std::size_t q = 0; q < lib1.size() && ok; ++q)
+        {
+            const auto it = pos.find(lib1.RawAt(q).m_number);
+            if (it == pos.end()) { ok = false; break; }
+            if (q == 0) { first = it->second; }
+            else if (it->second < prev) { ++wraps; }
+            prev = it->second;
+        }
+        ok = ok && (wraps == 0 || (wraps == 1 && prev < first));
+        if (ok)
+        {
+            for (std::size_t i = 0; i < lib0.size(); ++i)
+            { if (still.count(lib0.RawAt(i).m_number) == 0) { top.insert(lib0.RawAt(i).m_number); } }
         }
     }
     if (!top.empty() && LibraryTopVisible(root)) { top.erase(lib0.RawAt(0).m_number); }
@@ -4316,6 +4352,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         }
         bool all_tried = true, other_partial = false;
         std::string other_why;   // the first reason another order's search was partial
+        std::string order_hidden;   // an order that pays only off a hidden card (TapsHiddenCard): its card
         struct OrdersCost { long long a0 = t_dec_applies; ~OrdersCost() { g_cost_orders.fetch_add(t_dec_applies - a0); } } _orders_cost;
         std::vector<std::vector<TurnSolver::Plan>> folded;
         const std::vector<TurnSolver::Plan> alts = OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound,
@@ -4383,6 +4420,19 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                     if (other_why.empty()) { other_why = "a mana choice the oracle does not drive: " + o.unscripted; }
                 }
                 if (!o.Clean() || !Includes(o.left, e_want)) { continue; }
+                // HIDDEN INFORMATION, as the ENUM-GAP pass reads it (TapsHiddenCard): an order is chosen when the plan
+                // is, so an order that pays only off a card taken from the top of the library (a ritual Thrumming
+                // Stone's ripple revealed) is no order the engine could have picked. Shadowborn gate sb-D2-20261114
+                // s30057997 T4 {Apostle + Stone + Sire + Ritual}: Stone > Ritual pays Sire only with the library
+                // Ritual the hand Ritual's ripple casts. Reported HIDDEN-INFO when no other order pays without one.
+                {
+                    std::string card;
+                    if (TapsHiddenCard(root, o, &card))
+                    {
+                        if (order_hidden.empty()) { order_hidden = card; }
+                        continue;
+                    }
+                }
                 std::string order;
                 for (const Action& a : alt.actions)
                 {
@@ -4395,6 +4445,12 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                      dropped + "; the order " + order + " pays every action with " + ScriptText(o.script));
                 return;
             }
+        }
+        if (!order_hidden.empty())
+        {
+            Emit(C_HIDDEN_INFO, root, pre, plan, dropped + "; the only order that pays every action taps " + order_hidden
+                 + ", a card taken off the top of the library (hidden information, not an order's to know)");
+            return;
         }
         if (other_full)
         {
