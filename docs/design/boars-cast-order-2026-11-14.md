@@ -92,7 +92,7 @@ that total.
 * **E5. Activations are not casts.** Flinthoof's {R} haste, Greaves' equip and Zhur-Taa's taps are activations.
   They fit around these casts as the search finds them.
 
-## Questions for the USER
+## Questions for the USER (ANSWERED 2026-11-14: the USER approved the full list as drafted)
 
 1. **Greaves at slot 2.** It is order-neutral by its text. Its only effect is the Sage creature-only-mana payment and
    E1. Keep it there, or put it after the creatures as the generic order does?
@@ -100,8 +100,27 @@ that total.
    mana is not usable this turn without Greaves. So the only cost is the E1 fallback.
 3. **End-Raze before Decimator** (the emerge-victim tie-break above). Agreed?
 
-## Measurement (to follow)
+## Measurement (2026-11-14)
 
-Implementation will be `BoarsProvider::CastOrderRank`, behind `MTG_BOARS_CAST_ORDER`, **DEFAULT OFF** until the
-USER reviews. A held-out paired A/B (Boars and Boars 2HG, play setting and d3) will be reported here and to the
-USER. The USER decides adoption, whichever way the measurement points.
+Paired held-out A/B, ONE pooled batch, 400 games per cell, both arms on the same seeds (`MTG_BOARS_CAST_ORDER` off vs
+on, commit 4a59c17f6; manifest `build/scratch/boars/chain1/order_ab.json`). Loss counts as turn 10.
+
+| Cell | Seed base | Generic | This order | Delta | t | Faster | Slower |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Boars d5 b20 (play) | 91001 | 4.8600 | 4.8575 | -0.0025 | -1.0 | 1 | 0 |
+| Boars d3 b10 | 92001 | 4.8950 | 4.8825 | -0.0125 | -2.3 | 5 | 0 |
+| Boars 2HG d5 b20 (play) | 93001 | 5.2150 | 5.1950 | -0.0200 | -2.3 | 10 | 2 |
+| Boars 2HG d3 b10 | 94001 | 5.2025 | 5.1725 | -0.0300 | -3.0 | 14 | 2 |
+| Boars d0 | 95001 | 5.4900 | 5.4850 | -0.0050 | -1.0 | 3 | 1 |
+
+Better or neutral in every cell; 33 games faster, 5 slower (one turn each). The five slower games:
+
+* **d0 gi92 (seed 95093):** on T4 the generic order casts Flinthoof {1}{G} + {R} haste and attacks for lethal. With
+  Horn first, Horn + Flinthoof ({G}) becomes payable, the depth-0 runner takes the larger cast set and has no {R} left
+  for the haste (16 instead of 19). This is the same blind spot as sweep game 97009 (Flinthoof's haste kill is not
+  credited when choosing the cast set), which is being fixed separately (`boars-haste`); re-check after that fix.
+* **2HG play gi3, gi186; 2HG d3 gi159, gi194:** the lines diverge from T1-T3 (more Horn-first lines, e.g. T3 Horn +
+  Ilharg instead of Raggadragga + Sage). gi186 recovers at 4x budget; the other three stay one turn slower at 16x, so
+  the order changes how the beyond-horizon playout values those positions rather than the budget. Re-check after the
+  haste fix, since two of them hinge on Flinthoof / Greaves haste turns.
+

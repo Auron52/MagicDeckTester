@@ -52,11 +52,11 @@ uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int cont
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
-// ---- BoarsProvider: the AI-DRAFTED cast order (MTG_BOARS_CAST_ORDER, DEFAULT OFF) -------------------
+// ---- BoarsProvider: the USER-APPROVED cast order (MTG_BOARS_CAST_ORDER, DEFAULT ON) ------------------
 //
 // docs/design/boars-cast-order-2026-11-14.md, drafted for the USER's review (USER 2026-11-14: "If you want a ruling
-// on the cast order I recommend you come up with a recommended order and I review it"). Cast order is USER-OWNED:
-// this ships OFF, and =0 / unset is DeckProvider::CastOrderRank byte-for-byte (every creature at the generic 10,
+// on the cast order I recommend you come up with a recommended order and I review it"), then APPROVED by the USER
+// the same day ("That order seems reasonable to me."). =0 is DeckProvider::CastOrderRank byte-for-byte (every creature at the generic 10,
 // Greaves and Herald's Horn at 20). What in this list is order-sensitive, by the card text:
 //   * Herald's Horn's {1} reduction reaches only Boar spells cast AFTER it resolves -> first.
 //   * Herald of Ilharg counts only creature spells cast AFTER it is on the battlefield, and an MV >= 5 cast deals
@@ -69,7 +69,7 @@ uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int cont
 // Every slot is read off PARAMS, so an unlisted card lands by its shape; the name breaks every tie.
 static bool BoarsOrderEnabled()
 {
-    static const bool on = EnvOn("MTG_BOARS_CAST_ORDER");   // DEFAULT OFF (AI draft awaiting the USER); =1 enables
+    static const bool on = EnvOn("MTG_BOARS_CAST_ORDER", true);   // DEFAULT ON (USER approved 2026-11-14); =0 -> generic
     return heurarm::Flag(heurarm::BOARS_CAST_ORDER, on);
 }
 
