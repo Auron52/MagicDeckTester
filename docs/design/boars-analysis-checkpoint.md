@@ -88,8 +88,19 @@ run stands and what to do next.
       your claims as a result." Answer given: decoupled salts close the post-fetch-shuffle channel; coupled vs
       decoupled width deltas are similar here. RECOMMENDED (awaiting USER): shared order + explicit TOP-1 fetch width
       (intentional prune, reason: extra targets mostly buy clairvoyance; costs CG at budget); alternative = budget-staged
-      waves. **Do NOT run the tiers on 43afd29fd until the USER picks.** Then: re-run smoke/regression/overnight-boars,
+      waves. (superseded: see the 2026-11-14 ~08:30 entry below.) Then: re-run smoke/regression/overnight-boars,
       accept, check_gt_logs.
+  * **2026-11-14 ~08:30 UTC: fetch width TAKEN BY DEFAULT (NEVER-BLOCK rule, USER may overrule) + cast order draft**
+    -> `4a59c17f6`: `DecisionProvider::OnPlayFetchWidth` default 1 (the land drop searches the top of the shared
+    order; human play / unpruned audit keep every target; a held fetch's activation keeps LandSearchFetchPickWidth).
+    USER 2026-11-14: "If you want a ruling on the cast order I recommend you come up with a recommended order and I
+    review it." -> `docs/design/boars-cast-order-2026-11-14.md` + `BoarsProvider::CastOrderRank` behind
+    MTG_BOARS_CAST_ORDER, DEFAULT OFF (awaiting the USER). 3029/3029.
+    **RUNNING chain1** (pid in `build/scratch/boars/chain1/run.pid`, status `chain1/status.txt`, `chain1/DONE`):
+    smoke -> regression -> overnight --deck=boars,boars2hg (MTG_PGO=0) on 4a59c17f6, then the cast-order A/B
+    (`chain1/order_ab.json`, 400 g x 5 shapes x off/on, seeds 91001-95001; result `chain1/ab_cmp.txt`).
+    NEXT: audit/classify each tier's movers, accept smoke + regression + the Boars overnight rows, check_gt_logs,
+    commit GT; report the A/B to the USER (adoption is theirs).
   * **Hinata perf question (USER surprised by ~10 s/game):** TIMINGS.md says d3 b10 0.59 s/game, d5 b20 1.25 s/game
     (1 thread, post 9229b25ca); now d3 6.4 / d5 9-11.5 s/game (32-thread full load, d5 b30), 8 tail games = 41% of the
     d5 s3003 row; Hinata ~145 ms/kunit vs Boars ~50 and the 2e6-units~45s calibration (~23). NEXT (not started):
