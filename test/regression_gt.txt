@@ -1,15 +1,15 @@
-# Regression ground truth -- commit f23839709  date 2026-11-14
+# Regression ground truth -- commit f98634b59  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-14): Boars analysis: searched slower CG gi105 churn; CG gi113 fetch ranking tie persists (ranking candidate held off after CG A/B loss); net wins improve.
-# accepted-with-regressions (regression, 2026-11-14): Boars analysis regression: 263 searched games faster, 10 slower. All slower games audited: Boars 2HG gi36 cast-order budget tradeoff; Boars 2HG gi66 fetch-ranking tie; Boars gi117 shuffle variance; CG/5C games classified separately (ranking tie, draw variance, or churn). d0 creature-tap slowdowns accepted.
+# accepted-with-regressions (smoke, 2026-11-14): Boars greedy self-haste: d0 57 faster / 3 slower (net improvement); searched 0 faster / 0 slower, one same-turn play change after a different fetch/shuffle line. All other 201 configs identical.
+# accepted-with-regressions (regression, 2026-11-14): Boars greedy self-haste: d0 58 faster / 2 slower (net improvement); searched 0 faster / 0 slower, five same-turn play changes (four draw-divergent, one same-draws). Strict replay 836 refs, 0 drift. All other 319 configs identical.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-boars_smoke_d0_s1001=5.5010/c48fd722ff399e26
+boars_smoke_d0_s1001=5.4470/a7842cdac261b31a
 boars_smoke_d3_s1001=4.7800/f529e356b5c29cf9
-boars_smoke_d5_s1001=4.8700/83ff8b3700ceae75
+boars_smoke_d5_s1001=4.8700/5a953f22e0140d86
 boars2hg_smoke_d5_s1001=5.1200/82942d6db8e244c4
 morph_smoke_d0_s1001=4.7380/34fc50d3a92be7bd
 morph_smoke_d3_s1001=4.0200/eb01ec2903a67eb6
@@ -212,11 +212,11 @@ martyr_smoke_d5_s1001=5.2500/21fe7d2de15ff7bb
 martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
 
 # --- regression ---
-boars_regression_d0_s2002=5.4970/b64c4a69c3cd6cea
+boars_regression_d0_s2002=5.4410/6e4c0ba583b0d2d2
 boars_regression_d3_s2002=4.8200/0127ca0d63bd1f03
-boars_regression_d5_s2002=4.7667/5ad695a094408083
-boars_regression_d5_s3003=4.8000/56c234b5ea14bad9
-boars2hg_regression_d5_s2002=5.0800/77875212ebe0923a
+boars_regression_d5_s2002=4.7667/3620eeb57ef0bb3d
+boars_regression_d5_s3003=4.8000/0f4cc4a534e5fdf4
+boars2hg_regression_d5_s2002=5.0800/80a819a6e9ae6587
 boars_regression_d3_s30261=5.0000/6a614de42f04560c
 boars_regression_d5_s30261=5.0000/6a614de42f04560c
 morph_regression_d0_s2002=4.7730/770f3e7a37cda5a5
