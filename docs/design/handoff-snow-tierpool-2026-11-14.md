@@ -2,6 +2,16 @@
 
 This is the checkpoint for whichever agent (Claude or Codex) continues. Verify running processes before acting.
 
+## Codex continuation, 2026-11-14
+
+The USER chose to land the Snow package as-is, treating the measured LHC d0
++0.0010 as low priority. This accepts the reserve's correct realization of the
+committed plan; the d0 Martyr-sac valuation and missing trace action remain
+separate follow-ups. `MTG_D0_SNOW_PUMP_CREDIT` stays on by default as measured.
+The existing smoke and regression runs were inspected and accepted without
+re-running them. Both tiers had zero slower games; `test/check_gt_logs.py`
+reported 1170 consistent logs, zero stale, zero missing.
+
 ## 1. Snow package (branch `snow-contpay`, worktree `.claude/worktrees/snow-contpay`, LOCAL, not pushed)
 
 - **Branch state:** rebased onto origin `bca756347` at 10:2x UTC. It carries 10 commits ending at `6ad20e507`. The pre-rebase backup is branch `backup/snow-contpay-pre-rebase`.
