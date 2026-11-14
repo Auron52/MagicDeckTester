@@ -184,6 +184,8 @@ enum class UnprunedGate
     OboroBounce,     // Mill: restore Oboro's self-bounce when another land is in hand
     HedronZeroTrigger, // Mill: retain all 16 Hedron policies on plans with no possible trigger
     HedronUnusedBits, // Mill: retain all 16 masks even when fewer than four trigger bits can be read
+    Champion,        // Red Elementals: CHAMPION's exile pick restored to every candidate + the decline
+                     // (DecisionProvider::PruneChampionCandidates' doomed-attacker prune)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");

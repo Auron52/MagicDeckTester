@@ -2987,6 +2987,8 @@ public:
     // Test hooks: the MTG_FACEUP_AXIS_STATS searched-frame count (must read 0), and every crossing the face-up
     // axis makes from `state` as (recorded pin or -2, flipped-permanent count after the crossing).
     static long long FaceUpSearchedFrameUnpinnedForTest();
+    static long long ChampionSearchedFrameUnpinnedForTest();
+    static void ArmChampionCensusForTest();
     static std::vector<std::pair<int, int>> FaceUpBoundaryForTest(const GameState& state);
     // ...and its RESOLUTION node: a suspended tutor's search the real upkeep meets uncovered (a ripple free copy no
     // crossing could foresee) is searched at resolution, one copy per rank; returns the rank (-1 = one candidate).

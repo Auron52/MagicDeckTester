@@ -817,6 +817,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Islandwalk")    { return Keyword::Islandwalk; } // inert evasion tag; nothing blocks
     if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
     if (s == "Companion")     { return Keyword::Companion; }
+    if (s == "Champion")      { return Keyword::Champion; }   // inert tag; mechanic is param-modelled (champion_subtype)
     if (s == "Unearth")       { return Keyword::Unearth; }    // inert tag; mechanic is param-modelled  // inert tag; main-deck card, no companion zone
     throw std::runtime_error("Unknown keyword: " + s);
 }
