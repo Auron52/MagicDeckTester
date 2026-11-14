@@ -383,3 +383,44 @@ TEST_CASE("A plan casting Flinthoof Boar opens breakpoint site 9 (its same-main 
     q.actions.push_back(b);
     CHECK((TurnSolver::PlanOpensBreakpointForTest(s, q) & (1 << 9)) == 0);
 }
+
+// A2 (Boars 5d sweep lead, seed 97003): an all-creature batch prepay that taps Somberwald Sage booked the WHOLE pre-paid
+// pool as creature-only float (TurnSolver BatchPrepayMainCasts, the all_creatures branch) -- so a general source's
+// surplus (Gruul Turf's second unit) could no longer pay a NONCREATURE use later in the same phase. Board: Sage + Gruul
+// Turf; one line casts Flinthoof {1}{G}, Ignoble Hierarch {G} and Birds {G} (4 mana: Sage GGG + one of Turf's two);
+// the spare Turf unit must stay GENERAL float, so the next segment of the phase (human play re-enumerates) can spend
+// it on a noncreature use (a Lightning Greaves cast; Flinthoof's {R} haste when the spare is the {R}).
+TEST_CASE("A2: an all-creature prepay keeps a general source's surplus general (Flinthoof's {R} haste)")
+{
+    GameState s = BBase();
+    s.deck_has_mana_untapper = false;
+    BPut(s, "Somberwald Sage", 20, /*sick=*/false);
+    BPut(s, "Gruul Turf", 21, /*sick=*/false);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[0].hand.push_back(BCard("Flinthoof Boar", 1));
+    s.players[0].hand.push_back(BCard("Ignoble Hierarch", 2));
+    s.players[0].hand.push_back(BCard("Birds of Paradise", 3));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+    const TurnSolver::Plan* want = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        int casts = 0;
+        for (const Action& a : p.actions) { if (a.kind == Action::Kind::CastFromHand) { ++casts; } }
+        if (casts == 3) { want = &p; break; }
+    }
+    REQUIRE_MESSAGE(want != nullptr, "the 3-cast line is not enumerated");
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *want, /*is_pre_combat=*/true);
+    REQUIRE(BNum(roll, 1) != nullptr);
+    REQUIRE(BNum(roll, 2) != nullptr);
+    REQUIRE(BNum(roll, 3) != nullptr);
+    INFO("float general=" << roll.floating_mana.Total() << " creature-only=" << roll.floating_creature_mana.Total()
+         << " Turf tapped=" << BNum(roll, 21)->tapped);
+    CHECK(roll.floating_mana.Total() + roll.floating_creature_mana.Total() == 1);   // one unit left over
+    CHECK(roll.floating_creature_mana.Total() == 0);   // ...and it is Turf's, so it stays GENERAL
+    // A noncreature use of it this phase (a {1} activation / a Greaves cast's last unit): creature-only could not.
+    GameState t = roll;
+    ManaCost one; one.generic = 1;
+    CHECK(TapForCostDirect(t, one, /*for_creature=*/false));
+    // The bookkeeping is the only change: =0 restores the all-creature-only booking (measured A/B lever).
+}

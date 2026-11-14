@@ -65018,18 +65018,66 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (all_creatures)
     {
         bool restricted_tapped = false;
+        int n_restricted = 0, burst_yield = 0;
+        bool all_bursts = true;
         const int nb = static_cast<int>(std::min(bf_snap.size(), state.battlefield.size()));
-        for (int bi = 0; bi < nb && !restricted_tapped; ++bi)
+        for (int bi = 0; bi < nb; ++bi)
         {
             const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
             if (!bp.tapped || bf_snap[static_cast<std::size_t>(bi)].tapped || bp.def_absent) { continue; }
             const CardDefinition* bd = CardDatabase::Instance().LookupCached(bp.card);
-            if (bd != nullptr && bd->params.creature_mana_only) { restricted_tapped = true; }
+            if (bd == nullptr || !bd->params.creature_mana_only) { continue; }
+            restricted_tapped = true;
+            ++n_restricted;
+            if (!IsSingleColorBurstSource(*bd)) { all_bursts = false; continue; }
+            const int y = PermanentManaYield(state, bp, *bd);
+            burst_yield += (y >= 0 ? y : ManaProducedPerTap(*bd));
         }
         if (restricted_tapped)
         {
-            state.floating_creature_mana.AddPool(state.floating_mana);
-            state.floating_mana = ManaPool{};
+            // A GENERAL SOURCE'S SURPLUS STAYS GENERAL (Boars 5d sweep lead, seed 97003; MTG_PREPAY_GENERAL_SURPLUS,
+            // DEFAULT ON, =0 -> the whole pool creature-only as before). Booking the WHOLE pre-paid pool as
+            // creature-only is legal for every cast it funds, but its SURPLUS may be a general source's unit
+            // (Somberwald Sage GGG + Gruul Turf {R}{G} for {1}{G} + {G} + {G}: one Turf unit is left over), and
+            // as creature-only float a later NONCREATURE use this phase -- the next segment's Flinthoof {R} haste,
+            // a Lightning Greaves cast -- could no longer spend it. The surplus units that are PROVABLY not the
+            // restricted source's stay general: with ONE single-colour burst source tapped (Sage: `burst_yield`
+            // units of ONE colour X), every colour X it could have made is tried, the burst is spent first on X's
+            // pins and then on the generic (the attribution that leaves the most restricted mana spent), and a
+            // leftover unit counts as general only when it is general under EVERY X consistent with the
+            // production -- so restricted mana is never laundered. Anything else (two restricted sources, a
+            // non-burst one, an incoming float) keeps the conservative all-creature-only booking. Mana payment
+            // bookkeeping only (the standing exemption); both apply worlds call this, so they move in lockstep.
+            static const bool s_gen_surplus = EnvOn("MTG_PREPAY_GENERAL_SURPLUS", true);
+            ManaPool keep;
+            if (s_gen_surplus && n_restricted == 1 && all_bursts && burst_yield > 0 && !float_in)
+            {
+                const ManaPool& fl = state.floating_mana;
+                const int prod[5] = { produced.white, produced.blue, produced.black, produced.red, produced.green };
+                const int pin[5]  = { combined.white, combined.blue, combined.black, combined.red, combined.green };
+                const int left[5] = { std::max(0, fl.white - pin[0]), std::max(0, fl.blue - pin[1]),
+                                      std::max(0, fl.black - pin[2]), std::max(0, fl.red - pin[3]),
+                                      std::max(0, fl.green - pin[4]) };
+                int gen[5] = { left[0], left[1], left[2], left[3], left[4] };
+                bool any_x = false;
+                for (int x = 0; x < 5; ++x)
+                {
+                    if (prod[x] < burst_yield) { continue; }   // the burst cannot have been colour x
+                    const int r_left = std::max(0, burst_yield - std::min(burst_yield, pin[x]) - combined.generic);
+                    if (r_left > left[x]) { continue; }        // inconsistent with what is left
+                    any_x = true;
+                    gen[x] = std::min(gen[x], left[x] - r_left);
+                }
+                if (any_x)
+                {
+                    keep.white = gen[0]; keep.blue = gen[1]; keep.black = gen[2]; keep.red = gen[3]; keep.green = gen[4];
+                }
+            }
+            ManaPool crea = state.floating_mana;
+            crea.white -= keep.white; crea.blue -= keep.blue; crea.black -= keep.black;
+            crea.red -= keep.red; crea.green -= keep.green;
+            state.floating_creature_mana.AddPool(crea);
+            state.floating_mana = keep;
         }
     }
     // The kept {C} rides into the float as a subset count, for a {C}-pip deck's payer (GameState::floating_prepay_c).

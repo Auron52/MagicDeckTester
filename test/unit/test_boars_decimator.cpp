@@ -351,3 +351,47 @@ TEST_CASE("Decimator: a same-plan HAND victim is cast BEFORE the emerge whatever
     CHECK(DNum(s, 61) == nullptr);   // the Boar entered and was sacrificed
     CHECK(InGy(s, 61));
 }
+
+TEST_CASE("Decimator: an emerge pays EXACTLY -- the victim's mana, Sage's creature-only burst, no spare dork (sweep 97013)")
+{
+    // Boars 5d sweep, seed 97013 (2HG) T4: Forest, Forest, Mountain, Stomping Ground, Birds, Ignoble Hierarch, Somberwald
+    // Sage, Raggadragga. Decimator emerging off Hierarch (MV 1) costs {5}{G}{G}{G} = 8 and the board makes 9 without Birds
+    // (Hierarch 1 + Sage 3 + 4 lands). The payer tapped Birds too and floated one creature-only {W}: Birds then could not
+    // attack (Raggadragga makes it a 2/3), and that swing was the lethal point. Exact payment: Hierarch + Sage {G}{G}{G}
+    // + the four lands; Birds stays up. Both worlds.
+    auto board = [] {
+        GameState s = DBase();
+        s.turn_number = 4;
+        s.deck_has_mana_untapper = false;   // as GoldFishRunner stamps Boars (no etb/X/Arbor-style untapper)
+        DPut(s, "Forest", 17);
+        DPut(s, "Forest", 19);
+        DPut(s, "Mountain", 38);
+        DPut(s, "Stomping Ground", 47);
+        DPut(s, "Birds of Paradise", 1);
+        DPut(s, "Ignoble Hierarch", 30);
+        DPut(s, "Somberwald Sage", 43);
+        DPut(s, "Raggadragga, Goreguts Boss", 39);
+        s.players[0].hand.push_back(DCard(kDec, 5));
+        return s;
+    };
+    auto check = [](const GameState& s) {
+        CHECK(DNum(s, 30) == nullptr);   // the victim died
+        REQUIRE(DNum(s, 1) != nullptr);
+        CHECK_FALSE(DNum(s, 1)->tapped);  // Birds was not needed
+        CHECK(s.floating_creature_mana.Total() == 0);
+        CHECK(s.floating_mana.Total() == 0);
+    };
+    g_cast_trigger_mana_spent_probe = -1;
+    GameState roll = board();
+    TurnSolver::ApplyPlan(roll, DPlan({ DEmerge(30) }), /*is_pre_combat=*/true);
+    CHECK(DNum(roll, 5) != nullptr);
+    CHECK(g_cast_trigger_mana_spent_probe == 8);
+    check(roll);
+
+    g_cast_trigger_mana_spent_probe = -1;
+    GameState exec = board();
+    ExecEmerge(exec, 30);
+    CHECK(exec.players[0].hand.empty());
+    CHECK(g_cast_trigger_mana_spent_probe == 8);
+    check(exec);
+}
