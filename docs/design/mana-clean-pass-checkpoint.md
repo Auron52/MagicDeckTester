@@ -1524,6 +1524,17 @@ fungus 1,880, gods 4,300 (first run).
   oracle-off byte-identical): **4** issues, three APPLY-DROPs from one Crewmate dig seed
   s30088544 (need-later Captain) and one DOMINATED-ONESHOT s30086950. The 5,000-game block
   is recorded in `test/mana_clean.json`; the gate exits nonzero because these four issues remain.
+  **Round 5, generic ability extension (f35023d4a):** the same priority applies inside an
+  applying line or unseen continuation when a creature-only land can pay the current generic
+  ability as {C}. The demand test also counts total unrestricted mana, since a generic payment
+  can consume the Mountain needed for Bolt. Direct payments outside a line retain their earlier
+  hand-creature preference. Repro s30083181 6 -> 0, =0 restores all six; s30070533 remains 3.
+  Units 3095/3095. PGO a5119a635cf1; combined smoke 203/203 and regression 322/322
+  byte-identical to GT, searched slower 0, strict references 343 ok / 493 repaired / 1 beaten,
+  no play drift or enum gap. Fresh held-out A/B seed 90200000: 18,000 pairs, every deck net 0,
+  zero changed win turns. Gate pirates-C2r5-20261114 (89000-93999): **0** issues,
+  oracle-off byte-identical. The known s30070533 residual is still open; a clean independent
+  block does not erase its exact repro.
 * **Queue item E (2026-11-14): gods ENUM-GAP, Loam after a dredging draw (USER decision 12) -- BUILT, A/B net +3 ->
   PARKED, USER DECISION.** USER: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
   breakpoint. Same thing for the land drops that you pull from life."* `wip/gods-gy-option-demoted` 847943ebf (pushed;
