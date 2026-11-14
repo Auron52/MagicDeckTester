@@ -631,7 +631,7 @@ static_assert(sizeof(Player) == 216,
 // Integrated (morph-integ, 2026-11-13): origin's item A rounds (1464) + MTG_DOUBLER_COMBAT_PAY's +32 = 1496 (measured).
 // Deeproot Pilgrimage's deck-constant tap-watcher gate adds eight aligned bytes.
 // It is identical across states of one game, so dominance does not fold it.
-static_assert(sizeof(GameState) == 1504,   // verify combined current fields in the integrated build
+static_assert(sizeof(GameState) == 1552,   // Prophets' per-combat script vector and cursor
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -1046,6 +1046,15 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         fold(0x1A63000000ull + static_cast<std::uint64_t>(s.scripted_mihail_pay_mask));
         fold(0x1A64000000ull + static_cast<std::uint64_t>(s.scripted_mihail_trigger_ordinal));
     }
+    // Prophets' combat choices remain live until their corresponding damage triggers resolve.
+    // Only the unconsumed suffix can affect this state's future.
+    if (s.scripted_prophets_sac_cursor < static_cast<int>(s.scripted_prophets_sac.size()))
+    {
+        fold(0x1A65000000ull);
+        for (std::size_t i = static_cast<std::size_t>(s.scripted_prophets_sac_cursor);
+             i < s.scripted_prophets_sac.size(); ++i)
+        { fold(static_cast<std::uint64_t>(s.scripted_prophets_sac[i] + 3)); }
+    }
     if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
@@ -1146,9 +1155,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // what is observable -- a disagreement fails closed rather than comparing on mixed rules.
     const std::uint32_t gy_bits  = s.deck_gy_readers;
     const bool          gy_size  = ModelReadsFeature(s, MidGameFeature::GraveyardSize);
-    // Nothing in the engine reads state.exile's CONTENTS -- only its size, and only as a model
-    // feature (audited 2026-08-15; Apex/Light-Up staging lives in Player::staged_cards, suspend in
-    // suspended_cards, and both of those are folded unconditionally below).
+    // Prophets' linked exile is observable on the source leaving the battlefield. Its source ID,
+    // owner, and physical card are part of the future even when the model does not read exile size.
+    // Other decks only read exile size as a model feature (Apex/Light-Up staging lives in
+    // Player::staged_cards, suspend in suspended_cards).
     const bool exile_live = ModelReadsFeature(s, MidGameFeature::ExileSize);
     fold(0x11A0ull + gy_bits);
     fold(gy_size ? 0x11Aull : 0x11Bull);
@@ -1162,6 +1172,18 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
         std::uint64_t acc = 0;
         for (const Card& c : s.exile) { acc += c.m_name_hash; }
         fold(acc);
+    }
+    if (s.deck_has_prophets)
+    {
+        for (const Card& c : s.exile)
+        {
+            if (c.m_staged_expiry > -0x20000000
+                || c.m_staged_expiry <= -0x28000000 || c.m_is_staged) { continue; }
+            fold(0x50524F504558ull);
+            fold(c.m_name_hash);
+            fold(static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.m_number)));
+            fold(static_cast<std::uint64_t>(static_cast<std::uint32_t>(c.m_staged_expiry)));
+        }
     }
     // NOT folded, deliberately: m_card_scores -- and this classification covers the whole family of
     // borrowed profile pointers it joins (m_provider, m_required_pieces, m_evaluator,

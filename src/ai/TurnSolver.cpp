@@ -95626,7 +95626,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 704;   // Two Prophets pin vectors; checked below.
+static constexpr std::size_t kPlanDomAssertedSize = 712;   // Two Prophets pin vectors; checked below.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an

@@ -48,7 +48,7 @@
     "God"
    ],
    "keywords": [],
-   "oracle_text": "Svyelun has indestructible as long as you control at least two other Merfolk.\nWhenever Svyelun attacks, draw a card.\nOther Merfolk you control have ward {1}. (Whenever another Merfolk you control becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)",
+   "oracle_text": "Svyelun has indestructible as long as you control at least two other Merfolk.\nWhenever Svyelun attacks, draw a card.\nOther Merfolk you control have ward {1}. (Whenever another Merfolk you control becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.) [Conditional indestructible and ward are goldfish-inert for Merfolk Turns: the passive opponent never targets, attacks or blocks, and this 60-card list has no own destroy or damage effect. Attack draw is implemented.]",
    "template": "vanilla_creature",
    "parameters": {
     "attack_draw_cards": 1

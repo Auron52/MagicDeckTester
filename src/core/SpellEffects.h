@@ -10695,7 +10695,8 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     {
         const Permanent& e = state.battlefield[entered_index];
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
-        if (ed && ChoosesCreatureTypeOnEnter(ed->params))
+        if (ed && ChoosesCreatureTypeOnEnter(ed->params)
+            && e.chosen_subtype_id == SubtypeRegistry::kNone)
         {
             uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
                 state, e.controller_index, *ed);
@@ -48007,6 +48008,12 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     { perm.charge_counters = def.params.enters_with_mana_counters
                            << DoublerShift(state, perm.controller_index, /*for_tokens=*/false); }
     state.battlefield.push_back(perm);
+    // Ordinary land entry does not otherwise visit the universal watcher cascade.
+    // A chosen creature type is an as-enters choice, so resolve it before scry,
+    // landfall, or any later trigger can inspect this land.
+    if (ChoosesCreatureTypeOnEnter(def.params))
+    { FireEtbWatchers(state, state.active_player_index,
+                      static_cast<int>(state.battlefield.size()) - 1, false); }
     // The landfall HISTORY bit, set HERE and not only in OnLandEntered, because a put with
     // fire_landfall=false (Genesis Wave's simultaneous batch) reaches OnLandEntered only when a landfall
     // watcher exists -- the Wave's legacy order never calls it -- and the condition must see the entry

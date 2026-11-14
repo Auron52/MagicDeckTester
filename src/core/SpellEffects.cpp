@@ -3353,7 +3353,8 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                                              | (1u << static_cast<int>(Color::Green)));
             // The scaled ability yields N; the basic {C} mode yields ManaProducedPerTap. Credit the
             // larger -- an N of zero (no creatures) leaves the plain land, which is exact.
-            const int scaled = std::max(ScaledManaCreatureCount(state, &p), ManaProducedPerTap(*def));
+            const int scaled = std::max(ScaledManaCreatureCount(state, &state.battlefield[i]),
+                                        ManaProducedPerTap(*def));
             if (scaled <= 0) { continue; }
             srcs.push_back({ nbits, scaled, scaled, i });
             continue;

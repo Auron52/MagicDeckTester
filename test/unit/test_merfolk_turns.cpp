@@ -1,10 +1,13 @@
 #include <doctest/doctest.h>
 
+#include "ai/LandPlay.h"
 #include "cards/CardDatabase.h"
+#include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <algorithm>
 #include <vector>
 
 namespace
@@ -52,6 +55,38 @@ TEST_CASE("Three Tree City counts the chosen type of each source copy")
     CHECK(ScaledManaCreatureCount(state, &state.battlefield[3]) == 1);
     CHECK(ScaledManaNetYield(state, *city, &state.battlefield[2]) == 1);
     CHECK(ScaledManaNetYield(state, *city, &state.battlefield[3]) == 0);
+}
+
+TEST_CASE("Three Tree City asks for its type on a normal land drop and a put")
+{
+    LoadMerfolkCards();
+    const CardDefinition* city = CardDatabase::Instance().Lookup("Three Tree City");
+    REQUIRE(city != nullptr);
+    const auto& types = SubtypeRegistry::Instance();
+    EtbTypeChooser chooser = [](const GameState&, int, const std::string& source,
+                                const std::vector<std::string>& menu, int) {
+        CHECK(source == "Three Tree City");
+        const auto it = std::find(menu.begin(), menu.end(), "Goblin");
+        CHECK(it != menu.end());
+        return it == menu.end() ? 0 : static_cast<int>(it - menu.begin());
+    };
+    EtbTypeChooser* prior = g_play_etb_type_chooser;
+    g_play_etb_type_chooser = &chooser;
+    GameState dropped;
+    dropped.active_player_index = 0;
+    Card hand = city->card;
+    hand.m_number = 801;
+    dropped.players[0].hand.push_back(hand);
+    const bool played = PlayLandFromHand(dropped, 0, *city, LandPlayOptions{});
+    GameState put;
+    put.active_player_index = 0;
+    EnterLand(put, *city, 802);
+    g_play_etb_type_chooser = prior;
+    REQUIRE(played);
+    REQUIRE(dropped.battlefield.size() == 1);
+    REQUIRE(put.battlefield.size() == 1);
+    CHECK(dropped.battlefield[0].chosen_subtype_id == types.Id("Goblin"));
+    CHECK(put.battlefield[0].chosen_subtype_id == types.Id("Goblin"));
 }
 
 TEST_CASE("Seahunter searches Merfolk permanents and rejects Merfolk spells")
@@ -177,6 +212,7 @@ TEST_CASE("Wanderwine Prophets champions a selected copy and returns it under it
     CHECK(state.battlefield[1].card.m_number == 502);
     CHECK(state.battlefield[1].controller_index == 1);
     CHECK(state.battlefield[1].owner_index == 1);
+    CHECK(state.battlefield[1].entered_this_turn);
     CHECK(state.exile.empty());
 }
 
@@ -227,4 +263,24 @@ TEST_CASE("Wanderwine Prophets combat trigger sacrifices each chosen Merfolk and
     ResolveProphetsCombatDamage(decline, 0, {531});
     CHECK(decline.pending_extra_turns == 0);
     CHECK(decline.battlefield.size() == 1);
+}
+
+TEST_CASE("Wanderwine Prophets without fodder sacrifices itself and may sacrifice itself in combat")
+{
+    LoadMerfolkCards();
+    GameState enters;
+    enters.active_player_index = 0;
+    AddPermanent(enters, "Wanderwine Prophets", 541);
+    ResolveMerfolkChampion(enters, 0, 0);
+    CHECK(enters.battlefield.empty());
+    REQUIRE(enters.players[0].graveyard.size() == 1);
+    CHECK(enters.players[0].graveyard[0].m_number == 541);
+
+    GameState combat;
+    combat.active_player_index = 0;
+    AddPermanent(combat, "Wanderwine Prophets", 542);
+    combat.scripted_prophets_sac = {0};
+    ResolveProphetsCombatDamage(combat, 0, {542});
+    CHECK(combat.pending_extra_turns == 1);
+    CHECK(combat.battlefield.empty());
 }
