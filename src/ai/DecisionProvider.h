@@ -4437,6 +4437,25 @@ public:
                          [&](const auto& a, const auto& b) { return pw(a.second) > pw(b.second); });
     }
 
+    // EotPutOrder -- INCANDESCENT SOULSTOKE at the opponent's end step (SpellEffects.h EotPutOptions; agent F,
+    // 2026-11-14): the ORDER of the distinct Elemental creature card NAMES in hand the window may put. Reorder IN
+    // PLACE, never add or drop (no prune is offered: a deck provider that wants one adds a tested,
+    // MTG_UNPRUNE-gated hook beside this). The order decides the menu's
+    // FRONT (rank 0: wins every tie, and the permitted playout greedy beyond the horizon -- "put the first name
+    // still payable through each live source"). DEFAULT (a deliberate ranking, the EotFaceUpOrder shape): the
+    // largest printed power first, then hand order -- in a goldfish the body that attacks next turn is the point.
+    virtual void EotPutOrder(const GameState& s, std::vector<std::string>& names) const
+    {
+        auto pw = [&](const std::string& nm)
+        {
+            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+            return d != nullptr && d->card.m_power.has_value() ? *d->card.m_power : 0;
+        };
+        (void)s;
+        std::stable_sort(names.begin(), names.end(),
+                         [&](const std::string& a, const std::string& b) { return pw(a) > pw(b); });
+    }
+
     // GyEquipmentReturnPick -- Forge Anew's "return target Equipment card from your graveyard to the
     // battlefield" when the cast carried no searched pick (a put path, the unpinned cast variant, a
     // pin whose card has left the graveyard). `legal` = graveyard indices of the Equipment cards,

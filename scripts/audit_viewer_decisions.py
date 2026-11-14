@@ -2176,6 +2176,11 @@ def expected_for_card(card, deck_cards=None):
     # surfaces the `face_up` board prompt (one flip per answer, -1 = done).
     if p.get("morph_cost") or p.get("megamorph_cost"):
         exp.add("face_up")
+    # Incandescent Soulstoke (agent F, 2026-11-14): beside the main-phase put (verb:sfput), the opponent-end-step
+    # window surfaces the `eot_put` modal (one put per answer, -1 = done) -- a creature put only (Stoneforge's
+    # Equipment put stays sorcery-timed).
+    if p.get("tap_put_from_hand_cost") and p.get("tap_put_from_hand_creature_only"):
+        exp.add("eot_put")
     # Midrange Burn: the activation itself, any-target damage, and two non-targeting fuel costs.
     if p.get("tap_graveyard_exile_damage", 0) > 0:
         exp.update({"main_phase", "target", "gy_return_one"})

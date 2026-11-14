@@ -1913,6 +1913,12 @@ struct GameState
     // trigger, its projection twin and the main-phase axis walk the board for one. DEFAULT TRUE, the safe
     // direction (it only skips a walk that would find nothing). A deck constant, never folded.
     bool                     deck_has_attack_reanimate    = true;
+    // INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP (Red Elementals agent F, 2026-11-14), the same hole (the
+    // last byte of it). A DECK CONSTANT, never folded: the list holds a tap_put_from_hand_cost card whose put is
+    // a CREATURE put (tap_put_from_hand_creature_only -- Soulstoke; never Stoneforge Mystic, whose Equipment put
+    // is sorcery-timed in the engine), so the opponent-end-step window (EotFaceUpMenu's put half) walks the board
+    // for an untapped source. DEFAULT FALSE -- exact for an unstamped state too unless a test sets it by hand.
+    bool                     deck_has_eot_tap_put         = false;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

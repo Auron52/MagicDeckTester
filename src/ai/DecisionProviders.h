@@ -5495,6 +5495,11 @@ inline int BpChainSlotFor(const GameState& s)
 // whose mana the deferred main would spend (search the HOLD); 3 = an archetype ShouldAttackWith
 // holds a damage-dealing mana dork (search its RELEASE, MTG_DORK_ATK_PROVIDER_HOLD). See EngineFlags.h.
 int DorkAtkContestedKind(const GameState& s);
+// Kind 4 (Incandescent Soulstoke's end-step HOLD) in the non-FSLineWin hosts: the pre-apply gate for the hold twin
+// and its post-apply contested test (DecisionProviders.cpp; TurnSolver.cpp AppendEotHoldTwins).
+bool EotHoldTwinGate(const GameState& s);
+bool EotHoldContested(const GameState& s);
+long long EotHoldShadowedCount();   // FSLineWin nodes where a dork kind shadowed the hold (census)
 
 // MTG_EDF_TURN_TRACE (diagnostic, default off): one line per REAL main phase describing the
 // EldraziDisplacerFlicker blink loop on the executor's own board -- pieces present, refund, cost,

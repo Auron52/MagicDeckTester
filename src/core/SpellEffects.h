@@ -28250,11 +28250,38 @@ inline void TurnFaceDownPermanentUp(GameState& state, int controller, int idx)
 // GameState::scripted_eot_face_up). Beyond the horizon (a narrowed playout, the d0 runner) the unpinned consumer
 // takes the menu's FRONT -- the permitted playout greedy; MTG_FACEUP_AXIS_STATS counts every unpinned choice by
 // frame class (the searched-frame count must read 0).
+// INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP (Red Elementals agent F, 2026-11-14): the same window also
+// activates "{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield" -- one step per
+// live source, AFTER the flips (EotPutOptions / EotPutApply, defined beside the creature-ability pay scope below).
+struct EotPutStep
+{
+    int         src = 0;        // the source's card.m_number
+    std::string name;           // the Elemental creature card NAME put from hand
+    int         champion = 0;   // a champion put's packed exile pick (Action::enchant_target's carrier)
+    // The put creature's OWN enter choices, searched exactly as a main-phase put's are (agent F2 2026-11-14; the
+    // no-greedy rule: a window crossing is in the search window). `tutor` = the Plan::tutor_choice value its
+    // tutor ETB takes (Flamekin Harbinger: -1 = the provider's front at resolution, k >= 1 = rank k,
+    // kTutorDeclineChoice = "you may" declined) through ScriptedTutor; `look_top` = the Plan::look_top_pins row
+    // the look-tops its entry raises take (Risen Reef's land {default, flip}, Harbinger's CR 603.3b order {0..r})
+    // through ScriptedLookTop. Both are installed around THIS step's ApplyPutFromHand only (each step's pins
+    // start a fresh cursor, and an outer plan's pins never leak into the window).
+    int              tutor = -1;
+    std::vector<int> look_top;
+};
+// Window enter choices the menu did NOT fan (the look-top product past its cap fell back to the additive one-hot
+// fan, the main-phase axis's disclosed representation limit). Counted per searched menu build; printed with
+// MTG_FACEUP_AXIS_STATS (TurnSolver.cpp). Must read 0 on a deck whose census is claimed clean.
+inline std::atomic<long long> g_eot_put_etb_unfanned{0};
+inline std::atomic<long long> g_eot_put_etb_fanned_steps{0};   // ...and the steps that DID fan (any width > 1)
 struct EotFaceUpOption
 {
     std::vector<int>         ids;      // physical card numbers, in flip (= payment) order
     std::vector<std::string> regrow;   // per id: the pinned regrowth NAME ("" = none / the provider's pick)
+    std::vector<EotPutStep>  puts;     // Soulstoke puts after the flips, in order (empty = none)
 };
+inline bool AnyEotPutCandidate(const GameState& s);                                         // defined below
+inline std::vector<std::vector<EotPutStep>> EotPutOptions(const GameState& t, bool front_only);   // defined below
+inline bool EotPutApply(GameState& state, const std::vector<EotPutStep>& puts);              // defined below
 // A face-up form that WEAKLY DOMINATES the face-down 2/2 once its cost is paid from mana nothing else can use
 // (the opponent's end step): no "when turned face up" trigger, no self-sacrifice, fixed power AND toughness >= 2,
 // so the flipped creature has every capability of the 2/2 and is no smaller (no card in the pool reads "face
@@ -28334,7 +28361,32 @@ inline bool EotFaceUpPayAll(GameState& s, const std::vector<int>& ids)
 // would still be payable is dropped -- the superset is in the menu and weakly dominates it (same flips, the extra
 // mana has no other use at the opponent's end step, the face-up creature dominates the 2/2). The front is never
 // dropped. A function of the end-step state only, so the fan's crossings and the executor's consumer agree.
+// SOULSTOKE (agent F): each flip entry is then crossed with the window's put options on its leftover mana
+// (EotPutOptions: the put FRONT first, "put nothing" last), so the entry order is flips-major and rank 0 is
+// still the front of both. Without a live put source the menu is exactly the flip menu (every morph deck).
+inline std::vector<EotFaceUpOption> EotFaceUpMenuFlips(const GameState& s);
 inline std::vector<EotFaceUpOption> EotFaceUpMenu(const GameState& s)
+{
+    if (!AnyEotPutCandidate(s)) { return EotFaceUpMenuFlips(s); }
+    std::vector<EotFaceUpOption> flips = EotFaceUpMenuFlips(s);
+    if (flips.empty()) { flips.emplace_back(); }   // no face-down permanent: the one "flip nothing" entry
+    std::vector<EotFaceUpOption> menu;
+    for (const EotFaceUpOption& f : flips)
+    {
+        GameState t = s;
+        EotFloatingPools::Empty(t);
+        if (!f.ids.empty()) { TapSpeculationScope _spec; (void)EotFaceUpPayAll(t, f.ids); }
+        for (std::vector<EotPutStep>& pp : EotPutOptions(t, /*front_only=*/false))
+        {
+            EotFaceUpOption o = f;
+            o.puts = std::move(pp);
+            menu.push_back(std::move(o));
+            if (menu.size() >= 0x7FFF) { return menu; }
+        }
+    }
+    return menu;
+}
+inline std::vector<EotFaceUpOption> EotFaceUpMenuFlips(const GameState& s)
 {
     std::vector<EotFaceUpOption> menu;
     const auto cands = EotFaceUpCandidates(s);
@@ -28455,18 +28507,23 @@ inline void EotFaceUpApply(GameState& state, const EotFaceUpOption& o)
         FaceUpRegrowPinScope _pin(pin.empty() ? nullptr : &pin);
         TurnFaceDownPermanentUp(state, me, idx);
     }
+    if (!o.puts.empty()) { (void)EotPutApply(state, o.puts); }   // Soulstoke, after the flips (agent F)
 }
 // THE CONSUMER, at the opponent's notional end step in BOTH opponent_turn lambdas (GameEngine::RunTurnFrom,
 // TurnSolver's SimulateEndAndStartNextTurn), after that end step's self-sacrifice sweep. The pin is consumed
 // whatever it finds. Human play: the `face_up` prompt (g_play_face_up_chooser), one flip at a time.
+// SOULSTOKE (agent F): the same consumer runs the window's puts -- the menu entry's put half, or in human play the
+// `eot_put` prompt (g_play_eot_put_chooser) after the flips.
+inline void PerformOpponentEndStepEotPutsHuman(GameState& state);   // defined below
 inline void PerformOpponentEndStepFaceUp(GameState& state)
 {
     const int pin = state.scripted_eot_face_up;
     state.scripted_eot_face_up = -1;
-    if (!AnyEotFaceUpCandidate(state)) { return; }
-    if (g_play_face_up_chooser != nullptr)
+    const bool fu_any = AnyEotFaceUpCandidate(state);
+    if (!fu_any && !AnyEotPutCandidate(state)) { return; }
+    if (g_play_face_up_chooser != nullptr || g_play_eot_put_chooser != nullptr)
     {
-        for (;;)
+        for (; fu_any && g_play_face_up_chooser != nullptr; )
         {
             const auto cands = EotFaceUpCandidates(state);
             std::vector<int> idx;
@@ -28484,9 +28541,9 @@ inline void PerformOpponentEndStepFaceUp(GameState& state)
                     }
                 }
             }
-            if (idx.empty()) { return; }
+            if (idx.empty()) { break; }
             const int k = (*g_play_face_up_chooser)(state, idx, costs);
-            if (k < 0 || k >= static_cast<int>(idx.size())) { return; }
+            if (k < 0 || k >= static_cast<int>(idx.size())) { break; }
             EotFaceUpOption o;
             o.ids.push_back(state.battlefield[static_cast<std::size_t>(idx[static_cast<std::size_t>(k)])].card.m_number);
             o.regrow.push_back(std::string());   // the dig chooser asks at resolution
@@ -28494,6 +28551,8 @@ inline void PerformOpponentEndStepFaceUp(GameState& state)
             EotFaceUpApply(state, o);
             saved.Restore(state);
         }
+        if (g_play_eot_put_chooser != nullptr) { PerformOpponentEndStepEotPutsHuman(state); }
+        return;
     }
     const bool full = pin >= 0 || g_eot_face_up_width_probe != nullptr || g_faceup_unpinned_hook != nullptr;
     if (full)
@@ -28522,7 +28581,16 @@ inline void PerformOpponentEndStepFaceUp(GameState& state)
             if (EotFaceUpPayAll(t, trial)) { o.ids = std::move(trial); o.regrow.push_back(std::string()); }
         }
     }
-    if (o.ids.empty()) { return; }
+    // ...then the put front on what the flips leave (EotPutOptions' front -- identical to menu[0]'s put half).
+    if (AnyEotPutCandidate(state))
+    {
+        GameState t = state;
+        EotFloatingPools::Empty(t);
+        if (!o.ids.empty()) { TapSpeculationScope _spec; (void)EotFaceUpPayAll(t, o.ids); }
+        std::vector<std::vector<EotPutStep>> fr = EotPutOptions(t, /*front_only=*/true);
+        if (!fr.empty()) { o.puts = std::move(fr.front()); }
+    }
+    if (o.ids.empty() && o.puts.empty()) { return; }
     const EotFloatingPools saved(state);
     EotFaceUpApply(state, o);
     saved.Restore(state);
@@ -45279,6 +45347,432 @@ inline bool PermAbilitySourceIsCreature(const GameState& state, int controller, 
         return p.card.IsCreature() || p.is_animated;
     }
     return false;
+}
+
+// ---- INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP (Red Elementals agent F, 2026-11-14) -------------------
+// "{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield. That creature gains
+// haste until end of turn. Sacrifice it at the beginning of the next end step." It is instant speed, and the line
+// real play takes is the activation at the end of the OPPONENT's turn: it spends mana our turn left untapped, the
+// put creature has been under our control since our next turn began (no haste needed: it attacks then), "the next
+// end step" is then OURS (the opponent's end step has already begun), and Soulstoke untaps at our untap step and
+// can activate again in our main phase. The window is morph's opponent-end-step window (EotFaceUpMenu: the same
+// searched BoundaryFan axis, pin, census and executor crossing node) -- each flip entry is crossed with the put
+// options below, so one searched rank decides both.
+//
+// LEGALITY at the window (CR 302.6, {T}): the source untapped, CanTapNow -- a Soulstoke that entered during the
+// turn just ended is still summoning sick (it has not been ours "continuously since our most recent turn began";
+// our cleanup has already ended any until-end-of-turn haste), {1}{R} payable from the UNTAPPED sources (the
+// window pays like the flips: mana does not carry between steps), and an Elemental CREATURE card in hand.
+// THE DELAYED SACRIFICE needs no turn stamp: the window runs after the opponent's end step began (after the
+// self-sacrifice sweep there, PerformEndStepSelfSacrifices, and the delayed-sacrifice sweep run beside it for an
+// opponent extra turn), so the next sweep of Permanent::sac_at_end_step is our own end step -- exactly "the next
+// end step". A self-sacrificing body put here (Ball Lightning, Spark, Firecat, Hellspark) misses this end step's
+// trigger the same way (CR 603.2) and is sacrificed at ours.
+//
+// SOURCES ARE INTERCHANGEABLE HERE (a sound identity fold): every source untaps at our untap step, before anything
+// can read which one tapped, so the window's choice is a MULTISET of names (at most one put per live source),
+// assigned to the sources in battlefield order. Every live source is a copy of the first one's card (a list with
+// two DIFFERENT creature-put sources would need per-source costs; none exists in any pool).
+//
+// CHAMPION (a put Nova Chaser): the exile pick is crossed into the option exactly as the main-phase put's variants
+// are -- one per identity class (ChampionVariantTargets, the provider's tested prune included), one per EARLIER put
+// of the same option (a same-window entrant, named by its card), a decline, and a pick that is itself a champion
+// carries its return-time rank (ChampionPin::ret). Candidates are read on the pre-put board: a Firecat flipped in
+// the same window is a face-down 2/2 (no subtypes) there and is not offered (disclosed; a Nova exiling a Firecat
+// it could attack beside is not a line).
+//
+// OTHER ETB CHOICES of a put creature in the window (Risen Reef's look, Flamekin Harbinger's tutor) resolve at
+// their own unpinned defaults, as they do for every non-plan entry (the Vial upkeep put shape). DISCLOSED.
+inline bool EotPutSourceLive(const GameState& s, const Permanent& p)
+{
+    if (p.controller_index != s.active_player_index || p.tapped) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || !d->params.tap_put_from_hand_cost.has_value() || !d->params.tap_put_from_hand_creature_only)
+    { return false; }
+    return CanTapNow(p, s.battlefield);
+}
+inline bool EotPutCardMatches(const CardDefinition& src, const Card& c)
+{
+    if (c.m_is_staged) { return false; }
+    const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+    const Card& hc = hd ? hd->card : c;
+    if (src.params.tap_put_from_hand_creature_only && !hc.IsCreature()) { return false; }
+    if (src.params.tap_put_from_hand_types.empty()) { return true; }
+    for (const std::string& t : src.params.tap_put_from_hand_types) { if (CardMatchesTypeName(hc, t)) { return true; } }
+    return false;
+}
+inline bool AnyEotPutCandidate(const GameState& s)
+{
+    if (!s.deck_has_eot_tap_put) { return false; }
+    const Player& ap = s.players[static_cast<std::size_t>(s.active_player_index)];
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!EotPutSourceLive(s, p)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        for (const Card& c : ap.hand) { if (EotPutCardMatches(*d, c)) { return true; } }
+        return false;   // every live source is a copy of the first (see above)
+    }
+    return false;
+}
+constexpr int kEotPutMaxSteps = 4;
+// The put options on `t` (the end-step state after the entry's flips are paid), FRONT first and "put nothing"
+// (an empty sequence) LAST -- always present. The front: the provider's EotPutOrder first name through each live
+// source while the mana lasts (then the next name once its copies run out), every champion pick its variant
+// list's front. The rest: every other multiset, more puts first. A function of `t` alone, so the fan's crossings,
+// the executor's consumer and the unpinned front agree. front_only: just the front (an empty sequence when
+// nothing can be put).
+inline std::vector<std::vector<EotPutStep>> EotPutOptions(const GameState& t, bool front_only)
+{
+    std::vector<std::vector<EotPutStep>> out;
+    const int me = t.active_player_index;
+    const Player& ap = t.players[static_cast<std::size_t>(me)];
+    std::vector<int> srcs;
+    const CardDefinition* sdef = nullptr;
+    for (const Permanent& p : t.battlefield)
+    {
+        if (!EotPutSourceLive(t, p)) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (sdef == nullptr) { sdef = d; }
+        if (d == sdef && static_cast<int>(srcs.size()) < kEotPutMaxSteps) { srcs.push_back(p.card.m_number); }
+    }
+    std::vector<std::string> names;
+    std::vector<std::vector<int>> numbers;   // per name: its hand copies' card numbers, hand order
+    if (sdef != nullptr)
+    {
+        for (const Card& c : ap.hand)
+        {
+            if (!EotPutCardMatches(*sdef, c)) { continue; }
+            const std::string nm = c.m_name.str();
+            if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+        }
+        if (names.size() > 1) { ResolveProvider(t).EotPutOrder(t, names); }
+        numbers.resize(names.size());
+        for (const Card& c : ap.hand)
+        {
+            if (!EotPutCardMatches(*sdef, c)) { continue; }
+            const auto it = std::find(names.begin(), names.end(), c.m_name.str());
+            if (it != names.end()) { numbers[static_cast<std::size_t>(it - names.begin())].push_back(c.m_number); }
+        }
+    }
+    // Every put costs the same (one source kind), so payability depends on the COUNT only: the most puts the
+    // untapped sources fund, each paid under the creature-ability scope naming its source (Smokebraider's
+    // Elemental-ability mana and Secluded Courtyard's coloured mana are legal for it).
+    int max_len = 0;
+    if (sdef != nullptr && !names.empty())
+    {
+        TapSpeculationScope _spec;
+        GameState x = t;
+        for (std::size_t i = 0; i < srcs.size(); ++i)
+        {
+            const CreatureAbilityPayScope _sc(AbilitySourceCard(x, me, srcs[i]));
+            if (!TapForCostDirect(x, *sdef->params.tap_put_from_hand_cost, /*for_creature=*/false)) { break; }
+            ++max_len;
+        }
+    }
+    if (max_len == 0) { out.emplace_back(); return out; }
+    // The champion picks of entry `i` of `seq` (name indices), front first.
+    auto champ_picks = [&](const std::vector<int>& seq, std::size_t i) -> std::vector<int>
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(names[static_cast<std::size_t>(seq[i])]);
+        if (d == nullptr || d->params.champion_subtype.empty()) { return { 0 }; }
+        const std::string& sub = d->params.champion_subtype;
+        const int bound = ChampionReturnRankBound(t, me, sub);
+        auto is_champ = [](const Card& cc)
+        {
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(cc);
+            return cd != nullptr && !cd->params.champion_subtype.empty();
+        };
+        std::vector<int> picks;
+        auto emit = [&](int tn, bool cp)
+        {
+            for (int ret = cp ? 1 : 0; ret <= (cp ? bound + 1 : 0); ++ret) { picks.push_back(ChampionPackPick(tn, ret)); }
+        };
+        bool others = true;
+        for (int tn : ChampionVariantTargets(t, me, sub, &others))
+        {
+            bool cp = false;
+            for (const Permanent& q : t.battlefield) { if (q.card.m_number == tn) { cp = is_champ(q.card); break; } }
+            emit(tn, cp);
+        }
+        if (others)
+        {
+            std::vector<int> seen;
+            for (std::size_t j = 0; j < i; ++j)
+            {
+                const int nj = seq[j];
+                if (std::find(seen.begin(), seen.end(), nj) != seen.end()) { continue; }
+                seen.push_back(nj);
+                const CardDefinition* ed = CardDatabase::Instance().Lookup(names[static_cast<std::size_t>(nj)]);
+                const Card& ec = ed ? ed->card : ap.hand.front();
+                if (!(ec.IsCreature() && (CardHasSubtype(ec, sub) || (ed && ed->params.chosen_type_added_to_self))))
+                { continue; }
+                emit(numbers[static_cast<std::size_t>(nj)].front(), ed != nullptr && !ed->params.champion_subtype.empty());
+            }
+            picks.push_back(-1);   // decline: the put champion is sacrificed
+        }
+        if (picks.empty()) { picks.push_back(0); }
+        return picks;
+    };
+    // THE PUT CREATURE'S OWN ENTER CHOICES (agent F2, the no-greedy rule): the same two searched pins a main-phase
+    // put carries (TurnSolver.cpp EnumeratePlans' tutor axis and look-top fan) -- a put TUTOR creature's target
+    // (Flamekin Harbinger: the provider's front, every other rank of RankedTutorCandidates up to the provider's
+    // TutorSearchWidth, and the optional decline) and the look-tops its entry raises (Risen Reef: one LAND ordinal
+    // per look, {default, flip}, as the full product while 2^n <= 16 and the additive one-hot fan past it -- the
+    // main-phase cap and its disclosed limit; an entrant top-tutor's ORDER ordinal {0..r}). Look counts are UPPER
+    // bounds (every own Reef watches; a nonland top consumes no entry), so an over-sized row is an inert duplicate,
+    // never an unreachable answer. Front (rank 0) of every step = no pins = the provider's defaults, so the front
+    // sequence is unchanged and `front_only` (the playout, beyond the horizon) takes exactly it.
+    struct StepEtb { int tutor; std::vector<int> look_top; };
+    auto etb_variants = [&](const std::vector<int>& seq, std::size_t i) -> std::vector<StepEtb>
+    {
+        std::vector<StepEtb> v;
+        v.push_back(StepEtb{ -1, {} });
+        if (front_only || HumanPlayActive()) { return v; }
+        const CardDefinition* d = CardDatabase::Instance().Lookup(names[static_cast<std::size_t>(seq[i])]);
+        if (d == nullptr) { return v; }
+        const CardParams& pp = d->params;
+        std::vector<int> tut = { -1 };
+        if (d->card.IsCreature() && !pp.tutor_types.empty() && (pp.tutor_to_hand || pp.tutor_to_top)
+            && pp.etb_reveal_count == 0 && !(pp.etb_tutor_hand_count > 1 && pp.tutor_to_hand))
+        {
+            std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(t), t, me, pp);
+            std::vector<std::string> uniq;
+            for (const std::string& c : cands)
+            { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
+            const int w = std::max(1, ResolveProvider(t).TutorSearchWidth());
+            const int k = std::min(static_cast<int>(uniq.size()), w);
+            for (int c = 1; c < k; ++c) { tut.push_back(c); }
+            if (pp.tutor_optional) { tut.push_back(kTutorDeclineChoice); }
+        }
+        int looks = 0;   // look-top triggers this entry can raise (upper bound)
+        if (t.deck_has_look_top_watcher)
+        {
+            for (const Permanent& q : t.battlefield)
+            {
+                if (q.controller_index != me) { continue; }
+                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                if (qd != nullptr && qd->params.enters_look_top_land_or_hand) { ++looks; }
+            }
+            for (std::size_t j = 0; j < i; ++j)
+            {
+                const CardDefinition* ed = CardDatabase::Instance().Lookup(names[static_cast<std::size_t>(seq[j])]);
+                if (ed != nullptr && ed->params.enters_look_top_land_or_hand) { ++looks; }
+            }
+            if (pp.enters_look_top_land_or_hand && pp.creature_enters_includes_self) { ++looks; }
+        }
+        // ORDER rows: the unpinned default FIRST (so rank 0 of the step stays "no pins" = exactly what `front_only`
+        // takes), then every k in {0..looks}. One of the k rows repeats the default -- an inert duplicate (the
+        // default depends on the state at resolution, so it cannot be dropped here), never a missing line.
+        std::vector<std::vector<int>> orders = { {} };
+        if (looks > 0 && pp.tutor_to_top && !pp.tutor_types.empty())
+        {
+            for (int k = 0; k <= looks; ++k) { orders.push_back({ kLookTopOrderBase + 1 + k }); }
+        }
+        std::vector<std::vector<int>> lands = { {} };
+        if (looks > 0)
+        {
+            lands.clear();
+            if (looks <= 4)
+            {
+                for (int m = 0; m < (1 << looks); ++m)
+                {
+                    std::vector<int> row;
+                    for (int b = 0; b < looks; ++b) { row.push_back((m >> b) & 1 ? kLookTopLandFlip : -1); }
+                    while (!row.empty() && row.back() == -1) { row.pop_back(); }
+                    lands.push_back(std::move(row));
+                }
+            }
+            else
+            {
+                lands.push_back({});
+                for (int b = 0; b < looks; ++b)
+                {
+                    std::vector<int> row(static_cast<std::size_t>(b), -1);
+                    row.push_back(kLookTopLandFlip);
+                    lands.push_back(std::move(row));
+                }
+                g_eot_put_etb_unfanned.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+        v.clear();
+        for (int tu : tut)
+        {
+            for (const std::vector<int>& o : orders)
+            {
+                for (const std::vector<int>& l : lands)
+                {
+                    std::vector<int> row = o;   // the enumerator's layout: order entries first
+                    row.insert(row.end(), l.begin(), l.end());
+                    v.push_back(StepEtb{ tu, std::move(row) });
+                }
+            }
+        }
+        if (v.size() > 1) { g_eot_put_etb_fanned_steps.fetch_add(1, std::memory_order_relaxed); }
+        return v;
+    };
+    auto expand = [&](const std::vector<int>& seq)
+    {
+        // Per step: champion pick x own enter choices (the champion pick major, so a champion-only entrant keeps its
+        // exact old order; a non-champion's single pick 0 is crossed with its enter variants).
+        struct StepVar { int champion; int tutor; std::vector<int> look_top; };
+        std::vector<std::vector<StepVar>> per(seq.size());
+        for (std::size_t i = 0; i < seq.size(); ++i)
+        {
+            const std::vector<int> cp = champ_picks(seq, i);
+            const std::vector<StepEtb> ev = etb_variants(seq, i);
+            for (int c : cp) { for (const StepEtb& e : ev) { per[i].push_back(StepVar{ c, e.tutor, e.look_top }); } }
+        }
+        std::vector<std::size_t> r(seq.size(), 0);
+        for (;;)
+        {
+            std::vector<EotPutStep> o;
+            for (std::size_t i = 0; i < seq.size(); ++i)
+            {
+                const StepVar& sv = per[i][r[i]];
+                o.push_back({ srcs[i], names[static_cast<std::size_t>(seq[i])], sv.champion, sv.tutor, sv.look_top });
+            }
+            out.push_back(std::move(o));
+            if (front_only || out.size() >= 0x7FFF) { return; }
+            bool adv = false;
+            for (std::size_t i = seq.size(); i-- > 0; )
+            {
+                if (r[i] + 1 < per[i].size()) { ++r[i]; adv = true; break; }
+                r[i] = 0;
+            }
+            if (!adv) { return; }
+        }
+    };
+    // The front sequence: names in order, each up to its copy count, up to max_len puts.
+    std::vector<int> front;
+    for (std::size_t j = 0; j < names.size() && static_cast<int>(front.size()) < max_len; ++j)
+    {
+        for (std::size_t c = 0; c < numbers[j].size() && static_cast<int>(front.size()) < max_len; ++c)
+        { front.push_back(static_cast<int>(j)); }
+    }
+    expand(front);
+    if (front_only) { return out; }
+    // Every other multiset (non-decreasing name index, each name at most its copy count), more puts first.
+    std::vector<std::vector<int>> seqs;
+    std::vector<int> cur;
+    std::function<void(int)> rec = [&](int start)
+    {
+        if (!cur.empty() && cur != front) { seqs.push_back(cur); }
+        if (static_cast<int>(cur.size()) == max_len) { return; }
+        for (int j = start; j < static_cast<int>(names.size()); ++j)
+        {
+            const int used = static_cast<int>(std::count(cur.begin(), cur.end(), j));
+            if (used >= static_cast<int>(numbers[static_cast<std::size_t>(j)].size())) { continue; }
+            cur.push_back(j);
+            rec(j);
+            cur.pop_back();
+        }
+    };
+    rec(0);
+    std::stable_sort(seqs.begin(), seqs.end(),
+                     [](const std::vector<int>& a, const std::vector<int>& b) { return a.size() > b.size(); });
+    for (const std::vector<int>& q : seqs) { expand(q); if (out.size() >= 0x7FFF) { return out; } }
+    out.emplace_back();   // put nothing (the "you may" decline)
+    return out;
+}
+// The opponent's cleanup (CR 514.2) for what the window created: the put creature's haste "until end of turn" and
+// any until-end-of-turn effect its entry fired (a Risen Reef land's landfall pump) end before our untap step. Run
+// only when a put happened, so every flip-only window (every morph deck) is unchanged.
+inline void EotWindowEndOfTurnReset(GameState& state)
+{
+    for (Permanent& p : state.battlefield)
+    {
+        p.damage                = 0;
+        p.pending_death_trigger = 0;
+        p.temp_power_bonus      = 0;
+        p.temp_tough_bonus      = 0;
+        p.temp_haste            = false;
+        p.temp_lifelink         = false;
+        p.temp_double_strike    = false;
+        p.temp_indestructible   = false;
+        p.is_animated           = false;
+        p.animated_printed_types = false;
+    }
+}
+// Apply the put half of a window entry (after its flips): each step re-checks legality (PutFromHandLegalIndex: the
+// source live and able to {T}, the card still in hand) and pays under the source's creature-ability scope before the
+// shared ApplyPutFromHand (the enter cascade: Risen Reef's watcher, Metallic Mimic's counter, the creature's own ETB,
+// the champion pick). A stranded step is a no-op. Returns whether anything was put.
+inline bool EotPutApply(GameState& state, const std::vector<EotPutStep>& puts)
+{
+    const int me = state.active_player_index;
+    bool any = false;
+    for (const EotPutStep& st : puts)
+    {
+        if (PutFromHandLegalIndex(state, me, st.src, st.name) < 0) { continue; }
+        const Card* sc = AbilitySourceCard(state, me, st.src);
+        const CardDefinition* sd = sc != nullptr ? CardDatabase::Instance().LookupCached(*sc) : nullptr;
+        if (sd == nullptr || !sd->params.tap_put_from_hand_cost.has_value()) { continue; }
+        bool paid = false;
+        {
+            const CreatureAbilityPayScope _sc(sc);
+            paid = TapForCostDirect(state, *sd->params.tap_put_from_hand_cost, /*for_creature=*/false);
+        }
+        if (!paid) { continue; }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          "\xE2\x8F\xB3 Opponent's end step: " + sc->m_name.str() + " puts " + st.name
+                          + " onto the battlefield (sacrificed at the beginning of your next end step)");
+        }
+        // The step's own searched enter choices (EotPutStep::tutor / look_top; unpinned = the provider's defaults).
+        // (ScriptedTutor's shape, open-coded: that scope is defined further down this header.)
+        struct EotTutorPin
+        {
+            int saved;
+            explicit EotTutorPin(int k) : saved(g_scripted_tutor_choice) { g_scripted_tutor_choice = k; ++tutorpin::t_depth; }
+            ~EotTutorPin() { g_scripted_tutor_choice = saved; --tutorpin::t_depth; }
+        };
+        const EotTutorPin     _stu(st.tutor);
+        const ScriptedLookTop _slt(st.look_top);
+        if (ApplyPutFromHand(state, me, st.src, st.name, st.champion)) { any = true; }
+    }
+    if (any) { EotWindowEndOfTurnReset(state); }
+    return any;
+}
+// Human play (the `eot_put` prompt): after the flips, one put per answer through the first live source, re-asked
+// while one remains. Offered every distinct Elemental creature card name in hand when the ability is affordable
+// (unpruned; the champion pick asks at resolution).
+inline void PerformOpponentEndStepEotPutsHuman(GameState& state)
+{
+    for (int guard = 0; guard < 16; ++guard)
+    {
+        if (!AnyEotPutCandidate(state)) { return; }
+        int src_idx = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (EotPutSourceLive(state, state.battlefield[static_cast<std::size_t>(i)])) { src_idx = i; break; } }
+        if (src_idx < 0) { return; }
+        const Permanent& sp = state.battlefield[static_cast<std::size_t>(src_idx)];
+        const CardDefinition* sd = CardDatabase::Instance().LookupCached(sp.card);
+        {
+            TapSpeculationScope _spec;
+            GameState x = state;
+            EotFloatingPools::Empty(x);
+            const CreatureAbilityPayScope _sc(AbilitySourceCard(x, x.active_player_index, sp.card.m_number));
+            if (!TapForCostDirect(x, *sd->params.tap_put_from_hand_cost, /*for_creature=*/false)) { return; }
+        }
+        std::vector<std::string> names;
+        for (const Card& c : state.players[static_cast<std::size_t>(state.active_player_index)].hand)
+        {
+            if (!EotPutCardMatches(*sd, c)) { continue; }
+            const std::string nm = c.m_name.str();
+            if (std::find(names.begin(), names.end(), nm) == names.end()) { names.push_back(nm); }
+        }
+        if (names.empty()) { return; }
+        if (names.size() > 1) { ResolveProvider(state).EotPutOrder(state, names); }
+        const int k = (*g_play_eot_put_chooser)(state, src_idx, names);
+        if (k < 0 || k >= static_cast<int>(names.size())) { return; }
+        const int src = sp.card.m_number;
+        const EotFloatingPools saved(state);
+        EotFloatingPools::Empty(state);
+        const bool put = EotPutApply(state, { EotPutStep{ src, names[static_cast<std::size_t>(k)], 0 } });
+        saved.Restore(state);
+        if (!put) { return; }
+    }
 }
 
 // ---- BLOODLINE KEEPER'S IN-COMBAT TRANSFORM WINDOW (Vampires B; design_B_lords.md §4) --------------

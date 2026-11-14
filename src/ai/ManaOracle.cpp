@@ -5018,7 +5018,7 @@ bool PlanPaymentScript(const GameState& state, const TurnSolver::Plan& plan, boo
         const int saved_ov = g_dork_atk_override;
         const int rel = plan.atk_dork_release;
         if (DorkAtkSearchEnabled() && rel >= 1)
-        { g_dork_atk_override = (rel == 1) ? 1 : (rel == 2 ? 0 : (rel == 3 ? 3 : -1)); }
+        { g_dork_atk_override = (rel == 1) ? 1 : (rel == 2 ? 0 : (rel == 3 ? 3 : (rel == 4 ? 4 : -1))); }
         // One entry per creature we control on the scored board: +number = it attacked there, -number = it did
         // not. A body that is not listed (one a beginning-of-combat effect creates) is left to the heuristic.
         // Declared the way the search's combat declares (TurnSolver RolloutCombatDeclaration: the pool empties first
