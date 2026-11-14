@@ -57812,6 +57812,130 @@ static bool CrackFirstCompose(TurnSolver::Plan& q, const Action& crack, int r);
 // with the provider's FRONT pick (the documented default for every path without a searched pin), and take the
 // crack-first plan only when it scores STRICTLY better than the plain walk (or wins where it does not), so a
 // turn whose casts never needed the fetched land plays exactly as before.
+// ---- GREEDY SELF-HASTE RIDER (MTG_GREEDY_SELF_HASTE; Boars d0haste, 2026-11-14) ---------------------------
+// Flinthoof Boar: "{R}: This creature gains haste until end of turn" (CardParams::self_haste_cost, ActivatePump
+// mode 6). CollectActions offers the activation only for a creature ON the battlefield, and the search reaches
+// "cast it, then haste it" through breakpoint site 9 (kActSelfHaste, ba5d932b0). The GREEDY policy -- Solve, i.e.
+// the depth-0 runner and every playout turn beyond the horizon -- had no route to it at all: it picked its cast
+// set by a projection that gives a summoning-sick cast no attack, applied the plan once, and never re-solved, so a
+// freshly cast Flinthoof was never hasted in a rollout, and the d0 runner hasted one only when its second pass
+// found mana left over. Boars d0 seed 95093 gi92 T4: Herald's Horn + Flinthoof ({G}) was taken over Flinthoof
+// {1}{G} + {R} haste, which is lethal (T5 instead of T4).
+//
+// So Solve's candidate list gets, for each self_haste_cost creature it may cast pre-combat, a RIDER: the mode-6
+// activation of that very card (sac_source_id = the hand card's number, which the permanent keeps), marked with
+// the hand slot whose cast it hastes (Action::haste_rider_hand). It is an ordinary independent candidate: its
+// cost {R} is billed as a NONCREATURE use (is_noncreature: Somberwald Sage's creature-spell mana cannot pay it,
+// CR 106.6 -- the same bill the on-board activation carries), its attack is projected (haste_attack_power, the
+// stamp a hard-cast haste creature gets), and its eval is the one extra attack EvalCard gives a hasty body
+// (power x DMG). consider() refuses a rider without its cast (SubsetHasUncastHasteRider), so the walk scores
+// exactly "cast it + reserve the haste cost + activate" against every other set. The plan carries it to the
+// trailing pass of BOTH apply worlds (ApplyPlanDirect and AIEngine::TakeTurn), which activate it after the casts,
+// liveness first (SelfHasteActivationLive), so nothing is credited that is not applied.
+//
+// Offered only where the grant can change anything: pre-combat (haste after combat lifts nothing; the card has no
+// {T} ability), the body as it would land (summoning-sick, untapped) cannot attack without it and can with it --
+// SelfHasteActivationLive's own test on the hypothetical permanent -- and it has power to attack with. Never in
+// human play (the viewer enumerates the activation itself once the creature is out). Generic by params: only
+// Flinthoof holds self_haste_cost, so every other deck is byte-identical. The searched tree is untouched (this is
+// Solve's list, not CollectActions'): the permitted greedy class, beyond every search window.
+// Measured (held-out seed 99001, 400 games per cell, paired): Boars d0 -24 turns, Boars 2HG d0 -20, every searched
+// cell (d3 b10, d5 b20; standard and 2HG) <= 0 -- the slower games and their causes are in
+// docs/design/boars-greedy-self-haste.md. Fixture: test/scenarios/boars_flinthoof_d0_cast_then_haste.json.
+static bool GreedySelfHasteOn()
+{
+    static const bool env = EnvOn("MTG_GREEDY_SELF_HASTE", true);   // DEFAULT ON; =0 -> no rider
+    return heurarm::Flag(heurarm::GREEDY_SELF_HASTE, env);         // per-JOB so one pooled batch runs both arms
+}
+
+static bool AppendGreedySelfHasteRiders(const GameState& state, bool is_pre_combat, std::vector<Action>& cands)
+{
+    if (!is_pre_combat || HumanPlayActive() || !GreedySelfHasteOn()) { return false; }
+    const int me = state.active_player_index;
+    const std::vector<Card>& hand = state.players[me].hand;
+    std::vector<Action> riders;
+    for (const Action& c : cands)
+    {
+        if (c.kind != Action::Kind::CastFromHand || c.hand_index < 0
+            || c.hand_index >= static_cast<int>(hand.size())) { continue; }
+        // CollectActions does not always stamp a cast's def (the plain hand cast leaves it null): by name.
+        const CardDefinition* dp = c.def != nullptr ? c.def : CardDatabase::Instance().LookupInterned(c.card_name);
+        if (dp == nullptr) { continue; }
+        const CardDefinition& d = *dp;
+        if (!d.params.self_haste_cost.has_value() || !d.card.IsCreature() || RemandCountersCast(c)) { continue; }
+        if (c.haste_attack_power > 0 || c.cond_artifact_haste_power > 0) { continue; }   // hasty without it
+        const Card& hc = hand[static_cast<std::size_t>(c.hand_index)];
+        bool dup = false;   // one rider per hand card, however many cast variants it has
+        for (const Action& r : riders) { if (r.haste_rider_hand == c.hand_index) { dup = true; break; } }
+        if (dup) { continue; }
+        Permanent body;
+        body.card              = d.card;          // the definition's card, numbered as the hand copy (the
+        body.card.m_number     = hc.m_number;     // permanent a cast makes: the Vial-put / resolve shape)
+        body.controller_index  = me;
+        body.owner_index       = me;
+        body.entered_this_turn = true;
+        if (CanAttackFull(body, state.battlefield, me)) { continue; }   // a lord / equipment-free haste already
+        Permanent hasted = body;
+        hasted.temp_haste = true;
+        if (!CanAttackFull(hasted, state.battlefield, me)) { continue; }   // defender etc.: the grant is inert
+        auto [lord_pb, lord_tb] = ComputeLordBonus(d.card, state, me);
+        (void)lord_tb;
+        const bool ds = d.card.HasKeyword(Keyword::DoubleStrike)
+                     || HasDoubleStrikeFromLords(d.card, state.battlefield, me);
+        const int power = (d.card.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+        if (power <= 0) { continue; }
+        constexpr int DMG = 100;   // EvalCard's unit: the one attack a hasty body adds
+        Action a;
+        a.kind               = Action::Kind::ActivatePump;
+        a.card_name          = d.card.m_name;
+        a.def                = &d;
+        a.hand_index         = -1;
+        a.sac_source_id      = hc.m_number;
+        a.chosen_x           = 1;
+        a.gy_exile_mode      = 6;
+        a.cost               = d.params.self_haste_cost.value();
+        a.eval               = power * DMG;
+        a.is_noncreature     = true;
+        a.haste_attack_power = power;
+        a.haste_prowess      = d.card.HasKeyword(Keyword::Prowess);
+        a.haste_rider_hand   = c.hand_index;
+        riders.push_back(std::move(a));
+    }
+    // MTG_GREEDY_SELF_HASTE_TRACE=<turn> (DIAGNOSTIC, print-only; default 0 = off): the candidate list and the riders
+    // appended on that turn -- the read that found a hand copy is a name-only placeholder (no types).
+    static const int s_trace = EnvInt("MTG_GREEDY_SELF_HASTE_TRACE", 0);
+    if (s_trace > 0 && state.turn_number == s_trace)
+    {
+        std::fprintf(stderr, "[self-haste] T%d cands=%zu riders=%zu\n", state.turn_number, cands.size(), riders.size());
+        for (const Action& c : cands)
+        {
+            std::fprintf(stderr, "[self-haste]   kind=%d %s hi=%d def=%p hap=%d\n", static_cast<int>(c.kind),
+                         c.card_name.str().c_str(), c.hand_index, static_cast<const void*>(c.def), c.haste_attack_power);
+        }
+    }
+    if (riders.empty()) { return false; }
+    for (Action& r : riders) { cands.push_back(std::move(r)); }
+    return true;
+}
+
+// A rider (see above) whose cast the subset does not hold: it would pay {R} to haste a creature still in hand.
+static bool SubsetHasUncastHasteRider(const std::vector<Action>& cands, const std::vector<int>& sel)
+{
+    for (int i : sel)
+    {
+        const int h = cands[static_cast<std::size_t>(i)].haste_rider_hand;
+        if (h < 0) { continue; }
+        bool cast = false;
+        for (int k : sel)
+        {
+            const Action& c = cands[static_cast<std::size_t>(k)];
+            if (c.kind == Action::Kind::CastFromHand && c.hand_index == h && !RemandCountersCast(c)) { cast = true; break; }
+        }
+        if (!cast) { return true; }
+    }
+    return false;
+}
+
 TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
 { return SolveCrackFirst(state, is_pre_combat, permit, 0); }
 
@@ -57953,6 +58077,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
     g_search_candidate_enum = false;
     std::vector<Action> cands = CollectActions(state, is_pre_combat);
     g_search_candidate_enum = saved_sce;
+    // MTG_GREEDY_SELF_HASTE: "cast Flinthoof, keep {R}, haste it" as a candidate (AppendGreedySelfHasteRiders).
+    const bool any_haste_rider = AppendGreedySelfHasteRiders(state, is_pre_combat, cands);
     // MTG_PAY_PROBE_MEMO: this enumeration's payability questions about (state, cands) -- see paymemo.
     paymemo::Scope _pay_memo(state, cands);
     t_greedy_last_ncands = static_cast<int>(cands.size());
@@ -58598,6 +58724,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         // or cast (the cast-and-activate / cast-and-loop pairings). Lockstep twins below.
         if (pre.pod_activation && SubsetHasStrandedPodActivation(state, cands, sel)) { return; }
         if (pre.hand_blink     && SubsetHasStrandedHandBlink(cands, sel)) { return; }
+        // A greedy self-haste rider without its cast (MTG_GREEDY_SELF_HASTE): {R} for a creature still in hand.
+        if (any_haste_rider    && SubsetHasUncastHasteRider(cands, sel)) { return; }
         // Vampires A2 duplicates (over-pinned discards, a same-plan victim without its cast, the wrong
         // Blood cost variant, a non-canonical identical-Condemned pair). Lockstep twin in eval_and_push.
         if (pre.vamp_outlet    && SubsetVampOutletInvalidWith(state, cands, sel, fold_from_odometer, pre.vamp)) { return; }

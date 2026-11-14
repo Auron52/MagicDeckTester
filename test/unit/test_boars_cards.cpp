@@ -4,14 +4,17 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
+#include "ai/HeuristicArm.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameLogger.h"
+#include "core/EffectHandler.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 #include "deck/DeckLoader.h"
+#include "mtg_test_seam.h"
 #include <string>
 #include <vector>
 
@@ -423,4 +426,146 @@ TEST_CASE("A2: an all-creature prepay keeps a general source's surplus general (
     ManaCost one; one.generic = 1;
     CHECK(TapForCostDirect(t, one, /*for_creature=*/false));
     // The bookkeeping is the only change: =0 restores the all-creature-only booking (measured A/B lever).
+}
+
+// ---- MTG_GREEDY_SELF_HASTE (Boars d0haste, 2026-11-14): the GREEDY policy (Solve -- the depth-0 runner and every
+// playout turn beyond the horizon) casts Flinthoof, keeps {R} and hastes it when that is the better set. Repro: Boars
+// d0 seed 95093 gi92 T4 took Herald's Horn + Flinthoof ({G}) over Flinthoof {1}{G} + {R} haste, which was lethal.
+namespace
+{
+struct SelfHasteArm
+{
+    std::int8_t prev;
+    explicit SelfHasteArm(bool on) : prev(heurarm::t_arm[heurarm::GREEDY_SELF_HASTE])
+    { heurarm::t_arm[heurarm::GREEDY_SELF_HASTE] = on ? 1 : 0; }
+    ~SelfHasteArm() { heurarm::t_arm[heurarm::GREEDY_SELF_HASTE] = prev; }
+};
+void ResolveAllSh(GameState& st)
+{
+    while (!st.stack.empty())
+    {
+        const StackEntry e = st.stack.back();
+        st.stack.pop_back();
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(e.source);
+        if (d != nullptr) { EffectHandler::Resolve(st, e, *d); }
+    }
+}
+const Action* RiderOf(const TurnSolver::Plan& p, int num)
+{
+    for (const Action& a : p.actions)
+    {
+        if (a.kind == Action::Kind::ActivatePump && a.gy_exile_mode == 6 && a.sac_source_id == num) { return &a; }
+    }
+    return nullptr;
+}
+bool CastsNum(const TurnSolver::Plan& p, const GameState& s, int num)
+{
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.hand_index < 0) { continue; }
+        if (s.players[0].hand[static_cast<std::size_t>(a.hand_index)].m_number == num) { return true; }
+    }
+    return false;
+}
+// Forest, Forest, Mountain; Flinthoof (3/3 with the Mountain) + Herald's Horn {3} in hand; the opponent at 3. Three
+// mana buys the Horn, or Flinthoof {1}{G} + {R} haste -- the kill. The payer must keep the Mountain for the haste.
+GameState SelfHasteBoard()
+{
+    GameState s = BBase();
+    BPut(s, "Forest", 10);
+    BPut(s, "Forest", 11);
+    BPut(s, "Mountain", 12);
+    s.players[0].lands_played_this_turn = 1;
+    s.players[1].life = 3;
+    // A real game's hand holds DeckLoader PLACEHOLDERS (name + number, no types): the rider must judge the body it
+    // lands as from the definition, not from the hand copy (which reads as a non-creature that can never attack).
+    BDef("Flinthoof Boar");
+    Card flint;   // DeckLoader::MakePlaceholder's shape
+    flint.m_name = CardDatabase::Instance().CanonicalName("Flinthoof Boar");
+    flint.RehashName();
+    flint.m_number = 1;
+    s.players[0].hand.push_back(flint);
+    s.players[0].hand.push_back(BCard("Herald's Horn", 2));
+    return s;
+}
+TurnSolver::Plan GreedySolve(const GameState& s, bool pre_combat)
+{ return TurnSolver::Solve(s, pre_combat, TurnSolver::GreedyPermit(TurnSolver::GreedySite::HorizonLeaf, 0)); }
+}   // namespace
+
+TEST_CASE("Greedy self-haste: Solve casts Flinthoof + {R} haste for the kill, and BOTH worlds apply the activation")
+{
+    const GameState s = SelfHasteBoard();
+    SelfHasteArm on(true);
+    const TurnSolver::Plan p = GreedySolve(s, /*pre_combat=*/true);
+    INFO("plan actions=" << p.actions.size() << " wins=" << p.wins_this_turn);
+    CHECK(p.wins_this_turn);
+    CHECK(CastsNum(p, s, 1));
+    const Action* r = RiderOf(p, 1);
+    REQUIRE(r != nullptr);
+    CHECK(r->haste_rider_hand >= 0);
+    CHECK(r->is_noncreature);
+
+    // Rollout world (ApplyPlanDirect's trailing pass).
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, p, /*is_pre_combat=*/true);
+    REQUIRE(BNum(roll, 1) != nullptr);
+    CHECK(BNum(roll, 1)->temp_haste);
+    CHECK(CanAttackFull(*BNum(roll, 1), roll.battlefield, 0));
+
+    // Executor world, the committed plan (AIEngine::TakeTurn's trailing pass).
+    {
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        GameState ex = s;
+        eng.TakeTurn(ex, true, ResolveAllSh);
+        REQUIRE(BNum(ex, 1) != nullptr);
+        CHECK(BNum(ex, 1)->temp_haste);
+    }
+    // ...and the depth-0 runner's own greedy decision (GreedyPermit(D0Runner)).
+    {
+        AIEngine eng(MulliganProfile::DefaultProfile(), 0, 0);
+        GameState ex = s;
+        eng.TakeTurn(ex, true, ResolveAllSh);
+        REQUIRE(BNum(ex, 1) != nullptr);
+        CHECK(BNum(ex, 1)->temp_haste);
+    }
+}
+
+TEST_CASE("Greedy self-haste: no rider when it is off, post-combat, unpayable beside the cast, or only creature mana pays")
+{
+    {
+        const GameState s = SelfHasteBoard();
+        SelfHasteArm off(false);
+        CHECK(RiderOf(GreedySolve(s, true), 1) == nullptr);
+    }
+    {
+        const GameState s = SelfHasteBoard();
+        SelfHasteArm on(true);
+        CHECK(RiderOf(GreedySolve(s, /*pre_combat=*/false), 1) == nullptr);   // haste after combat lifts nothing
+    }
+    {
+        // Two lands: Flinthoof {1}{G} takes both, so no {R} is left -- the rider never rides without its mana.
+        GameState s = BBase();
+        BPut(s, "Forest", 10);
+        BPut(s, "Mountain", 12);
+        s.players[0].lands_played_this_turn = 1;
+        s.players[1].life = 3;
+        s.players[0].hand.push_back(BCard("Flinthoof Boar", 1));
+        SelfHasteArm on(true);
+        const TurnSolver::Plan p = GreedySolve(s, true);
+        CHECK(CastsNum(p, s, 1));
+        CHECK(RiderOf(p, 1) == nullptr);
+    }
+    {
+        // Somberwald Sage's creature-spell-only mana pays the cast, never the ability (CR 106.6): with a lone Forest
+        // as the only general source, no {R} exists for the haste.
+        GameState s = BBase();
+        BPut(s, "Somberwald Sage", 20, /*sick=*/false);
+        BPut(s, "Forest", 10);
+        s.players[0].lands_played_this_turn = 1;
+        s.players[1].life = 3;
+        s.players[0].hand.push_back(BCard("Flinthoof Boar", 1));
+        SelfHasteArm on(true);
+        CHECK(RiderOf(GreedySolve(s, true), 1) == nullptr);
+    }
 }

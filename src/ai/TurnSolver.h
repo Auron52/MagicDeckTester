@@ -876,6 +876,11 @@ struct Action
                                        // projection silently misses a cast Goblin Guide / Monastery
                                        // Swiftspear. Stamped once by CollectActions (both enumerators
                                        // share it), 0 for every non-creature / summoning-sick cast.
+    // GREEDY SELF-HASTE RIDER (MTG_GREEDY_SELF_HASTE; Solve only -- the d0 runner and the horizon playout): an
+    // ActivatePump mode-6 action (Flinthoof Boar's "{R}: haste") for a self_haste_cost creature still IN HAND, the
+    // hand slot whose cast it hastes. A subset may hold it only together with that cast (SubsetHasUncastHasteRider);
+    // the trailing pass of both apply worlds activates it once the cast has landed. -1 = not a rider.
+    int  haste_rider_hand      = -1;
     // Goblin Tomb Raider (static_artifact_haste) cast with NO durable artifact on board: its hasty
     // attack power IF the same subset also puts a durable artifact onto the battlefield
     // (adds_durable_artifact on another selected action). Credited into haste_cast_atk only then.
