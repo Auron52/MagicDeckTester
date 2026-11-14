@@ -1719,6 +1719,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                      std::uint64_t reserved_mask, ManaPool* available,
                                      bool honor_legacy_cco)
 {
+    static thread_local bool credit_retry = false;
+    const ManaPool available_pre_credit = available != nullptr ? *available : ManaPool{};
     if (tapstats::Enabled()) { tapstats::g_pay_once.fetch_add(1, std::memory_order_relaxed); }
     int      active = state.active_player_index;
     ManaPool floating;  // mana produced this payment but not yet consumed (held locally)
@@ -1934,6 +1936,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             GenericCFirstScope _gcf(cap);
             {
                 WildTrueScope _wt(pwt_gen_live ? &pwt_gen : nullptr, pwt_enforce);
+                // First try the ordinary payment. A generic credit is an alternative
+                // assignment, not free mana: spending it before trying a land can
+                // consume a float colour needed by a later cast (Bruna's Wish line).
+                WildTrueCreditScope _credit(credit_retry || manaoracle::t_float_only);
                 SpendFloatingTowardCost(state.floating_mana, cost);
             }
             if (pwt_gen_live) { PrepayWildTrueStore(state, 0, pwt_gen); }
@@ -3937,6 +3943,47 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
       // plan application, and it is separately levered (MTG_HUMAN_CONCRETE_LEFTOVER).
       // No-op outside human play and for a wild-free pool.
       ConcretiseHumanFloat(state, active, ConcreteSite::Leftover);
+      // A one-of-each Karoo tap can pay a generic pip with one colour and float the
+      // other. The payment's hand-demand ordering may choose the colour a later
+      // wish target needs. Keep that generic assignment movable while the float is
+      // unchanged, just as a generic pip paid by the whole-turn prepay does.
+      if (PrepayWildDeferOn() && reserve_pre.Total() == 0 && tap_bill.generic == 1
+          && tap_bill.ManaValue() == 1 && lo.Total() == 1 && state.floating_mana.Total() == 1)
+      {
+          const Permanent* source = nullptr;
+          const CardDefinition* source_def = nullptr;
+          const int nb = static_cast<int>(std::min(bf_pre.size(), state.battlefield.size()));
+          int tapped = 0;
+          for (int bi = 0; bi < nb; ++bi)
+          {
+              const Permanent& bp = state.battlefield[static_cast<std::size_t>(bi)];
+              if (!bp.tapped || bf_pre[static_cast<std::size_t>(bi)].tapped
+                  || bp.controller_index != active || bp.def_absent) { continue; }
+              ++tapped;
+              source = &bp;
+              source_def = CardDatabase::Instance().LookupCached(bp.card);
+          }
+          if (tapped == 1 && source_def != nullptr && source_def->params.produces_amount == 2
+              && source_def->params.etb_bounce_land && !LegacyKarooPay())
+          {
+              const auto& produces = EffectiveProducesFor(state, active, *source_def, source);
+              if (produces.size() == 2 && produces[0] != produces[1])
+              {
+                  const int col[5] = {state.floating_mana.white, state.floating_mana.blue,
+                                      state.floating_mana.black, state.floating_mana.red,
+                                      state.floating_mana.green};
+                  for (Color c : produces)
+                  {
+                      const int ci = static_cast<int>(c);
+                      if (ci < 0 || ci >= 5 || col[ci] != 0) { continue; }
+                      WildTrueRec credit; credit.held[ci] = 1;
+                      state.prepay_wild_true.stamp = PrepayCStampNow(state);
+                      PrepayWildTrueStore(state, 0, credit);
+                      break;
+                  }
+              }
+          }
+      }
       if (g_float_trace && !AllPlayHooksNull())
       { std::fprintf(stderr, "[float] cost=%s leftover{w%d u%d b%d r%d g%d c%d *%d} -> float{w%d u%d b%d r%d g%d c%d *%d}\n",
                      cost.ToString().c_str(), lo.white, lo.blue, lo.black, lo.red, lo.green, lo.colorless, lo.wild,
@@ -4260,6 +4307,16 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     state.floating_haste_c             = haste_reserve_pre;
     state.floating_prepay_c            = prepay_c_pre;
     state.prepay_wild_true             = pwt_pre;
+    if (!credit_retry && PrepayWildDeferOn() && pwt_gen0.HeldTotal() > 0
+        && (cost_in.white | cost_in.blue | cost_in.black | cost_in.red | cost_in.green) != 0)
+    {
+        if (available != nullptr) { *available = available_pre_credit; }
+        credit_retry = true;
+        const bool paid = TapForCostSharedOnceImpl(state, cost_in, for_creature, reserved_mask,
+                                                  available, honor_legacy_cco);
+        credit_retry = false;
+        return paid;
+    }
     if (tapstats::Enabled()) { tapstats::g_pay_once_fail.fetch_add(1, std::memory_order_relaxed); }
     return false;
 }
