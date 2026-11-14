@@ -112,6 +112,33 @@ run stands and what to do next.
     97005 no T4 land, + d0 gi92 cast-order repro) and `.claude/worktrees/boars-pay` (97013 emerge overpay, 97003
     creature-only leftover, human-menu dupes/unpayable emerge victims/dead equip, display fields). Briefs + handoffs in
     each worktree's `logs/boars-research/`. Their fixes land on boars-analysis by rebase, then another smoke/regression.
+  * **2026-11-14 ~11:40 UTC (compaction point) -- CURRENT STATE, read this first.**
+    * Branch `boars-analysis` HEAD `151d9b9b6` (+ this doc commit): cast order ON `963b0858f`; Flinthoof site-9 fix
+      `ba5d932b0` (from boars-haste); Cyclone OnPlayFetchWidth 0 `94f435fee` (my 4a59c17f6 cap had cut Cyclone's
+      USER-requested Xander's Lounge -- smoke attribution: Cyclone moved only at 4a59c17f6, Five Colour moved at
+      43afd29fd, better); payment `c8004bd60` + human menu/display `080665c27` (from boars-pay). 3033/3033, 516/516.
+    * **RUNNING chain3** pid in `build/scratch/boars/chain3/run.pid` (status.txt, DONE): smoke DONE (rc=1 = movers),
+      regression running, then overnight --deck=boars,boars2hg. Waiter armed; cron faac6d71 (2-hourly, session-only).
+      Smoke movers (16 cases): Boars d3 4.86->4.78, d5 4.92->4.87, 2HG 5.20->5.12, d0 5.495->5.501 (d0 lighter bar;
+      greedy cast-with-haste follow-up pending); CG d0 better, d5 4.6467->4.6533 (top-1 width; USER width question),
+      d3/2hg play-only; Five Colour better; Minotaur better everywhere; Bruna d0 5.938->5.935 (payment fix). Searched
+      slower = 2, both CG d5 (gi105 = draws diverge after a fetch shuffle = clairvoyance, not a regression; gi113 TBD);
+      `classify_turn_later.sh smoke` running -> `chain3/classify_smoke.txt`.
+    * NEXT when chain3 DONE: read regression + overnight logs, classify slower games, then
+      `bash test/regression.sh --smoke --accept` (and --regression, --overnight --deck=boars,boars2hg), check_gt_logs,
+      commit GT. Then integrate the two follow-up agents and re-run smoke/regression.
+    * **Agents running** (worktrees with ABSOLUTE paths this time; both wait for chain3/DONE before their A/Bs):
+      `.claude/worktrees/boars-rank` (97005 fetch-ranking tie -> pips needed vs board sources, heurarm
+      MTG_FETCH_RANK_PIPS, A/B armed), `.claude/worktrees/boars-d0haste` (greedy d0/rollout "cast with haste" option,
+      heurarm MTG_GREEDY_SELF_HASTE). Briefs in each `logs/boars-research/*-brief.md`. NOTE the earlier boars-haste /
+      boars-pay worktrees are NESTED at `.claude/worktrees/boars/.claude/worktrees/` (relative-path mistake); their
+      briefs sit in stray plain dirs `/workspaces/MagicDeckTester/.claude/worktrees/boars-{haste,pay}/logs/` (brief
+      files only). Both branches are integrated; remove those worktrees via scripts/safe_worktree_remove.sh later.
+    * Sweep record in the ledger: 5 of 6 flags fixed; 97005 open (boars-rank). Follow-ups: Vampires' Stromkirk
+      Condemned likely has the same site-9 gap (USER Q). Both earlier agents overran 250K (360K/470K) -- watch it.
+    * USER rulings this session (verbatim): "If you want a ruling on the cast order I recommend you come up with a
+      recommended order and I review it." -> full list shown -> "That order seems reasonable to me." Fetch width:
+      top-1 taken as the agent default (NOT yet answered by the USER).
   * **Hinata perf question (USER surprised by ~10 s/game):** TIMINGS.md says d3 b10 0.59 s/game, d5 b20 1.25 s/game
     (1 thread, post 9229b25ca); now d3 6.4 / d5 9-11.5 s/game (32-thread full load, d5 b30), 8 tail games = 41% of the
     d5 s3003 row; Hinata ~145 ms/kunit vs Boars ~50 and the 2e6-units~45s calibration (~23). NEXT (not started):
