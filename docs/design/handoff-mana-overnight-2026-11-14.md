@@ -89,8 +89,8 @@ completeness hole: when the true-colour booking refuses an ILLEGAL assignment it
 re-assignment of the same units (e.g. a bundle's G moved onto generic). Please re-check the round-2 claim "KNOWN GAPS
 (permissive, never lossy)" against items 1 and 4.
 
-## Mana-chain follow-up (Codex, 2026-11-14; WIP until gates finish)
-- **Item 1: repaired in `wip/item-W-defer`.** The prepay now prices the second Incubator's same-line discount;
+## Mana-chain follow-up (Codex, 2026-11-14)
+- **Item 1: repaired in `wip/item-W-snow-rebase`.** The prepay now prices the second Incubator's same-line discount;
   the literal generic credit permits reassignment. Dragons gi363 wins T5 at shipped settings and d8 b0.
 - **Item 2: correctness cost retained.** Niv gi380/522/244 remain T6/T7/T4; their old faster payments used
   wrong-colour mana (CR 106.1b). No false claim of a legal recovery is made for them.
@@ -100,11 +100,16 @@ re-assignment of the same units (e.g. a bundle's G moved onto generic). Please r
 - **Item 4: residual open from the earlier literal fix.** Niv gi1138 and EDF gi549 still win a turn later at
   d8 b0, with or without the new defer lever. They need their own legal-line attribution.
 - The round-2 "permissive, never lossy" claim was corrected in `mana-clean-pass-checkpoint.md`.
-- Validation in the Codex worktree: units 3093/3093, PGO built; smoke searched slower 0 and regression
-  searched slower 0, with four same-score regression line changes inspected. Strict reference replay had
-  no play drift or enum gap. The held-out main-deck A/B (46,400 paired games) has per-deck net <= 0:
-  Dragons -2 turns, Niv 0 (one faster, one slower), all other decks 0. Niv's slower d5 gi2565 is
-  undergoing the required d8 b0 recovery check; 2HG A/B and GT promotion remain pending.
+- Pre-Snow validation: units 3093/3093, PGO built; smoke and regression searched slower 0, with four
+  same-score regression line changes inspected. Strict references had no play drift or enum gap. Held-out
+  main-deck A/B (46,400 pairs) had per-deck net <= 0: Dragons -2 turns, Niv net 0 (one faster, one
+  slower), all others 0. Niv's slower d5 gi2565 recovered at d8 b0; 2HG A/B (16,200 pairs) was net 0.
+- Rebased onto the Snow/tier-pool package and repeated the gates: Release units 3093/3093, PGO built;
+  combined smoke/regression searched slower 0 and changed only the same nine expected fingerprints.
+  Strict references: 343 ok / 493 repaired / 1 beaten, with no play drift or enum gap. Fresh held-out
+  A/B at seed 90000000 covered 62,600 paired games across 99 main-deck and 2HG variants; every deck
+  net 0, with zero faster or slower wins. Both tiers' ground truth was accepted; `check_gt_logs.py`
+  reports 1170 consistent, zero stale or missing. The Bruna gi432 hand-demand residual remains open.
 
 ## Not yours (kept by the Spirits session)
 - Spirits 8 games: all restored by `MTG_SPIRITS_NO_FETCH_HOLD=0` (the USER's fetch-hold drop) -- a Spirits provider

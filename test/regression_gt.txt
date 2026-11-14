@@ -1,4 +1,4 @@
-# Regression ground truth -- commit b8a867de2  date 2026-11-14
+# Regression ground truth -- commit 30ac53d39  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
@@ -101,7 +101,7 @@ kittyv3_smoke_d3_s1001=3.8400/04da9c42718f1d65
 kittyv3_smoke_d5_s1001=3.8160/d652ab27a2659bec
 dragons_smoke_d0_s1001=5.8750/21d51b5a277cca36
 dragons_smoke_d3_s1001=5.6667/6965bbea4bfafb76
-dragons_smoke_d5_s1001=5.6277/4b148103f7f86748
+dragons_smoke_d5_s1001=5.6277/6016ac0d7fba1e50
 breaching_smoke_d0_s1001=4.8460/d7152eee2ef2f433
 breaching_smoke_d3_s1001=3.0800/f7ff527dd38a2821
 breaching_smoke_d5_s1001=3.0971/4c4debfd5590bdff
@@ -164,8 +164,8 @@ soldiers_smoke_d5_s1001=4.2457/be23baaba6574a46
 pd_smoke_d0_s1001=7.2650/eaa298132dc91c86
 pd_smoke_d3_s1001=5.3600/3ddb1805d5d45e11
 pd_smoke_d5_s1001=5.5100/6683a4c0eeb56823
-bruna2hg_smoke_d5_s1001=5.2800/e9abf1ede034d96a
-bruna_smoke_d0_s1001=5.9380/5ed3f4db09b62274
+bruna2hg_smoke_d5_s1001=5.2800/dcceff0af3d0f8f1
+bruna_smoke_d0_s1001=5.9380/b6289349d729b88d
 bruna_smoke_d3_s1001=4.7200/ff843a1b8ed106f4
 bruna_smoke_d5_s1001=4.7067/df1a136c546f1efa
 edf2hg_smoke_d5_s1001=3.9600/2c55524724e494f7
@@ -184,7 +184,7 @@ galadriel_smoke_d5_s1001=5.0343/de12b4178a6498b1
 galadriel2hg_smoke_d5_s1001=4.8933/c5dceba1c36445b0
 niv_smoke_d0_s1001=6.0740/effb6335390f51cd
 niv_smoke_d3_s1001=4.5200/30679d8b74d74444
-niv_smoke_d5_s1001=4.6500/5b894d06bcdfdab2
+niv_smoke_d5_s1001=4.6500/d2ce4cd483d5d907
 niv2hg_smoke_d5_s1001=4.4800/c148692d2f9b1b99
 colossus_smoke_d0_s1001=4.3580/f1a3ce0a59cfc500
 colossus_smoke_d3_s1001=3.2800/5928c76b96dbd120
@@ -377,8 +377,8 @@ auras_regression_d5_s2002=4.0867/adfcc7d33d37929f
 auras_regression_d5_s3003=4.1044/807b4432b98b6e3a
 goblins_regression_d0_s2002=4.0340/72caca88eea362f7
 goblins_regression_d3_s2002=3.6900/c3fec9f608d2f48d
-goblins_regression_d5_s2002=3.7920/f781c7c23d23e663
-goblins_regression_d5_s3003=3.7840/e392fe2c720b6110
+goblins_regression_d5_s2002=3.7920/be0406032e5e06bd
+goblins_regression_d5_s3003=3.7840/3c9f48302cf20ee4
 creature_giving_regression_d0_s2002=5.5800/11ce70f7d2e1011f
 creature_giving_regression_d3_s2002=4.5500/00a3148475d0911c
 creature_giving_regression_d5_s2002=4.6118/15513bdefbbe09e7
@@ -407,10 +407,10 @@ kittyv3_regression_d0_s2002=4.8310/ab72dc99e1cf2e58
 kittyv3_regression_d3_s2002=3.8400/c58e53b2c7c7b2d0
 kittyv3_regression_d5_s2002=3.8067/3ea08f6dd31f8e38
 kittyv3_regression_d5_s3003=3.6800/12b7950fca7c124f
-dragons_regression_d0_s2002=5.8670/9356a9818dcc8566
+dragons_regression_d0_s2002=5.8670/3e7692a55b8cb732
 dragons_regression_d3_s2002=5.5200/f0df74131496a82f
 dragons_regression_d5_s2002=5.5540/9db8b72cac909ac6
-dragons_regression_d5_s3003=5.5300/9aa1b202e2651468
+dragons_regression_d5_s3003=5.5300/9a49e84806d01c15
 breaching_regression_d0_s2002=4.8260/6a698b1862790630
 breaching_regression_d3_s2002=3.1200/abcd838f1b9f0f3b
 breaching_regression_d5_s2002=3.1020/59d591bfb06f270c
@@ -466,7 +466,7 @@ pd_regression_d0_s2002=7.3350/b24c34ed2456a20f
 pd_regression_d3_s2002=5.7200/54cc0e6b99514d08
 pd_regression_d5_s2002=5.4400/96e5baf524b6b5d8
 pd_regression_d5_s3003=5.5000/43481ae036b80893
-bruna_regression_d0_s2002=5.8880/e3b851db5ff8da6c
+bruna_regression_d0_s2002=5.8890/e7a21ffd5d8e340d
 bruna_regression_d3_s2002=4.7200/f9813c16f811a775
 bruna_regression_d5_s2002=4.8600/95f82a02ee14b0b8
 bruna_regression_d5_s3003=4.7000/1d7ef5e238d78d43

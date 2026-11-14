@@ -1287,8 +1287,8 @@ fungus 1,880, gods 4,300 (first run).
   NEXT (USER 2026-11-13, "That shouldn't show up in anything"): literal route (a) -- no single-colour unit ever booked
   as `wild`; design notes in logs/mana-clean-chain/A-wild-handoff.md.
 
-* **Queue item W (Codex continuation, 2026-11-14): generic prepay reassignment -- validation IN PROGRESS on
-  `wip/item-W-defer`.** A literal-colour generic payment now retains a credit for the colour it spent, so a later
+* **Queue item W (Codex continuation, 2026-11-14): generic prepay reassignment -- validated on
+  `wip/item-W-snow-rebase`.** A literal-colour generic payment now retains a credit for the colour it spent, so a later
   pip can take that unit back and move the generic to another unit that was already floating. The per-cast payer
   creates the same credit for a one-of-each Karoo paying exactly one generic pip and floating its other colour.
   The payer first tries its ordinary allocation and uses the credit only after payment failure: eager exchange
@@ -1302,11 +1302,16 @@ fungus 1,880, gods 4,300 (first run).
   play-changed 3. Regression: 317 passed, 5 digest-only failures, strict references 343 ok / 493 repaired /
   1 beaten, no play drift or enum gap; searched slower 0, same-score play-changed 4 (Dragons x2, Goblins x2,
   each line inspected), depth-zero Bruna gi708 T7->T8 after different T3 play and divergent draws. Fresh paired
-  A/B (seed 89900000, 46,400 pairs across 52 main decks, 5,000/arm at d5 plus 3,000/arm at d3 for each of
+  pre-Snow A/B (seed 89900000, 46,400 pairs across 52 main decks, 5,000/arm at d5 plus 3,000/arm at d3 for each of
   Dragons/Niv/EDF/Bruna): every deck net <= 0; Dragons net -2 turns (2 faster, 0 slower), Niv net 0
-  (1 faster, 1 slower at d5), every other deck net 0. **PENDING:** Niv d5 gi2565's depth-8 unlimited recovery
-  is running; 2HG held-out A/B, GT acceptance/check_gt_logs, then disposition item W and the residual hand-generic
-  issue. No fresh mana-clean 5000-game block has run for this item yet.
+  (1 faster, 1 slower at d5), every other deck net 0. Niv d5 gi2565 recovered at d8 b0; the pre-Snow
+  2HG pool (16,200 pairs) had no changed outcomes. After the Snow/tier-pool rebase, Release units again
+  passed 3093/3093 and PGO rebuilt. The combined smoke/regression run had the same four plus five digest-only
+  fingerprint changes, searched slower 0, strict references 343 ok / 493 repaired / 1 beaten with no play
+  drift or enum gap. Fresh A/B seed 90000000: 62,600 pairs across 99 main-deck and 2HG variants, every deck
+  net 0, zero faster or slower wins. Both tier GT sets accepted; `check_gt_logs.py` 1170 consistent, 0 stale,
+  0 missing. The Bruna gi432 hand-generic residual remains open. No fresh mana-clean 5000-game block has run
+  for this item yet.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
