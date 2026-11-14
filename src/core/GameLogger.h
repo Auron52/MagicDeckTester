@@ -711,6 +711,13 @@ extern thread_local StorageHoldChooser* g_play_storage_hold_chooser;
 using FaceUpChooser = std::function<int(const GameState& state, const std::vector<int>& face_down_idx,
                                         const std::vector<std::string>& costs)>;
 extern thread_local FaceUpChooser* g_play_face_up_chooser;
+// INCANDESCENT SOULSTOKE at the OPPONENT'S END STEP (the `eot_put` decision; SpellEffects.h
+// PerformOpponentEndStepEotPutsHuman, agent F 2026-11-14): offered the source (its battlefield index) and the
+// distinct Elemental creature card names in hand that source can put now with the mana left untapped; returns
+// an index into `names` to activate it (re-asked while another untapped source remains), or -1 = done.
+// Human play only; nulled during search (RevealLogPause).
+using EotPutChooser = std::function<int(const GameState& state, int source_idx, const std::vector<std::string>& names)>;
+extern thread_local EotPutChooser* g_play_eot_put_chooser;
 // The play viewer opts into a pre-draw Magus of the Bazaar activation choice. Saved
 // reference replays without the flag keep their original positional choices.
 extern thread_local bool g_play_magus_upkeep_prompt;
@@ -1156,7 +1163,7 @@ inline bool AllPlayHooksNull()
         && g_play_demonstrate_chooser == nullptr
         && g_play_firebreathe_chooser == nullptr && g_play_cast_order_chooser == nullptr
         && g_play_storage_hold_chooser == nullptr && g_play_tutor_chooser == nullptr
-        && g_play_face_up_chooser == nullptr
+        && g_play_face_up_chooser == nullptr && g_play_eot_put_chooser == nullptr
         && g_play_attach_host_chooser == nullptr && g_play_jitte_chooser == nullptr
         && g_play_attackers_chooser == nullptr && g_play_tap_pref_chooser == nullptr
         && g_play_loyalty_chooser == nullptr
@@ -1220,6 +1227,7 @@ struct RevealLogPause
     CastOrderChooser* saved_cochooser;
     StorageHoldChooser* saved_shchooser;
     FaceUpChooser*      saved_fuchooser;
+    EotPutChooser*      saved_eotputchooser;
     TutorChooser*       saved_tutorchooser;
     BounceChooser*      saved_ahchooser;
     FirebreatheChooser* saved_jitchooser;
@@ -1283,6 +1291,7 @@ struct RevealLogPause
         saved_cochooser = g_play_cast_order_chooser;
         saved_shchooser = g_play_storage_hold_chooser;
         saved_fuchooser = g_play_face_up_chooser;
+        saved_eotputchooser = g_play_eot_put_chooser;
         saved_tutorchooser = g_play_tutor_chooser;
         saved_ahchooser = g_play_attach_host_chooser;
         saved_jitchooser = g_play_jitte_chooser;
@@ -1312,6 +1321,7 @@ struct RevealLogPause
         g_play_lightpaws_chooser = nullptr; g_play_firebreathe_chooser = nullptr;
         g_play_cast_order_chooser = nullptr; g_play_storage_hold_chooser = nullptr;
         g_play_face_up_chooser = nullptr;
+        g_play_eot_put_chooser = nullptr;
         g_play_tutor_chooser = nullptr;
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
@@ -1349,6 +1359,7 @@ struct RevealLogPause
                         g_play_cast_order_chooser = saved_cochooser;
                         g_play_storage_hold_chooser = saved_shchooser;
                         g_play_face_up_chooser = saved_fuchooser;
+                        g_play_eot_put_chooser = saved_eotputchooser;
                         g_play_tutor_chooser = saved_tutorchooser;
                         g_play_attach_host_chooser = saved_ahchooser;
                         g_play_jitte_chooser = saved_jitchooser;

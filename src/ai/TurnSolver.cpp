@@ -943,6 +943,64 @@ static bool PlanHasAttackTriggerPin(const TurnSolver::Plan& p)
         || (p.fling_victim_choice != -1 && FlingPinFoldOn())    // ...and Surtland Flinger's victim (same shape)
         || (p.lackey_choice >= 0 && LackeyPinFoldOn());         // ...and Goblin Lackey's put (spent at combat damage)
 }
+// INCANDESCENT SOULSTOKE'S HOLD IN EVERY HOST (agent F2 2026-11-14; kind 4 of the searched attack/hold). Attacking
+// taps the source and forfeits its put at the opponent's end step (SpellEffects.h EotPutOptions), and the goldfish
+// attack policy swings with everything, so a host whose combat never considers the HOLD cannot find the end-step put
+// at any budget. FSLineWin searches it inside its own combat branch (DorkAtkContestedKind == 4). Every OTHER host
+// that decides a pre-combat main (SolveWithLookahead's passes, breakpoint / group waves and escalation, the opt-in
+// reshuffle-averaged host) carries it as a PLAN TWIN: the same plan with Plan::atk_dork_release = 4, placed right
+// after its base, scored by the same loop, its combat run under override 4 (EotHoldCombatScope), and its executor
+// pin the existing atk_dork_release lockstep (AIEngine m_atk_release_pin, the payment script's re-declaration).
+// GATED cheaply: only when the pre-apply state has a source the window could use (EotHoldTwinGate), and a twin
+// whose post-apply hold no longer differs from the natural attack (EotHoldContested) is skipped unscored. A twin
+// never takes a tie (the hold must be strictly better, as in FSLineWin). Every deck without the stamp: no twin.
+static std::atomic<long long> g_eot_hold_twins{0}, g_eot_hold_twin_inert{0};
+static void AppendEotHoldTwins(const GameState& state, std::vector<TurnSolver::Plan>& plans)
+{
+    if (plans.empty() || HumanPlayActive() || !EotHoldTwinGate(state)) { return; }
+    std::vector<TurnSolver::Plan> out;
+    out.reserve(plans.size() * 2);
+    for (TurnSolver::Plan& p : plans)
+    {
+        const bool twin = p.atk_dork_release < 0 && !p.wins_this_turn;
+        out.push_back(std::move(p));
+        if (twin)
+        {
+            out.push_back(out.back());
+            out.back().atk_dork_release = 4;
+            g_eot_hold_twins.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    plans.swap(out);
+}
+// The twin's post-apply test: true = an inert duplicate of its base (skip it unscored).
+static bool EotHoldTwinInert(const TurnSolver::Plan& p, const GameState& post_apply)
+{
+    if (p.atk_dork_release != 4 || EotHoldContested(post_apply)) { return false; }
+    g_eot_hold_twin_inert.fetch_add(1, std::memory_order_relaxed);
+    return true;
+}
+// Run a plan's combat under its recorded kind-4 hold (only 4: the other kinds belong to FSLineWin's branch, which
+// sets the override itself).
+struct EotHoldCombatScope
+{
+    explicit EotHoldCombatScope(const TurnSolver::Plan& p) : saved(g_dork_atk_override), on(p.atk_dork_release == 4)
+    { if (on) { g_dork_atk_override = 4; } }
+    ~EotHoldCombatScope() { if (on) { g_dork_atk_override = saved; } }
+    EotHoldCombatScope(const EotHoldCombatScope&) = delete;
+    EotHoldCombatScope& operator=(const EotHoldCombatScope&) = delete;
+    int  saved;
+    bool on;
+};
+// A twin's post-apply STATE equals its base's (the hold is a combat pin, read only by SimulateCombat), so every
+// post-apply state dedup the twin passes through (the lookahead's axis-variant skip, LaWaveDup in the breakpoint
+// wave, the group wave) would discard it as its base's duplicate and the hold would be unreachable there. Fold the
+// pin into the key, exactly as the combat-pin shares fold their pins. Identity for every plan without kind 4.
+static TranspositionTable::Key EotHoldFoldKey(TranspositionTable::Key k, const TurnSolver::Plan& p)
+{
+    if (p.atk_dork_release == 4) { k.h1 ^= 0x5E7A4C1D0F3B2A91ull; k.h2 ^= 0xE07D5017E4A11D04ull; }
+    return k;
+}
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
     return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
@@ -76157,7 +76215,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
-        PerformOpponentEndStepFaceUp(state);
+        if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }   // Soulstoke (twin)
+        PerformOpponentEndStepFaceUp(state);   // ...the window: flips, then Soulstoke puts
         DayNightTurnBoundary(state);
         return true;
     };
@@ -88189,7 +88248,7 @@ template <typename SeenSet, typename SlotMap>
 static bool LaWaveDup(const BpWaveWalker& walker, const TurnSolver::Plan& v, const GameState& gs,
                       SeenSet& seen, SlotMap& key_slot)
 {
-    const TranspositionTable::Key wk = BuildDedupKey(gs);
+    const TranspositionTable::Key wk = EotHoldFoldKey(BuildDedupKey(gs), v);   // a kind-4 twin is its own state
     const bool fresh = seen.insert(wk).second;
     if (BpWaveProbeOn())
     {
@@ -100885,8 +100944,8 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             return state.turn_number;
         }
 
-        // Combat
-        SimulateCombat(state);
+        // Combat (under the turn plan's Soulstoke HOLD when the searched turn chose it -- AppendEotHoldTwins)
+        { const EotHoldCombatScope _eh(pre_plan); SimulateCombat(state); }
         if (OpponentHasLost(state))
         {
             leafeval::Publish(leafeval::kInvalid);   // a win needs no tie-break (turn-wise)
@@ -104838,10 +104897,15 @@ static Installer s_installer;
 // d0 runner / a breakpoint enumeration (beyond the horizon the front is the permitted playout greedy), not at a
 // constant-leaf edge (the identity fold: that leaf cannot tell two flip sets apart, and a deeper pass searches
 // the crossing, so nothing is unfindable at any budget). False for every deck without a morph card.
+// INCANDESCENT SOULSTOKE (agent F, 2026-11-14): the same window puts an Elemental creature card from hand
+// (EotPutOptions), so a live untapped put source with a matching card in hand makes it pending too (the menu then
+// crosses every flip entry with the put options). False for every deck without such a source.
 static bool FaceUpUncoveredPending(const GameState& state)
 {
-    return state.deck_has_morph && state.scripted_eot_face_up < 0 && g_bp_enum_depth == 0 && !t_rollout_narrow
-        && !HumanPlayActive() && !EchoEdgeFoldHere(state) && AnyEotFaceUpCandidate(state);
+    return (state.deck_has_morph || state.deck_has_eot_tap_put) && state.scripted_eot_face_up < 0
+        && g_bp_enum_depth == 0 && !t_rollout_narrow
+        && !HumanPlayActive() && !EchoEdgeFoldHere(state)
+        && (AnyEotFaceUpCandidate(state) || AnyEotPutCandidate(state));
 }
 // THE HOLD PASS (morph's opponent-end-step flip; Morph INT-2c, 2026-11-12). A main whose enumeration offers
 // a plan offers no PASS unless its land drop is still open (the no-land pass, add_for_land("", "")): the
@@ -104906,6 +104970,14 @@ struct Installer
                              "unpinned windows (any width)=%lld\n",
                      g_searched.load(), g_narrow.load(), g_edge.load(), g_outside.load(), g_real.load(),
                      g_fan_crossings.load(), g_unpinned_calls.load());
+        // ...and the window PUT's own enter choices (SpellEffects.h EotPutStep::tutor / look_top, agent F2): steps
+        // whose menu fanned them, and the look-top rows past the product cap that fell back to the one-hot fan.
+        std::fprintf(stderr, "[faceup-axis] eot-put enter choices: fanned steps=%lld unfanned (look-top past "
+                             "cap, must be 0)=%lld\n",
+                     g_eot_put_etb_fanned_steps.load(), g_eot_put_etb_unfanned.load());
+        std::fprintf(stderr, "[faceup-axis] soulstoke hold: lookahead twins=%lld inert-skipped=%lld "
+                             "fslinewin-shadowed-by-dork-kind=%lld\n",
+                     g_eot_hold_twins.load(), g_eot_hold_twin_inert.load(), EotHoldShadowedCount());
     }
 };
 static Installer s_installer;
@@ -110057,8 +110129,10 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         // 2 = forced hold. The default branch is always the natural one, hence def_rec == 0.
         // 3 = an ARCHETYPE hold keeps a damage dork home (MTG_DORK_ATK_PROVIDER_HOLD) -> search
         // its release under override 3, recorded as 3 so the executor pins the same variant.
-        const int  alt_override   = (dork_kind == 2) ? 0 : (dork_kind == 3 ? 3 : 1);
-        const int  alt_rec        = (dork_kind == 2) ? 2 : (dork_kind == 3 ? 3 : 1);
+        // 4 = Incandescent Soulstoke attacks naturally while the opponent's end-step window could use it ->
+        // search its HOLD under override 4, recorded as 4 (DecisionProviders.cpp EotTapHoldSource).
+        const int  alt_override   = (dork_kind == 2) ? 0 : (dork_kind == 3 ? 3 : (dork_kind == 4 ? 4 : 1));
+        const int  alt_rec        = (dork_kind == 2) ? 2 : (dork_kind == 3 ? 3 : (dork_kind == 4 ? 4 : 1));
         // DIG TRACE (MTG_DORK_ATK_TRACE, default off): per-node contested verdict + variant
         // tails, the branch's own [fsw]-style instrument.
         static const bool s_dat = EnvOn("MTG_DORK_ATK_TRACE");
@@ -110257,7 +110331,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             // stated policy (FiveColour, USER 2026-08-09: "Deathrite only very rarely wants to
             // attack"), and a provider may ORDER options -- so its verdict is the tie default and the
             // release has to be measurably better to displace it.
-            const bool alt_wins = (dork_kind == 2 || dork_kind == 3)
+            const bool alt_wins = (dork_kind == 2 || dork_kind == 3 || dork_kind == 4)   // 4: the hold must be strictly better
                                       ? (tail_rel.win_turn <  tail.win_turn)
                                       : (tail_rel.win_turn <= tail.win_turn);
             if (alt_wins)
@@ -115125,6 +115199,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
             plans.push_back(TurnSolver::Plan{});
             AppendIdlePassAxes(state, plans, 2);
         }
+        AppendEotHoldTwins(state, plans);   // kind 4: each plan's Soulstoke-HOLD twin (gated; see its note)
     }
     else
     {
@@ -115205,10 +115280,15 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
             {
                 wt = max_turns + 1;
             }
+            else if (EotHoldTwinInert(plans[i], s))   // an inert Soulstoke-hold twin: never better than its base
+            {
+                wt = max_turns + 1;
+            }
             else
             {
                 if (is_pre_combat)
                 {
+                    const EotHoldCombatScope _eh(plans[i]);
                     SimulateCombat(s);
                 }
                 if (OpponentHasLost(s))         // wins THIS turn (library-independent -> all k agree)
@@ -115870,7 +115950,16 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             AppendIdleDigSiblings(state, candidates);
             AppendIdleEchoVariants(state, candidates, idle_at);   // an echo obligation since main 1 (MTG_ECHO_AXIS)
         }
-        if (candidates.size() == 1) { report(max_turns + 1, 0); return Plan{}; }
+        // (A lone pass is returned unscored -- unless Soulstoke's end-step HOLD makes passing two lines, below.)
+        if (candidates.size() == 1 && !(is_pre_combat && EotHoldTwinGate(state)))
+        { report(max_turns + 1, 0); return Plan{}; }
+    }
+    // KIND 4 IN THIS HOST (AppendEotHoldTwins): every pre-combat candidate gets its Soulstoke-HOLD twin right after
+    // it, so the opponent's end-step put is findable behind this host's combat too. Gated on a usable source.
+    if (is_pre_combat && EotHoldTwinGate(state))
+    {
+        PbLazyMaterialize(candidates, pb_lazy);
+        AppendEotHoldTwins(state, candidates);
     }
 
     // Track the committed pass's win turn / sub_depth for non-convergence reporting.
@@ -117391,7 +117480,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ((reframe_seen.count(ek) != 0 || bp_seen_states.count(ek) != 0)
                          ? g_put_bounce_verify_ok : g_put_bounce_verify_bad).fetch_add(1, std::memory_order_relaxed);
                 }
-                if (CandDedupActive() && !reframe_seen.insert(BuildDedupKey(copy)).second)
+                if (CandDedupActive() && !reframe_seen.insert(EotHoldFoldKey(BuildDedupKey(copy), plan)).second)
                 { ++candidates_done; continue; }
                 // The post-apply key, through the combat-pin share's prefix cache when it can be: a
                 // cached base banks its prefix, a sharing variant finishes the base's prefix with its
@@ -117418,18 +117507,20 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     return BuildDedupKey(copy);
                 };
                 if (bp_variants_here
-                    && !bp_seen_states.insert(post_apply_key()).second
+                    && !bp_seen_states.insert(EotHoldFoldKey(post_apply_key(), plan)).second
                     && PlanDupSkippable(plan))
                 {
                     if (plan.bp_choice < 0) { g_axis_dup_skips.fetch_add(1, std::memory_order_relaxed); }
                     ++candidates_done; continue;
                 }
 
+                // A Soulstoke-hold twin whose hold no longer differs from the natural attack (AppendEotHoldTwins).
+                if (EotHoldTwinInert(plan, copy)) { ++candidates_done; continue; }
                 // Combat this turn
                 // The put-bounce fold listens to THIS combat (a cached base, or a variant started from it).
                 put_fold.Arm(cp_i, put_fold.on && cp_cache.count(static_cast<int>(cp_i)) != 0,
                              cp_shared != nullptr, &copy);
-                SimulateCombat(copy);
+                { const EotHoldCombatScope _eh(plan); SimulateCombat(copy); }
                 put_fold.Record(cp_i, cp_shared != nullptr ? cp_base_of[cp_i] : static_cast<int>(cp_i));
                 if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return plan; }
                 // DIAGNOSTIC (MTG_DUP_DIFF): post-COMBAT duplicate rate, split by whether the
@@ -117786,6 +117877,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
             if (!pass_has_best)                      { better = true; }
             else if (win_turn != pass_best_win)      { better = win_turn < pass_best_win; }
             else if (fb_strict)                      { better = false; }   // a flip never takes a tie
+            else if (plan.atk_dork_release == 4)     { better = false; }   // ...nor a Soulstoke-hold twin
             else if (leafeval::InfWinTie() && win_turn <= max_turns
                      && (leaf_inf >= 0) != (pass_best_inf >= 0))
             { better = leaf_inf >= 0; }
@@ -117944,10 +118036,11 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                                                  g_bp_wave_probe.la_retired.fetch_add(1); }
                           continue; }
                         if (LaWaveDup(walker, v, copy, bp_seen_states, la_key_slot)) { continue; }
+                        if (EotHoldTwinInert(v, copy)) { continue; }   // an inert Soulstoke-hold twin
                         _dhs.fresh = true;
                         if (BpWaveProbeOn()) { g_bp_wave_probe.rolled.fetch_add(1);
                                                g_bp_wave_probe.la_rolled.fetch_add(1); }
-                        SimulateCombat(copy);
+                        { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
                         if (OpponentHasLost(copy)) { report(state.turn_number, depth - 1); return v; }
                         if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
                             || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
@@ -118082,8 +118175,9 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                     ApplyPlanDirect(copy, v, true);
                     // Post-apply dedup vs everything scored this pass (tranche plans are disjoint
                     // from wave 0 BY PLAN, so a hit is a genuine same-state collapse).
-                    if (!bp_seen_states.insert(BuildDedupKey(copy)).second) { return true; }
-                    SimulateCombat(copy);
+                    if (!bp_seen_states.insert(EotHoldFoldKey(BuildDedupKey(copy), v)).second) { return true; }
+                    if (EotHoldTwinInert(v, copy)) { return true; }   // an inert Soulstoke-hold twin
+                    { const EotHoldCombatScope _eh(v); SimulateCombat(copy); }
                     if (OpponentHasLost(copy)) { won_out = true; return true; }
                     if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
                         || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2
@@ -118231,7 +118325,7 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 if (is_pre_combat)
                 {
                     ApplyPlanDirect(copy, plan, true);
-                    SimulateCombat(copy);
+                    { const EotHoldCombatScope _eh(plan); SimulateCombat(copy); }
                     if (OpponentHasLost(copy)) { return state.turn_number; }
                     if (second_main || UntapSecondMainLive(copy)   // per-turn: Jorn
                         || ProviderSecondMainLive(copy))           // per-turn: a provider's restricted m2

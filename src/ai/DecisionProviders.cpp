@@ -5668,6 +5668,27 @@ static bool ProviderHeldDorkReleasable(const GameState& s, const Permanent& p)
     return AttackPowerOf(s, p) >= 1;
 }
 
+// INCANDESCENT SOULSTOKE'S ATTACK HOLD (kind 4 of the searched attack/hold, agent F 2026-11-14): a creature whose
+// "{cost}, {T}: put a creature card from hand" (tap_put_from_hand_creature_only) the OPPONENT's end-step window can
+// use (SpellEffects.h EotPutOptions) -- it must be UNTAPPED there, so attacking with it (no vigilance) forfeits that
+// put. The goldfish attack policy swings with everything, which made the end-step put unreachable on every turn the
+// source could attack; the FSLineWin branch therefore searches the HOLD beside the natural attack whenever the
+// window could use the source: ours, untapped, under our control since this turn began (the window's summoning-
+// sickness test, CR 302.6), and a matching card in hand now. Override 4 (that branch, the executor's pin of it, the
+// payment script's re-declaration) keeps every such source home. False for every deck without the stamp.
+static bool EotTapHoldSource(const GameState& s, const Permanent& p)
+{
+    if (!s.deck_has_eot_tap_put || p.controller_index != s.active_player_index) { return false; }
+    if (p.tapped || !p.card.IsCreature() || p.card.HasKeyword(Keyword::Vigilance)) { return false; }
+    if (p.entered_this_turn || p.gained_control_this_turn) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+    if (d == nullptr || !d->params.tap_put_from_hand_cost.has_value() || !d->params.tap_put_from_hand_creature_only)
+    { return false; }
+    for (const Card& c : s.players[static_cast<std::size_t>(s.active_player_index)].hand)
+    { if (EotPutCardMatches(*d, c)) { return true; } }
+    return false;
+}
+
 bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker) const
 {
     // "This creature attacks each combat if able" (Deathbellow Raider, CR 508.1a). A RESTRICTION,
@@ -5680,6 +5701,8 @@ bool DecisionProvider::AttackWith(const GameState& s, const Permanent& attacker)
         const CardDefinition* ad = CardDatabase::Instance().LookupCached(attacker.card);
         if (ad && ad->params.must_attack) { return true; }
     }
+    // Kind 4's HOLD (the searched branch and its pins only; never ambient): Soulstoke stays home for the window.
+    if (g_dork_atk_override == 4 && EotTapHoldSource(s, attacker)) { return false; }
     if (HoldManaSourceForCollapsedMain(s, attacker)) { return false; }
     if (HoldForCombatAuraSwap(s, attacker)) { return false; }
     // Searched release of an ARCHETYPE-held damage dork (override 3, MTG_DORK_ATK_PROVIDER_HOLD): the
@@ -5739,7 +5762,54 @@ static bool Main2SpendsCreatureMana(const GameState& s, int active)
     return spend > noncreature;
 }
 
+static int DorkAtkContestedKindBase(const GameState& s);
+// The four kinds (see TurnSolver.cpp's FSLineWin branch): 1-3 the dork tower's, 4 Soulstoke's end-step hold. Kind 4
+// is asked only when no dork kind fires (one alternative combat per plan): a natural attacker the opponent's
+// end-step window could use (EotTapHoldSource) -> search its HOLD.
+static std::atomic<long long> g_eot_hold_shadowed{0};
+long long EotHoldShadowedCount() { return g_eot_hold_shadowed.load(); }
 int DorkAtkContestedKind(const GameState& s)
+{
+    const int k = DorkAtkContestedKindBase(s);
+    // FSLineWin runs ONE alternative combat per plan: a dork kind (1-3) that fires SHADOWS the Soulstoke hold at this
+    // node (counted; the census prints it -- the residue of the one-alternative shape).
+    if (k != 0 && s.deck_has_eot_tap_put && EotHoldContested(s)) { g_eot_hold_shadowed.fetch_add(1, std::memory_order_relaxed); }
+    if (k != 0 || !s.deck_has_eot_tap_put || !DorkAtkSearchEnabled()) { return k; }
+    const DecisionProvider& prov = ResolveProvider(s);
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!EotTapHoldSource(s, p)) { continue; }
+        if (!CanAttackFull(p, s.battlefield, s.active_player_index)) { continue; }
+        if (prov.AttackWith(s, p)) { return 4; }
+    }
+    return 0;
+}
+// KIND 4 IN EVERY OTHER HOST (agent F2 2026-11-14, the completeness rule: a line unfindable at an unlimited budget is
+// not acceptable). The non-FSLineWin hosts (SolveWithLookahead's candidate passes, its breakpoint / group waves and
+// escalation, the opt-in reshuffle-averaged host) carry the HOLD as a plan TWIN (Plan::atk_dork_release = 4,
+// TurnSolver.cpp AppendEotHoldTwins). EotHoldTwinGate is the cheap PRE-apply gate (a source the window could use:
+// ours, untapped, under our control since the turn began, a matching Elemental creature card in hand);
+// EotHoldContested the POST-apply test that the hold still differs from the natural attack (the source still
+// untapped and a natural attacker, a matching card still in hand) -- the twin of an inert hold is skipped unscored.
+bool EotHoldTwinGate(const GameState& s)
+{
+    if (!s.deck_has_eot_tap_put || !DorkAtkSearchEnabled()) { return false; }
+    for (const Permanent& p : s.battlefield) { if (EotTapHoldSource(s, p)) { return true; } }
+    return false;
+}
+bool EotHoldContested(const GameState& s)
+{
+    if (!s.deck_has_eot_tap_put || !DorkAtkSearchEnabled()) { return false; }
+    const DecisionProvider& prov = ResolveProvider(s);
+    for (const Permanent& p : s.battlefield)
+    {
+        if (!EotTapHoldSource(s, p)) { continue; }
+        if (!CanAttackFull(p, s.battlefield, s.active_player_index)) { continue; }
+        if (prov.AttackWith(s, p)) { return true; }
+    }
+    return false;
+}
+static int DorkAtkContestedKindBase(const GameState& s)
 {
     if (!DorkAtkSearchEnabled())             { return 0; }
     // The archetype-hold release (kind 3, MTG_DORK_ATK_PROVIDER_HOLD) does not need the collapsed

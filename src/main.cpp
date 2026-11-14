@@ -4358,6 +4358,30 @@ static void WriteFaceUpDecisionJson(std::ostream& os, const GameState& s, const 
            "turn), or -1 = done. Asked again after each flip. Default = the AI's order.");
 }
 
+// INCANDESCENT SOULSTOKE at the OPPONENT'S END STEP (the `eot_put` decision, SpellEffects.h
+// PerformOpponentEndStepEotPutsHuman; agent F 2026-11-14): `options` = the distinct Elemental creature card names in
+// hand the untapped source can put now ({1}{R} payable from the mana left untapped). Reply an option index to
+// activate it (re-asked while another untapped source remains), or -1 = put nothing. Default = 0 (the provider's
+// EotPutOrder front).
+static void WriteEotPutDecisionJson(std::ostream& os, const GameState& s, int source_idx,
+                                    const std::vector<std::string>& names, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    const std::string src = (source_idx >= 0 && source_idx < static_cast<int>(s.battlefield.size()))
+        ? s.battlefield[static_cast<std::size_t>(source_idx)].card.m_name.str() : std::string("Incandescent Soulstoke");
+    d.Type("eot_put").Source(src + " (opponent's end step)").Turn(s)
+     .Board(s).HeuristicDefault(names.empty() ? -1 : 0).Int("source_perm_index", source_idx);
+    d.Array("options", names.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, names[i]);
+        os << ", \"label\": "; JsonStr(os, "put " + names[i]); os << " }";
+    });
+    d.Note("reply an option index to pay {1}{R} from your untapped mana, tap the source and put that Elemental creature "
+           "card from your hand onto the battlefield now (it survives into your turn and attacks then; it is sacrificed "
+           "at the beginning of YOUR next end step), or -1 = put nothing. Asked again while another untapped source "
+           "remains. Default = the AI's order.");
+}
+
 // Kitesail Larcenist `treasurify` decision: for ONE player's side, the human picks WHICH artifact or
 // creature that player controls becomes a Treasure artifact (loses every other type and ability), or
 // -1 for none ("up to one"). Fired for the OPPONENT side always, and for the own side on an Aether
@@ -6155,6 +6179,7 @@ g_play_attackers_chooser = nullptr;
 g_play_tap_pref_chooser = nullptr;
 g_play_storage_hold_chooser = nullptr;
 g_play_face_up_chooser = nullptr;
+g_play_eot_put_chooser = nullptr;
 if (!keep_sinks)   // --choices-then-auto keeps them: the search's turns still narrate final_events
 {
     g_play_draw_sink = nullptr;
@@ -6505,6 +6530,7 @@ struct ClaudePlayHarness
     TapPrefChooser        tap_pref_chooser;     // --tap-pref (reference replay)
     StorageHoldChooser    storage_hold_chooser;
     FaceUpChooser         face_up_chooser;
+    EotPutChooser         eot_put_chooser;
     LandEntryChooser      land_entry_chooser;
     SoulfireTargetChooser soulfire_chooser;
 
@@ -8322,6 +8348,38 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_face_up_chooser = &face_up_chooser;
+
+    // Incandescent Soulstoke's put at the opponent's end step: one put per answer, -1 = done. Shares the
+    // --choices stream. Default = 0, the provider's front.
+    eot_put_chooser =
+        [this](const GameState& s, int source_idx, const std::vector<std::string>& names) -> int
+        {
+            int di = static_cast<int>(cursor);
+            const int def = names.empty() ? -1 : 0;
+        claude_retry_eotput:
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < -1 || chosen >= static_cast<int>(names.size())) { chosen = def; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEotPutDecisionJson(ss, s, source_idx, names, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEotPutDecisionJson(std::cout, s, source_idx, names, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            if (AwaitMoreChoices()) { goto claude_retry_eotput; }
+            std::exit(70);
+        };
+    g_play_eot_put_chooser = &eot_put_chooser;
 
     // Kitesail Larcenist (treasurify): per side, the player picks which artifact/creature becomes a
     // Treasure, or -1 for none. `controller` here is the SIDE being chosen for (FireOwnEtbTriggers

@@ -352,6 +352,10 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // then the searched flip window (the plan's pin, the human's `face_up` prompt, or beyond the horizon the
         // provider's front). Lockstep twin: SimulateEndAndStartNextTurn's opponent_turn. Deck-gated.
         PerformEndStepSelfSacrifices(state);
+        // ...and Soulstoke's delayed "sacrifice it at the beginning of the next end step" for a body a previous
+        // opponent-end-step window put (only an opponent EXTRA turn reaches one; our own end step swept every other).
+        // The window below (flips, then Soulstoke puts) runs after it, so ITS puts meet our end step. Deck-gated.
+        if (state.deck_has_eot_tap_put) { PerformEndStepDelayedSacrifices(state); }
         PerformOpponentEndStepFaceUp(state);
         DayNightTurnBoundary(state);
     };

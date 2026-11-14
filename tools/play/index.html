@@ -2445,7 +2445,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one','eot_put'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -4641,6 +4641,7 @@ function renderDecisionPanel(d, dec){
                 || dec==='madness'   // Vampires A1: the discarded card is in EXILE (no visible zone) -- a card-image modal
                 || dec==='x_value'   // Stroke of Genius's X, picked at the cast (not a plan axis in human play)
                 || dec==='gy_return_one'   // Abiding Grace / Emeria: a graveyard card (image) or the alternative
+                || dec==='eot_put'   // Incandescent Soulstoke at the opponent's end step: a hand card (image) or nothing
                 // free_cast is a modal ONLY for the walk-based sites (cascade / Breaching
                 // Dragonstorm / Creative Technique), whose card is in no visible zone. A from-hand
                 // charge (zone:"hand" -- World War Hulk chapter I, Maelstrom Archangel) is a bottom
@@ -4669,6 +4670,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='demonstrate' ? demonstratePanelHtml(d)
                   : dec==='attack_mode' ? attackModePanelHtml(d)
                   : dec==='gy_return_one' ? gyReturnOnePanelHtml(d)
+                  : dec==='eot_put' ? eotPutPanelHtml(d)
                   : dec==='lifegain_counters' ? lifegainCountersPanelHtml(d)
                   : dec==='madness' ? madnessPanelHtml(d)
                   : dec==='tutor_etb' ? tutorPanelHtml(d)
@@ -5761,6 +5763,8 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-atkmode]').forEach(b=>b.onclick=()=>commitAttackMode(d, +b.dataset.atkmode));
   else if (dec==='gy_return_one')
     panel.querySelectorAll('[data-gyr]').forEach(b=>b.onclick=()=>commitGyReturnOne(d, +b.dataset.gyr));
+  else if (dec==='eot_put')
+    panel.querySelectorAll('[data-eotput]').forEach(b=>b.onclick=()=>commitEotPut(d, +b.dataset.eotput));
   else if (dec==='lifegain_counters')
     panel.querySelectorAll('[data-lgc]').forEach(b=>b.onclick=()=>commitLifegainCounters(d, +b.dataset.lgc));
   else if (dec==='madness')
@@ -6016,6 +6020,28 @@ function gyReturnOnePanelHtml(d){
        `<button class="${def===0?'primary':'ghost'}" data-gyr="0">${esc(d.alt_text)}${def===0?'  ·  AI':''}</button></div>`;
   }
   return h;
+}
+// `eot_put` (Incandescent Soulstoke at the OPPONENT'S end step, agent F 2026-11-14): ONE pick -- an Elemental
+// creature card IMAGE from your hand to put onto the battlefield ({1}{R} from your untapped mana, the source taps),
+// or "Put nothing". Reply = the option index, -1 = nothing; re-asked while another untapped source remains.
+function eotPutPanelHtml(d){
+  const def=(d.heuristic_default==null)?-1:d.heuristic_default;
+  let h=`<h3>${esc(d.source||'Opponent\'s end step')} — put an Elemental onto the battlefield?</h3>`;
+  h+=`<div class="sub">Pay {1}{R} from your untapped mana and tap the source to put one of these cards from your hand onto the battlefield now. It has been yours since your turn began, so it attacks on your turn without needing haste, and it is sacrificed at the beginning of <b>your</b> next end step. The source untaps in your untap step and can be used again.</div>`;
+  h+=`<div class="tutgrid">`;
+  (d.options||[]).forEach(o=>{
+    const isAI=(o.index===def);
+    h+=`<span class="cardmini tdig${isAI?' def':''}" data-eotput="${o.index}" data-name="${esc(o.name)}" title="${esc(o.name)}">`+
+       `<img loading="lazy" src="${scryImg(o.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(o.name)}</em>`+
+       (isAI?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+  });
+  h+=`</div><div class="pbtns" style="justify-content:center">`+
+     `<button class="${def<0?'primary':'ghost'}" data-eotput="-1">Put nothing${def<0?'  ·  AI':''}</button></div>`;
+  return h;
+}
+function commitEotPut(d, v){
+  const o=(d.options||[]).find(x=>x.index===v);
+  pushChoice(d, v, `Opponent's end step: ${o?'put '+o.name+' onto the battlefield':'no Soulstoke put'}`);
 }
 function commitGyReturnOne(d, v){
   const c=(d.candidates||[]).find(x=>x.index===v);

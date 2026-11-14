@@ -10928,10 +10928,11 @@ std::vector<Permanent*> AIEngine::DeclareAttackers(GameState& state)
     if (pin == 1) { g_dork_atk_override = 1; }
     else if (pin == 2) { g_dork_atk_override = 0; }
     else if (pin == 3) { g_dork_atk_override = 3; }
+    else if (pin == 4) { g_dork_atk_override = 4; }   // Soulstoke held for the opponent's end-step window
     std::vector<Permanent*> attackers;
     for (int idx : DeclareAttackerIndices(state))
     { attackers.push_back(&state.battlefield[idx]); }
-    if (pin == 1 || pin == 2 || pin == 3) { g_dork_atk_override = -1; }
+    if (pin == 1 || pin == 2 || pin == 3 || pin == 4) { g_dork_atk_override = -1; }
     // MTG_REAL_PAY_ATTACK_PIN: a scripted pre-combat main declares the SCORED combat (the release pin above is
     // already folded into it -- PlanPaymentScript read the declaration under the plan's own variant). Every body
     // the scored board listed takes its verdict from there; one it did not list (made since) keeps the heuristic's.

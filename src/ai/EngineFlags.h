@@ -1710,7 +1710,8 @@ inline bool DorkAtkSearchEnabled()
 
 // Per-thread combat-variant override for the searched dork attack/hold. -1 = natural (the
 // heuristic hold decides); 1 = RELEASE (held dorks attack); 0 = HOLD (the hold direction); 3 =
-// RELEASE the damage dorks an archetype's ShouldAttackWith keeps home (MTG_DORK_ATK_PROVIDER_HOLD).
+// RELEASE the damage dorks an archetype's ShouldAttackWith keeps home (MTG_DORK_ATK_PROVIDER_HOLD); 4 = HOLD an
+// Incandescent Soulstoke the opponent's end-step window could use (DecisionProviders.cpp EotTapHoldSource).
 // Set ONLY (a) by the FSLineWin branch around the alternate SimulateCombat, (b) by the executor's
 // DeclareAttackers when the committed line pinned a release, and (c) by PlanPaymentScript reading
 // the scored declaration under the plan's variant (MTG_REAL_PAY_ATTACK_PIN) -- never ambient, so

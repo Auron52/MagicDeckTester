@@ -1348,12 +1348,13 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // (Blistering Firecat). MAINBOARD ONLY: a face-down permanent needs a morph card CAST from hand, and a
     // sideboard card never reaches the hand in a goldfish.
     {
-        bool morph = false, selfsac = false, lifelock = false, atk_reanimate = false;
+        bool morph = false, selfsac = false, lifelock = false, atk_reanimate = false, eot_put = false;
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (!d) { continue; }
             atk_reanimate = atk_reanimate || d->params.attack_trigger_reanimate;
+            eot_put = eot_put || (d->params.tap_put_from_hand_cost.has_value() && d->params.tap_put_from_hand_creature_only);
             morph   = morph   || d->params.morph_cost.has_value() || d->params.megamorph_cost.has_value();
             selfsac = selfsac || d->params.endstep_sacrifice_self;
             lifelock = lifelock || d->params.static_players_cant_gain_life
@@ -1366,6 +1367,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         state.deck_has_static_life_locks = lifelock;
         // Thunderkin Awakener's attack trigger (mainboard only: a sideboard card never reaches play here).
         state.deck_has_attack_reanimate  = atk_reanimate;
+        // Incandescent Soulstoke's put at the opponent's end step (mainboard only, the same reason).
+        state.deck_has_eot_tap_put       = eot_put;
     }
     // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
     // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
