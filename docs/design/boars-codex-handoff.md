@@ -241,6 +241,17 @@ the old ranking. In those two, the new red fetch makes T2 War-Riders castable an
 the two-Birds line remains legal after the red fetch, but the search does not take it at 16x budget. This is a separate
 search-line judgment, not a missing colour in the fetch target. See `rank2/rc/cg2hg_real_focus/` and the final report.
 
+Follow-up on the USER's "should be a recoverable line?": yes, the T2 Stomping Ground land plan with **two Birds** is
+actually enumerated (new `boars-rank` unit fixture), and a controlled T3 replay with that board and the observed next
+three draws wins T5. But the ranked fetch's real salt-10 game remains T6 at **depth 8, unlimited budget** under blind
+search. When the search sees the realised shuffle instead, it wins T5 even with the ranked Stomping Ground, by casting
+War-Riders on T2 and Defense of the Heart on T4. In eight paired depth-8/unlimited blind-search salts on that same
+realised shuffle, ranking OFF wins T5 in 6/8, ranking ON in 4/8; the two ON losses are salts 1 and 6. Both choose the
+T2 War-Riders line, then Sylvan Scrying over the castable Defense on T4. ON's four T5 salts do cast Defense on T4.
+This is a genuine one-sample blind-search line-choice variance, not a missing legal plan or finite-budget cutoff. It
+does not justify calling the two-Birds line "unfindable"; nor does the exact-shuffle T5 erase the paired blind losses.
+The standalone diagnostic manifests and traces are in `build/scratch/boars/rank2/recovery_g258/`.
+
 Review request: consider enabling `MTG_FETCH_RANK_PIPS` by default with the capacity correction; the only failing raw
 per-deck aggregate is the four clairvoyant CG play results, which the USER said to ignore. Keep the top-1 width and
 do not add a Creature Giving width-2 fallback without separate evidence and USER review. Five Colour's shared-list
