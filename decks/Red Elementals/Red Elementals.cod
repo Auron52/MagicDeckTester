@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Hellspark Elemental"/>
+        <card number="4" name="Spark Elemental"/>
+        <card number="4" name="Flamekin Bladewhirl"/>
+        <card number="4" name="Ball Lightning"/>
+        <card number="4" name="Incandescent Soulstoke"/>
+        <card number="4" name="Blistering Firecat"/>
+        <card number="2" name="Nova Chaser"/>
+        <card number="4" name="Lightning Bolt"/>
+        <card number="15" name="Mountain"/>
+        <card number="1" name="Sunspine Lynx"/>
+        <card number="4" name="Thunderkin Awakener"/>
+        <card number="4" name="Fiery Islet"/>
+        <card number="4" name="Legion Leadership"/>
+        <card number="2" name="Metallic Mimic"/>
+    </zone>
+</cockatrice_deck>
