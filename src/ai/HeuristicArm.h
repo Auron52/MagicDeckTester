@@ -937,6 +937,7 @@ enum Slot : int
     D0_SNOW_PUMP_CREDIT,      // MTG_D0_SNOW_PUMP_CREDIT  Snow fix (b) d0 follow-up, 2026-11-14: the greedy's lethal projection credits Rimefeather Owl's ice counters (+1 power per useful activation the selection's slack really pays for, to each attack-eligible snow-count P/T creature). Default ON (pooled A/B 2026-11-14); =0 -> no credit
     PREPAY_WILD_DEFER,        // MTG_PREPAY_WILD_DEFER  item W (overnight 2026-11-14, Dragons gi363 / Niv held-out gi1138 / EDF gi549): a generic pip paid out of the recorded float by a colour unit does not settle its SOURCE -- the record keeps a credit per colour (GameState::PrepayWildTrue::gheld), and a later pip of that colour the float cannot pay takes the unit back while the generic moves to any other unit of the float (the {G} paid the Incubator's {3}, both {R} pay Lathliss). Exact for generic pips (any unit pays one); never admits an illegal pip (the moved generic takes a unit that existed when it was paid: a changed float drops the credits). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the generic's colour is final
     CCO_NC_PRIORITY,         // MTG_CCO_NC_PRIORITY  item C2, Pirates: inside a line or unseen continuation, a castable hand noncreature has a pip only unrestricted mana can pay; this payment plus that pip needs all unrestricted supply of its colour or more total mana than unrestricted sources provide. A creature-only land pays the current creature or generic ability ahead of an unrestricted source even when another hand creature wants the land's colour. Ordering only. Default ON; =0 -> hand-creature keep wins
+    PREPAY_CCO_VIAL_DIG,     // MTG_PREPAY_CCO_VIAL_DIG  item C2, Pirates s30070533: a joint prepay ahead of a Vial-put ETB dig cannot price the undeclared continuation. When a castable undeclared noncreature in hand needs coloured mana and the current bill plus it exceeds unrestricted supply while creature-only mana exists, decline the joint prepay and pay casts in order. Default ON; =0 -> historical joint prepay
     COUNT
 };
 
@@ -1818,6 +1819,7 @@ inline const char* Name(int slot)
         "MTG_D0_SNOW_PUMP_CREDIT",
         "MTG_PREPAY_WILD_DEFER",
         "MTG_CCO_NC_PRIORITY",
+        "MTG_PREPAY_CCO_VIAL_DIG",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -414,6 +414,43 @@ TEST_CASE("CCO hand demand: a generic ability leaves Mountain for a castable Bol
     }
 }
 
+// Pirates s30070533 T4: the joint bill {1}{R} pays the two named casts before a Vial-put
+// Crewmate digs. Bolt {R} is already in hand but absent from that bill. Paying the casts one
+// at a time lets the CCO hand-demand payer keep Mountain for Bolt.
+TEST_CASE("CCO prepay: Vial dig declines a bill that would spend Bolt's Mountain")
+{
+    auto run = [](int lever)
+    {
+        ArmHD arm(heurarm::PREPAY_CCO_VIAL_DIG, lever);
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 4;
+        PutHD(s, "Secluded Courtyard", 43);
+        PutHD(s, "Unclaimed Territory", 57);
+        PutHD(s, "Unclaimed Territory", 58);
+        PutHD(s, "Mountain", 38);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Aether Vial", 6);
+        HandHD(s, "Goblin Tomb Raider", 26);
+        HandHD(s, "Staunch Crewmate", 54);
+        Action vial_cast;
+        vial_cast.kind = Action::Kind::CastFromHand;
+        vial_cast.card_name = DefHD("Aether Vial").card.m_name;
+        vial_cast.hand_index = 1;
+        Action goblin_cast;
+        goblin_cast.kind = Action::Kind::CastFromHand;
+        goblin_cast.card_name = DefHD("Goblin Tomb Raider").card.m_name;
+        goblin_cast.hand_index = 2;
+        Action crew_vial;
+        crew_vial.kind = Action::Kind::ActivateVial;
+        crew_vial.card_name = DefHD("Staunch Crewmate").card.m_name;
+        crew_vial.hand_index = 3;
+        return TurnSolver::BatchPrepayMainCasts(s, { vial_cast, goblin_cast, crew_vial });
+    };
+    CHECK_FALSE(run(1));
+    CHECK(run(0));
+}
+
 // Item C2 round 2 (MTG_CCO_RESERVE_OTHER): the CCO LINE RESERVE must not hold a creature-only land for a colour the
 // OTHER untapped creature-only lands still make. Pirates s30070533 T3/T4: the line owes one creature {U} beyond a
 // Mountain-only unrestricted supply plus the Bolt's {R}; with both Territories held, the creature's {1} took the

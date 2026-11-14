@@ -61812,7 +61812,7 @@ namespace
 enum PrepayOutcome { PP_OK = 0, PP_DIG, PP_FLOOD, PP_FLOAT_NZ, PP_PRODUCER, PP_NO_DEF, PP_XSPELL,
                      PP_SOULFIRE, PP_HINATA, PP_FEW_CASTS, PP_UNPAYABLE, PP_WILD, PP_OK_MIXED,
                      PP_MINT_HOLD, PP_BIGMANA_MIXED, PP_PD_TIMING, PP_LIFE_SCALED, PP_SUBTYPE_MANA,
-                     PP_AURA_PARTIAL, PP_DYNAMIC_COST, PP_SCALER_GROWN, PP_N };
+                     PP_AURA_PARTIAL, PP_DYNAMIC_COST, PP_SCALER_GROWN, PP_CCO_VIAL_DIG, PP_N };
 const char* const kPrepayName[PP_N] = {
     "PREPAID (no per-cast search)", "declined: dig-draw", "declined: flood engine",
     "declined: float non-empty", "declined: producer (ritual/rock)", "declined: no card def",
@@ -61827,7 +61827,8 @@ const char* const kPrepayName[PP_N] = {
     "declined: subtype-restricted mana live (Smokebraider)",
     "partial: the held land Auras' bills (MTG_PREPAY_AURA_STAGE)",
     "declined: a cast in the line can reduce a later cast's cost",
-    "declined: a subtype-scaled dork the batch's creatures grow (MTG_PREPAY_SCALER_GROWN)" };
+    "declined: a subtype-scaled dork the batch's creatures grow (MTG_PREPAY_SCALER_GROWN)",
+    "declined: Vial dig with tight noncreature hand demand (MTG_PREPAY_CCO_VIAL_DIG)" };
 struct PrepayProbe
 {
     std::atomic<std::uint64_t> n[PP_N];
@@ -63841,6 +63842,69 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // A single cast is already optimal via the per-cast complete-solver fallback; the inter-cast
     // stranding needs >=2 casts sharing the pool. <2 -> decline (single-cast turns byte-identical).
     if (eligible < 2 || combined.ManaValue() == 0) { return Pp(PP_FEW_CASTS); }
+    // CCO + VIAL DIG (MTG_PREPAY_CCO_VIAL_DIG). The joint bill sees the named casts but cannot
+    // name the cast a Vial-put ETB dig will add. It may tap the only unrestricted {R} for that
+    // bill while a creature-only land could have paid its generic/creature share (Pirates
+    // s30070533 T4: Mountain paid before Crewmate dug a cast, leaving Bolt in hand unpayable).
+    // Decline only when a coloured noncreature already in hand is castable after this bill and
+    // the bill plus that spell exceeds unrestricted mana; the per-cast payer then sees the hand
+    // demand at each payment. No Vial dig in the line -> no extra board or hand scan.
+    if (PrepayCcoVialDigOn())
+    {
+        bool vial_dig = false;
+        for (const Action& a : acts)
+        {
+            if (a.kind != Action::Kind::ActivateVial) { continue; }
+            const CardDefinition* d = PrepayCastFace(a);
+            if (d != nullptr && d->params.etb_dig_count > 0) { vial_dig = true; break; }
+        }
+        if (vial_dig)
+        {
+            int cco_units = 0;
+            int unres_colours = 0;
+            const ManaPool& fl = state.floating_mana;
+            const int fp[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+            for (int ci = 0; ci < 5; ++ci) { if (fp[ci] > 0) { unres_colours |= 1 << ci; } }
+            if (fl.wild > 0) { unres_colours = 0x1f; }
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index != active || p.tapped || p.def_absent) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+                if (d == nullptr || !CanTapNow(p, state.battlefield)) { continue; }
+                if (d->params.colored_creature_only)
+                { cco_units += std::max(1, ManaProducedPerTap(*d)); continue; }
+                if (d->params.creature_mana_only || BigSpellOnlySource(d->params)) { continue; }
+                for (Color c : EffectiveProduces(state, active, *d))
+                { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { unres_colours |= 1 << ci; } }
+            }
+            if (cco_units > 0 && unres_colours != 0)
+            {
+                const int all_units = static_cast<int>(AvailableManaPool(state).Total() + fl.Total());
+                const int unres_units = all_units - cco_units;
+                const int spare = all_units - combined.ManaValue();
+                if (spare > 0 && unres_units > 0)
+                {
+                    for (const Card& hc : state.players[active].hand)
+                    {
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(hc);
+                        if (d == nullptr || d->card.IsLand() || d->card.IsCreature()) { continue; }
+                        const ManaCost& m = d->card.m_mana_cost;
+                        if (m.ManaValue() > spare || combined.ManaValue() + m.ManaValue() <= unres_units)
+                        { continue; }
+                        const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
+                        int pip_mask = 0;
+                        for (int ci = 0; ci < 5; ++ci) { if (pips[ci] > 0) { pip_mask |= 1 << ci; } }
+                        if ((pip_mask & unres_colours) == 0) { continue; }
+                        bool named = false;
+                        for (const Action& a : acts)
+                        { if (a.kind == Action::Kind::CastFromHand && a.card_name == hc.m_name)
+                          { named = true; break; } }
+                        if (!named) { return Pp(PP_CCO_VIAL_DIG); }
+                    }
+                }
+            }
+        }
+    }
     // The life-scaled decline armed above: the batch needs the Alchemist -> pay per cast, in order.
     if (life_scaled_armed && !life_scaled_rest.CanPay(combined)) { return Pp(PP_LIFE_SCALED); }
     // SUBTYPE-RESTRICTED MANA IN THE JOINT SOLVE (Giada; see SubtypeBatchState). The solves below run

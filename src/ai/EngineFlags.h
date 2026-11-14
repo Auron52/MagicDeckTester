@@ -827,6 +827,16 @@ inline bool CcoNcPriorityOn()
     return heurarm::Flag(heurarm::CCO_NC_PRIORITY, env_on);
 }
 
+// MTG_PREPAY_CCO_VIAL_DIG -- DEFAULT ON; =0 keeps joint prepay (item C2). A Vial-put ETB dig
+// opens a continuation whose cast is absent from the combined bill. With creature-only mana up,
+// that bill can tap the sole unrestricted source of an undeclared hand spell's colour before the
+// dig. Decline the joint solve in that tight case; per-cast payment preserves the source.
+inline bool PrepayCcoVialDigOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_CCO_VIAL_DIG", true);
+    return heurarm::Flag(heurarm::PREPAY_CCO_VIAL_DIG, env_on);
+}
+
 // MTG_CCO_RESERVE_OTHER -- DEFAULT ON; =0 restores the historical reserve (item C2 round 2, mana-clean). The CCO LINE
 // RESERVE holds a colored_creature_only land (tapped after every other land) while the rest of the line owes a colour
 // beyond the unrestricted supply -- and it held EVERY such land for that colour, however many there were. Pirates
