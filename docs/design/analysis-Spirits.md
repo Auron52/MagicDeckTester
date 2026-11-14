@@ -938,3 +938,16 @@ Default-off: units 3081/3082 (env deck-folder count), smoke 203/203 byte-identic
 `hor` (agent recommends: lossless, keeps the d0 gain, slightly better searched; costs ~20% more units). Until then
 the USER's drop stands and the accepted overnight GT (0c823e7a3) reflects it. Mana items found in the same pass are
 in docs/design/handoff-mana-overnight-2026-11-14.md.
+
+### The fetch hold: the 8 unrecoverable games are CLAIRVOYANCE -- horizon lever DELETED (2026-11-14 ~09:40 UTC)
+USER: *"I would argue that there is no non-clairvoyant reason to do this. If not, I need a real argument with real
+examples. Clairvoyance is the one exception to the no unrecoverable rule."* Traced all 5 distinct games at d8 b0,
+drop vs hold (`build/scratch/spirits/holdwhy/`). In every one the hold line has one LESS usable land on the hold
+turn (the fetched land enters untapped either way) and its advantage starts exactly where its later crack moves the
+post-fetch shuffle after a draw the search already knows: s5005 gi119 (drop skips its T2 land drop to keep the known
+T3 draw; hold plays Strand T2, cracks T3 for Godless Shrine; draws split T4), s5005 gi23 (split T2), s6006 gi188
+(split T2), s3003 gi129 (split T2), s3003 gi56 (hold's T3 crack takes lands so a spell is drawn T4: draw thinning).
+No card in the 60 rewards holding (no landfall, no Ponder/Brainstorm, no graveyard land count); the real-game reason
+(keep the target open until the draw) is information the clairvoyant search already has. -> the USER's full drop
+STANDS; the regression/overnight GT accepted with it stands. `MTG_SPIRITS_FETCH_HOLD_HORIZON` and
+`TurnSolver::InD0Game` reverted (bca756347): no legitimate use, so deleted rather than left as a dead lever.

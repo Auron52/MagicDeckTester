@@ -4091,9 +4091,6 @@ bool TurnSolver::RouteTapeScope::Clean() const
 int           TurnSolver::DecisionRootTurn() { return g_decision_root_turn; }
 bool          TurnSolver::DecisionRootOpen() { return g_decision_root_open; }
 bool          TurnSolver::InD0Runner()       { return g_d0_permit_nest > 0; }
-static thread_local int g_d0_game_nest = 0;   // TurnSolver::InD0Game (AIEngine::TakeTurn's D0GameScope)
-bool          TurnSolver::InD0Game()         { return g_d0_game_nest > 0 || g_d0_permit_nest > 0; }
-void          TurnSolver::D0GameNest(int delta) { g_d0_game_nest += delta; }
 // Owned by the OUTERMOST frame of a real decision -- SolveWithLookahead's budgeted root and
 // FullSearchLineHybrid (the executor's commit-the-line path, which bypasses SolveWithLookahead
 // entirely) -- and restored on exit, so a nested or later solve never inherits another frame's
