@@ -684,6 +684,10 @@ is live, including a feeder, independently of the flat-pool credit. A focused
 unit case checks the zero-net board. Both exact viewer lines and the full test
 suite still need replay after the header rebuild.
 
+Both exact viewer lines now return `accept`; the zero-net City test passes.
+The autonomous d5/b20 benchmark for seed 987459 improved from turn 7 to turn
+6 after the mana-gate fix, matching the Codex-play result on that seed.
+
 Seed 987461 yielded a same-opening search-quality lead: Codex-play won on
 turn 5 by putting Prophets with Seahunter, equipping Greaves and taking extra
 turns; d5/b20 won on turn 6. No rules transition discrepancy was reported.
@@ -697,3 +701,38 @@ once either player has lost at the damage step. A focused combat test checks
 that no sacrifice, extra turn, or scripted choice is consumed after lethal.
 The final-source profile and viewer audit were stopped again for this fix and
 must restart from its linked binary.
+
+Held-out seed 987464 found a `not_verified` viewer proposal that equips
+Lightning Greaves to Merfolk Sovereign and then declares Sovereign's own
+targeted ability on that shrouded Sovereign. Selecting the proposal attaches
+Greaves and drops the illegal activation; the board remains legal. This is
+within the protocol's `enumerated_proposals` contract: the menu explicitly
+does not certify every action in a proposal. It remains a viewer clarity gap,
+not a demonstrated state-transition bug. No broad plan-pruning change was
+made during the profile run.
+
+Held-out seed 987467 supplied a stronger same-opening search-quality lead:
+Codex-play chose Dockhand plus Seahunter putting Wanderwine Prophets on turn 3
+and won turn 4 through extra turns; autonomous d5/b20 won turn 5. Both kept
+the same seven with no bottom. Handing the search the player's turn-3 line
+then auto-playing the rest also wins turn 4, isolating the choice to that
+turn. The engine transitions were legal. This is a candidate for the
+earliest-win heuristic miner and paired A/B, not a rules defect.
+
+The 18-game Codex-play sweep used disjoint seeds 987451–987468. Most outcomes
+matched. The confirmed correctness defects were opponent-land IDs and token
+cleanup (987453), the islandized and fed City mana gates (987459), and the
+post-lethal Prophets prompt (987463); each has a focused fix above. Mihail's
+pay prompt was clarified (987458). Seed 987464's shroud combination is an
+explicitly uncertified proposal. Remaining same-opening search-quality leads
+are seeds 987461 (T5 vs T6), 987467 (T4 vs T5) and 987468 (T6 vs T7).
+Seed 987452's apparent lead is explained by different mulligans. The corrected
+source passes the full Release suite: 3,125 cases and 3,597,235 assertions.
+
+The preliminary same-seed multi-depth sanity sample (seed 910000, 150 games,
+provisional pre-final card scores) is monotone: d0 avg 6.0067, d3/b10 avg
+5.4933, d5/b20 avg 5.4733. D3 improved 66 games over d0 and worsened none;
+d5 improved two over d3 and worsened none. D5 game index 55 took about 18
+minutes on one core despite b20, yet won turn 5 at both d3 and d5. It is a
+runtime outlier to inspect after the official profile; it did not cause a
+search-quality regression in this sample.
