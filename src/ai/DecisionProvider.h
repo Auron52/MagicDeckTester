@@ -3232,6 +3232,7 @@ public:
     // a per-deck question: a provider whose fetch genuinely needs the alternatives returns more here (a
     // USER-review gate, confidence-conditional per state when granted). Not read in human play or the
     // unpruned audit (every legal target), and not the ACTIVATION of a held fetchland (LandSearchFetchPickWidth).
+    // 0 = no extra cap: a provider with its OWN reviewed width keeps it (Cyclone: the rule pick + Xander's Lounge).
     virtual int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
     { (void)s; (void)fetch; return 1; }
 

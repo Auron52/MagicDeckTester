@@ -4042,6 +4042,9 @@ public:
     std::vector<std::string> FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const override;
     std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
                                                    const std::vector<std::string>& ranked) const override;
+    // The land drop keeps the provider's OWN width (the rule pick + Xander's Lounge): no extra top-1 cap from the
+    // base OnPlayFetchWidth (2026-11-14), which would cut the triome the USER asked to have searched.
+    int OnPlayFetchWidth(const GameState&, const CardDefinition&) const override { return 0; }
     // MYRIAD LANDSCAPE (MTG_CYCLONE_MYRIAD_RULE): two Islands, the one-option pick; two Mountains searched
     // beside them only while short on red.
     void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
