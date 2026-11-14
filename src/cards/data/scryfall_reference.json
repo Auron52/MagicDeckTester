@@ -7062,6 +7062,17 @@
     "toughness": null,
     "type_line": "Land — Island Mountain"
   },
+  "Thunderkin Awakener": {
+    "cmc": 2.0,
+    "keywords": [
+      "Haste"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Haste\nWhenever this creature attacks, choose target Elemental creature card in your graveyard with toughness less than this creature's toughness. Return that card to the battlefield tapped and attacking. Sacrifice it at the beginning of the next end step.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Elemental Shaman"
+  },
   "Tide Shaper": {
     "cmc": 1.0,
     "keywords": [

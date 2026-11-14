@@ -16785,6 +16785,30 @@
    "parameters": {
     "champion_subtype": "Elemental"
    }
+  },
+  {
+   "name": "Thunderkin Awakener",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Shaman"
+   ],
+   "keywords": [
+    "Haste"
+   ],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "Haste\nWhenever this creature attacks, choose target Elemental creature card in your graveyard with toughness less than this creature's toughness. Return that card to the battlefield tapped and attacking. Sacrifice it at the beginning of the next end step. [1/2 haste: attacks the turn it is cast. ATTACK TRIGGER = attack_trigger_reanimate (generic: _subtype \"Elemental\", _toughness_lt_self, _sac_end_step), the shared FireAttackReanimate in BOTH combat worlds (GameEngine::CombatPhase, the rollout's SimulateOneCombatAfterTitan) and the attack projection (CountAttackReanimatePump). One trigger per DECLARED attacking copy; a body put onto the battlefield attacking was never declared (CR 508.4), so a returned Thunderkin does not trigger. TARGET: a creature CARD in our graveyard with the printed subtype and printed toughness LESS than this creature's LIVE toughness (LethalToughness: an Incandescent Soulstoke lord or a Metallic Mimic counter raises it to 3 and admits toughness-2 cards -- another Thunderkin, Nova Chaser, Soulstoke), fixed as the trigger goes on the stack (CR 603.3d) and re-checked on resolution (CR 608.2b; last known information if this creature left). 'Choose target' is mandatory: with a legal target one is returned; with none the trigger does nothing. Two triggers never pick the same card (the second would only fizzle -- disclosed as dominated). WHICH card is SEARCHED: Plan::attack_reanimate_choice -> GameState::scripted_attack_reanimate, packed ranks per trigger ordinal into AttackReanimateOptions (one entry per distinct NAME -- a sound identity fold -- ordered by DecisionProvider::AttackReanimateTargets: biggest printed power first, then a card without a graveyard ability before an unearthable one); a returned CHAMPION (Nova Chaser) is expanded into one entry per champion pick plus the decline, so its enter choice is searched by the same rank. The returned card enters TAPPED and ATTACKING through the universal enter cascade (Mimic's counter, the Soulstoke lord, its own ETBs -- Sunspine Lynx's damage, Nova's champion) and deals combat damage this combat. It is NOT unearthed (a returned Hellspark dies into the graveyard). The end-step sacrifice is a delayed trigger on the OBJECT (Permanent::sac_at_end_step): a body championed and later returned is a new object and is not sacrificed; a returned Spark / Ball Lightning / Firecat that also sacrifices itself is sacrificed once. Human play: gy_return_one (mandatory) per trigger.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_trigger_reanimate": true,
+    "attack_trigger_reanimate_subtype": "Elemental",
+    "attack_trigger_reanimate_toughness_lt_self": true,
+    "attack_trigger_reanimate_sac_end_step": true
+   }
   }
  ]
 }

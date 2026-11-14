@@ -446,6 +446,18 @@ public:
     // shuffle-independent, the MTG_TUTOR_RANKED_DEFAULT rationale.
     virtual void GyReturnOrder(const GameState& s, int controller, std::vector<int>& cand_numbers) const;
 
+    // AttackReanimateTargets -- THUNDERKIN AWAKENER (CardParams::attack_trigger_reanimate): the ORDER of an
+    // attack trigger's graveyard -> battlefield (tapped and attacking) candidates. `cand_numbers` = the legal
+    // targets' card m_numbers, one per distinct NAME, in GyReturnOrder order; reorder in place, front = the
+    // default the playout policy takes beyond the horizon (the searched rank, Plan::attack_reanimate_choice,
+    // indexes this list). A provider may also RESTRICT (USER 2026-11-14: "the provider can prune other
+    // options") -- such a prune must be measured against MTG_UNPRUNE and disclosed; an emptied list is
+    // ignored. DEFAULT (ordering only, nothing dropped): the biggest printed power first (this combat's
+    // damage -- the returned body is sacrificed at end step either way), then a card WITHOUT a graveyard
+    // ability of its own before one with it (an unearthable Hellspark kept in the yard is a later turn's
+    // attacker; the graveyard is contested between unearth and the trigger), then GyReturnOrder.
+    virtual void AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const;
+
     // GraceOptions -- Abiding Grace's option list for ONE end-step trigger, in the order the searched
     // rank (Plan::grace_choice) indexes it; front = the default the playout policy takes beyond the
     // horizon. Each entry is kGraceGainOption (-1: "You gain N life") or the m_number of a graveyard

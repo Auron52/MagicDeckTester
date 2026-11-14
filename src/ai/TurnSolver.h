@@ -1881,6 +1881,12 @@ public:
         // == the front, byte-identical to no branch. Copied onto GameState::scripted_attack_attach
         // (decided in main, consumed at declare-attackers -- the bruna_gather_choice route).
         int attack_attach_choice = -1;
+        // THUNDERKIN AWAKENER attack return ("return target Elemental creature card ... tapped and
+        // attacking"): PACKED per attack-trigger ordinal (kAttackReanimatePinBits each), a RANK into that
+        // trigger's resolution-time AttackReanimateOptions list (SpellEffects.h); -1 == every trigger takes
+        // its front. Copied onto GameState::scripted_attack_reanimate (decided in main, consumed at
+        // declare-attackers -- the attack_attach_choice route).
+        int attack_reanimate_choice = -1;
         // Set only on the depth<=0 HORIZON LEAF plan (SolveWithLookahead): the one plan the
         // future-turn rollout combat-swap pin applies to (MTG_ROLLOUT_AURA_SWAP). Never keyed,
         // compared or serialised -- a rollout-local marker.

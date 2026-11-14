@@ -690,3 +690,184 @@ TEST_CASE("Nova Chaser: a put champion's same-line pins, and the RETURNING champ
     }
     g_champion_unpinned_hook = nullptr;
 }
+
+// ==== THUNDERKIN AWAKENER (attack_trigger_reanimate, 2026-11-14) =======================================
+namespace
+{
+// Graveyard CARDS need card numbers below GameState::kFirstTokenNumber (a token is not a card).
+int g_ntk = 500;
+int GyTk(GameState& s, const std::string& name)
+{
+    Card c = DRe(name).card; c.m_number = g_ntk++; s.players[0].graveyard.push_back(c);
+    return c.m_number;
+}
+int AwakenerAttacking(GameState& s)
+{
+    const int n = PutRe(s, "Thunderkin Awakener");
+    s.battlefield.back().NoteAttackDeclared();
+    s.battlefield.back().tapped = true;
+    return n;
+}
+std::vector<int> FireAwakeners(GameState& s, int pin = -1)
+{
+    std::vector<int> atk;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index == 0 && q.tapped && q.card.IsCreature()) { atk.push_back(i); }
+    }
+    s.scripted_attack_reanimate = pin;
+    FireAttackReanimate(s, 0, atk, /*live=*/true);
+    std::vector<int> nums;
+    for (int i : atk) { nums.push_back(s.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    return nums;
+}
+std::vector<std::string> OptNames(const GameState& s, int toughness)
+{
+    std::vector<std::string> out;
+    for (const AttackReanimateOpt& o : AttackReanimateOptions(s, 0, DRe("Thunderkin Awakener").params, toughness, nullptr))
+    {
+        for (const Card& c : s.players[0].graveyard)
+        { if (c.m_number == o.card) { out.push_back(c.m_name.str()); break; } }
+    }
+    return out;
+}
+}   // namespace
+
+TEST_CASE("Thunderkin Awakener: targets an Elemental CREATURE CARD in the graveyard below its LIVE toughness")
+{
+    GameState s = BoardRe();
+    const CardParams& p = DRe("Thunderkin Awakener").params;
+    REQUIRE(p.attack_trigger_reanimate);
+    CHECK(p.attack_trigger_reanimate_subtype == "Elemental");
+    CHECK(p.attack_trigger_reanimate_toughness_lt_self);
+    CHECK(p.attack_trigger_reanimate_sac_end_step);
+    CHECK(DRe("Thunderkin Awakener").card.HasKeyword(Keyword::Haste));
+    GyTk(s, "Spark Elemental");      // 3/1 Elemental: legal
+    GyTk(s, "Nova Chaser");          // 10/2: not below toughness 2
+    GyTk(s, "Metallic Mimic");       // 2/1 Shapeshifter: not an Elemental card
+    GyTk(s, "Lightning Bolt");       // not a creature
+    GyTk(s, "Mountain");
+    PutRe(s, "Ball Lightning");      // on the battlefield, not in the graveyard
+    CHECK(OptNames(s, 2) == std::vector<std::string>{"Spark Elemental"});
+    // Toughness 3 (a Soulstoke lord / a Mimic counter) admits the toughness-2 Nova Chaser -- expanded into
+    // its champion picks (the battlefield Ball Lightning) plus the decline.
+    const std::vector<AttackReanimateOpt> o3 = AttackReanimateOptions(s, 0, p, 3, nullptr);
+    int nova_entries = 0;
+    for (const AttackReanimateOpt& o : o3) { if (o.champion != 0) { ++nova_entries; } }
+    CHECK(o3.size() == 1u + static_cast<std::size_t>(nova_entries));
+    CHECK(nova_entries >= 1);
+    // Live toughness: the Awakener under an Incandescent Soulstoke is a 2/3 and can return Nova.
+    GameState l = BoardRe();
+    PutRe(l, "Incandescent Soulstoke");
+    AwakenerAttacking(l);
+    const int nova = GyTk(l, "Nova Chaser");
+    FireAwakeners(l, (o3.size() > 0 ? 0 : -1));
+    CHECK(CountRe(l.players[0].graveyard, "Nova Chaser") == 0);
+    (void)nova;
+}
+
+TEST_CASE("Thunderkin Awakener: the card returns TAPPED and ATTACKING, doomed, not unearthed; no trigger of its own")
+{
+    GameState s = BoardRe();
+    s.deck_has_endstep_self_sac = true;
+    PutRe(s, "Incandescent Soulstoke");                    // toughness 3: a Thunderkin card is a legal target
+    const int awk = AwakenerAttacking(s);
+    const int tk2 = GyTk(s, "Thunderkin Awakener");
+    const int hs  = GyTk(s, "Hellspark Elemental");
+    // Default order: biggest printed power first (Hellspark 3 over Thunderkin 1) -- rank 1 = Thunderkin.
+    CHECK(OptNames(s, 3) == std::vector<std::string>{"Hellspark Elemental", "Thunderkin Awakener"});
+    const std::vector<int> atk = FireAwakeners(s, 1);
+    REQUIRE(BfNum(s, tk2) >= 0);
+    const Permanent& r = s.battlefield[static_cast<std::size_t>(BfNum(s, tk2))];
+    CHECK(r.tapped);
+    CHECK(static_cast<bool>(r.sac_at_end_step));
+    CHECK_FALSE(static_cast<bool>(r.unearthed));
+    CHECK(std::find(atk.begin(), atk.end(), tk2) != atk.end());   // it joins this combat
+    CHECK(std::find(atk.begin(), atk.end(), awk) != atk.end());
+    // The returned Thunderkin was never declared: no second trigger, Hellspark stays in the graveyard.
+    CHECK(CountRe(s.players[0].graveyard, "Hellspark Elemental") == 1);
+    // One trigger per DECLARED copy with no legal target does nothing.
+    GameState e = BoardRe();
+    AwakenerAttacking(e);
+    GyTk(e, "Nova Chaser");
+    const std::size_t bf = e.battlefield.size();
+    FireAwakeners(e);
+    CHECK(e.battlefield.size() == bf);
+    (void)hs;
+}
+
+TEST_CASE("Thunderkin Awakener: the returned body deals combat damage; the projection sees it")
+{
+    GameState s = BoardRe();
+    s.players[1].life = 20;
+    for (int k = 0; k < 2; ++k) { PutRe(s, "Mountain"); }
+    const int awk = PutRe(s, "Thunderkin Awakener");
+    (void)awk;
+    GyTk(s, "Spark Elemental");
+    GyTk(s, "Blistering Firecat");
+    const int proj = TurnSolver::ProjectedAttackDamageForTest(s);
+    GameState t = s;
+    RolloutSimulateCombat(t);
+    // 1 (the Awakener) + 7 (the Firecat, the default front: biggest power).
+    CHECK(s.players[1].life - t.players[1].life == 8);
+    CHECK(proj == 8);
+    CHECK(CountRe(t.players[0].graveyard, "Blistering Firecat") == 0);
+    // The searched rank 1 returns the Spark instead: 1 + 3.
+    GameState u = s;
+    u.scripted_attack_reanimate = 1;
+    CHECK(TurnSolver::ProjectedAttackDamageForTest(u) == 4);
+    RolloutSimulateCombat(u);
+    CHECK(s.players[1].life - u.players[1].life == 4);
+}
+
+TEST_CASE("Thunderkin Awakener: the delayed sacrifice keys on the OBJECT; a self-sacrificer dies once")
+{
+    GameState s = BoardRe();
+    s.deck_has_endstep_self_sac = true;
+    AwakenerAttacking(s);
+    const int spark = GyTk(s, "Spark Elemental");
+    const int hs    = GyTk(s, "Hellspark Elemental");
+    FireAwakeners(s, 1);   // Hellspark / Spark tie on power 3: the non-unearth Spark is the front -> rank 1 = Hellspark
+    REQUIRE(BfNum(s, hs) >= 0);
+    CHECK_FALSE(static_cast<bool>(s.battlefield[static_cast<std::size_t>(BfNum(s, hs))].unearthed));
+    PerformEndStepUnearthExiles(s);
+    PerformEndStepDelayedSacrifices(s);
+    DestroyAttackedAtEndStep(s);
+    PerformEndStepSelfSacrifices(s);
+    // Not unearthed: the returned Hellspark dies into the graveyard (a later unearth / reanimation), once.
+    CHECK(BfNum(s, hs) < 0);
+    CHECK(CountRe(s.players[0].graveyard, "Hellspark Elemental") == 1);
+    CHECK(CountRe(s.exile, "Hellspark Elemental") == 0);
+    CHECK(CountRe(s.players[0].graveyard, "Spark Elemental") == 1);
+    (void)spark;
+
+    // Championed after its return, then back as a NEW object: the delayed sacrifice finds nothing.
+    GameState c = BoardRe();
+    AwakenerAttacking(c);
+    const int bw = GyTk(c, "Flamekin Bladewhirl");
+    FireAwakeners(c);
+    REQUIRE(BfNum(c, bw) >= 0);
+    CHECK(static_cast<bool>(c.battlefield[static_cast<std::size_t>(BfNum(c, bw))].sac_at_end_step));
+    const int nova = EnterNova(c, bw);
+    REQUIRE(BfNum(c, bw) < 0);
+    SacrificePermanentAt(c, 0, BfNum(c, nova));   // the champion leaves -> Bladewhirl returns
+    REQUIRE(BfNum(c, bw) >= 0);
+    CHECK_FALSE(static_cast<bool>(c.battlefield[static_cast<std::size_t>(BfNum(c, bw))].sac_at_end_step));
+    PerformEndStepDelayedSacrifices(c);
+    CHECK(BfNum(c, bw) >= 0);
+}
+
+TEST_CASE("Thunderkin Awakener: the returned card enters through the enter cascade (Mimic's counter)")
+{
+    GameState s = BoardRe();
+    PutRe(s, "Metallic Mimic");
+    s.battlefield.back().card.m_subtypes.push_back("Elemental");   // its chosen type
+    s.battlefield.back().chosen_subtype_id = SubtypeRegistry::Instance().Intern("Elemental");
+    AwakenerAttacking(s);
+    const int spark = GyTk(s, "Spark Elemental");
+    FireAwakeners(s);
+    REQUIRE(BfNum(s, spark) >= 0);
+    const Permanent& r = s.battlefield[static_cast<std::size_t>(BfNum(s, spark))];
+    CHECK(r.EffectivePower() == 4);       // 3/1 + the Mimic's +1/+1 counter
+}

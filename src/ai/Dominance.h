@@ -624,6 +624,11 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-13, mana-clean item A round 3; 1456 -> 1464): `prepay_wild_true` grows to 27 bytes (gfund[5] /
 // cfund[5]: the literal booking's per-pool generic-funding subset counts, MTG_PREPAY_WILD_LITERAL; slots now pack
 // mask + count). Same classification and the same value-gated fold (PrepayWildTrueKey mixes the clamped counts).
+// +0 bytes (2026-11-14, Thunderkin Awakener; measured 1464 -> 1464): `scripted_attack_reanimate` (an int32, in the
+// 4-byte hole after scripted_doth_put) and the bool `deck_has_attack_reanimate` (the hole after
+// deck_has_static_life_locks). The pin is FUTURE-DETERMINING (set in a main phase, consumed at THIS turn's
+// declare-attackers) and is FOLDED in Build(), value-gated; the bool is a DECK CONSTANT that only skips
+// provably-empty scans -- nothing to fold.
 static_assert(sizeof(GameState) == 1464,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -976,6 +981,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Raubahn's attack-attach pin: the same FUTURE-DETERMINING class as the Bruna pin, value-gated.
     if (s.scripted_attack_attach >= 0)
     { fold(0xA77A0000ull + static_cast<std::uint64_t>(s.scripted_attack_attach)); }
+    // Thunderkin Awakener's packed attack-return ranks: the same FUTURE-DETERMINING class, value-gated.
+    if (s.scripted_attack_reanimate >= 0)
+    { fold(0x7A4E1C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_reanimate))); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

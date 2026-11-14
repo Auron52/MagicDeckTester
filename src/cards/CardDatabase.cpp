@@ -1665,6 +1665,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     if (params.contains("unearth_cost"))
         p.unearth_cost = ManaCostFromString(params["unearth_cost"].get<std::string>());
     p.champion_subtype = params.value("champion_subtype", std::string{});
+    p.attack_trigger_reanimate         = params.value("attack_trigger_reanimate", false);
+    p.attack_trigger_reanimate_subtype = params.value("attack_trigger_reanimate_subtype", std::string{});
+    p.attack_trigger_reanimate_toughness_lt_self = params.value("attack_trigger_reanimate_toughness_lt_self", false);
+    p.attack_trigger_reanimate_sac_end_step      = params.value("attack_trigger_reanimate_sac_end_step", false);
     if (params.contains("transmute_cost"))
         p.transmute_cost = ManaCostFromString(params["transmute_cost"].get<std::string>());
     if (params.contains("life_gated_put_creatures_cost"))

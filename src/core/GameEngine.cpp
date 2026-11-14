@@ -409,6 +409,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
+    state.scripted_attack_reanimate = -1;  // searched Thunderkin Awakener return (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
     Player& ap = state.ActivePlayer();
@@ -1136,6 +1137,10 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, state.active_player_index, atk_idx);
     FireMilitiaPrideTokens(state, state.active_player_index, atk_idx);
+    // Thunderkin Awakener: each DECLARED copy returns a graveyard card tapped and attacking (searched pick,
+    // GameState::scripted_attack_reanimate; repairs atk_idx). Mirrors TurnSolver's SimulateOneCombatAfterTitan
+    // (lockstep, ONE shared helper). Deck-gated inert.
+    FireAttackReanimate(state, state.active_player_index, atk_idx, /*live=*/true);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     // Geist of Saint Traft's Angel: "exile that token at end of combat" -- the numbers collected here are

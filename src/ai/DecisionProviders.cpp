@@ -866,6 +866,29 @@ void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::ve
     });
 }
 
+void DecisionProvider::AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const
+{
+    if (cand_numbers.size() < 2) { return; }
+    const std::vector<Card>& gy = s.players[static_cast<std::size_t>(controller)].graveyard;
+    auto def_of = [&](int num) -> const CardDefinition*
+    {
+        for (const Card& c : gy) { if (c.m_number == num) { return CardDatabase::Instance().LookupCached(c); } }
+        return nullptr;
+    };
+    auto power = [&](int num) { const CardDefinition* d = def_of(num); return d ? d->card.m_power.value_or(0) : 0; };
+    auto gy_ability = [&](int num)
+    {
+        const CardDefinition* d = def_of(num);
+        return d != nullptr && (d->params.unearth_cost.has_value() || d->params.landfall_return_self_from_gy);
+    };
+    std::stable_sort(cand_numbers.begin(), cand_numbers.end(), [&](int a, int b)
+    {
+        const int pa = power(a), pb = power(b);
+        if (pa != pb) { return pa > pb; }
+        return !gy_ability(a) && gy_ability(b);
+    });
+}
+
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {

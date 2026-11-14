@@ -2602,6 +2602,21 @@ struct CardParams
     // parked with an m_staged_expiry marker (kChampionExileBase) linked to the champion's m_number and
     // returns as a NEW object from FireLeavesBattlefieldTriggers. Empty for every other card.
     std::string champion_subtype;
+    // THUNDERKIN AWAKENER (Red Elementals, 2026-11-14): "Whenever this creature attacks, choose target
+    // <subtype> creature card in your graveyard with toughness less than this creature's toughness. Return
+    // that card to the battlefield tapped and attacking. Sacrifice it at the beginning of the next end
+    // step." attack_trigger_reanimate = the trigger exists (one per DECLARED attacking copy, CR 508.1m);
+    // _subtype = the printed creature subtype the card must have (empty = any creature card);
+    // _toughness_lt_self = the printed toughness must be LESS than the source's LIVE toughness (lords,
+    // counters; checked when the trigger goes on the stack AND on resolution, CR 608.2b); _sac_end_step =
+    // the returned OBJECT carries Permanent::sac_at_end_step (the delayed sacrifice keys on the object).
+    // WHICH card is SEARCHED (Plan::attack_reanimate_choice -> GameState::scripted_attack_reanimate, a rank
+    // per trigger ordinal into AttackReanimateOptions); the shared FireAttackReanimate runs in both combat
+    // worlds and the attack projection. All default off for every other card.
+    bool        attack_trigger_reanimate                 = false;
+    std::string attack_trigger_reanimate_subtype;
+    bool        attack_trigger_reanimate_toughness_lt_self = false;
+    bool        attack_trigger_reanimate_sac_end_step    = false;
     std::optional<ManaCost> transmute_cost;
     std::optional<ManaCost> life_gated_put_creatures_cost;
     int  activate_min_life                      = 0;

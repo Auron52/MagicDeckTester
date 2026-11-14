@@ -1238,7 +1238,7 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
                                   const std::string& source_name, int minus_counters = 0,
                                   bool as_noncreature_enchantment = false, int owner = -1,
-                                  bool unearthed = false);
+                                  bool unearthed = false, bool tapped = false, bool sac_at_end_step = false);
 // Sunspine Lynx's ETB (etb_damage_each_player_per_nonbasic_land) reaches Price of Progress's shared
 // resolver, defined far below.
 inline void ResolveNonbasicLandDamage(GameState& state, int controller, int multiplier);
@@ -13354,7 +13354,8 @@ inline bool GyEnterCleanerActive(const GameState& state, int controller, int vic
 // like the tutor-to-battlefield put. Returns the new battlefield index, or -1.
 inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& card,
                                   const std::string& source_name, int minus_counters,
-                                  bool as_noncreature_enchantment, int owner, bool unearthed)
+                                  bool as_noncreature_enchantment, int owner, bool unearthed,
+                                  bool tapped, bool sac_at_end_step)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     Permanent perm;
@@ -13385,6 +13386,12 @@ inline int PutCardOntoBattlefield(GameState& state, int controller, const Card& 
         perm.unearthed  = true;
         perm.temp_haste = true;
     }
+    // Thunderkin Awakener: "return that card to the battlefield tapped and attacking. Sacrifice it at the
+    // beginning of the next end step." Both are how the OBJECT enters, so set before the enter cascade (an
+    // enter trigger -- a returned Nova Chaser's champion -- sees it tapped and doomed). The sacrifice is a
+    // delayed trigger keyed on this object (PerformEndStepDelayedSacrifices). false for every other caller.
+    if (tapped)          { perm.tapped          = true; }
+    if (sac_at_end_step) { perm.sac_at_end_step = true; }
     state.battlefield.push_back(perm);
     const int idx = static_cast<int>(state.battlefield.size()) - 1;
     if (g_play_event_sink)   // nulled by RevealLogPause during search/rollout -> byte-identical
@@ -33397,6 +33404,12 @@ struct GyReanimateFilter
     int  exact_mv = -1;      // >= 0: mana value must EQUAL this (Abiding Grace: 1)
     int  max_mv   = -1;      // >= 0: mana value must be <= this
     bool creature = true;    // creature cards only ("target creature card")
+    // Thunderkin Awakener: a printed creature subtype ("Elemental creature card"; nullptr = any) and a
+    // printed-toughness ceiling ("toughness less than this creature's toughness": max_toughness =
+    // live toughness - 1; inactive unless use_max_toughness).
+    const std::string* subtype = nullptr;
+    bool use_max_toughness = false;
+    int  max_toughness     = 0;
 };
 
 inline bool GyReanimateEligible(const Card& gc, const GyReanimateFilter& f)
@@ -33407,6 +33420,8 @@ inline bool GyReanimateEligible(const Card& gc, const GyReanimateFilter& f)
     const int mv = c.m_mana_cost.ManaValue();
     if (f.exact_mv >= 0 && mv != f.exact_mv) { return false; }
     if (f.max_mv >= 0 && mv > f.max_mv) { return false; }
+    if (f.subtype != nullptr && !CardHasSubtype(c, *f.subtype)) { return false; }
+    if (f.use_max_toughness && c.m_toughness.value_or(0) > f.max_toughness) { return false; }
     return true;
 }
 
@@ -33480,6 +33495,227 @@ inline bool ResolveGyReanimate(GameState& state, int controller, int card_number
     if (legendary) { EnforceLegendRule(state, controller); }
     DrainPendingZeroToughness(state);
     return true;
+}
+
+// ==== THUNDERKIN AWAKENER: "Whenever this creature attacks, choose target Elemental creature card in your
+// graveyard with toughness less than this creature's toughness. Return that card to the battlefield tapped
+// and attacking. Sacrifice it at the beginning of the next end step." (CardParams::attack_trigger_reanimate*)
+//
+// One trigger per DECLARED attacking copy (CR 508.1m; a body put onto the battlefield attacking was never
+// declared, CR 508.4, so a returned Thunderkin does not trigger). Called from GameEngine::CombatPhase and
+// the rollout's SimulateOneCombatAfterTitan (lockstep, ONE body) right after the declare-attackers triggers
+// and before the attack-token block, and on a COPY by the attack projection (CountAttackReanimatePump,
+// `live` = false: no chooser, no play event).
+//
+// TARGETS are fixed as the triggers go on the stack (CR 603.3d): each trigger snapshots the legal graveyard
+// cards against its source's LIVE toughness then (LethalToughness: lords, counters); with none the trigger
+// is removed. On resolution the target must still be legal (CR 608.2b): still in the graveyard and still
+// below the source's toughness now (last known information when the source has left). Triggers resolve in
+// declared order; each picks among the snapshot cards still in the graveyard, so a later trigger never
+// re-targets an earlier return (choosing the same card would only make it fizzle -- returning a body that
+// is sacrificed at end step anyway is never worse than nothing against the passive opponent; disclosed).
+//
+// WHICH card is SEARCHED: GameState::scripted_attack_reanimate (Plan::attack_reanimate_choice), PACKED per
+// trigger ordinal, a RANK into AttackReanimateOptions -- one entry per distinct NAME (copies are the same
+// card to play: a SOUND identity fold), ordered by the provider's AttackReanimateTargets; a card with
+// CHAMPION (a returned Nova Chaser) is expanded into one entry per champion pick (ChampionVariantTargets:
+// identity-folded, provider-pruned) plus the decline, so its enter trigger's choice is searched by the
+// same rank. Unpinned (-1) = each list's front: the playout policy beyond the horizon only. A rank past the
+// list clamps to its last entry (duplicate-not-whiff). Human play (`gy_return_one`, mandatory -- no
+// alternative button): every legal graveyard copy; a returned champion then asks through its own `dig`.
+//
+// The returned card enters TAPPED and ATTACKING through the universal enter cascade (PutCardOntoBattlefield
+// under GraveyardEnterScope: ETB watchers -- Metallic Mimic's counter, the Soulstoke lord by live subtype --
+// and its own enter triggers). It is NOT unearthed (a returned Hellspark dies into the graveyard). The
+// delayed sacrifice keys on the OBJECT (Permanent::sac_at_end_step), so a body that leaves and returns
+// (championed, then back) is a new object and is not sacrificed; a body that also sacrifices itself at end
+// step (Spark Elemental) is sacrificed once -- the first sweep moves it, the second finds nothing.
+// `atk_idx` is REPAIRED by number afterwards: the returned bodies join this combat, and a creature a
+// returned champion exiled leaves it (CR 506.4).
+constexpr int kAttackReanimatePinBits     = 4;
+constexpr int kAttackReanimatePinMask     = (1 << kAttackReanimatePinBits) - 1;
+constexpr int kAttackReanimateMaxOrdinals = 7;   // 7 x 4 bits in the int32 pin
+
+struct AttackReanimateOpt { int card = 0; int champion = 0; };   // champion: 0 = none / unpinned, > 0 identity, -1 decline
+
+inline GyReanimateFilter AttackReanimateFilter(const CardParams& p, int source_toughness)
+{
+    GyReanimateFilter f;
+    if (!p.attack_trigger_reanimate_subtype.empty()) { f.subtype = &p.attack_trigger_reanimate_subtype; }
+    if (p.attack_trigger_reanimate_toughness_lt_self)
+    {
+        f.use_max_toughness = true;
+        f.max_toughness     = source_toughness - 1;
+    }
+    return f;
+}
+
+// ONE trigger's option list, in the order the searched rank indexes. `snapshot` = the legal targets when
+// the trigger went on the stack (nullptr = the current graveyard: the enumerator's walk).
+inline std::vector<AttackReanimateOpt> AttackReanimateOptions(const GameState& state, int controller,
+                                                              const CardParams& pp, int source_toughness,
+                                                              const std::vector<int>* snapshot)
+{
+    std::vector<AttackReanimateOpt> out;
+    std::vector<int> names = GyReanimateCandidateNames(state, controller,
+                                                       AttackReanimateFilter(pp, source_toughness), snapshot);
+    if (names.size() > 1)
+    {
+        std::vector<int> pv = names;
+        ResolveProvider(state).AttackReanimateTargets(state, controller, pv);
+        // A provider may reorder and restrict, never add: keep only legal entries; an emptied list is ignored.
+        std::vector<int> kept;
+        for (int n : pv)
+        {
+            if (std::find(names.begin(), names.end(), n) != names.end()
+                && std::find(kept.begin(), kept.end(), n) == kept.end())
+            { kept.push_back(n); }
+        }
+        if (!kept.empty()) { names.swap(kept); }
+    }
+    const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    for (int num : names)
+    {
+        const CardDefinition* d = nullptr;
+        for (const Card& c : gy) { if (c.m_number == num) { d = CardDatabase::Instance().LookupCached(c); break; } }
+        if (d != nullptr && !d->params.champion_subtype.empty() && !HumanPlayActive())
+        {
+            bool others = true;
+            const std::vector<int> picks = ChampionVariantTargets(state, controller, d->params.champion_subtype, &others);
+            for (int t : picks) { out.push_back({num, t}); }
+            if (others || picks.empty()) { out.push_back({num, -1}); }
+        }
+        else { out.push_back({num, 0}); }
+    }
+    return out;
+}
+
+// Return graveyard card `opt.card` tapped and attacking; the new permanent's number, or 0 when the card is
+// no longer in the graveyard (the target is illegal: the trigger does nothing).
+inline int ReturnGraveyardCardAttacking(GameState& state, int controller, const AttackReanimateOpt& opt,
+                                        const std::string& source_name, bool sac_at_end_step)
+{
+    std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+    int gi = -1;
+    for (int i = 0; i < static_cast<int>(gy.size()); ++i)
+    { if (gy[static_cast<std::size_t>(i)].m_number == opt.card) { gi = i; break; } }
+    if (gi < 0) { return 0; }
+    const Card back = gy[static_cast<std::size_t>(gi)];
+    gy.erase(gy.begin() + gi);
+    bool legendary = false;
+    {
+        GraveyardEnterScope from_gy;
+        const ChampionPinScope champ(back.m_number, opt.champion);   // a returned champion's searched pick
+        const int idx = PutCardOntoBattlefield(state, controller, back, source_name, 0, false, -1,
+                                               /*unearthed=*/false, /*tapped=*/true, sac_at_end_step);
+        legendary = idx >= 0 && idx < static_cast<int>(state.battlefield.size())
+                 && state.battlefield[static_cast<std::size_t>(idx)].card.HasSupertype(Supertype::Legendary);
+    }
+    if (legendary) { EnforceLegendRule(state, controller); }
+    DrainPendingZeroToughness(state);
+    return back.m_number;
+}
+
+inline void FireAttackReanimate(GameState& state, int controller, std::vector<int>& atk_idx, bool live)
+{
+    const int pin = state.scripted_attack_reanimate;
+    state.scripted_attack_reanimate = -1;   // consumed by this combat whatever happens below
+    if (!state.deck_has_attack_reanimate || atk_idx.empty()) { return; }
+    struct Trig { int src; const CardDefinition* d; int bound; std::vector<int> legal; std::string name; };
+    std::vector<Trig> trigs;
+    for (int i : atk_idx)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.attack_trigger_reanimate) { continue; }
+        Trig t{p.card.m_number, d, LethalToughness(p, state), {}, p.card.m_name.str()};
+        t.legal = GyReanimateCandidates(state, controller, AttackReanimateFilter(d->params, t.bound));
+        trigs.push_back(std::move(t));
+    }
+    if (trigs.empty()) { return; }
+    std::vector<int> nums;
+    for (int i : atk_idx)
+    {
+        nums.push_back(i >= 0 && i < static_cast<int>(state.battlefield.size())
+                           ? state.battlefield[static_cast<std::size_t>(i)].card.m_number : -1);
+    }
+    for (std::size_t j = 0; j < trigs.size(); ++j)
+    {
+        const Trig& t = trigs[j];
+        if (t.legal.empty()) { continue; }   // no legal target as it triggered: removed (CR 603.3d)
+        int cur = t.bound;                    // last known information when the source has left
+        for (const Permanent& q : state.battlefield)
+        { if (q.card.m_number == t.src) { cur = LethalToughness(q, state); break; } }
+        const std::vector<AttackReanimateOpt> opts = AttackReanimateOptions(state, controller, t.d->params, cur, &t.legal);
+        if (opts.empty())
+        {
+            if (live && g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "trigger", t.name + " (attack): its target is gone -- nothing returns"); }
+            continue;
+        }
+        int k = 0;
+        if (pin >= 0 && static_cast<int>(j) < kAttackReanimateMaxOrdinals)
+        { k = (pin >> (kAttackReanimatePinBits * static_cast<int>(j))) & kAttackReanimatePinMask; }
+        k = std::min(k, static_cast<int>(opts.size()) - 1);
+        AttackReanimateOpt opt = opts[static_cast<std::size_t>(k)];
+        // Human play (`gy_return_one`, mandatory): every legal graveyard copy, unfolded.
+        if (live && g_play_gy_return_one_chooser != nullptr && !g_tap_speculating)
+        {
+            const std::vector<int> per_copy = GyReanimateCandidates(
+                state, controller, AttackReanimateFilter(t.d->params, cur), &t.legal);
+            const std::vector<Card>& gy = state.players[static_cast<std::size_t>(controller)].graveyard;
+            std::vector<Card> cards;
+            InternedName want;
+            for (const Card& c : gy) { if (c.m_number == opt.card) { want = c.m_name; break; } }
+            int def = 0;   // the searched pick's first copy (1-based), else the first candidate
+            for (std::size_t ci = 0; ci < per_copy.size(); ++ci)
+            {
+                for (const Card& c : gy)
+                {
+                    if (c.m_number != per_copy[ci]) { continue; }
+                    cards.push_back(c);
+                    if (def == 0 && c.m_name == want) { def = static_cast<int>(cards.size()); }
+                    break;
+                }
+            }
+            if (def == 0) { def = 1; }
+            if (!cards.empty())
+            {
+                int r = (*g_play_gy_return_one_chooser)(state, controller, t.name + " (attack)", std::string(), cards, def);
+                if (r < 1 || r > static_cast<int>(per_copy.size())) { r = def; }
+                opt.card     = per_copy[static_cast<std::size_t>(r - 1)];
+                opt.champion = 0;   // a returned champion asks through its own `dig` prompt
+            }
+        }
+        if (live && g_play_event_sink && !g_tap_speculating)
+        {
+            std::string nm;
+            for (const Card& c : state.players[static_cast<std::size_t>(controller)].graveyard)
+            { if (c.m_number == opt.card) { nm = c.m_name.str(); break; } }
+            EmitPlayEvent(state.turn_number, "trigger",
+                          t.name + " (attack): returns " + nm + " tapped and attacking"
+                          + (t.d->params.attack_trigger_reanimate_sac_end_step ? " (sacrificed at the next end step)" : ""));
+        }
+        const int back = ReturnGraveyardCardAttacking(state, controller, opt, t.name + " (attack)",
+                                                      t.d->params.attack_trigger_reanimate_sac_end_step);
+        if (back > 0) { nums.push_back(back); }
+    }
+    // Repair by number: the returned bodies attack; anything that left (a champion's exile) or stopped
+    // being a creature is out of combat.
+    atk_idx.clear();
+    for (int n : nums)
+    {
+        if (n < 0) { continue; }
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != n) { continue; }
+            if (q.card.IsCreature() || q.is_animated) { atk_idx.push_back(i); }
+            break;
+        }
+    }
 }
 
 // ==== ABIDING GRACE: "At the beginning of your end step, choose one -- * You gain 1 life. * Return

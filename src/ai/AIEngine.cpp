@@ -720,6 +720,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
     return p.lackey_choice >= 0 || p.fling_victim_choice != -1
         || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0 || p.bruna_gather_choice >= 0
         || p.combat_aura_swap_choice >= 0 || p.attack_attach_choice >= 0 || p.fb_hold_choice >= 0
+        || p.attack_reanimate_choice >= 0
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
@@ -758,6 +759,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.bruna_gather_choice >= 0     && s.scripted_bruna_gather != p.bruna_gather_choice)        { ok = false; }
     if (p.combat_aura_swap_choice >= 0 && s.scripted_combat_aura_swap != p.combat_aura_swap_choice) { ok = false; }
     if (p.attack_attach_choice >= 0    && s.scripted_attack_attach != p.attack_attach_choice)      { ok = false; }
+    if (p.attack_reanimate_choice >= 0 && s.scripted_attack_reanimate != p.attack_reanimate_choice) { ok = false; }
     if (p.fb_hold_choice >= 0          && s.scripted_fb_hold != p.fb_hold_choice)                  { ok = false; }
     if (p.attack_land_search_choice >= 0 && s.scripted_attack_land_search != p.attack_land_search_choice) { ok = false; }
     if (p.combat_crack_choice >= 0     && s.scripted_combat_land_search_crack != p.combat_crack_choice) { ok = false; }
