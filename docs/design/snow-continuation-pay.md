@@ -183,10 +183,38 @@ unchanged from the committed tree (6, 8). New scenario `snow_site8_cont_acts_inl
 `MTG_EXEC_SITE8_CONT_INLINE=0` (no win, opponent at 1); `snow_owl_repeat_extras_keep_owed_sheets` still passes.
 Unit 2971/2971, scenarios 514/514.
 
-### 5.1 Pooled held-out A/B (binary 2dbb7abe9, snapshot `build/scratch/snowcp/mtg.ab3`)
+### 5.1 Pooled held-out A/B (binary 0618b9848, snapshot `build/scratch/snowcp/mtg.ab3`)
 
-PENDING -- `build/scratch/snowcp/ab3/` (manifest `tools/mkman3.py`, report `tools/ab3_report.py`). Arms: `base` =
-committed tree (reserve 0, inline 0); `new` = reserve + inline (the shipped defaults); `inl` = inline only (Snow d5
-held-out, attribution). Snow d5 b20 1500/arm (seeds 110000+), d3 b10 1000/arm (112000+), d0 1000/arm (114000+); the
-regression Snow cells d5 s2002 + s3003 (150 each), d3 s2002 (25), d0 s2002 (1000) as must-not-regress; Selesnya v2,
-EDF (d5 b20), Kithkin (d5 b30) 300 each (116000/117000/118000+).
+ONE pooled batch, 1299 jobs / 17,775 games, 24/24 workers busy, 06:18-07:07 UTC (`build/scratch/snowcp/ab3/`,
+manifest `tools/mkman3.py`, report `tools/ab3_report.py` -> `ab3/report.txt`). Arms: `base` = the committed tree
+(reserve 0, inline 0); `new` = reserve + inline (the shipped defaults of 2dbb7abe9); `nd` = `new` +
+`MTG_D0_SNOW_PUMP_CREDIT`; `inl` = inline only (Snow d5 held-out). Paired per game against `base`; a no-win counts 99.
+Held-out seeds 110000+ (d5), 112000+ (d3), 114000+ (d0), 116000-118000+ (other decks).
+
+| cell | n/arm | base | new | nd | inl | new f/s | nd f/s | play-changed new/nd | units new/nd |
+|---|---|---|---|---|---|---|---|---|---|
+| **Snow d5 b20** held-out | 1500 | 5.6920 | 5.6913 | 5.6913 | 5.6913 | 1/0 | 1/0 | 43/42 (inl 7) | 0.9988/0.9985 |
+| **Snow d3 b10** held-out | 1000 | 5.7270 | 5.7250 | 5.7250 | | 2/0 | 2/0 | 35/35 | 0.9995/0.9992 |
+| Snow regression d5 s2002 | 150 | 5.6267 | 5.6267 | 5.6267 | | 0/0 | 0/0 | 7/7 | 1.0001/0.9999 |
+| Snow regression d5 s3003 | 150 | 5.7000 | 5.7000 | 5.7000 | | 0/0 | 0/0 | 2/2 | 1.0001/1.0000 |
+| Snow regression d3 s2002 | 25 | 5.6800 | 5.6800 | 5.6800 | | 0/0 | 0/0 | 1/1 | 1.0000/1.0000 |
+| Snow d0 held-out | 1000 | 6.1580 | 6.1580 | 6.1560 | | 0/0 | 2/0 | 13/14 | (d0: no units) |
+| Snow regression d0 s2002 | 1000 | 6.1590 | **6.1620** | 6.1590 | | 0/**3** | 0/0 | 14/12 | |
+| Selesnya v2 (d6 b20) | 300 | 4.6133 | 4.6133 | | | 0/0 | | 0 | 1.0000 |
+| EDF (d5 b20) | 300 | 4.0400 | 4.0400 | | | 0/0 | | 0 | 1.0001 |
+| Kithkin (d6 b30) | 300 | 4.4833 | 4.4833 | | | 0/0 | | 0 | 1.0000 |
+
+Reading:
+- **Searched Snow: no slower game in any arm** (2500 held-out + 325 regression games), so no `--depth 8
+  --budget-ms 0` repro was owed. d5 -0.0007 and d3 -0.0020. The d5 faster game also appears in `inl`, which
+  changes only 7 games: it comes from the executor fix alone (a game the committed tree did not win now wins).
+  The regression d5 s2002 cell is back at the committed GT (5.6267): gi78 and gi101 recover.
+- **`new` alone fails the bar at d0**: regression d0 s2002 is +0.0030 (the three known games gi242/609/784,
+  6 -> 7, nothing faster). The held-out d0 sample is 0/0.
+- **`nd` clears the bar on every deck and axis**: searched as `new`, d0 held-out -0.0020 (2 faster, 0 slower),
+  regression d0 0/0. Selesnya v2 / EDF / Kithkin are play-identical (0 games changed) in `new`; `nd` is inert
+  there (no Owl).
+- Units: 0.998-1.000 on every searched cell.
+
+Decision: `MTG_D0_SNOW_PUMP_CREDIT` flipped to DEFAULT ON (it earned it here, and without it the package is net
++3 on the d0 regression cell). Surfaced to the parent/USER; `=0` restores the projection without the credit.
