@@ -813,19 +813,24 @@ it), the on-play and activation lists are identical, stable under library order;
 Garden for two Wardens) and legacy Misty (Breeding Pool for Hunted Phantasm, every target kept); Morph's INT-9 pick
 on both routes; the base width vs the explicit top-1 providers.
 
-**Measurement.** See `logs/boars-research/rank-handoff.md` (in flight at the time of writing).
+**Measurement.** The follow-up pip-demand/shock-first ranking on `boars-rank` (`23e2e67db`,
+`MTG_FETCH_RANK_PIPS=1`) recovered 97005, Creature Giving smoke gi113, and all four Boars
+ranking-tie slower games. Its 300-game-per-cell pooled A/B failed the every-deck-neutral bar:
+Creature Giving was +4 turns, despite Boars -18 and Boars 2HG -6. It remains OFF and
+unintegrated. The two Creature Giving games deciding that bar still need root cause; see
+`.claude/worktrees/boars-rank/logs/boars-research/rank-handoff.md`.
 
 ## Claude-play sweep
 - commit: `4a59c17f6` (frozen binary `build/scratch/boars/sweep/mtg.sweep`); fixes integrated at `080665c27`
 - seeds: 97001-97016 (12 standard, 97013-97016 2HG), one Opus agent per game, 2026-11-14
 - games: 16; Claude vs search (d5 b20): equal 12, Claude faster 3 (97002 T5 vs T6, 97005 T5 vs T6, 97009 T4 vs T5), Claude slower 1 (97010: a different post-fetch shuffle, not a misplay)
 - flags: 1 unresolved
-  - 97005 OPEN (search, ranking): the shared fetch ranking puts first only the colours the board LACKS; with red and green both on the board every target ties and library order picks (Forest), so the top-1 land drop never sees the second red source Ilharg needs ({R}{R}). `MTG_UNPRUNE=fetch` d5 b0 finds T5. Proposed: rank by pips NEEDED per colour against SOURCES on the board (a ranking fix, USER 2026-10-05 "counterexample => fix the ranking"); needs an A/B on the shared-order decks.
+  - 97005 OPEN (search, ranking): the shared fetch ranking puts first only the colours the board LACKS; with red and green both on the board every target ties and library order picks (Forest), so the top-1 land drop never sees the second red source Ilharg needs ({R}{R}). `MTG_UNPRUNE=fetch` d5 b0 finds T5. The pip-demand/shock-first candidate recovers the game but failed the Creature Giving A/B bar, so it remains OFF pending root cause and a safer ranking.
   - 97009 FIXED `ba5d932b0`: site 9 now fans a plan that CASTS Flinthoof (its same-main {R} self-haste was unreachable at any budget); T5 -> T4 at d5 b20 and d8 b0; other decks byte-identical; Boars 100 held-out: play -0.07, d3 -0.04 (the one slower d3 game recovers at d3 b0 / d8 b0).
   - 97002 FIXED by the USER-approved cast order (`963b0858f`): the generic cheapest-first order cast Flinthoof before Herald of Ilharg; `MTG_UNPRUNE=searchorder` alone found it.
   - 97013 FIXED `c8004bd60`: the payment refine compared restricted and general float key by key, so it rejected the exact emerge payment; general float now covers a restricted unit of the same colour (Birds stays untapped).
   - 97003 FIXED `c8004bd60`: an all-creature prepay with Sage tapped keeps a provably-general surplus general (`MTG_PREPAY_GENERAL_SURPLUS`, default on).
   - Human-play menu FIXED `080665c27`: fetch-pin twin rows folded; emerge victims payable-only; dead-equip twin rows folded; post-combat exalted P/T, legend_keep `attacked` (code-read only), 2HG mulligan life.
-- follow-ups (not sweep flags): the d0 / beyond-horizon greedy never hastes a freshly cast Flinthoof (cast-order A/B d0 gi92) -- a "cast with haste" playout option needs its own A/B; Vampires' Stromkirk Condemned likely has the same site-9 gap as Flinthoof (not touched; changes Vampires play).
+- follow-ups (not sweep flags): the d0 / beyond-horizon "cast with haste" playout option was adopted at `f98634b59` after a held-out A/B and full smoke/regression; Vampires' Stromkirk Condemned likely has the same site-9 gap as Flinthoof (not touched; changes Vampires play).
 - dismissed: 97006 "same top cards after every shuffle" = the designed common-random-numbers shuffle (keyed on seed + search count).
 - decision types seen across the sweep: mulligan, bottom, main_phase, land_entry, bounce, sacrifice, tutor_etb, dig, target, creature_type, lackey_put, legend_keep -- every Boars decision class in the 2c-ter classification fired (emerge victim, Ilharg put, legend keep, Ilharg dies tuck, Horn type + upkeep take, Raggadragga target, fetch target + hold, Turf bounce, shock).

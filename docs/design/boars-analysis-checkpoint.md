@@ -211,3 +211,37 @@ target branching cost unmeasured.
   NEXT: root-cause verdicts -> accept smoke, regression, overnight --deck=boars,boars2hg; check_gt_logs; commit GT. Then
   integrate boars-rank (if the A/B passes <= 0 per deck) and boars-d0haste, re-run smoke + regression. Then remaining
   Stage 5 (verify_deck, 5a-5h, discard policy), Stage 6 report, push (4h rhythm), worktree cleanup.
+
+* **2026-11-14 Codex continuation (after Claude handoff `f23839709`) -- CURRENT STATE.**
+  * The rc-boars verdicts were complete (`build/scratch/boars/rootcause/rc-boars.md`): four searched
+    Boars fetch-ranking ties, one Boars 2HG cast-order budget tradeoff (regression gi36, Horn line
+    found at 64x/unlimited), five fetch-hold shuffle-variance games, two depth-0 creature-tap
+    slowdowns. The Creature Giving/Five Colour verdicts are in `rootcause/rc-cg.md`.
+  * ACCEPTED chain3 smoke + regression + Boars-scoped overnight GT at `bcb91b0e6`. All searched
+    slower games had verdicts. `check_gt_logs.py`: 1172 consistent / 0 stale / 0 missing.
+  * `boars-rank` (`23e2e67db`, MTG_FETCH_RANK_PIPS) stays **OFF and unintegrated**: its held-out
+    300-game-per-cell A/B was Boars -18, Boars 2HG -6, Creature Giving +4, CG 2HG 0,
+    Minotaur -2. The every-deck <=0 bar failed. CG gi138 and CG 2HG gi258, the deciding games,
+    need root cause. See `.claude/worktrees/boars-rank/logs/boars-research/rank-handoff.md`.
+  * INTEGRATED the greedy self-haste rider at `f98634b59` (from `boars-d0haste`); held-out A/B
+    was Boars d0 -24, Boars 2HG d0 -20, all searched aggregates <=0. Final Release build,
+    unit binary, 517/517 scenarios PASS. Full smoke: 201/203 configs unchanged; searched
+    0 slower, 1 same-score play change; d0 57 faster/3 slower. Full regression: 319/323
+    unchanged; searched 0 slower, 5 same-score play changes; d0 58 faster/2 slower.
+    Strict viewer reference replay: 836 refs, 0 drift/enum-gap; 2 suboptimal refs beaten.
+    ACCEPTED smoke + regression GT at `f4bb324d7`; `check_gt_logs.py`: 1172 consistent.
+    No new overnight tier was run for this separate optimization (periodic overnight policy).
+  * Static `verify_deck.py --no-sweep --no-network`: coverage 19/19, card fields, suite
+    membership, viewer self-guard and 9 viewer wiring types PASS. Gate FAILS on the one
+    unresolved Claude-play flag 97005; the ranking candidate that fixed it failed A/B.
+    Mismatch/play-invariant/runtime viewer checks were intentionally SKIPPED by `--no-sweep`.
+  * The full runs were slow on this shared box: smoke batch 12m35s, regression batch 24m26s,
+    then strict reference replay. Nothing is running from this Codex continuation; no status
+    timer was armed. All commits remain LOCAL on `boars-analysis`; do not push this side branch.
+  * **NEXT:** root-cause the rank A/B's CG gi138 / CG 2HG gi258, design a ranking that closes
+    Boars 97005 without hurting CG, then re-measure under the every-deck <=0 bar. Run Stage 5
+    `verify_deck.py` full gate, 5b multi-depth, 5c2 leaf tie-break, 5e-5h viewer checks
+    (including Raggadragga `target` HARD_MISS), discard bucket policy, Stage 6 disclosure.
+    Separately confirm Five Colour's unnamed single-pick fetch plan change and decide on the
+    Vampires Stromkirk Condemned site-9 gap. Re-measure Hinata cost on an idle box. Shared-branch
+    push belongs to the parent with refs-safe scan, rebase, rebuild, smoke, GT check and CI watch.
