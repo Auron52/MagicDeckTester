@@ -184,3 +184,10 @@ Codex notes there cover waiters and timers.
   * d5 b0 backstop rows identical to d3 b0;
   * the stale CG overnight GT;
   * Raggadragga `deck_has_mana_untapper` (left as is).
+
+## Subagent handoffs (all three Claude subagents were told to stop and hand off, ~13:00 UTC)
+* rank: `.claude/worktrees/boars-rank/logs/boars-research/rank-handoff.md` (A/B batch left RUNNING, PID 567419).
+* d0haste: `.claude/worktrees/boars-d0haste/logs/boars-research/d0haste-handoff.md`.
+* rc-boars: `build/scratch/boars/rootcause/rc-boars.md` (done rows + TODO rows) and
+  `.claude/worktrees/boars/logs/boars-research/rootcause-rc-boars-handoff.md`.
+If a file is missing, that agent stopped before writing it; redo its step from its brief.
