@@ -737,3 +737,16 @@ d5 improved two over d3 and worsened none. D5 game index 55 took about 18
 minutes on one core despite b20, yet won turn 5 at both d3 and d5. It is a
 runtime outlier to inspect after the official profile; it did not cause a
 search-quality regression in this sample.
+
+The final-source 1,000-game scorer wrote the baseline profile with 16 card
+scores, a one-to-five-land static keep window, and no hand-score threshold.
+Its pooled cost-aggregate reframe A/B returned `COST_NEUTRAL`; the discard
+evidence stage is still running. The first pooled suite-cost gate, which began
+with the provisional scores, passed at 10,126.843 core-ms/game against
+Hinata's 5,236.733, or 1.93× versus the 3× ceiling. The gate is being repeated
+with the final scores before adoption. A live 100-game viewer sweep on seeds
+777000–777099 surfaced every expected decision type and passed. The static
+verifier passed coverage, live Scryfall mana costs, card fields, and viewer
+wiring; its sole blocking result is the expected absence of accepted GT for
+the new three-tier rows. The reference safety scan found no unprotected games
+across 93 checkouts and worktrees.

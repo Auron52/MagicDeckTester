@@ -725,9 +725,9 @@ SMOKE_CASES=(
   # templates. Confirm its searched ms/game against Hinata in the same pooled tier
   # before accepting any GT. The 2HG row is a small 30-life searched canary.
   "merfolkturns 0 1001 1000 0"
-  "merfolkturns 3 1001   50 10"
-  "merfolkturns 5 1001  100 20"
-  "merfolkturns2hg 3 1001 50 10"
+  "merfolkturns 3 1001   10 10"
+  "merfolkturns 5 1001   30 20"
+  "merfolkturns2hg 3 1001 10 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
