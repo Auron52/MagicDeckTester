@@ -95,6 +95,21 @@ inline bool RepeatExtrasReserveOn()
 // Sheets] = the kill) realised without the continuation's activations: played != scored. With this on the executor
 // applies them inline at the same point, as the rollout does. Site 9 (after the pass) is unaffected: it already
 // applies at once. Reads no budget; the same at every budget.
+// MTG_D0_SNOW_PUMP_CREDIT (2026-11-14, Snow fix (b) d0 follow-up; DEFAULT OFF -- a GREEDY-PROJECTION term, earned by
+// A/B). The greedy runner's lethal projection (TurnSolver::Solve, consider()) never credited Rimefeather Owl's ice
+// counters: each useful "{1}{S}: ice counter" makes one more snow permanent, +1 power to every attack-eligible
+// creature whose P/T is the battlefield's snow count. The greedy then ranked [Scrying Sheets(act), Owl x3] over
+// [Owl x3] by eval alone; with MTG_REPEAT_EXTRAS_RESERVE the over-asked plan realises Owl x2 + the look and misses a
+// lethal the honest [Owl x3] had (Snow regression d0 s2002 gi242/609/784, T6 -> T7). The credit counts the
+// activations the apply will really make: the first, plus the extras the selection's own slack pays for (the
+// reserve keeps the later named steps' share; with the reserve off the extras may also take that share). Only the
+// depth-0 runner and the beyond-horizon playout read Solve's projection, the only places a greedy is permitted.
+inline bool D0SnowPumpCreditOn()
+{
+    static const bool env = EnvOn("MTG_D0_SNOW_PUMP_CREDIT", false);
+    return heurarm::Flag(heurarm::D0_SNOW_PUMP_CREDIT, env);
+}
+
 inline bool ExecSite8ContInlineOn()
 {
     static const bool env = EnvOn("MTG_EXEC_SITE8_CONT_INLINE", true);

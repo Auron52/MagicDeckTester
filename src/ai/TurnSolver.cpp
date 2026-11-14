@@ -58016,6 +58016,20 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
     // attack (see CollectAttackingManaSources).
     const std::vector<AttackingManaSource> atk_mana_srcs = CollectAttackingManaSources(state);
     int prowess_attackers   = CountProwessAttackers(state);
+    // MTG_D0_SNOW_PUMP_CREDIT (EngineFlags.h): attack-eligible creatures whose P/T is the battlefield's snow count
+    // (Rimefeather Owl) -- each useful ice counter the selection makes adds one to each. 0 = no term (inert).
+    int snow_pt_attackers = 0;
+    if (is_pre_combat && D0SnowPumpCreditOn())
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != state.active_player_index || !q.card.IsCreature()) { continue; }
+            const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+            if (qd == nullptr || !qd->params.pt_equals_snow_permanents_on_battlefield) { continue; }
+            if (q.tapped || !CanAttackFull(q, state.battlefield, state.active_player_index)) { continue; }
+            ++snow_pt_attackers;
+        }
+    }
     // §2b BODIES THE PAYMENT WILL EAT (MTG_SAC_OUTLET_PAY): what this greedy chooser charges a plan
     // for them. The pool above credits every legal fodder body as one mana, and nothing in a plan's
     // score said the payer turns those bodies into mana by SACRIFICING them -- a cast's EvalCard
@@ -59609,6 +59623,32 @@ TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_c
                                                (credited ? eff_nc : pool_noncreature));
         int projected_atk = pending_atk - atk_tap_lost + vial_haste_atk + haste_cast_atk
                           + noncreature_count * (prowess_attackers + haste_cast_prowess);
+        if (snow_pt_attackers > 0)
+        {
+            // The apply's own count of ice activations: the first is on the subset's books; the K-1 extras are paid out
+            // of what the selection leaves (MTG_REPEAT_EXTRAS_RESERVE keeps the later named activations' share; off,
+            // the extras may take it too -- the Owl runs first in the provider's order).
+            int left = (credited ? eff : pool).Total() - combined.ManaValue();
+            if (!RepeatExtrasReserveOn())
+            {
+                for (int j : sel)
+                {
+                    const Action& oa = cands[static_cast<std::size_t>(j)];
+                    if (IsTrailingActivation(oa.kind) && oa.ability_mode != Action::AbilityMode::IceCounter)
+                    { left += oa.cost.ManaValue(); }
+                }
+            }
+            for (int j : sel)
+            {
+                const Action& ia = cands[static_cast<std::size_t>(j)];
+                if (ia.kind != Action::Kind::ActivatePermAbility || ia.ability_mode != Action::AbilityMode::IceCounter)
+                { continue; }
+                const int per    = std::max(1, ia.cost.ManaValue());
+                const int extras = std::min(std::max(0, ia.chosen_x - 1), std::max(0, left / per));
+                left -= extras * per;
+                projected_atk += (1 + extras) * snow_pt_attackers;
+            }
+        }
         // Deck-specific extra reach toward lethal (Land's Edge ammo + clairvoyant Treasure Hunt),
         // provider-owned. Built only when the deck has such a model (byte-identical otherwise).
         int extra_lethal = 0;
