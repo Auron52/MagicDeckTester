@@ -140,3 +140,53 @@ important than depth 0"). The apparatus is ready in `build/scratch/snowcp/rts/`:
 
 The parent stopped the chain before the screen played a game, because fix (b) failed regression (Snow d5 gi78 /
 gi101). This A/B waits until fix (b) is amended, and must then run on the amended binary, not `mtg.ab`.
+
+## 5. The regression the tier found, and the amendment (`MTG_EXEC_SITE8_CONT_INLINE`, default ON)
+
+The integrated regression tier (morph-integ-with-snow 2ae033cdb) found fix (b) slower on Snow d5 s2002 gi78 (6 -> 7)
+and gi101 (8 -> LOSS), neither recovering at `--depth 8 --budget-ms 0`, and on d0 s2002 gi242/609/784 (6 -> 7,
+recovering at d8 b0). Reproduced single-game on this branch (`build/scratch/snowcp/rer/`).
+
+**Mechanism (traced, not inferred): an executor/rollout lockstep break that the cap exposed. The cap itself is
+sound.** gi101 T8 (the max turn), committed line `[Scrying Sheets(act), Rimefeather Owl(act)x3, Scrying Sheets(act)]`
+with `bp_choice=0@0`, verified as the T8 kill at T5 (d5 b20) and at T1 (d8 b0):
+
+1. Both worlds cap the Owl at x1 (`want=2 ret=0`, owed = both looks), so both looks stay payable.
+2. The first look finds Abominable Treefolk, which is now PLAYABLE (mana is left), so breakpoint site 8 opens in
+   both worlds, and both pick the same searched continuation, candidate 0 = `[Owl x2, Scrying Sheets]`.
+3. The ROLLOUT's site-8 branch applies the continuation's activations inline
+   (`apply_trailing_activations(extra.actions)`): Owl +2, three ice counters, the kill.
+4. The EXECUTOR (`resolve_draw_breakpoint`) routed them through `exec_continuation_activations`, which QUEUES while
+   `main_trailing_done` is false -- and the main trailing pass clears that queue, unrun, when it ends. The Owl's
+   two extra activations never happened; the opponent was left at 1.
+
+gi78 T6 is the same shape (`[Owl x3, Augur, Sheets, Sheets]`, cap x1, the look finds Marit Lage's Slumber, the
+continuation `[Slumber, Sheets, Owl x3]` cast the Slumber and lost its activations). With the reserve OFF the Owl
+extras ate the mana, the find was not playable, no breakpoint opened, and the bug was never reached -- which is
+why fix (b)'s own A/B (seeds 61000 / 81000) saw nothing. The brief's caveat is answered too: depth DID take effect
+at d8 b0 (`searched_depth=8 verified=1` at T1); the search found the same kill line and the executor dropped it, so
+no budget could recover the game.
+
+So the answer to "is the cap removing a line the search wanted?" is no: the search's line was the capped line, it
+was a real kill, and the realisation lost it. The cap only bites when a later named step in the same pass is owed
+and payable; here it was, and the search used the freed mana deliberately (look, find, re-activate the Owl).
+
+**Amendment.** `resolve_draw_breakpoint` captures `rdb_site_activated` on entry (set only by site 8, inside the
+trailing pass; every caller sets it, and a nested cast-armed site resets it, hence the capture) and applies the
+continuation's activations at once via `exec_trailing_activations`, as the rollout does. Site 9 (after the pass)
+already applied at once. Reads no budget; the same at every budget. Lever `MTG_EXEC_SITE8_CONT_INLINE` (heurarm
+per-job; =0 restores the queue). This is a pre-existing executor defect that also fires with the reserve OFF
+whenever a committed site-8 continuation carries an activation, so it can move reserve-off play too (arm `inl`).
+
+Checks (commit 2dbb7abe9): gi78 7 -> 6, gi101 LOSS -> 8 at d5 b20 AND at d8 b0; reserve off + inline on: both
+unchanged from the committed tree (6, 8). New scenario `snow_site8_cont_acts_inline` (gi101 T8) PASSES, FAILS at
+`MTG_EXEC_SITE8_CONT_INLINE=0` (no win, opponent at 1); `snow_owl_repeat_extras_keep_owed_sheets` still passes.
+Unit 2971/2971, scenarios 514/514.
+
+### 5.1 Pooled held-out A/B (binary 2dbb7abe9, snapshot `build/scratch/snowcp/mtg.ab3`)
+
+PENDING -- `build/scratch/snowcp/ab3/` (manifest `tools/mkman3.py`, report `tools/ab3_report.py`). Arms: `base` =
+committed tree (reserve 0, inline 0); `new` = reserve + inline (the shipped defaults); `inl` = inline only (Snow d5
+held-out, attribution). Snow d5 b20 1500/arm (seeds 110000+), d3 b10 1000/arm (112000+), d0 1000/arm (114000+); the
+regression Snow cells d5 s2002 + s3003 (150 each), d3 s2002 (25), d0 s2002 (1000) as must-not-regress; Selesnya v2,
+EDF (d5 b20), Kithkin (d5 b30) 300 each (116000/117000/118000+).
