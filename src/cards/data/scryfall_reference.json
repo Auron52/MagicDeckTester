@@ -4668,6 +4668,18 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Nova Chaser": {
+    "cmc": 4.0,
+    "keywords": [
+      "Champion",
+      "Trample"
+    ],
+    "mana_cost": "{3}{R}",
+    "oracle_text": "Trample\nChampion an Elemental (When this enters, sacrifice it unless you exile another Elemental you control. When this leaves the battlefield, that card returns to the battlefield.)",
+    "power": "10",
+    "toughness": "2",
+    "type_line": "Creature — Elemental Warrior"
+  },
   "Nykthos Paragon": {
     "cmc": 6.0,
     "keywords": [],
