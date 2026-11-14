@@ -14,10 +14,13 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
   - Held-out A/B: every deck and axis is net <= 0. Ledger `docs/design/snow-continuation-pay.md` section 5.1; data in `build/scratch/snowcp/ab3/`.
   - Built, Release. Unit tests pass (3088/3088).
 - **RUNNING:** `build/scratch/snowcp/run_tiers.sh` (PID 634677, detached), which runs the old harness's `--smoke` and then `--regression` in that worktree.
+  - Smoke FINISHED at 10:53 UTC: rc=1 (7 cases changed, none slower; see "Smoke result" below). rc=1 is the expected GT drift, not a crash.
+  - Regression is still running; the ETA is about 12:00 UTC.
   - Logs: `build/scratch/snowcp/tier_{smoke,regression}.log`.
-  - DONE marker: `build/scratch/snowcp/tiers.DONE` (one `mode rc= wall=` line per tier). The ETA is about 11:30 UTC.
+  - DONE marker: `build/scratch/snowcp/tiers.DONE` (one `mode rc= wall=` line per tier; `tiers.DONE.tmp` holds the lines so far).
 - **Next steps:**
-  1. Read both logs' per-game audit. Expected movement is in the Snow rows only. Any other deck moving needs a look first; a searched slower game must recover at `--depth 8 --budget-ms 0`.
+  1. Read both logs' per-game audit. A searched slower game must recover at `--depth 8 --budget-ms 0`. Smoke already moved non-Snow decks (below).
+  1b. Run ONE pooled held-out A/B over every deck either tier moved: package off (`MTG_REPEAT_EXTRAS_RESERVE=0 MTG_EXEC_SITE8_CONT_INLINE=0 MTG_D0_SNOW_PUMP_CREDIT=0`) vs default, at each moved row's depth and budget. Seeds are disjoint from the suite's; reuse the `build/scratch/snowcp/ab3/` manifest shape. Every deck must be net <= 0, or STOP and do not push.
   2. Accept from the inspected runs in the worktree: `bash test/regression.sh --smoke --accept`, then `bash test/regression.sh --accept`. These promote the existing runs; they do not re-run.
   3. Run `python3 test/check_gt_logs.py` and `python3 scripts/check_references_safe.py`.
   4. Commit the GT, fetch, and rebase if origin moved. If src or GT replays, rebuild and re-run the tiers.
@@ -26,7 +29,7 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
 - **Smoke result (11:30 UTC): 7 cases changed, none slower; Jumbo d0 has one game faster.** Besides the 3 Snow rows, play moved in `pd_smoke_d5` (gi33, still a loss), `edf_smoke_d0` (gi551, opponent 1 life higher at T5, same T6 win), and in `jumbo_smoke_d0` and `lhc_smoke_d0`. A single-game run with each flag off shows `MTG_REPEAT_EXTRAS_RESERVE` causes the PD and EDF changes; the other two flags change neither game. That reserve is generic: it applies to any {T}-less K-repeat activation (for example PD's Pyrohemia), so this is a play change reaching other decks, not a leak. The earlier held-out A/B (section 5.1) covered Snow, Selesnya v2 d6, EDF d5 and Kithkin d6, but not the d0 rows or PD. **Before accepting:** run ONE pooled held-out A/B over every deck the smoke and regression tiers moved, package off vs default. Every deck must be net <= 0. Data: `build/scratch/snowcp/mv/`. Both branches are also on origin as `wip/snow-contpay` and `wip/tier-pool`.
 - **After landing:** the `MTG_RESCUE_TAP_SOURCE` re-test goes to the MANA agent (below).
 
-## 2. Tier pooling harness (branch `tier-pool`, worktree `.claude/worktrees/tier-pool`, LOCAL)
+## 2. Tier pooling harness (branch `tier-pool`, worktree `.claude/worktrees/tier-pool`; backed up on origin as `wip/tier-pool`)
 
 - **Commits:**
   - `f9dc6404d`: WIP. Jobserver tokens, a persistent `--interactive` replay child per reference, xargs-parallel scenarios, VPC beside the batch, and `--both` combined smoke+regression.
