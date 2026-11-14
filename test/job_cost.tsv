@@ -395,7 +395,7 @@ elementals_regression_d0_s2002	1
 elementals_regression_d3_s2002	14101
 elementals_regression_d3_s30001	51236
 elementals_regression_d3_s3003	9521
-elementals_regression_d5_s2002	22079
+elementals_regression_d5_s2002	22080
 elementals_regression_d5_s30001	19807
 elementals_regression_d5_s3003	17677
 elementals_smoke_d0_s1001	1
@@ -1100,7 +1100,7 @@ pirates_regression_d3_s30001	13137
 pirates_regression_d3_s3003	7041
 pirates_regression_d5_s2002	4329
 pirates_regression_d5_s30001	5382
-pirates_regression_d5_s3003	4685
+pirates_regression_d5_s3003	4684
 pirates_smoke_d0_s1001	1
 pirates_smoke_d3_s1001	6079
 pirates_smoke_d5_s1001	4483
