@@ -224,7 +224,7 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
 // (the card being paid excluded by cost identity, the same cap) need beyond what the
 // unrestricted untapped sources (lands, rocks, ready dorks; per tap) plus the float can make -- the colours
 // only the restricted land can still supply, which is what holding it is for.
-static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost,
+static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost, bool for_creature,
                               bool& nc_live, int& keep_mask)
 {
     nc_live = false;
@@ -238,7 +238,11 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
         const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
         if (qd == nullptr) { continue; }
         const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield);
-        if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+        // A spendable one-shot (Treasure) is supply too when the scan repair is on (CcoHandScanOn): pirates
+        // s30066580 T4, Forerunner {2}{B} off Canal + Courtyard + Mountain + the Corsair Treasure read castable 0,
+        // so the Bolt in hand was not live and the Courtyard was held for nothing.
+        const bool one_shot = CcoHandScanOn() && PaySacSpendableNow(state, q, *qd);
+        if (!dork && !one_shot && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
         const int amt = std::max(1, ManaProducedPerTap(*qd));
         total += amt;
         if (qd->params.colored_creature_only || qd->params.creature_mana_only || BigSpellOnlySource(qd->params))
@@ -261,7 +265,12 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
         if (hd == nullptr || hd->card.IsLand()) { continue; }
         const ManaCost& m = hd->card.m_mana_cost;
         if (m.ManaValue() > castable) { continue; }
-        if (!skipped_self && m.generic == cost.generic && m.white == cost.white && m.blue == cost.blue
+        // The paid card is skipped by cost identity, and only among cards of its own kind when the self-skip
+        // repair is on (CcoHandScanOn): a {R} creature (Daring Buccaneer, reveal paid) must not skip a {R}
+        // Lightning Bolt that sits before it in hand -- pirates s30064129 T3, where that hid the only live
+        // noncreature demand and the Canal paid the Buccaneer, stranding the Bolt behind Secluded Courtyard.
+        if (!skipped_self && (!CcoHandScanOn() || hd->card.IsCreature() == for_creature)
+            && m.generic == cost.generic && m.white == cost.white && m.blue == cost.blue
             && m.black == cost.black && m.red == cost.red && m.green == cost.green && m.colorless == cost.colorless)
         { skipped_self = true; continue; }
         const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
@@ -2921,7 +2930,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (kind == 1 && def->params.colored_creature_only && cco_hold == 0
                     && rank > 9 && rank < 60 && CcoHandDemandOn())
                 {
-                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, cch_nc_live, cch_keep); }
+                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep); }
                     if (cch_nc_live)
                     {
                         int mine = 0;

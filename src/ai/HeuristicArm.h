@@ -929,6 +929,7 @@ enum Slot : int
     SPIRITS_CAST_ORDER,       // MTG_SPIRITS_CAST_ORDER  the USER's full Spirits cast order (2026-11-14; SpiritsProvider::CastOrderRank). Default ON; =0 -> the generic tiers
     SPIRITS_BUCKET_DISCARD,   // MTG_SPIRITS_BUCKET_DISCARD  the USER's Spirits cleanup-discard buckets (2026-11-14; SpiritsShed): 3-4 threats of varying costs, at most 3 lands (4-5 while 4 threats are kept), one Vial. Default ON; =0 -> the generic ranking
     ONDEMAND_KEEP_COLOUR,     // MTG_ONDEMAND_KEEP_COLOUR  item D round 3, mana-clean: the on-demand payer's step 1 (ordinary payment, crackable lands held) is not taken when it leaves a coloured pip of the rest of the applying line with NO source on the board (the held Lake's only Swamp victim is the line's only {R}); the plain tap / crack ladder is tried first under the same no-strand test, and the held payment stays the fallback. Shadowborn s30055067 T8 (Ritual's {B} tapped Blood Crypt, Sire's {R} stranded). Default ON; =0 -> step 1 always
+    CCO_HAND_SCAN,            // MTG_CCO_HAND_SCAN  item C2, mana-clean: two repairs of CcoHandDemandScan's input -- the card being paid is skipped (cost identity) only among hand cards of its own kind (a {R} Daring Buccaneer no longer hides a {R} Lightning Bolt, pirates s30064129 T3), and a spendable one-shot (Treasure) counts as supply (pirates s30066580 T4). Ordering only. Default ON; =0 -> the historical scan
     COUNT
 };
 
@@ -1802,6 +1803,7 @@ inline const char* Name(int slot)
         "MTG_SPIRITS_CAST_ORDER",
         "MTG_SPIRITS_BUCKET_DISCARD",
         "MTG_ONDEMAND_KEEP_COLOUR",
+        "MTG_CCO_HAND_SCAN",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
