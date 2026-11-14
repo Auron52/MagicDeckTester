@@ -39,6 +39,17 @@ bool HumanFetchHoldVariant(const GameState& state, const CardDefinition& land);
 // immediate-fetch replay (a recording made before the hold model, when the provider's list was the menu).
 void WidenHumanFetchTargets(const GameState& state, int controller, const CardParams& fetch_pp,
                             std::vector<std::string>& cands);
+// THE ON-PLAY FETCH TARGETS (USER 2026-11-14: "We should obviously use the same heuristic that just grabs Stomping
+// Ground"). A BATTLEFIELD-model fetchland (land_search_activation_cost) resolving at its land drop takes its targets,
+// in order, from the SAME list its activation searches -- LandSearchPicksMemo(LandSearchSpecOf(params)), ordered by
+// the provider's LandSearchFetchPickOrder and (autonomous play only) narrowed by LandSearchFetchPickWidth -- so
+// the two routes cannot disagree. A legacy immediate-model fetchland (no activation params, or a
+// --legacy-fetch-immediate replay) keeps FetchCandidates. Human play widens either list to every legal target
+// (WidenHumanFetchTargets). OnPlayFetchCandidates is the full ordered list; NarrowOnPlayFetch applies the
+// search's width to it (FetchSearchCandidates for the legacy model; the battlefield list is already narrowed).
+std::vector<std::string> OnPlayFetchCandidates(const GameState& state, int controller, const CardDefinition& land);
+void NarrowOnPlayFetch(const GameState& state, int controller, const CardDefinition& land,
+                       std::vector<std::string>& cands);
 
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a
@@ -424,6 +435,24 @@ public:
     bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
     std::vector<std::string> FetchCandidates(const GameState& s, int controller,
                                              const CardParams& fetch_pp) const override;
+    // EXISTING PROVIDER PRUNE, PENDING USER REVIEW (2026-11-14): the search fans only the top pick (Stomping Ground
+    // under INT-9). This was the base default until the USER ruled the default should search every target ("why do
+    // we only try the first candidate by default? ... It's a different story if we have an intentional prune");
+    // kept explicit so Morph's play is byte-identical, in both MTG_MORPH_FETCH_RULE arms.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     void FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const override;
     bool FaceUpTrailFlipAfterTargetCast() const override;
     // R11-R13: MTG_MORPH_WATCHER_IN_PLAN, MTG_MORPH_TBR_OTHER, MTG_MORPH_TIE_NONMANA (each DEFAULT ON).
@@ -966,6 +995,24 @@ public:
     bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    // EXISTING PROVIDER PRUNE, PENDING USER REVIEW (2026-11-14): one fetch target searched. FetchCandidates here
+    // already returns the single best pick; ModernRwBurnProvider inherits this override, and its own list can hold
+    // more than one name (the fallback when neither Sacred Foundry nor Mountain is left). Explicit since the base
+    // default became EVERY target (USER 2026-11-14), so both decks' play is byte-identical.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
     // CastEnablerFirst: no override -- enabler-first is the generic param-derived ENABLES tier
@@ -2072,12 +2119,28 @@ public:
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
-    // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
-    // reviewed policy -- no override needed. Evidence that top-1 is right here: the wide fan's
+    // Fetch search breadth: TOP ENTRY ONLY, this deck's reviewed policy (USER 2026-08-21, "I meant for our
+    // heuristic to be used with just the top entry"). It was the base-class default until 2026-11-14, when the
+    // USER made the default every target; explicit since then (byte-identical). Evidence that top-1 is right
+    // here: the wide fan's
     // coupled-metric edge (+0.034 held-out 8/8 keys) was proven 100% CLAIRVOYANCE by the
     // MTG_SHUFFLE_SALT_SEARCH decouple ensemble (salts 1-4, 2,400 games: uncap 5.0558 WORST in
     // every salt vs top-1 5.0317) -- the extra targets only "won" by pre-seeing the deterministic
     // post-fetch shuffle. See docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     void ModalSplitCandidates(const GameState&, const CardDefinition&,
                               std::vector<int>&) const override;
     // Hold a live UTILITY mana dork (Deathrite Shaman / Bloom Tender / Birds) out of combat when

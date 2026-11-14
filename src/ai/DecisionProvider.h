@@ -3194,20 +3194,31 @@ public:
     // at the call site (best-first for ranking providers), so overrides select from it instead of
     // re-running an expensive ranking.
     //
-    // DEFAULT = ONE option, the top pick (USER standing rule 2026-08-21: "if I don't specify, the
-    // assumption should be that the heuristic picks only one option to return" -- the silent
-    // top-n widths this replaces were "a major performance headache and I don't even know it is
-    // happening"). Widening is a USER-REVIEW gate ("the AI will need to convince me it is
-    // necessary"), and when granted it should be CONFIDENCE-CONDITIONAL, per STATE, not a
-    // per-deck constant: "sometimes you are 100% confident in the decision and other times need
-    // to search multiple. This design allows that" -- return 1 when the doctrine is sure, the
-    // genuinely-ambiguous set when it is not. Engine-side, MTG_UNPRUNED and HUMAN PLAY bypass
-    // this entirely (the audit must see every target; the viewer keeps every legal option).
+    // DEFAULT = EVERY legal target, in the provider's order (USER 2026-11-14: "Wait, why do we only try the
+    // first candidate by default? That sounds bad. It's a different story if we have an intentional prune.").
+    // The old default (the top pick only) applied the 2026-08-21 standing rule -- "if I don't specify, the
+    // assumption should be that the heuristic picks only one option to return" -- to an UNRANKED fallback:
+    // GenericProvider's list is library order, so its "top pick" was whichever legal name sat highest in
+    // the library (Boars seed 5158 gi153 T1: Mountain over Stomping Ground / Forest with Birds of Paradise
+    // in hand). That rule now governs only an INTENTIONAL provider prune: a provider that has a reviewed
+    // fetch doctrine narrows here explicitly (FetchTopPickOnly below), and widening one of those is still a
+    // USER-review gate ("the AI will need to convince me it is necessary"), CONFIDENCE-CONDITIONAL per
+    // state when granted: "sometimes you are 100% confident in the decision and other times need to search
+    // multiple. This design allows that". The ORDER still matters with the full fan: it is the order a
+    // finite budget spends in, and the pick of every greedy consumer (the playout beyond the horizon, the
+    // d0 runner, PerformFetch with no named target). Engine-side, MTG_UNPRUNED and HUMAN PLAY bypass this
+    // entirely (the audit must see every target; the viewer keeps every legal option).
     virtual std::vector<std::string>
     FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
                           const std::vector<std::string>& ranked) const
     {
         (void)s; (void)controller; (void)fetch_pp;
+        return ranked;
+    }
+    // The explicit one-option prune for a provider whose fetch ranking IS a reviewed doctrine (the
+    // pre-2026-11-14 default, kept byte-identical where a provider relied on it).
+    static std::vector<std::string> FetchTopPickOnly(const std::vector<std::string>& ranked)
+    {
         if (ranked.size() <= 1) { return ranked; }
         return { ranked.front() };
     }
@@ -3927,6 +3938,29 @@ public:
                                     const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
       (void)subtype; return static_cast<int>(picks.size()); }
+    // LandSearchFetchPickOrder / LandSearchFetchPickWidth -- the same ORDER and NARROWING for a FETCHLAND-shaped
+    // search ("a <subtype> or <subtype_alt> card", LandSearchSpec::subtype_alt set: a battlefield fetchland's
+    // activation, Karametra's cast trigger). ONE list serves both routes of a battlefield fetchland (USER
+    // 2026-11-14, "We should obviously use the same heuristic that just grabs Stomping Ground"): its
+    // ACTIVATION (in-plan pins, crack-first roots) and its ON-PLAY resolution at the land drop
+    // (OnPlayFetchCandidates, DecisionProviders.h) both read LandSearchPicksMemo. Base: the land-search
+    // order above with no subtype (exactly what this spec read before these hooks existed) and no narrowing,
+    // so every provider that does not override them is byte-identical. A provider whose fetch ranking is a
+    // reviewed doctrine overrides both (and keys or declines the memo, LandSearchPickOrderKey's CONTRACT).
+    // Same contexts as above: the width is autonomous play only (human play / MTG_UNPRUNE=landpick never
+    // narrow). Subtype ids are SubtypeRegistry ids (0 = none).
+    virtual void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                          std::uint16_t subtype_alt,
+                                          std::vector<std::vector<std::string>>& picks) const
+    { (void)subtype; (void)subtype_alt;
+      LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks); }
+    virtual int LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                         bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                         std::uint16_t subtype_alt,
+                                         const std::vector<std::vector<std::string>>& picks) const
+    { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
+      (void)subtype; (void)subtype_alt; return static_cast<int>(picks.size()); }
     // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
     // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
     // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds

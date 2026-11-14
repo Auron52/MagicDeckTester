@@ -96004,8 +96004,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // Pass 2 of the real-fetch model: a fetchland with more than one legal target is an inline
     // sub-decision. The SEARCHED set is provider-owned and provider-SIZED
     // (DecisionProvider::FetchSearchCandidates -- "the return IS the candidate set"; the default
-    // is the heuristic's TOP PICK ONLY, per the USER's 2026-08-21 standing rule that a heuristic
-    // returns one option unless a reviewed doctrine explicitly widens it. The old engine-side
+    // is EVERY legal target in the provider's order since USER 2026-11-14 ("why do we only try the
+    // first candidate by default? ... It's a different story if we have an intentional prune"); a
+    // provider with a reviewed fetch doctrine narrows explicitly (FetchTopPickOnly). The old engine-side
     // top-2 cap and the collapsed-main uncap override are GONE: the widened fan's edge was proven
     // 100% draw-order clairvoyance by the decouple ensemble -- see
     // docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION 2026-08-21b). Two engine-side
@@ -96028,10 +96029,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         }
         if (ld && FetchResolvesOnPlay(state, *ld))
         {
-            std::vector<std::string> cands =
-                ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
-            // Human play: the human picks among EVERY legal target, not the provider's (narrowed) list.
-            WidenHumanFetchTargets(state, state.active_player_index, ld->params, cands);
+            // The SAME ordered list the fetchland's activation searches (OnPlayFetchCandidates; human play:
+            // widened to every legal target -- the human picks, not the provider).
+            std::vector<std::string> cands = OnPlayFetchCandidates(state, state.active_player_index, *ld);
             // ...and may HOLD the fetch instead (kFetchHoldTarget, USER 2026-11-14 "allow deferring the fetch
             // in the choice dialog"), always: every target is named, even a single one, so the choose dialog
             // shows targets + hold. Human play only (HumanFetchHoldVariant), never the autonomous fan.
@@ -96044,11 +96044,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             }
             if (cands.size() > 1)
             {
-                if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
-                {
-                    cands = ResolveProvider(state).FetchSearchCandidates(
-                        state, state.active_player_index, ld->params, cands);
-                }
+                NarrowOnPlayFetch(state, state.active_player_index, *ld, cands);
                 // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch
                 // capping the fan below whatever the provider returned (this arc's attribution
                 // instrument; also caps the audit/viewer bypasses for measurement symmetry).
@@ -96096,9 +96092,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             {
                 // The SAME fetch fan as a hand fetchland (FetchCandidates, narrowed by the provider's
                 // FetchSearchCandidates outside the unpruned audit and human play).
-                std::vector<std::string> cands =
-                    ResolveProvider(state).FetchCandidates(state, state.active_player_index, tl->params);
-                WidenHumanFetchTargets(state, state.active_player_index, tl->params, cands);
+                std::vector<std::string> cands = OnPlayFetchCandidates(state, state.active_player_index, *tl);
                 if (HumanFetchHoldVariant(state, *tl))   // the hand fetchland's targets + hold, above
                 {
                     if (cands.empty()) { add_for_land(tn, "", "", true); }
@@ -96107,11 +96101,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
                 else if (cands.size() > 1)
                 {
-                    if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
-                    {
-                        cands = ResolveProvider(state).FetchSearchCandidates(
-                            state, state.active_player_index, tl->params, cands);
-                    }
+                    NarrowOnPlayFetch(state, state.active_player_index, *tl, cands);
                     static const int s_fetch_fan_cap_top = EnvInt("MTG_FETCH_FAN_CAP", 0);
                     if (s_fetch_fan_cap_top > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_top)
                     { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_top)); }

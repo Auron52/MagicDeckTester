@@ -427,8 +427,81 @@ GenericProvider::FetchCandidates(const GameState& s, int controller, const CardP
     // deck's doubled colours), so it is NOT a safe deck-agnostic default; it stays an archetype
     // override. A generic fetchland deck thus searches its fetch targets rather than whiffing.
     // (Previously returned {} -> a generic fetch paid 1 life and fetched nothing.)
-    return AllLegalFetchTargets(s, controller, fetch_pp);
+    // ORDER (2026-11-14): the same fetch-shaped land-search order a battlefield fetchland's activation reads
+    // (LandSearchFetchPickOrder; base = the colours the hand NEEDS and the board LACKS first), stable on library
+    // order -- one heuristic for a legacy immediate-model fetchland and a battlefield one (USER: "We should
+    // obviously use the same heuristic that just grabs Stomping Ground"). Providers with their own ranking start
+    // from AllLegalFetchTargets (library order), never from here.
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);
+    if (all.size() < 2 || fetch_pp.fetch_land_types.size() < 2) { return all; }
+    std::vector<std::vector<std::string>> picks;
+    picks.reserve(all.size());
+    for (std::string& nm : all) { picks.push_back({ std::move(nm) }); }
+    const SubtypeRegistry& reg = SubtypeRegistry::Instance();
+    LandSearchFetchPickOrder(s, controller, 1, 0, false, false, reg.Id(fetch_pp.fetch_land_types[0]),
+                             reg.Id(fetch_pp.fetch_land_types[1]), picks);
+    std::vector<std::string> out;
+    out.reserve(picks.size());
+    for (std::vector<std::string>& pk : picks) { if (!pk.empty()) { out.push_back(std::move(pk.front())); } }
+    return out;
 }
+
+// A PROVIDER-RANKED fetchland's battlefield picks (LandSearchFetchPickOrder / Width overrides of AntiLifegain,
+// Modern RW Burn through it, Five Colour and Morph, 2026-11-14): the provider's own FetchCandidates ranking,
+// applied to the land-search pick list so a battlefield fetchland's activation and its on-play land drop read
+// ONE list. Picks the ranking names come first in its order, the rest after in their own order; the width is
+// the provider's FetchSearchCandidates of that ranking (each of these four: the top pick only, an existing
+// provider prune pending USER review). A fetch-shaped spec with one land per pick only (every fetchland).
+static CardParams FetchParamsForSpec(std::uint16_t subtype, std::uint16_t subtype_alt)
+{
+    const SubtypeRegistry& reg = SubtypeRegistry::Instance();
+    CardParams fp;
+    fp.fetch_land_types = { reg.Name(subtype), reg.Name(subtype_alt) };
+    return fp;
+}
+static void OrderFetchPicksByProvider(const DecisionProvider& prov, const GameState& s, int controller, int count,
+                                      std::uint16_t subtype, std::uint16_t subtype_alt,
+                                      std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || picks.size() < 2) { return; }
+    const std::vector<std::string> ranked = prov.FetchCandidates(s, controller, FetchParamsForSpec(subtype, subtype_alt));
+    std::vector<std::vector<std::string>> out;
+    out.reserve(picks.size());
+    std::vector<bool> used(picks.size(), false);
+    for (const std::string& nm : ranked)
+    {
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            if (!used[i] && picks[i].size() == 1 && picks[i][0] == nm) { used[i] = true; out.push_back(std::move(picks[i])); break; }
+        }
+    }
+    for (std::size_t i = 0; i < picks.size(); ++i) { if (!used[i]) { out.push_back(std::move(picks[i])); } }
+    picks = std::move(out);
+}
+static int FetchPicksWidthByProvider(const DecisionProvider& prov, const GameState& s, int controller, int count,
+                                     std::uint16_t subtype, std::uint16_t subtype_alt,
+                                     const std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || picks.size() < 2) { return static_cast<int>(picks.size()); }
+    const CardParams fp = FetchParamsForSpec(subtype, subtype_alt);
+    const std::vector<std::string> ranked = prov.FetchCandidates(s, controller, fp);
+    if (ranked.empty()) { return static_cast<int>(picks.size()); }
+    return static_cast<int>(prov.FetchSearchCandidates(s, controller, fp, ranked).size());
+}
+#define MTG_FETCH_PICKS_BY_PROVIDER(Cls)                                                                         \
+    void Cls::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int, bool, bool,          \
+                                       std::uint16_t subtype, std::uint16_t subtype_alt,                         \
+                                       std::vector<std::vector<std::string>>& picks) const                       \
+    { OrderFetchPicksByProvider(*this, s, controller, count, subtype, subtype_alt, picks); }                     \
+    int Cls::LandSearchFetchPickWidth(const GameState& s, int controller, int count, int, bool, bool,           \
+                                      std::uint16_t subtype, std::uint16_t subtype_alt,                          \
+                                      const std::vector<std::vector<std::string>>& picks) const                  \
+    { return FetchPicksWidthByProvider(*this, s, controller, count, subtype, subtype_alt, picks); }               \
+    bool Cls::LandSearchPickOrderKey(const GameState&, int, std::uint64_t&) const { return false; }
+MTG_FETCH_PICKS_BY_PROVIDER(AntiLifegainProvider)
+MTG_FETCH_PICKS_BY_PROVIDER(FiveColourProvider)
+MTG_FETCH_PICKS_BY_PROVIDER(MorphProvider)
+#undef MTG_FETCH_PICKS_BY_PROVIDER
 
 // Every legal target of a fetchland: the distinct library land names carrying one of its subtypes, in
 // library order. GenericProvider's list, and the full set human play widens a narrowed provider list to.
@@ -7977,7 +8050,7 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     // all of them -- identical to the generic "return all matching library lands" path.
     if (DecisionUnpruned(UnprunedGate::Fetch))
     {
-        return GenericProvider::FetchCandidates(state, controller_index, fetch_pp);
+        return AllLegalFetchTargets(state, controller_index, fetch_pp);
     }
 
     const Player& ap = state.players[controller_index];
@@ -9193,7 +9266,7 @@ bool MorphProvider::TrickTargetTieAvoidsManaProducers() const
 //     reader is Den Protector's regrowth, which a CRACKED fetch only adds to. FetchResolvesOnPlay keeps the hold under
 //     human play, MTG_UNPRUNED (UnprunedGate::Fetch) and at 3 life or less.
 // (2) Order: the pick producing the most colours first (Stomping Ground: both the deck's colours), then the generic
-//     library order (Forest / Mountain). FetchSearchCandidates keeps the base default, the top pick only; the engine
+//     library order (Forest / Mountain). FetchSearchCandidates and LandSearchFetchPickWidth keep the top pick only (explicit since 2026-11-14); the engine
 //     fans every target under human play / MTG_UNPRUNED. Read off params.produces, never a card name.
 // Life: fetch 1 + shock 2. The shock's own pay-life rule (life > 2) and the redirect group's life rule (D: never a
 // group that would leave us at 0 or below) read the current life, so a fetch paid earlier cannot overdraw either.
@@ -9210,7 +9283,7 @@ bool MorphProvider::ConsiderFetchHold(const GameState& s, const CardDefinition& 
 std::vector<std::string> MorphProvider::FetchCandidates(const GameState& s, int controller,
                                                         const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = DeckProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() <= 1 || !MorphFetchRuleOn()) { return all; }
     auto colours = [](const std::string& nm) -> int
     {
@@ -21195,7 +21268,7 @@ std::vector<std::string>
 FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                                     const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() < 2 || DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
 
     constexpr int NC = 6;                    // W,U,B,R,G,C
@@ -22347,7 +22420,7 @@ bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinit
 std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
     const GameState& s, int controller, const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
 
     int white_sources = 0;
@@ -22373,6 +22446,33 @@ void WidenHumanFetchTargets(const GameState& state, int controller, const CardPa
     if (!HumanPlayActive() || LegacyFetchImmediateOn()) { return; }
     for (std::string& nm : AllLegalFetchTargets(state, controller, fetch_pp))
     { if (std::find(cands.begin(), cands.end(), nm) == cands.end()) { cands.push_back(std::move(nm)); } }
+}
+
+static bool BattlefieldModelFetch(const CardParams& p)
+{
+    return !p.fetch_land_types.empty() && p.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn();
+}
+
+std::vector<std::string> OnPlayFetchCandidates(const GameState& state, int controller, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    std::vector<std::string> cands;
+    if (BattlefieldModelFetch(p))
+    {
+        for (const std::vector<std::string>& pick : LandSearchPicksMemo(state, controller, LandSearchSpecOf(p)))
+        { if (!pick.empty()) { cands.push_back(pick.front()); } }
+    }
+    else { cands = ResolveProvider(state).FetchCandidates(state, controller, p); }
+    WidenHumanFetchTargets(state, controller, p, cands);
+    return cands;
+}
+
+void NarrowOnPlayFetch(const GameState& state, int controller, const CardDefinition& land,
+                       std::vector<std::string>& cands)
+{
+    if (BattlefieldModelFetch(land.params)) { return; }   // LandSearchFetchPickWidth already applied
+    if (cands.size() <= 1 || DecisionUnpruned(UnprunedGate::Fetch) || HumanPlayActive()) { return; }
+    cands = ResolveProvider(state).FetchSearchCandidates(state, controller, land.params, cands);
 }
 
 // The modern zero-mana, one-life, sacrifice-self, single-land fetch template: the only activated search
@@ -34391,7 +34491,7 @@ std::vector<std::string> CycloneLtpTargets(const GameState& s, int me, const std
 std::vector<std::string> CycloneProvider::FetchCandidates(const GameState& s, int controller,
                                                           const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() <= 1 || !CycloneFetchRuleOn()) { return all; }
     const bool short_red = CycloneShortOnRed(s, controller);
     std::vector<int> tier(all.size());
@@ -34410,7 +34510,9 @@ std::vector<std::string> CycloneProvider::FetchSearchCandidates(const GameState&
                                                                 const CardParams& fetch_pp,
                                                                 const std::vector<std::string>& ranked) const
 {
-    if (!CycloneFetchRuleOn()) { return DeckProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked); }
+    // Rule off: the top pick only -- the base default this arm read until 2026-11-14 (the USER then made the default
+    // every target); kept so the lever's off arm is byte-identical.
+    if (!CycloneFetchRuleOn()) { (void)s; (void)controller; (void)fetch_pp; return FetchTopPickOnly(ranked); }
     if (ranked.size() <= 1) { return ranked; }
     // The rule's pick, plus the enters-tapped triome (Xander's Lounge) beside it: "arguably the triome should be
     // fetched if we don't need the mana" -- the search decides whether the mana is needed.

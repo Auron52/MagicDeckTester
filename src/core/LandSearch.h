@@ -256,13 +256,29 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
-                             spec.subtype_alt == SubtypeRegistry::kNone ? spec.subtype : SubtypeRegistry::kNone, out);
-    // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
-    if (LandSearchPickPruned() && spec.subtype_alt == SubtypeRegistry::kNone)
+    // A fetchland-shaped spec ("X or Y card") has its own pair of hooks (LandSearchFetchPickOrder / Width,
+    // whose base is exactly the plain order with no subtype and no narrowing): the ONE list both routes of a
+    // battlefield fetchland read -- its activation and its on-play land drop (OnPlayFetchCandidates).
+    const bool fetch_shape = spec.subtype_alt != SubtypeRegistry::kNone;
+    if (fetch_shape)
     {
-        const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                               spec.share_land_type, spec.subtype, out);
+        prov.LandSearchFetchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                                      spec.subtype, spec.subtype_alt, out);
+    }
+    else
+    {
+        prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                                 spec.subtype, out);
+    }
+    // The provider's NARROWING (LandSearchPickWidth / LandSearchFetchPickWidth): autonomous play only; see
+    // LandSearchPickPruned.
+    if (LandSearchPickPruned())
+    {
+        const int w = fetch_shape
+            ? prov.LandSearchFetchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                            spec.share_land_type, spec.subtype, spec.subtype_alt, out)
+            : prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                       spec.share_land_type, spec.subtype, out);
         if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
     }
     return out;

@@ -763,3 +763,54 @@ games each, d3 b10, seed 9101): all 120 per-game `[win]` lines and the batch std
 remapping (USER: "Either way is fine"; kept). (2) The human menu (claude-play plan list) now also lists
 "hold, then crack in the same plan" lines beside the on-play target lines; they are outcome-identical to them and are
 kept so the viewer's split forms (`land=;landsearch=;cast=`) still match a plan.
+
+## Fetch target ranking (2026-11-14) -- one list for both routes of a battlefield fetchland
+
+**Symptom.** Boars overnight seed 5158 gi153 (T6 -> T7, same kept hand and draws): T1 hand Herald of Ilharg, 2x
+Somberwald Sage, Birds of Paradise, Wooded Foothills. The land drop cracked Foothills on play for **Mountain**, so the
+Birds ({G}) was never cast. Stomping Ground and Forest were in the library.
+
+**Mechanism.** Since `ConsiderFetchHold` defaults false (124950596) a zero-mana one-life fetch resolves at its land
+drop, and that route took its targets from `FetchCandidates` + `FetchSearchCandidates`. Neither BoarsProvider nor
+CreatureGivingProvider overrides `FetchCandidates`, so they inherited GenericProvider's list = LIBRARY ORDER, and the
+base `FetchSearchCandidates` kept only its front: the "top pick" was whichever legal name sat highest in the
+library. The fetchland's ACTIVATION route (the hold path, before the no-hold default) instead read
+`LandSearchPicksMemo` -- ordered by `LandSearchPickOrder` (base: the colours the hand NEEDS and the board LACKS first)
+and searched over EVERY pick -- and took Stomping Ground. Two routes, two heuristics, for one card.
+
+**USER rulings (verbatim).** *"Wait, why do we only try the first candidate by default? That sounds bad. It's a
+different story if we have an intentional prune."* Then: *"This makes no sense. We should obviously use the same
+heuristic that just grabs Stomping Ground."*
+
+**Fix.**
+1. ONE list. `OnPlayFetchCandidates` / `NarrowOnPlayFetch` (DecisionProviders.cpp): a battlefield-model fetchland
+   (`land_search_activation_cost`; Arid Mesa, Windswept Heath, Wooded Foothills) resolving on play takes its targets,
+   in order, from `LandSearchPicksMemo(LandSearchSpecOf(params))` -- the activation's own list. Both TurnSolver
+   land-drop fans (hand and library top) and `PerformFetch`'s default pick read it, so executor, rollout, d0 runner
+   and human play (widened to every legal target, plus the Hold variant) agree. Legacy immediate-model fetchlands
+   (Bloodstained Mire, Marsh Flats, Misty Rainforest, Scalding Tarn, Verdant Catacombs) keep `FetchCandidates`, and
+   GenericProvider's list is now ordered by the SAME rule (stable on library order).
+2. Fetch-shaped land searches (`subtype_alt` set) get their own pair of hooks, `LandSearchFetchPickOrder` /
+   `LandSearchFetchPickWidth` (DecisionProvider.h). Base = exactly what such a spec read before (the plain order,
+   no subtype, no narrowing), so every provider without an override is unchanged.
+3. Base `FetchSearchCandidates` = EVERY target (was the front only). `FetchTopPickOnly` is the explicit prune.
+4. Providers whose fetch ranking was a deliberate top-1 keep it explicitly, on BOTH routes (pending USER review):
+   **Anti-Lifegain** (and **Modern RW Burn**, which inherits it), **Five Colour**, **Morph** -- their
+   `FetchCandidates` ranking now orders the battlefield pick list (`LandSearchFetchPickOrder`), its
+   `FetchSearchCandidates` (top-1) is the width (`LandSearchFetchPickWidth`), and their pick-list memo is declined
+   (`LandSearchPickOrderKey` = false: the ranking reads hand, board and library order). **Cyclone** keeps its own
+   `FetchSearchCandidates` (rule's pick + the tapped triome); its rule-off arm is now an explicit top-1. Their
+   legacy fetches keep `FetchCandidates` + the explicit top-1 overrides.
+5. The first draft (a FiveColour-derived hand-aware key for Boars / Creature Giving, `HandAwareFetchRanking`) was
+   DROPPED under the second ruling.
+
+**Disclosed changes for the ported decks.** At 3 life or less a fetch still holds and is cracked later; that crack
+now reads the provider's ranking and top-1 instead of the base order over every pick, so Anti-Lifegain / RW Burn /
+Five Colour / Morph can move in those (rare) games. Everywhere else they are meant to be byte-identical.
+
+**Tests.** `test/unit/test_boars_fetch_rank.cpp`: gi153's state takes Stomping Ground on play (then Forest without
+it), the on-play and activation lists are identical, stable under library order; Creature Giving Heath (Temple
+Garden for two Wardens) and legacy Misty (Breeding Pool for Hunted Phantasm, every target kept); Morph's INT-9 pick
+on both routes; the base width vs the explicit top-1 providers.
+
+**Measurement.** See `logs/boars-research/rank-handoff.md` (in flight at the time of writing).

@@ -47898,7 +47898,16 @@ inline void PerformFetch(GameState& state, int controller_index,
     std::string want = target_name;
     if (want.empty())
     {
-        std::vector<std::string> cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp);
+        // A battlefield-model fetchland's front pick comes from the SAME list its activation searches
+        // (LandSearchPicksMemo; OnPlayFetchCandidates in DecisionProviders.cpp is the land drop's reader);
+        // a legacy immediate-model fetchland keeps FetchCandidates.
+        std::vector<std::string> cands;
+        if (fetch_pp.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn())
+        {
+            for (const std::vector<std::string>& pick : LandSearchPicksMemo(state, controller_index, LandSearchSpecOf(fetch_pp)))
+            { if (!pick.empty()) { cands.push_back(pick.front()); break; } }
+        }
+        else { cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp); }
         // Whiff: no legal target (life already paid). The library was still searched -> shuffle.
         if (cands.empty()) { WhiffShuffle(state, controller_index, "fetch"); return; }
         want = cands.front();
