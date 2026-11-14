@@ -91,6 +91,7 @@ declare -A DECK_FILE=(
   [hydras]=decks/Hydras/Hydras.cod
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
   [morph]=decks/Morph/Morph.cod
+  [boars]=decks/Boars/Boars.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -144,6 +145,7 @@ declare -A DECK_PROF=(
   [hydras]=decks/Hydras/Hydras.profile.json
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
   [morph]=decks/Morph/Morph.profile.json
+  [boars]=decks/Boars/Boars.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -174,6 +176,14 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # boars (Boars): ADDED 2026-11-13 by the analysis (docs/design/analysis-Boars.md), all three tiers at once, at
+  # martyr/galadriel's pre-keep-table ENTRY shape. Gruul creature ramp, BoarsProvider, no value_play block -> play
+  # rows are d5 b20. No keep table and no value leaf yet, so GT WILL move when they land. boars2hg: Zhur-Taa Druid
+  # and Herald of Ilharg deal damage to EACH opponent, so heads matter.
+  "boars      0  1001 1000  0"
+  "boars      3  1001   50 10"
+  "boars      5  1001  100 20"
+  "boars2hg   5  1001   25 20"
   # Morph: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, hydras sizing
   # (similar per-game cost). No card scales with opponents or reads starting life, so morph2hg is the
   # small searched 2HG canary every deck carries. docs/design/analysis-Morph.md.
@@ -719,6 +729,17 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # boars: see the SMOKE block (2026-11-13, pre-keep-table entry set).
+  "boars      0  2002 1000  0"
+  "boars      3  2002   50 10"
+  "boars      5  2002  150 20"
+  "boars      5  3003  150 20"
+  "boars2hg   5  2002   75 20"
+  # Boars unlimited backstop (2026-11-13): 5-game blocks screened at d3 and d5 (budget 0, abandon_units 2e6);
+  # 30261..30265 finished every game at both depths, each under 15 s. The deck's d5 budget-0 tail is heavy
+  # (~16% of screened d5 games hit the cap), so keep this block fixed. Disjoint from the overnight block.
+  "boars            3 30261   5 0"
+  "boars            5 30261   5 0"
   # Morph: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
   "morph      0  2002 1000  0"
   "morph      3  2002   75 10"
@@ -1177,6 +1198,25 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # boars: overnight ENTRY set before its keep table (2026-11-13; d0 4x2000, one d3 b10 sanity row, d5 4x300 b20
+  # play rows, boars2hg d5 4x75 b20). Expand to the FULL set just before the keep table is adopted.
+  "boars      0  4004 2000  0"
+  "boars      0  6006 2000  0"
+  "boars      0  8008 2000  0"
+  "boars      0 10010 2000  0"
+  "boars      3  4004  125 10"
+  "boars      5  4004  300 20"
+  "boars      5  5005  300 20"
+  "boars      5  6006  300 20"
+  "boars      5  7007  300 20"
+  "boars2hg   5  4004   75 20"
+  "boars2hg   5  5005   75 20"
+  "boars2hg   5  6006   75 20"
+  "boars2hg   5  7007   75 20"
+  # Boars unlimited backstop (2026-11-13): 30101..30105 finished every game at d3 and d5 (budget 0,
+  # abandon_units 2e6), each under 15 s. Disjoint from the regression block (30261).
+  "boars            3 30101   5 0"
+  "boars            5 30101   5 0"
   # Morph: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
   # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
   "morph      0  4004 2000  0"
