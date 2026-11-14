@@ -910,3 +910,10 @@ Rebased onto origin e95bd03a9 (items B/C+I/D payer levers, martyr keep table); H
 origin + the 10 spirits keys (check_gt_logs 1170 consistent). CI run 43557336252: ubuntu, windows, Linux/Windows
 determinism parity all success. **Open:** sweep re-run (agent: no); optional d5 budget screen (b10/b20/b40); keep
 table -> value leaf when the USER restarts the artifact queue. Overnight spirits GT left to the next periodic run.
+- **USER 2026-11-14 ~06:30 UTC:** *"We don't need to run an additional Claude-play sweep."* -> sweep CLOSED at
+  35b021047's record. *"Is a budget comparison not normally done automatically as part of the value-leaf?"* -> yes:
+  value-leaf phase E.7 (`play_setting_stage.py`) decides the play setting (depth {5,6} x budget {b, 1.5b, 2b}, never
+  below d5 or the current budget, cheapest not-notably-worse arm; dearer-better = a TRADE for the USER). No separate
+  screen; it happens when the Spirits value leaf runs (after the keep table, when the USER restarts the queue).
+- **Running:** overnight tier rebaseline on 75ebee43a (logs/spirits/overnight_rebase.log, .DONE marker), session
+  status timer 970b95c1 (2-hourly, session-only). Then accept, check_gt_logs, push after 08:34 UTC, CI watch.
