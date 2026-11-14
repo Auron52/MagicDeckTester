@@ -187,3 +187,6 @@ target branching cost unmeasured.
   A width-2 fallback only for top-1 misses no deliberate rule can resolve, never 3+. Relayed in rank-handoff.md.
   USER follow-up (verbatim): "Boars and such do not fall into the same category. The search choices are obvious."
   -> a width-2 fallback, if ever needed, is scoped to colour-complex decks (Creature Giving class); Boars stays top-1.
+  USER rule for two-colour decks (verbatim): "If there are 2 colours you literally can just always get the shock and then
+  basics after that. This makes fixing extremely easy." -> two-colour deck: the dual first while any is left, then the
+  basic chosen by the castable-pip rule; relayed in rank-handoff.md for the fresh rank agent.
