@@ -36,6 +36,7 @@ declare -A DECK_FILE=(
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.cod"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.cod"
   [merfolk]=decks/Merfolk/Merfolk.cod
+  [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.cod"
   [th]="decks/Treasure Hunt/Treasure Hunt.txt"
   [knights]=decks/Knights/Knights.cod
   [whiteknights]="decks/White Knights/White Knights.cod"
@@ -100,6 +101,7 @@ declare -A DECK_PROF=(
   [midrangeburn]="decks/Midrange Burn/Midrange Burn.profile.json"
   [modernrwburn]="decks/Modern RW Burn/Modern RW Burn.profile.json"
   [merfolk]=decks/Merfolk/Merfolk.profile.json
+  [merfolkturns]="decks/Merfolk Turns/Merfolk Turns.profile.json"
   [th]="decks/Treasure Hunt/Treasure Hunt.profile.json"
   [knights]=decks/Knights/Knights.profile.json
   [whiteknights]="decks/White Knights/White Knights.profile.json"
@@ -719,6 +721,13 @@ SMOKE_CASES=(
   "spirits     3 1001   50 10"
   "spirits     5 1001  100 20"
   "spirits2hg  3 1001   50 10"
+  # Merfolk Turns: provisional pre-keep-table ENTRY set, sized from the Merfolk/Spirits
+  # templates. Confirm its searched ms/game against Hinata in the same pooled tier
+  # before accepting any GT. The 2HG row is a small 30-life searched canary.
+  "merfolkturns 0 1001 1000 0"
+  "merfolkturns 3 1001   50 10"
+  "merfolkturns 5 1001  100 20"
+  "merfolkturns2hg 3 1001 50 10"
 )
 
 # regression: ~8-9 min pre-commit sweep -- two seeds at d3/d5, d0 single seed.
@@ -872,6 +881,10 @@ REGRESSION_CASES=(
   # 30101/30161/30221). 30181 finished every game with none over 5 s at either depth (19.2 + 4.4 core-s, 0.87M units).
   "spirits          3 30181  20 0"
   "spirits          5 30181  20 0"
+  # Merfolk Turns unlimited backstop: s30131 (three games) completed at both d3/d5
+  # below the 2e6-unit cap; d3 7.2 and d5 9.7 core-s in the screening batch.
+  "merfolkturns     3 30131   3 0"
+  "merfolkturns     5 30131   3 0"
   "stompy           3 30001  20 0"
   "stompy           5 30001  20 0"
   "th               3 30001  20 0"
@@ -1172,6 +1185,10 @@ REGRESSION_CASES=(
   "spirits 3 2002   75 10"
   "spirits 5 2002  150 20"
   "spirits 5 3003  150 20"
+  "merfolkturns 0 2002 1000 0"
+  "merfolkturns 3 2002   50 10"
+  "merfolkturns 5 2002  150 20"
+  "merfolkturns 5 3003  150 20"
 
 )
 
@@ -2066,5 +2083,20 @@ OVERNIGHT_CASES=(
   "spirits 5  5005  425 20"
   "spirits 5  6006  425 20"
   "spirits 5  7007  425 20"
+  # Merfolk Turns: pre-keep-table overnight ENTRY set. The searched rows are
+  # the shipped d5/b20 play setting; expand at keep-table adoption.
+  "merfolkturns 0  4004 2000 0"
+  "merfolkturns 0  6006 2000 0"
+  "merfolkturns 0  8008 2000 0"
+  "merfolkturns 0 10010 2000 0"
+  "merfolkturns 3  4004  125 10"
+  "merfolkturns 5  4004  300 20"
+  "merfolkturns 5  5005  300 20"
+  "merfolkturns 5  6006  300 20"
+  "merfolkturns 5  7007  300 20"
+  # Disjoint unlimited backstop: s30161 (three games) completed at both depths,
+  # d3 19.7 and d5 4.3 core-s, no abandoned games.
+  "merfolkturns 3 30161    3 0"
+  "merfolkturns 5 30161    3 0"
 
 )

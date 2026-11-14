@@ -79,12 +79,13 @@ All twelve Oracle entries were fetched from the live Scryfall API on 2026-11-14.
 ## Current stage
 
 Stage 4/5: all 17 deck cards have complete coverage and the viewer decision
-emitters are wired. The 1,000-game baseline profile was generated on the
-integration build, then a second fixed-recipe profile run was started on the
-C2 mana integration (`3564a2fbd`) so the shipped scores match the final source.
-The provisional three-tier suite rows remain unaccepted pending the pooled
-Hinata cost gate and verification. No value leaf or exhaustive mulligan table
-is part of this analysis.
+emitters are wired. The final-source 1,000-game scorer completed on the C2
+mana integration (`3564a2fbd`) plus the Codex-play corrections. Its baseline
+profile contains 16 card scores, a static one-to-five-land keep window, and no
+hand-score gate. The cost-aggregate diagnostic, leaf tie-break check, viewer
+audit, and pooled Hinata cost gate are running. The provisional three-tier
+suite rows remain unaccepted pending those results and verification. No value
+leaf or exhaustive mulligan table is part of this analysis.
 
 ### Deeproot Pilgrimage checkpoint
 
