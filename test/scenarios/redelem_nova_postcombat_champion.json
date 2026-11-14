@@ -1,0 +1,54 @@
+{
+  "deck": "decks/Red Elementals/Red Elementals.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 21,
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    },
+    {
+      "name": "Mountain",
+      "controller": 0,
+      "tapped": false,
+      "sick": false
+    }
+  ],
+  "hand": [
+    "Spark Elemental",
+    "Nova Chaser"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 40,
+  "depth": 3,
+  "budget_ms": 0,
+  "max_turns": 6,
+  "expect_win_turn": 5,
+  "expect_exile_contains": [
+    "Spark Elemental"
+  ],
+  "comment": "Nova Chaser (champion an Elemental, CR 702.72) -- the POST-COMBAT champion line. T3 with five Mountains, Spark Elemental (3/1 trample haste, sacrificed at each end step) and Nova Chaser (10/2 trample, no haste) in hand, the opponent at 21, nothing else to draw. Only Spark attacking T3 (3) and Nova cast in MAIN 2 championing the already-attacked, doomed Spark keeps both the 3 damage and the 10/2 (T4 10, T5 10 = 23 >= 21: win T5). Nova pre-combat would have to champion the Spark before it attacks (20 by T5: T6) or champion nothing and be sacrificed. Needs a searched second main (GoldFishRunner::DeckUsesSecondMain reads champion_subtype) and the champion pick searched (ChampionVariantTargets -> Action::enchant_target). The Spark stays in exile (Nova never leaves)."
+}

@@ -7404,7 +7404,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 ManaPool avail = AvailableManaPool(state);
                 if (TapForCost(state, a.cost, avail, /*for_creature=*/false)
                     && ApplyPutFromHand(state, state.active_player_index, a.sac_source_id,
-                                        a.card_name.str()) && m_logger)
+                                        a.card_name.str(), a.enchant_target) && m_logger)
                 { m_logger->LogAbility(a.sac_source_id, "Purphoros, Bronze-Blooded", "put creature; sacrifice at end step"); }
             }
         }
@@ -7934,7 +7934,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 const bool put_paid = TapForCost(state, a.cost, avail, /*for_creature=*/false);
                 put_scope.reset();
                 if (put_paid
-                    && ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()))
+                    && ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str(), a.enchant_target))
                 {
                     if (m_logger)
                     { m_logger->LogAbility(a.sac_source_id, bf_name(a.sac_source_id),

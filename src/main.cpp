@@ -4661,6 +4661,14 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                "opponent's -- check whose before you pick), or -1 to destroy nothing (\"you may\"). "
                "Default = the AI's pick (an opponent's, else nothing).");
     }
+    else if (source.find("(champion)") != std::string::npos)
+    {
+        // CHAMPION (SpellEffects.h ResolveChampionEtb; Nova Chaser): `examined` = every other permanent
+        // you control with the champion subtype (a Mimic that chose it and tokens included).
+        d.Note("reply an examined index to EXILE (champion) that permanent -- it returns to the battlefield "
+               "as a new object when the champion leaves -- or -1 to exile nothing, which SACRIFICES the "
+               "champion. Default = the AI's pick.");
+    }
     else if (source.find("(may exile)") != std::string::npos)
     {
         // Skyclave Apparition's ETB (SpellEffects.h ResolveEtbExileUpToOne): `examined` = every legal

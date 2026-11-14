@@ -71,6 +71,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <tuple>
 #include <string>
 
 struct TopDisposition;   // core/GameLogger.h
@@ -4528,6 +4529,29 @@ public:
             if (best < 0 || pw > best_pw) { best = k; best_pw = pw; }
         }
         return best;
+    }
+
+    // OrderChampionCandidates -- CHAMPION (CardParams::champion_subtype; Nova Chaser). ORDERS the
+    // battlefield indices `idx` of the permanents the champion may exile (never restricts: every one
+    // stays a searched cast variant). The FRONT is the UNPINNED resolution only -- the playout beyond
+    // the horizon, an entry route that carries no pin (a card returning from a champion exile at the end
+    // step), and a same-plan entrant the cast's variants could not name at enumeration -- and the
+    // human's highlighted default. Default order: the doomed first (it leaves at this end step anyway:
+    // sac_at_end_step, unearthed, endstep_sacrifice_self), then a creature that already attacked / is
+    // tapped, then the smallest effective power, then the lowest card number (deterministic).
+    virtual void OrderChampionCandidates(const GameState& s, int controller, std::vector<int>& idx) const
+    {
+        (void)controller;
+        auto rank = [&s](int bi)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            const bool doomed = q.sac_at_end_step || q.unearthed || q.exile_at_end
+                             || (!q.def_absent && d != nullptr && d->params.endstep_sacrifice_self);
+            const bool spent  = q.AttacksThisTurn() > 0 || q.tapped;
+            return std::make_tuple(doomed ? 0 : 1, spent ? 0 : 1, q.EffectivePower(), q.card.m_number);
+        };
+        std::stable_sort(idx.begin(), idx.end(), [&rank](int a, int b) { return rank(a) < rank(b); });
     }
 
     // EtbOptionalNonbasicLandDestroyPick -- White Orchid Phantom's UNPINNED resolution ("destroy up to

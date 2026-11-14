@@ -14396,7 +14396,8 @@ static void BuildAttackTapCtx(const GameState& state, bool is_pre_combat, int pe
             const Action& a = cands[j];
             if (a.kind != Action::Kind::CastFromHand || a.enchant_target <= 0) { continue; }
             const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
-            if (d == nullptr || !RemovalSearchesForController(*d)) { continue; }
+            // ...and a CHAMPION's exile pick (Nova Chaser): the championed creature is gone the same way.
+            if (d == nullptr || (!RemovalSearchesForController(*d) && d->params.champion_subtype.empty())) { continue; }
             if (!attacker(own_perm(a.enchant_target))) { continue; }
             set_bit(j, a.enchant_target);
         }
@@ -42493,6 +42494,53 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             }
         }
 
+        // CHAMPION (CardParams::champion_subtype; Nova Chaser, CR 702.72): WHICH <subtype> permanent its
+        // enter trigger exiles -- or none, which sacrifices it -- is a SEARCH decision: one CastFromHand
+        // variant per identity class of battlefield candidate (ChampionVariantTargets -- a SOUND fold),
+        // its m_number riding enchant_target (the Protege precedent; both worlds install it as
+        // g_champion_pin), plus an explicit DECLINE (-1, ordered last: eval 0). The ordinary cast below is
+        // the UNPINNED variant (0 -> the provider's front AT RESOLUTION): with no candidate on the board it
+        // is the only one, and otherwise it is kept only when a SAME-PLAN entrant could be championed
+        // (ChampionSamePlanEntrantPossible) -- else it would duplicate the front explicit variant exactly,
+        // so it is skipped (`continue`: a champion card has no other cast variant). Human play gets no
+        // variants: the ordinary cast's resolution asks the "(champion)" chooser.
+        if (!def.params.champion_subtype.empty() && !HumanPlayActive())
+        {
+            const std::vector<int> champ = ChampionVariantTargets(state, state.active_player_index,
+                                                                  def.params.champion_subtype);
+            for (int tn : champ)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = EvalCard(def, state);
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = tn;
+                actions.push_back(std::move(a));
+            }
+            // The DECLINE: always emitted when no same-plan entrant is possible (then it is the only
+            // non-candidate outcome -- with no candidate at all it is the whole menu, a cast that only
+            // sacrifices the champion), priced as what it is: eval 0, not the 10/2's body.
+            const bool same_plan = ChampionSamePlanEntrantPossible(state, state.active_player_index,
+                                                                   ap.hand[i].m_number,
+                                                                   def.params.champion_subtype);
+            if (!champ.empty() || !same_plan)
+            {
+                Action a;
+                a.kind           = Action::Kind::CastFromHand;
+                a.card_name      = ap.hand[i].m_name;
+                a.hand_index     = i;
+                a.cost           = EffectiveCost(def, state);
+                a.eval           = 0;
+                a.card_mv        = def.card.m_mana_cost.ManaValue();
+                a.enchant_target = -1;   // decline: the champion is sacrificed
+                actions.push_back(std::move(a));
+            }
+            if (!same_plan) { continue; }
+        }
+
         // Magnetic Theft ("Attach target Equipment to target creature"): WHICH (Equipment, creature)
         // pair is a SEARCH decision -- one CastFromHand variant per pair BuildAttachSpellPairs keeps
         // (sharing hand_index -> mutually exclusive). The Equipment rides attach_equip_id (+ its name
@@ -46994,6 +47042,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 {
                     a.vial_attack_power = 0;
                     a.eval              = -2;
+                }
+                // CHAMPION (a put Nova Chaser): the same searched exile pick as the cast's variants
+                // (enchant_target -> ApplyPutFromHand's g_champion_pin) -- one per identity class, a
+                // decline, and the unpinned put only when a same-plan entrant is possible.
+                if (hd != nullptr && !hd->params.champion_subtype.empty() && !HumanPlayActive())
+                {
+                    const std::vector<int> champ = ChampionVariantTargets(state, state.active_player_index,
+                                                                          hd->params.champion_subtype);
+                    if (!champ.empty())
+                    {
+                        for (int tn : champ)
+                        {
+                            Action v = a;
+                            v.enchant_target = tn;
+                            actions.push_back(std::move(v));
+                        }
+                        Action v = a;
+                        v.enchant_target = -1;
+                        v.eval           = std::min(a.eval, 0);
+                        v.vial_attack_power = 0;
+                        actions.push_back(std::move(v));
+                        if (!ChampionSamePlanEntrantPossible(state, state.active_player_index, c.m_number,
+                                                             hd->params.champion_subtype))
+                        { continue; }
+                    }
                 }
                 actions.push_back(std::move(a));
             }
@@ -72887,6 +72960,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Goblins tribal ETB cascade (rollout side, lockstep with EffectHandler): self-tokens,
             // ETB burn, Matron tutor (search target = tutor_target), Muxus reveal. No-op for every
             // non-Goblin creature -> other decks byte-identical.
+            // CHAMPION's searched exile pick (enchant_target; lockstep with EffectHandler::EnterBattlefield).
+            const ChampionPinScope _champ(cast_number, def.params.champion_subtype.empty() ? 0 : enchant_target);
             FireOwnEtbTriggers(state, state.active_player_index,
                            static_cast<int>(state.battlefield.size()) - 1, tutor_target, chosen_x);
 
@@ -75953,7 +76028,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (PutFromHandLegalIndex(state, state.active_player_index, a.sac_source_id,
                                       a.card_name.str()) >= 0
                 && TapForCostDirect(state, a.cost, /*for_creature=*/false))
-            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str()); }
+            { ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str(), a.enchant_target); }
         }
         else if (a.kind == Action::Kind::BankManaTap)
         { ApplyKruphixBankTap(state, a.sac_source_id, a.chosen_float_color.str().empty()
@@ -76695,7 +76770,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             }
             if (put_paid)
             {
-                ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str());
+                ApplyPutFromHand(state, state.active_player_index, a.sac_source_id, a.card_name.str(), a.enchant_target);
                 if (put_draws)
                 {
                     static const bool s_sfput_trial = EnvOn("MTG_SF_PUT_TRIAL");
