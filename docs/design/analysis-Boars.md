@@ -814,3 +814,17 @@ Garden for two Wardens) and legacy Misty (Breeding Pool for Hunted Phantasm, eve
 on both routes; the base width vs the explicit top-1 providers.
 
 **Measurement.** See `logs/boars-research/rank-handoff.md` (in flight at the time of writing).
+
+## Claude-play sweep
+- commit: `4a59c17f6` (frozen binary `build/scratch/boars/sweep/mtg.sweep`)
+- seeds: 97001-97016 (12 standard, 97013-97016 2HG), one Opus agent per game, 2026-11-14
+- games: 16; Claude vs search (d5 b20): equal 11, Claude faster 4 (97002, 97005, 97009 T4 vs T5... see below), Claude slower 1 (97010: different post-fetch shuffle, not a misplay)
+- flags: 6 unresolved
+  - 97009 CONFIRMED completeness: the T2 root never finds Flinthoof cast + {R} self-haste in the same main (T4 kill; search T5 at d5 b20, d5 b0, d8 b0; found once Flinthoof is on the battlefield). Investigating (`boars-haste`).
+  - 97002: search T6 at every budget incl. d8 b0 and MTG_UNPRUNE=fetch,landpick; MTG_UNPRUNED d5 b0 finds T5 -> a narrowing gate hides the line. Investigating (`boars-haste`).
+  - 97005: AI plays no land / no cast on T4 with 2 Foothills in hand; Claude T5 vs AI T6 (b200 still T6). Investigating (`boars-haste`).
+  - 97013 (2HG) CONFIRMED payment: emerge with the Hierarch victim taps Birds needlessly (9 for 8), losing a T4 kill line. Investigating (`boars-pay`).
+  - 97003 lead: all-creature prepay leftover moved wholesale into the creature-only pool incl. land units (TurnSolver ~65020) -- verify it can lose a line. (`boars-pay`)
+  - Human-play menu: duplicate "hold, then crack" rows per fetch target (every agent); emerge victim menu offers unpayable victims and silently drops the cast (97001, 97009); a plan equipping Greaves to its own emerge victim (97010); display fields: post-combat exalted P/T (97004), legend_keep attacked:false (97007), mulligan life 20 under 2HG (97013). (`boars-pay`)
+- dismissed: 97006 "same top cards after every shuffle" = the designed common-random-numbers shuffle (keyed on seed + search count).
+- decision types seen across the sweep: mulligan, bottom, main_phase, land_entry, bounce, sacrifice, tutor_etb, dig, target, creature_type, lackey_put, legend_keep -- every Boars decision class in the 2c-ter classification fired (emerge victim, Ilharg put, legend keep, Ilharg dies tuck, Horn type + upkeep take, Raggadragga target, fetch target + hold, Turf bounce, shock).
