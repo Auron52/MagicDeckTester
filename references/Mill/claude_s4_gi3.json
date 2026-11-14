@@ -1,0 +1,487 @@
+{
+  "seed": 4, "game_index": 3, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Darkslick Shores" }, { "num": 21, "name": "Fractured Sanity" }, { "num": 22, "name": "Fractured Sanity" }, { "num": 45, "name": "Surgical Extraction" }, { "num": 27, "name": "Hedron Crab" }, { "num": 10, "name": "Darkslick Shores" }, { "num": 11, "name": "Darkslick Shores" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Darkslick Shores", "cast=Hedron Crab"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 9, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 27, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Darkslick Shores; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 1, "summary": "land=Darkslick Shores; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "cast=Hedron Crab", "land=Darkslick Shores", "cast=Surgical Extraction"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Hedron Crab" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": ["Peat Bog"], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Darkslick Shores; cast: Hedron Crab, Surgical Extraction → 1:Peat Bog", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "tutor_target": "1:Peat Bog" }] },
+    { "index": 1, "summary": "land=Darkslick Shores; cast: Hedron Crab, Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 2, "summary": "land=Darkslick Shores (after the casts); cast: Hedron Crab, Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_after_casts": true, "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 3, "summary": "land=Darkslick Shores (after Hedron Crab); cast: Hedron Crab, Surgical Extraction → 1:Peat Bog", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_slot": 1, "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "tutor_target": "1:Peat Bog" }] },
+    { "index": 4, "summary": "land=Darkslick Shores (after Hedron Crab); cast: Hedron Crab, Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_slot": 1, "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 5, "summary": "land=none; cast: Hedron Crab, Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab", "Surgical Extraction"], "cast_order_canonical": ["Hedron Crab", "Surgical Extraction"], "actions": [{ "card": "Hedron Crab" }, { "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 6, "summary": "land=Darkslick Shores; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 7, "summary": "land=Darkslick Shores (after the casts); cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_after_casts": true, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 9, "summary": "land=none; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 10, "summary": "land=Darkslick Shores; cast: Surgical Extraction → 1:Peat Bog", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Surgical Extraction"], "actions": [{ "card": "Surgical Extraction", "tutor_target": "1:Peat Bog" }] },
+    { "index": 11, "summary": "land=Darkslick Shores; cast: Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Surgical Extraction"], "actions": [{ "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 12, "summary": "land=none; cast: Surgical Extraction → 1:Peat Bog", "declared_order_payability": "not_verified", "land": null, "casts": ["Surgical Extraction"], "actions": [{ "card": "Surgical Extraction", "tutor_target": "1:Peat Bog" }] },
+    { "index": 13, "summary": "land=none; cast: Surgical Extraction → 1:Peat Bog (pay 2 life)", "declared_order_payability": "not_verified", "land": null, "casts": ["Surgical Extraction"], "actions": [{ "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }] },
+    { "index": 14, "summary": "land=Darkslick Shores; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [] },
+    { "index": 15, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 112, "summary": "land=Darkslick Shores; cast: Surgical Extraction → 1:Peat Bog (pay 2 life), cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Surgical Extraction"], "actions": [{ "card": "Surgical Extraction", "phyrexian_life": 2, "tutor_target": "1:Peat Bog" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 113, "summary": "land=Darkslick Shores; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 97,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 2,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": ["Peat Bog"], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 2,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 45, "name": "Surgical Extraction", "cost": "{B}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Boarding Party", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry"], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 7,
+  "type": "dig",
+  "source": "Surgical Extraction (target card in a graveyard)",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": [], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "heuristic_default": 0,
+  "examined": [{ "index": 0, "legal": true, "name": "Peat Bog" }, { "index": 1, "legal": true, "name": "Saprazzan Skerry" }, { "index": 2, "legal": true, "name": "Mossfire Valley" }, { "index": 3, "legal": true, "name": "Boarding Party" }, { "index": 4, "legal": true, "name": "Maelstrom Wanderer" }, { "index": 5, "legal": true, "name": "Svyelunite Temple" }],
+  "note": "reply an examined index to target that card in a graveyard. The target is mandatory; -1 takes the AI's pick. Afterward, choose which same-name cards to exile from each zone."
+}
+},
+    { "chosen": [0], "decision": {
+  "decision_index": 8,
+  "type": "dragon",
+  "source": "Surgical Extraction (exile from graveyard)",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "max_puts": 1,
+  "ai_set": [],
+  "candidates": [{ "index": 0, "def": false, "name": "Maelstrom Wanderer" }],
+  "note": "reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). You may choose any number. Default = the AI's pick."
+}
+},
+    { "chosen": [1], "decision": {
+  "decision_index": 9,
+  "type": "dragon",
+  "source": "Surgical Extraction (exile from hand)",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "max_puts": 1,
+  "ai_set": [0],
+  "candidates": [{ "index": 0, "def": true, "name": "Maelstrom Wanderer" }],
+  "note": "reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). You may choose any number. Default = the AI's pick."
+}
+},
+    { "chosen": [1], "decision": {
+  "decision_index": 10,
+  "type": "dragon",
+  "source": "Surgical Extraction (exile from library)",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 6, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "max_puts": 1,
+  "ai_set": [0],
+  "candidates": [{ "index": 0, "def": true, "name": "Maelstrom Wanderer" }],
+  "note": "reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). You may choose any number. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 2, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Surgical Extraction"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 45, "hand_size": 6, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Surgical Extraction"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 45, "hand_size": 6, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Darkslick Shores", "cast=Fractured Sanity"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Ruin Crab" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 11, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Surgical Extraction"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 44, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Darkslick Shores; cast: Fractured Sanity", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Fractured Sanity"], "actions": [{ "card": "Fractured Sanity" }] },
+    { "index": 1, "summary": "land=Darkslick Shores; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 2, "summary": "land=Darkslick Shores (after the casts); cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_after_casts": true, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 4, "summary": "land=none; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 5, "summary": "land=Darkslick Shores; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 7, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 56, "summary": "land=Darkslick Shores; cast: Ruin Crab, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 57, "summary": "land=Darkslick Shores (after Ruin Crab); cast: Ruin Crab, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_slot": 1, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 58, "summary": "land=Darkslick Shores; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 67,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 14,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Surgical Extraction"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 44, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 15,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Surgical Extraction"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 41, "hand_size": 7, "graveyard": ["Boarding Party", "Maelstrom Wanderer", "Mossfire Valley", "Peat Bog", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 24, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 5, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 24, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "land=Scalding Tarn", "cast=Ruin Crab"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Scalding Tarn" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 43, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 23, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: Fractured Sanity, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Fractured Sanity", "Scalding Tarn"], "actions": [{ "card": "Fractured Sanity" }, { "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Scalding Tarn; cast: Fractured Sanity", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Fractured Sanity"], "actions": [{ "card": "Fractured Sanity" }] },
+    { "index": 2, "summary": "land=none; cast: Fractured Sanity", "declared_order_payability": "not_verified", "land": null, "casts": ["Fractured Sanity"], "actions": [{ "card": "Fractured Sanity" }] },
+    { "index": 3, "summary": "land=Scalding Tarn; cast: Ruin Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Ruin Crab", "Scalding Tarn"], "actions": [{ "card": "Ruin Crab" }, { "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 4, "summary": "land=Scalding Tarn (after Ruin Crab); cast: Ruin Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_slot": 1, "casts": ["Ruin Crab", "Scalding Tarn"], "actions": [{ "card": "Ruin Crab" }, { "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Scalding Tarn; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 6, "summary": "land=Scalding Tarn (after the casts); cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_after_casts": true, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 8, "summary": "land=none; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 9, "summary": "land=Scalding Tarn; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Scalding Tarn; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 12, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 91, "summary": "land=Scalding Tarn; cast: Ruin Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Ruin Crab", "Scalding Tarn"], "actions": [{ "card": "Ruin Crab" }, { "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 92, "summary": "land=Scalding Tarn (after Ruin Crab); cast: Ruin Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_slot": 1, "casts": ["Ruin Crab", "Scalding Tarn"], "actions": [{ "card": "Ruin Crab" }, { "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 93, "summary": "land=Scalding Tarn; cast: Ruin Crab, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 94, "summary": "land=Scalding Tarn (after the casts); cast: Ruin Crab, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_after_casts": true, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 96, "summary": "land=none; cast: Ruin Crab, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 97, "summary": "land=Scalding Tarn; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 98, "summary": "land=Scalding Tarn; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 98,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Scalding Tarn", "idx": 11, "num": 43, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 23, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 20,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Scalding Tarn", "idx": 11, "num": 43, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 39, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 20, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 12, "num": 39, "sick": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 11, "num": 43, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Surgical Extraction"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 14, "summary": "land=none; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 43, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "tutor_etb",
+  "source": "Scalding Tarn -- land onto the battlefield",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 11, "num": 39, "sick": true, "is_land": false, "power": 0, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Scalding Tarn", "Surgical Extraction"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Island" }, { "index": 1, "name": "Watery Grave" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 11, "num": 39, "sick": true, "is_land": false, "power": 0, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Scalding Tarn", "Surgical Extraction"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 11, "num": 39, "sick": true, "is_land": false, "power": 0, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Scalding Tarn", "Surgical Extraction"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 14, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Creative Technique", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 25,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "sacrifice", "text": "🔪 Scalding Tarn -- sacrificed (cost)" }, { "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "tutor", "text": "🔎 Scalding Tarn: Island onto the battlefield" }],
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [{ "name": "Darkslick Shores", "idx": 4, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 8, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 10, "num": 11, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 5, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 7, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 11, "num": 39, "sick": true, "is_land": false, "power": 0, "toughness": 3 }], "vial_counters": [], "hand": [{ "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Scalding Tarn", "Surgical Extraction"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 6, "num": 500001, "is_land": false, "power": 2, "toughness": 2 }, { "name": "2/2 Creature", "idx": 9, "num": 500002, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }], "library_size": 8, "hand_size": 7, "graveyard": ["Annoyed Altisaur", "Annoyed Altisaur", "Boarding Party", "Boarding Party", "Boarding Party", "Boarding Party", "Breaching Dragonstorm", "Breaching Dragonstorm", "Breaching Dragonstorm", "Call Forth the Tempest", "Creative Technique", "Creative Technique", "Dwarven Ruins", "Dwarven Ruins", "Dwarven Ruins", "Ferrous Lake", "Ferrous Lake", "Maelstrom Wanderer", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mossfire Valley", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Peat Bog", "Peat Bog", "Remote Farm", "Remote Farm", "Sakashima's Protege", "Sakashima's Protege", "Saprazzan Skerry", "Saprazzan Skerry", "Saprazzan Skerry", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple", "Svyelunite Temple"], "exile": ["Maelstrom Wanderer", "Maelstrom Wanderer", "Maelstrom Wanderer"], "starting_deck": { "name": "Breaching Dragonstorm", "slot": 4, "cards": [["Maelstrom Wanderer", 4], ["Annoyed Altisaur", 4], ["Sakashima's Protege", 2], ["Boarding Party", 4], ["Breaching Dragonstorm", 4], ["Call Forth the Tempest", 1], ["Creative Technique", 4], ["Dwarven Ruins", 4], ["Ferrous Lake", 4], ["Mossfire Valley", 4], ["Mountain", 9], ["Peat Bog", 4], ["Remote Farm", 4], ["Saprazzan Skerry", 4], ["Svyelunite Temple", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Fractured Sanity", "declared_order_payability": "not_verified", "land": null, "casts": ["Fractured Sanity"], "actions": [{ "card": "Fractured Sanity" }] },
+    { "index": 1, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ]
+}
