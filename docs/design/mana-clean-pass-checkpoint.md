@@ -1472,4 +1472,15 @@ fungus 1,880, gods 4,300 (first run).
   the CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE, cco_hold) holds EVERY creature-only land when the line owes a colour
   beyond the unrestricted supply (Mountain only), so a dug Corsair Captain's generic takes the Mountain the Bolt needs;
   the same "other restricted lands cover it" count would apply to the reserve's cco_short_mask (needs its own A/B).
-  Next pirates block 74000-78999.
+  **Round 2 result:** regression 322/322 unchanged, A/B 89500000 nets 0 (39762088d); gate pirates-C2r2-20261114
+  (74000-78999, PGO 316eac74bf1d) 39 -> **10** (e11c9a28e). Then the parked reserve fix, **a0c51f63d
+  MTG_CCO_RESERVE_OTHER** (heurarm, default ON, =0 -> historical; ordering only): the CCO LINE RESERVE holds a
+  creature-only land only for a shortfall the OTHER untapped creature-only lands (live count) cannot cover, and counts
+  a spendable Treasure as unrestricted supply. Repros s30070533 16 -> 3, s30074443 / s30075333 T4 -> 0. Units
+  3073/3073; smoke + regression one d0 digest row each, lever=0 reproduces (defa8af4e, 6ce234658), searched rows
+  unchanged; A/B 89600000 32,000 games 0 changed outcomes, nets 0 (logs/mana-clean-chain/itemC2/ab3_report.txt).
+  Gate pirates-C2r3-20261114 (79000-83999, PGO d83e185eb1db, byte-identical) **12** issues, all Bolt, 5 signatures
+  (b5630192a). **Open for the next round** (logs/mana-clean-chain/C2-handoff.md): the hand-demand keep holds a
+  creature-only land for a hand creature the line does not cast this turn (Stormtamer x2 / Corsair Captain) over the
+  line's Bolt (s30080205, s30079131, s30079307; 6 flags); s30083181 (6) unanalysed; s30070533's undeclared
+  dig-continuation residual. Next pirates block 84000-88999.
