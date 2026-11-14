@@ -370,20 +370,17 @@ for _mode in "${MODES[@]}"; do
 done
 
 # Scenario sanity gate: hand-built board fixtures (test/scenarios/*.json) that assert a specific
-# interaction still plays correctly. Cheap (seconds) and deck-agnostic, so run them up front on the
-# freshly-built binary. A FAIL here is a hard regression -- abort before the (long) batch run.
-# The fixtures run in PARALLEL (test/scenarios.sh), so the gate costs seconds, not the ~90 s of
-# serial wall it took in front of every tier before 2026-11-14.
+# interaction still plays correctly. A FAIL is a hard regression and fails the tier. The fixtures run in
+# PARALLEL, longest first (test/scenarios.sh), and -- where the jobserver below exists -- CONCURRENTLY
+# with the game batch on the shared tokens, so they cost no wall of their own: a FAIL kills the batch at
+# once (nothing it would measure can be accepted) and the tier aborts. Without the jobserver
+# (SIDE_STAGES_SERIAL=1, no mkfifo) they run up front, before the batch, as they always did.
 SCEN="$(dirname "$0")/scenarios.sh"
-if [ -f "$SCEN" ]; then
-  log_all "--- scenario sanity ---"
-  _t0=$(date +%s)
-  if THREADS=$THREADS MTG_BIN="$BIN" bash "$SCEN" | tee -a "${OUTS[@]}"; then :; else
-    log_all "ABORT: scenario sanity failed (a hand-built fixture regressed) -- fix before running the batch."
-    exit 1
-  fi
-  stage_line "scenario sanity" $(( $(date +%s) - _t0 ))
-fi
+[ -f "$SCEN" ] || SCEN=""
+scen_abort() {
+  log_all "ABORT: scenario sanity failed (a hand-built fixture regressed) -- fix before running the batch."
+  exit 1
+}
 
 # Viewer LINE-BUILD checks (play-GUI frontend) remain standalone/on-demand -- run
 # `bash test/viewer_checks.sh` after touching tools/play/. The engine<->GUI PROTOCOL layer,
@@ -530,7 +527,7 @@ for _mode in "${MODES[@]}"; do vpc_wanted "$_mode" && VPC_ANY=1; done
 T=$THREADS; [ "$T" -le 0 ] && T=$(nproc 2>/dev/null || echo 8)
 SIDE_DIR="$BDIR/side"
 JS_FIFO=""
-if [ "$VPC_ANY" = 1 ] && [ "${SIDE_STAGES_SERIAL:-0}" != 1 ] && command -v mkfifo >/dev/null 2>&1; then
+if { [ "$VPC_ANY" = 1 ] || [ -n "$SCEN" ]; } && [ "${SIDE_STAGES_SERIAL:-0}" != 1 ] && command -v mkfifo >/dev/null 2>&1; then
   JS_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mtg-jobserver.XXXXXX") && mkfifo "$JS_DIR/fifo" \
     && exec {JS_FD}<>"$JS_DIR/fifo" && JS_FIFO="$JS_DIR/fifo"
   if [ -n "$JS_FIFO" ]; then
@@ -572,6 +569,28 @@ wait_side_stages() {
 }
 [ "$VPC_ANY" = 1 ] && [ -n "$JS_FIFO" ] && start_side_stages
 
+mkdir -p "$SIDE_DIR"
+if [ -n "$SCEN" ] && [ -z "$JS_FIFO" ]; then
+  log_all "--- scenario sanity ---"
+  _t0=$(date +%s)
+  if THREADS=$THREADS MTG_BIN="$BIN" bash "$SCEN" | tee -a "${OUTS[@]}"; then :; else scen_abort; fi
+  stage_line "scenario sanity" $(( $(date +%s) - _t0 ))
+elif [ -n "$SCEN" ]; then
+  # Concurrent: one fixture per token. On a FAIL, kill the batch (its pid is written by the wrapper below).
+  : > "$SIDE_DIR/batch.pid"; printf '' > "$SIDE_DIR/scen.rc"
+  (
+    date +%s > "$SIDE_DIR/scen.t0"
+    THREADS=$THREADS MTG_JOBSERVER="$JS_FIFO" MTG_BIN="$BIN" bash "$SCEN" > "$SIDE_DIR/scen.out" 2>&1
+    rc=$?; echo $rc > "$SIDE_DIR/scen.rc"; date +%s > "$SIDE_DIR/scen.t1"
+    if [ $rc != 0 ]; then
+      for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$SIDE_DIR/batch.pid" ] && break; sleep 1; done
+      _bp=$(cat "$SIDE_DIR/batch.pid" 2>/dev/null)
+      [ -n "$_bp" ] && kill "$_bp" 2>/dev/null
+    fi
+  ) &
+  SCEN_PID=$!
+fi
+
 TOTAL_START=$(date +%s)
 # `tee` to batch.log so per-job results STREAM to the terminal live as each case
 # finishes (the binary flushes one line per completed job), instead of being buffered
@@ -587,7 +606,7 @@ if [ ${#MODES[@]} -gt 1 ]; then
   # below; clear what an interrupted earlier combined run may have left, so nothing stale is moved.
   mkdir -p "$BDIR/wins"; find "$BDIR/wins" -maxdepth 1 -type f -delete
 fi
-MTG_JOBSERVER="$JS_FIFO" "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" \
+( echo $BASHPID > "$SIDE_DIR/batch.pid"; MTG_JOBSERVER="$JS_FIFO" exec "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" ) \
     2>"$BDIR/batch.err" | tee "$BDIR/batch.log" "$BATCH_BACKUP"
 if ! cmp -s "$BDIR/batch.log" "$BATCH_BACKUP"; then
   cp "$BATCH_BACKUP" "$BDIR/batch.log"
@@ -596,6 +615,14 @@ fi
 rm -f "$BATCH_BACKUP"
 TOTAL=$(( $(date +%s) - TOTAL_START ))
 stage_line "game batch (mtg --batch)" "$TOTAL" "${JS_FIFO:+(shared tokens with the reference stages)}"
+if [ -n "$SCEN" ] && [ -n "$JS_FIFO" ]; then
+  wait "$SCEN_PID"
+  log_all "--- scenario sanity ---"
+  tee -a "${OUTS[@]}" < "$SIDE_DIR/scen.out"
+  [ "$(cat "$SIDE_DIR/scen.rc")" = 0 ] || scen_abort
+  stage_line "scenario sanity" $(( $(cat "$SIDE_DIR/scen.t1") - $(cat "$SIDE_DIR/scen.t0") )) \
+    "(concurrent with the batch, shared tokens)"
+fi
 
 # A combined run hands each tier exactly the files its own run would have written: its job lines of
 # batch.log (+ the header/footer), the shared batch.err, and its per-game logs (<key>.wins/.units/...).

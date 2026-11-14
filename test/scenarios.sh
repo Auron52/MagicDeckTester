@@ -29,10 +29,30 @@ jobs=${SCEN_JOBS:-${THREADS:-0}}
 
 # Per-fixture output: <tmp>/<i>.out (combined stdout+stderr) and <tmp>/<i>.rc. Regenerable scratch.
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/scenarios.XXXXXX") || { echo "ERROR: mktemp failed" >&2; exit 2; }
-trap 'rm -f "$tmp"/*.out "$tmp"/*.rc; rmdir "$tmp" 2>/dev/null' EXIT
+trap 'rm -f "$tmp"/*.out "$tmp"/*.rc "$tmp"/*.ms; rmdir "$tmp" 2>/dev/null' EXIT
+# LONGEST FIRST: a few valve fixtures cost ~45 s apiece (kittyv2_*_valve_*), so in file order the run
+# waited on them alone at the end (67 s on 24 cores, 2026-11-14). Each fixture's last wall (ms) is kept
+# in test/logs/scenario_times.tsv (regenerable scratch) and fixtures start in descending cost, unknown
+# first. Only the START order changes: the report below is printed in fixture order.
+times="$(dirname "$dir")/logs/scenario_times.tsv"
 export BIN tmp
-for i in "${!files[@]}"; do printf '%s\0%s\0' "$i" "${files[$i]}"; done \
-  | xargs -0 -n 2 -P "$jobs" bash -c '"$BIN" --scenario "$2" > "$tmp/$1.out" 2>&1; echo $? > "$tmp/$1.rc"' _
+for i in "${!files[@]}"; do
+  n=$(basename "${files[$i]}")
+  c=$(awk -F'\t' -v n="$n" '$1==n{print $2; exit}' "$times" 2>/dev/null)
+  printf '%s\t%s\t%s\n' "${c:-999999999}" "$i" "${files[$i]}"
+done | sort -t$'\t' -k1,1nr | while IFS=$'\t' read -r _c i f; do printf '%s\0%s\0' "$i" "$f"; done \
+  | xargs -0 -n 2 -P "$jobs" bash -c '
+      # MTG_JOBSERVER (test/regression.sh runs this beside the game batch): hold one shared CPU token per
+      # fixture, the same protocol as the batch workers (src/runner/BatchRunner.cpp JobServer).
+      js=""; if [ -n "${MTG_JOBSERVER:-}" ] && [ -p "$MTG_JOBSERVER" ] && exec 3<>"$MTG_JOBSERVER"; then
+        IFS= read -r -n 1 -u 3 _tok && js=1; fi
+      s=$(date +%s%N); "$BIN" --scenario "$2" > "$tmp/$1.out" 2>&1; echo $? > "$tmp/$1.rc"
+      echo $(( ($(date +%s%N) - s) / 1000000 )) > "$tmp/$1.ms"
+      [ -n "$js" ] && printf + >&3; exit 0' _
+mkdir -p "$(dirname "$times")" 2>/dev/null
+for i in "${!files[@]}"; do
+  [ -f "$tmp/$i.ms" ] && printf '%s\t%s\n' "$(basename "${files[$i]}")" "$(cat "$tmp/$i.ms")"
+done > "$times.$$" 2>/dev/null && mv -f "$times.$$" "$times" 2>/dev/null
 
 pass=0; fail=0; err=0
 for i in "${!files[@]}"; do
