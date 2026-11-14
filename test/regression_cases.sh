@@ -92,6 +92,7 @@ declare -A DECK_FILE=(
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
   [morph]=decks/Morph/Morph.cod
   [spirits]=decks/Spirits/Spirits.cod
+  [mill]=decks/Mill/Mill.cod
 )
 declare -A DECK_PROF=(
   [fungusv3]=decks/Fungus/Fungus.profile.json
@@ -146,6 +147,7 @@ declare -A DECK_PROF=(
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
   [morph]=decks/Morph/Morph.profile.json
   [spirits]=decks/Spirits/Spirits.profile.json
+  [mill]=decks/Mill/Mill.profile.json
 )
 
 # PLAY-SETTING SHAPE (USER 2026-10-27: "I would cut d3 b10 games to run more at play settings. d3 b10 is a nice
@@ -176,6 +178,11 @@ declare -A DECK_PROF=(
 # into turn 11 -- legal but volatile), and slivers actively spins on its heavy tail. The
 # deeper/generous budgets live in OVERNIGHT instead. See search-perf-investigation memory.
 SMOKE_CASES=(
+  # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
+  "mill 0 1001 100 0"
+  "mill 3 1001   5 10"
+  "mill 5 1001   5 20"
+  "mill2hg 5 1001  5 20"
   # Morph: ENTRY set (no keep table, no value leaf) at its built-in d5/b20 play setting, hydras sizing
   # (similar per-game cost). No card scales with opponents or reads starting life, so morph2hg is the
   # small searched 2HG canary every deck carries. docs/design/analysis-Morph.md.
@@ -727,6 +734,12 @@ SMOKE_CASES=(
 # (see SMOKE block). slivers must stay low regardless -- it spins on its heavy tail (s2002 d5
 # was 16.5 min at budget 200) for zero benefit. d0 has no search. Only antilife is new here.
 REGRESSION_CASES=(
+  # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
+  "mill 0 2002 100 0"
+  "mill 3 2002   5 10"
+  "mill 5 2002   5 20"
+  "mill 5 3003   5 20"
+  "mill2hg 5 2002 5 20"
   # Morph: ENTRY set, two d5/b20 play blocks + one d3/b10 sanity row (see the SMOKE block).
   "morph      0  2002 1000  0"
   "morph      3  2002   75 10"
@@ -1196,6 +1209,12 @@ REGRESSION_CASES=(
 # See .claude/skills/regression-testing.md rule 7 and
 # docs/design/searched-design-audit-blind-spots.md ("Method trap: overlapping seed bases").
 OVERNIGHT_CASES=(
+  # Mill: provisional entry rows for the same-run suite cost gate; resize after measurement.
+  "mill 0 4004 100 0"
+  "mill 3 4004   5 10"
+  "mill 5 4004   5 20"
+  "mill 5 5005   5 20"
+  "mill2hg 5 4004 5 20"
   # Morph: overnight ENTRY set before its keep table (d0 4x2000, d5 4x300 b20 play rows, one d3 b10
   # sanity row, one 2HG canary). Expand to the FULL set just before the keep table is adopted.
   "morph      0  4004 2000  0"

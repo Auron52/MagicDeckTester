@@ -1400,9 +1400,19 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
         else if (!a.remand_by.empty())
         {
             const CardDefinition* xd = CardDatabase::Instance().Lookup(a.card_name);
-            tag += (xd != nullptr && xd->params.cant_be_countered)
-                 ? " + " + a.remand_by.str() + " on it (can't be countered: it resolves; draw a card)"
-                 : " + " + a.remand_by.str() + " on it (back to hand; draw a card)";
+            const CardDefinition* rider = CardDatabase::Instance().Lookup(a.remand_by);
+            if (rider != nullptr && rider->params.counters_target_spell_to_graveyard)
+            {
+                tag += " + " + a.remand_by.str() + " on it "
+                    + ((xd != nullptr && xd->params.cant_be_countered)
+                        ? "(can't be countered: it resolves)" : "(countered to graveyard)");
+            }
+            else
+            {
+                tag += (xd != nullptr && xd->params.cant_be_countered)
+                     ? " + " + a.remand_by.str() + " on it (can't be countered: it resolves; draw a card)"
+                     : " + " + a.remand_by.str() + " on it (back to hand; draw a card)";
+            }
         }
         // DEVOUR count (Mycoloth, CR 702.81). Same lesson again, and it had actually GONE WRONG:
         // the solver enumerates one cast variant per k = 0..(own creatures), keyed into
@@ -4084,7 +4094,8 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
                                     int min_targets = 1, bool random_damage = false,
                                     const std::string& loyalty_desc = "",
                                     const std::string& copy_desc = "",
-                                    const std::string& lifegain_desc = "")
+                                    const std::string& lifegain_desc = "",
+                                    bool mills_target_player = false)
 {
     DecisionJson d(os, decision_index);
     d.Type("target").Source(source).Turn(s);
@@ -4092,6 +4103,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // spell (Heroes' Reunion / Rest for the Weary): the legal set is the two PLAYERS, nothing is
     // damaged, and the viewer must word it as life gained, not "N damage".
     if (!lifegain_desc.empty()) { d.Str("lifegain", lifegain_desc); }
+    if (mills_target_player) { d.Int("mill_cards", per_target); }
     // A non-empty loyalty_desc (e.g. "turned into a green 3/3 Elk with no abilities") flags this as
     // a PLANESWALKER LOYALTY ability's target: no damage number, and the legal set is whatever that
     // ability's printed restriction allows (artifacts and lands included), so the viewer must not
@@ -4115,7 +4127,7 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     // deals no fixed per-target damage, so it carries no `per_target_damage` at all: a literal 0 there
     // read as "this deals 0 damage" (Hydras sweep, seed 50002 T4). The viewer words those prompts from
     // `loyalty` and never reads the number.
-    if (!loyalty_desc.empty())
+    if (!loyalty_desc.empty() || mills_target_player)
     { os << "  \"max_targets\": " << max_targets << ", \"min_targets\": " << min_targets << ",\n"; }
     else
     {
@@ -4148,6 +4160,9 @@ static void WriteTargetDecisionJson(std::ostream& os, const GameState& s, const 
     if (!lifegain_desc.empty())
     { d.Note("reply an option index -- the PLAYER who " + lifegain_desc + " (no damage is dealt). "
              "Default = the AI's pick (heuristic_default)."); }
+    else if (mills_target_player)
+    { d.Note("reply an option index -- the chosen player mills " + std::to_string(per_target)
+             + " cards (no damage is dealt). Default = the AI's pick (heuristic_default)."); }
     else if (!loyalty_desc.empty())
     { d.Note("reply an option index -- the permanent this ability (" + source + ") targets. It is "
              + loyalty_desc + ". Default = the AI's pick."); }
@@ -4390,7 +4405,12 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     // ONTO THE BATTLEFIELD (Skyhunter's attach follows as its own attach_host decision). Say
     // the right one -- the 5d sweep flagged the fixed into-hand wording as contradicting
     // Skyhunter's oracle text.
-    if (source.find("(attack dig)") != std::string::npos)
+    if (source.find("Surgical Extraction (target card in a graveyard)") == 0)
+    {
+        d.Note("reply an examined index to target that card in a graveyard. The target is mandatory; "
+               "-1 takes the AI's pick. Afterward, choose which same-name cards to exile from each zone.");
+    }
+    else if (source.find("(attack dig)") != std::string::npos)
     {
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
@@ -4985,8 +5005,12 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
     // of creature cards") and Genesis Wave ("any number of permanent cards with mana value X or
     // less"), neither of which puts a Dragon. Display-only -- the decision JSON is protocol, not
     // play, so no digest moves.
-    d.Note("reply one int per candidate (1 = put this card onto the battlefield), up to max_puts "
-           "total. The engine keeps the rule's play order. Default = the AI's pick.");
+    if (source.find("Surgical Extraction (exile from ") == 0)
+    { d.Note("reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). "
+             "You may choose any number. Default = the AI's pick."); }
+    else
+    { d.Note("reply one int per candidate (1 = put this card onto the battlefield), up to max_puts "
+             "total. The engine keeps the rule's play order. Default = the AI's pick."); }
 }
 
 // Defense of the Heart upkeep sac-tutor decision: the player picks WHICH library creature cards
@@ -7269,6 +7293,8 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // exile makes the opponent gain life = the creature's power (a Tainted Remedy flips that to
             // a loss -- the whole point of the deck), so surface the target as a human choice.
             const bool exile_removal = (def.tmpl == CardTemplate::Removal);
+            const bool mill_removal = def.params.destroy_target_creature_max_mv > 0
+                || def.params.modal_counter_or_destroy_by_controller_graveyard;
             // Tuck removal (Unexpectedly Absent) neither exiles nor gains life -- the Swords wording
             // here was actively misleading in a lifegain-trigger deck (5d sweep, gi=9).
             // With allow_self_target the wording must not say "you" for a target whose controller may be
@@ -7278,6 +7304,7 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // creature's controller -- the Swords life wording would be wrong for it.
             const std::string remove_desc = def.params.bounce_opponent_nonland_permanent
                 ? std::string("returned to its owner's hand (tokens cease to exist)")
+                : mill_removal ? std::string("destroyed if it still meets the mana-value limit at resolution")
                 : !exile_removal ? std::string()
                 : def.params.tuck_to_library
                 ? std::string("put into its owner's library just beneath the top X cards (a token ceases to exist); no life gain")
@@ -7430,6 +7457,17 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     }
                 }
             }
+            else if (mill_removal)
+            {
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[bi];
+                    if (!MillRemovalTargetLegal(s, controller, def, p)) { continue; }
+                    legal.push_back({ 1, bi, 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s)
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
+                }
+            }
             else if (exile_removal && def.params.allow_self_target)
                                      { CollectCreatureTargets(s, controller, legal, legal_labels); }
             else if (exile_removal)  { CollectOpponentCreatureTargets(s, controller, legal, legal_labels); }
@@ -7502,7 +7540,10 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // No legal target at all: nothing to ask (min 0 would otherwise offer a lone,
             // pointless "(no target)" confirm for an empty-board up-to-one trick).
             if (opts.empty() || legal.empty()) { return heuristic; }
-            const int per_target = per_target_damage;   // actual engine damage per target (not recomputed)
+            const bool mills_target_player = def.params.landfall_mill_target_player
+                || def.params.spell_mill_target_player;
+            const int per_target = def.params.spell_mill_target_player
+                ? def.params.spell_mill_opponent : per_target_damage;
             // Default index = the option whose target set matches the heuristic pick.
             auto same = [](const std::vector<ChosenTarget>& a, const std::vector<ChosenTarget>& b) {
                 if (a.size() != b.size()) { return false; }
@@ -7521,14 +7562,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc, mills_target_player);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc, mills_target_player);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_8; }
@@ -9563,6 +9604,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     };
 
     GameState state;
+    state.game_seed            = j.value("seed", 1);
     state.m_provider            = &SelectDecisionProvider(deck);
     // Deck traits + shuffle salts (uses_second_main, dependency pulls, ...). Without this every
     // deck-gated mechanism reads its default inside a fixture: the main-phase filter keys on
@@ -9682,7 +9724,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // and overriding it here would throw that away, so this stands down when it fired.
     if (!state.opponent_library_dealt)
     {
-        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck), state.game_seed);
+        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck), state.game_seed,
+                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck));
     }
 
     try

@@ -210,6 +210,58 @@ void CheckSame(const Outcome& r, const Outcome& e)
 
 }   // namespace
 
+TEST_CASE("Counterspell counters an own spell to graveyard in rollout and executor")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    for (int k = 0; k < 3; ++k) { Put(s, "Island", 50 + k); }
+    Hand(s, "Counterspell", 10);
+    Hand(s, "Ponder", 11);
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* chosen = nullptr;
+    for (const auto& p : plans)
+    {
+        if (p.actions.size() == 1 && HasCast(p, "Ponder", "Counterspell"))
+        { chosen = &p; break; }
+    }
+    REQUIRE(chosen != nullptr);
+    CHECK_FALSE(chosen->actions.front().is_draw);
+    const auto [roll, exec] = BothWorlds(s, *chosen, "Ponder");
+    CheckSame(roll, exec);
+    CHECK(roll.drawn == 0);
+    CHECK(std::find(roll.graveyard.begin(), roll.graveyard.end(), "Ponder") != roll.graveyard.end());
+    CHECK(std::find(roll.graveyard.begin(), roll.graveyard.end(), "Counterspell") != roll.graveyard.end());
+}
+
+TEST_CASE("Drown can counter an own spell without a creature target when graveyard threshold is met")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Put(s, "Island", 50);
+    Put(s, "Island", 51);
+    Put(s, "Swamp", 52);
+    Hand(s, "Drown in the Loch", 10);
+    Hand(s, "Ponder", 11);
+    const CardDefinition& drown = Def("Drown in the Loch");
+    CHECK_FALSE(CounterRiderCanTarget(s, 0, drown, Def("Ponder")));
+    Card gy = Def("Island").card;
+    gy.m_number = 100;
+    s.players[0].graveyard.push_back(gy);
+    CHECK(CounterRiderCanTarget(s, 0, drown, Def("Ponder")));
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* chosen = nullptr;
+    for (const auto& p : plans)
+    {
+        if (p.actions.size() == 1 && HasCast(p, "Ponder", "Drown in the Loch"))
+        { chosen = &p; break; }
+    }
+    REQUIRE(chosen != nullptr);
+    const auto [roll, exec] = BothWorlds(s, *chosen, "Ponder");
+    CheckSame(roll, exec);
+    CHECK(roll.drawn == 0);
+    CHECK(std::find(roll.graveyard.begin(), roll.graveyard.end(), "Drown in the Loch") != roll.graveyard.end());
+}
+
 TEST_CASE("Remand: never offered alone; every target is its own variant; X and its remand never share a plan")
 {
     EnsureCardsLoaded();

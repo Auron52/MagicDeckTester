@@ -90,6 +90,31 @@ std::vector<TurnSolver::Plan> PlansWithFold(const GameState& s, int arm)
     valuearm::t_arm.dup_action_fold = -1;
     return v;
 }
+
+Action TaggedSourceDaf(int tag, int source)
+{
+    Action a;
+    a.kind = Action::Kind::TapForTokens;
+    a.card_name = "Krenko, Mob Boss";
+    a.sac_source_id = source;
+    a.equiv_tag = tag;
+    return a;
+}
+
+std::vector<Action> LargeFoldMenuDaf()
+{
+    // More than 16 tagged actions exercises FinalizeFoldTags' large-menu source index.
+    std::vector<Action> actions;
+    for (int i = 0; i < 17; ++i)
+    { actions.push_back(TaggedSourceDaf(1000 + i, 1000 + i)); }
+    return actions;
+}
+
+void FinalizeDaf(std::vector<Action>& actions)
+{
+    GameState state;
+    TurnSolver::FinalizeFoldTagsForTest(state, actions);
+}
 }   // namespace
 
 TEST_CASE("Dup-action fold: equal-but-eval sac twins exist, and the plan list is unchanged (set and order)")
@@ -113,4 +138,62 @@ TEST_CASE("Dup-action fold: equal-but-eval sac twins exist, and the plan list is
     REQUIRE(off.size() > 1);
     CHECK(on.size() == off.size());
     CHECK(on == off);
+}
+
+TEST_CASE("Fold tags: large tagged menu rejects every class sharing a source")
+{
+    std::vector<Action> actions = LargeFoldMenuDaf();
+    const std::size_t first = actions.size();
+    actions.push_back(TaggedSourceDaf(101, 11));
+    actions.push_back(TaggedSourceDaf(202, 11));
+    actions.push_back(TaggedSourceDaf(101, 22));
+    actions.push_back(TaggedSourceDaf(202, 22));
+    actions.push_back(TaggedSourceDaf(303, 33));
+    actions.push_back(TaggedSourceDaf(303, 44));
+    FinalizeDaf(actions);
+    for (int i = 0; i < 4; ++i) { CHECK(actions[first + i].equiv_tag == 0); }
+    CHECK(actions[first + 4].equiv_tag == 303);
+    CHECK(actions[first + 4].equiv_ord == 0);
+    CHECK(actions[first + 5].equiv_tag == 303);
+    CHECK(actions[first + 5].equiv_ord == 1);
+}
+
+TEST_CASE("Fold tags: tagged source zero and mixed tagged-untagged collisions remain distinct")
+{
+    SUBCASE("source zero is still checked among tagged actions")
+    {
+        std::vector<Action> actions = LargeFoldMenuDaf();
+        const std::size_t first = actions.size();
+        actions.push_back(TaggedSourceDaf(101, 0));
+        actions.push_back(TaggedSourceDaf(101, 0));
+        FinalizeDaf(actions);
+        CHECK(actions[first].equiv_tag == 0);
+        CHECK(actions[first + 1].equiv_tag == 0);
+    }
+    SUBCASE("untagged action on one source invalidates the tagged class")
+    {
+        std::vector<Action> actions = LargeFoldMenuDaf();
+        const std::size_t first = actions.size();
+        actions.push_back(TaggedSourceDaf(101, 11));
+        actions.push_back(TaggedSourceDaf(101, 22));
+        actions.push_back(TaggedSourceDaf(0, 11));
+        FinalizeDaf(actions);
+        CHECK(actions[first].equiv_tag == 0);
+        CHECK(actions[first + 1].equiv_tag == 0);
+    }
+    SUBCASE("a Remand rider does not collide with the canonical source")
+    {
+        std::vector<Action> actions = LargeFoldMenuDaf();
+        const std::size_t first = actions.size();
+        actions.push_back(TaggedSourceDaf(101, 11));
+        actions.push_back(TaggedSourceDaf(101, 22));
+        Action rider = TaggedSourceDaf(0, 11);
+        rider.remand_by = "Remand";
+        actions.push_back(rider);
+        FinalizeDaf(actions);
+        CHECK(actions[first].equiv_tag == 101);
+        CHECK(actions[first].equiv_ord == 0);
+        CHECK(actions[first + 1].equiv_tag == 101);
+        CHECK(actions[first + 1].equiv_ord == 1);
+    }
 }

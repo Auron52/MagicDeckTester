@@ -344,6 +344,17 @@
     "toughness": "4",
     "type_line": "Creature — Angel"
   },
+  "Archive Trap": {
+    "cmc": 5.0,
+    "keywords": [
+      "Mill"
+    ],
+    "mana_cost": "{3}{U}{U}",
+    "oracle_text": "If an opponent searched their library this turn, you may pay {0} rather than pay this spell's mana cost.\nTarget opponent mills thirteen cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant — Trap"
+  },
   "Arcum's Astrolabe": {
     "cmc": 1.0,
     "keywords": [],
@@ -1348,6 +1359,15 @@
     "toughness": "5",
     "type_line": "Legendary Creature — Spider Human Hero"
   },
+  "Counterspell": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{U}",
+    "oracle_text": "Counter target spell.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Courser of Kruphix": {
     "cmc": 3.0,
     "keywords": [
@@ -1514,6 +1534,15 @@
     "keywords": [],
     "mana_cost": "",
     "oracle_text": "{T}: Add {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Darkslick Shores": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {U} or {B}.",
     "power": null,
     "toughness": null,
     "type_line": "Land"
@@ -1821,6 +1850,24 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Spirit Soldier"
+  },
+  "Drown in the Loch": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{U}{B}",
+    "oracle_text": "Choose one —\n• Counter target spell with mana value less than or equal to the number of cards in its controller's graveyard.\n• Destroy target creature with mana value less than or equal to the number of cards in its controller's graveyard.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Drowned Catacomb": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control an Island or a Swamp.\n{T}: Add {U} or {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Dwalin, Weaponmaster": {
     "cmc": 2.0,
@@ -2158,6 +2205,17 @@
     "toughness": "2",
     "type_line": "Creature — Minotaur Shaman"
   },
+  "Fatal Push": {
+    "cmc": 1.0,
+    "keywords": [
+      "Revolt"
+    ],
+    "mana_cost": "{B}",
+    "oracle_text": "Destroy target creature if it has mana value 2 or less.\nRevolt — Destroy that creature if it has mana value 4 or less instead if a permanent left the battlefield under your control this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Feed the Clan": {
     "cmc": 2.0,
     "keywords": [
@@ -2414,6 +2472,18 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Elemental"
+  },
+  "Fractured Sanity": {
+    "cmc": 3.0,
+    "keywords": [
+      "Cycling",
+      "Mill"
+    ],
+    "mana_cost": "{U}{U}{U}",
+    "oracle_text": "Each opponent mills fourteen cards.\nCycling {1}{U} ({1}{U}, Discard this card: Draw a card.)\nWhen you cycle this card, each opponent mills four cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Frontline Heroism": {
     "cmc": 3.0,
@@ -2685,6 +2755,17 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elf Scout"
+  },
+  "Glimpse the Unthinkable": {
+    "cmc": 2.0,
+    "keywords": [
+      "Mill"
+    ],
+    "mana_cost": "{U}{B}",
+    "oracle_text": "Target player mills ten cards.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Glittering Massif": {
     "cmc": 0.0,
@@ -3025,6 +3106,18 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Legendary Creature — Human Knight"
+  },
+  "Hedron Crab": {
+    "cmc": 1.0,
+    "keywords": [
+      "Landfall",
+      "Mill"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Landfall — Whenever a land you control enters, target player mills three cards. (They put the top three cards of their library into their graveyard.)",
+    "power": "0",
+    "toughness": "2",
+    "type_line": "Creature — Crab"
   },
   "Heliod, Sun-Crowned": {
     "cmc": 3.0,
@@ -4665,6 +4758,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Oboro, Palace in the Clouds": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {U}.\n{1}: Return Oboro to its owner's hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land"
+  },
   "Ocelot Pride": {
     "cmc": 1.0,
     "keywords": [
@@ -4910,6 +5012,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Sliver"
+  },
+  "Polluted Delta": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Swamp card, put it onto the battlefield, then shuffle.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Polluted Mire": {
     "cmc": 0.0,
@@ -5512,6 +5623,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Artifact"
+  },
+  "Ruin Crab": {
+    "cmc": 1.0,
+    "keywords": [
+      "Landfall",
+      "Mill"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Landfall — Whenever a land you control enters, each opponent mills three cards. (To mill a card, a player puts the top card of their library into their graveyard.)",
+    "power": "0",
+    "toughness": "3",
+    "type_line": "Creature — Crab"
   },
   "Rumble Arena": {
     "cmc": 0.0,
@@ -6561,6 +6684,15 @@
     "toughness": "3",
     "type_line": "Creature — Spirit"
   },
+  "Surgical Extraction": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{B/P}",
+    "oracle_text": "({B/P} can be paid with either {B} or 2 life.)\nChoose target card in a graveyard other than a basic land card. Search its owner's graveyard, hand, and library for any number of cards with the same name as that card and exile them. Then that player shuffles.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
   "Surrak and Goreclaw": {
     "cmc": 6.0,
     "keywords": [
@@ -6676,6 +6808,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Tasha's Hideous Laughter": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "Each opponent exiles cards from the top of their library until that player has exiled cards with total mana value 20 or greater.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   },
   "Tectonic Giant": {
     "cmc": 4.0,
@@ -7427,6 +7568,15 @@
     ],
     "mana_cost": "{G}",
     "oracle_text": "Kicker {G} (You may pay an additional {G} as you cast this spell.)\nTarget creature can't be the target of spells or abilities your opponents control this turn. If this spell was kicked, that creature gets +4/+4 until end of turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
+  },
+  "Visions of Beyond": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "Draw a card. If a graveyard has twenty or more cards in it, draw three cards instead.",
     "power": null,
     "toughness": null,
     "type_line": "Instant"

@@ -157,6 +157,13 @@ enum class UnprunedGate
                      // prunes every one: a fight can only damage our Hydra vs the passive opponent)
     CounterDestroy,  // Hydras: Steelbane Hydra's destroy targets restored to every legal artifact/enchantment
                      // (DecisionProvider::CounterDestroyArtEnchTargets' dominance prune drops our own)
+    SurgicalSubset,  // Mill: restore every optional-copy subset for Surgical Extraction
+    SurgicalTarget,  // Mill: restore every speculative Surgical target name
+    SurgicalCost,    // Mill: restore Surgical's black-mana cast beside the life-paid cast
+    MillControl,     // Mill: restore Counterspell, Drown in the Loch and Fatal Push casts
+    OboroBounce,     // Mill: restore Oboro's self-bounce when another land is in hand
+    HedronZeroTrigger, // Mill: retain all 16 Hedron policies on plans with no possible trigger
+    HedronUnusedBits, // Mill: retain all 16 masks even when fewer than four trigger bits can be read
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -365,6 +372,39 @@ class DeckProvider : public GenericProvider
 public:
     // Every deck-specific provider must answer this. See the block above for why it is pure.
     virtual CertStance Certificate() const = 0;
+};
+
+// Mill's own provider keeps its decisions on the Generic surface. The signature
+// is gated on library-mill effects, not on fetch lands shared by other decks.
+// Hedron's searched four-trigger periodic target policy is the deck's explicit
+// search narrowing (TurnSolver::AppendSubdecisionAxes). It spans all 16 mixed
+// patterns and repeats, since held fetchlands can make many trigger choices.
+class MillProvider : public DeckProvider
+{
+public:
+    const char* Name() const override { return "Mill"; }
+    std::vector<std::string> FetchCandidates(const GameState&, int,
+        const CardParams&) const override;
+    // Hedron/Ruin landfall can use a fetchland's second entry later in the turn.
+    // Keep both the battlefield hold and the searched crack-on-play option.
+    bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return true; }
+    int HedronMillTargetPolicyPeriod() const override { return 4; }
+    bool FoldsZeroTriggerHedronPolicies() const override
+    { return !DecisionUnpruned(UnprunedGate::HedronZeroTrigger); }
+    bool FoldsUnusedHedronPolicyBits() const override
+    { return !DecisionUnpruned(UnprunedGate::HedronUnusedBits); }
+    bool NarrowsSurgicalSubset(int copy_count) const override
+    { return copy_count >= 1 && !DecisionUnpruned(UnprunedGate::SurgicalSubset); }
+    void SurgicalTargetCandidates(const GameState&,
+        std::vector<SurgicalTargetOption>&) const override;
+    bool DefersSurgicalTarget() const override;
+    std::string SurgicalCastTarget(const GameState&, const std::string& pin) const override;
+    bool LifeOnlyPhyrexianCast(const GameState&, const CardDefinition& def) const override
+    { return def.params.surgical_extraction && !DecisionUnpruned(UnprunedGate::SurgicalCost); }
+    bool NeverCast(const CardDefinition& def) const override;
+    bool OffersSelfBounce(const GameState& state, const CardDefinition& def) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Library depletion and Tasha exile can win this turn; prove a bound over both effects before pruning." }; }
 };
 
 // =============================================================================================

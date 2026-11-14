@@ -50,6 +50,18 @@ struct CardParams
     bool chain_lightning_copy = false; // damaged player/controller may pay RR and copy
     bool sacrifice_mountains_alternative = false; // Fireblast: sacrifice two Mountains instead of mana
     int draw         = 0;
+    // Mill deck: spells remove cards from the passive opponent's real library.
+    int spell_mill_opponent = 0;
+    bool spell_mill_target_player = false;
+    int spell_exile_opponent_until_mv = 0;
+    int draw_if_any_graveyard_at_least = 0;
+    int draw_instead_if_threshold = 0;
+    int cycling_mill_opponent = 0;
+    bool surgical_extraction = false;
+    bool archive_trap_free_if_opponent_searched = false;
+    bool modal_counter_or_destroy_by_controller_graveyard = false;
+    int destroy_target_creature_max_mv = 0;
+    int revolt_destroy_max_mv = 0;
     int dredge       = 0; // optional replacement of one draw by milling this many cards
     int power_bonus  = 0;
     int tough_bonus  = 0;
@@ -60,6 +72,7 @@ struct CardParams
     bool bounce_target_spell = false;          // Sink into Stupor: return a spell from the stack
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
+    std::optional<ManaCost> self_bounce_cost; // Oboro: {1}: return this land to hand
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
     // is this card (name + `produces` above); the BACK face is a distinct single-color land the
     // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
@@ -2151,6 +2164,7 @@ struct CardParams
     // which the search branches over. The card's template is draw_spell (draw: 1), so its resolution
     // IS a plain cantrip in both worlds. See docs/design/remand-self-target.md.
     bool counters_target_spell_to_hand = false;
+    bool counters_target_spell_to_graveyard = false;
     // "This spell can't be countered." (Niv-Mizzet, Parun; Emrakul, the Aeons Torn). A Remand
     // aimed at such a spell still resolves: the counter does nothing (CR 701.5a needs the spell to
     // be countered), the spell stays on the stack and resolves normally, and Remand still draws --
@@ -3700,6 +3714,8 @@ struct CardParams
     // subtypes (the fastland precedent: the shared predicate keeps enumeration pricing and the real
     // drop in lockstep). enters_tapped stays false on the entry (the static flag would double-tap).
     std::vector<std::string> checkland_subtypes;
+    int landfall_mill_opponent = 0;
+    bool landfall_mill_target_player = false;
 
     // ================= StompySurprise (mono-green elf ramp) =================
     // Every field below is gated (0/false/empty = inert) so other decks stay byte-identical.
@@ -5154,6 +5170,7 @@ inline bool DefHasTargetedLandfall(const CardParams& p)
 inline bool DefHasLandfallTrigger(const CardParams& p)
 {
     return p.landfall_creates_tokens > 0
+        || p.landfall_mill_opponent > 0
         || (p.landfall_counters_each > 0 && !p.landfall_counters_each_subtype.empty())
         || DefHasTargetedLandfall(p)   // Phylath; Scythecat Cub (any creature, 2026-10-23)
         || p.landfall_lifegain > 0

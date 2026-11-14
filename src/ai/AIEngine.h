@@ -628,7 +628,7 @@ private:
     // alt_lifegain > 0 casts via an alternative cost (Invigorate / Skyshroud Cutter / Reverent
     // Silence): pay no mana and instead make the opponent gain alt_lifegain life.
     void CastSpellFromHand(GameState& state, Card& hand_card, ManaPool& available,
-                           int alt_lifegain = 0, const std::string& tutor_target = "",
+                           int alt_lifegain = 0, std::string tutor_target = "",
                            int chosen_x = 0, int own_targets = 0, int ponder_keep = -1,
                            int crackle_targets = -1,    // -1 = legacy auto-max discount
                            int splice_count = 0,        // Desperate Ritual splice count k (0 = plain)

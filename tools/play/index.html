@@ -4774,6 +4774,17 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  if ((d.source||'').startsWith('Surgical Extraction (target card in a graveyard)')) {
+    let h='<h3>Surgical Extraction — target a graveyard card</h3>'+
+      '<div class="sub">Choose a card in either graveyard. You will then choose which cards with that name to exile from its owner’s graveyard, hand, and library.</div><div class="tutgrid">';
+    (d.examined||[]).forEach(c=>{
+      const ai=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${ai?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+        (ai?'<span class="deftag">AI pick</span>':'')+'</span>';
+    });
+    return h+'</div>';
+  }
   if (/\(attack pay\)/.test(d.source||'')) {
     let h=`<h3>Militia's Pride — pay {W} for a Kithkin Soldier?</h3>`;
     h+=`<div class="sub">${esc(d.source||'')}<br/>The 1/1 white Kithkin Soldier enters tapped and attacking now. Each Pride trigger is a separate choice.</div>`;
@@ -5243,6 +5254,21 @@ function dragonPanelHtml(d){
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
   const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
+  if ((d.source||'').startsWith('Surgical Extraction (exile from ')) {
+    const zone=(d.source||'').replace(/^Surgical Extraction \(exile from /,'').replace(/\)$/,'');
+    let h=`<h3>Surgical Extraction — exile cards from ${esc(zone)}</h3>`+
+      '<div class="sub">Choose any number of these cards with the targeted name to exile. The AI’s picks are preselected.</div><div class="tutgrid">';
+    (d.candidates||[]).forEach(c=>{
+      const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+      h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+        (isAI?'<span class="deftag">AI pick</span>':'')+'</span>';
+    });
+    h+='</div><div class="pbtns"><span class="pcount">'+sel.size+' selected</span>'+
+      '<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>'+
+      '<button id="decconfirm" class="primary">Exile selected</button></div>';
+    return h;
+  }
   // The same multi-pick serves every "put any number of these onto the battlefield" source --
   // Bilbo, Genesis Wave, Bruna's Auras/Equipment, ... -- so only Dragonstorm says "Dragon". USER
   // 2026-10-06: "A lot of dialogs seem to say Put X Dragons when they are not dragons. Bruna's dialog
@@ -5659,6 +5685,12 @@ function promptPanelHtml(d, dec){
   if (d.lifegain){
     return `<h3>Target player — ${esc(d.source||'')}</h3>`+
       `<div class="sub">The chosen player <b>${esc(d.lifegain)}</b> · pick 1. Click your own life total or the opponent's on the board. The AI's pick (you) is preselected.</div>`+
+      `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
+      `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
+  }
+  if (d.mill_cards){
+    return `<h3>Target player — ${esc(d.source||'')}</h3>`+
+      `<div class="sub">The chosen player mills <b>${d.mill_cards} cards</b> · pick 1. Click your own life total or the opponent's on the board. The AI's pick is preselected.</div>`+
       `<div class="pbtns"><span class="pcount">${n} / 1 selected</span><span class="spacer"></span>`+
       `<button id="decconfirm" class="primary" ${n?'':'disabled'}>Confirm</button></div>`;
   }

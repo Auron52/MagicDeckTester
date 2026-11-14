@@ -495,6 +495,8 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
             {
                 // Non-permanent custom spell: tutor / destroy-all-enchantments / cascade,
                 // then graveyard.
+                if (def.params.surgical_extraction)
+                { ResolveSurgicalExtraction(state, entry.controller_index, entry.tutor_target); }
                 if (entry.awaken && AwakenLandTargetIndex(state, entry.controller_index,
                                                          entry.enchant_target) < 0)
                 {
@@ -513,6 +515,20 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                 {
                     ApplyBorosCharm(state, entry.controller_index,
                                     entry.chosen_x.value_or(1), entry.enchant_target);
+                }
+                if (def.params.spell_mill_opponent > 0 || def.params.spell_exile_opponent_until_mv > 0)
+                {
+                    int mill_target = 1;
+                    if (def.params.spell_mill_target_player)
+                    {
+                        mill_target = entry.player_target;
+                        for (const Target& t : entry.targets)
+                        { if (t.type == Target::Type::Player) { mill_target = t.player_index == entry.controller_index ? 0 : 1; break; } }
+                    }
+                    ResolveOpponentLibrarySpell(state, def.params.spell_mill_opponent,
+                                                def.params.spell_exile_opponent_until_mv,
+                                                entry.controller_index, def.params.spell_mill_target_player,
+                                                mill_target, &def);
                 }
                 // "Create N tokens" as the spell's resolution (Fungus Frolic). Lockstep twin of
                 // the rollout's apply_one ApplyCastCreatesTokens call.
@@ -1054,7 +1070,7 @@ void EffectHandler::ResolveDrawSpell(GameState& state, const StackEntry& entry,
                                       const CardDefinition& def)
 {
     Player& controller = state.players[entry.controller_index];
-    int n = def.params.draw;
+    int n = SpellDrawCount(state, def.params);
 
     // THE BLIND RESOLUTION CHOOSER (blind mode only; null otherwise => byte-identical): the put-back's pair /
     // Ponder's order is decided here, after the draw / the look, against what the resolution reveals.

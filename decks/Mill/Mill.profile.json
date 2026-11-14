@@ -1,0 +1,84 @@
+{
+  "card_scores": {
+    "Archive Trap": [
+      -0.37730711043872933,
+      -0.5574468085106377
+    ],
+    "Counterspell": [
+      -0.31807546943427933,
+      -0.6790611814345988
+    ],
+    "Darkslick Shores": [
+      -0.07221345615306962,
+      -0.02868378440897512
+    ],
+    "Drown in the Loch": [
+      -0.43823913947821946,
+      -0.4734324403885779
+    ],
+    "Drowned Catacomb": [
+      -0.275289827973074
+    ],
+    "Fatal Push": [
+      -0.385480023852117
+    ],
+    "Fractured Sanity": [
+      0.20652713270612555,
+      0.020016077170417645
+    ],
+    "Glimpse the Unthinkable": [
+      0.1547697821891374
+    ],
+    "Hedron Crab": [
+      0.48956214919059615,
+      0.36717836257309955
+    ],
+    "Island": [
+      -0.043879643837929194
+    ],
+    "Oboro, Palace in the Clouds": [
+      -0.10379108016903249
+    ],
+    "Polluted Delta": [
+      0.29782761365232524,
+      0.1325062034739446
+    ],
+    "Ruin Crab": [
+      0.44123376623376576,
+      0.3586452762923358
+    ],
+    "Scalding Tarn": [
+      0.3648936170212762
+    ],
+    "Surgical Extraction": [
+      0.000882208424531683
+    ],
+    "Swamp": [
+      -0.08896285222689215
+    ],
+    "Tasha's Hideous Laughter": [
+      0.16730370711489773,
+      0.12087458745874624
+    ],
+    "Visions of Beyond": [
+      0.1232724631666322,
+      -0.08524590163934498
+    ],
+    "Watery Grave": [
+      -0.11570550108027255,
+      -0.07132867132867116
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 1,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

@@ -589,6 +589,69 @@ inline int CleanupDiscardManaValue(const Card& c)
     return def != nullptr ? def->card.m_mana_cost.ManaValue() : c.m_mana_cost.ManaValue();
 }
 
+// Shared by real stack resolution and the search's direct resolution. Library cards are
+// lightweight zone placeholders, so their printed mana values must come from the database.
+inline int MillPlayerLibrary(GameState& state, int player, int count)
+{
+    if (player == 1) { return opponentdeck::MillToGraveyard(state, count); }
+    Player& p = state.players[player];
+    int milled = 0;
+    while (milled < count && !p.library.empty())
+    {
+        p.graveyard.push_back(p.library.front());
+        p.library.erase(p.library.begin());
+        ++milled;
+    }
+    return milled;
+}
+
+inline int ResolveOpponentLibrarySpell(GameState& state, int mill_count, int exile_until_mv,
+                                      int controller = 0, bool target_player = false,
+                                      int player_target = 1, const CardDefinition* source = nullptr)
+{
+    if (!state.opponent_library_dealt && !target_player) { return 0; }
+    if (target_player && source != nullptr && g_play_target_chooser != nullptr)
+    {
+        // Human play offers both players for Glimpse. The autonomous base action is
+        // self-mill (it appends an opponent-target variant), but the viewer's default
+        // should be the opponent; the player can still explicitly choose self.
+        const int initial = source->params.spell_mill_target_player
+            ? 1 - controller : (player_target == 0 ? controller : 1 - controller);
+        const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+            state, *source, controller, 1, 0, { ChosenTarget{ 0, initial, 0 } });
+        if (!picked.empty() && picked[0].kind == 0)
+        { player_target = picked[0].index == controller ? 0 : 1; }
+    }
+    int removed = 0;
+    if (mill_count > 0)
+    { removed += MillPlayerLibrary(state, player_target == 0 ? controller : 1 - controller, mill_count); }
+    if (exile_until_mv > 0)
+    {
+        int total_mv = 0;
+        Player& opp = state.players[1];
+        while (total_mv < exile_until_mv && !opp.library.empty())
+        {
+            const Card& top = opp.library.front();
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(top);
+            total_mv += def != nullptr ? def->card.m_mana_cost.ManaValue() : top.m_mana_cost.ManaValue();
+            removed += opponentdeck::TakeFromTop(state, 1);
+        }
+    }
+    return removed;
+}
+
+inline int SpellDrawCount(const GameState& state, const CardParams& params)
+{
+    if (params.draw_if_any_graveyard_at_least <= 0 || params.draw_instead_if_threshold <= 0)
+    { return params.draw; }
+    for (const Player& player : state.players)
+    {
+        if (static_cast<int>(player.graveyard.size()) >= params.draw_if_any_graveyard_at_least)
+        { return params.draw_instead_if_threshold; }
+    }
+    return params.draw;
+}
+
 inline bool CleanupDiscardIsLand(const Card& c)
 {
     const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
@@ -2677,6 +2740,145 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
             SaltSeed(SearchShuffleSeed(state.game_seed, state.search_count), salt));
     }
     ++state.search_count;
+}
+
+// Surgical Extraction: the pin is "owner:name|selected-card-numbers". The
+// target must be in a graveyard and is exiled; each additional same-name card
+// in its owner's graveyard, hand and library may independently be exiled. The search pins physical card
+// numbers so a preceding mill can move them between zones without changing the
+// choice. Human play uses the target and multi-pick dialogs.
+inline bool SurgicalTargetLegal(const GameState& state, int owner, const std::string& name)
+{
+    const std::string target_name = name.substr(0, name.find('|'));
+    if (owner < 0 || owner > 1 || target_name.empty()) { return false; }
+    for (const Card& c : state.players[owner].graveyard)
+    {
+        if (c.m_name.str() != target_name) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d && !IsBasicLandCard(*d)) { return true; }
+    }
+    return false;
+}
+
+inline std::string SurgicalDefaultTarget(const GameState& state, int controller)
+{
+    std::string best;
+    int best_count = -1;
+    for (int owner = 0; owner < 2; ++owner)
+    for (const Card& c : state.players[owner].graveyard)
+    {
+        const std::string name = c.m_name.str();
+        if (!SurgicalTargetLegal(state, owner, name)) { continue; }
+        int count = 0;
+        for (const Card& q : state.players[owner].library)
+        { if (q.m_name.str() == name) { ++count; } }
+        if (owner == controller) { count = 0; }
+        if (count > best_count)
+        { best_count = count; best = std::to_string(owner) + ":" + name; }
+    }
+    return best;
+}
+
+inline void ResolveSurgicalExtraction(GameState& state, int controller, std::string pin)
+{
+    if (pin.size() < 3 || pin[1] != ':'
+        || !SurgicalTargetLegal(state, pin[0] - '0', pin.substr(2)))
+    { pin = SurgicalDefaultTarget(state, controller); }
+    if (g_play_dig_chooser && !g_tap_speculating)
+    {
+        std::vector<Card> examined;
+        std::vector<int> legal;
+        std::vector<std::string> pins;
+        for (int owner = 0; owner < 2; ++owner)
+        for (const Card& c : state.players[owner].graveyard)
+        {
+            const std::string candidate = std::to_string(owner) + ":" + c.m_name.str();
+            if (!SurgicalTargetLegal(state, owner, c.m_name.str())
+                || std::find(pins.begin(), pins.end(), candidate) != pins.end()) { continue; }
+            legal.push_back(static_cast<int>(pins.size()));
+            pins.push_back(candidate);
+            examined.push_back(c);
+        }
+        int def = 0;
+        for (int i = 0; i < static_cast<int>(pins.size()); ++i)
+        { if (pins[i] == pin) { def = i; break; } }
+        if (!pins.empty())
+        {
+            const int chosen = (*g_play_dig_chooser)(state, controller,
+                "Surgical Extraction (target card in a graveyard)", examined, legal, def);
+            if (chosen >= 0 && chosen < static_cast<int>(pins.size())) { pin = pins[chosen]; }
+        }
+    }
+    if (pin.size() < 3 || pin[1] != ':') { return; }
+    const int owner = pin[0] - '0';
+    const std::string payload = pin.substr(2);
+    const std::size_t separator = payload.find('|');
+    const std::string name = payload.substr(0, separator);
+    const bool has_search_selection = separator != std::string::npos;
+    const std::string suffix = has_search_selection ? payload.substr(separator + 1) : std::string();
+    const bool select_library = suffix == "@library";
+    const bool select_all = suffix == "@all";
+    std::vector<int> selected_numbers;
+    if (has_search_selection && !select_library && !select_all)
+    {
+        std::size_t at = 0;
+        while (at < suffix.size())
+        {
+            const std::size_t end = suffix.find(',', at);
+            const std::string token = suffix.substr(at, end == std::string::npos ? end : end - at);
+            if (!token.empty()) { selected_numbers.push_back(std::stoi(token)); }
+            if (end == std::string::npos) { break; }
+            at = end + 1;
+        }
+    }
+    if (!SurgicalTargetLegal(state, owner, name)) { return; }
+    Player& target = state.players[owner];
+    // The targeted card is exiled by the first sentence of Surgical, regardless
+    // of which additional same-name cards are chosen from the searched zones.
+    for (auto it = target.graveyard.begin(); it != target.graveyard.end(); ++it)
+    {
+        if (it->m_name.str() != name) { continue; }
+        state.exile.push_back(*it);
+        target.graveyard.erase(it);
+        break;
+    }
+    auto exile_zone = [&](auto& zone, const char* label, bool default_all) {
+        std::vector<Card> candidates;
+        for (const Card& c : zone)
+        { if (c.m_name.str() == name) { candidates.push_back(c); } }
+        std::vector<int> picks;
+        if (select_all || (select_library && std::string(label) == "library"))
+        { for (int i = 0; i < static_cast<int>(candidates.size()); ++i) { picks.push_back(i); } }
+        else if (has_search_selection)
+        {
+            for (int i = 0; i < static_cast<int>(candidates.size()); ++i)
+            { if (std::find(selected_numbers.begin(), selected_numbers.end(), candidates[i].m_number)
+                  != selected_numbers.end()) { picks.push_back(i); } }
+        }
+        else if (default_all)
+        { for (int i = 0; i < static_cast<int>(candidates.size()); ++i) { picks.push_back(i); } }
+        if (g_play_dragon_chooser && !g_tap_speculating && !candidates.empty())
+        {
+            picks = (*g_play_dragon_chooser)(state, controller,
+                std::string("Surgical Extraction (exile from ") + label + ")",
+                candidates, static_cast<int>(candidates.size()), picks);
+        }
+        std::vector<int> numbers;
+        for (int i : picks)
+        { if (i >= 0 && i < static_cast<int>(candidates.size())) { numbers.push_back(candidates[i].m_number); } }
+        for (auto it = zone.begin(); it != zone.end(); )
+        {
+            if (std::find(numbers.begin(), numbers.end(), it->m_number) == numbers.end()) { ++it; continue; }
+            state.exile.push_back(*it);
+            it = zone.erase(it);
+        }
+    };
+    exile_zone(target.graveyard, "graveyard", false);
+    exile_zone(target.hand, "hand", owner != controller);
+    exile_zone(target.library, "library", owner != controller);
+    // The library was searched even if zero cards were chosen; the owner shuffles.
+    ShuffleAfterSearch(state, owner);
+    if (owner == 1 && target.library.empty()) { state.opponent_decked = true; }
 }
 
 // A FAIL-TO-FIND library search ("search your library for ..., then shuffle" that finds nothing: no legal
@@ -10258,6 +10460,42 @@ inline void FireLandfallTriggers(GameState& state, int controller, int land_numb
         const CardParams& wp = wd->params;
         const std::string& wname = wd->card.m_name.str();   // the name registry's string: stable
 
+        if (wp.landfall_mill_opponent > 0)
+        {
+            int target = 1 - controller;
+            if (wp.landfall_mill_target_player)
+            {
+                // Bit n of the searched sequence selects this trigger's player target.
+                // The ordinal advances for each Hedron trigger, even when two Crabs
+                // trigger from the same land. The viewer chooses afresh below.
+                const int policy = LandfallTargetPinFor(state);
+                const int ordinal = state.hedron_mill_trigger_ordinal;
+                const int period = ResolveProvider(state).HedronMillTargetPolicyPeriod();
+                if (policy >= 0x100 && ((policy >> ordinal) & 1) != 0)
+                { target = controller; }
+                if (period > 0)
+                { state.hedron_mill_trigger_ordinal = static_cast<std::uint8_t>((ordinal + 1) % period); }
+                if (g_play_target_chooser != nullptr)
+                {
+                    CardDefinition target_def = *wd;
+                    target_def.params.targeting = Targeting::Player;
+                    const std::vector<ChosenTarget> picked = (*g_play_target_chooser)(
+                        state, target_def, controller, 1, wp.landfall_mill_opponent,
+                        { ChosenTarget{ 0, target, 0 } });
+                    if (!picked.empty() && picked[0].kind == 0
+                        && (picked[0].index == controller || picked[0].index == 1 - controller))
+                    { target = picked[0].index; }
+                }
+            }
+            const int milled = MillPlayerLibrary(state, target, wp.landfall_mill_opponent);
+            if (log)
+            {
+                EmitPlayEvent(state.turn_number, "mill",
+                              wname + " (landfall): " + (target == controller ? "you" : "opponent")
+                              + " mill " + std::to_string(milled) + " card(s)");
+            }
+        }
+
         // Tokens (Rampaging Baloths' 4/4 Beast, Omnath's 5/5 Elemental). MANDATORY in the current
         // Oracle text of both. One event of N tokens through the token chokepoint (Doubling Season,
         // the enter cascade). Each enters summoning sick, so a landfall token cannot attack this turn.
@@ -11688,6 +11926,8 @@ inline void DrainPendingSelfBounces(GameState& state)
                               + ": returned to hand (a Dragon entered)");
             }
             EnterHand(state, q.owner_index, RevealedCard(q.card), HandEntryReason::Bounce);
+            if (q.controller_index == state.active_player_index)
+            { state.permanent_left_under_control_this_turn = true; }
             state.battlefield.erase(state.battlefield.begin()
                                     + static_cast<std::ptrdiff_t>(i));
             break;   // one bounce per record; a duplicate record finds nothing next pass
@@ -13221,6 +13461,8 @@ inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_ind
 // the Priest for free.
 inline void FireSacrificeWatchers(GameState& state, int controller)
 {
+    if (controller == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     for (Permanent& w : state.battlefield)
     {
         if (w.controller_index != controller) { continue; }
@@ -13742,6 +13984,8 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                            const std::vector<int>* dwatch,
                            int dead_total_counters)
 {
+    if (dead_controller == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     // MORBID (GameState::creature_died_this_turn). Only a CREATURE dying counts: the shared
     // sacrifice chokepoint (SacrificePermanentAt) routes land / artifact sacrifices through here too.
     if (dead_card.IsCreature()) { state.creature_died_this_turn = true; }
@@ -18252,6 +18496,7 @@ inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controll
         PerformLandSearch(state, controller, WhiteOrchidLandSearchSpec(), src_name, ConsumeScriptedLandSearchPin());
         return;
     }
+    state.opponent_searched_library_this_turn = true;
     Card land;
     land.m_name = "Opponent Basic Land";
     land.RehashName();
@@ -24086,6 +24331,13 @@ inline void ResolveNonbasicLandDamage(GameState& state, int controller, int mult
 // this marker (cascade etc.) do not pay the alternative cost.
 inline bool IsFireblastAlternative(const CardDefinition& def, const std::string& pin)
 { return def.params.sacrifice_mountains_alternative && pin.compare(0, 10, "fireblast:") == 0; }
+
+inline bool IsArchiveTrapAlternative(const CardDefinition& def, const GameState& state,
+                                    const std::string& pin)
+{
+    return def.params.archive_trap_free_if_opponent_searched
+        && pin == "archive_trap_zero" && state.opponent_searched_library_this_turn;
+}
 
 inline std::vector<int> FireblastMountains(const GameState& state, int controller)
 {
@@ -30908,6 +31160,8 @@ inline void ApplyBlink(GameState& state, int controller, int source_id, int targ
     if (idx < 0) { return; }
     const Card    raw   = state.battlefield[idx].card;
     const int     owner = state.battlefield[idx].owner_index;
+    if (state.battlefield[idx].controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
     // The exile half IS a leave: a flickered Reveillark fires its LTB ("return up to two creature
     // cards with power 2 or less") before it returns. No-op for every card without an LTB param.
@@ -34442,6 +34696,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapInvestigate: return "investigate";
         case PermAbilityMode::TapDraw:        return "draw a card";
         case PermAbilityMode::SacDraw:        return "sacrifice: draw a card";
+        case PermAbilityMode::SelfBounce:     return "return this land to its owner's hand";
         case PermAbilityMode::ThresholdLoot:  return "sacrifice: target player draws three, then discards three";
         // Without these two the claude-play plan menu and the executor's LogAbility both print the
         // bare "activate" default -- a human (or the claude-play oracle) would be asked to approve
@@ -35043,6 +35298,29 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             state.battlefield.erase(state.battlefield.begin() + static_cast<std::ptrdiff_t>(idx));
             FireSacrificeWatchers(state, controller);   // a sac cost IS a sacrifice
             TrickDraw(state, controller, 1);
+            break;
+        }
+        case PermAbilityMode::SelfBounce:
+        {
+            // Oboro: paying {1} does not tap or sacrifice the land. It leaves the battlefield
+            // on resolution and can be replayed if a land drop remains this turn.
+            const Permanent self = state.battlefield[static_cast<std::size_t>(idx)];
+            if (self.controller_index == state.active_player_index)
+            { state.permanent_left_under_control_this_turn = true; }
+            EnterHand(state, self.owner_index, RevealedCard(self.card), HandEntryReason::Bounce);
+            state.battlefield.erase(state.battlefield.begin() + idx);
+            RefreshDevotionCreatures(state);
+            for (Permanent& q : state.battlefield)
+            {
+                if (q.equipped_to == source_id) { q.equipped_to = 0; }
+                if (q.aura_attached_to == source_id) { q.aura_attached_to = 0; }
+            }
+            RefreshReconfigureCreatures(state);
+            if (g_play_event_sink)
+            {
+                EmitPlayEvent(state.turn_number, "zone",
+                              "\xF0\x9F\x94\x99 " + src_name + ": returned to owner's hand");
+            }
             break;
         }
         case PermAbilityMode::ThresholdLoot:
@@ -42726,6 +43004,14 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
         static const std::vector<Color> kIslandBlue{ Color::Blue };
         return kIslandBlue;
     }
+    // Tarn/Delta retain a `produces` proxy for hand colour-fixing estimates. A
+    // fetchland on the battlefield has no printed mana ability; the proxy must
+    // never enter mana payment or the viewer's manual tap surface.
+    if (perm != nullptr && !def.params.fetch_land_types.empty())
+    {
+        static const std::vector<Color> kNone{};
+        return kNone;
+    }
     if (perm != nullptr && def.params.enters_with_mana_counters > 0
         && perm->charge_counters <= 0)
     {
@@ -44819,10 +45105,11 @@ inline void FireCycleWatchers(GameState& state, int controller)
 // Bookkeeping shared by all three cycle sites: a cycle is BOTH a "card cycled or discarded this
 // turn" (Hollow One's cost scaler) and the trigger event above. Kept as one call so a future cycle
 // site cannot pick up one half and miss the other.
-inline void OnCardCycled(GameState& state, int controller)
+inline void OnCardCycled(GameState& state, int controller, int mill_opponent = 0)
 {
     state.players[controller].cards_cycled_or_discarded_this_turn += 1;
     FireCycleWatchers(state, controller);
+    if (mill_opponent > 0) { opponentdeck::MillToGraveyard(state, mill_opponent); }
 }
 
 // Shared "dig when stuck" gate (cycling / sacrifice-to-draw lands, e.g. Lonely Sandbar,
@@ -50645,6 +50932,38 @@ inline bool SpellCanTargetPermanent(const GameState& s, int controller, const Pe
     return true;
 }
 
+// Fatal Push and Drown in the Loch: the target restriction is checked when choosing a target
+// and again at resolution. A token's printed mana value is zero. Revolt reads the turn flag;
+// Drown reads the graveyard of the creature's controller, not always the opponent's.
+inline bool MillRemovalTargetLegal(const GameState& s, int caster, const CardDefinition& spell,
+                                   const Permanent& target)
+{
+    const CardParams& pp = spell.params;
+    if (pp.destroy_target_creature_max_mv <= 0
+        && !pp.modal_counter_or_destroy_by_controller_graveyard) { return false; }
+    if (!target.card.IsCreature() || !SpellCanTargetPermanent(s, caster, target)) { return false; }
+    const CardDefinition* td = CardDatabase::Instance().LookupCached(target.card);
+    const int mv = td != nullptr ? td->card.m_mana_cost.ManaValue()
+                                 : target.card.m_mana_cost.ManaValue();
+    const int cap = pp.modal_counter_or_destroy_by_controller_graveyard
+        ? static_cast<int>(s.players[target.controller_index].graveyard.size())
+        : (s.permanent_left_under_control_this_turn && pp.revolt_destroy_max_mv > 0
+            ? pp.revolt_destroy_max_mv : pp.destroy_target_creature_max_mv);
+    return mv <= cap;
+}
+
+inline int MillRemovalTargetIndex(const GameState& s, int caster, const CardDefinition& spell,
+                                  int number)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (number > 0 && p.card.m_number != number) { continue; }
+        if (MillRemovalTargetLegal(s, caster, spell, p)) { return i; }
+    }
+    return -1;
+}
+
 inline int AwakenLandTargetIndex(const GameState& s, int controller, int card_number)
 {
     if (card_number <= 0) { return -1; }
@@ -50827,7 +51146,20 @@ inline int GreatestPowerAmongOwnCreatures(const GameState& s, int controller)
 // so a card that can only be cast as a rider can never read as castable through a side door.
 inline bool CastableOnItsOwn(const CardDefinition& d)
 {
-    return !d.params.goldfish_inert && !d.params.counters_target_spell_to_hand;
+    return !d.params.goldfish_inert && !d.params.counters_target_spell_to_hand
+        && !(d.params.counters_target_spell_to_graveyard
+             && !d.params.modal_counter_or_destroy_by_controller_graveyard);
+}
+
+inline bool CounterRiderCanTarget(const GameState& state, int controller,
+                                 const CardDefinition& counter, const CardDefinition& target)
+{
+    if (!counter.params.counters_target_spell_to_hand
+        && !counter.params.counters_target_spell_to_graveyard) { return false; }
+    if (counter.params.modal_counter_or_destroy_by_controller_graveyard
+        && target.card.m_mana_cost.ManaValue()
+             > static_cast<int>(state.players[controller].graveyard.size())) { return false; }
+    return true;
 }
 
 inline int OpponentNonlandTargetIndex(const GameState& state, int caster, int target_number)
@@ -50904,7 +51236,7 @@ inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const Ca
     // legal target would be the spell that is casting it, which no walk models as a target -- so it is
     // not cast, exactly as an Aura with no host. [Disclosed gap: "cascade into Remand on the cascading
     // spell" is a legal line this engine cannot express; no Remand deck runs a free-cast walk.]
-    if (pp.counters_target_spell_to_hand) { return false; }
+    if (pp.counters_target_spell_to_hand || pp.counters_target_spell_to_graveyard) { return false; }
     if (pp.is_aura) { return !LegalEnchantTargets(s, controller, pp).empty(); }
     if (pp.attach_target_equipment) { return AttachSpellCastLegal(s, controller); }
     if (pp.bounce_opponent_nonland_permanent)
@@ -51355,7 +51687,12 @@ inline void ResolveCreatureRemovalAt(GameState& state, int bi, const CardDefinit
 {
     if (bi < 0 || bi >= static_cast<int>(state.battlefield.size())) { return; }
     Permanent& target = state.battlefield[static_cast<std::size_t>(bi)];
+    if ((def.params.destroy_target_creature_max_mv > 0
+         || def.params.modal_counter_or_destroy_by_controller_graveyard)
+        && !MillRemovalTargetLegal(state, caster, def, target)) { return; }
     const Permanent leaving = target;
+    if (leaving.controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     const int tgt_controller = target.controller_index;
     const int tgt_power      = target.EffectivePower();   // captured before the erase (Swords' rider)
     const int dead_num       = target.card.m_number;

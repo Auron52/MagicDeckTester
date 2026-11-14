@@ -374,9 +374,11 @@ void GameEngine::UntapStep(GameState& state)
     state.phase = Phase::Beginning;
     state.step  = Step::Untap;
     state.opponent_lost_life_this_turn = false;
+    state.opponent_searched_library_this_turn = false;
     state.players_cant_gain_life_this_turn = false;
     state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.permanent_left_under_control_this_turn = false;
     state.combat_damage_prevented_this_turn = false;   // Kami of False Hope (lockstep w/ SimulateEndAndStartNextTurn)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep twin: SimulateEndAndStartNextTurn)
     state.noncombat_damage_received_this_turn = {};
@@ -428,6 +430,7 @@ void GameEngine::UntapStep(GameState& state)
     ap.cards_cycled_or_discarded_this_turn = 0;   // Hollow One cycle/discard count (same lockstep)
     ap.equip_activated_this_turn = false;         // Kili's waiver is per TURN (same lockstep)
     ap.land_entered_this_turn    = false;         // Rest for the Weary's landfall history (same lockstep)
+    state.hedron_mill_trigger_ordinal = 0;
     // DESCEND's baseline (The Mycotyrant). A REBASE, not a reset to 0 -- descend is "this turn", so
     // the snapshot has to follow the graveyard rather than clear (same lockstep w/
     // SimulateEndAndStartNextTurn). It must be refreshed AFTER the previous turn's end step has

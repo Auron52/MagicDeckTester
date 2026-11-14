@@ -68,6 +68,14 @@ def positive(v):      return isinstance(v, (int, float)) and v > 0
 def real_target(v):   return isinstance(v, str) and v not in ("none", "player", "")
 
 MANIFEST = {
+    # Mill: cast modes, player targets, and Oboro activation are plan choices.
+    "archive_trap_free_if_opponent_searched": ("main_phase", truthy),
+    "landfall_mill_target_player": ("main_phase", truthy),
+    "spell_mill_target_player": ("main_phase", truthy),
+    "modal_counter_or_destroy_by_controller_graveyard": ("main_phase", truthy),
+    "counters_target_spell_to_graveyard": ("main_phase", truthy),
+    "self_bounce_cost": ("main_phase", present),
+    "surgical_extraction": ("main_phase", truthy),
     # Temporal Mastery: the first drawn card each turn can be revealed and
     # cast immediately for its miracle cost. The hand-zone paid-cast prompt
     # uses the shared optional-cast protocol at the draw event.
@@ -909,6 +917,16 @@ def _cost_mv(card, cost_from):
 # one dangerous error; under-listing just yields a longer, safe review list.
 # ---------------------------------------------------------------------------
 INERT_PARAMS = {
+    # Mill: printed magnitudes and legality thresholds. Their action/target choices
+    # are classified above; resolving these riders is mandatory.
+    "cycling_mill_opponent": "mandatory mill count on cycling Fractured Sanity; cycling timing is the existing main_phase action",
+    "destroy_target_creature_max_mv": "Fatal Push's base target-legality threshold; creature target is the existing target decision",
+    "draw_if_any_graveyard_at_least": "Visions of Beyond's mandatory graveyard threshold, with no player choice",
+    "draw_instead_if_threshold": "Visions of Beyond's mandatory replacement draw count, with no player choice",
+    "landfall_mill_opponent": "printed mill count of an automatic landfall trigger; Hedron's target choice is classified separately",
+    "revolt_destroy_max_mv": "Fatal Push's conditional target-legality threshold; creature target is the existing target decision",
+    "spell_exile_opponent_until_mv": "Tasha's mandatory top-library exile threshold, with no target or mode choice",
+    "spell_mill_opponent": "printed mill count; cast timing and Glimpse's player target are classified separately",
     # Spirits (2026-11-13, integrator C2): Skyclave Apparition's LTB.
     "ltb_exiled_owner_illusion_token": "mandatory LTB: the exiled card's owner creates an X/X Illusion (X = its MV) -- no target, no 'may', no choice",
     # Spirits (2026-11-13): Geist of Saint Traft's Angel and Spirit of the Labyrinth's guard.

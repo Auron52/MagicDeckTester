@@ -24,6 +24,7 @@
 #include "DecisionProviders.h"
 
 #include "../core/SpellEffects.h"   // shared rules helpers + the archetype heuristic free fns
+#include "../core/OpponentDeck.h"   // frozen printed copy counts for Mill's Surgical target rule
 #include "../deck/DeckLoader.h"     // Decklist
 #include "LandPlay.h"               // PlayLandFromHand (the combo route's land drop)
 #include "TurnSolver.h"             // Action (PlanContext walks the plan's action list)
@@ -139,6 +140,13 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"etbcolor",   UnprunedGate::EtbColor},
     {"etbfight",   UnprunedGate::EtbFight},
     {"counterdestroy", UnprunedGate::CounterDestroy},
+    {"surgicalsubset", UnprunedGate::SurgicalSubset},
+    {"surgicaltarget", UnprunedGate::SurgicalTarget},
+    {"surgicalcost", UnprunedGate::SurgicalCost},
+    {"millcontrol", UnprunedGate::MillControl},
+    {"oborobounce", UnprunedGate::OboroBounce},
+    {"hedronzerotrigger", UnprunedGate::HedronZeroTrigger},
+    {"hedronunusedbits", UnprunedGate::HedronUnusedBits},
 };
 
 const char* GateName(UnprunedGate g)
@@ -237,6 +245,146 @@ bool DecisionUnpruned(UnprunedGate g)
     if (DecisionUnpruned()) { return true; }         // global MTG_UNPRUNED opens every gate
     if (UnpruneHumanSuppressed()) { return false; }  // selective mode honours the same suppression
     return ((UnpruneMask() >> static_cast<int>(g)) & 1u) != 0;
+}
+
+std::vector<std::string> MillProvider::FetchCandidates(
+    const GameState& state, int controller, const CardParams& fetch_pp) const
+{
+    std::vector<std::string> legal = GenericProvider::FetchCandidates(state, controller, fetch_pp);
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch) || legal.size() <= 1)
+    { return legal; }
+    // Both fetchlands in Mill prefer the untapped colour pair. The basic lands
+    // are deterministic fallbacks when no Watery Grave remains. The candidate
+    // set has one name, so the search cannot spend width on shuffle clairvoyance.
+    for (const char* name : {"Watery Grave", "Island", "Swamp"})
+    {
+        if (std::find(legal.begin(), legal.end(), name) != legal.end())
+        { return {name}; }
+    }
+    return {legal.front()};
+}
+
+bool MillProvider::NeverCast(const CardDefinition& def) const
+{
+    // This goldfish opponent casts no spells and presents no creatures. These
+    // answers cannot advance the mill clock; keep the complete legal menu for
+    // human play and the explicit unpruned audit.
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::MillControl)) { return false; }
+    const std::string& name = def.card.m_name;
+    return name == "Counterspell" || name == "Drown in the Loch" || name == "Fatal Push";
+}
+
+bool MillProvider::OffersSelfBounce(const GameState& state, const CardDefinition& def) const
+{
+    if (def.card.m_name != "Oboro, Palace in the Clouds" || HumanPlayActive()
+        || DecisionUnpruned(UnprunedGate::OboroBounce)) { return true; }
+    for (const Card& held : state.players[state.active_player_index].hand)
+    {
+        const CardDefinition* held_def = CardDatabase::Instance().LookupCached(held);
+        if (held_def != nullptr && held_def->card.IsLand()) { return false; }
+    }
+    return true;
+}
+
+void MillProvider::SurgicalTargetCandidates(
+    const GameState& state, std::vector<SurgicalTargetOption>& targets) const
+{
+    // Rank only the frozen printed list and public zones. Without Tasha in
+    // hand, prefer removing three unseen copies of a four-of, breaking ties
+    // by mana value. With Tasha, maximize the estimated total mana value
+    // Surgical can remove from the library, including printed three-ofs.
+    // Neither the hidden hand nor shuffled library order chooses a name.
+    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::SurgicalTarget)
+        || targets.size() <= 1) { return; }
+    const int caster = state.active_player_index;
+    const auto& printed = opponentdeck::Selected(state.game_seed).cards;
+    const bool tasha_in_hand = std::any_of(
+        state.players[caster].hand.begin(), state.players[caster].hand.end(), [](const Card& card) {
+            return card.m_name == "Tasha's Hideous Laughter";
+        });
+    std::tuple<int, int, int, int, int, std::string> best_key{99, 0, 99, 0, 999, ""};
+    int best = -1;
+    for (int i = 0; i < static_cast<int>(targets.size()); ++i)
+    {
+        const SurgicalTargetOption& t = targets[static_cast<std::size_t>(i)];
+        int printed_count = 0, printed_order = 999;
+        if (t.owner != caster)
+        {
+            for (int j = 0; j < static_cast<int>(printed.size()); ++j)
+            {
+                if (t.name != printed[static_cast<std::size_t>(j)].first) { continue; }
+                printed_count = printed[static_cast<std::size_t>(j)].second;
+                printed_order = j;
+                break;
+            }
+        }
+        int exposed = t.graveyard_copies;
+        if (t.owner != caster)
+        {
+            for (const Card& exiled : state.exile)
+            {
+                if (exiled.m_number >= opponentdeck::kNumberBase && exiled.m_name == t.name)
+                { ++exposed; }
+            }
+        }
+        const bool opponent = t.owner != caster;
+        const bool legal_now = t.graveyard_copies > 0;
+        const CardDefinition* def = CardDatabase::Instance().Lookup(t.name);
+        const int mana_value = def != nullptr ? def->card.m_mana_cost.ManaValue() : 0;
+        const int tier = opponent && legal_now && printed_count == 4 && exposed == 1 ? 0
+                       : opponent && legal_now && printed_count == 4 ? 1
+                       : opponent && legal_now ? 2
+                       : legal_now ? 3
+                       : opponent && printed_count == 4 ? 4
+                       : opponent ? 5 : 6;
+        const bool tasha_candidate = tasha_in_hand && opponent && legal_now && printed_count >= 3;
+        const int remaining = std::max(0, printed_count - exposed);
+        const int estimated_removed_mv = remaining * mana_value;
+        const auto key = std::make_tuple(tasha_candidate ? 0 : tier + (tasha_in_hand ? 1 : 0),
+                                         tasha_candidate ? -estimated_removed_mv : 0,
+                                         tier, -mana_value, printed_order, t.name);
+        if (best < 0 || key < best_key) { best = i; best_key = key; }
+    }
+    if (best >= 0)
+    {
+        SurgicalTargetOption chosen = std::move(targets[static_cast<std::size_t>(best)]);
+        targets.clear();
+        targets.push_back(std::move(chosen));
+    }
+}
+
+bool MillProvider::DefersSurgicalTarget() const
+{
+    return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SurgicalTarget)
+        && !DecisionUnpruned(UnprunedGate::SurgicalSubset);
+}
+
+std::string MillProvider::SurgicalCastTarget(const GameState& state, const std::string& pin) const
+{
+    if (pin != "@mill_surgical") { return pin; }
+    std::vector<SurgicalTargetOption> legal;
+    for (int owner = 0; owner < 2; ++owner)
+    for (const Card& card : state.players[owner].graveyard)
+    {
+        const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
+        if (def == nullptr || IsBasicLandCard(*def)) { continue; }
+        auto it = std::find_if(legal.begin(), legal.end(), [&](const SurgicalTargetOption& option) {
+            return option.owner == owner && option.name == card.m_name.str();
+        });
+        if (it == legal.end())
+        {
+            legal.push_back({});
+            it = std::prev(legal.end());
+            it->owner = owner;
+            it->name = card.m_name.str();
+        }
+        ++it->graveyard_copies;
+    }
+    if (legal.empty()) { return {}; }
+    SurgicalTargetCandidates(state, legal);
+    const SurgicalTargetOption& selected = legal.front();
+    return std::to_string(selected.owner) + ":" + selected.name
+        + (selected.owner == state.active_player_index ? "|" : "|@library");
 }
 
 std::vector<std::string> RankedTutorCandidates(const DecisionProvider& prov, const GameState& s,
@@ -22937,10 +23085,21 @@ static bool ModernFetchCollapsible(const GameState& state, const CardParams& p)
         && state.players[state.active_player_index].life > 3;
 }
 
+// Tarn and Delta were legacy immediate fetches before Mill needed battlefield timing.
+// Their activated shape is now in card data, but existing decks keep that prior play
+// surface; only Mill offers the hold and the accompanying crack-on-play branch.
+static bool LegacyImmediateOutsideMill(const GameState& state, const CardDefinition& land)
+{
+    const std::string& name = land.card.m_name.str();
+    return (name == "Scalding Tarn" || name == "Polluted Delta")
+        && std::string(ResolveProvider(state).Name()) != "Mill";
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
     if (p.fetch_land_types.empty()) { return false; }
+    if (LegacyImmediateOutsideMill(state, land)) { return true; }
     if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
     if (!ModernFetchCollapsible(state, p)) { return false; }
     if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
@@ -22965,6 +23124,7 @@ bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
+    if (LegacyImmediateOutsideMill(state, land)) { return false; }
     if (LegacyFetchImmediateOn() || !ModernFetchCollapsible(state, p) || HumanPlayActive()) { return false; }
     return DecisionUnpruned(UnprunedGate::Fetch) || ResolveProvider(state).ConsiderFetchHold(state, land);
 }
@@ -23773,6 +23933,7 @@ namespace
     // Stateless, read-only -> single shared const instances are thread-safe (same model as
     // CardDatabase). Process lifetime, so GameState's raw pointer stays valid.
     const GenericProvider        g_generic;
+    const MillProvider           g_mill;
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
@@ -26283,6 +26444,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Archetype detection by card params (same shape as GoldFishRunner::DeckUsesSecondMain).
     // Order matters only if a deck mixed signatures; today each is exclusive (verified).
     bool anti = false, th = false, vial = false, hinata = false, burn = false, dragonstorm = false;
+    bool mill = false; // gated library effects; fetch lands alone cannot set this signature
     bool extra_turn_resolve = false, extra_turn_signature = false;
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
@@ -26545,6 +26707,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
         if (!def) { continue; }
         const CardParams& p = def->params;
+        if (p.spell_exile_opponent_until_mv > 0 || p.landfall_mill_opponent > 0
+            || p.landfall_mill_target_player || p.cycling_mill_opponent > 0
+            || p.spell_mill_opponent > 0)
+        { mill = true; }
         // OR across three independently replaceable Kithkin cards. The two new
         // mechanics are gated; Cenn's Heir adds a subtype-gated older parameter.
         // Aether Vial and the two artifact lords are shared tribal staples.
@@ -27290,6 +27456,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // inherits Generic). Trips no other signature (verified: it detected to Generic before this
     // provider existed), so placement here is for tidiness only.
     if (snow) { return g_snow; }
+    if (mill) { return g_mill; }
     if (anti && modern_rw_burn) { return g_modern_rw_burn; }
     if (anti) { return g_antilife; }
     if (th)   { return g_treasure; }

@@ -3994,8 +3994,8 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). A fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life and STILL shuffles (CR 701.19b; USER 2026-10-27: 'Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle' -- WhiffShuffle, SpellEffects.h; before that date a whiff returned before the shuffle).]",
-   "template": "basic_land",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Mountain card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/U/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics (FiveColour's Island/Mountain-typed targets -- Steam Vents, Stomping Ground, Blood Crypt, Breeding Pool, Jetmir's Garden, Zagoth Triome, basic Island/Mountain -- reach all five colours); it never taps for mana. Outside Mill it searches on play; Mill may hold it on the battlefield for a later activation. 'Then shuffle' IS modelled: PerformFetch ends with ShuffleAfterSearch (CR 701.19; deterministic and lockstep in both worlds, ON by default -- MTG_NO_SEARCH_SHUFFLE is the opt-out), so the fetched land thins the library and cards a Brainstorm-style put-back left on top are shuffled away; the search sees the post-shuffle order (the engine-wide known-library simplification). A fail-to-find (no Island or Mountain card left, or the chosen target already gone) pays the life and STILL shuffles (CR 701.19b; USER 2026-10-27: 'Scalding Tarn sacrificing and finding nothing should indeed allow for a shuffle' -- WhiffShuffle, SpellEffects.h; before that date a whiff returned before the shuffle).]",
+   "template": "custom",
    "parameters": {
     "produces": [
      "W",
@@ -4007,7 +4007,12 @@
     "fetch_land_types": [
      "Island",
      "Mountain"
-    ]
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1
    }
   },
   {
@@ -16656,6 +16661,269 @@
      "Flying"
     ],
     "created_token_color": "W"
+   }
+  },
+  {
+   "name": "Darkslick Shores",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control two or fewer other lands.\n{T}: Add {U} or {B}.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "fastland_max_other_lands": 2
+   }
+  },
+  {
+   "name": "Drowned Catacomb",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This land enters tapped unless you control an Island or a Swamp.\n{T}: Add {U} or {B}.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "checkland_subtypes": [
+     "Island",
+     "Swamp"
+    ]
+   }
+  },
+  {
+   "name": "Polluted Delta",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for an Island or Swamp card, put it onto the battlefield, then shuffle.",
+   "template": "custom",
+   "parameters": {
+    "produces": [
+     "U",
+     "B"
+    ],
+    "fetch_land_types": [
+     "Island",
+     "Swamp"
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1
+   }
+  },
+  {
+   "name": "Counterspell",
+   "mana_cost": "{U}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Counter target spell.",
+   "template": "counter_spell",
+   "parameters": {
+    "counters_target_spell_to_graveyard": true
+   }
+  },
+  {
+   "name": "Glimpse the Unthinkable",
+   "mana_cost": "{U}{B}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Target player mills ten cards.",
+   "template": "custom",
+   "parameters": {
+    "spell_mill_opponent": 10,
+    "spell_mill_target_player": true,
+    "targeting": "player"
+   }
+  },
+  {
+   "name": "Archive Trap",
+   "mana_cost": "{3}{U}{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [
+    "Trap"
+   ],
+   "keywords": [],
+   "oracle_text": "If an opponent searched their library this turn, you may pay {0} rather than pay this spell's mana cost.\nTarget opponent mills thirteen cards.",
+   "template": "custom",
+   "parameters": {
+    "spell_mill_opponent": 13,
+    "archive_trap_free_if_opponent_searched": true
+   }
+  },
+  {
+   "name": "Visions of Beyond",
+   "mana_cost": "{U}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Draw a card. If a graveyard has twenty or more cards in it, draw three cards instead.",
+   "template": "draw_spell",
+   "parameters": {
+    "draw": 1,
+    "draw_if_any_graveyard_at_least": 20,
+    "draw_instead_if_threshold": 3
+   }
+  },
+  {
+   "name": "Fractured Sanity",
+   "mana_cost": "{U}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Each opponent mills fourteen cards.\nCycling {1}{U} ({1}{U}, Discard this card: Draw a card.)\nWhen you cycle this card, each opponent mills four cards.",
+   "template": "custom",
+   "parameters": {
+    "spell_mill_opponent": 14,
+    "cycling_cost": "{1}{U}",
+    "cycling_mill_opponent": 4
+   }
+  },
+  {
+   "name": "Ruin Crab",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Crab"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 3,
+   "oracle_text": "Landfall — Whenever a land you control enters, each opponent mills three cards. (To mill a card, a player puts the top card of their library into their graveyard.)",
+   "template": "custom",
+   "parameters": {
+    "landfall_mill_opponent": 3
+   }
+  },
+  {
+   "name": "Surgical Extraction",
+   "mana_cost": "{B/P}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "({B/P} can be paid with either {B} or 2 life.)\nChoose target card in a graveyard other than a basic land card. Search its owner's graveyard, hand, and library for any number of cards with the same name as that card and exile them. Then that player shuffles.",
+   "template": "custom",
+   "parameters": {
+    "surgical_extraction": true
+   }
+  },
+  {
+   "name": "Tasha's Hideous Laughter",
+   "mana_cost": "{1}{U}{U}",
+   "types": [
+    "Sorcery"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Each opponent exiles cards from the top of their library until that player has exiled cards with total mana value 20 or greater.",
+   "template": "custom",
+   "parameters": {
+    "spell_exile_opponent_until_mv": 20
+   }
+  },
+  {
+   "name": "Hedron Crab",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Crab"
+   ],
+   "keywords": [],
+   "power": 0,
+   "toughness": 2,
+   "oracle_text": "Landfall — Whenever a land you control enters, target player mills three cards. (They put the top three cards of their library into their graveyard.)",
+   "template": "custom",
+   "parameters": {
+    "landfall_mill_opponent": 3,
+    "landfall_mill_target_player": true
+   }
+  },
+  {
+   "name": "Oboro, Palace in the Clouds",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {U}.\n{1}: Return Oboro to its owner's hand.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "U"
+    ],
+    "self_bounce_cost": "{1}"
+   }
+  },
+  {
+   "name": "Drown in the Loch",
+   "mana_cost": "{U}{B}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Choose one —\n• Counter target spell with mana value less than or equal to the number of cards in its controller's graveyard.\n• Destroy target creature with mana value less than or equal to the number of cards in its controller's graveyard.",
+   "template": "removal",
+   "parameters": {
+    "targeting": "creature",
+    "allow_self_target": true,
+    "modal_counter_or_destroy_by_controller_graveyard": true,
+    "counters_target_spell_to_graveyard": true
+   }
+  },
+  {
+   "name": "Fatal Push",
+   "mana_cost": "{B}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Destroy target creature if it has mana value 2 or less.\nRevolt — Destroy that creature if it has mana value 4 or less instead if a permanent left the battlefield under your control this turn.",
+   "template": "removal",
+   "parameters": {
+    "targeting": "creature",
+    "allow_self_target": true,
+    "destroy_target_creature_max_mv": 2,
+    "revolt_destroy_max_mv": 4
    }
   }
  ]

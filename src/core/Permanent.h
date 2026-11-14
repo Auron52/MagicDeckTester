@@ -370,6 +370,7 @@ enum class PermAbilityMode
     // Being two modes, every activation signature that keys ability_mode tells them apart. Appended LAST.
     TurnFaceUp,
     TurnFaceUpLate,
+    SelfBounce,       // Oboro, Palace in the Clouds: {1}: return itself to owner's hand
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)
@@ -383,6 +384,7 @@ inline bool IsTurnFaceUpMode(PermAbilityMode m)
 inline bool PermAbilityTaps(PermAbilityMode m)
 {
     return m != PermAbilityMode::SacDraw
+        && m != PermAbilityMode::SelfBounce
         && m != PermAbilityMode::Drain
         && m != PermAbilityMode::ExileTop
         && m != PermAbilityMode::IceCounter

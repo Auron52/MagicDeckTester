@@ -3,13 +3,14 @@
 // Three things here are easy to get wrong in a way no aggregate fingerprint would catch:
 //
 //  1. EVERY NAME MUST RESOLVE. A library card is a bare placeholder -- its types come from the
-//     CardDatabase at read time. If a name in the fixed list is renamed or dropped from cards.json,
+//     CardDatabase at read time. If a name in the 50 deck pool is renamed or dropped from cards.json,
 //     the lookup silently returns null and the card becomes typeless: Dimensional Infiltrator's
 //     "if it's a land card" check would then see NO lands at all, quietly halving the behaviour it
 //     models, and every game would still run to completion looking perfectly healthy.
 //
-//  2. THE LAND RATIO IS READ, not decoration. Same reason: the Infiltrator's land branch fires at
-//     the list's land frequency, so a drifted ratio silently changes what that card does.
+//  2. THE LAND RATIO IS READ, not decoration. Tasha uses the selected real deck's
+//     mana values, and other library-reading decks use the established fixed list.
+//     Each pool entry must be populated and well formed.
 //
 //  3. EMPTY IS NOT ABSENT. `players[1].library` is empty on every deck that was not dealt one, so
 //     the obvious `library.empty()` deck-out test is TRUE on turn 0 -- a spurious instant win in
@@ -19,16 +20,27 @@
 
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
+#include "core/HeuristicDefaults.h"
 #include "core/OpponentDeck.h"
 
+#include <array>
 #include <string>
 
 namespace {
 
-int TotalCards()
+void EnsureOpponentCards()
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+}
+
+int TotalCards(const opponentdeck::DeckSpec& deck)
 {
     int n = 0;
-    for (const std::pair<const char*, int>& e : opponentdeck::List()) { n += e.second; }
+    for (const std::pair<const char*, int>& e : deck.cards) { n += e.second; }
     return n;
 }
 
@@ -36,34 +48,74 @@ int TotalCards()
 
 TEST_CASE("opponent deck: every card resolves in the database")
 {
-    for (const std::pair<const char*, int>& e : opponentdeck::List())
+    EnsureOpponentCards();
+    CHECK(opponentdeck::Pool().size() == 50u);
+    for (const opponentdeck::DeckSpec& deck : opponentdeck::Pool())
     {
-        Card c;
-        c.m_name = e.first;
-        c.RehashName();
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        INFO("card: " << e.first);
-        REQUIRE(def != nullptr);
+        INFO("deck: " << deck.name);
+        CHECK(TotalCards(deck) == 60);
+        for (const std::pair<const char*, int>& e : deck.cards)
+        {
+            Card c;
+            c.m_name = e.first;
+            c.RehashName();
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            INFO("card: " << e.first);
+            REQUIRE(def != nullptr);
+            CHECK(def->card.m_mana_cost.ManaValue() >= 0);
+        }
     }
 }
 
-TEST_CASE("opponent deck: 60 cards, and the land ratio the Infiltrator reads")
+TEST_CASE("opponent deck: seed modulo selects each of the 50 real 60-card decks")
 {
-    CHECK(TotalCards() == 60);
-
-    int lands = 0;
-    for (const std::pair<const char*, int>& e : opponentdeck::List())
+    EnsureOpponentCards();
+    static const std::array<const char*, 50> expected_names = {{
+        "Accomplished Alchemist", "Angels", "Anti-Lifegain", "Auras",
+        "Breaching Dragonstorm", "Bruna", "Colossus Hammer", "Creature Giving",
+        "Critter Lifegain", "Dragons", "Dragonstorm", "Eldrazi Displacer Flicker",
+        "Extra Turns", "Five Colour", "Fluctuator", "Fungus", "Galadriel",
+        "Giants", "Goblins", "Gods", "Hinata", "Hydras", "Jumbo Cactuar",
+        "Kithkin", "Kitty Equipment", "Knights", "Landfall", "Landfall Elementals",
+        "Lifegain Heliod Combo", "Martyr Lifegain", "Melira Pod", "Merfolk",
+        "Midrange Burn", "Mill", "Minotaur", "Mirrorwing Dragon", "Modern RW Burn",
+        "Morph", "NivMizzetCombo", "Pirates", "Prevent Damage", "Selesnya Lifegain",
+        "Shadowborn Apostle", "Snow", "Soldiers", "Spirits", "Stompy Surprise",
+        "Unpredictable Cyclone", "Vampires", "White Knights",
+    }};
+    for (uint64_t seed = 0; seed < 50; ++seed)
     {
-        Card c;
-        c.m_name = e.first;
-        c.RehashName();
-        const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-        REQUIRE(def != nullptr);
-        // The DEFINITION's card, never the zone placeholder: a card outside the battlefield has
-        // empty type masks, so `c.IsLand()` here would be false for all 60.
-        if (def->card.IsLand()) { lands += e.second; }
+        const opponentdeck::DeckSpec& deck = opponentdeck::Selected(seed);
+        CHECK(std::string(deck.name) == expected_names[seed]);
+        CHECK(&deck == &opponentdeck::Pool()[seed]);
+        CHECK(&deck == &opponentdeck::Selected(seed + 50));
+        CHECK(TotalCards(deck) == 60);
+        int lands = 0;
+        for (const auto& e : deck.cards)
+        {
+            const CardDefinition* def = CardDatabase::Instance().Lookup(e.first);
+            REQUIRE(def != nullptr);
+            if (def->card.IsLand()) { lands += e.second; }
+        }
+        CHECK(lands > 0);
+        CHECK(lands < 60);
     }
-    CHECK(lands == 24);
+}
+
+TEST_CASE("opponent deck: diverse pool is selected only when requested")
+{
+    const auto& fixed = opponentdeck::FixedList();
+    int fixed_cards = 0;
+    for (const auto& entry : fixed) { fixed_cards += entry.second; }
+    CHECK(fixed_cards == 60);
+    CHECK(std::string(fixed.front().first) == "Mountain");
+    CHECK(&opponentdeck::List(0) == &fixed);
+    CHECK(&opponentdeck::List(49) == &fixed);
+    CHECK(&opponentdeck::List(50) == &fixed);
+    CHECK(&opponentdeck::List(0, true) == &opponentdeck::Pool()[0].cards);
+    CHECK(&opponentdeck::List(1, true) == &opponentdeck::Pool()[1].cards);
+    CHECK(&opponentdeck::List(49, true) == &opponentdeck::Pool()[49].cards);
+    CHECK(&opponentdeck::List(50, true) == &opponentdeck::Pool()[0].cards);
 }
 
 TEST_CASE("opponent deck: dealing is gated, and leaves 53 in library / 7 in hand")

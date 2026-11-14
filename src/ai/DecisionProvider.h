@@ -203,6 +203,44 @@ public:
     // printed which provider was in force, so nothing could have caught them earlier. Pure reporting:
     // no engine path branches on this.
     virtual const char* Name() const { return "Generic"; }
+    // A deck-specific searched periodic target sequence for Hedron Crab. Zero
+    // means no narrowing policy has been supplied; the solver must not silently
+    // use a bounded sequence for such a deck.
+    virtual int HedronMillTargetPolicyPeriod() const { return 0; }
+    // A deck provider may fold Hedron policies for a plan proven to cause no
+    // landfall before the scoped policy expires. The solver proves that narrow
+    // case from the plan shape; the default keeps every policy.
+    virtual bool FoldsZeroTriggerHedronPolicies() const { return false; }
+    // A provider may fold policy bits that no trigger in a bounded plan can
+    // read. The solver retains all masks for any unclassified action or land.
+    virtual bool FoldsUnusedHedronPolicyBits() const { return false; }
+    // Surgical Extraction's optional-copy subsets are exhaustive by default.
+    // A deck may supply an explicit large-copy search narrowing.
+    virtual bool NarrowsSurgicalSubset(int) const { return false; }
+    struct SurgicalTargetOption
+    {
+        int owner = 0;
+        std::string name;
+        int graveyard_copies = 0;
+        int hand_copies = 0;
+        int library_copies = 0;
+        int library_mana_value = 0;
+        bool graveyard_shuffle = false;
+    };
+    // The generic search retains every possible target, including names a
+    // preceding same-plan mill could put into a graveyard. A deck provider may
+    // shortlist those speculative names; live human play keeps the full menu.
+    virtual void SurgicalTargetCandidates(const GameState&,
+                                          std::vector<SurgicalTargetOption>&) const {}
+    // A deck may defer the autonomous target choice until the cast, after an
+    // earlier same-plan mill has revealed which names are actually in a graveyard.
+    virtual bool DefersSurgicalTarget() const { return false; }
+    virtual std::string SurgicalCastTarget(const GameState&, const std::string& pin) const
+    { return pin; }
+    // A deck may use the life-paid Phyrexian cast as its sole autonomous
+    // candidate when that payment is legal. Human play keeps both costs.
+    virtual bool LifeOnlyPhyrexianCast(const GameState&, const CardDefinition&) const
+    { return false; }
     // The provider chooses a creature type for an entering permanent. The shared enter
     // cascade applies the choice; deck-specific preferences belong in provider overrides.
     virtual uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
@@ -1203,6 +1241,10 @@ public:
     // 2026-10-03: Skred "should never be cast via heuristic ... no reason to waste time enumerating
     // it." Default false -> every deck without a provider rule is byte-identical.
     virtual bool NeverCast(const CardDefinition& /*def*/) const { return false; }
+
+    // Whether autonomous play offers a permanent's paid self-bounce ability.
+    // The printed ability remains available to human play.
+    virtual bool OffersSelfBounce(const GameState&, const CardDefinition&) const { return true; }
 
     // CastUnderCastCap -- with a cast cap live this turn (an Irencrag Feat resolved: "you can cast only
     // one more spell this turn", GameState::casts_remaining_this_turn >= 0), is `def` worth offering

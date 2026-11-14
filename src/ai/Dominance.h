@@ -632,7 +632,10 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-14, mana-clean item W; 1496 -> 1504): `prepay_wild_true` grows to 33 bytes (gheld[5] + gtot: the
 // generic pips' re-assignable credits, MTG_PREPAY_WILD_DEFER). Same classification and the same value-gated fold
 // (PrepayWildTrueKey mixes the loaded credits, which are 0 whenever gtot no longer matches the float).
-static_assert(sizeof(GameState) == 1504,   // verify combined current fields in the integrated build
+// Mill/Archive Trap and Fatal Push revolt state (2026-11-14) occupy the next 8-byte slot
+// (1504 -> 1512 after integration with mana-clean item W).
+// Their future-determining flags are folded in Build() when live.
+static_assert(sizeof(GameState) == 1512,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -904,6 +907,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // having an opponent library at all: an unconditional fold would shift every key for every
     // deck and give up byte-identity to record a field that is permanently false for them.
     if (s.opponent_library_dealt) { fold(s.opponent_decked ? 0xD3CDull : 0xD3CEull); }
+    if (s.opponent_searched_library_this_turn) { fold(0xA8C41Eull); }
+    if (s.hedron_mill_trigger_ordinal != 0)
+    { fold(0x4844524Eull + s.hedron_mill_trigger_ordinal); }
     // Infinite-life marker (Melira Pod): a proven loop is a real state difference (it feeds the
     // no-win tiebreak), so states differing on it -- or on WHEN it was proven -- must not merge.
     // Only ever stamped in a deck that runs the loop, so this fold is byte-identical elsewhere.
@@ -1014,6 +1020,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     if (s.scripted_demon_trigger >= 0)
     { fold(0xDE404E0000ull + static_cast<std::uint64_t>(s.scripted_demon_trigger)); }
     if (s.deck_has_morbid && s.creature_died_this_turn) { fold(0x40B1D0000ull); }
+    if (s.deck_has_revolt && s.permanent_left_under_control_this_turn) { fold(0xFA7A10000ull); }
     // Kami of False Hope's prevention: FUTURE-DETERMINING within the turn (a prevented combat deals
     // nothing), so a "sacked Kami" board must not merge with an otherwise identical one (a Lurrus
     // recast or a Grace return can rebuild the same permanents). Folded only when TRUE.

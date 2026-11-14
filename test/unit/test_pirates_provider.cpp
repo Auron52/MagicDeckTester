@@ -244,7 +244,8 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // binary so a future signature cannot capture them unnoticed either.
         // Unpredictable Cyclone: CycloneProvider since phase 3 (2026-10-27) -- the Cyclone / Curator entries
         // carry its signature params; it rode AntiLifegain (Scalding Tarn's fetch_land_types) before.
-        {"Mill", "AntiLifegain"},             {"Unpredictable Cyclone", "Cyclone"},
+        // Mill now routes by its dedicated mill signature, above fetch-land AntiLifegain.
+        {"Mill", "Mill"},                     {"Unpredictable Cyclone", "Cyclone"},
         // Morph (onboarded 2026-11-11, INT-1): MorphProvider, routed at the TOP by its own signature -- it
         // would otherwise ride AntiLifegain via Wooded Foothills' fetch.
         {"Morph", "Morph"},
@@ -379,10 +380,21 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         CHECK_MESSAGE(std::string(p.Name()) == want, folder, " routed to ", std::string(p.Name()), ", expected ", want);
         ++checked;
     }
-    // A NEW deck folder must be added to the table above (its routing decided, not defaulted).
+    // A NEW decklist must be added to the table above (its routing decided, not defaulted).
+    // Artifact-only directories from keep-table generation are not decklists.
     int folders = 0;
-    for (const auto& e : fs::directory_iterator(root)) { if (e.is_directory()) { ++folders; } }
-    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " folders but the table pins ", checked,
+    for (const auto& e : fs::directory_iterator(root))
+    {
+        if (!e.is_directory()) { continue; }
+        bool has_list = false;
+        for (const auto& f : fs::directory_iterator(e.path()))
+        {
+            if (f.is_regular_file() && (f.path().extension() == ".cod" || f.path().extension() == ".txt"))
+            { has_list = true; break; }
+        }
+        if (has_list) { ++folders; }
+    }
+    CHECK_MESSAGE(folders == checked, "decks/ holds ", folders, " decklist folders but the table pins ", checked,
                   " -- add the new deck's expected provider here");
 }
 

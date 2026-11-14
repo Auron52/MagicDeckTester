@@ -159,6 +159,8 @@ public:
     // a library and opening hand at all (see core/OpponentDeck.h). Scans BOTH boards -- this deck's
     // only library-toucher is a SIDEBOARD card reachable off Living Wish.
     static bool DeckTouchesOpponentZones(const Decklist& deck);
+    // Tasha's Hideous Laughter reads mana values from a real opposing deck.
+    static bool DeckUsesDiverseOpponentPool(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto
     // GameState::dep_enabler_main1 / dep_castpayoff_main1 by SetupGame.

@@ -325,6 +325,7 @@ add_executable(mtg-test
     test/unit/test_bp_resume_line_hold.cpp
     test/unit/test_rollout_land_act_color.cpp
     test/unit/test_opponent_deck.cpp
+    test/unit/test_mill_rules.cpp
     test/unit/test_breaching_clauses.cpp
     test/unit/test_midrange_burn_permanents.cpp
     test/unit/test_figure_of_destiny.cpp

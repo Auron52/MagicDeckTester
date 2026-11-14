@@ -615,10 +615,28 @@ bool GoldFishRunner::DeckTouchesOpponentZones(const Decklist& deck)
             if (def->params.grants_tap_mill_toughness) { return true; }
             if (def->params.attack_defending_player_reveal_land_to_hand) { return true; }
             if (def->params.attack_exile_defender_top > 0) { return true; }
+            if (def->params.spell_mill_opponent > 0
+                || def->params.spell_exile_opponent_until_mv > 0
+                || def->params.landfall_mill_opponent > 0
+                || def->params.cycling_mill_opponent > 0
+                || def->params.surgical_extraction) { return true; }
         }
         return false;
     };
     return scan(deck.mainboard) || scan(deck.sideboard);
+}
+
+bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)
+{
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (def && def->params.spell_exile_opponent_until_mv > 0) { return true; }
+        }
+    }
+    return false;
 }
 
 // Card-dependency-map closure (docs/design/card-dependency-map.md, USER design 2026-08-15): a
@@ -1635,6 +1653,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         bool echo = false;
         // Shadowborn INT-2 (GameState::deck_has_morbid / deck_has_count_anthem / deck_has_demon_triggers).
         bool morbid = false, count_anthem = false, demon_triggers = false, sac_named = false;
+        bool revolt = false;
         bool ripple = false;   // Shadowborn INT-3: Thrumming Stone (grants_ripple) / innate ripple
         // An upkeep sac-tutor (GameState::deck_has_sac_tutor, Defense of the Heart): the searched put-list fan.
         bool sac_tutor = false;
@@ -1730,6 +1749,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.upkeep_gy_reanimate)             { upkeep_reanimate = true; }
                 if (d->params.echo_cost.has_value())          { echo = true; }
                 if (d->params.endstep_morbid_destroy_target_creature) { morbid = true; }
+                if (d->params.revolt_destroy_max_mv > 0) { revolt = true; }
                 if (!d->params.creature_count_anthem_tiers.empty())  { count_anthem = true; }
                 if (d->params.sac_named_count > 0)                    { sac_named = true; }
                 if (d->params.grants_ripple > 0 || d->params.ripple > 0) { ripple = true; }
@@ -1829,6 +1849,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // demon trigger can exist, so the morbid key fold, the count-anthem pass and the three trigger
         // walks (both worlds) and the demon-trigger plan axis are dead code for that deck.
         state.deck_has_morbid              = garth || morbid;
+        state.deck_has_revolt              = garth || revolt;
         state.deck_has_count_anthem        = garth || count_anthem;
         state.deck_has_demon_triggers      = garth || demon_triggers;
         state.deck_has_sac_named           = garth || sac_named;
@@ -1937,7 +1958,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // narrower than the walk it gates silently drops a real discount (which UNDERCHARGES a spell and
     // changes play). Widen both together or neither.
     //
-    // Mainboard + sideboard (a wish reaches the sideboard) + the passive opponent's fixed list: the
+    // Mainboard + sideboard (a wish reaches the sideboard) + the selected passive opponent list: the
     // opponent never casts, so this function's answer can only ever be about our own spells, but
     // scanning their 60 makes the gate true by construction instead of by that argument. Garth
     // One-Eye materialises cards from outside every decklist, so he holds the gate open.
@@ -1962,7 +1983,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         if (!any)
         {
-            for (const std::pair<const char*, int>& e : opponentdeck::List())
+            for (const std::pair<const char*, int>& e : opponentdeck::List(state.game_seed,
+                                                              DeckUsesDiverseOpponentPool(deck)))
             {
                 const CardDefinition* d = CardDatabase::Instance().Lookup(e.first);
                 if (d && reduces(d->params)) { any = true; break; }
@@ -1970,7 +1992,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         state.deck_has_cost_reducer = any;
         // Thalia's SYMMETRIC noncreature tax: same scanned set (mainboard + sideboard + the
-        // passive opponent's 60), so the gate is sound by construction for an opponent taxer too.
+        // selected passive opponent's 60), so the gate is sound for an opponent taxer too.
         bool tax = false;
         for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
         {
@@ -1984,7 +2006,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         if (!tax)
         {
-            for (const std::pair<const char*, int>& e : opponentdeck::List())
+            for (const std::pair<const char*, int>& e : opponentdeck::List(state.game_seed,
+                                                              DeckUsesDiverseOpponentPool(deck)))
             {
                 const CardDefinition* d = CardDatabase::Instance().Lookup(e.first);
                 if (d && d->params.noncreature_spell_tax > 0) { tax = true; break; }
@@ -2032,6 +2055,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index)
 {
     GameState state;
+    state.game_seed = seed; // Trait stamps must see the same opponent list that Deal selects.
 
     // Starting life: per-job override -> MTG_START_LIFE -> 20 (see core/GameSetup.h). BOTH
     // players, because 2HG starts both teams at 30; our own total is inert for a goldfish (the
@@ -2099,7 +2123,8 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // The passive opponent's own library + opening hand, on a DERIVED seed so player 0's shuffle
     // above is untouched (core/OpponentDeck.h). Gated on the deck being able to reach those zones,
     // so this is a no-op for every deck that cannot mill.
-    opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed);
+    opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed,
+                       DeckUsesDiverseOpponentPool(deck));
 
     DealWishPool(state, deck);
 

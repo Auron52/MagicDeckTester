@@ -997,6 +997,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     CardParams p;
     p.damage      = params.value("damage", 0);
     p.draw        = params.value("draw", 0);
+    p.spell_mill_opponent = params.value("spell_mill_opponent", 0);
+    p.spell_mill_target_player = params.value("spell_mill_target_player", false);
+    p.spell_exile_opponent_until_mv = params.value("spell_exile_opponent_until_mv", 0);
+    p.draw_if_any_graveyard_at_least = params.value("draw_if_any_graveyard_at_least", 0);
+    p.draw_instead_if_threshold = params.value("draw_instead_if_threshold", 0);
+    p.cycling_mill_opponent = params.value("cycling_mill_opponent", 0);
+    p.surgical_extraction = params.value("surgical_extraction", false);
+    p.archive_trap_free_if_opponent_searched = params.value("archive_trap_free_if_opponent_searched", false);
+    p.modal_counter_or_destroy_by_controller_graveyard =
+        params.value("modal_counter_or_destroy_by_controller_graveyard", false);
+    p.destroy_target_creature_max_mv = params.value("destroy_target_creature_max_mv", 0);
+    p.revolt_destroy_max_mv = params.value("revolt_destroy_max_mv", 0);
     p.dredge      = params.value("dredge", 0);
     p.power_bonus = params.value("power_bonus", 0);
     p.tough_bonus = params.value("tough_bonus", 0);
@@ -1031,6 +1043,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     {
         p.produces.push_back(ColorFromString(c));
     }
+    if (params.contains("self_bounce_cost"))
+        p.self_bounce_cost = ManaCostFromString(params["self_bounce_cost"].get<std::string>());
     p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
     for (const std::string& c : params.value("mdfc_back_produces", json::array()))
     {
@@ -1089,6 +1103,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.landfall_target_any_creature   = params.value("landfall_target_any_creature", false);     // Scythecat Cub
     p.landfall_target_second_doubles = params.value("landfall_target_second_doubles", false);   // Scythecat Cub
     p.landfall_lifegain              = params.value("landfall_lifegain", 0);
+    p.landfall_mill_opponent = params.value("landfall_mill_opponent", 0);
+    p.landfall_mill_target_player = params.value("landfall_mill_target_player", false);
     p.landfall_quest_counters        = params.value("landfall_quest_counters", 0);
     p.landfall_double_self_counters  = params.value("landfall_double_self_counters", false);   // Mossborn Hydra
     p.landfall_self_pump_power       = params.value("landfall_self_pump_power", 0);
@@ -1576,6 +1592,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.damage_divided            = params.value("damage_divided", false);
     p.goldfish_inert            = params.value("goldfish_inert", false);
     p.counters_target_spell_to_hand = params.value("counters_target_spell_to_hand", false);   // Remand
+    p.counters_target_spell_to_graveyard = params.value("counters_target_spell_to_graveyard", false);
     p.cant_be_countered         = params.value("cant_be_countered", false);
     p.hinata_cost_reducer        = params.value("hinata_cost_reducer", false);
     p.discount_max_targets       = params.value("discount_max_targets", 0);

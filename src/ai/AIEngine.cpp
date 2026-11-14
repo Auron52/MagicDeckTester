@@ -9778,7 +9778,7 @@ AIEngine::DigOutcome AIEngine::PerformDigFull(GameState& state, const std::strin
         ResolveDiscardScryTriggers(state, state.active_player_index,
                                    DiscardScryTriggers(state, state.active_player_index), scry_pin);
         // D1 -- the executor's cycle site: Hollow One's counter + Drannith Stinger's trigger.
-        OnCardCycled(state, state.active_player_index);
+        OnCardCycled(state, state.active_player_index, sd->params.cycling_mill_opponent);
         // UNPREDICTABLE CYCLONE: the draw is REPLACED (lockstep with TurnSolver's cyclone_replaced_draw:
         // walk -> cast the hit -> bottom the rest in a random order -> the Remand). The human never reaches
         // this site (human play applies through TurnSolver), so there is no chooser here.
@@ -10107,7 +10107,7 @@ int AIEngine::FindOpponentCreature(const GameState& state) const
 }
 
 void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool& available,
-                                 int alt_lifegain, const std::string& tutor_target,
+                                 int alt_lifegain, std::string tutor_target,
                                  int chosen_x, int own_targets, int ponder_keep,
                                  int crackle_targets, int splice_count,
                                  const std::string& chosen_float_color, int enchant_target,
@@ -10192,6 +10192,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     const int gy_cast_src = riders.gy_cast_source_id;
     if (gy_cast_src >= 0 && !GyCastPermissionLegal(state, state.active_player_index, gy_cast_src, *def)) { return; }
     std::vector<Card>& cast_zone = gy_cast_src >= 0 ? ap.graveyard : ap.hand;
+    if (def->params.surgical_extraction)
+    {
+        tutor_target = ResolveProvider(state).SurgicalCastTarget(state, tutor_target);
+        if (tutor_target.size() < 3 || tutor_target[1] != ':'
+            || !SurgicalTargetLegal(state, tutor_target[0] - '0', tutor_target.substr(2)))
+        { return; }
+    }
     if (def->params.return_up_to_gy_lands > 0
         && !GraveyardLandTargetsLegal(state, state.active_player_index, tutor_target,
                                      def->params.return_up_to_gy_lands)) { return; }
@@ -10222,7 +10229,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     if (!remand_name.empty() && alt_lifegain <= 0 && !free_cast && state.casts_remaining_this_turn != 1)
     {
         const CardDefinition* rd = CardDatabase::Instance().Lookup(remand_name.str());
-        if (rd != nullptr && rd->params.counters_target_spell_to_hand)
+        if (rd != nullptr && CounterRiderCanTarget(state, state.active_player_index, *rd, *def))
         {
             for (const Card& hc : ap.hand)
             { if (hc.m_name == remand_name && hc.m_number != (*hand_card_p).m_number) { remand_def = rd; break; } }
@@ -10364,6 +10371,11 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
                 }
                 entry.player_target = t.player_index == opp_index ? 1 : 0;
             }
+            else if (def->params.spell_mill_target_player)
+            {
+                t.player_index = riders.player_target != 0 ? opp_index : state.active_player_index;
+                entry.player_target = riders.player_target;
+            }
             else if (def->params.draw_target_player)
             { t.player_index = riders.draw_target != 0 ? opp_index : state.active_player_index; }
             entry.targets.push_back(t);
@@ -10371,6 +10383,30 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         }
         case Targeting::Creature:
         {
+            if (def->params.destroy_target_creature_max_mv > 0
+                || def->params.modal_counter_or_destroy_by_controller_graveyard)
+            {
+                int pidx = MillRemovalTargetIndex(state, state.active_player_index,
+                                                  *def, enchant_target);
+                if (pidx < 0) { return; }
+                if (g_play_target_chooser)
+                {
+                    const auto picked = (*g_play_target_chooser)(
+                        state, *def, state.active_player_index, 1, 0,
+                        { ChosenTarget{ 1, pidx, 0 } });
+                    if (!picked.empty() && picked[0].kind == 1
+                        && picked[0].index >= 0
+                        && picked[0].index < static_cast<int>(state.battlefield.size())
+                        && MillRemovalTargetLegal(state, state.active_player_index, *def,
+                                                   state.battlefield[picked[0].index]))
+                    { pidx = picked[0].index; }
+                }
+                Target pt;
+                pt.type = Target::Type::Permanent;
+                pt.permanent_index = pidx;
+                entry.targets.push_back(pt);
+                break;
+            }
             // Path to Exile (land_search_for_removal_controller): the target is the PLAN's -- the own
             // creature the searched self-target variant names (enchant_target), else the opponent
             // target (the first opponent creature). No legal target -> not cast (CR 601.2c), before
@@ -10612,7 +10648,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // Maelstrom Archangel: spend a banked free cast (mirror of the rollout's prep_free +
     // cascade_free arm). Consumed here so exactly this cast skips payment; a stranded marker
     // (bank empty) falls through to the normal paid attempt below, matching apply_one.
-    bool spend_free = IsFireblastAlternative(*def, tutor_target);
+    bool spend_free = IsFireblastAlternative(*def, tutor_target)
+                   || IsArchiveTrapAlternative(*def, state, tutor_target);
     if (!spend_free && free_cast && state.free_casts_available > 0)
     {
         spend_free = true;
@@ -11121,7 +11158,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
             // "spell" kind), then its draw: GameEngine::ResolveStack never sees this resolution.
             m_logger->LogCastSpell(remand_card.m_number, remand_card.m_name,
                                    remand_cost.ToString() + " (target: " + def->card.m_name.str()
-                                   + (remand_countered ? ", countered to hand)" : ", can't be countered)"));
+                                   + (remand_countered
+                                        ? (remand_def->params.counters_target_spell_to_graveyard
+                                            ? ", countered to graveyard)" : ", countered to hand)")
+                                        : ", can't be countered)"));
             const Player& cp = state.players[state.active_player_index];
             for (std::size_t hi = before_draw; hi < cp.hand.size(); ++hi)
             { m_logger->LogDraw(cp.hand[hi].m_number, cp.hand[hi].m_name); }

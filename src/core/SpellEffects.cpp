@@ -2985,6 +2985,8 @@ void BounceKarooLand(GameState& state, int controller, int self_index)
     // modal land-or-spell choice. RevealedCard above does it -- the same mapping every other
     // battlefield -> zone push uses (graveyard, exile, library), so this site is not special.
     EnterHand(state, controller, c, HandEntryReason::Bounce);
+    if (state.battlefield[pick].controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
     state.battlefield.erase(state.battlefield.begin() + pick);
     // CR 704.5m right away (Bruna sweep C, seed 77001): an Aura on the bounced land (Wild Growth on
     // a Botanical Sanctum the Chancery returns) is put into the graveyard NOW, not at the next combat

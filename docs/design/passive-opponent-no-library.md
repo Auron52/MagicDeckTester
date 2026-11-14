@@ -1,5 +1,12 @@
 # The passive opponent's library, hand, and draw step
 
+**Update 2026-11-14:** Decks with Tasha's Hideous Laughter use a frozen pool of
+50 real 60-card mainboards as their passive opponent's library basis. The
+selected list is `seed % 50` (`src/core/OpponentDeckPool.h`); it is independently
+shuffled and dealt a seven-card opening hand. This preserves the 53-card
+deck-out depth and gives Tasha an ordered mix of printed mana values. Other
+decks that touch the opponent's library keep the fixed list described below.
+
 **Status: CLOSED 2026-09-02** (`src/core/OpponentDeck.h`). Recorded 2026-09-02 from a user
 observation while diagnosing [analysis-Eldrazi Displacer Flicker.md](analysis-Eldrazi%20Displacer%20Flicker.md);
 implemented the same day. The history below is kept because the *shape* of the bug — and the two

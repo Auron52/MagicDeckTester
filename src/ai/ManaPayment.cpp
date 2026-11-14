@@ -8395,8 +8395,14 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
     FireOnCastTriggers(state, remand_def);
     FireProwess(state, remand_def);
-    // Resolution: counter X to its owner's hand, then draw.
-    if (countered) { ReturnCounteredSpellToHand(state, controller, x_card); }
+    // Resolution: Remand returns X to hand; a hard counter puts it in the
+    // owner's graveyard. Both use this combined-cast rider to target a spell.
+    if (countered)
+    {
+        if (remand_def.params.counters_target_spell_to_graveyard)
+        { p.graveyard.push_back(x_card); }
+        else { ReturnCounteredSpellToHand(state, controller, x_card); }
+    }
     const std::size_t before = p.hand.size();
     const int want = remand_def.params.draw;
     const DrawBatchResult draws = DrawIntoHandDetailed(state, controller, want, HandEntryReason::Draw);

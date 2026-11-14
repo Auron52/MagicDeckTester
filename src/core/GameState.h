@@ -335,6 +335,7 @@ struct GameState
     //                             end-step discard: gates the three shared trigger walks and the
     //                             Plan::demon_trigger_choice axis.
     bool deck_has_morbid         = true;
+    bool deck_has_revolt         = true; // Fatal Push can read a permanent leaving under our control
     bool deck_has_count_anthem   = true;
     bool deck_has_demon_triggers = true;
     std::array<int, 2> noncombat_damage_received_this_turn{};
@@ -383,6 +384,13 @@ struct GameState
     // (and running the fallback lookahead) every remaining turn. See GameEngine::PlayOutFrom.
     bool                     proven_no_win                = false;
     bool                     opponent_lost_life_this_turn = false;
+    // Archive Trap: an opponent actually searched their own library this turn.
+    // Searching the opponent's library ourselves (Surgical Extraction) does not qualify.
+    bool                     opponent_searched_library_this_turn = false;
+    // Hedron Crab target-player trigger ordinal modulo four this turn.
+    // Selects the next bit of the searched periodic target policy.
+    std::uint8_t             hedron_mill_trigger_ordinal = 0;
+    bool                     permanent_left_under_control_this_turn = false; // Fatal Push revolt
     // MORBID: "if a creature died this turn" (Reaper from the Abyss). Set in OnCreatureDies for a
     // dying CREATURE of either side (sacrifice costs, destroy, SBA, tokens included -- CR 700.4);
     // cleared at BOTH untap sites (GameEngine::UntapStep, TurnSolver::SimulateEndAndStartNextTurn).
@@ -885,7 +893,7 @@ struct GameState
     // cannot express "this DECK has none". A per-GAME stamp can.
     //
     // THE SET SCANNED is mainboard + sideboard (a wish reaches the sideboard) + the passive
-    // opponent's fixed 60 (core/OpponentDeck.h). The opponent never casts, so EffectiveSpellCost is
+    // opponent's seed-selected 60 (core/OpponentDeck.h). The opponent never casts, so EffectiveSpellCost is
     // only ever asked about OUR spells -- but scanning their list anyway makes the gate sound by
     // construction rather than by that argument, and it costs 60 lookups once per game. Garth
     // One-Eye holds it open, like every other gate here. Tokens have no definition, so they cannot

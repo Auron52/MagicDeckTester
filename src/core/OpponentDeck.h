@@ -10,22 +10,12 @@
 // whose intended kill was "deck the opponent" measured 2.5 turns slower than the user expected,
 // with nothing in any report pointing at why.
 //
-// FIXED, NOT A MIRROR. The list below is the same 60 cards for every deck under test. That is a
-// deliberate choice over "copy the deck under test": deck-out depth becomes a CONSTANT (53 cards
-// after the opening hand), so a mill measurement is comparable across decks instead of being a
-// function of the mill deck's own size. The user's spec (2026-09-02) was "it can be a fixed deck of
-// some sort. Maybe have it be realish so hand manipulation like discard can be relevant, but
-// otherwise it doesn't matter too much."
-//
-// REALISH means the type distribution is load-bearing, and it is read by real cards:
-// Dimensional Infiltrator exiles the top card of their library and cares whether it is a LAND, so a
-// 24/36 land split is not decoration. Discard effects need a hand to bite on, hence the 7-card
-// opening hand. The opponent never CASTS any of it -- they remain fully passive -- so the cards are
-// chosen only for a plausible type/land mix, and every name must exist in cards.json (a library
-// card is a bare placeholder; its types come from the definition at read time, per the empty-mask
-// rule in docs/design/ -- never call IsLand() on the zone card itself).
+// Mill chooses a real 60-card mainboard by seed % 50 from the frozen primary decklist pool.
+// Other decks retain the established fixed opponent list. The opponent stays passive.
+// Every library card is a name-only placeholder; read its types from CardDatabase at use time.
 #include "GameState.h"
 #include "DrawCap.h"
+#include "OpponentDeckPool.h"
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -33,31 +23,21 @@
 
 namespace opponentdeck {
 
-// 60 cards: 24 lands / 20 creatures / 16 spells. Every name is a card already in cards.json.
-inline const std::vector<std::pair<const char*, int>>& List()
+inline const DeckSpec& Selected(uint64_t seed) { return Pool()[seed % Pool().size()]; }
+inline const std::vector<std::pair<const char*, int>>& FixedList()
 {
     static const std::vector<std::pair<const char*, int>> kList = {
-        // 24 lands -- a normal two-and-a-splash manabase's worth. The COUNT is what matters
-        // (Dimensional Infiltrator's land check hits ~40% of the time, as against a real deck).
-        {"Mountain",             8},
-        {"Forest",               8},
-        {"Island",               4},
-        {"Plains",               4},
-        // 20 creatures.
-        {"Birds of Paradise",    4},
-        {"Monastery Swiftspear", 4},
-        {"Sinew Sliver",         4},
-        {"Venerable Knight",     4},
-        {"Goblin Guide",         4},
-        // 16 noncreature spells -- a mix of instant / sorcery / artifact so a hand-reading or
-        // graveyard-reading effect sees a plausible spread rather than 16 copies of one type.
-        {"Lightning Bolt",       4},
-        {"Swords to Plowshares", 4},
-        {"Ponder",               4},
-        {"Sol Ring",             4},
+        {"Mountain", 8}, {"Forest", 8}, {"Island", 4}, {"Plains", 4},
+        {"Birds of Paradise", 4}, {"Monastery Swiftspear", 4},
+        {"Sinew Sliver", 4}, {"Venerable Knight", 4}, {"Goblin Guide", 4},
+        {"Lightning Bolt", 4}, {"Swords to Plowshares", 4},
+        {"Ponder", 4}, {"Sol Ring", 4},
     };
     return kList;
 }
+inline const std::vector<std::pair<const char*, int>>& List(uint64_t seed,
+                                                             bool use_diverse_pool = false)
+{ return use_diverse_pool ? Selected(seed).cards : FixedList(); }
 
 // Cards drawn into the opponent's opening hand. Seven, like anybody else's -- they never mulligan
 // (they make no decisions at all), so this is a flat draw off the top of their shuffled library.
@@ -76,13 +56,13 @@ inline constexpr int kNumberBase = 100000;
 // shared RNG stream, so dealing a second library cannot perturb player 0's permutation by a single
 // card. (Had it been a shared stream this change would have moved every deck's baseline and cost a
 // full three-tier GT rebaseline.)
-inline void Deal(GameState& state, bool needed, uint64_t seed)
+inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_pool = false)
 {
     if (!needed) { return; }
 
     Player& opp = state.players[1];
     int number  = kNumberBase;
-    for (const std::pair<const char*, int>& entry : List())
+    for (const std::pair<const char*, int>& entry : List(seed, use_diverse_pool))
     {
         for (int i = 0; i < entry.second; ++i)
         {
