@@ -247,3 +247,16 @@ do not add a Creature Giving width-2 fallback without separate evidence and USER
 change remains a separate question: the single provider pick becomes an unnamed land plan and is reranked after the
 fetch moves to the graveyard; its observed earlier win relied on retaining a known library top, but the choice-timing
 change itself is real. No fetch-ranking work is running at this checkpoint.
+
+### Isolated Five Colour plan-naming candidate
+
+`boars-fetchname` is a separate local worktree/branch at `8bb5ceba6` (not merged or pushed). For a fetch whose provider
+returns one target, TurnSolver now stamps that target on the land-drop plan instead of leaving it empty for a second
+pick after the fetch enters the graveyard. The same correction covers a Courser-style land played from the library top.
+A unit test checks that Five Colour's one provider target survives plan enumeration. Full checks: 3,036/3,036 unit
+tests and 517/517 scenarios. In 50 paired Five Colour games (play profile, seed 3163..3212, game indices 160..209),
+only gi184 T5 -> T4 and gi204 T4 -> T5 change win turn, for zero aggregate change; both arms tie under all five
+known-respecting blind salts on each game. A seven-deck depth-3 control (20 games each) has no win-turn changes:
+Boars, CG, Morph, Anti-Lifegain, Modern RW Burn, Cyclone digest-identical; Five Colour has one same-turn play change.
+Artifacts: `build/scratch/boars/fetchname/`. Recommend reviewing this as a separate plan-timing correctness fix, not
+as a claimed speed or win-turn gain. No jobs remain running.
