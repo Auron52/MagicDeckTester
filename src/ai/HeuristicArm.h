@@ -932,6 +932,7 @@ enum Slot : int
     ONDEMAND_KEEP_COLOUR,     // MTG_ONDEMAND_KEEP_COLOUR  item D round 3, mana-clean: the on-demand payer's step 1 (ordinary payment, crackable lands held) is not taken when it leaves a coloured pip of the rest of the applying line with NO source on the board (the held Lake's only Swamp victim is the line's only {R}); the plain tap / crack ladder is tried first under the same no-strand test, and the held payment stays the fallback. Shadowborn s30055067 T8 (Ritual's {B} tapped Blood Crypt, Sire's {R} stranded). Default ON; =0 -> step 1 always
     CCO_HAND_SCAN,            // MTG_CCO_HAND_SCAN  item C2, mana-clean: two repairs of CcoHandDemandScan's input -- the card being paid is skipped (cost identity) only among hand cards of its own kind (a {R} Daring Buccaneer no longer hides a {R} Lightning Bolt, pirates s30064129 T3), a spendable one-shot (Treasure) counts as supply (pirates s30066580 T4), and the creature-colour keep counts the OTHER untapped creature-only lands (pirates s30069061 T3). Ordering only. Default ON; =0 -> the historical scan
     CCO_RESERVE_OTHER,        // MTG_CCO_RESERVE_OTHER  item C2 round 2, mana-clean: the CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE) holds a creature-only land for a colour the line owes beyond the unrestricted supply only when the OTHER untapped creature-only lands (counted live) cannot cover that shortfall; a released land then reaches the CCO hand-demand rung. Pirates s30070533 T3/T4 (every Territory/Courtyard held for one {U}, the generic took the Mountain the Bolt needed); its supply also counts a spendable one-shot (Treasure, pirates s30074443 T4). Ordering only. Default ON; =0 -> hold every such land
+    PREPAY_WILD_MERGE,        // MTG_PREPAY_WILD_MERGE  item W (overnight 2026-11-14, Dragons gi363): a generic pip paid from the prepay's restricted funding (two fund colours, or two restricted `wild` masks) does not commit to ONE unit -- it MERGES two units of different colours into one restricted unit of their union mask (exact: the remainder is one of the two), so a later pip finds the legal re-assignment (the {G} paid the Incubator's {3}, the {R} pays Lathliss). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the generic consumes one unit (most funding left first)
     COUNT
 };
 
@@ -1808,6 +1809,7 @@ inline const char* Name(int slot)
         "MTG_ONDEMAND_KEEP_COLOUR",
         "MTG_CCO_HAND_SCAN",
         "MTG_CCO_RESERVE_OTHER",
+        "MTG_PREPAY_WILD_MERGE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
