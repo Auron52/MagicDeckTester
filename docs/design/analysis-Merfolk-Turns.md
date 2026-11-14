@@ -78,11 +78,13 @@ All twelve Oracle entries were fetched from the live Scryfall API on 2026-11-14.
 
 ## Current stage
 
-Stage 2: implement the missing cards and repair Three Tree City. The critical
-play interactions are Prophets' champion and extra turn, Seahunter's library
-put, Mihail's top-library casts and paid token trigger, Deeproot's tap trigger,
-and Tidal Warrior's temporary Island effect. Do not run or accept an analyzer
-profile with these missing.
+Stage 4/5: all 17 deck cards have complete coverage and the viewer decision
+emitters are wired. The 1,000-game baseline profile was generated on the
+integration build, then a second fixed-recipe profile run was started on the
+C2 mana integration (`3564a2fbd`) so the shipped scores match the final source.
+The provisional three-tier suite rows remain unaccepted pending the pooled
+Hinata cost gate and verification. No value leaf or exhaustive mulligan table
+is part of this analysis.
 
 ### Deeproot Pilgrimage checkpoint
 
@@ -589,3 +591,57 @@ watchdog's 21 GiB warning threshold. The focused Merfolk tests passed 22
 cases/384 assertions. The change is committed and backed up on
 `origin/wip/merfolk-turns` as `25e86c28a`. The standard profile run was
 restarted from this build; its result and the suite cost gate remain pending.
+
+### 2026-11-14 final-source checkpoint
+
+The original Merfolk source was merged with the shared branch through the C2
+Cavern of Souls payment change in `3564a2fbd`. Paired held-out A/B against the
+pre-C2 integration build changed **0/2,000 d0 games** (seed 933000) and
+**0/200 d3/b10 games** (same seed). This is outcome evidence, not a substitute
+for generating the profile on the final source. The C2 fixed-recipe profile run
+is underway on two pinned cores with a 28 GiB process RSS cap. The pre-C2
+1,000-game scorer completed and wrote a provisional baseline profile; its
+remaining diagnostic was stopped because it measured the superseded engine.
+
+The live repository-wide Scryfall cost audit passed 630/630 costed cards, and
+`provider_audit.py --check` routes Merfolk Turns to `MerfolkTurnsProvider` with
+`NotAssessed` certificate. The static viewer audit expects champion, creature
+type, dig, sacrifice and Vial-charge prompts. Its three text advisories are
+Silvergill Douser's targeted power reduction (opponent-inert), Rogue's
+Passage's unblockable target (opponent-inert for autonomous play, present for
+human play), and Seahunter's search (the dig choice). The live viewer audit,
+full C2 unit suite, cost gate and regression tiers are still running or owed.
+
+The C2 Release `mtg-test` run passed 3,120 cases and 3,597,181 assertions.
+Codex-play seed 987451 matched the d5/b20 search on turn 5 with no flags.
+Seed 987452 produced a provisional search-quality lead: Codex-play won on turn
+6 while the search won on turn 7 by holding Aether Vial at three counters
+and deploying Merfolk Sovereign. The independent player is bisecting the
+opening and turn choices before this is classified. No engine-state bug was
+reported on either seed.
+
+### 2026-11-14 Codex-play correctness findings and source correction
+
+Held-out seed 987453 surfaced two real viewer/game-state defects while still
+matching the search's turn-6 win. The passive opponent's three lands were all
+number 0 for this list, so Tidal Warrior and Rishadan Dockhand could not offer
+them as distinct human targets. `GoldFishRunner::SetupGame` now numbers those
+lands when either ability is in the deck, reusing the existing Expropriate ID
+range. A Prophets combat trigger sacrificed a Merfolk token, but the shared
+`SacrificePermanentAt` left its Card in the graveyard vector. The Prophets
+resolver now removes that physical token after sacrifice and death watchers
+finish. Both fixes have focused unit tests. The C2 scorer, pooled cost gate and
+live viewer sweep were stopped because their old-binary results cannot be
+adopted after this source change. The final-source rebuild is in progress;
+all three will be rerun.
+
+Codex-play seed 987452's apparent T6-vs-T7 search gap is an opening-hand
+comparison, not a like-for-like main-phase miss: the shipped static policy kept
+five Islands plus two Pilgrimages, while the independent player mulliganed twice.
+Handing search its own opening returns T7; handing it the player's post-mulligan
+opening returns T6. On the player's turn-6 board, a separate budget-sensitive
+choice remains: d5/b20 through b5000 taps Silvergill Douser and wins T7, while
+unbudgeted d5 passes and wins T6. Pass exists in the candidate set, so this is
+a search-quality/budget finding rather than an enumerator legality bug. The
+static keep policy is baseline only; exhaustive keep/bottom optimization awaits
+the user's later artifact stage.

@@ -2146,14 +2146,15 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     const int nonbasics = kNonbasics[pattern_index];
     const bool numbered_land_targets = std::any_of(deck.mainboard.begin(), deck.mainboard.end(),
         [](const Card& c) { return c.m_name == "Tide Shaper" || c.m_name == "Spreading Seas"
-                                  || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"; });
+                                  || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"
+                                  || c.m_name == "Tidal Warrior" || c.m_name == "Rishadan Dockhand"; });
     for (int i = 0; i < 3; ++i)
     {
         Card land;
         land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
         land.RehashName();
-        // Expropriate must distinguish the three physical opponent lands when
-        // choosing the permanent gained for a MONEY vote.
+        // Expropriate's MONEY vote and the Merfolk land-target abilities address
+        // physical opponent lands by number. Give each target a distinct ID.
         if (numbered_land_targets) { land.m_number = 600000 + i; }
         land.AddType(CardType::Land);
         if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }

@@ -8,6 +8,7 @@
 #include "core/GameLogger.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
+#include "runner/GoldFishRunner.h"
 #include "core/SpellEffects.h"
 #include "core/EffectHandler.h"
 #include "mtg_test_seam.h"
@@ -720,6 +721,52 @@ TEST_CASE("Wanderwine Prophets token champion ceases to exist; decline sacrifice
     REQUIRE(state.battlefield.size() == 2);
     CHECK(state.battlefield[0].card.m_number == 512);
     CHECK(state.battlefield[1].card.m_number == 513);
+}
+
+TEST_CASE("Merfolk land target abilities can identify every passive opponent land")
+{
+    LoadMerfolkCards();
+    Decklist deck;
+    for (const char* name : {"Tidal Warrior", "Rishadan Dockhand"})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        deck.mainboard.push_back(def->card);
+    }
+    GameState state = GoldFishRunner::SetupGame(deck, 987453, 2);
+    std::vector<int> ids;
+    const CardDefinition* warrior = CardDatabase::Instance().Lookup("Tidal Warrior");
+    const CardDefinition* dockhand = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    REQUIRE(warrior != nullptr);
+    REQUIRE(dockhand != nullptr);
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != 1 || !q.card.IsLand()) { continue; }
+        CHECK(q.card.m_number != 0);
+        CHECK(TapTargetPumpTargetLegalFor(state, q, 0, *warrior));
+        CHECK(TapTargetPumpTargetLegalFor(state, q, 0, *dockhand));
+        ids.push_back(q.card.m_number);
+    }
+    REQUIRE(ids.size() == 3);
+    CHECK(ids[0] != ids[1]);
+    CHECK(ids[1] != ids[2]);
+    CHECK(ids[0] != ids[2]);
+}
+
+TEST_CASE("Wanderwine Prophets token sacrifice ceases to exist after its trigger")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Wanderwine Prophets", 610);
+    AddPermanent(state, "Rishadan Dockhand", GameState::kFirstTokenNumber);
+    state.battlefield.back().is_token = true;
+    state.scripted_prophets_sac = {1};
+    ResolveProphetsCombatDamage(state, 0, {610});
+    CHECK(state.pending_extra_turns == 1);
+    REQUIRE(state.battlefield.size() == 1);
+    CHECK(state.battlefield[0].card.m_number == 610);
+    CHECK(state.players[0].graveyard.empty());
 }
 
 TEST_CASE("Wanderwine Prophets combat trigger sacrifices each chosen Merfolk and queues extra turns")

@@ -17467,7 +17467,17 @@ inline void ResolveProphetsCombatDamage(GameState& state, int controller,
         if (g_play_fling_chooser != nullptr && !legal.empty())
         { pick = (*g_play_fling_chooser)(state, controller, "Wanderwine Prophets", legal, pick); }
         if (pick < 0 || pick >= static_cast<int>(legal.size())) { continue; }
+        const Permanent victim = state.battlefield[legal[static_cast<std::size_t>(pick)]];
         SacrificePermanentAt(state, controller, legal[static_cast<std::size_t>(pick)]);
+        if (victim.is_token)
+        {
+            // SacrificePermanentAt currently leaves tokens in the graveyard vector (see its
+            // Descend note). Prophets' token fodder must cease to exist after death triggers;
+            // remove this physical token without changing other decks' learned graveyard state.
+            std::vector<Card>& gy = state.players[victim.owner_index].graveyard;
+            gy.erase(std::remove_if(gy.begin(), gy.end(), [&](const Card& c)
+                { return c.m_number == victim.card.m_number; }), gy.end());
+        }
         state.QueueExtraTurn(controller);
     }
 }
