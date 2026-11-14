@@ -700,9 +700,10 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     // the count before each draw. Same total. Lockstep twin: TurnSolver's modal draws.
                     for (int k = 0; k < draws && !mp.library.empty(); ++k)
                     {
-                        const std::size_t mp_before = mp.hand.size();
-                        DrawIntoHand(state, entry.controller_index, 1, HandEntryReason::Draw);
-                        mp.cards_drawn_this_turn += static_cast<int>(mp.hand.size() - mp_before);
+                        [[maybe_unused]] const std::size_t mp_before = mp.hand.size();
+                        // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+                        // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+                        mp.cards_drawn_this_turn += DrawIntoHand(state, entry.controller_index, 1, HandEntryReason::Draw);
                     }
                     if (g_play_draw_sink)
                     {

@@ -915,7 +915,7 @@ enum Slot : int
     FACEUP_TRAIL_STALE_PIN_FOLD, // MTG_FACEUP_TRAIL_STALE_PIN_FOLD  Morph INT-15 P2 (engine identity fold): after combat, a regrowth TRAIL flip (Den Protector) emits no variant naming a hand solo-target trick the provider no longer offers -- it cannot reach the graveyard, so the pin is stale and resolves as the TRAIL base. Default ON; =0 -> kept
     PREPAY_WILD_LITERAL,      // MTG_PREPAY_WILD_LITERAL  item A round 3, route (a) LITERAL (USER 2026-11-13: "Does this wild-mana fix avoid floating wild mana? That shouldn't show up in anything."): the prepay books a single-colour source's generic funding as ITS COLOUR (never `wild`) plus a per-pool generic-funding count (GameState::PrepayWildTrue::gfund/cfund) the drain spends on generic first; only a multi-colour source's unit stays `wild` (its colours, committed at spend). Rides on PREPAY_WILD_TRUE. Default ON; =0 -> the tag version
     PREPAY_WILD_REPLAY,       // MTG_PREPAY_WILD_REPLAY  item A round 5: a planner's replay of the general-float drain (LineFloatTapFirstPlan, the hybrid float order) runs under the prepay's record, so the literal booking's generic funding pays a replayed generic pip first, as the payer does (alchemist regression d0 s2002 gi83). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the replay drains without the record
-    SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  TEMPORARY A/B SELECTOR (Spirits Stage 1 fetch_hold_review): SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). Default OFF = the hold is offered (root default). Measurement only; the hold policy is a USER decision
+    SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). ADOPTED default ON 2026-11-14 (USER Q4: 'we should drop the fetch hold'); =0 -> the root default (hold offered)
     SPIRITS_FETCH_PRIORITY,   // MTG_SPIRITS_FETCH_PRIORITY  the USER's Flooded Strand target rule (2026-11-13; SpiritsFetchRule): order every target, search the pick plus one maker per missing W/U/B colour. Default ON; =0 -> the lossless every-target fan
     SPIRITS_LORD_VALUE,       // MTG_SPIRITS_LORD_VALUE  Spirits Q8 (USER 2026-11-13 'try to adjust if it seems to make sense'): EvalCard (the d0 runner and the beyond-horizon playout) credits a Spirit lord with its +N on every other Spirit we control, not just its own body (SpiritsProvider::ComboCardValue). ADOPTED default ON 2026-11-13 (seed 630000: d0 -0.068, d3/d5 0 slower, cheaper); =0 -> the own-body price
     LORD_LEAVE_SBA,           // MTG_LORD_LEAVE_SBA  item B (a) (mana-clean audit, USER 2026-11-13: 0/0 Burst tokens "are straight up dead before you can do anything with them"): after a devour or a sacrifice of a LORD, the toughness SBA (CR 704.5f) runs in BOTH worlds at that instant (SweepZeroToughnessSba), so a creature the lord was holding above 0 dies in the rollout too (it already died at the executor's next SBA). Default ON; =0 -> the rollout keeps the 0/0 alive
@@ -925,6 +925,8 @@ enum Slot : int
     PAY_HAND_GENERIC,         // MTG_PAY_HAND_GENERIC  item I (2), mana-clean: when the line owes no colour, a generic pip paid from a float of two or more colours spends the colour the HAND needs least (castable hand cards' pips), WUBRG on a tie. Martyr Lifegain s30001947 T3 (Basilica {W}{B}: the sac's {1} took the {W}, the second Speaker {W} stranded). Default ON; =0 -> WUBRG
     MARTYR_SAC_FIRST,         // MTG_MARTYR_SAC_FIRST  item I (1), USER 2026-11-13 ("If Martyr is already out we should for sure."): a Martyr of Sands on the battlefield since the turn began is sacrificed before the plan's casts when the plan casts a white card and that order pays (else trailing); replaces the searched position fan for those plans. Martyr Lifegain only. Default ON; =0 -> the fan
     PAY_HAND_SURPLUS_FIRST,   // MTG_PAY_HAND_SURPLUS_FIRST  item D, mana-clean: under PAY_HAND_GENERIC each float colour pays generic out of its SURPLUS over the hand's pips first (in hand-surplus order), then the demanded remainder. Shadowborn s30053678 T4 (Sire {4}{B}{R} ate four {B}, Demonic Tutor's {B} stranded on {R}{R}). Default ON; =0 -> the single drain
+    SPIRITS_CAST_ORDER,       // MTG_SPIRITS_CAST_ORDER  the USER's full Spirits cast order (2026-11-14; SpiritsProvider::CastOrderRank). Default ON; =0 -> the generic tiers
+    SPIRITS_BUCKET_DISCARD,   // MTG_SPIRITS_BUCKET_DISCARD  the USER's Spirits cleanup-discard buckets (2026-11-14; SpiritsShed): 3-4 threats of varying costs, at most 3 lands (4-5 while 4 threats are kept), one Vial. Default ON; =0 -> the generic ranking
     COUNT
 };
 
@@ -1794,6 +1796,8 @@ inline const char* Name(int slot)
         "MTG_PAY_HAND_GENERIC",
         "MTG_MARTYR_SAC_FIRST",
         "MTG_PAY_HAND_SURPLUS_FIRST",
+        "MTG_SPIRITS_CAST_ORDER",
+        "MTG_SPIRITS_BUCKET_DISCARD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

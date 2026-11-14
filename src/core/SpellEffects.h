@@ -6391,9 +6391,10 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             Player& kp = state.players[active];
             if (!kp.library.empty())
             {
-                std::size_t before = kp.hand.size();
-                DrawIntoHand(state, active, 1, HandEntryReason::Draw);
-                kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
+                [[maybe_unused]] const std::size_t before = kp.hand.size();
+                // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+                // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+                kp.cards_drawn_this_turn += DrawIntoHand(state, active, 1, HandEntryReason::Draw);
                 if (g_play_draw_sink)
                 {
                     for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
@@ -8074,9 +8075,10 @@ inline void FireCreatureEnterWatchers(GameState& state, int entered_controller, 
         Player& wp_player = state.players[who];
         for (int k = 0; k < n_draw && !wp_player.library.empty(); ++k)
         {
-            std::size_t before = wp_player.hand.size();
-            DrawIntoHand(state, who, 1, HandEntryReason::Draw);
-            wp_player.cards_drawn_this_turn += static_cast<int>(wp_player.hand.size() - before);
+            [[maybe_unused]] const std::size_t before = wp_player.hand.size();
+            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+            wp_player.cards_drawn_this_turn += DrawIntoHand(state, who, 1, HandEntryReason::Draw);
             if (g_play_draw_sink && !g_tap_speculating)
             {
                 for (std::size_t hi = before; hi < wp_player.hand.size(); ++hi)
@@ -10998,9 +11000,10 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
             { w.storied_draw_used_this_turn = true; }
             Player& kp = state.players[nctrl2];
             if (kp.library.empty()) { continue; }
-            const std::size_t before = kp.hand.size();
-            DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
-            kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
+            [[maybe_unused]] const std::size_t before = kp.hand.size();
+            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+            kp.cards_drawn_this_turn += DrawIntoHand(state, nctrl2, 1, HandEntryReason::Draw);
             if (g_play_draw_sink)
             {
                 for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
@@ -11032,9 +11035,10 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                 Player& kp = state.players[ectrl];
                 for (int k = 0; k < draws && !kp.library.empty(); ++k)
                 {
-                    std::size_t before = kp.hand.size();
-                    DrawIntoHand(state, ectrl, 1, HandEntryReason::Draw);
-                    kp.cards_drawn_this_turn += static_cast<int>(kp.hand.size() - before);
+                    [[maybe_unused]] const std::size_t before = kp.hand.size();
+                    // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+                    // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+                    kp.cards_drawn_this_turn += DrawIntoHand(state, ectrl, 1, HandEntryReason::Draw);
                     if (g_play_draw_sink)
                     {
                         for (std::size_t hi = before; hi < kp.hand.size(); ++hi)
@@ -12250,9 +12254,10 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         Player& dp = state.players[controller];
         for (int k = 0; k < p.etb_self_draw && !dp.library.empty(); ++k)
         {
-            std::size_t before = dp.hand.size();
-            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-            dp.cards_drawn_this_turn += static_cast<int>(dp.hand.size() - before);
+            [[maybe_unused]] const std::size_t before = dp.hand.size();
+            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+            dp.cards_drawn_this_turn += DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
             if (g_play_draw_sink && !g_tap_speculating)
             {
                 for (std::size_t hi = before; hi < dp.hand.size(); ++hi)
@@ -12930,9 +12935,10 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         const int n_draw = n_disc + p.etb_discard_any_draw_bonus;
         for (int k = 0; k < n_draw && !cp_.library.empty(); ++k)
         {
-            std::size_t before = cp_.hand.size();
-            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-            cp_.cards_drawn_this_turn += static_cast<int>(cp_.hand.size() - before);
+            [[maybe_unused]] const std::size_t before = cp_.hand.size();
+            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+            cp_.cards_drawn_this_turn += DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
             if (g_play_draw_sink && !g_tap_speculating)
             {
                 for (std::size_t hi = before; hi < cp_.hand.size(); ++hi)
@@ -14015,9 +14021,10 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
         // Counted per draw (the per-turn draw cap reads the count before each draw; same total).
         for (int k = 0; k < braingeyser_x && !pl.library.empty(); ++k)
         {
-            const std::size_t k_before = pl.hand.size();
-            DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-            pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - k_before);
+            [[maybe_unused]] const std::size_t k_before = pl.hand.size();
+            // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+            // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+            pl.cards_drawn_this_turn += DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
         }
         if (g_play_draw_sink)
         {
@@ -14608,9 +14615,10 @@ inline void ApplyLoyaltyAbility(GameState& state, int controller, int walker_id,
                 Player& pl = state.players[controller];
                 if (!pl.library.empty())
                 {
-                    std::size_t before = pl.hand.size();
-                    DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
-                    pl.cards_drawn_this_turn += static_cast<int>(pl.hand.size() - before);
+                    [[maybe_unused]] const std::size_t before = pl.hand.size();
+                    // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+                    // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+                    pl.cards_drawn_this_turn += DrawIntoHand(state, controller, 1, HandEntryReason::Draw);
                     if (g_play_draw_sink)
                     {
                         for (std::size_t hi = before; hi < pl.hand.size(); ++hi)

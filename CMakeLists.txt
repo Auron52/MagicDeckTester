@@ -339,6 +339,7 @@ add_executable(mtg-test
     test/unit/test_spirits_skyclave_orchid.cpp
     test/unit/test_spirits_usher.cpp
     test/unit/test_spirits_fetch_rule.cpp
+    test/unit/test_spirits_discard.cpp
     test/unit/test_lurrus.cpp
     test/unit/test_jumbo_cactuar.cpp
     test/unit/test_edf_blink_target.cpp

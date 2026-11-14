@@ -70901,9 +70901,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Lockstep twin: EffectHandler's modal draws.
             for (int k = 0; k < draws && !ap.library.empty(); ++k)
             {
-                const std::size_t k_before = ap.hand.size();
-                DrawIntoHand(state, state.active_player_index, 1, HandEntryReason::Draw);
-                ap.cards_drawn_this_turn += static_cast<int>(ap.hand.size() - k_before);
+                [[maybe_unused]] const std::size_t k_before = ap.hand.size();
+                // Actual draws only (DrawIntoHand's count): a dredge replacing the draw is not a draw, so it neither
+                // counts toward the per-turn draw cap nor toward any draw count (USER 2026-11-14).
+                ap.cards_drawn_this_turn += DrawIntoHand(state, state.active_player_index, 1, HandEntryReason::Draw);
             }
             if (g_play_draw_sink)
             {

@@ -22524,6 +22524,289 @@ bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int contro
     return false;
 }
 
+// ---- SpiritsProvider: the USER's full cast order (2026-11-14) -----------------------------------------------
+// USER, on the proposal (land -> Vial -> Mimic -> Wanderer -> Patrician -> lords -> the bodies -> Souls -> White
+// Orchid -> Millicent): "The cast order looks good, though we should make a full order with 6 and 7 split. Most
+// cards don't care about the order except Metallic Mimic, Geist/Lingering Souls and Millicent, so it should work
+// fine." So one spot per card. The splits within the two former groups (AGENT, cheapest-first as the generic tier
+// did, the USER's three load-bearing edges untouched): Supreme Phantom ({1}{U}) before Drogskol Captain
+// ({1}{W}{U}); Usher (1) -> Labyrinth (2) -> Shacklegeist (2) -> Geist of Saint Traft (3) -> Skyclave (3).
+// The load-bearing edges: Metallic Mimic before every later Spirit (its +1/+1 counter, Souls tokens included);
+// Patrician Geist before Lingering Souls (the flashback's {1} discount); Lingering Souls' tokens before
+// Millicent (affinity). A hand cast and a flashback of Souls share a rank (hand first: the flashback copy
+// is the one the hand cast puts there -- GyCastRidesCastSequence). Vial puts and graveyard casts ride the
+// sequence at these ranks. MTG_SPIRITS_CAST_ORDER=0 -> the generic tiers (creatures cheapest-first at 10, the
+// Vial and Souls at 20, Millicent at 25).
+namespace
+{
+bool SpiritsCastOrderOn()
+{
+    static const bool env = EnvOn("MTG_SPIRITS_CAST_ORDER", true);   // DEFAULT ON (USER order); =0 -> generic
+    return heurarm::Flag(heurarm::SPIRITS_CAST_ORDER, env);
+}
+struct SpiritsOrderRow { const char* name; int rank; const char* why; };
+constexpr SpiritsOrderRow kSpiritsCastOrder[] = {
+    { "Aether Vial",                   101, "USER: the Vial first -- it starts charging a turn sooner" },
+    { "Metallic Mimic",                102, "USER: before every later Spirit (its +1/+1 counter, Souls tokens included)" },
+    { "Mausoleum Wanderer",            103, "USER order" },
+    { "Patrician Geist",               104, "USER: before Lingering Souls (the flashback's {1} discount)" },
+    { "Supreme Phantom",               105, "USER order (lords; Phantom, the cheaper, first)" },
+    { "Drogskol Captain",              106, "USER order (lords)" },
+    { "Usher of the Fallen",           107, "USER order (bodies, cheapest first)" },
+    { "Spirit of the Labyrinth",       108, "USER order (bodies)" },
+    { "Shacklegeist",                  109, "USER order (bodies)" },
+    { "Geist of Saint Traft",          110, "USER order (bodies)" },
+    { "Skyclave Apparition",           111, "USER order (bodies)" },
+    { "Lingering Souls",               112, "USER: hand, then flashback; after Patrician, before Millicent" },
+    { "White Orchid Phantom",          113, "USER order: late, so a destroyed own nonbasic has already made its mana" },
+    { "Millicent, Restless Revenant",  114, "USER: last -- affinity counts every Spirit cast before it" },
+};
+}   // namespace
+
+int SpiritsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (SpiritsCastOrderOn())
+    {
+        for (const SpiritsOrderRow& r : kSpiritsCastOrder) { if (def.card.m_name == r.name) { return r.rank; } }
+    }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
+const char* SpiritsProvider::CastOrderTierName(int rank) const
+{
+    if (!SpiritsCastOrderOn()) { return nullptr; }
+    for (const SpiritsOrderRow& r : kSpiritsCastOrder) { if (r.rank == rank) { return r.why; } }
+    return nullptr;
+}
+
+// ---- SpiritsProvider: the USER's cleanup-discard buckets (2026-11-14) ---------------------------------------
+// USER: "For the Discard order we should have actual buckets. i.e. We should hold at least 3-4 threats of varying
+// costs and at most 3 lands and an Aether Vial for deployment. Most of the time we are probably okay with 3 lands
+// total, though 4 or 5 are okay to hit if we can keep 4 threats in hand. I agree that Lingering Souls should be
+// dropped early on the threat side."
+//
+// THE QUOTAS. LANDS count the board ("3 lands total"): keep up to 3 in total; the 4th and 5th are kept only while
+// 4 threats are kept (otherwise they are surplus), anything past 5 is surplus. THREATS (every nonland, non-Vial
+// card): keep 4, chosen for VARYING COSTS -- the most valuable threat of each distinct effective cost first
+// (Millicent at her affinity-reduced cost), then the most valuable of the rest; the first 3 chosen are the core,
+// the 4th sits below the Vial. VIAL: one, while none is on the battlefield.
+// LINGERING SOULS with black access (an unrestricted black land we control or hold, or a Flooded Strand we
+// control or hold with a Godless Shrine / Watery Grave left to fetch) is the FIRST threat shed, and it still counts
+// toward the 4 threats -- from the graveyard it is two 1/1 fliers for {1}{B} (AGENT READING of "dropped early on
+// the threat side"). Without black access it is an ordinary threat (its hand cast is {2}{W}).
+// THE THREAT VALUE (keep longest -> shed first): Millicent > Drogskol Captain > Supreme Phantom > Patrician Geist >
+// Geist of Saint Traft > Lingering Souls > White Orchid > Labyrinth > Mimic > Usher > Wanderer > Shacklegeist >
+// Skyclave (the 2026-11-13 proposal's order; the USER did not object to it).
+// WHICH LANDS ARE KEPT: greedily, the land filling the earliest unmet slot of the fetch rule's {W1,U1,W2,B1,W3,U2}
+// (counting the board, as SpiritsFetchInputsOf does: a creature-only land counts for W/U only; a Flooded Strand
+// counts as any colour), ties Strand > a dual > a creature-only land > a basic > Azorius Chancery.
+//
+// THE SHED ORDER (first -> last): surplus lands (past 5; past 3 when 4 threats cannot be kept), worst first ->
+// a surplus Vial (any while one is on the battlefield, else all but one) -> Lingering Souls with black access ->
+// threats beyond the kept 4, lowest value first -> the 4th/5th lands -> the 4th kept threat -> the kept Vial ->
+// the core 3 threats, lowest value first -> the kept lands, worst first. Every hand index is named once, routed
+// through CleanupDiscardRankingWithOrder (staged-card and required-piece protections stay engine-enforced). The
+// quotas move after every shed, so the rule is re-asked per shed (ShedStable false). Measured bound (2026-11-13,
+// seed 610000): the discard ranking moved 1 game of 300 at d3 and 0 at d5 -- this deck rarely sheds.
+// MTG_SPIRITS_BUCKET_DISCARD=0 -> the generic ranking.
+namespace
+{
+bool SpiritsBucketDiscardOn()
+{
+    static const bool env = EnvOn("MTG_SPIRITS_BUCKET_DISCARD", true);   // DEFAULT ON (USER rule); =0 -> generic
+    return heurarm::Flag(heurarm::SPIRITS_BUCKET_DISCARD, env);
+}
+int SpiritsThreatValue(const CardDefinition* d)
+{
+    if (d == nullptr) { return 0; }
+    static const std::pair<const char*, int> kValue[] = {
+        { "Skyclave Apparition", 600 },  { "Shacklegeist", 610 },        { "Mausoleum Wanderer", 620 },
+        { "Usher of the Fallen", 630 },  { "Metallic Mimic", 640 },      { "Spirit of the Labyrinth", 645 },
+        { "White Orchid Phantom", 648 }, { "Lingering Souls", 650 },     { "Geist of Saint Traft", 700 },
+        { "Patrician Geist", 800 },      { "Supreme Phantom", 810 },     { "Drogskol Captain", 820 },
+        { "Millicent, Restless Revenant", 900 },
+    };
+    for (const auto& [name, v] : kValue) { if (d->card.m_name == name) { return v; } }
+    return 500 + 10 * d->card.m_power.value_or(0);   // a card outside the 60: by its body
+}
+bool SpiritsIsStrand(const std::string& name) { return name == "Flooded Strand"; }
+bool SpiritsUnrestrictedBlackLand(const CardDefinition* d)
+{
+    if (d == nullptr || !d->card.IsLand() || d->params.colored_creature_only) { return false; }
+    for (Color c : d->params.produces) { if (c == Color::Black) { return true; } }
+    return false;
+}
+// Can a Lingering Souls in the graveyard be flashed back: a black source we control or hold, or a Flooded Strand
+// we control or hold with a black Plains/Island-typed land left in the library.
+bool SpiritsSoulsBlackAccess(const GameState& s, int me)
+{
+    if (SpiritsFetchInputsOf(s, me).b > 0) { return true; }
+    bool strand = false;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == me && SpiritsIsStrand(q.card.m_name)) { strand = true; } }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        if (SpiritsUnrestrictedBlackLand(CardDatabase::Instance().LookupCached(c))) { return true; }
+        if (SpiritsIsStrand(c.m_name)) { strand = true; }
+    }
+    if (!strand) { return false; }
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].library)
+    {
+        if (SpiritsUnrestrictedBlackLand(CardDatabase::Instance().LookupCached(c))
+            && (CardHasSubtype(c, "Plains") || CardHasSubtype(c, "Island")))
+        { return true; }
+    }
+    return false;
+}
+std::vector<int> SpiritsShed(const GameState& s, const std::vector<std::string>* required_pieces)
+{
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    const int n = static_cast<int>(ap.hand.size());
+    auto def_of = [&](int i) { return CardDatabase::Instance().LookupCached(ap.hand[static_cast<std::size_t>(i)]); };
+
+    int board_lands = 0;
+    bool vial_in_play = false;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me) { continue; }
+        if (q.card.IsLand()) { ++board_lands; }
+        if (q.card.m_name == "Aether Vial") { vial_in_play = true; }
+    }
+    const bool black = SpiritsSoulsBlackAccess(s, me);
+
+    std::vector<int> lands, vials, souls_fb, threats;
+    for (int i = 0; i < n; ++i)
+    {
+        const CardDefinition* d = def_of(i);
+        const std::string& nm = ap.hand[static_cast<std::size_t>(i)].m_name;
+        if (d != nullptr && d->card.IsLand())       { lands.push_back(i); }
+        else if (nm == "Aether Vial")               { vials.push_back(i); }
+        else if (nm == "Lingering Souls" && black)  { souls_fb.push_back(i); }
+        else                                        { threats.push_back(i); }
+    }
+
+    // ---- lands: the keep order, best first ----
+    {
+        const SpiritsFetchInputs in = SpiritsFetchInputsOf(s, me);
+        int have[3] = { in.w, in.u, in.b };
+        static const int kSlotCol[6] = { 0, 1, 0, 2, 0, 1 };   // W1 U1 W2 B1 W3 U2
+        static const int kSlotN[6]   = { 1, 1, 2, 1, 3, 2 };
+        auto mask_of = [&](int i)
+        {
+            const CardDefinition* d = def_of(i);
+            if (SpiritsIsStrand(ap.hand[static_cast<std::size_t>(i)].m_name)) { return 7u; }
+            unsigned m = 0;
+            if (d == nullptr) { return m; }
+            for (Color c : d->params.produces)
+            {
+                if (c == Color::White) { m |= 1u; } else if (c == Color::Blue) { m |= 2u; }
+                else if (c == Color::Black && !d->params.colored_creature_only) { m |= 4u; }
+            }
+            return m;
+        };
+        auto cls_of = [&](int i)
+        {
+            const CardDefinition* d = def_of(i);
+            const std::string& nm = ap.hand[static_cast<std::size_t>(i)].m_name;
+            if (SpiritsIsStrand(nm))                 { return 0; }
+            if (nm == "Azorius Chancery")            { return 4; }
+            if (d != nullptr && IsBasicLandCard(*d)) { return 3; }
+            if (d != nullptr && d->params.colored_creature_only) { return 2; }
+            return 1;
+        };
+        std::vector<int> ordered;
+        std::vector<char> used(lands.size(), 0);
+        for (std::size_t k = 0; k < lands.size(); ++k)
+        {
+            int best = -1; unsigned best_need = 0; int best_cls = 0;
+            for (std::size_t j = 0; j < lands.size(); ++j)
+            {
+                if (used[j]) { continue; }
+                const unsigned m = mask_of(lands[j]);
+                unsigned need = 0;
+                for (int t = 0; t < 6; ++t)
+                { if (have[kSlotCol[t]] < kSlotN[t] && ((m >> kSlotCol[t]) & 1u)) { need |= 1u << (5 - t); } }
+                const int cls = cls_of(lands[j]);
+                if (best < 0 || need > best_need || (need == best_need && cls < best_cls))
+                { best = static_cast<int>(j); best_need = need; best_cls = cls; }
+            }
+            used[static_cast<std::size_t>(best)] = 1;
+            const unsigned m = mask_of(lands[static_cast<std::size_t>(best)]);
+            for (int c = 0; c < 3; ++c) { if ((m >> c) & 1u) { ++have[c]; } }
+            ordered.push_back(lands[static_cast<std::size_t>(best)]);
+        }
+        lands.swap(ordered);
+    }
+
+    // ---- threats: the kept 4, varying costs first ----
+    std::stable_sort(threats.begin(), threats.end(), [&](int a, int b)
+    { return SpiritsThreatValue(def_of(a)) > SpiritsThreatValue(def_of(b)); });
+    std::vector<int> sel;
+    {
+        std::vector<int> costs;
+        for (int i : threats)
+        {
+            if (sel.size() >= 4) { break; }
+            const CardDefinition* d = def_of(i);
+            const int c = d != nullptr ? vialcurve::EffectiveCost(s, *d) : 0;
+            if (std::find(costs.begin(), costs.end(), c) != costs.end()) { continue; }
+            costs.push_back(c);
+            sel.push_back(i);
+        }
+        for (int i : threats)
+        {
+            if (sel.size() >= 4) { break; }
+            if (std::find(sel.begin(), sel.end(), i) == sel.end()) { sel.push_back(i); }
+        }
+    }
+    auto in_sel = [&](int i) { return std::find(sel.begin(), sel.end(), i) != sel.end(); };
+    const bool four_threats = static_cast<int>(sel.size() + souls_fb.size()) >= 4;
+    const int cap3 = std::max(0, 3 - board_lands);
+    const int cap5 = std::max(0, 5 - board_lands);
+    const int nl = static_cast<int>(lands.size());
+
+    std::vector<int> shed;
+    shed.reserve(static_cast<std::size_t>(n));
+    // 1. surplus lands, worst first
+    for (int r = nl - 1; r >= (four_threats ? cap5 : cap3); --r) { shed.push_back(lands[static_cast<std::size_t>(r)]); }
+    // 2. a surplus Vial
+    const int kept_vial = (!vial_in_play && !vials.empty()) ? vials.front() : -1;
+    for (int i : vials) { if (i != kept_vial) { shed.push_back(i); } }
+    // 3. Lingering Souls with black access
+    for (int i : souls_fb) { shed.push_back(i); }
+    // 4. threats beyond the kept 4, lowest value first
+    for (auto it = threats.rbegin(); it != threats.rend(); ++it) { if (!in_sel(*it)) { shed.push_back(*it); } }
+    // 5. the 4th / 5th lands (kept only while 4 threats are)
+    if (four_threats)
+    { for (int r = std::min(nl, cap5) - 1; r >= cap3; --r) { shed.push_back(lands[static_cast<std::size_t>(r)]); } }
+    // 6. the 4th kept threat
+    if (sel.size() >= 4) { shed.push_back(sel[3]); }
+    // 7. the kept Vial
+    if (kept_vial >= 0) { shed.push_back(kept_vial); }
+    // 8. the core 3 threats, lowest value first (sel's first three, re-sorted by value)
+    {
+        std::vector<int> core(sel.begin(), sel.begin() + static_cast<std::ptrdiff_t>(std::min<std::size_t>(3, sel.size())));
+        std::stable_sort(core.begin(), core.end(), [&](int a, int b)
+        { return SpiritsThreatValue(def_of(a)) < SpiritsThreatValue(def_of(b)); });
+        for (int i : core) { shed.push_back(i); }
+    }
+    // 9. the kept lands, worst first
+    for (int r = std::min(nl, cap3) - 1; r >= 0; --r) { shed.push_back(lands[static_cast<std::size_t>(r)]); }
+    return CleanupDiscardRankingCounted(s, required_pieces, shed);
+}
+}   // namespace
+
+std::vector<int> SpiritsProvider::CleanupDiscardCandidates(const GameState& s,
+                                                           const std::vector<std::string>* required_pieces) const
+{
+    const int n = static_cast<int>(s.players[s.active_player_index].hand.size());
+    if (!SpiritsBucketDiscardOn() || n <= 0 || n > 64) { return DeckProvider::CleanupDiscardCandidates(s, required_pieces); }
+    return SpiritsShed(s, required_pieces);
+}
+
+bool SpiritsProvider::CleanupDiscardShedStable() const { return !SpiritsBucketDiscardOn(); }
+
 // ---- SpiritsProvider: Usher of the Fallen's BOAST -- the narrow post-combat main ------------------
 //
 // THE GAP. "Boast -- {1}{W}: Create a 1/1 white Human Warrior creature token. (Activate only if this creature

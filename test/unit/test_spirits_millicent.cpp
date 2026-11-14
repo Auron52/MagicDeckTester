@@ -226,12 +226,21 @@ TEST_CASE("Millicent affinity on a CREATURE spell: {1} less per Spirit we contro
     CHECK(EffectiveSpellCost(MlDef(kMill), s).ToString() == "{W}{U}");
 }
 
-TEST_CASE("Millicent casts in the AFFINITY tier: after a Spirit creature, Lingering Souls and a Mimic")
+TEST_CASE("Millicent casts LAST: after a Spirit creature, Lingering Souls and a Mimic (the USER's full order)")
 {
     GameState s = MlBoard({});
     const DecisionProvider& p = ResolveProvider(s);
     const int m = p.CastOrderRank(s, MlDef(kMill));
-    CHECK(m == 25);
+    // The USER's full Spirits cast order (2026-11-14): one strictly increasing spot per card.
+    const char* order[] = { "Aether Vial", "Metallic Mimic", "Mausoleum Wanderer", "Patrician Geist",
+                            "Supreme Phantom", "Drogskol Captain", "Usher of the Fallen", "Spirit of the Labyrinth",
+                            "Shacklegeist", "Geist of Saint Traft", "Skyclave Apparition", kSouls,
+                            "White Orchid Phantom", kMill };
+    for (std::size_t i = 1; i < sizeof(order) / sizeof(order[0]); ++i)
+    {
+        CAPTURE(order[i]);
+        CHECK(p.CastOrderRank(s, MlDef(order[i - 1])) < p.CastOrderRank(s, MlDef(order[i])));
+    }
     CHECK(p.CastOrderRank(s, MlDef("Mausoleum Wanderer")) < m);
     CHECK(p.CastOrderRank(s, MlDef(kSouls)) < m);
     CHECK(p.CastOrderRank(s, MlDef("Metallic Mimic")) < m);

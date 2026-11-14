@@ -807,3 +807,63 @@ viewer (IsADirectoryError) and regression_tiers FAILs are that mistake; re-run a
 **Open USER questions:** cast-order proposal; discard-bucket proposal; Q4 fetch hold; fetch-rule readings
 (creature-only lands count W/U not B; basics: Plains while lib Plains > lib Islands, else Island); Labyrinth ruling
 (a capped draw cannot be replaced by dredge/Cyclone); extraturns_regression_d5_s2002 one-game pooled churn (kept GT).
+
+## USER rulings 2026-11-14 + cast order / discard buckets / fetch hold LANDED (uncommitted at write time)
+- **Cast order:** *"The cast order looks good, though we should make a full order with 6 and 7 split. Most cards don't
+  care about the order except Metallic Mimic, Geist/Lingering Souls and Millicent, so it should work fine."* ->
+  `SpiritsProvider::CastOrderRank` (`MTG_SPIRITS_CAST_ORDER`, default ON), one spot per card: Vial 101 -> Mimic ->
+  Wanderer -> Patrician -> Supreme Phantom -> Drogskol Captain -> Usher -> Labyrinth -> Shacklegeist -> Geist of
+  Saint Traft -> Skyclave -> Lingering Souls -> White Orchid -> Millicent 114 (splits AGENT, cheapest first).
+- **White Orchid Phantom on our own land:** USER *"I'm not sure we want to destroy our own land, though you are right
+  that it does refresh it, effectively producing mana... Interesting."* No change: the own-nonbasic target is a
+  SEARCHED option ("up to one"), offered only while a basic remains (OfferOwnNonbasicLandDestroy).
+- **Discard:** *"For the Discard order we should have actual buckets. i.e. We should hold at least 3-4 threats of
+  varying costs and at most 3 lands and an Aether Vial for deployment. Most of the time we are probably okay with 3
+  lands total, though 4 or 5 are okay to hit if we can keep 4 threats in hand. I agree that Lingering Souls should be
+  dropped early on the threat side."* -> `SpiritsShed` (`MTG_SPIRITS_BUCKET_DISCARD`, default ON; full rule and the
+  AGENT readings in the code comment): surplus lands (past 5 in total; past 3 when 4 threats cannot be kept) -> surplus
+  Vial -> Lingering Souls with black access (still counts as a threat from the graveyard) -> threats past the kept 4
+  (varying costs first) -> 4th/5th lands -> 4th threat -> the Vial -> core 3 threats -> kept lands.
+- **Q4 fetch hold:** *"Yes, we should drop the fetch hold. It isn't helpful here."* -> `MTG_SPIRITS_NO_FETCH_HOLD`
+  default ON (=0 restores the hold).
+- **Fetch-rule readings (creature-only lands W/U not B; basics Plains while lib Plains > Islands):** *"2-3 on Fetches
+  sounds good."* APPROVED.
+- **Labyrinth vs dredge:** *"4 on Spirit of the Labyrinth I agree that your interpretation should be correct. The draws
+  don't happen at all, so there is nothing to replace."* Plus the nuance: *"If you draw a card, for subsequent draws you
+  cannot dredge, so that part is correct. However, if you dredge all previous cards subsequent draws are not blocked yet
+  because dredging does not count as a draw. That means you can continue dredging."* / *"So, you have to actually draw
+  at some point for the block to kick in."* The choke point already did this (a dredge returns drew=false; the cap
+  reads actual draws). FIXED the 10 single-draw sites that counted `hand.size()` growth as draws (a dredge would have
+  consumed the cap): they now add `DrawIntoHand`'s actual-draw count (SpellEffects.h x8, EffectHandler modal draws,
+  TurnSolver twin). Pinned by test_spirits_discard.cpp "dredge, dredge, draw, then the cap".
+- **Measurement** (held-out seed 640000, paired; arms new / nocast / nobucket / old = all three off):
+  | lever | d0 x1000 | d3 b10 x400 | d5 b20 x400 | units |
+  |---|---|---|---|---|
+  | fetch hold dropped | -0.131 (132 faster / 2 slower) | -0.0025 (1/0) | 0 | d3 -9%, d5 -23% |
+  | USER cast order | -0.004 (4/0) | same outcomes | same outcomes | -0.5% |
+  | discard buckets | digest-identical | identical | identical | ~0 |
+  Buckets: index 0 differs from the generic ranking in 87% of rollout sheds, but only 28 real sheds in 9,600 games
+  and none moved a game (the 2026-11-13 bound said ~0). Old -> new: d0 5.1040 -> 4.9690, d3 4.6125 -> 4.6100, d5
+  4.6075 -> 4.6075.
+- Units 3060/3061 (the deck-folder count, environmental); scenarios 530/530.
+
+## RESUME HERE (checkpoint 2026-11-14 ~00:50 UTC; supersedes earlier blocks)
+**Done since the last block:** USER rulings of 2026-11-14 (section above) all IMPLEMENTED and measured (clean win,
+all default ON): full cast order, discard buckets, fetch hold dropped, dredge-vs-cap draw-count fix. Units 3060/3061
+(deck-folder count, environmental), scenarios 530/530. CI for the a819bc2d6 push: ubuntu, windows, determinism
+parity ALL SUCCESS.
+**Running (harness-tracked, this session):** `bash test/regression.sh --smoke` then `--regression` (Release, dirty
+src at launch = this commit's src) -> logs/spirits/smoke_castdisc.log, logs/spirits/reg_castdisc.log (each ends
+`rc=N`). Do NOT rebuild until both finish.
+**Next, in order:**
+1. Read both tiers' audit (audit_changed_games). Expected movement: spirits keys (cast order / hold / buckets).
+   Any other deck moving = the draw-count fix (10 single-draw sites now add DrawIntoHand's actual draws, not hand
+   growth) -- should be identical unless a dredge happens at one of those sites; root-cause anything else.
+2. Accept smoke + regression (`--accept`, scoped or full as the audit warrants; ACCEPT note ONE line), then
+   `python3 test/check_gt_logs.py`. Spirits overnight keys wait for the periodic overnight run.
+3. `python3 scripts/verify_deck.py decks/Spirits/Spirits.cod > logs/spirits/verify_final.log` (the .cod, NOT the
+   folder); INVESTIGATE the earlier `play_invariants 8 invariant violation(s)` if it recurs.
+4. Shared-branch push not before ~03:55 UTC 2026-11-14 (4 h rule); then background CI watch (--interval 60).
+5. Stage 6 report with 6a disclosure.
+**Open USER questions:** extraturns_regression_d5_s2002 one-game pooled churn (GT kept); whether to re-run the
+claude-play sweep (recorded at 35b021047, before the fetch/cast-order/lord changes; 0 flags; agent recommends no).

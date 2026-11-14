@@ -135,7 +135,7 @@ TEST_CASE("Spirits routing: the signature survives cutting any ONE of its cards,
 
 // ---- the lossless fetch surface -----------------------------------------------------------------
 
-TEST_CASE("SpiritsProvider: Flooded Strand offers every distinct legal target, hold kept")
+TEST_CASE("SpiritsProvider: Flooded Strand offers every distinct legal target, hold declined")
 {
     GameState s = SpFresh();
     // Library: two Plains, an Island, Hallowed Fountain, Godless Shrine, Watery Grave, a creature.
@@ -153,18 +153,11 @@ TEST_CASE("SpiritsProvider: Flooded Strand offers every distinct legal target, h
     // Fountain plus the best black maker -- never the DecisionProvider top-1 default.
     CHECK(prov.FetchSearchCandidates(s, 0, strand.params, prov.FetchCandidates(s, 0, strand.params))
           == std::vector<std::string>{"Hallowed Fountain", "Godless Shrine"});
-    // The battlefield hold stays offered (root default), so the Strand is never collapsed on play.
-    CHECK(prov.ConsiderFetchHold(s, strand));
+    // The battlefield hold is DECLINED (USER Q4 2026-11-14: "we should drop the fetch hold"): the Strand
+    // resolves on play; MTG_SPIRITS_NO_FETCH_HOLD=0 restores the root's hold.
+    CHECK_FALSE(prov.ConsiderFetchHold(s, strand));
     s.m_provider = &prov;
-    CHECK_FALSE(FetchResolvesOnPlay(s, strand));
-    // ...and BESIDE the hold, the crack-on-play variants are offered (a pinned target collapses the
-    // fetch at the land drop so its land pays for this plan's casts) -- never at 3 life or less.
-    CHECK(FetchCrackOnPlayOffered(s, strand));
-    CHECK(FetchCrackOnPlayPinned(s, strand, "Island"));
-    CHECK_FALSE(FetchCrackOnPlayPinned(s, strand, ""));   // the hold variant carries no target
-    s.players[0].life = 3;
-    CHECK_FALSE(FetchCrackOnPlayOffered(s, strand));
-    CHECK_FALSE(FetchCrackOnPlayPinned(s, strand, "Island"));
+    CHECK(FetchResolvesOnPlay(s, strand));
 }
 
 // ---- the lords ----------------------------------------------------------------------------------

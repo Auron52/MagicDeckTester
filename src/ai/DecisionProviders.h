@@ -4305,16 +4305,29 @@ public:
     // A Spirit LORD's value to the greedy chooser (the d0 runner, the playout beyond the horizon): its own body
     // as EvalCard prices it PLUS its +N on every other Spirit creature we control (MTG_SPIRITS_LORD_VALUE).
     bool ComboCardValue(const GameState& s, const CardDefinition& def, int dmg_unit, int& out) const override;
+    // The USER's full cast order (2026-11-14, MTG_SPIRITS_CAST_ORDER): Vial -> Mimic -> Wanderer -> Patrician ->
+    // Phantom -> Captain -> Usher -> Labyrinth -> Shacklegeist -> Geist of Saint Traft -> Skyclave -> Lingering
+    // Souls -> White Orchid -> Millicent. One spot per card (no ranges).
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    const char* CastOrderTierName(int rank) const override;
+    // The USER's cleanup-discard buckets (2026-11-14, MTG_SPIRITS_BUCKET_DISCARD; SpiritsShed in the .cpp). The
+    // quotas move after every shed, so the order is re-asked per shed (ShedStable false while on).
+    std::vector<int> CleanupDiscardCandidates(const GameState& s,
+                                              const std::vector<std::string>* required_pieces) const override;
+    bool CleanupDiscardShedStable() const override;
     // Usher of the Fallen's BOAST: the narrow post-combat main (BoastSecondMainLive / IsBoastActivation,
     // DecisionProviders.cpp) -- opened only on a turn an attacked, un-boasted Usher can pay its {1}{W},
     // and its menu is the boast activations alone (soundness argument at the definition).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
-    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;    // TEMPORARY A/B selector for the Stage 1 fetch_hold_review (MTG_SPIRITS_NO_FETCH_HOLD, per-job via
-    // HeuristicArm): =1 declines the battlefield hold. Default OFF -> the root default (hold offered).
+    bool RestrictedSecondMainAdmits(const GameState& s, const Action& a) const override;
+    // The battlefield fetch hold is DECLINED: Flooded Strand cracks on play. USER 2026-11-14 (Q4): "Yes, we
+    // should drop the fetch hold. It isn't helpful here." Measured quality-neutral on 600 paired games (d3/d5,
+    // 1 faster / 1 slower each) and ~10% fewer units. MTG_SPIRITS_NO_FETCH_HOLD=0 restores the root's hold
+    // (A/B only; per-job via HeuristicArm).
     bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override
     {
-        static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD");
+        static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD", true);
         if (heurarm::Flag(heurarm::SPIRITS_NO_FETCH_HOLD, env)) { return false; }
         return DeckProvider::ConsiderFetchHold(s, fetch);
     }
