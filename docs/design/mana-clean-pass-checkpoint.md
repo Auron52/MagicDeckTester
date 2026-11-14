@@ -1588,3 +1588,17 @@ fungus 1,880, gods 4,300 (first run).
   Recommendation: adopt -- the residual is budget displacement on 2 games in 5000, against the ENUM-GAP family the
   USER asked to fix. Not run (adoption-only): smoke/regression accept, PGO gate 30000-34999. Scratch:
   build/scratch/claudeE/{ab,ab2,d8,g2082}; handoff logs/mana-clean-chain/E-handoff.md.
+
+* **Queue item K (Codex, 2026-11-14): Jumbo cast order -- validated in isolated `wip/k-jumbo`, based on H.**
+  `JumboOvergrowthAtBreakpoint` now tests `outside == 3 || stacked == 3`, never their mixed sum, and accepts a
+  one-mana Aura on any land. The GSZ-to-Arbor-Elf move places Overgrowth after the tutor only when the ranked
+  sequence fails and the moved sequence pays, with a planned haste equip onto that library Elf included in both
+  payment probes (the cast-order vector itself omits equips). Two focused unit cases cover the other-land board and
+  the fetched-Elf-plus-equip board; 3,099/3,099 full unit cases passed. Oracle repro s30040847 T3:
+  APPLY-DROP-ORDER 5 -> 0. Jumbo combined smoke/regression: 3,365 games, 544/544 scenarios, strict viewer refs
+  343 ok/493 repaired/1 beaten and zero drift/divergence/gap. Score unchanged in every tier row; 15 searched and one
+  d0 same-score play traces moved. All 15 searched traces inspected against the H binary: most cast GSZ and
+  Overgrowth in the same earlier turn, and no win turn regressed. Fresh held-out 3,000 paired Jumbo games
+  (seed 7100001, profile depth, b20) had 0 changed win turns, net 0. Tier batch 23s vs H-equivalent 22s;
+  search units 9,095,976 vs 9,171,439 (-0.8%). Four Jumbo play digests were accepted locally with their `.wins`
+  files; no other deck ground truth changed. K is ready for a later integration after H.
