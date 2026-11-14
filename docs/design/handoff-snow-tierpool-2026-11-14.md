@@ -12,6 +12,21 @@ The existing smoke and regression runs were inspected and accepted without
 re-running them. Both tiers had zero slower games; `test/check_gt_logs.py`
 reported 1170 consistent logs, zero stale, zero missing.
 
+Snow and its accepted GT were committed as `32da5c41a` and pushed to
+`origin/phase-1-2-deck-analyzer`. CI build run `43596869487` was started.
+The pooled harness was squash-merged into the Snow worktree and built. A single
+`--smoke --regression --overnight --deck=th` run passed all three tiers; the
+scenario-failure probe aborted and killed its batch; the explicit serial
+fallback passed its smoke row; a VPC sample recorded zero stateless
+fallbacks in 1,339 interactive steps; and the simulated no-FIFO fallback
+passed its smoke row (544 scenarios, three game jobs). These results are in
+`build/scratch/tier-pool/` in the primary checkout.
+
+Cyclone backstop decision: **keep the fixed 30031..30033 block**. Seed 30033
+now hits the two-million-unit cap, which is exactly the regression signal
+specified by `.claude/skills/regression-testing.md`; re-screening would hide it.
+The stale `test/regression_cases.sh` comment was corrected.
+
 ## 1. Snow package (branch `snow-contpay`, worktree `.claude/worktrees/snow-contpay`, LOCAL, not pushed)
 
 - **Branch state:** rebased onto origin `bca756347` at 10:2x UTC. It carries 10 commits ending at `6ad20e507`. The pre-rebase backup is branch `backup/snow-contpay-pre-rebase`.

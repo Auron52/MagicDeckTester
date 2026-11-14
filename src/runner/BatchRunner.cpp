@@ -53,7 +53,96 @@ using json = nlohmann::json;
 #else
 extern char** environ;
 #define MTG_ENVIRON environ
+#include <cerrno>
+#include <fcntl.h>
+#include <unistd.h>
 #endif
+
+namespace
+{
+// SHARED CPU TOKENS (MTG_JOBSERVER=<fifo>): a GNU-make-style jobserver, so this batch and OTHER processes
+// running beside it (test/regression.sh runs the reference-replay sweep concurrently with the game batch)
+// share ONE thread budget instead of each taking all of it. The harness makes a FIFO and writes N one-byte
+// tokens into it; every worker reads a token before it takes a game and writes it back when the game is
+// done, and the sweep does the same per reference. So at most N games/replays run at once across the
+// processes, and whichever side has work left absorbs the tokens the other has stopped using -- no core
+// idles on one side while the other still has a queue, and the total never exceeds N (CLAUDE.md: total
+// threads <= cores).
+//
+// SCHEDULING ONLY. A game is seeded by its job + index and its budget is in work units, so which worker
+// runs it, and when, cannot change a result (the same property the LPT ordering already relies on). The
+// token is taken BEFORE pool.Take so the queue still hands out the most expensive remaining game first.
+// Unset (every non-harness run): no token, no change. Not available on Windows (no FIFOs): ignored there.
+class JobServer
+{
+public:
+    JobServer()
+    {
+#if !defined(_WIN32)
+        const char* p = std::getenv("MTG_JOBSERVER");
+        if (p == nullptr || *p == '\0') { return; }
+        // O_RDWR: opening a FIFO read-write never blocks and never sees EOF, so a token read simply
+        // waits until one is written back.
+        fd_ = ::open(p, O_RDWR | O_CLOEXEC);
+        if (fd_ < 0)
+        { std::fprintf(stderr, "[batch] WARNING: MTG_JOBSERVER=%s cannot be opened -- running without shared tokens\n", p); }
+        else
+        { std::fprintf(stderr, "[batch] jobserver %s: workers share CPU tokens with other processes "
+                               "(a worker waiting for a token reads as idle in the heartbeat)\n", p); }
+#endif
+    }
+    ~JobServer()
+    {
+#if !defined(_WIN32)
+        if (fd_ >= 0) { ::close(fd_); }
+#endif
+    }
+    JobServer(const JobServer&) = delete;
+    JobServer& operator=(const JobServer&) = delete;
+    // -> whether a token is held (false = no jobserver, or it failed: run untokened).
+    bool Acquire()
+    {
+#if !defined(_WIN32)
+        if (fd_ < 0) { return false; }
+        char c;
+        for (;;)
+        {
+            const ssize_t n = ::read(fd_, &c, 1);
+            if (n == 1) { return true; }
+            if (n < 0 && errno == EINTR) { continue; }
+            std::fprintf(stderr, "[batch] WARNING: jobserver read failed -- this worker runs untokened\n");
+            return false;
+        }
+#else
+        return false;
+#endif
+    }
+    void Release()
+    {
+#if !defined(_WIN32)
+        const char c = '+';
+        for (;;)
+        {
+            const ssize_t n = ::write(fd_, &c, 1);
+            if (n == 1 || !(n < 0 && errno == EINTR)) { return; }
+        }
+#endif
+    }
+private:
+    int fd_ = -1;
+};
+
+// One token for one loop iteration of a worker (released on every exit from the iteration).
+struct JobToken
+{
+    explicit JobToken(JobServer& js) : js_(js), held_(js.Acquire()) {}
+    ~JobToken() { if (held_) { js_.Release(); } }
+    JobToken(const JobToken&) = delete;
+    JobToken& operator=(const JobToken&) = delete;
+    JobServer& js_;
+    bool       held_;
+};
+}   // namespace
 
 namespace
 {
@@ -1002,7 +1091,8 @@ bool PartialEnvIgnored(const std::string& name)
 {
     static const char* const kIgnore[] = {
         "MTG_BATCH_HEARTBEAT", "MTG_SLOW_GAME_MS", "MTG_SLOW_GAME_LOG", "MTG_RSS_CAP_GB",
-        "MTG_DUMP_UNITS", "MTG_BATCH_PARTIAL", "MTG_PGO", "MTG_BUILD_JOBS", "MTG_JOURNAL_BACKUP_S"};
+        "MTG_DUMP_UNITS", "MTG_BATCH_PARTIAL", "MTG_PGO", "MTG_BUILD_JOBS", "MTG_JOURNAL_BACKUP_S",
+        "MTG_JOBSERVER"};
     for (const char* k : kIgnore) { if (name == k) { return true; } }
     return false;
 }
@@ -2259,6 +2349,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
     std::atomic<std::size_t> cursor{0};
     std::vector<std::thread> threads;
     threads.reserve(num_threads);
+    JobServer jobserver;   // MTG_JOBSERVER: shared CPU tokens (no-op when unset)
 
     for (int t = 0; t < num_threads; ++t)
     {
@@ -2274,6 +2365,7 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
 
             for (;;)
             {
+                JobToken token(jobserver);   // held for this game only (see JobServer)
                 WorkItem wi;
                 if (!pool.Take(wi)) { break; }
                 const Job& job = jobs[wi.job];

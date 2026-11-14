@@ -44,7 +44,7 @@ test/regression.sh runs the full sweep --strict (threaded) in REGRESSION mode --
 three: this is a whole-corpus replay, so re-running it in smoke and overnight re-measured the same
 thing (VPC_ALWAYS=1 forces it in any mode, VPC_SKIP=1 skips it).
 """
-import collections, json, os, re, subprocess, sys, glob, time
+import collections, json, os, re, subprocess, sys, glob, tempfile, time, threading
 
 MTG = os.environ.get("MTG_BIN", "./build/Release/mtg")
 # The passive opponent's scheduled creatures ("1/1 Creature" spawns) carry card numbers from this
@@ -695,18 +695,10 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     --storage-hold / --cast-order); safe for every prefix (keyed, applied only when reached).
     max_turns must cover the reference's recorded win turn, else a real saved win (e.g. the
     Hinata T9 game) can never replay. Returns (exit_code, stdout)."""
-    args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
-            "--max-turns", str(max_turns), "--depth", "0", "--profile", prof,
-            "--choices", ",".join(str(c) for c in choices)]
-    if force is not None:
-        args += ["--force-mulligan", force]
-    if extra:
-        args += extra
     # Uncapped plan list: recorded references index into the FULL enumerated plan list, and the
     # stale-index repair content-matches against the emitted "plans" array -- the viewer's display
     # cap (MTG_PLAY_PLANS_CAP, default 200; ENOBUFS fix) would make any recorded pick beyond the
     # cap look unrepairable and read as play-drift (FiveColour s8 gi7 records index 304).
-    env = dict(os.environ, MTG_PLAY_PLANS_CAP="0")
     # `valve` (retry only): a SMALLER plan-space bound than the viewer's own 65,536 POSITIONS.
     # Uncapped EMISSION of a valve-sized frame is what used to take this checker down -- one
     # position yields several plans, so a KittyEquipment v2 T3 frame materialises ~420k plans,
@@ -718,10 +710,173 @@ def replay(deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, v
     #
     # None on the first attempt, so a reference that already replays sees the viewer's own bound and
     # cannot change class because of this knob.
-    if valve:
-        env["MTG_VIEWER_PLAN_CAP_POSITIONS"] = str(valve)
+    args, env = _replay_argv_env(deck, prof, seed, gi, choices, force, extra, max_turns, valve)
     p = subprocess.run(capped(args), capture_output=True, text=True, env=env)
     return p.returncode, p.stdout + p.stderr
+
+
+def _replay_argv_env(deck, prof, seed, gi, choices, force, extra, max_turns, valve):
+    """The exact argv + env replay() would use (shared, so the two routes cannot drift)."""
+    args = [MTG, deck, "--claude-play", "--seed", str(seed), "--game-index", str(gi),
+            "--max-turns", str(max_turns), "--depth", "0", "--profile", prof,
+            "--choices", ",".join(str(c) for c in choices)]
+    if force is not None:
+        args += ["--force-mulligan", force]
+    if extra:
+        args += extra
+    env = dict(os.environ, MTG_PLAY_PLANS_CAP="0")
+    if valve:
+        env["MTG_VIEWER_PLAN_CAP_POSITIONS"] = str(valve)
+    return args, env
+
+
+# INTERACTIVE REPLAY (MTG_REPLAY_INTERACTIVE, default ON; =0 restores the stateless respawn chain).
+#
+# WHERE THE SWEEP'S TIME WENT. The walk below asks the engine for one decision per step, and the
+# stateless protocol answers each by re-simulating the WHOLE pick prefix in a fresh process -- so a
+# reference with N decisions costs O(N^2) frame enumerations. A Kitty_Equipment reference (hundreds of
+# decisions, wide equip fans emitted uncapped) cost 700-1,560 s apiece, and the 837-reference sweep
+# summed to ~360 core-minutes: half as much CPU as the regression tier's whole game batch, and its
+# single slowest reference (~26 min) was the serial tail the tier waited on (2026-11-14 measurement).
+#
+# The play viewer solved the same problem with `--interactive` (tools/play/server.js "INTERACTIVE
+# PREFIX-CACHE"): one persistent child per game, parked on stdin after each decision, resumed with the
+# next picks. It runs the identical chooser path, so its frames are byte-identical to a stateless
+# replay of the same prefix (test/interactive_parity_check.py). Same rule as the viewer: the child
+# serves only the HAPPY path -- a well-formed decision block, or a clean exit with a result / a
+# side-channel prompt. ANYTHING else (a non-extending prefix, changed side-channel argv, a child
+# death, an "Error:" line, a malformed block) kills the child and answers THAT step with the
+# stateless replay(), which stays the source of truth. So a verdict can only differ from the
+# stateless sweep if the parity claim itself is broken -- which the full-corpus A/B checks
+# (identical verdict lines old vs new, 2026-11-14).
+INTERACTIVE_REPLAY = os.environ.get("MTG_REPLAY_INTERACTIVE", "1") != "0"
+_DEC_END = b"<<<END_DECISION>>>"
+_replay_stats = collections.Counter()
+_replay_stats_lock = threading.Lock()
+
+
+class _ReplaySession:
+    """At most one live --interactive child for one reference walk. replay() semantics exactly."""
+
+    def __init__(self):
+        self.child = None
+        self.key = None
+        self.sent = []
+        self.buf = bytearray()
+        self.pos = 0          # stdout offset where the next step's output starts
+        self.errf = None
+        self.err_pos = 0
+        self.last = None      # (rc, out) of the step the child is parked on
+
+    def close(self):
+        if self.child is not None:
+            try:
+                self.child.kill()
+            except OSError:
+                pass
+            try:
+                self.child.wait()
+            except OSError:
+                pass
+            for f in (self.child.stdin, self.child.stdout):
+                try:
+                    f.close()
+                except OSError:
+                    pass
+        if self.errf is not None:
+            try:
+                self.errf.close()
+            except OSError:
+                pass
+        self.child = self.errf = self.key = self.last = None
+        self.sent, self.buf, self.pos, self.err_pos = [], bytearray(), 0, 0
+
+    def _stderr_has_error(self):
+        """Whether the child's stderr so far holds "Error:" -- scanned INCREMENTALLY (the stateless
+        route sees the whole of it in every step's output, so a hit anywhere is a hit)."""
+        # pread, never seek: the child shares this file's OFFSET (one open file description), so
+        # moving it would make the child's next write land over earlier bytes.
+        fd = self.errf.fileno()
+        start = max(0, self.err_pos - 8)
+        size = os.fstat(fd).st_size
+        data = os.pread(fd, max(0, size - start), start) if size > start else b""
+        self.err_pos = max(self.err_pos, size)
+        return b"Error:" in data
+
+    def _read_step(self):
+        """-> (rc, out) for the frame the child reaches next, or None (anything unusual)."""
+        fd = self.child.stdout.fileno()
+        scan = self.pos
+        while True:
+            end = self.buf.find(_DEC_END, scan)
+            if end >= 0:
+                end += len(_DEC_END)
+                chunk = bytes(self.buf[self.pos:end]).decode("utf-8", "replace")
+                del self.buf[:end]                      # a wide frame is ~100s of MB: keep none
+                self.pos = 0
+                # Only the walk's "Error:" test reads beyond the frame, and it is answered here; on
+                # any hit the step goes to the stateless replay, which reports it verbatim.
+                if "Error:" in chunk or self._stderr_has_error() or not DEC_RE.search(chunk):
+                    return None
+                return 70, chunk
+            # Only the tail can complete a marker split across reads: never rescan the whole frame.
+            scan = max(self.pos, len(self.buf) - len(_DEC_END) + 1)
+            data = os.read(fd, 1 << 20)
+            if not data:
+                break
+            self.buf += data
+        rc = self.child.wait()
+        chunk = bytes(self.buf[self.pos:]).decode("utf-8", "replace")
+        if "Error:" in chunk or self._stderr_has_error():
+            return None
+        if rc == 0 and RES_RE.search(chunk):
+            return 0, chunk
+        if rc == 70 and DEC_RE.search(chunk):
+            return 70, chunk         # a side-channel PROMPT frame exits 70 by design
+        return None
+
+    def replay(self, deck, prof, seed, gi, choices, force=None, extra=None, max_turns=8, valve=None):
+        if not INTERACTIVE_REPLAY:
+            return replay(deck, prof, seed, gi, choices, force, extra, max_turns, valve)
+        with _replay_stats_lock:
+            _replay_stats["steps"] += 1
+        choices = [int(c) for c in choices]
+        key = (deck, prof, seed, gi, force, tuple(extra or ()), max_turns, valve)
+        r = None
+        if (self.child is not None and self.child.returncode is None and self.key == key
+                and len(choices) >= len(self.sent) and choices[:len(self.sent)] == self.sent):
+            delta = choices[len(self.sent):]
+            if not delta:
+                return self.last
+            try:
+                self.child.stdin.write((",".join(str(c) for c in delta) + "\n").encode())
+                self.child.stdin.flush()
+                r = self._read_step()
+            except OSError:
+                r = None
+        else:
+            self.close()
+            args, env = _replay_argv_env(deck, prof, seed, gi, choices, force, extra, max_turns,
+                                         valve)
+            self.errf = tempfile.TemporaryFile()
+            try:
+                self.child = subprocess.Popen(capped(args + ["--interactive"]), env=env,
+                                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                              stderr=self.errf, bufsize=0)
+                self.key = key
+                r = self._read_step()
+            except OSError:
+                r = None
+        if r is None or r[0] != 70 or self.child is None or self.child.returncode is not None:
+            # Terminal, side-channel exit, or anything unusual: no live child to keep.
+            self.close()
+        if r is None:
+            with _replay_stats_lock:
+                _replay_stats["fallbacks"] += 1
+            return replay(deck, prof, seed, gi, choices, force, extra, max_turns, valve)
+        if self.child is not None:
+            self.sent, self.last = choices, r
+        return r
 
 
 def remap_candidate_index(choice, recorded, current):
@@ -1451,6 +1606,15 @@ def check_reference(path, collect=None):
 
 
 def walk_reference(path, collect=None, valve=None, pin_lines=False):
+    """See _walk_reference. Owns the walk's interactive replay child (closed on every exit)."""
+    sess = _ReplaySession()
+    try:
+        return _walk_reference(path, collect, valve, pin_lines, sess)
+    finally:
+        sess.close()
+
+
+def _walk_reference(path, collect, valve, pin_lines, sess):
     """Replay one reference by INTENT, validating the contract at every step.
 
     collect: optional dict; on return it holds the replay ingredients ('deck', 'prof', 'seed',
@@ -1584,7 +1748,7 @@ def walk_reference(path, collect=None, valve=None, pin_lines=False):
     # One invocation per decision; bounded well above any real game so a protocol change that
     # loops cannot hang the suite (that is why these checks live outside smoke/regression).
     for _ in range(400):
-        rc, out = replay(deck, prof, seed, gi, resolved, force, side, mt, valve=valve)
+        rc, out = sess.replay(deck, prof, seed, gi, resolved, force, side, mt, valve=valve)
         if "Error:" in out or rc not in (0, 70):
             # Kind "engine" (still a contract-fail: the `False` is what the report reads) so the
             # retry in check_reference can tell "the engine fell over" apart from every other
@@ -2112,10 +2276,36 @@ def _save_ref_times(prev, new):
         print(f"[ref times not saved: {e}]", file=sys.stderr)
 
 
+# SHARED CPU TOKENS (MTG_JOBSERVER=<fifo>, see src/runner/BatchRunner.cpp JobServer). test/regression.sh
+# runs this sweep CONCURRENTLY with the tier's game batch, and both draw from one FIFO of N tokens: a
+# reference walk holds one token for its whole chain (its replay child and this thread's parsing are one
+# core between them), so batch games + walks never exceed N, and whichever side still has work absorbs
+# the tokens the other has stopped using. Scheduling only: a walk's verdict cannot depend on when it ran.
+# The per-ref time recorded below starts AFTER the token is held, so it stays a cost, not a queue wait.
+_JOBSERVER_FD = None
+
+
+def _jobserver_fd():
+    global _JOBSERVER_FD
+    p = os.environ.get("MTG_JOBSERVER")
+    if not p or os.name != "posix":
+        return None
+    if _JOBSERVER_FD is None:
+        _JOBSERVER_FD = os.open(p, os.O_RDWR)   # RDWR: never blocks on open, never sees EOF
+    return _JOBSERVER_FD
+
+
 def _timed_check(path):
-    t0 = time.monotonic()
-    r = check_reference(path)
-    return r, round(time.monotonic() - t0, 2)
+    fd = _jobserver_fd()
+    if fd is not None:
+        os.read(fd, 1)                          # blocks until a token is free (any byte is one)
+    try:
+        t0 = time.monotonic()
+        r = check_reference(path)
+        return r, round(time.monotonic() - t0, 2)
+    finally:
+        if fd is not None:
+            os.write(fd, b"+")
 
 
 def main():
@@ -2238,6 +2428,9 @@ def main():
           f"{counts['board-diverged']} board-diverged, "
           f"{counts['unresolvable']} enum-gap, {counts['mulligan']} mull-drift, "
           f"{counts['contract']} contract-fail  ({len(refs)} refs)")
+    if INTERACTIVE_REPLAY:
+        print(f"Interactive replay: {_replay_stats['fallbacks']} stateless fallbacks "
+              f"in {_replay_stats['steps']} steps")
     if counts["repaired"]:
         print("  repaired     = recorded line REPRODUCED after repairing stale indices / answering decision")
         print("                 points the reference predates. Not a regression; no action (never ask the user to re-save)")

@@ -25,9 +25,16 @@
 #   bash test/regression.sh            # regression mode (default)
 #   bash test/regression.sh --smoke    # fast smoke gate
 #   bash test/regression.sh --overnight
+#   bash test/regression.sh --smoke --regression   # (or --both) BOTH tiers in ONE pooled batch; each
+#                                                  # tier still reports/records/fails on its own keys
+#
+# Wall time per stage is stamped as "[stage] <name> <s>" lines (console + each tier's result file).
+# The reference stages (regression tier) run CONCURRENTLY with the game batch on one shared token
+# budget (MTG_JOBSERVER); SIDE_STAGES_SERIAL=1 runs them after the batch, the pre-2026-11-14 order.
 #
 # Update ground truth from a run you have inspected and ACCEPT (no re-run):
 #   bash test/regression.sh --smoke --accept     # promote last smoke results
+#   bash test/regression.sh --both --accept      # promote BOTH tiers' last results (one accept each)
 # Accept reuses test/results/<mode>.env from the most recent run of that mode and
 # merges it into regression_gt.txt, leaving the other modes untouched.
 #
@@ -54,24 +61,55 @@ GTLOGS=${REGRESSION_GT_LOGS:-test/gt_logs}
 THREADS=${THREADS:-0}
 
 MODE=regression
+MODES=()          # every tier flag given, in order: >1 runs them as ONE pooled batch (see "COMBINED" below)
 ACCEPT=0
 ACCEPT_ACK=""     # --accept-with-regressions=<note>: same as --accept (promote, no re-run/re-audit);
                   # the note is recorded in the GT provenance header to document an intended slowdown.
 DECK_ONLY=""      # --deck=<name>: restrict this run to one deck's cases (see regression_cases.sh)
 for arg in "$@"; do
   case "$arg" in
-    --smoke)     MODE=smoke ;;
-    --regression) MODE=regression ;;   # the default; accepted explicitly so a scripted sweep can
-                                       # pass a mode flag UNIFORMLY instead of special-casing ""
-    --overnight) MODE=overnight ;;
-    --fast)      MODE=smoke ;;      # back-compat alias
+    --smoke)     MODES+=(smoke) ;;
+    --regression) MODES+=(regression) ;;   # the default; accepted explicitly so a scripted sweep can
+                                           # pass a mode flag UNIFORMLY instead of special-casing ""
+    --overnight) MODES+=(overnight) ;;
+    --fast)      MODES+=(smoke) ;;      # back-compat alias
+    --both)      MODES+=(smoke regression) ;;   # = --smoke --regression (one pooled batch)
     --accept)    ACCEPT=1 ;;
     --accept-with-regressions=*) ACCEPT=1; ACCEPT_ACK="${arg#*=}" ;;
     --deck=*)    DECK_ONLY="${arg#*=}" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+# De-duplicate, keep the order given; none = regression (the historical default).
+_m=(); for _x in "${MODES[@]}"; do [[ " ${_m[*]} " == *" $_x "* ]] || _m+=("$_x"); done; MODES=("${_m[@]}")
+[ ${#MODES[@]} -eq 0 ] && MODES=(regression)
+MODE=${MODES[0]}
 
+# COMBINED TIERS (USER 2026-11-14: "All things that can be should be combined into one batch. This even
+# includes the possibility to run smoke and regression full together when we intend to."). Several tier
+# flags (`--smoke --regression`, or `--both`) run EVERY game of EVERY named tier as ONE `mtg --batch`,
+# so the run pays one load-imbalance tail instead of one per tier; each tier then reports, records and
+# fails exactly as its own run would (its own test/logs/<mode>/, results env, result file and per-game
+# diff). An --accept with several tiers accepts each in turn -- the same as one --accept per tier.
+if [ "$ACCEPT" = 1 ] && [ ${#MODES[@]} -gt 1 ]; then
+  _rc=0
+  for _x in "${MODES[@]}"; do
+    _a=("--$_x" --accept)
+    [ -n "$ACCEPT_ACK" ] && _a=("--$_x" "--accept-with-regressions=$ACCEPT_ACK")
+    [ -n "$DECK_ONLY" ] && _a+=("--deck=$DECK_ONLY")
+    bash "${BASH_SOURCE[0]}" "${_a[@]}" || _rc=1
+  done
+  exit $_rc
+fi
+
+# shellcheck source=regression_cases.sh
+source "$HERE/regression_cases.sh"
+
+# select_mode <mode>: point every per-tier global (LOGDIR, OUT, RESULTS, MODEFLAG, CASES) at one tier.
+# Called once for the tier being accepted / run, and per tier by a combined run (each tier keeps
+# exactly the files, keys and case list its own run would have).
+select_mode() {
+MODE=$1
 LOGDIR=test/logs/$MODE
 OUT=test/regression_result_${MODE}.txt
 RESULTS=test/results/${MODE}.env
@@ -84,8 +122,6 @@ case "$MODE" in
   *)         MODEFLAG="" ;;
 esac
 
-# shellcheck source=regression_cases.sh
-source "$HERE/regression_cases.sh"
 
 case "$MODE" in
   smoke)      CASES=( "${SMOKE_CASES[@]}" ) ;;
@@ -113,6 +149,9 @@ if [ -n "$DECK_ONLY" ]; then
   [ ${#_filtered[@]} -eq 0 ] && { echo "ERROR: --deck=$DECK_ONLY matched no $MODE cases" >&2; exit 2; }
   CASES=( "${_filtered[@]}" )
 fi
+
+}
+select_mode "$MODE"
 
 # ---- accept: promote the last run's results into ground truth -------------
 # Rebuilds regression_gt.txt in canonical matrix order, pulling each value from
@@ -255,13 +294,13 @@ if [ "$ACCEPT" = 1 ]; then
   exit 0
 fi
 
-# ---- run a mode and compare ----------------------------------------------
+# ---- run the tier(s) and compare ------------------------------------------
 # THE ENGINE (user, 2026-10-08: PGO+LTO "for everything except maybe quick development cycles").
 # harness_bin above already takes build/PGO when it was built from exactly this HEAD:src with a clean
 # src/ (byte-identical to Release, ~1.3x faster), so smoke and regression use it for free and otherwise
 # run Release with no build delay. The OVERNIGHT tier is long enough that it builds a stale PGO first.
 # MTG_PGO=0 pins Release (and an explicit MTG_BIN always wins).
-if [ "$MODE" = overnight ] && [ -z "${MTG_BIN:-}" ]; then
+if [[ " ${MODES[*]} " == *" overnight "* ]] && [ -z "${MTG_BIN:-}" ]; then
   harness_pgo_ensure
   BIN=$(harness_bin) || exit 1
 fi
@@ -271,70 +310,91 @@ if [ ! -f "$BIN" ]; then
   exit 1
 fi
 
+# STAGE WALL TIMES (2026-11-14). Every stage this harness runs stamps its own wall time, live on the
+# console and again in each tier's result file just before its Result line, so "where did the tier's
+# time go" is read off the log and never guessed. The USER's bar: the side stages "should be a fraction
+# at most" of the tier. A stage that runs CONCURRENTLY with the game batch (below) reports its own
+# start-to-finish wall, so the stage lines can sum to more than the tier's wall.
+STAGE_LINES=()
+stage_line() {   # <name> <seconds> [note]
+  local l
+  l=$(printf '[stage] %-40s %6ss = %dm%02ds%s' "$1" "$2" $(($2/60)) $(($2%60)) "${3:+  $3}")
+  echo "$l"; STAGE_LINES+=("$l")
+}
+RUN_T0=$(date +%s)
+
 # Snapshot the binary into the run dir and execute the COPY. A long run can then
 # overlap with rebuilds of build/Release/mtg (iterating on other work) without
 # hitting ETXTBSY ("Text file busy", which the linker raises when it opens a running
 # executable for write) or silently swapping the binary mid-run. The snapshot is
 # what every batch invocation below uses; the source binary is free to be rebuilt.
-BIN_SNAPSHOT="$LOGDIR/mtg.run"
-harness_install_bin "$BIN" "$BIN_SNAPSHOT"   # in the devcontainer: bytes on the build volume, never run off 9p
-# Provenance stamp: record the exact version this run (and any --accept'd GT) came from.
-# When the tree is dirty, save the working diff so a re-baseline from uncommitted changes
-# stays reconstructable as git_hash + mtg.run.diff (see test/snapshot_bin.sh).
-{
-  echo "git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-  if git diff --quiet HEAD 2>/dev/null; then echo "git_state=clean"; else
-    echo "git_state=dirty"; git diff HEAD > "$BIN_SNAPSHOT.diff" 2>/dev/null || true
-    echo "diff=mtg.run.diff"
-  fi
-  echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  echo "binary_kind=$BIN_KIND"
-} > "$BIN_SNAPSHOT.meta" 2>/dev/null || true
-BIN="$BIN_SNAPSHOT"
+# A combined run snapshots into EVERY tier's dir (each tier's --accept saves its own mtg.run as that
+# tier's baseline) and executes the first tier's copy -- the bytes are the same.
+SRC_BIN="$BIN"
+RUN_BIN=""
+OUTS=()
+for _mode in "${MODES[@]}"; do
+  select_mode "$_mode"
+  BIN_SNAPSHOT="$LOGDIR/mtg.run"
+  harness_install_bin "$SRC_BIN" "$BIN_SNAPSHOT"   # in the devcontainer: bytes on the build volume, never run off 9p
+  # Provenance stamp: record the exact version this run (and any --accept'd GT) came from.
+  # When the tree is dirty, save the working diff so a re-baseline from uncommitted changes
+  # stays reconstructable as git_hash + mtg.run.diff (see test/snapshot_bin.sh).
+  {
+    echo "git_hash=$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    if git diff --quiet HEAD 2>/dev/null; then echo "git_state=clean"; else
+      echo "git_state=dirty"; git diff HEAD > "$BIN_SNAPSHOT.diff" 2>/dev/null || true
+      echo "diff=mtg.run.diff"
+    fi
+    echo "built=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "binary_kind=$BIN_KIND"
+  } > "$BIN_SNAPSHOT.meta" 2>/dev/null || true
+  [ -z "$RUN_BIN" ] && RUN_BIN="$BIN_SNAPSHOT"
+  OUTS+=("$OUT")
+done
+BIN="$RUN_BIN"
 
 [ -f "$GT" ] && source "$GT" 2>/dev/null || true
 
-PASS=0; FAIL=0; NEW=0
-
 log() { echo "$1"; echo "$1" >> "$OUT"; }
+# Into EVERY tier's result file (console once): the stages a combined run shares.
+log_all() { local o; echo "$1"; for o in "${OUTS[@]}"; do echo "$1" >> "$o"; done; }
 
-: > "$OUT"
-: > "$RESULTS"
-log "=== REGRESSION ($MODE) $(date) ==="
-log "(threads=$THREADS; binary=$BIN [$BIN_KIND]; logs in $LOGDIR)"
+for _mode in "${MODES[@]}"; do
+  select_mode "$_mode"
+  : > "$OUT"
+  : > "$RESULTS"
+  log "=== REGRESSION ($MODE) $(date) ==="
+  log "(threads=$THREADS; binary=$BIN [$BIN_KIND]; logs in $LOGDIR)"
+  [ ${#MODES[@]} -gt 1 ] && log "(COMBINED run: tiers ${MODES[*]} share ONE pooled batch -- see test/logs/combined/)"
+done
 
 # Scenario sanity gate: hand-built board fixtures (test/scenarios/*.json) that assert a specific
-# interaction still plays correctly. Cheap (seconds) and deck-agnostic, so run them up front on the
-# freshly-built binary. A FAIL here is a hard regression -- abort before the (long) batch run.
+# interaction still plays correctly. A FAIL is a hard regression and fails the tier. The fixtures run in
+# PARALLEL, longest first (test/scenarios.sh), and -- where the jobserver below exists -- CONCURRENTLY
+# with the game batch on the shared tokens, so they cost no wall of their own: a FAIL kills the batch at
+# once (nothing it would measure can be accepted) and the tier aborts. Without the jobserver
+# (SIDE_STAGES_SERIAL=1, no mkfifo) they run up front, before the batch, as they always did.
 SCEN="$(dirname "$0")/scenarios.sh"
-if [ -f "$SCEN" ]; then
-  log "--- scenario sanity ---"
-  if MTG_BIN="$BIN" bash "$SCEN" | tee -a "$OUT"; then :; else
-    log "ABORT: scenario sanity failed (a hand-built fixture regressed) -- fix before running the batch."
-    exit 1
-  fi
-fi
+[ -f "$SCEN" ] || SCEN=""
+scen_abort() {
+  log_all "ABORT: scenario sanity failed (a hand-built fixture regressed) -- fix before running the batch."
+  exit 1
+}
 
 # Viewer LINE-BUILD checks (play-GUI frontend) remain standalone/on-demand -- run
 # `bash test/viewer_checks.sh` after touching tools/play/. The engine<->GUI PROTOCOL layer,
-# however, is now ALSO a regression gate (see "reference reproducibility" after the batch below):
-# since the switch to threaded intent replay (docs/design/reference-intent-replay.md) the full
-# 138-ref sweep costs seconds, and its --strict verdict is real signal -- play-drift/ENUM-GAP mean
-# the engine moved under a recorded human game. It runs AFTER the deck batch so the GT
-# fingerprints always land first (the historical hang concern), and it uses the same snapshot
-# binary as the batch.
+# however, is now ALSO a regression gate (see "reference reproducibility" below): since the switch
+# to threaded intent replay (docs/design/reference-intent-replay.md) its --strict verdict is real
+# signal -- play-drift/ENUM-GAP mean the engine moved under a recorded human game. It uses the same
+# snapshot binary as the batch, and since 2026-11-14 it runs CONCURRENTLY with the batch (see
+# "SIDE STAGES" below); its verdict is still reported after the GT fingerprints.
 
 # Emit the whole case matrix as one batch manifest. `mtg.exe --batch` pools every
 # game of every case into a single atomic work queue, so the suite pays ONE
 # load-imbalance tail instead of one per case (the old per-case sweep stranded a
 # core on each config's slowest game). Results are validated byte-identical to the
 # per-case runs, so the ground truth is unchanged. See docs/design/batch-runner.md.
-MANIFEST="$LOGDIR/manifest.json"
-# Play rows test what SHIPS (USER 2026-10-27): warn when one's budget drifted from the deck's value_play budget.
-if command -v python3 >/dev/null 2>&1; then
-  _profs=(); for _k in "${!DECK_PROF[@]}"; do _profs+=("$_k=${DECK_PROF[$_k]}"); done
-  printf '%s\n' "${CASES[@]}" | python3 "$HERE/lib/play_rows_check.py" "${_profs[@]}"
-fi
 # MEASURED JOB COSTS (test/job_cost.tsv, written by --accept via test/lib/job_cost.py): each known job's
 # work units per game becomes its LPT weight, so the expensive chunks (NivMizzetCombo / Bruna d5 in
 # smoke) are dispatched FIRST and the cheap ones backfill -- USER 2026-10-23, after smoke's makespan sat
@@ -345,9 +405,9 @@ declare -A JOB_COST_U=()
 if [ -f "$JOB_COST_TABLE" ] && command -v python3 >/dev/null 2>&1; then
   while read -r _jk _ju; do JOB_COST_U[$_jk]=$_ju; done < <(python3 "$HERE/lib/job_cost.py" emit "$JOB_COST_TABLE")
 fi
-{
-  echo '{ "jobs": ['
-  first=1
+# emit_jobs: the current tier's job objects, ",\n"-joined, no trailing newline (the manifest body).
+emit_jobs() {
+  local first=1 spec deck depth seed games budget base extra2hg file prof name bud weight
   for spec in "${CASES[@]}"; do
     # shellcheck disable=SC2086
     set -- $spec; deck=$1; depth=$2; seed=$3; games=$4; budget=$5
@@ -379,7 +439,10 @@ fi
     # regression_cases.sh). They were screened to games far below this ceiling, so it never binds on a
     # healthy engine; it exists so a change that makes one of them DEGENERATE abandons that game
     # deterministically (the case's avg/digest then moves and the tier FAILS) instead of hanging the
-    # tier for hours. 2,000,000 units is ~45 s of search on this box. Weight 1 starts them ahead of
+    # tier for hours. The WALL of 2,000,000 units is deck-dependent (measured 2026-11-14: Cyclone ~88 us/unit
+    # alone, so 2M = 177 s, and 253 s with all 24 workers busy; ~45 s held only for the decks it was first
+    # timed on). The cap is in units on purpose (deterministic), so a costly deck's abandoned game is a
+    # row-screening question (pick a block that finishes), not an uncounted cost. Weight 1 starts them ahead of
     # every weight-0 job: by the batch's own depth/budget order budget 0 sorts LAST at its depth, which
     # would put unbounded games on the tail (Hinata's weight, if any, still outranks them).
     if [ "$depth" -gt 0 ] && [ "$bud" -eq 0 ]; then
@@ -403,8 +466,136 @@ fi
         "$name" "$file" "$prof" "$extra2hg" "$games" "$seed" "$depth" "$bud" "$weight"
     fi
   done
-  printf '\n] }\n'
-} > "$MANIFEST"
+}
+# Each tier's own manifest (byte-identical to a single-tier run's), and the batch's: the tier's own
+# for a single tier, every tier's jobs concatenated for a combined run.
+if [ ${#MODES[@]} -gt 1 ]; then BDIR=test/logs/combined; else BDIR=$LOGDIR; fi
+mkdir -p "$BDIR"
+MANIFEST="$BDIR/manifest.json"
+_all_jobs=""
+for _mode in "${MODES[@]}"; do
+  select_mode "$_mode"
+  # Play rows test what SHIPS (USER 2026-10-27): warn when one's budget drifted from the deck's value_play budget.
+  if command -v python3 >/dev/null 2>&1; then
+    _profs=(); for _k in "${!DECK_PROF[@]}"; do _profs+=("$_k=${DECK_PROF[$_k]}"); done
+    printf '%s\n' "${CASES[@]}" | python3 "$HERE/lib/play_rows_check.py" "${_profs[@]}"
+  fi
+  _jobs=$(emit_jobs)
+  printf '{ "jobs": [\n%s\n] }\n' "$_jobs" > "$LOGDIR/manifest.json"
+  _all_jobs="${_all_jobs:+$_all_jobs,
+}$_jobs"
+done
+[ ${#MODES[@]} -gt 1 ] && printf '{ "jobs": [\n%s\n] }\n' "$_all_jobs" > "$MANIFEST"
+
+# ---- SIDE STAGES: reference replays + suboptimal require-beat, CONCURRENT with the batch ------------
+# Replays every saved references/<deck>/claude_*.json by INTENT (content-anchored picks, engine
+# defaults for predated decision points -- docs/design/reference-intent-replay.md) against the
+# SAME snapshot binary as the batch. --strict fails on play-drift (a recorded human line now ends
+# differently) and ENUM-GAP (a previously-offered plan vanished for an identical state); the
+# accepted classes (shuffle-dead, mull-drift) never gate.
+#
+# REGRESSION MODE ONLY (USER, 2026-08-17: "I only want it to run in one mode. maybe full regression
+# to be safe"). It is a whole-corpus REPLAY, not a sampled batch, so running it in all three modes
+# re-measured the identical thing three times -- and each replay is a --claude-play process with
+# MTG_UNPRUNED set, i.e. the widest enumeration the engine ever performs (that is what OOM'd the
+# box; see docs/design/claude-play-unprune-blowup.md). Regression is the middle tier every real
+# change goes through, so the gate keeps its coverage: smoke stays a fast fingerprint check, and
+# overnight stops spending its concurrency on a sweep regression already ran. Force it in any mode
+# with VPC_ALWAYS=1; skip it entirely with VPC_SKIP=1. A combined run replays the corpus ONCE and
+# reports it under every tier that would have run it.
+#
+# CONCURRENT, ON ONE THREAD BUDGET (USER 2026-11-14: "All things that can be should be combined into one
+# batch"). These two stages used to run AFTER the game batch, serially: on 2026-11-14 the reference
+# sweep alone was ~28 min of a ~61 min regression tier, most of it one ~26-minute reference running on
+# an otherwise idle box. A reference walk cannot be a batch job (it is a chain of engine calls whose
+# every pick depends on the previous frame), so instead the sweep, ref_bench's own pooled batch and the
+# tier batch all draw from ONE jobserver FIFO of $T tokens (MTG_JOBSERVER; src/runner/BatchRunner.cpp
+# JobServer, viewer_protocol_check._timed_check): at most $T games/walks run at once across all three
+# processes (total threads <= cores), and whichever has work left absorbs the tokens the others stop
+# using. Scheduling only -- every verdict and digest is what the serial order produced. The sweep
+# itself replays each reference through ONE persistent --interactive child instead of re-simulating the
+# whole pick prefix per decision (viewer_protocol_check INTERACTIVE REPLAY), which is most of its cost.
+# Without mkfifo (Windows), or with SIDE_STAGES_SERIAL=1, they run after the batch as before.
+VPC="$HERE/viewer_protocol_check.py"
+VPC_ANY=0
+vpc_wanted() {   # does tier $1 run the reference stages?
+  local r=0
+  [ "$1" = regression ] && r=1
+  [ "${VPC_ALWAYS:-0}" = 1 ] && r=1
+  [ "${VPC_SKIP:-0}" = 1 ] && r=0
+  [ $r = 1 ]
+}
+for _mode in "${MODES[@]}"; do vpc_wanted "$_mode" && VPC_ANY=1; done
+{ [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; } || VPC_ANY=0
+T=$THREADS; [ "$T" -le 0 ] && T=$(nproc 2>/dev/null || echo 8)
+SIDE_DIR="$BDIR/side"
+JS_FIFO=""
+if { [ "$VPC_ANY" = 1 ] || [ -n "$SCEN" ]; } && [ "${SIDE_STAGES_SERIAL:-0}" != 1 ] && command -v mkfifo >/dev/null 2>&1; then
+  JS_DIR=$(mktemp -d "${TMPDIR:-/tmp}/mtg-jobserver.XXXXXX") && mkfifo "$JS_DIR/fifo" \
+    && exec {JS_FD}<>"$JS_DIR/fifo" && JS_FIFO="$JS_DIR/fifo"
+  if [ -n "$JS_FIFO" ]; then
+    printf "%${T}s" "" | tr ' ' '+' >&"$JS_FD"
+    trap 'exec {JS_FD}>&-; rm -f "$JS_FIFO"; rmdir "$JS_DIR" 2>/dev/null' EXIT
+  elif [ -n "${JS_DIR:-}" ]; then
+    # FIFO setup can fail on an otherwise usable host; leave no empty scratch dir behind.
+    rmdir "$JS_DIR" 2>/dev/null || true
+  fi
+fi
+# start_side_stages: launch both stages in the background; each writes <name>.out/.rc/.t0/.t1.
+start_side_stages() {
+  mkdir -p "$SIDE_DIR"
+  local f
+  for f in vpc subopt; do : > "$SIDE_DIR/$f.out"; printf '' > "$SIDE_DIR/$f.rc"; done
+  (
+    date +%s > "$SIDE_DIR/vpc.t0"
+    MTG_JOBSERVER="$JS_FIFO" MTG_BIN="$BIN" python3 "$VPC" --strict --threads "$T" > "$SIDE_DIR/vpc.out" 2>&1
+    echo $? > "$SIDE_DIR/vpc.rc"; date +%s > "$SIDE_DIR/vpc.t1"
+  ) &
+  VPC_PID=$!
+  # SUBOPTIMAL references must be STRICTLY BEATEN by the search (USER 2026-10-22: "Suboptimal games
+  # could be replayed as well with the expectation that we strictly beat them"). The sweep replays
+  # their recorded lines; this plays each from its shuffle at the deck's committed play setting and
+  # fails unless the search wins EARLIER than the user did. A suboptimal game with a proper reference
+  # for the same game is superseded and skipped. A handful of games, in ref_bench's own pooled batch
+  # (on the shared tokens).
+  (
+    date +%s > "$SIDE_DIR/subopt.t0"
+    MTG_JOBSERVER="$JS_FIFO" MTG_BIN="$BIN" python3 "$HERE/../scripts/ref_bench.py" --suboptimal --require-beat \
+      > "$SIDE_DIR/subopt.out" 2>&1
+    echo $? > "$SIDE_DIR/subopt.rc"; date +%s > "$SIDE_DIR/subopt.t1"
+  ) &
+  SUB_PID=$!
+}
+wait_side_stages() {
+  wait "$VPC_PID" "$SUB_PID"
+  stage_line "reference replays (viewer protocol)" $(( $(cat "$SIDE_DIR/vpc.t1") - $(cat "$SIDE_DIR/vpc.t0") )) \
+    "${JS_FIFO:+(concurrent with the batch, shared tokens)}"
+  stage_line "suboptimal require-beat (ref_bench)" $(( $(cat "$SIDE_DIR/subopt.t1") - $(cat "$SIDE_DIR/subopt.t0") )) \
+    "${JS_FIFO:+(concurrent with the batch, shared tokens)}"
+}
+[ "$VPC_ANY" = 1 ] && [ -n "$JS_FIFO" ] && start_side_stages
+
+mkdir -p "$SIDE_DIR"
+if [ -n "$SCEN" ] && [ -z "$JS_FIFO" ]; then
+  log_all "--- scenario sanity ---"
+  _t0=$(date +%s)
+  if THREADS=$THREADS MTG_BIN="$BIN" bash "$SCEN" | tee -a "${OUTS[@]}"; then :; else scen_abort; fi
+  stage_line "scenario sanity" $(( $(date +%s) - _t0 ))
+elif [ -n "$SCEN" ]; then
+  # Concurrent: one fixture per token. On a FAIL, kill the batch (its pid is written by the wrapper below).
+  : > "$SIDE_DIR/batch.pid"; printf '' > "$SIDE_DIR/scen.rc"
+  (
+    date +%s > "$SIDE_DIR/scen.t0"
+    THREADS=$THREADS MTG_JOBSERVER="$JS_FIFO" MTG_BIN="$BIN" bash "$SCEN" > "$SIDE_DIR/scen.out" 2>&1
+    rc=$?; echo $rc > "$SIDE_DIR/scen.rc"; date +%s > "$SIDE_DIR/scen.t1"
+    if [ $rc != 0 ]; then
+      for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s "$SIDE_DIR/batch.pid" ] && break; sleep 1; done
+      _bp=$(cat "$SIDE_DIR/batch.pid" 2>/dev/null)
+      [ -n "$_bp" ] && kill "$_bp" 2>/dev/null
+    fi
+  ) &
+  SCEN_PID=$!
+fi
 
 TOTAL_START=$(date +%s)
 # `tee` to batch.log so per-job results STREAM to the terminal live as each case
@@ -415,181 +606,219 @@ TOTAL_START=$(date +%s)
 # without this copy every result reads as "no output" and the cost gate loses a
 # completed 12-minute measurement. The backup has a unique name so another tier
 # process cannot clobber it; remove it after verifying the public log.
-BATCH_BACKUP="$LOGDIR/batch.$$.backup"
-"$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$LOGDIR/wins" \
-    2>"$LOGDIR/batch.err" | tee "$LOGDIR/batch.log" "$BATCH_BACKUP"
-if ! cmp -s "$LOGDIR/batch.log" "$BATCH_BACKUP"; then
-  cp "$BATCH_BACKUP" "$LOGDIR/batch.log"
-  echo "Restored $LOGDIR/batch.log from the independent batch stream" >&2
+BATCH_BACKUP="$BDIR/batch.$$.backup"
+if [ ${#MODES[@]} -gt 1 ]; then
+  # The combined batch writes per-game logs here and they are MOVED into each tier's own wins dir
+  # below; clear what an interrupted earlier combined run may have left, so nothing stale is moved.
+  mkdir -p "$BDIR/wins"; find "$BDIR/wins" -maxdepth 1 -type f -delete
+fi
+( echo $BASHPID > "$SIDE_DIR/batch.pid"; MTG_JOBSERVER="$JS_FIFO" exec "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" ) \
+    2>"$BDIR/batch.err" | tee "$BDIR/batch.log" "$BATCH_BACKUP"
+if ! cmp -s "$BDIR/batch.log" "$BATCH_BACKUP"; then
+  cp "$BATCH_BACKUP" "$BDIR/batch.log"
+  echo "Restored $BDIR/batch.log from the independent batch stream" >&2
 fi
 rm -f "$BATCH_BACKUP"
 TOTAL=$(( $(date +%s) - TOTAL_START ))
-BATCH_OUT=$(cat "$LOGDIR/batch.log")
+stage_line "game batch (mtg --batch)" "$TOTAL" "${JS_FIFO:+(shared tokens with the reference stages)}"
+if [ -n "$SCEN" ] && [ -n "$JS_FIFO" ]; then
+  wait "$SCEN_PID"
+  log_all "--- scenario sanity ---"
+  tee -a "${OUTS[@]}" < "$SIDE_DIR/scen.out"
+  [ "$(cat "$SIDE_DIR/scen.rc")" = 0 ] || scen_abort
+  stage_line "scenario sanity" $(( $(cat "$SIDE_DIR/scen.t1") - $(cat "$SIDE_DIR/scen.t0") )) \
+    "(concurrent with the batch, shared tokens)"
+fi
 
-# Per-game ground-truth logs live in test/gt_logs/<key>.wins (committed). The batch
-# run just wrote this run's per-game win turns to $LOGDIR/wins/<key>.wins. We diff
-# them so the report names EXACTLY which games changed -- the cheap built-in version
-# of the mandatory pre-accept per-game analysis (no rebuilding the old binary).
+# A combined run hands each tier exactly the files its own run would have written: its job lines of
+# batch.log (+ the header/footer), the shared batch.err, and its per-game logs (<key>.wins/.units/...).
+if [ ${#MODES[@]} -gt 1 ]; then
+  for _mode in "${MODES[@]}"; do
+    select_mode "$_mode"
+    mkdir -p "$LOGDIR/wins"
+    _keys=$(for spec in "${CASES[@]}"; do set -- $spec; echo "${1}_${MODE}_d${2}_s${3}"; done)
+    awk 'FNR==NR{k[$0]=1;next} /^[^ ]+: played=/{n=$1; sub(/:$/,"",n); if(!(n in k)) next} {print}' \
+        <(printf '%s\n' "$_keys") "$BDIR/batch.log" > "$LOGDIR/batch.log"
+    cp -f "$BDIR/batch.err" "$LOGDIR/batch.err"
+    while IFS= read -r _k; do
+      for _f in "$BDIR/wins/$_k".*; do [ -e "$_f" ] && mv -f "$_f" "$LOGDIR/wins/"; done
+    done <<< "$_keys"
+  done
+fi
 
-# Parse one "<name>: played=P avg=A digest=D" line per job into the avg/digest fingerprint,
-# in matrix order, and compare to ground truth. avg = mean turn-to-win with an unwon game scored
-# max_turns+1 (the goldfish metric); win/loss is intentionally NOT reported (see ComputeAvgTurns /
-# main.cpp) because a goldfishing loss is an arbitrary horizon threshold agents wrongly prioritize.
-CUR_DECK=""
-for spec in "${CASES[@]}"; do
-  # shellcheck disable=SC2086
-  set -- $spec; deck=$1; depth=$2; seed=$3
-  if [ "$deck" != "$CUR_DECK" ]; then CUR_DECK="$deck"; log ""; log "-- $CUR_DECK --"; fi
-  key="${deck}_${MODE}_d${depth}_s${seed}"
-  line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
-  # ANCHOR the extraction to THIS key and the exact field order. The old patterns led with a
-  # greedy `.*`, so when two workers' result lines spliced together in the batch output (seen
-  # 2026-09-08: "stompy...ms=216" + "fivecolour_overnight_d5_s4004: played=300 avg=4.8633...")
-  # the greedy prefix skipped this case's own avg/digest and captured the SPLICED-IN case's --
-  # reporting stompy as 4.5540 -> 4.8633, a 0.31-turn "regression" that never happened, and one
-  # that --accept would have written into GT as a false fingerprint. Anchored, a malformed line
-  # simply yields no avg and the case fails safe as "(no output)".
-  avg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=([0-9.]+) .*/\1/p")
-  dg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=[0-9.]+ digest=([0-9a-f]+)( .*)?$/\1/p")
-  expected="${!key-}"
-  if [ -z "$avg" ]; then
-    status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
-  else
-    # Fingerprint = avg/play-digest. avg (to 4 dp) catches outcome/turn shifts; the digest catches a
-    # play change that keeps the same avg. Backward-compat: a GT without a digest matches on avg alone.
-    got="${avg}${dg:+/$dg}"
-    echo "$key=$got" >> "$RESULTS"           # record for a later --accept
-    if [ -z "$expected" ]; then
-      status="NEW "; expected="<none>"; NEW=$((NEW+1))
-    elif [ "$expected" = "$got" ]; then
-      status="PASS"; PASS=$((PASS+1))
-    elif [ "$expected" = "${avg}" ]; then
-      status="PASS"; PASS=$((PASS+1))        # GT without a digest: avg matches
+if [ "$VPC_ANY" = 1 ]; then
+  if [ -z "$JS_FIFO" ]; then
+    # Serial fallback (no FIFOs, or SIDE_STAGES_SERIAL=1): the historical order, after the batch.
+    start_side_stages
+  fi
+  wait_side_stages
+fi
+
+# report_mode: everything a single tier's run reports after its games -- the fingerprint compare and
+# per-game diff, the overflow gate, the reference verdicts, the per-game audit, the Result line.
+# -> 0 when the tier passes.
+report_mode() {
+  PASS=0; FAIL=0; NEW=0
+  local BATCH_OUT spec deck depth seed key line avg dg expected status got new_wins gt_wins diffs nch
+  BATCH_OUT=$(cat "$LOGDIR/batch.log")
+
+  # Per-game ground-truth logs live in test/gt_logs/<key>.wins (committed). The batch
+  # run just wrote this run's per-game win turns to $LOGDIR/wins/<key>.wins. We diff
+  # them so the report names EXACTLY which games changed -- the cheap built-in version
+  # of the mandatory pre-accept per-game analysis (no rebuilding the old binary).
+
+  # Parse one "<name>: played=P avg=A digest=D" line per job into the avg/digest fingerprint,
+  # in matrix order, and compare to ground truth. avg = mean turn-to-win with an unwon game scored
+  # max_turns+1 (the goldfish metric); win/loss is intentionally NOT reported (see ComputeAvgTurns /
+  # main.cpp) because a goldfishing loss is an arbitrary horizon threshold agents wrongly prioritize.
+  local CUR_DECK=""
+  for spec in "${CASES[@]}"; do
+    # shellcheck disable=SC2086
+    set -- $spec; deck=$1; depth=$2; seed=$3
+    if [ "$deck" != "$CUR_DECK" ]; then CUR_DECK="$deck"; log ""; log "-- $CUR_DECK --"; fi
+    key="${deck}_${MODE}_d${depth}_s${seed}"
+    line=$(printf '%s\n' "$BATCH_OUT" | grep "^${key}: ")
+    # ANCHOR the extraction to THIS key and the exact field order. The old patterns led with a
+    # greedy `.*`, so when two workers' result lines spliced together in the batch output (seen
+    # 2026-09-08: "stompy...ms=216" + "fivecolour_overnight_d5_s4004: played=300 avg=4.8633...")
+    # the greedy prefix skipped this case's own avg/digest and captured the SPLICED-IN case's --
+    # reporting stompy as 4.5540 -> 4.8633, a 0.31-turn "regression" that never happened, and one
+    # that --accept would have written into GT as a false fingerprint. Anchored, a malformed line
+    # simply yields no avg and the case fails safe as "(no output)".
+    avg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=([0-9.]+) .*/\1/p")
+    dg=$(printf '%s\n' "$line" | sed -nE "s/^${key}: played=[0-9]+ avg=[0-9.]+ digest=([0-9a-f]+)( .*)?$/\1/p")
+    expected="${!key-}"
+    if [ -z "$avg" ]; then
+      status="FAIL"; got="(no output)"; FAIL=$((FAIL+1))
     else
-      status="FAIL"; FAIL=$((FAIL+1))
+      # Fingerprint = avg/play-digest. avg (to 4 dp) catches outcome/turn shifts; the digest catches a
+      # play change that keeps the same avg. Backward-compat: a GT without a digest matches on avg alone.
+      got="${avg}${dg:+/$dg}"
+      echo "$key=$got" >> "$RESULTS"           # record for a later --accept
+      if [ -z "$expected" ]; then
+        status="NEW "; expected="<none>"; NEW=$((NEW+1))
+      elif [ "$expected" = "$got" ]; then
+        status="PASS"; PASS=$((PASS+1))
+      elif [ "$expected" = "${avg}" ]; then
+        status="PASS"; PASS=$((PASS+1))        # GT without a digest: avg matches
+      else
+        status="FAIL"; FAIL=$((FAIL+1))
+      fi
     fi
-  fi
-  log "$(printf '  %s  %-26s exp=%-16s got=%-16s' "$status" "$key" "$expected" "$got")"
+    log "$(printf '  %s  %-26s exp=%-16s got=%-16s' "$status" "$key" "$expected" "$got")"
 
-  # Per-game diff against committed ground-truth logs. Lists every game whose win
-  # turn moved (old -> new), so changed games can be inspected before --accept.
-  new_wins="$LOGDIR/wins/${key}.wins"; gt_wins="$GTLOGS/${key}.wins"
-  if [ -f "$new_wins" ] && [ -f "$gt_wins" ]; then
-    diffs=$(awk 'FNR==NR{o[$1]=$2;next} ($1 in o)&&o[$1]!=$2{print "      gi="$1": "o[$1]" -> "$2}' \
-                "$gt_wins" "$new_wins")
-    if [ -n "$diffs" ]; then
-      nch=$(printf '%s\n' "$diffs" | grep -c .)
-      log "      >> $nch game(s) changed vs ground-truth log (inspect before --accept):"
-      printf '%s\n' "$diffs" | head -20 | while IFS= read -r dl; do log "$dl"; done
-      [ "$nch" -gt 20 ] && log "      ... ($((nch-20)) more)"
+    # Per-game diff against committed ground-truth logs. Lists every game whose win
+    # turn moved (old -> new), so changed games can be inspected before --accept.
+    new_wins="$LOGDIR/wins/${key}.wins"; gt_wins="$GTLOGS/${key}.wins"
+    if [ -f "$new_wins" ] && [ -f "$gt_wins" ]; then
+      diffs=$(awk 'FNR==NR{o[$1]=$2;next} ($1 in o)&&o[$1]!=$2{print "      gi="$1": "o[$1]" -> "$2}' \
+                  "$gt_wins" "$new_wins")
+      if [ -n "$diffs" ]; then
+        nch=$(printf '%s\n' "$diffs" | grep -c .)
+        log "      >> $nch game(s) changed vs ground-truth log (inspect before --accept):"
+        printf '%s\n' "$diffs" | head -20 | while IFS= read -r dl; do log "$dl"; done
+        [ "$nch" -gt 20 ] && log "      ... ($((nch-20)) more)"
+      fi
+    elif [ -f "$new_wins" ] && [ ! -f "$gt_wins" ]; then
+      log "      >> no ground-truth log yet ($GTLOGS/${key}.wins) -- will be created on --accept"
     fi
-  elif [ -f "$new_wins" ] && [ ! -f "$gt_wins" ]; then
-    log "      >> no ground-truth log yet ($GTLOGS/${key}.wins) -- will be created on --accept"
+  done
+
+  # ---- CounterList overflow (src/core/Permanent.h) -----------------------------------------------
+  # The binary prints "[counterlist] OVERFLOW xN" at exit if a counter put ever fell past the inline
+  # array. Storage is canonical (one entry per Counter::Type) so it cannot happen today; the line was
+  # once printed x5,787,486 per regression batch for weeks with nothing reading it, because the
+  # Permanent.h comment claimed a gate that did not exist. This is that gate.
+  if grep -q '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err" 2>/dev/null; then
+    log ""
+    log "FAIL: $(grep -m1 '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err")"
+    FAIL=$((FAIL+1))
   fi
+
+  # ---- reference reproducibility (engine<->GUI protocol layer) ------------------------------
+  # (Run as a SIDE STAGE above; its verdict is reported and gates here, in the tier that owns it.)
+  if ! vpc_wanted "$MODE"; then
+    log ""
+    log "--- reference reproducibility: SKIPPED ($MODE; runs in regression mode -- VPC_ALWAYS=1 to force) ---"
+  elif [ "$VPC_ANY" = 1 ]; then
+    local vpc_out vpc_rc sub_out sub_rc
+    log ""
+    log "--- reference reproducibility (viewer protocol, --strict) ---"
+    vpc_out=$(cat "$SIDE_DIR/vpc.out"); vpc_rc=$(cat "$SIDE_DIR/vpc.rc")
+    printf '%s\n' "$vpc_out" >> "$OUT"
+    # Console gets the tally + any gating lines; the full per-ref detail lives in $OUT.
+    printf '%s\n' "$vpc_out" | grep -E '^(Viewer protocol:|  (CONTRACT-FAIL|play-drift|ENUM-GAP))' \
+      | while IFS= read -r vl; do echo "$vl"; done
+    if [ "$vpc_rc" != 0 ]; then
+      log "FAIL: reference reproducibility (--strict) -- a recorded human game no longer replays; see $OUT"
+      FAIL=$((FAIL+1))
+    fi
+    log ""
+    log "--- suboptimal references (the search must strictly beat each one) ---"
+    sub_out=$(cat "$SIDE_DIR/subopt.out"); sub_rc=$(cat "$SIDE_DIR/subopt.rc")
+    printf '%s\n' "$sub_out" >> "$OUT"
+    printf '%s\n' "$sub_out" | grep -E '^(REQUIRE-BEAT|  )' | while IFS= read -r sl; do echo "$sl"; done
+    if [ "$sub_rc" != 0 ]; then
+      log "FAIL: a suboptimal reference is no longer strictly beaten by the search; see $OUT"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+
+  # ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
+  # The fingerprint compare above governs PASS/FAIL; this appends the per-game breakdown the aggregate
+  # hides -- every SLOWER game (worse loss-penalized score; a win becoming unwon is just the maximal
+  # slowdown, not a special category) split searched vs d0 -- so an ordinary run already surfaces what to analyze
+  # before --accept. The metric is the loss-penalized avg (loss = max_turns+1); the accept decision is a
+  # human judgement on the NET delta, not a per-game gate. See docs/design/auto-audit-integration.md.
+  if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
+    local gtchk audit_out _t0
+    _t0=$(date +%s)
+    log ""
+    # The audit below diffs against test/gt_logs/. Those per-game logs and the fingerprints in
+    # regression_gt.txt are promoted by the same --accept but under different rules, so they CAN
+    # drift apart (a per-deck accept, a clobbered wins dir, an interrupted run) -- and a stale
+    # per-game log makes every later run's audit report a PREVIOUS commit's changes as its own.
+    # That is not hypothetical: on 2026-08-24 a green 42/42 smoke run simultaneously reported 2
+    # slower + 22 play-changed games, all of them eaccc120's, on decks the change under test could
+    # not touch. Say so before printing an audit the reader would otherwise trust.
+    if [ -f "$HERE/check_gt_logs.py" ]; then
+      if ! gtchk=$(python3 "$HERE/check_gt_logs.py" --mode "$MODE" 2>&1); then
+        log "--- WARNING: committed gt_logs are STALE vs regression_gt.txt ---"
+        printf '%s\n' "$gtchk" | grep -E '^(STALE|---)' | while IFS= read -r cl; do log "  $cl"; done
+        log "  The per-game audit below is diffing against those stale logs -- treat its"
+        log "  'slower / play-changed' list as UNATTRIBUTED until a clean run is accepted."
+      fi
+    fi
+    log "--- per-game audit (vs committed gt_logs) ---"
+    audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
+    printf '%s\n' "$audit_out" | while IFS= read -r al; do log "$al"; done
+    # Offer the churn auto-classifier when there are searched SLOWER games to explain.
+    if printf '%s\n' "$audit_out" | grep -q "SEARCHED-depth SLOWER"; then
+      log "      >> classify searched slower games automatically: bash test/classify_turn_later.sh $MODE"
+    fi
+    stage_line "per-game audit ($MODE)" $(( $(date +%s) - _t0 ))
+  fi
+
+  log ""
+  log "--- stage wall times (this run; tier wall so far $(( $(date +%s) - RUN_T0 ))s) ---"
+  local sl
+  for sl in "${STAGE_LINES[@]}"; do echo "$sl" >> "$OUT"; done
+  log ""
+  log "Result: $PASS passed, $FAIL failed, $NEW new   (batch makespan ${TOTAL}s = $((TOTAL/60))m$((TOTAL%60))s)"
+  if [ "$FAIL" -eq 0 ]; then
+    [ "$NEW" -gt 0 ] && log "ALL PASS ($NEW new key(s); inspect, then 'bash test/regression.sh $MODEFLAG --accept' to record)" \
+                     || log "ALL PASS"
+    return 0
+  else
+    log "REGRESSION DETECTED"
+    return 1
+  fi
+}
+
+RC=0
+for _mode in "${MODES[@]}"; do
+  select_mode "$_mode"
+  report_mode || RC=1
 done
-
-# ---- CounterList overflow (src/core/Permanent.h) -----------------------------------------------
-# The binary prints "[counterlist] OVERFLOW xN" at exit if a counter put ever fell past the inline
-# array. Storage is canonical (one entry per Counter::Type) so it cannot happen today; the line was
-# once printed x5,787,486 per regression batch for weeks with nothing reading it, because the
-# Permanent.h comment claimed a gate that did not exist. This is that gate.
-if grep -q '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err" 2>/dev/null; then
-  log ""
-  log "FAIL: $(grep -m1 '^\[counterlist\] OVERFLOW' "$LOGDIR/batch.err")"
-  FAIL=$((FAIL+1))
-fi
-
-# ---- reference reproducibility (engine<->GUI protocol layer) ------------------------------
-# Replays every saved references/<deck>/claude_*.json by INTENT (content-anchored picks, engine
-# defaults for predated decision points -- docs/design/reference-intent-replay.md) against the
-# SAME snapshot binary as the batch. --strict fails on play-drift (a recorded human line now ends
-# differently) and ENUM-GAP (a previously-offered plan vanished for an identical state); the
-# accepted classes (shuffle-dead, mull-drift) never gate. Threaded: the full sweep is seconds.
-#
-# REGRESSION MODE ONLY (USER, 2026-08-17: "I only want it to run in one mode. maybe full regression
-# to be safe"). It is a whole-corpus REPLAY, not a sampled batch, so running it in all three modes
-# re-measured the identical thing three times -- and each replay is a --claude-play process with
-# MTG_UNPRUNED set, i.e. the widest enumeration the engine ever performs (that is what OOM'd the
-# box; see docs/design/claude-play-unprune-blowup.md). Regression is the middle tier every real
-# change goes through, so the gate keeps its coverage: smoke stays a fast fingerprint check, and
-# overnight stops spending its concurrency on a sweep regression already ran. Force it in any mode
-# with VPC_ALWAYS=1; skip it entirely with VPC_SKIP=1.
-VPC="$HERE/viewer_protocol_check.py"
-VPC_RUN=0
-[ "$MODE" = regression ] && VPC_RUN=1
-[ "${VPC_ALWAYS:-0}" = 1 ] && VPC_RUN=1
-[ "${VPC_SKIP:-0}" = 1 ] && VPC_RUN=0
-if [ "$VPC_RUN" != 1 ]; then
-  log ""
-  log "--- reference reproducibility: SKIPPED ($MODE; runs in regression mode -- VPC_ALWAYS=1 to force) ---"
-elif [ -f "$VPC" ] && command -v python3 >/dev/null 2>&1; then
-  log ""
-  log "--- reference reproducibility (viewer protocol, --strict) ---"
-  VPC_THREADS=$THREADS; [ "$VPC_THREADS" -le 0 ] && VPC_THREADS=$(nproc 2>/dev/null || echo 8)
-  vpc_out=$(MTG_BIN="$BIN" python3 "$VPC" --strict --threads "$VPC_THREADS" 2>&1); vpc_rc=$?
-  printf '%s\n' "$vpc_out" >> "$OUT"
-  # Console gets the tally + any gating lines; the full per-ref detail lives in $OUT.
-  printf '%s\n' "$vpc_out" | grep -E '^(Viewer protocol:|  (CONTRACT-FAIL|play-drift|ENUM-GAP))' \
-    | while IFS= read -r vl; do echo "$vl"; done
-  if [ $vpc_rc -ne 0 ]; then
-    log "FAIL: reference reproducibility (--strict) -- a recorded human game no longer replays; see $OUT"
-    FAIL=$((FAIL+1))
-  fi
-  # SUBOPTIMAL references must be STRICTLY BEATEN by the search (USER 2026-10-22: "Suboptimal games
-  # could be replayed as well with the expectation that we strictly beat them"). The sweep above
-  # replays their recorded lines; this plays each from its shuffle at the deck's committed play
-  # setting and fails unless the search wins EARLIER than the user did. A suboptimal game with a proper
-  # reference for the same game is superseded and skipped. A handful of games: seconds.
-  log ""
-  log "--- suboptimal references (the search must strictly beat each one) ---"
-  sub_out=$(MTG_BIN="$BIN" python3 "$HERE/../scripts/ref_bench.py" --suboptimal --require-beat 2>&1); sub_rc=$?
-  printf '%s\n' "$sub_out" >> "$OUT"
-  printf '%s\n' "$sub_out" | grep -E '^(REQUIRE-BEAT|  )' | while IFS= read -r sl; do echo "$sl"; done
-  if [ $sub_rc -ne 0 ]; then
-    log "FAIL: a suboptimal reference is no longer strictly beaten by the search; see $OUT"
-    FAIL=$((FAIL+1))
-  fi
-fi
-
-# ---- per-game audit (split by depth) -- makes the pre-accept analysis unmissable ----------
-# The fingerprint compare above governs PASS/FAIL; this appends the per-game breakdown the aggregate
-# hides -- every SLOWER game (worse loss-penalized score; a win becoming unwon is just the maximal
-# slowdown, not a special category) split searched vs d0 -- so an ordinary run already surfaces what to analyze
-# before --accept. The metric is the loss-penalized avg (loss = max_turns+1); the accept decision is a
-# human judgement on the NET delta, not a per-game gate. See docs/design/auto-audit-integration.md.
-if [ -f "$HERE/audit_changed_games.py" ] && command -v python3 >/dev/null 2>&1; then
-  log ""
-  # The audit below diffs against test/gt_logs/. Those per-game logs and the fingerprints in
-  # regression_gt.txt are promoted by the same --accept but under different rules, so they CAN
-  # drift apart (a per-deck accept, a clobbered wins dir, an interrupted run) -- and a stale
-  # per-game log makes every later run's audit report a PREVIOUS commit's changes as its own.
-  # That is not hypothetical: on 2026-08-24 a green 42/42 smoke run simultaneously reported 2
-  # slower + 22 play-changed games, all of them eaccc120's, on decks the change under test could
-  # not touch. Say so before printing an audit the reader would otherwise trust.
-  if [ -f "$HERE/check_gt_logs.py" ]; then
-    if ! gtchk=$(python3 "$HERE/check_gt_logs.py" --mode "$MODE" 2>&1); then
-      log "--- WARNING: committed gt_logs are STALE vs regression_gt.txt ---"
-      printf '%s\n' "$gtchk" | grep -E '^(STALE|---)' | while IFS= read -r cl; do log "  $cl"; done
-      log "  The per-game audit below is diffing against those stale logs -- treat its"
-      log "  'slower / play-changed' list as UNATTRIBUTED until a clean run is accepted."
-    fi
-  fi
-  log "--- per-game audit (vs committed gt_logs) ---"
-  audit_out=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
-  printf '%s\n' "$audit_out" | while IFS= read -r al; do log "$al"; done
-  # Offer the churn auto-classifier when there are searched SLOWER games to explain.
-  if printf '%s\n' "$audit_out" | grep -q "SEARCHED-depth SLOWER"; then
-    log "      >> classify searched slower games automatically: bash test/classify_turn_later.sh $MODE"
-  fi
-fi
-
-log ""
-log "Result: $PASS passed, $FAIL failed, $NEW new   (batch makespan ${TOTAL}s = $((TOTAL/60))m$((TOTAL%60))s)"
-if [ "$FAIL" -eq 0 ]; then
-  [ "$NEW" -gt 0 ] && log "ALL PASS ($NEW new key(s); inspect, then 'bash test/regression.sh $MODEFLAG --accept' to record)" \
-                   || log "ALL PASS"
-  exit 0
-else
-  log "REGRESSION DETECTED"
-  exit 1
-fi
+[ ${#MODES[@]} -gt 1 ] && echo "" && echo "Combined (${MODES[*]}): $([ $RC = 0 ] && echo ALL PASS || echo REGRESSION DETECTED)   (tier wall $(( $(date +%s) - RUN_T0 ))s)"
+exit $RC

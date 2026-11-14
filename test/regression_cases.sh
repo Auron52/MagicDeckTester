@@ -753,8 +753,9 @@ REGRESSION_CASES=(
   "extraturns 5 2002 150 20"
   "extraturns 5 3003 150 20"
   "extraturns2hg 5 2002 75 20"
-  # Cyclone unlimited backstop: screened 30031..30033 at d3 and d5; all six games
-  # finished below the 2e6-unit per-game cap. Keep this block fixed as a regression signal.
+  # Cyclone unlimited backstop: originally screened 30031..30033 at d3 and d5.
+  # Seed 30033 now reaches the 2e6-unit cap (the d5 GT has two completed games).
+  # Keep this block fixed: a newly degenerate game is the regression signal.
   "cyclone          3 30031 3 0"
   "cyclone          5 30031 3 0"
   # Shadowborn unlimited backstop: screened 30071..30075 at d3 and d5 (abandon_units 2e6, MTG_SLOW_GAME_MS=5000);
