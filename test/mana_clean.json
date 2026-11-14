@@ -7032,6 +7032,47 @@
      "seed": 30069000,
      "src": "33405742710dcb6792baed601c62995b57750043",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 10,
+      "CONTINUATION-DIFFERS": 2,
+      "DOMINATED-LAND": 276,
+      "DOMINATED-LIFE": 3,
+      "DROP-COVERED": 111,
+      "PHANTOM": 1693
+     },
+     "commit": "39762088d1c0525f0e27791a0a1e80a69b09943c",
+     "date": "2026-11-14T06:02:56Z",
+     "decisions": 38711,
+     "deck": "decks/Pirates/Pirates.cod",
+     "deck_sha": "4d66d796f128d3ca93b1547e0aa096f0c62dc17b",
+     "game_index": 74000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 10,
+     "life_breakpoints": [],
+     "ms_off": 584665,
+     "ms_on": 977063,
+     "report": "logs/mana_clean/pirates-C2r2-20261114/report.md",
+     "run": "pirates-C2r2-20261114",
+     "seed": 30074000,
+     "src": "316eac74bf1d061439822a491a909d6a8bad25e3",
+     "verdict": "issues"
     }
    ]
   },
