@@ -1140,6 +1140,10 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     AI-only declines, heurarm slot PLAN_JOINT_PAY + its name). Everything else of e4264949f stays: the trial's
     ConcreteDeferScope in PrepareHumanCommit, `g_line_hold_has_acts`, the physical-{C} pre-load, the
     SacNamedTutorPut decline, and scenario `morph_human_seq_joint_pay_might_first_turf_birds`.
+  * **Tiers WITHOUT the fallback (morph-integ `07804f142` over origin `585324ef3`, with INT-16; ACCEPTED).** Every
+    kithkin / selesnyav2 / bruna / edf row listed above under "Smoke/Regression on e4264949f" is byte-identical to GT
+    without the fallback, so those movements were MTG_PLAN_JOINT_PAY's. Moved rows (morph only, all digest-only)
+    are listed under INT-16 below.
 
 ### INT-16 (2026-11-13) -- exact doubler combat payability
 - USER (verbatim, 2026-11-13), about INT-12's documented probe approximations: "If we are approximating and this might
@@ -1224,6 +1228,14 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     regression `morph_regression_d0_s2002` (4.7730), `morph_regression_d5_s3003` (4.1200; gi 11, T3 kept) and
     `morph2hg_regression_d5_s2002` (4.6800; gi 14 T5, gi 42 T4 kept). Searched: 0 slower / 0 faster. d0: 0 slower
     (the probe runs in the d0 runner's apply as well). Viewer protocol: 0 play-drift, 0 board-diverged; REQUIRE-BEAT passed.
+  - **Integrated + ACCEPTED (branch morph-integ, `07804f142` = INT-14 human joint pay + INT-16 over origin `585324ef3`,
+    MTG_PLAN_JOINT_PAY dropped; GameState 1496).** Unit 2976/2976, scenarios 519/519, viewer protocol 837 refs 0
+    play-drift / 0 board-diverged / 0 enum-gap. Smoke 198/199: `morph_smoke_d0_s1001` 4.7380 digest-only (5 d0 games
+    play-changed, 0 slower). Regression 313/316: `morph_regression_d0_s2002` 4.7730, `morph_regression_d5_s3003`
+    4.1200 (gi 11, T3 kept), `morph2hg_regression_d5_s2002` 4.6667 (gi 42, T4 kept) -- all digest-only; audit searched
+    0 slower / 0 faster, d0 0 slower (7 play-changed); REQUIRE-BEAT 2/2. The 2HG d5 row shows only gi 42 (gi 14 no
+    longer differs on origin's base). (The first regression run's one ENUM-GAP, Eldrazi_Displacer_Flicker s8 gi7, was
+    an artifact of the 9p mount failing mid-stage; the re-run has 0.)
 
 ## Claude-play sweep
 - commit: `f2df0a83f`
