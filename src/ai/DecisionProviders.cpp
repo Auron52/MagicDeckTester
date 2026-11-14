@@ -638,6 +638,7 @@ static bool UnpruneHumanSuppressed()
 static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"fixedburntarget", UnprunedGate::FixedBurnTarget},
     {"champion", UnprunedGate::Champion},
+    {"championmain2", UnprunedGate::ChampionMain2},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -1666,7 +1667,15 @@ void DecisionProvider::GyReturnOrder(const GameState& s, int controller, std::ve
     });
 }
 
-void DecisionProvider::AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const
+// ---- RedElementalsProvider (Stage 4a, 2026-11-14; the class note in DecisionProviders.h) ----------------------
+//
+// THUNDERKIN AWAKENER's target ORDER (an ordering heuristic; nothing dropped -- every rank stays searched):
+// the biggest printed power first (this combat's damage -- the returned body is sacrificed at end step either
+// way), then a card WITHOUT a graveyard ability of its own before one with it (an unearthable Hellspark kept in
+// the yard is a later turn's attacker; the graveyard is contested between unearth and the trigger), then the
+// GyReturnOrder order the list arrives in. It sets the searched rank order, the beyond-horizon playout pick and
+// the human's default. Moved here from the root DecisionProvider unchanged (the root is now neutral).
+void RedElementalsProvider::AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const
 {
     if (cand_numbers.size() < 2) { return; }
     const std::vector<Card>& gy = s.players[static_cast<std::size_t>(controller)].graveyard;
@@ -1687,6 +1696,112 @@ void DecisionProvider::AttackReanimateTargets(const GameState& s, int controller
         if (pa != pb) { return pa > pb; }
         return !gy_ability(a) && gy_ability(b);
     });
+}
+
+// CHAMPION ORDER (an ordering heuristic; USER 2026-11-14: "I think we could have a heuristic that orders targets
+// for champion most likely"). Never restricts. Order: the DOOMED first (it leaves at this end step anyway:
+// sac_at_end_step, unearthed, exile_at_end, a face-up endstep_sacrifice_self), then a creature that already
+// attacked / is tapped, then the smallest effective power, then the lowest card number (deterministic). Moved
+// here from the root DecisionProvider unchanged (the root is now neutral: battlefield order).
+static bool RedElemChampionDoomed(const Permanent& q)
+{
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    return q.sac_at_end_step || q.unearthed || q.exile_at_end
+        || (!q.def_absent && d != nullptr && d->params.endstep_sacrifice_self);
+}
+static bool RedElemChampionSpent(const Permanent& q) { return q.AttacksThisTurn() > 0 || q.tapped; }
+
+void RedElementalsProvider::OrderChampionCandidates(const GameState& s, int controller, std::vector<int>& idx) const
+{
+    (void)controller;
+    auto rank = [&s](int bi)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+        return std::make_tuple(RedElemChampionDoomed(q) ? 0 : 1, RedElemChampionSpent(q) ? 0 : 1,
+                               q.EffectivePower(), q.card.m_number);
+    };
+    std::stable_sort(idx.begin(), idx.end(), [&rank](int a, int b) { return rank(a) < rank(b); });
+}
+
+// CHAMPION PRUNE (a pruning heuristic; USER 2026-11-14: "No, the provider can prune other options."),
+// MTG_CHAMPION_DOOMED_PRUNE (DEFAULT ON; =0 keeps the full set). When a candidate is DOOMED (above) AND SPENT (it
+// attacked or is tapped -- championing it costs nothing this turn), the champion takes the first such candidate
+// and nothing else is offered: every other option exiles a live body or sacrifices the champion, while this one
+// exiles a card that was leaving and brings it back when the champion leaves. Disclosed cost: the doomed card
+// goes to exile, not the graveyard (unearth / Thunderkin cannot reach it while the champion lives). Human play and
+// MTG_UNPRUNED / MTG_UNPRUNE=champion never reach this (ChampionAdmitted). Measured inert at d3 b100 (ledger,
+// Agent B3: 840/840 games identical). Moved here from the root DecisionProvider unchanged.
+void RedElementalsProvider::PruneChampionCandidates(const GameState& s, int controller, std::vector<int>& idx,
+                                                    bool& others) const
+{
+    (void)controller;
+    static const bool on = EnvOn("MTG_CHAMPION_DOOMED_PRUNE", true);   // DEFAULT ON; =0 -> every candidate
+    if (!on) { return; }
+    for (int bi : idx)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+        if (RedElemChampionDoomed(q) && RedElemChampionSpent(q)) { idx.assign(1, bi); others = false; return; }
+    }
+}
+
+// THE NOVA CHASER MAIN-2 RULE -- a provider RESTRICTION (USER 2026-11-14, verbatim: "Note that Nova Chaser should
+// be cast main 2 if it is hardcast, but it might also be dropped in main 1 via Incandescent Soulstoke."), generic
+// over the param: a card with champion_subtype that has NO haste access this turn
+// (TrickHandRecipientCanAttackThisTurn: printed haste, or a haste grant on our battlefield / in hand) is not
+// offered as a HAND CAST in the PRE-combat main. The Soulstoke put (an ActivatePermAbility, PutFromHandAbility)
+// is untouched: it grants haste, so a main-1 put Nova attacks, and it stays searched in both mains. A
+// restriction, never a pick: the post-combat cast keeps every searched champion variant (board classes,
+// same-line entrants, the decline), and the deck plays a full searched second main (DeckUsesSecondMain is true
+// for any champion deck).
+//
+// WHY IT IS (NEARLY) DOMINATED -- and the one corner where it is not, so this is a USER-ruled RESTRICTION, not a
+// sound fold. A hardcast champion without haste cannot attack this turn wherever it is cast, so casting it in main 1
+// buys no combat damage; the mana is the same lands in either main (nothing in this list taps or spends mana in
+// combat); and its champion EXILE in main 1 can only take a body out BEFORE combat -- one that could have attacked
+// (a strict loss), one that cannot attack this turn either (summoning-sick: the same exile in main 2), or nothing
+// (the decline: the same sacrifice in main 2). Post-combat the same choice is offered over a board that already
+// attacked, plus the doomed-attacker line (champion a Spark / Ball Lightning / unearthed Hellspark that is about to
+// be sacrificed), and the Nova card stays in hand through combat as Flamekin Bladewhirl's reveal.
+// THE CORNER (disclosed, Stage 4a): a main-1 Nova that DECLINES (or champions nothing) is sacrificed into the
+// graveyard BEFORE combat, and Thunderkin Awakener's attack trigger returns "an Elemental creature card with
+// toughness less than Thunderkin's" -- Nova's 2 is below a Thunderkin pumped by the Soulstoke lord (+1/+1) or a
+// Metallic Mimic counter, so that Nova comes back tapped and attacking as a 10/2 trampler THIS turn. A main-2 Nova
+// only reaches the graveyard for NEXT turn's trigger. The restriction gives that line up; the MTG_UNPRUNE arm of
+// the ledger's A/B measures what it costs. A list that adds a haste granter falls out by construction
+// (TrickHandRecipientCanAttackThisTurn).
+// Lockstep: CollectActions applies it at its tail for the search, the rollout, the d0 runner and the executor
+// alike. Human play keeps the full set (the TurnSolver block); MTG_UNPRUNED / MTG_UNPRUNE=championmain2 and
+// MTG_REDELEM_NOVA_MAIN2=0 (heurarm REDELEM_NOVA_MAIN2, per-job) restore the main-1 hardcast.
+static bool RedElemNovaMain2On()
+{
+    static const bool env = EnvOn("MTG_REDELEM_NOVA_MAIN2", true);   // DEFAULT ON; =0 -> main-1 hardcast offered
+    return heurarm::Flag(heurarm::REDELEM_NOVA_MAIN2, env);
+}
+// ORDER-OPAQUE CASTS BY RANK (cast order: USER-owned, surfaced in the ledger's Stage 4a; default ON because it is
+// the behaviour this deck had while it rode MorphProvider). The MTG_ORDER_OPAQUE doctrine (USER, Mirrorwing review
+// 2026-08-18: "We need to order everything, not have search own the order"): an order-opaque set (Legion
+// Leadership, a solo-target trick, with the casts around it) is sorted by the GENERIC CastOrderRank -- creatures
+// (10) before other noncreature spells (20) -- so the power doubler resolves after the Elementals it can double and
+// after the Soulstoke lord's +1/+1 (doubling 2(P+1) >= 2P+1). Root cause it fixes, Stage 4a A/B: the bare
+// DeckProvider derivation left that order to the search and lost a turn in 8 of 840 games, every one a Legion
+// Leadership line (e.g. seed 5000 gi308 T4: Leadership then Spark = 8 damage vs Spark then Leadership = 9; seed 300
+// gi49 T2-T4: the Spark + Leadership T4 kill not found even at --budget-ms 0); turning this on alone restores all 8.
+// MTG_REDELEM_OPAQUE_ORDER=0 (heurarm REDELEM_OPAQUE_ORDER, per-job) -> the search owns the order.
+bool RedElementalsProvider::OrderOpaqueCastsByRank() const
+{
+    static const bool env = EnvOn("MTG_REDELEM_OPAQUE_ORDER", true);   // DEFAULT ON; =0 -> the search owns the order
+    return heurarm::Flag(heurarm::REDELEM_OPAQUE_ORDER, env);
+}
+bool RedElementalsProvider::RestrictsCollectedActions() const
+{
+    return RedElemNovaMain2On() && !DecisionUnpruned(UnprunedGate::ChampionMain2);
+}
+bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const
+{
+    if (!is_pre_combat || a.kind != Action::Kind::CastFromHand) { return true; }
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().Lookup(a.card_name.str());
+    if (d == nullptr || d->params.champion_subtype.empty() || !d->card.IsCreature()) { return true; }
+    return TrickHandRecipientCanAttackThisTurn(s, *d);
 }
 
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
@@ -25027,6 +25142,7 @@ namespace
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
     const BoarsProvider          g_boars;
+    const RedElementalsProvider  g_red_elementals;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -27694,6 +27810,14 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // BOARS (R/G Boar ramp-tribal; BoarsProvider). MUST return ABOVE `anti`: the fetchlands' fetch_land_types set
     // that signature alone. Params carried by no other deck (see the class note; I2-I5 append to the OR).
     bool boars = false;
+    // RED ELEMENTALS (mono-red one-shot Elementals; RedElementalsProvider, Stage 4a 2026-11-14). MUST return
+    // ABOVE `morph`: Spark / Ball Lightning / Hellspark / Firecat's endstep_sacrifice_self, Firecat's morph_cost
+    // and Legion Leadership's trick_double_power each set that signature alone (the deck rode MorphProvider until
+    // this flag existed). Signature = params no other card carries, OR-ed across THREE cards: Nova Chaser's
+    // champion_subtype, Thunderkin Awakener's attack_trigger_reanimate, and Hellspark Elemental's unearth_cost on
+    // an ELEMENTAL card (unearth alone is a generic mechanic other lists may add). Never Soulstoke / Metallic
+    // Mimic (Landfall Elementals), Bladewhirl's reveal_or_pay_subtype (Kithkin, Pirates) or Sunspine Lynx.
+    bool redelem = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -27890,6 +28014,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0   // Decimator (I4)
             || p.attack_put_creature_from_hand)   // Ilharg, the Raze-Boar (I5a)
         { boars = true; }
+        if (!p.champion_subtype.empty() || p.attack_trigger_reanimate
+            || (p.unearth_cost.has_value() && CardHasSubtype(def->card, "Elemental")))
+        { redelem = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
         { gods = true; }
@@ -28449,7 +28576,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // Shadowborn Apostle: FIRST (see the flag) -- above `anti`, which its tutors set alone.
     // Hydras: FIRST -- above `goblin` (Gargos's reduces_spell_subtype) and `fungus` (a counter-doubling
     // param); its signature is carried by no other deck (see the flag).
-    // Morph: FIRST -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
+    // Morph: FIRST (after Red Elementals) -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
+    // Red Elementals: above `morph`, whose signature its end-step-sacrifice bodies / Firecat / Legion Leadership
+    // set alone (see the flag). Its signature is carried by no other deck, so the position is free.
+    if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
     if (boars)       { return g_boars; }

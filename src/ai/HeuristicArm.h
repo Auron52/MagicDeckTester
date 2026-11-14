@@ -948,6 +948,8 @@ enum Slot : int
     FETCH_RANK_PIPS,          // MTG_FETCH_RANK_PIPS  the BASE fetch-shaped land-search order (DecisionProvider::LandSearchFetchPickOrder: a battlefield fetchland's activation AND its land drop, and GenericProvider's legacy FetchCandidates) is a deliberate RANKING instead of name / library order (USER 2026-11-14: a shock over a basic unless no shock makes the colour the line needs): (1) the land adds a pip to the SIMULTANEOUS matching of the castable hand spells' pips against our sources (one pip per source), (2) the plain needed-and-lacked cover, (3) a dual over a basic, (4) castable-demanded colours made, (5) name. Boars sweep seed 97005 T4 (Ilharg {R}{R}, one red source: top-1 fetched Forest; now Stomping Ground) and CG smoke gi113 (Birds is one mana, not W and R at once: Breeding Pool fetched). Overriding providers (Anti-Lifegain, Five Colour, Morph, Cyclone, Landfall, Landfall Elementals) are untouched
     PD_NAMED_LINE_PRIORITY,   // MTG_PD_NAMED_LINE_PRIORITY  the Earthquake-in-hand red hold stands down while the current plan has two or more named mana casts. Default ON; =0 is the broad hold from the first fresh PD gate.
     SB_CULLING_FALLBACK,      // MTG_SB_CULLING_FALLBACK  fixed Shadowborn victim: when a same-plan hand Apostle cannot fund Culling before later casts, admit the battlefield Demon fallback only if the exact walk pays it. The plan search sees one payable victim route.
+    REDELEM_NOVA_MAIN2,       // MTG_REDELEM_NOVA_MAIN2  Red Elementals Stage 4a (USER 2026-11-14: "Note that Nova Chaser should be cast main 2 if it is hardcast, but it might also be dropped in main 1 via Incandescent Soulstoke."): a champion card (champion_subtype) with no haste access is not HARDCAST in the pre-combat main (RedElementalsProvider::CollectedActionAllowed); the Soulstoke put stays in both mains. Human play and MTG_UNPRUNE=championmain2 keep both. Default ON; =0 -> the main-1 hardcast is offered
+    REDELEM_OPAQUE_ORDER,     // MTG_REDELEM_OPAQUE_ORDER  Red Elementals Stage 4a: RedElementalsProvider::OrderOpaqueCastsByRank -- an order-opaque cast set (Legion Leadership with the casts around it) is rank-sorted (generic CastOrderRank: creatures 10 before noncreatures 20, so the doubler follows the bodies it doubles) instead of left to the search. The behaviour the deck had on MorphProvider; USER-owned cast-order item, surfaced. Default ON; =0 -> the search owns the order
     COUNT
 };
 
@@ -1840,6 +1842,8 @@ inline const char* Name(int slot)
         "MTG_FETCH_RANK_PIPS",
         "MTG_PD_NAMED_LINE_PRIORITY",
         "MTG_SB_CULLING_FALLBACK",
+        "MTG_REDELEM_NOVA_MAIN2",
+        "MTG_REDELEM_OPAQUE_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -22,6 +22,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "deck/DeckLoader.h"
 
 #include <algorithm>
 #include <string>
@@ -53,7 +54,7 @@ GameState BoardRe()
     GameState s;
     s.active_player_index = 0;
     s.turn_number         = 4;
-    static const GenericProvider prov;
+    static const RedElementalsProvider prov;   // the deck's provider (Stage 4a): its champion / Thunderkin hooks
     s.m_provider          = &prov;
     return s;
 }
@@ -529,7 +530,8 @@ TEST_CASE("Nova Chaser: a SAME-LINE entrant is a searched variant (named by its 
     HandRe(s, "Spark Elemental");     // a second copy: still ONE variant per name
     HandRe(s, "Metallic Mimic");
     HandRe(s, "Lightning Bolt");
-    const std::vector<Action> v = NovaCastVariants(s, /*pre_combat=*/true);
+    // POST-combat: the deck provider offers the HARDCAST only there (the USER's main-2 rule, Stage 4a).
+    const std::vector<Action> v = NovaCastVariants(s, /*pre_combat=*/false);
     // No Elemental on the board: the menu is the decline + one same-line variant per entrant name.
     std::vector<std::string> names;
     bool decline = false;
@@ -870,4 +872,77 @@ TEST_CASE("Thunderkin Awakener: the returned card enters through the enter casca
     REQUIRE(BfNum(s, spark) >= 0);
     const Permanent& r = s.battlefield[static_cast<std::size_t>(BfNum(s, spark))];
     CHECK(r.EffectivePower() == 4);       // 3/1 + the Mimic's +1/+1 counter
+}
+
+// ---- Stage 4a: routing, the root's neutral defaults, and the USER's Nova Chaser main-2 rule -------------------------
+
+TEST_CASE("Red Elementals: routes to its own provider, above Morph")
+{
+    EnsureCardsRe();
+    const Decklist d = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Red Elementals/Red Elementals.cod"));
+    CHECK(std::string(DetectDecisionProvider(d).Name()) == "RedElementals");
+    // The signature survives cutting any ONE of its three cards.
+    for (const char* cut : {"Nova Chaser", "Thunderkin Awakener", "Hellspark Elemental"})
+    {
+        Decklist e = d;
+        e.mainboard.erase(std::remove_if(e.mainboard.begin(), e.mainboard.end(),
+                                         [&](const Card& c) { return c.m_name.str() == cut; }),
+                          e.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(e).Name()) == "RedElementals", "cutting ", cut);
+    }
+}
+
+TEST_CASE("Champion / Thunderkin: the ROOT provider is neutral; the deck provider orders and prunes")
+{
+    GameState s = BoardRe();
+    PutRe(s, "Flamekin Bladewhirl");                                   // live, untapped, power 1
+    const int spark = PutRe(s, "Spark Elemental", 0, /*tapped=*/true); // doomed + spent
+    s.battlefield.back().NoteAttackDeclared();
+    const GenericProvider generic;
+    std::vector<int> idx{0, 1};
+    generic.OrderChampionCandidates(s, 0, idx);
+    CHECK(idx == std::vector<int>{0, 1});                              // battlefield order kept
+    bool others = true;
+    generic.PruneChampionCandidates(s, 0, idx, others);
+    CHECK(idx.size() == 2);
+    CHECK(others);
+    const RedElementalsProvider deck;
+    deck.OrderChampionCandidates(s, 0, idx);
+    CHECK(idx == std::vector<int>{1, 0});                              // the doomed Spark first
+    deck.PruneChampionCandidates(s, 0, idx, others);
+    CHECK(idx == std::vector<int>{1});
+    CHECK_FALSE(others);
+    CHECK(s.battlefield[1].card.m_number == spark);
+    // Thunderkin's target order: neutral at the root, printed power first in the deck provider.
+    const int bl = GyRe(s, "Spark Elemental");
+    const int ball = GyRe(s, "Ball Lightning");
+    std::vector<int> gy{bl, ball};
+    generic.AttackReanimateTargets(s, 0, gy);
+    CHECK(gy == std::vector<int>{bl, ball});
+    deck.AttackReanimateTargets(s, 0, gy);
+    CHECK(gy == std::vector<int>{ball, bl});
+}
+
+TEST_CASE("Nova Chaser: HARDCAST only after combat (USER main-2 rule); the Soulstoke put stays in main 1")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 6; ++k) { PutRe(s, "Mountain"); }
+    PutRe(s, "Flamekin Bladewhirl");
+    PutRe(s, "Incandescent Soulstoke");
+    HandRe(s, "Nova Chaser");
+    // Pre-combat: no hardcast variant at all; the Soulstoke put of Nova (PutFromHandAbility) is offered -- it
+    // grants haste, so that Nova attacks this turn.
+    CHECK(NovaCastVariants(s, /*pre_combat=*/true).empty());
+    bool put_nova = false;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+    {
+        if (a.kind == Action::Kind::PutFromHandAbility && a.card_name.str() == "Nova Chaser") { put_nova = true; }
+    }
+    CHECK(put_nova);
+    // Post-combat: every searched champion variant is back.
+    CHECK_FALSE(NovaCastVariants(s, /*pre_combat=*/false).empty());
+    // The rule is the deck provider's: the root offers the main-1 hardcast.
+    const GenericProvider generic;
+    s.m_provider = &generic;
+    CHECK_FALSE(NovaCastVariants(s, /*pre_combat=*/true).empty());
 }

@@ -532,11 +532,11 @@ public:
     // default the playout policy takes beyond the horizon (the searched rank, Plan::attack_reanimate_choice,
     // indexes this list). A provider may also RESTRICT (USER 2026-11-14: "the provider can prune other
     // options") -- such a prune must be measured against MTG_UNPRUNE and disclosed; an emptied list is
-    // ignored. DEFAULT (ordering only, nothing dropped): the biggest printed power first (this combat's
-    // damage -- the returned body is sacrificed at end step either way), then a card WITHOUT a graveyard
-    // ability of its own before one with it (an unearthable Hellspark kept in the yard is a later turn's
-    // attacker; the graveyard is contested between unearth and the trigger), then GyReturnOrder.
-    virtual void AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const;
+    // ignored. ROOT DEFAULT: NEUTRAL -- GyReturnOrder's order, untouched, nothing dropped. The deck ordering
+    // (printed power descending, then a card without a graveyard ability first) lives in
+    // RedElementalsProvider (Stage 4a, 2026-11-14).
+    virtual void AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const
+    { (void)s; (void)controller; (void)cand_numbers; }
 
     // GraceOptions -- Abiding Grace's option list for ONE end-step trigger, in the order the searched
     // rank (Plan::grace_choice) indexes it; front = the default the playout policy takes beyond the
@@ -4545,58 +4545,25 @@ public:
 
     // OrderChampionCandidates -- CHAMPION (CardParams::champion_subtype; Nova Chaser). ORDERS the
     // battlefield indices `idx` of the permanents the champion may exile (never restricts: every one
-    // stays a searched variant). A PROVIDER ORDERING HEURISTIC (USER 2026-11-14: "I think we could have a
-    // heuristic that orders targets for champion most likely"): it is the order the cast / put variants
-    // are emitted in (so a binding budget tries the likely-best target first; same-line entrants follow,
-    // the decline is last), the rank order of a RETURNING champion's searched pick (rank 0 = the front),
-    // the UNPINNED resolution's pick -- reached only beyond the search horizon / outside any search
-    // (census MTG_CHAMPION_AXIS_STATS) -- and the human's highlighted default. A deck provider may
-    // override it (Stage 4a). Default order: the doomed first (it leaves at this end step anyway:
-    // sac_at_end_step, unearthed, endstep_sacrifice_self), then a creature that already attacked / is
-    // tapped, then the smallest effective power, then the lowest card number (deterministic).
+    // stays a searched variant). The order is the order the cast / put variants are emitted in (so a
+    // binding budget tries the front first; same-line entrants follow, the decline is last), the rank
+    // order of a RETURNING champion's searched pick (rank 0 = the front), the UNPINNED resolution's pick
+    // -- reached only beyond the search horizon / outside any search (census MTG_CHAMPION_AXIS_STATS) --
+    // and the human's highlighted default. ROOT DEFAULT: NEUTRAL -- battlefield order, untouched. The
+    // deck heuristic (doomed first, then spent, then smallest power; the USER's "a heuristic that orders
+    // targets for champion") lives in RedElementalsProvider (Stage 4a, 2026-11-14).
     virtual void OrderChampionCandidates(const GameState& s, int controller, std::vector<int>& idx) const
-    {
-        (void)controller;
-        auto rank = [&s](int bi)
-        {
-            const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
-            const bool doomed = q.sac_at_end_step || q.unearthed || q.exile_at_end
-                             || (!q.def_absent && d != nullptr && d->params.endstep_sacrifice_self);
-            const bool spent  = q.AttacksThisTurn() > 0 || q.tapped;
-            return std::make_tuple(doomed ? 0 : 1, spent ? 0 : 1, q.EffectivePower(), q.card.m_number);
-        };
-        std::stable_sort(idx.begin(), idx.end(), [&rank](int a, int b) { return rank(a) < rank(b); });
-    }
+    { (void)s; (void)controller; (void)idx; }
 
-    // PruneChampionCandidates -- CHAMPION (Nova Chaser): a provider PRUNING heuristic (USER 2026-11-14: "No, the
+    // PruneChampionCandidates -- CHAMPION (Nova Chaser): a provider PRUNING hook (USER 2026-11-14: "No, the
     // provider can prune other options."). `idx` = the candidates in OrderChampionCandidates' order (battlefield
     // indices -- at enumeration the board, at a returning champion's resolution the live list); it may ERASE
-    // entries and clear `others` (= the decline and every same-line entrant variant). The root default keeps
-    // everything: the full set is the oracle. Never consulted in human play or under MTG_UNPRUNED /
-    // MTG_UNPRUNE=champion (ChampionAdmitted). DEFAULT RULE, MTG_CHAMPION_DOOMED_PRUNE (default ON, A/B in the
-    // Red Elementals ledger; belongs in the deck provider once Stage 4a creates one): when a candidate is DOOMED
-    // (it leaves at this end step anyway: sac_at_end_step / unearthed / exile_at_end / a face-up
-    // endstep_sacrifice_self) AND SPENT (it attacked or is tapped -- championing it costs nothing this turn),
-    // the champion takes the first such candidate and nothing else is offered: every other option exiles a live
-    // body or sacrifices the champion, while this one exiles a card that was leaving and brings it back when the
-    // champion leaves. Disclosed cost: the doomed card goes to exile, not the graveyard (unearth / a graveyard
-    // return can no longer reach it while the champion lives).
+    // entries and clear `others` (= the decline and every same-line entrant variant). ROOT DEFAULT: keep
+    // everything -- the full set is the oracle. Never consulted in human play or under MTG_UNPRUNED /
+    // MTG_UNPRUNE=champion (ChampionAdmitted). The deck rule (MTG_CHAMPION_DOOMED_PRUNE, the doomed-and-spent
+    // candidate admitted alone) lives in RedElementalsProvider (Stage 4a, 2026-11-14).
     virtual void PruneChampionCandidates(const GameState& s, int controller, std::vector<int>& idx, bool& others) const
-    {
-        (void)controller;
-        static const bool on = EnvOn("MTG_CHAMPION_DOOMED_PRUNE", true);
-        if (!on) { return; }
-        for (int bi : idx)
-        {
-            const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
-            const bool doomed = q.sac_at_end_step || q.unearthed || q.exile_at_end
-                             || (!q.def_absent && d != nullptr && d->params.endstep_sacrifice_self);
-            const bool spent  = q.AttacksThisTurn() > 0 || q.tapped;
-            if (doomed && spent) { idx.assign(1, bi); others = false; return; }
-        }
-    }
+    { (void)s; (void)controller; (void)idx; (void)others; }
 
     // EtbOptionalNonbasicLandDestroyPick -- White Orchid Phantom's UNPINNED resolution ("destroy up to
     // one target nonbasic land", CardParams::etb_destroy_nonbasic_land_optional): an index into `legal`

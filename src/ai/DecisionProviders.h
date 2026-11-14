@@ -185,7 +185,9 @@ enum class UnprunedGate
     HedronZeroTrigger, // Mill: retain all 16 Hedron policies on plans with no possible trigger
     HedronUnusedBits, // Mill: retain all 16 masks even when fewer than four trigger bits can be read
     Champion,        // Red Elementals: CHAMPION's exile pick restored to every candidate + the decline
-                     // (DecisionProvider::PruneChampionCandidates' doomed-attacker prune)
+                     // (RedElementalsProvider::PruneChampionCandidates' doomed-attacker prune)
+    ChampionMain2,   // Red Elementals: a no-haste champion card's PRE-combat hardcast restored
+                     // (RedElementalsProvider::CollectedActionAllowed, the USER's Nova Chaser main-2 rule)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -3950,6 +3952,61 @@ public:
     // restricted to the USER's short list (Hydra / Brushfire / Soulstoke / Smokebraider by their conditions)
     // and searched over it; MTG_UNPRUNE=tutor and human play keep every legal Elemental.
     std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+};
+
+// RED ELEMENTALS (mono-red hasty one-shot Elementals re-bought from the graveyard: Spark / Hellspark /
+// Ball Lightning / Blistering Firecat, Thunderkin Awakener, Incandescent Soulstoke, Nova Chaser, Legion
+// Leadership; onboarded 2026-11-14, ledger docs/design/analysis-Red Elementals.md). Its OWN provider
+// (Stage 4a). Before it the deck rode MorphProvider BY ACCIDENT: Spark / Ball Lightning / Hellspark /
+// Firecat's endstep_sacrifice_self, Firecat's morph_cost and Legion Leadership's trick_double_power are
+// all terms of the `morph` signature, which routes first. Morph's hooks encode the USER's rules for THAT
+// list and premises stated "for THIS list" -- e.g. EndStepSacFaceUpDeadAfterCombat assumes nothing reads a
+// creature dying or sitting in the graveyard, which Thunderkin's attack return and Nova's champion both do
+// here -- so it is NOT derived from: DeckProvider (== Generic) is the base, and the move off Morph is a
+// play change measured in the ledger's Stage 4a A/B.
+//
+// SIGNATURE (DetectDecisionProvider's `redelem`): params carried by no other card in cards.json, OR-ed
+// across THREE cards -- Nova Chaser's champion_subtype, Thunderkin Awakener's attack_trigger_reanimate,
+// Hellspark Elemental's unearth_cost on an ELEMENTAL card. Deliberately EXCLUDES Incandescent Soulstoke's
+// tap_put_from_hand_* and Metallic Mimic (Landfall Elementals runs both), the end-step-sacrifice bodies and
+// Firecat (Morph), Legion Leadership (Morph), Flamekin Bladewhirl's reveal_or_pay_subtype (Kithkin / Pirates
+// carry the param) and Sunspine Lynx (a red staple any burn list may add). Routed ABOVE `morph`.
+//
+// HOOKS (each a provider heuristic, Stage 6a disclosure in the ledger):
+//   * OrderChampionCandidates  -- ORDERING (USER: "I think we could have a heuristic that orders targets for
+//     champion most likely."): doomed first, then spent, then smallest power, then lowest card number.
+//   * PruneChampionCandidates  -- PRUNING (USER: "No, the provider can prune other options."),
+//     MTG_CHAMPION_DOOMED_PRUNE (default ON): a doomed-and-spent candidate is admitted alone.
+//   * AttackReanimateTargets   -- ORDERING (Thunderkin): printed power descending, then a card without a
+//     graveyard ability of its own first.
+//   * RestrictsCollectedActions / CollectedActionAllowed -- RESTRICTION (USER: "Note that Nova Chaser should
+//     be cast main 2 if it is hardcast, but it might also be dropped in main 1 via Incandescent Soulstoke."),
+//     MTG_REDELEM_NOVA_MAIN2 (heurarm REDELEM_NOVA_MAIN2, default ON): a champion card with no haste access
+//     is not HARDCAST in the pre-combat main; the Soulstoke put stays in both mains. MTG_UNPRUNE=championmain2
+//     and human play offer both.
+//   * OrderOpaqueCastsByRank   -- CAST ORDER (USER-owned, surfaced): rank-sort an order-opaque cast set (the
+//     solo-target trick Legion Leadership and the casts around it) by the GENERIC CastOrderRank, so the doubler
+//     follows the bodies it doubles. MTG_REDELEM_OPAQUE_ORDER (heurarm, default ON). It is the ONE Morph hook the
+//     Stage 4a A/B showed this deck was living on (every slower game of the bare DeckProvider derivation is
+//     recovered by it alone); Morph's own tiered CastOrderRank is NOT taken.
+class RedElementalsProvider : public DeckProvider
+{
+public:
+    void OrderChampionCandidates(const GameState& s, int controller, std::vector<int>& idx) const override;
+    void PruneChampionCandidates(const GameState& s, int controller, std::vector<int>& idx, bool& others) const override;
+    void AttackReanimateTargets(const GameState& s, int controller, std::vector<int>& cand_numbers) const override;
+    bool RestrictsCollectedActions() const override;
+    bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
+    bool OrderOpaqueCastsByRank() const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. Damage is combat plus Lightning Bolt (3) and Sunspine Lynx's ETB (1 per opponent "
+               "nonbasic). A winless-this-turn bound must price every hasty body still castable or "
+               "Soulstoke-puttable this turn (Spark / Ball Lightning / Hellspark / Firecat, unearth from the "
+               "graveyard), each Thunderkin attack trigger's tapped-and-attacking return of an Elemental with "
+               "toughness below the Awakener's from the graveyard, the Soulstoke +1/+1 lord, Metallic Mimic counters, Legion "
+               "Leadership's power doubling on the largest attacker, trample, and the Bolts in hand." }; }
+    const char* Name() const override { return "RedElementals"; }
 };
 
 // UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). The deck rode
