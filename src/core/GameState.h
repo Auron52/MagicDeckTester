@@ -772,6 +772,14 @@ struct GameState
     // dominance::Build(), BuildDedupKey's pending pins and BuildBreakpointKey. An int32 in the 4-byte hole
     // before floating_bigspell_pp (gdb ptype /o: 772; sizeof(GameState) unchanged).
     std::int32_t             scripted_doth_put = -1;
+    // THE SEARCHED THUNDERKIN AWAKENER RETURN (Plan::attack_reanimate_choice, Red Elementals 2026-11-14):
+    // PACKED per attack-trigger ordinal (kAttackReanimatePinBits each, ordinal 0 lowest; -1 = unpinned =
+    // every trigger takes its option list's front), each a RANK into that trigger's resolution-time list
+    // (AttackReanimateOptions, SpellEffects.h). Decided in a main phase, consumed + cleared at THIS turn's
+    // declare-attackers by the shared FireAttackReanimate (both worlds), cleared at both turn starts.
+    // FUTURE-DETERMINING: folded value-gated in dominance::Build(), BuildDedupKey's combat pins and the
+    // sim keys. Placed in the 4-byte hole after scripted_doth_put (sizeof(GameState) unchanged).
+    std::int32_t             scripted_attack_reanimate = -1;
     const struct CardParams* floating_bigspell_pp = nullptr;
     // STORM counter: number of spells cast THIS TURN (by the active player -- the only caster in
     // the goldfish). Incremented by exactly 1 at every shared cast site (AIEngine::CastSpellFromHand,
@@ -1901,6 +1909,10 @@ struct GameState
     // and DamageCantBePreventedNow walk the battlefield for one. DEFAULT TRUE, the safe direction (it only
     // skips a walk that would find nothing).
     bool                     deck_has_static_life_locks   = true;
+    // THUNDERKIN AWAKENER, the same hole: the list holds an attack_trigger_reanimate card, so the combat
+    // trigger, its projection twin and the main-phase axis walk the board for one. DEFAULT TRUE, the safe
+    // direction (it only skips a walk that would find nothing). A deck constant, never folded.
+    bool                     deck_has_attack_reanimate    = true;
     // THE RIPPLE CHAIN SCRIPT (see RippleScript above). Turn-scoped, consumed within a chain.
     RippleScript             ripple_script;
     // Non-owning pointer to the deck's learned mid-game PLAY evaluator (MulliganProfile::eval_model),

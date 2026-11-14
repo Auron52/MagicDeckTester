@@ -831,6 +831,10 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // so WHICH creature cards sit in our graveyard is observable. Unearth exists only on creature
         // cards, so the creature-name projection (a superset) covers it -- coarser would be unsound.
         if (p.unearth_cost.has_value())      { m |= GyR_CreatureNames; }
+        // THUNDERKIN AWAKENER: the attack trigger returns a graveyard <subtype> CREATURE card, so WHICH
+        // creature cards sit in our graveyard decides what the next attack can return -- the creature-name
+        // projection (a superset of its targets) covers it.
+        if (p.attack_trigger_reanimate)      { m |= GyR_CreatureNames; }
         // Lurrus of the Dream-Den: a graveyard CAST permission reads which permanent cards sit in our
         // graveyard (see GyR_GyCastNames -- also the deck gate of every Lurrus site).
         if (p.gy_cast_permanent_max_mv > 0)  { m |= GyR_GyCastNames; }
@@ -1403,11 +1407,12 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // (Blistering Firecat). MAINBOARD ONLY: a face-down permanent needs a morph card CAST from hand, and a
     // sideboard card never reaches the hand in a goldfish.
     {
-        bool morph = false, selfsac = false, lifelock = false;
+        bool morph = false, selfsac = false, lifelock = false, atk_reanimate = false;
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (!d) { continue; }
+            atk_reanimate = atk_reanimate || d->params.attack_trigger_reanimate;
             morph   = morph   || d->params.morph_cost.has_value() || d->params.megamorph_cost.has_value();
             selfsac = selfsac || d->params.endstep_sacrifice_self;
             lifelock = lifelock || d->params.static_players_cant_gain_life
@@ -1418,6 +1423,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         // Sunspine Lynx's statics: only OUR list can hold one (the passive opponent's fixed list never
         // does), and a wish-reached sideboard Lynx is not in this pool.
         state.deck_has_static_life_locks = lifelock;
+        // Thunderkin Awakener's attack trigger (mainboard only: a sideboard card never reaches play here).
+        state.deck_has_attack_reanimate  = atk_reanimate;
     }
     // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
     // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.

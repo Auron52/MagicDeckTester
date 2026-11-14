@@ -639,6 +639,7 @@ static_assert(sizeof(Player) == 216,
 // Mill/Archive Trap, Fatal Push revolt, and Merfolk tap watchers occupy upstream storage.
 // Boars adds the Horn upkeep pin and the Ilharg / legend pins. Recheck this size after merging fields.
 static_assert(sizeof(GameState) == 1608,   // Boars fields fit in upstream storage
+// Thunderkin's attack pin is future determining and folded in Build(); its deck gate is constant.
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -994,6 +995,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // Raubahn's attack-attach pin: the same FUTURE-DETERMINING class as the Bruna pin, value-gated.
     if (s.scripted_attack_attach >= 0)
     { fold(0xA77A0000ull + static_cast<std::uint64_t>(s.scripted_attack_attach)); }
+    // Thunderkin Awakener's packed attack-return ranks: the same FUTURE-DETERMINING class, value-gated.
+    if (s.scripted_attack_reanimate >= 0)
+    { fold(0x7A4E1C00000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_reanimate))); }
     // scripted_vial_charge is LIVE across the end-of-turn boundary by design (set during the
     // turn's apply, consumed at the NEXT turn's upkeep -- see its GameState note), so a pending
     // searched charge is future-determining and must fold exact-match like its sibling pins.

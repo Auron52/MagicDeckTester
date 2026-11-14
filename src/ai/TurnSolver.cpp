@@ -957,6 +957,7 @@ static bool PlanHasCombatPin(const TurnSolver::Plan& p)
         || p.attack_put_choice != -1           // Ilharg's attack put (I5a)
         || p.legend_keep_turn != 0             // the turn's legend-rule keep (Boars LK)
         || p.attack_attach_choice >= 0         // Raubahn's attack attach: read in THIS combat only
+        || p.attack_reanimate_choice >= 0      // Thunderkin Awakener's attack return: read in THIS combat only
         || p.fb_hold_choice >= 0               // the searched banked hold: read at THIS combat's pump only
         || PlanHasAttackTriggerPin(p);        // Tectonic mode / keep, Flinger victim (the *_PIN_FOLD levers)
 }
@@ -1610,6 +1611,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("gather", first.bruna_gather_choice != dup.bruna_gather_choice);
     pl("cswap", first.combat_aura_swap_choice != dup.combat_aura_swap_choice);
     pl("aattach", first.attack_attach_choice != dup.attack_attach_choice);
+    pl("areanimate", first.attack_reanimate_choice != dup.attack_reanimate_choice);
     pl("clandfall", first.combat_landfall_target_choice != dup.combat_landfall_target_choice);
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
@@ -13350,6 +13352,39 @@ static int CountAttackAttachPump(const GameState& state, int active,
     return AttackersCombatDamage(t, nums) - before;
 }
 
+// Projection twin of Thunderkin Awakener's attack trigger (FireAttackReanimate): the returned card enters
+// tapped and ATTACKING at declare-attackers, so its damage lands THIS combat (and a returned champion that
+// exiles an attacker takes that attacker's damage out). The very same body runs on a COPY with the same pin
+// (`live=false`), and the combat damage of every attacker after (the declared ones plus the returned bodies)
+// minus before is the addend -- the CountAttackAttachPump shape. Free unless the deck holds an Awakener AND
+// one is attacking.
+static int CountAttackReanimatePump(const GameState& state, int active,
+                                    const std::vector<const Permanent*>& attackers)
+{
+    if (!state.deck_has_attack_reanimate || attackers.empty()) { return 0; }
+    bool live = false;
+    for (const Permanent* p : attackers)
+    {
+        if (p->def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p->card);
+        if (d != nullptr && d->params.attack_trigger_reanimate) { live = true; break; }
+    }
+    if (!live) { return 0; }
+    std::vector<int> atk_idx;
+    std::vector<int> nums;
+    for (const Permanent* p : attackers)
+    {
+        atk_idx.push_back(static_cast<int>(p - state.battlefield.data()));
+        nums.push_back(p->card.m_number);
+    }
+    const int before = AttackersCombatDamage(state, nums);
+    GameState t = state;
+    FireAttackReanimate(t, active, atk_idx, /*live=*/false);
+    std::vector<int> after;
+    for (int i : atk_idx) { after.push_back(t.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    return AttackersCombatDamage(t, after) - before;
+}
+
 // Projection twin of Kalonian Hydra's attack trigger (ApplyAttackDoubleTeamCounters): each attacking copy
 // doubles the +1/+1 counters on every creature we control in the declare-attackers step, BEFORE damage, so
 // a lone Kalonian swings for 8, not the 4 its body reads (the Dwalin hone lesson: a missing addend
@@ -13577,6 +13612,8 @@ static int PendingAttackDamageImpl(const GameState& state)
     dmg += CountAttackLandSearchPump(state, active, attackers);
     // Raubahn's attack attach: the moved Equipment lands on an attacker THIS combat.
     dmg += CountAttackAttachPump(state, active, attackers);
+    // Thunderkin Awakener's attack return: the returned body attacks THIS combat.
+    dmg += CountAttackReanimatePump(state, active, attackers);
     // Bloodline Keeper's in-combat transform (Vampires B): Lord of Lineage's +2/+2 lands THIS combat.
     dmg += CountCombatTransformPump(state, active, attackers);
     // Tectonic Giant: 3 to each opponent, but ONLY when the resolved mode is the damage one --
@@ -29457,6 +29494,9 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     if (p.combat_aura_swap_choice != -1) { fold(static_cast<uint64_t>(p.combat_aura_swap_choice + 2) * 83); }
     // Raubahn's attack attach -- same must-fold rule, value-gated (own domain tag).
     if (p.attack_attach_choice != -1) { fold(0xA77A0000ull + static_cast<uint64_t>(p.attack_attach_choice + 2)); }
+    // Thunderkin Awakener's packed attack-return ranks -- same must-fold rule, value-gated (own domain tag).
+    if (p.attack_reanimate_choice != -1)
+    { fold(0x7A4E1C0000000000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.attack_reanimate_choice))); }
     // The searched banked hold -- same must-fold rule, value-gated (own domain tag).
     if (p.fb_hold_choice != -1) { fold(0xFB400000ull + static_cast<uint64_t>(p.fb_hold_choice + 2)); }
     // LAND-SEARCH picks (core/LandSearch.h) -- same must-fold rule; value-gated so every deck without
@@ -29842,6 +29882,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.tectonic_keep_choice == -1
         && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
         && p.attack_attach_choice == -1 && p.fb_hold_choice == -1
+        && p.attack_reanimate_choice == -1
         && p.saga_ch1_choice == -1
         && !p.searched_order && p.atk_dork_release == -1
         && p.bp_choice == -1 && p.bp_at == 0 && !p.bp_all && !p.bp_wave0
@@ -29883,6 +29924,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.attack_put_choice != -1
         || p.legend_keep_turn != 0   // the turn's legend-rule keep (Boars LK): an inert twin lands on its base's state
         || p.upkeep_legend_keep_choice >= 0   // ...and the next upkeep's (LK3, a boundary pin)
+        || p.attack_reanimate_choice >= 0   // Thunderkin's attack return (a clamped rank lands on a sibling)
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -58149,6 +58191,7 @@ namespace solvememo
             || a.bruna_gather_choice != b.bruna_gather_choice
             || a.combat_aura_swap_choice != b.combat_aura_swap_choice
             || a.attack_attach_choice != b.attack_attach_choice
+            || a.attack_reanimate_choice != b.attack_reanimate_choice
             || a.fb_hold_choice != b.fb_hold_choice
             || a.saga_target_choice != b.saga_target_choice
             || a.grace_choice != b.grace_choice
@@ -77933,6 +77976,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                         || plan.combat_aura_swap_choice >= 0 || plan.saga_target_choice >= 0
                         || plan.grace_choice >= 0 || plan.upkeep_gy_reanimate_choice >= 0 || plan.demon_trigger_choice >= 0
                         || plan.attack_attach_choice >= 0 || plan.fb_hold_choice >= 0
+                        || plan.attack_reanimate_choice >= 0
                         || plan.saga_ch1_choice != -1 || !plan.sac_pins.empty()
                         || plan.tapmode_choice != 0 || plan.freshmode_choice != 0
                         || plan.bounce_choice >= 1 || plan.etbcounter_choice >= 0
@@ -78349,6 +78393,8 @@ static void SimulateOneCombatAfterTitan(GameState& state, int active, std::vecto
     FireMilitiaPrideTokens(state, active, atk_idx);
     // Ilharg's attack put (Boars I5a) -- lockstep twin of GameEngine::CombatPhase, same point, ONE shared helper.
     FireAttackPutFromHand(state, active, atk_idx, declared_n);
+    // Thunderkin Awakener's attack return (lockstep w/ GameEngine::CombatPhase, ONE shared helper).
+    FireAttackReanimate(state, active, atk_idx, /*live=*/true);
     // Attack-trigger tokens (Adeline), tapped and attacking this combat, then persist -- except Geist of
     // Saint Traft's Angel, exiled at end of combat (eoc_exile_nums; swept after the damage below).
     std::vector<int> eoc_exile_nums;
@@ -78937,6 +78983,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_attack_put = -1;                // Ilharg's searched attack put (same lockstep)
     LegendKeepOpenUpkeep(state);                   // the turn's legend keep ends; the next-upkeep pin rules the upkeep (LK3)
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
+    state.scripted_attack_reanimate = -1;          // searched Thunderkin Awakener return (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
     // (scripted_upkeep_land_search survives: Search for Tomorrow's arrival reads it at THIS upkeep.)
@@ -93700,6 +93747,175 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
     }
 
+    // SEARCHED THUNDERKIN AWAKENER ATTACK RETURN (Plan::attack_reanimate_choice) -- the Raubahn shape (base
+    // plans only, decided in main, consumed at declare-attackers through GameState::scripted_attack_reanimate)
+    // with the Abiding Grace CODES (EnumerateReanimateCodes): the pin is PACKED per trigger ordinal, a rank
+    // into each trigger's resolution-time AttackReanimateOptions list, and the codes are the distinct ordered
+    // outcome sequences on this board, walked on state copies through the real resolution primitive
+    // (ReturnGraveyardCardAttacking: an earlier return leaves the graveyard and its enter cascade -- a
+    // returned champion's exile -- is applied), so two triggers never emit a duplicate ordering.
+    //
+    // ORDINALS per plan: every copy on our battlefield that can attack this turn (untapped; able now, or it
+    // has haste) plus every copy THIS plan casts or puts (the printed haste attacks the turn it lands).
+    // COMPLETENESS (the budget rule): the board the triggers see is later than this one, so the walk uses an
+    // UPPER BOUND on the source's toughness (the largest live toughness among the copies, or a hand copy's
+    // printed toughness with the lords out now, plus every toughness lord / enter-counter source this plan
+    // could still add) -- a too-high bound only adds ranks that clamp at resolution (duplicates the
+    // combat-pin fold collapses after combat, never a lost card) -- and HEADROOM ranks at every ordinal for
+    // what the walk cannot see yet: champion cards in hand that can die into the graveyard first (a declined
+    // champion is sacrificed), and the extra champion picks a returned champion gains from this plan's casts.
+    // Unconditional, no lever (a missing searched capability is not a heuristic -- the no-greedy rule).
+    if (!cont_axes_only && !HumanPlayActive() && state.deck_has_attack_reanimate && !pin_list_dead)
+    {
+        const int me = state.active_player_index;
+        const Player& rp = state.players[static_cast<std::size_t>(me)];
+        const CardDefinition* src_def = nullptr;
+        int n_bf = 0, t_bound = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent || q.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d == nullptr || !d->params.attack_trigger_reanimate) { continue; }
+            if (!CanAttackFull(q, state.battlefield, me)) { continue; }
+            ++n_bf; src_def = d;
+            t_bound = std::max(t_bound, LethalToughness(q, state));
+        }
+        auto is_src = [](const CardDefinition* d) { return d != nullptr && d->params.attack_trigger_reanimate; };
+        int hand_extra = 0;     // toughness a later entrant can still gain this turn
+        int entrant_names = 0;  // distinct own <champion subtype> entrants in hand (headroom for a returned champion)
+        bool champion_in_hand_eligible = false;
+        for (const Card& c : rp.hand)
+        {
+            if (c.m_is_staged) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr) { continue; }
+            if (is_src(d))
+            {
+                if (src_def == nullptr) { src_def = d; }
+                t_bound = std::max(t_bound, d->card.m_toughness.value_or(0)
+                                            + ComputeLordBonus(d->card, state, me, false, nullptr).second);
+            }
+            hand_extra += std::max(0, d->params.tough_bonus) + std::max(0, d->params.other_chosen_subtype_enters_counters);
+            if (d->card.IsCreature()) { ++entrant_names; }
+        }
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != me || q.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d != nullptr) { hand_extra += std::max(0, d->params.other_chosen_subtype_enters_counters); }
+        }
+        auto src_entries = [&](const TurnSolver::Plan& p) -> int
+        {
+            int c = 0;
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::PutFromHandAbility) { continue; }
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                if (is_src(d)) { ++c; if (src_def == nullptr) { src_def = d; } }
+            }
+            return c;
+        };
+        std::vector<int> entries_per_plan(all.size(), 0);
+        bool any = n_bf > 0;
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            entries_per_plan[i] = src_entries(all[i]);
+            if (entries_per_plan[i] > 0) { any = true; }
+        }
+        if (any && src_def != nullptr)
+        {
+            const CardParams& sp = src_def->params;
+            const int tmax = t_bound + hand_extra;
+            for (const Card& c : rp.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && !d->params.champion_subtype.empty()
+                    && GyReanimateEligible(c, AttackReanimateFilter(sp, tmax)))
+                { champion_in_hand_eligible = true; }
+            }
+            ReanimateAxisSpec spec;
+            spec.bits     = kAttackReanimatePinBits;
+            spec.max_rank = kAttackReanimatePinMask + 1;
+            {
+                // Headroom: champion names in hand that can reach the graveyard first, and the extra picks a
+                // returned champion gains from this plan's entrants.
+                std::vector<InternedName> gy_names;
+                for (const Card& c : rp.graveyard) { gy_names.push_back(c.m_name); }
+                bool champion_eligible = champion_in_hand_eligible;
+                for (const Card& c : rp.graveyard)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d != nullptr && !d->params.champion_subtype.empty()
+                        && GyReanimateEligible(c, AttackReanimateFilter(sp, tmax)))
+                    { champion_eligible = true; }
+                }
+                std::vector<InternedName> extra;
+                for (const Card& c : rp.hand)
+                {
+                    const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                    if (d == nullptr || d->params.champion_subtype.empty()) { continue; }
+                    if (!GyReanimateEligible(c, AttackReanimateFilter(sp, tmax))) { continue; }
+                    if (std::find(gy_names.begin(), gy_names.end(), c.m_name) != gy_names.end()) { continue; }
+                    if (std::find(extra.begin(), extra.end(), c.m_name) != extra.end()) { continue; }
+                    extra.push_back(c.m_name);
+                }
+                spec.headroom = static_cast<int>(extra.size()) + (champion_eligible ? entrant_names : 0);
+            }
+            const std::string src_name = src_def->card.m_name.str();
+            spec.options = [&](const GameState& g)
+            {
+                const std::vector<AttackReanimateOpt> o = AttackReanimateOptions(g, me, sp, tmax, nullptr);
+                std::vector<int> idx(o.size());
+                for (std::size_t k = 0; k < o.size(); ++k) { idx[k] = static_cast<int>(k); }
+                return idx;
+            };
+            spec.apply = [&](GameState& g, int k)
+            {
+                const std::vector<AttackReanimateOpt> o = AttackReanimateOptions(g, me, sp, tmax, nullptr);
+                if (k >= 0 && k < static_cast<int>(o.size()))
+                {
+                    RevealLogPause quiet;
+                    ReturnGraveyardCardAttacking(g, me, o[static_cast<std::size_t>(k)], src_name,
+                                                 sp.attack_trigger_reanimate_sac_end_step);
+                }
+            };
+            std::vector<std::vector<int>> codes_by_n(static_cast<std::size_t>(kAttackReanimateMaxOrdinals) + 1);
+            auto codes_for = [&](int n) -> const std::vector<int>&
+            {
+                std::vector<int>& c = codes_by_n[static_cast<std::size_t>(n)];
+                if (c.empty()) { spec.n = n; EnumerateReanimateCodes(state, spec, 0, 0, c); }
+                return c;
+            };
+            const int inherited = state.scripted_attack_reanimate;
+            std::vector<TurnSolver::Plan> extra;
+            for (std::size_t i = 0, n_base = all.size(); i < n_base; ++i)
+            {
+                const TurnSolver::Plan& p = all[i];
+                if (p.scry_choice >= 0 || p.bp_choice >= 0 || p.etbdig_choice >= 0
+                    || p.lackey_choice >= 0 || p.ponder_choice >= 0 || p.putback_choice >= 0
+                    || p.discard_choice >= 0 || p.vial_charge_choice >= 0
+                    || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
+                    || p.tectonic_keep_choice >= 0
+                    || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+                    || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0)
+                { continue; }
+                const int n = std::min(kAttackReanimateMaxOrdinals, n_bf + entries_per_plan[i]);
+                if (n <= 0) { continue; }
+                for (const int packed : codes_for(n))
+                {
+                    if (inherited >= 0 ? packed == inherited : packed == 0) { continue; }
+                    TurnSolver::Plan v = p;
+                    v.attack_reanimate_choice = packed;
+                    extra.push_back(std::move(v));
+                }
+            }
+            TRACE("thunderkinaxis", "T%d %zu plan(s) -> %zu variant(s) (tmax=%d headroom=%d bf=%d codes(n=1)=%zu)",
+                  state.turn_number, all.size(), extra.size(), tmax, spec.headroom, n_bf, codes_by_n[1].size());
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // SEARCHED PONDER KEEP-vs-SHUFFLE -- the post-dedup fan-out that makes the decision real. Both
     // ponder_keep values are always legal, so unlike the tutor/dig axes there is no candidate list to
     // size: emit the two pinned alternatives and let the base plan carry the heuristic. One of the
@@ -94867,7 +95083,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                        || p.attack_attach_choice >= 0
+                        || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                         || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan already carries.
@@ -94965,7 +95181,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                         || p.tectonic_keep_choice >= 0
                         || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                        || p.attack_attach_choice >= 0
+                        || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                         || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                         || !p.sac_pins.empty()) { continue; }
                     // k = 0 is the heuristic's own pick, which the base plan carries on a fresh state.
@@ -95083,7 +95299,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                    || p.attack_attach_choice >= 0
+                    || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                     || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty()) { continue; }
                 const int n = std::min(kGraceMaxOrdinals, n_bf + casts_per_plan[i]);
@@ -95236,7 +95452,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                 || p.tectonic_keep_choice >= 0
                 || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                || p.attack_attach_choice >= 0
+                || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                 || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0
                 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                 || !p.sac_pins.empty()) { continue; }
@@ -95439,7 +95655,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                             || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                             || p.tectonic_keep_choice >= 0
                             || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                            || p.attack_attach_choice >= 0
+                            || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                             || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
                             || p.saga_ch1_choice != -1
                             || !p.sac_pins.empty()) { continue; }
@@ -95734,7 +95950,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.fling_victim_choice != -1 || p.tectonic_mode_choice >= 0
                     || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                    || p.attack_attach_choice >= 0
+                    || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0
                     || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || !p.sac_pins.empty() || p.tapmode_choice != 0
                     || p.freshmode_choice != 0) { continue; }
@@ -96565,7 +96781,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
-                && p.attack_attach_choice == -1
+                && p.attack_attach_choice == -1 && p.attack_reanimate_choice == -1
                 && p.freshmode_choice == 0 && p.tapmode_choice == 0 && p.dig_choice == -1
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
@@ -97321,7 +97537,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     || p.vial_charge_choice >= 0 || p.fling_victim_choice != -1
                     || p.tectonic_mode_choice >= 0 || p.tectonic_keep_choice >= 0
                     || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
-                    || p.attack_attach_choice >= 0 || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
+                    || p.attack_attach_choice >= 0 || p.attack_reanimate_choice >= 0 || p.saga_target_choice >= 0 || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0 || p.saga_ch1_choice != -1
                     || p.freshmode_choice != 0 || p.tapmode_choice != 0 || p.dig_choice != -1
                     || p.soulbond_decline || p.fb_hold_choice >= 0)
                 { continue; }
@@ -97394,7 +97610,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && p.vial_charge_choice == -1 && p.fling_victim_choice == -1
                 && p.tectonic_mode_choice == -1 && p.tectonic_keep_choice == -1
                 && p.bruna_gather_choice == -1 && p.combat_aura_swap_choice == -1
-                && p.attack_attach_choice == -1 && p.freshmode_choice == 0 && p.tapmode_choice == 0
+                && p.attack_attach_choice == -1 && p.attack_reanimate_choice == -1 && p.freshmode_choice == 0 && p.tapmode_choice == 0
                 && !p.soulbond_decline;
         };
         std::vector<TurnSolver::Plan> extra;
@@ -98816,6 +99032,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.lackey_choice); add(pl.fling_victim_choice);
             add(pl.tectonic_mode_choice); add(pl.tectonic_keep_choice);
             add(pl.bruna_gather_choice); add(pl.combat_aura_swap_choice); add(pl.attack_attach_choice);
+            add(pl.attack_reanimate_choice);
             add(pl.ponder_choice); add(pl.discard_choice); add(pl.vial_charge_choice);
             add(pl.putback_choice); add(pl.putback_group);
             add(pl.etbcounter_choice); add(pl.sweep_choice); add(pl.le_fire_choice);
@@ -99076,6 +99293,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.bruna_gather_choice == b.bruna_gather_choice)) { d += " bruna_gather_choice"; }
     if (!(a.combat_aura_swap_choice == b.combat_aura_swap_choice)) { d += " combat_aura_swap_choice"; }
     if (!(a.attack_attach_choice == b.attack_attach_choice)) { d += " attack_attach_choice"; }
+    if (!(a.attack_reanimate_choice == b.attack_reanimate_choice)) { d += " attack_reanimate_choice"; }
     if (!(a.horizon_leaf == b.horizon_leaf)) { d += " horizon_leaf"; }
     if (!(a.ponder_choice == b.ponder_choice)) { d += " ponder_choice"; }
     if (!(a.putback_choice == b.putback_choice)) { d += " putback_choice"; }
@@ -101543,6 +101761,7 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.scripted_combat_aura_swap, state.scripted_combat_aura_swap_in, state.scripted_discard_choice,
             state.scripted_vial_charge, state.scripted_saga_target, state.scripted_attack_land_search,
             state.scripted_upkeep_land_search, state.scripted_combat_land_search_crack, state.scripted_attack_attach,
+            state.scripted_attack_reanimate,
             state.scripted_grace_choice, state.scripted_athreos_coin, state.scripted_upkeep_gy_reanimate,
             state.scripted_draw_dredge,
             state.casts_remaining_this_turn, state.free_casts_available, state.hand_size_at_combat,
@@ -105986,7 +106205,8 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
                               state.scripted_fb_hold, state.scripted_combat_transform,
                               state.scripted_militia_pride_pay, state.scripted_attack_put,
                               // + the turn's legend-rule keep (Boars LK; 0 = unset, mapped to the -1 gate)
-                              state.scripted_legend_keep == 0 ? -1 : static_cast<int>(state.scripted_legend_keep) };
+                              state.scripted_legend_keep == 0 ? -1 : static_cast<int>(state.scripted_legend_keep),
+                              state.scripted_attack_reanimate };
         for (int i = 0; i < static_cast<int>(sizeof(cpins) / sizeof(cpins[0])); ++i)
         {
             if (cpins[i] != -1)
@@ -119388,7 +119608,7 @@ TurnSolver::Plan TurnSolver::ReshuffleAvgChoosePlan(const GameState& state, int 
                 iv("combat_crack", q.combat_crack_choice, -1); iv("landfall_target", q.landfall_target_choice, -1);
                 iv("vial_charge", q.vial_charge_choice, -1); iv("tapmode", q.tapmode_choice, 0); iv("freshmode", q.freshmode_choice, 0);
                 iv("atk_dork_release", q.atk_dork_release, -1); iv("atk_forfeit", q.atk_forfeit, 0);
-                iv("attack_attach", q.attack_attach_choice, -1); iv("etbdig", q.etbdig_choice, -1); iv("dig", q.dig_choice, -1);
+                iv("attack_attach", q.attack_attach_choice, -1); iv("attack_reanimate", q.attack_reanimate_choice, -1); iv("etbdig", q.etbdig_choice, -1); iv("dig", q.dig_choice, -1);
                 iv("tutor", q.tutor_choice, -1); iv("bp", q.bp_choice, -1); iv("ponder", q.ponder_choice, -1);
                 iv("putback", q.putback_choice, -1); iv("discard", q.discard_choice, -1); iv("scry", q.scry_choice, -1);
                 iv("etbcounter", q.etbcounter_choice, -1); iv("le_fire", q.le_fire_choice, -1); iv("grace", q.grace_choice, -1); iv("demontrig", q.demon_trigger_choice, -1);
@@ -131921,7 +132141,8 @@ static std::string PlanDumpApplyLosses(const GameState& state, const TurnSolver:
             {"vial", copy.scripted_vial_charge}, {"saga", copy.scripted_saga_target},
             {"attack_land_search", copy.scripted_attack_land_search},
             {"upkeep_land_search", copy.scripted_upkeep_land_search},
-            {"attack_attach", copy.scripted_attack_attach}, {"grace", copy.scripted_grace_choice},
+            {"attack_attach", copy.scripted_attack_attach}, {"attack_reanimate", copy.scripted_attack_reanimate},
+            {"grace", copy.scripted_grace_choice},
             {"upkeep_gy_reanimate", copy.scripted_upkeep_gy_reanimate}, {"cheat", copy.scripted_cheat_choice} };
         for (const auto& pr : pins)
         { if (pr.second != -1) { st += std::string(" ") + pr.first + "=" + std::to_string(pr.second); } }
@@ -132134,6 +132355,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     { s.scripted_combat_aura_swap = p.combat_aura_swap_choice; s.scripted_combat_aura_swap_in = -1; }
     // Raubahn's attack attach, at declare-attackers.
     if (p.attack_attach_choice >= 0) { s.scripted_attack_attach = static_cast<std::int16_t>(p.attack_attach_choice); }
+    // Thunderkin Awakener's packed attack-return ranks, at declare-attackers.
+    if (p.attack_reanimate_choice >= 0) { s.scripted_attack_reanimate = p.attack_reanimate_choice; }
     // The Saga chapter target, read at the NEXT turn's draw step (AdvanceSagas).
     if (p.saga_target_choice >= 0) { s.scripted_saga_target = p.saga_target_choice; }
     // Abiding Grace's packed end-step mode/target ranks, read at THIS turn's end step

@@ -493,6 +493,11 @@ MANIFEST = {
     # "(champion)" modal over every candidate (-1 = exile nothing, the champion is sacrificed) at
     # ResolveChampionEtb (human play gets no champion cast variants).
     "champion_subtype": ("dig", truthy),
+    # THUNDERKIN AWAKENER: "whenever this creature attacks, choose target Elemental creature card in your
+    # graveyard ... return that card to the battlefield tapped and attacking" -- the mandatory
+    # `gy_return_one` pick (no alt_text button) at FireAttackReanimate, once per attacking copy with a
+    # legal target; a returned champion then asks through its own `dig` "(champion)".
+    "attack_trigger_reanimate": ("gy_return_one", truthy),
     # White Orchid Phantom: "destroy up to one target nonbasic land" -- the `dig` "(may destroy nonbasic
     # land)" modal over every nonbasic land, both sides (-1 = none), then `tutor_etb` for our basic.
     "etb_destroy_nonbasic_land_optional": ("dig", truthy),
@@ -2387,6 +2392,9 @@ def modeled_tokens(card):
         t.update({"target", "modal"})
     # Emeria's upkeep "you may return target creature card" -- the same `gy_return_one` pick.
     if p.get("upkeep_gy_reanimate"):
+        t.add("target")
+    # Thunderkin Awakener's attack trigger "choose target Elemental creature card" -- the `gy_return_one` pick.
+    if p.get("attack_trigger_reanimate"):
         t.add("target")
     return t
 
