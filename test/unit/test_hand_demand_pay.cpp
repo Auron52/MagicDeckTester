@@ -301,3 +301,38 @@ TEST_CASE("CCO hand demand: a Treasure counts toward the hand's castability")
         CHECK_FALSE(TappedHD(s, "Secluded Courtyard"));   // the historical cap: the Courtyard is held
     }
 }
+
+// Item C2 (MTG_CCO_HAND_SCAN, part 3): a hand creature's colour is not a reason to hold THIS creature-only land when
+// another untapped creature-only land still makes it. Pirates s30069061 T3: Unclaimed Territory x2 + Mountain, Aether
+// Vial's {1} with Bolt, Staunch Crewmate and Dire Fleet Captain in hand -- a Territory pays, the other stays for the
+// creature, the Mountain for the Bolt.
+TEST_CASE("CCO hand demand: a second creature-only land covers the hand creature's colour")
+{
+    const ManaCost vial = DefHD("Aether Vial").card.m_mana_cost;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        PutHD(s, "Unclaimed Territory", 57);
+        PutHD(s, "Unclaimed Territory", 58);
+        PutHD(s, "Mountain", 38);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Staunch Crewmate", 53);
+        HandHD(s, "Dire Fleet Captain", 18);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    {
+        ArmHD on(heurarm::CCO_HAND_SCAN, 1);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, vial, /*for_creature=*/false));
+        CHECK_FALSE(TappedHD(s, "Mountain"));
+    }
+    {
+        ArmHD off(heurarm::CCO_HAND_SCAN, 0);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, vial, /*for_creature=*/false));
+        CHECK(TappedHD(s, "Mountain"));   // the historical keep: both Territories held for the creatures
+    }
+}
