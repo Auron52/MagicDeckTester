@@ -18,6 +18,7 @@ struct ContPinScope
     std::optional<ScriptedTutor>      tutor;
     std::optional<ScriptedSacLand>    sac;
     std::optional<ScriptedLandSearch> land_search;
+    std::optional<ScriptedProphetsChampion> champion;
     std::optional<IncineratorPinScope> incinerator;
     std::optional<ScriptedLookTop>    look_top;     // the continuation's Risen Reef looks / trigger orders
     std::optional<ScriptedDredge>     dredge;
@@ -34,6 +35,7 @@ struct ContPinScope
         if (p->tutor      >= 0) { tutor.emplace(p->tutor); }
         if (!p->sac.empty())    { sac.emplace(p->sac); }
         if (!p->land_search.empty()) { land_search.emplace(p->land_search); }
+        if (!p->champion.empty()) { champion.emplace(p->champion); }
         if (!p->incinerator_targets.empty()) { incinerator.emplace(p->incinerator_targets); }
         if (!p->look_top.empty())    { look_top.emplace(p->look_top); }
         if (!p->dredge.empty())      { dredge.emplace(p->dredge); }
@@ -57,6 +59,7 @@ inline ContPins ContPinsOf(const TurnSolver::Plan& p)
     c.bounce     = p.bounce_choice;
     c.sac        = p.sac_pins;
     c.land_search = p.land_search_pins;
+    c.champion = p.champion_pins;
     c.look_top    = p.look_top_pins;
     c.dredge      = p.dredge_pins;
     c.incinerator_targets = p.incinerator_targets;

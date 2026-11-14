@@ -197,6 +197,7 @@ enum class Keyword
     // your hand" special action never apply. No engine code reads this enumerator; it exists so Scryfall's
     // keywords array can be pasted VERBATIM (KeywordFromString throws on an unmapped keyword -- see Jump).
     Companion,
+    Islandwalk,  // inert evasion tag; appended to preserve existing keyword-mask ordinals
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };
