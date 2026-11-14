@@ -689,6 +689,8 @@ inline uint64_t FungibilityKey(const Permanent& p)
     if (p.destroy_at_end_if_attacked) { Mix(h, 0xBE55E5Cull); }
     // Ilharg's put body (Permanent::return_at_end_step, I5a): returns to hand tonight. Set-gated.
     if (p.return_at_end_step) { Mix(h, 0x12E7A2Bull); }
+    // Unearth (Permanent::unearthed): exiled at this turn's end step and on any departure. Set-gated.
+    if (p.unearthed) { Mix(h, 0x0E0A57E5ull); }
     // Soulbond partner (Silverblade Paladin). A full int, not a bit: WHICH creature is paired is
     // what decides who double-strikes, so two otherwise-identical Paladins paired to different
     // bodies are NOT fungible.
@@ -3581,6 +3583,7 @@ static std::string BoardSignature(const GameState& s)
         if (p.sac_at_end_step) { e += "/xs"; } // Soulstoke put, sacrificed at end step
         if (p.destroy_at_end_if_attacked) { e += "/xb"; } // Berserked: destroyed at end step if it attacked
         if (p.return_at_end_step) { e += "/xr"; } // Ilharg put body, returned to hand at end step
+        if (p.unearthed) { e += "/xu"; }   // unearthed: exiled at end step / on leaving
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -19523,7 +19526,7 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     { return false; }
     why = foldcensus::kTempHasteEtc;
     if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step) { return false; }
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step || p.unearthed) { return false; }
     why = foldcensus::kChosenSubtype;
     if (p.chosen_subtype_id != 0) { return false; }
     // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object state that makes two
@@ -42962,6 +42965,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                           + (p.temp_vigilance ? "V" : "")
                           + (p.destroy_at_end_if_attacked ? "B" : "")   // Berserked: dies if it attacks
                           + (p.return_at_end_step ? "R" : "")           // Ilharg put body: back to hand tonight
+                          + (p.unearthed ? "U" : "")                    // unearthed: exiled at end step
                           + "/c" + p.counters.KeyFragment();
                 if (!seen_equiv.insert(eq).second) { continue; }
                 // The best dork's plain form is replaced by the cast-time pick (above); its strive
@@ -50995,6 +50999,57 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 a.is_noncreature = false;
                 actions.push_back(std::move(a));
             }
+        }
+        // UNEARTH (CR 702.84a; Hellspark Elemental): "{1}{R}: Return this card from your graveyard to
+        // the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would
+        // leave the battlefield. Unearth only as a sorcery." Sorcery speed = every main-phase
+        // enumeration (empty stack). ONE ACTION PER GRAVEYARD COPY, so a plan may unearth as many as it
+        // can pay for -- the SEARCH decides whether and how many; nothing here picks. The copies are
+        // interchangeable (same card, same cost, same entry), so they share an equiv_tag and
+        // FinalizeFoldTags folds them to the canonical prefix (k of n, never "which k") -- a sound
+        // identity fold; human play is never folded (FinalizeFoldTags clears the tags there). Not a cast
+        // (is_noncreature false: no prowess / noncreature-spell count). PRE-COMBAT its hasted power
+        // (printed + live lord bonus) is stamped into the this-turn attack projection, the hasted Vial /
+        // Soulstoke-put convention. AFTER COMBAT it can no longer attack and is exiled at this turn's end
+        // step, so its static value is its entry only -- priced by the rollout -- minus the card it
+        // spends: -2, strictly below the pass (the Soulstoke-put rule). Gated on the param.
+        for (const Card& gc : ap.graveyard)
+        {
+            const CardDefinition* gd = CardDatabase::Instance().LookupCached(gc);
+            if (!gd || !gd->params.unearth_cost.has_value()) { continue; }
+            const Card& uc = gd->card;
+            Action a;
+            a.kind           = Action::Kind::Unearth;
+            a.card_name      = gc.m_name;
+            a.hand_index     = -1;
+            a.sac_source_id  = gc.m_number;       // this copy: the fold's source key
+            a.cost           = gd->params.unearth_cost.value();
+            a.is_noncreature = false;
+            if (is_pre_combat && uc.IsCreature())
+            {
+                auto [lord_pb, lord_tb] = ComputeLordBonus(uc, state, state.active_player_index);
+                (void)lord_tb;
+                const bool ds = uc.HasKeyword(Keyword::DoubleStrike)
+                             || HasDoubleStrikeFromLords(uc, state.battlefield, state.active_player_index);
+                const int power = std::max(0, uc.m_power.value_or(0) + lord_pb) * (ds ? 2 : 1);
+                a.vial_attack_power = power;
+                a.eval              = std::max(1, power * DMG);
+            }
+            else
+            {
+                a.vial_attack_power = 0;
+                a.eval              = -2;
+            }
+            // Nonzero tag shared by every copy of this name (FinalizeFoldTags validates the class:
+            // field-identical members, one action per source; a collision with another class's tag only
+            // fails that validation and declines the fold).
+            if (FoldActSourcesOn() && !HumanPlayActive())
+            {
+                std::uint64_t h = 0x0E0A57E5ull ^ static_cast<std::uint64_t>(gc.m_name_hash);
+                h ^= h >> 29; h *= 0xBF58476D1CE4E5B9ull; h ^= h >> 32;
+                a.equiv_tag = static_cast<int>(h & 0x3FFFFFFFull) | 0x40000000;
+            }
+            actions.push_back(std::move(a));
         }
     }
 
@@ -68007,6 +68062,7 @@ bool TurnSolver::IsTrailingActivation(Action::Kind k)
         case Action::Kind::ActivateLoyalty:
         case Action::Kind::GarthActivate:
         case Action::Kind::Eternalize:
+        case Action::Kind::Unearth:
             return true;
         default:
             return false;
@@ -68049,6 +68105,7 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
     if (verb == "suspend")    { return k == K::Suspend; }
     if (verb == "channel")    { return k == K::Channel; }
     if (verb == "eternalize") { return k == K::Eternalize; }
+    if (verb == "unearth")    { return k == K::Unearth; }
     // A cycle / sacrifice-to-draw (USER 2026-10-28: "Cycling should be a plan item like any other").
     if (verb == "cycle" || verb == "sacdraw") { return k == K::DigDraw; }
     if (verb == "sacout")     { return k == K::SacForMana || k == K::SacCreatureOutlet; }
@@ -68056,7 +68113,7 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
     // permanent on the battlefield, never a card leaving the hand or the graveyard.
     return k != K::CastFromHand && k != K::ActivateVial && k != K::CastFromGraveyard
         && k != K::DiscardToLandsEdge && k != K::Suspend && k != K::Channel && k != K::Eternalize
-        && k != K::PlayLand;
+        && k != K::Unearth && k != K::PlayLand;
 }
 
 // The label a human step is reported under (the viewer's verbs, in words).
@@ -68076,6 +68133,7 @@ static const char* HumanStepLabel(const Action& a)
         case K::Suspend:           return "suspend";
         case K::Channel:           return "channel";
         case K::Eternalize:        return "eternalize";
+        case K::Unearth:           return "unearth";
         case K::ActivatePod:       return "Pod";
         case K::TapForTokens:      return "tap";
         case K::TapMillToughness:  return "mill";
@@ -68237,7 +68295,7 @@ static bool HumanStepFromCard(Action::Kind k)
 {
     using K = Action::Kind;
     return k == K::CastFromHand || k == K::ActivateVial || k == K::CastFromGraveyard || k == K::Suspend
-        || k == K::Channel || k == K::Eternalize;
+        || k == K::Channel || k == K::Eternalize || k == K::Unearth;
 }
 
 // Can action `a` be the play step `st` names? The verb's kind, the card, and every detail the token
@@ -68335,6 +68393,7 @@ const char* TurnSolver::HumanStepVerbFor(Action::Kind k)
         case K::Suspend:                return "suspend";
         case K::Channel:                return "channel";
         case K::Eternalize:             return "eternalize";
+        case K::Unearth:                return "unearth";
         case K::SacForMana:             return "";         // MANA: payment, never a step (USER ruling)
         case K::SacCreatureOutlet:      return "sacout";
         case K::TapForTokens:
@@ -75910,6 +75969,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (present && TapForCostDirect(state, a.cost, /*for_creature=*/false))
             { ApplyEternalize(state, state.active_player_index, a.card_name.str()); }
         }
+        else if (a.kind == Action::Kind::Unearth)
+        {
+            // Unearth (Hellspark Elemental): a copy must still be in the graveyard (a stale plan is a
+            // no-op, not a payment for nothing), then pay the ability (never creature-spell-only mana)
+            // and return it (lockstep with AIEngine's trailing pass; one shared ApplyUnearth).
+            if (UnearthGraveyardIndex(state, state.active_player_index, a.card_name.str(), a.sac_source_id) >= 0
+                && TapForCostDirect(state, a.cost, /*for_creature=*/false))
+            { ApplyUnearth(state, state.active_player_index, a.card_name.str(), a.sac_source_id); }
+        }
         else if (a.kind == Action::Kind::ComboRoute)
         {
             // THE MECHANICAL COMBO OFF ROUTE: all-or-nothing on a copy (see EdfComboRouteApply).
@@ -78454,6 +78522,9 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
             ResolveAthreosExile(state, leaving);
         }
     }
+    // Unearth's end-step exile (Permanent::unearthed) -- lockstep twin of GameEngine::EndStep, same
+    // position, same shared helper. No-op without the bit.
+    PerformEndStepUnearthExiles(state);
     // Incandescent Soulstoke's delayed sacrifice (Permanent::sac_at_end_step) -- lockstep twin of
     // GameEngine::EndStep, same position, same shared helper. No-op without the flag.
     PerformEndStepDelayedSacrifices(state);
@@ -80605,6 +80676,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 w.End(); break;
             case Action::Kind::Eternalize:
                 w.Begin(kSigU); w.Put("ETERNALIZE#"); w.Put(act.card_name); w.End(); break;
+            // Unearth: the NAME only -- graveyard copies are interchangeable, so two plans unearthing
+            // different copies are one line (lockstep with the legacy key's UNEARTH#).
+            case Action::Kind::Unearth:
+                w.Begin(kSigU); w.Put("UNEARTH#"); w.Put(act.card_name); w.End(); break;
             case Action::Kind::Channel:
                 w.Begin(kSigS); w.Put("CHANNEL#"); w.Put(act.card_name);
                 if (!act.tutor_target.str().empty()) { w.Put('>'); w.Put(act.tutor_target); }
@@ -86130,6 +86205,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                   + ":" + act.tutor_target.str()); break;
                 case Action::Kind::Eternalize:
                     u.push_back("ETERNALIZE#" + act.card_name.str()); break;
+                case Action::Kind::Unearth:
+                    u.push_back("UNEARTH#" + act.card_name.str()); break;
                 case Action::Kind::Channel:
                     // Transmute rides this kind with its FOUND card in tutor_target: distinct
                     // finds are distinct plans (the Gamble lesson). Empty for a real Channel ->
@@ -101281,7 +101358,8 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             | (static_cast<std::uint64_t>(pm.destroy_at_end_if_attacked) << 39)
             | (static_cast<std::uint64_t>(pm.mana_tap_mark) << 40)
             | (static_cast<std::uint64_t>(pm.temp_vigilance) << 41)     // End-Raze until-EOT grant (0 elsewhere)
-            | (static_cast<std::uint64_t>(pm.return_at_end_step) << 42));   // Ilharg put body (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.return_at_end_step) << 42) // Ilharg put body (0 elsewhere)
+            | (static_cast<std::uint64_t>(pm.unearthed) << 48));        // Unearth (0 elsewhere)
         mix(static_cast<std::uint64_t>(static_cast<std::uint8_t>(pm.chosen_color)) | (static_cast<std::uint64_t>(pm.garth_chosen_mask) << 8)
             | (static_cast<std::uint64_t>(pm.chosen_keyword_mask) << 16) | (static_cast<std::uint64_t>(pm.chosen_subtype_id) << 24));
         mix(static_cast<std::uint64_t>(pm.paired_with));
@@ -103578,6 +103656,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         if (perm.sac_at_end_step) { Fold(tk, 0x5AC0E5D5ull); }   // Soulstoke put (nonzero-gated)
         if (perm.destroy_at_end_if_attacked) { Fold(tk, 0xBE55E5Cull); }   // Berserk (nonzero-gated)
         if (perm.return_at_end_step) { Fold(tk, 0x12E7A2Bull); }   // Ilharg put body (nonzero-gated)
+        if (perm.unearthed) { Fold(tk, 0x0E0A57E5ull); }   // unearthed (nonzero-gated)
         // Rick's chosen keyword pair / Brutal Cathar's linked exile: per-object, future-determining
         // (lifelink + vigilance on every Human; which opponent creature returns). Nonzero-gated.
         if (perm.chosen_keyword_mask != 0)
@@ -128036,7 +128115,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                       spec.suspends.empty() &&
                       spec.animates.empty() && spec.tap_tokens.empty() &&
                       spec.pods.empty() && spec.ooze_exiles.empty() && spec.blinks.empty() &&
-                      spec.eternalizes.empty() &&
+                      spec.eternalizes.empty() && spec.unearths.empty() &&
                       // taplife= (Wellwisher). EVERY new verb must be added here or a line made up
                       // ONLY of it silently grades `accept / plan_index -1 / "pass / cast nothing"`
                       // -- an ACCEPT for a line the engine then does not play, which is strictly
@@ -128255,6 +128334,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
     // eternalize= (Timeless Witness from the graveyard): its own verb, never in the cast multiset.
     std::vector<std::string> sortedEternalize = spec.eternalizes;
     std::sort(sortedEternalize.begin(), sortedEternalize.end());
+    // unearth= (Hellspark Elemental from the graveyard): its own verb, one entry per activation.
+    std::vector<std::string> sortedUnearth = spec.unearths;
+    std::sort(sortedUnearth.begin(), sortedUnearth.end());
     const bool blink_declared     = !spec.blinks.empty();
 
     // --- 1) Does the line match a plan (or several variants) the model would play? ----
@@ -128336,6 +128418,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::vector<std::string> oozeNames;
         std::vector<std::string> sacNamedFetches;
         std::vector<std::string> eternalizeNames;
+        std::vector<std::string> unearthNames;
         // One entry per blink activation: (outlet name, blinked creature's m_number). Matched
         // against spec.blinks by BlinksMatch below, which honours the 0 wildcard.
         std::vector<LineSpec::BlinkSpec> blinkActs;
@@ -128464,6 +128547,8 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             { sacNamedFetches.push_back(a.tutor_target.str()); continue; }
             if (a.kind == Action::Kind::Eternalize)
             { eternalizeNames.push_back(a.card_name.str()); continue; }
+            if (a.kind == Action::Kind::Unearth)
+            { unearthNames.push_back(a.card_name.str()); continue; }
             // Blink: matched against its own verb when declared (the target is the decision), else
             // by outlet name in the ordinary cast multiset -- the legacy behaviour every saved
             // reference was written under. sac_victim_id is the blinked creature's m_number.
@@ -128716,6 +128801,11 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             std::vector<std::string> v2 = eternalizeNames;
             std::sort(v2.begin(), v2.end());
             if (v2 != sortedEternalize) { continue; }
+        }
+        {
+            std::vector<std::string> v2 = unearthNames;
+            std::sort(v2.begin(), v2.end());
+            if (v2 != sortedUnearth) { continue; }
         }
         std::vector<std::string> sortedNames = orderNames;
         std::sort(sortedNames.begin(), sortedNames.end());
@@ -131556,7 +131646,7 @@ static const char* PlanDumpKindName(Action::Kind k)
         "ActivateLoyalty", "Equip", "GYReturn", "GYPlay", "GYExile", "AttachAllEquipment",
         "PutFromHand", "JitteMode", "RevealTop", "Pump", "AnimateLand", "TapForTokenPay",
         "UntapCreature", "Blink", "ACTIVATE", "Pod", "GYExileGrow", "ComboRoute", "Eternalize",
-        "AttachAllFree", "AuraSwap", "ActivateUntap"
+        "AttachAllFree", "AuraSwap", "ActivateUntap", "Unearth"
     };
     const int i = static_cast<int>(k);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }

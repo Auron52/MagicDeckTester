@@ -8124,5 +8124,60 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Druid"
+  },
+  "Ball Lightning": {
+    "cmc": 3.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}{R}{R}",
+    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "6",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
+  "Flamekin Bladewhirl": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Warrior"
+  },
+  "Hellspark Elemental": {
+    "cmc": 2.0,
+    "keywords": [
+      "Haste",
+      "Trample",
+      "Unearth"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
+  "Spark Elemental": {
+    "cmc": 1.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
+  "Sunspine Lynx": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls.",
+    "power": "5",
+    "toughness": "4",
+    "type_line": "Creature — Elemental Cat"
   }
 }

@@ -553,6 +553,7 @@ const char* KindText(Action::Kind k)
         case Action::Kind::AttachAllFreeEquipment: return "attachallfree";
         case Action::Kind::AuraSwap: return "auraswap";
         case Action::Kind::ActivateUntap: return "untap";
+        case Action::Kind::Unearth: return "unearth";
     }
     return "kind?";
 }

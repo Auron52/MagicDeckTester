@@ -103,6 +103,8 @@
   //   channel=    Twinshot Sniper's from-HAND channel ability (names the card) (LineSpec::channels)
   //   suspend=    Lotus Bloom's from-HAND Suspend (names the card)             (LineSpec::suspends)
   //   eternalize= Timeless Witness's from-GRAVEYARD Eternalize (names the card) (LineSpec::eternalizes)
+  //   unearth=    an Unearth activation from the GRAVEYARD (Hellspark Elemental; names the card;
+  //               one entry per activation)                                 (LineSpec::unearths)
   //   adventure=  Brightcap Badger's adventure half (names the PARENT card)     (LineSpec::adventures)
   //   kicked=     Saproling Migration cast WITH its kicker paid (names the card)  (LineSpec::kickeds)
   //   facedown=   a morph card cast FACE DOWN for {3} (names the card)          (LineSpec::face_downs)
@@ -142,6 +144,8 @@
     // ... and ETERNALIZE (Timeless Witness) is activated from the GRAVEYARD -- neither a cast nor a
     // board activation, so it carries its own verb (names the graveyard card).
     if (p.kind === 'eternalize') return 'eternalize';
+    // ... and UNEARTH (Hellspark Elemental), the same from-the-GRAVEYARD shape.
+    if (p.kind === 'unearth') return 'unearth';
     if (p.kind !== 'activate') return 'cast';
     // A plain board activation (Frost Augur's look, Krenko's tap) writes `act=`, not `cast=`: the
     // engine keeps it in the same ordered multiset but requires the matched plan to ACTIVATE the

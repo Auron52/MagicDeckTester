@@ -7428,6 +7428,21 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 if (m_logger) { m_logger->LogAbility(0, a.card_name.str(), "eternalize (4/4 black Zombie token)"); }
             }
         }
+        else if (a.kind == Action::Kind::Unearth)
+        {
+            // Unearth (executor mirror of the rollout's trailing pass; one shared ApplyUnearth).
+            if (UnearthGraveyardIndex(state, state.active_player_index, a.card_name.str(), a.sac_source_id) >= 0)
+            {
+                ManaPool avail = AvailableManaPool(state);
+                if (TapForCost(state, a.cost, avail, /*for_creature=*/false))
+                {
+                    ApplyUnearth(state, state.active_player_index, a.card_name.str(), a.sac_source_id);
+                    if (m_logger)
+                    { m_logger->LogAbility(a.sac_source_id, a.card_name.str(),
+                                           "unearth from graveyard (haste; exiled at end step or if it would leave)"); }
+                }
+            }
+        }
         else if (a.kind == Action::Kind::ComboRoute)
         {
             // THE MECHANICAL COMBO OFF ROUTE (lockstep with ApplyPlanDirect): all-or-nothing.

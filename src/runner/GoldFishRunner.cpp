@@ -821,6 +821,10 @@ std::uint32_t GoldFishRunner::DeckGraveyardReaders(const Decklist& deck)
         // Bloodghast: a GRAVEYARD landfall watcher -- whether a copy sits in our graveyard decides
         // whether the next land returns it (see GyR_GyLandfallNames).
         if (p.landfall_return_self_from_gy)  { m |= GyR_GyLandfallNames; }
+        // UNEARTH (Hellspark Elemental): a graveyard copy is an activation the next main phase can take,
+        // so WHICH creature cards sit in our graveyard is observable. Unearth exists only on creature
+        // cards, so the creature-name projection (a superset) covers it -- coarser would be unsound.
+        if (p.unearth_cost.has_value())      { m |= GyR_CreatureNames; }
         // Lurrus of the Dream-Den: a graveyard CAST permission reads which permanent cards sit in our
         // graveyard (see GyR_GyCastNames -- also the deck gate of every Lurrus site).
         if (p.gy_cast_permanent_max_mv > 0)  { m |= GyR_GyCastNames; }
@@ -1393,16 +1397,21 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
     // (Blistering Firecat). MAINBOARD ONLY: a face-down permanent needs a morph card CAST from hand, and a
     // sideboard card never reaches the hand in a goldfish.
     {
-        bool morph = false, selfsac = false;
+        bool morph = false, selfsac = false, lifelock = false;
         for (const Card& c : deck.mainboard)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (!d) { continue; }
             morph   = morph   || d->params.morph_cost.has_value() || d->params.megamorph_cost.has_value();
             selfsac = selfsac || d->params.endstep_sacrifice_self;
+            lifelock = lifelock || d->params.static_players_cant_gain_life
+                                || d->params.static_damage_cant_be_prevented;
         }
         state.deck_has_morph            = morph;
         state.deck_has_endstep_self_sac = selfsac;
+        // Sunspine Lynx's statics: only OUR list can hold one (the passive opponent's fixed list never
+        // does), and a wish-reached sideboard Lynx is not in this pool.
+        state.deck_has_static_life_locks = lifelock;
     }
     // The graveyard-shuffle trigger and annihilator: BOTH ZONES -- each stamp only skips a scan that
     // would find nothing (the deck_has_attack_threshold reasoning), so over-arming is merely slower.
@@ -1988,7 +1997,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
                 if (d && (d->params.hellbent_upkeep_life_loss > 0 || d->params.tap_blood_cost.has_value()
-                          || d->params.tap_is_life_payment || d->params.damage_per_nonbasic_land > 0))
+                          || d->params.tap_is_life_payment || d->params.damage_per_nonbasic_land > 0
+                          || d->params.etb_damage_each_player_per_nonbasic_land > 0))
                 { return true; }
             }
             return false;

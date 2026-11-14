@@ -854,7 +854,7 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
         if (p.temp_haste || p.is_animated || p.exile_at_end
             || p.sac_at_end_step || p.destroy_at_end_if_attacked
-            || p.return_at_end_step)                                 { return false; }   // Ilharg's put (I5a)
+            || p.return_at_end_step || p.unearthed)                 { return false; }
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
         if (p.temp_vigilance)                                       { return false; }   // End-Raze Forerunners until-EOT grant

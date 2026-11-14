@@ -816,7 +816,8 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
     if (s == "Islandwalk")    { return Keyword::Islandwalk; } // inert evasion tag; nothing blocks
     if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
-    if (s == "Companion")     { return Keyword::Companion; }  // inert tag; main-deck card, no companion zone
+    if (s == "Companion")     { return Keyword::Companion; }
+    if (s == "Unearth")       { return Keyword::Unearth; }    // inert tag; mechanic is param-modelled  // inert tag; main-deck card, no companion zone
     throw std::runtime_error("Unknown keyword: " + s);
 }
 
@@ -1093,6 +1094,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cost_less_per_opponent_noncombat_damage = params.value("cost_less_per_opponent_noncombat_damage", false);
     p.incinerator_damage_trigger = params.value("incinerator_damage_trigger", false);
     p.damage_per_nonbasic_land = params.value("damage_per_nonbasic_land", 0);
+    p.etb_damage_each_player_per_nonbasic_land = params.value("etb_damage_each_player_per_nonbasic_land", 0);
+    p.static_players_cant_gain_life   = params.value("static_players_cant_gain_life", false);
+    p.static_damage_cant_be_prevented = params.value("static_damage_cant_be_prevented", false);
     p.chain_lightning_copy = params.value("chain_lightning_copy", false);
     p.sacrifice_mountains_alternative = params.value("sacrifice_mountains_alternative", false);
     if (params.contains("spectacle_cost"))
@@ -1753,6 +1757,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_return_equipment_from_gy           = params.value("etb_return_equipment_from_gy", false);
     if (params.contains("eternalize_cost"))
         p.eternalize_cost = ManaCostFromString(params["eternalize_cost"].get<std::string>());
+    if (params.contains("unearth_cost"))
+        p.unearth_cost = ManaCostFromString(params["unearth_cost"].get<std::string>());
     if (params.contains("transmute_cost"))
         p.transmute_cost = ManaCostFromString(params["transmute_cost"].get<std::string>());
     if (params.contains("life_gated_put_creatures_cost"))

@@ -17346,6 +17346,112 @@
     ],
     "tap_mana_damage_each_opponent": 1
    }
+  },
+  {
+   "name": "Spark Elemental",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Trample",
+    "Haste"
+   ],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature. [Vanilla 3/1 with Trample + Haste (keywords) and endstep_sacrifice_self: at the beginning of EACH end step (ours and the opponent's notional one) it is sacrificed through the shared SacrificePermanentAt (PerformEndStepSelfSacrifices, both end-step sites in lockstep; it dies, so dies/LTB watchers fire). Haste lets it attack the turn it is cast (the search's this-turn attack projection stamps it via haste_attack_power). Trample is inert vs the never-blocking goldfish opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "endstep_sacrifice_self": true
+   }
+  },
+  {
+   "name": "Ball Lightning",
+   "mana_cost": "{R}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Trample",
+    "Haste"
+   ],
+   "power": 6,
+   "toughness": 1,
+   "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature. [Vanilla 6/1 with Trample + Haste (keywords) and endstep_sacrifice_self: at the beginning of EACH end step it is sacrificed through the shared SacrificePermanentAt (PerformEndStepSelfSacrifices, both end-step sites in lockstep; it dies, so dies/LTB watchers fire). Haste lets it attack the turn it is cast. Trample is inert vs the never-blocking goldfish opponent.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "endstep_sacrifice_self": true
+   }
+  },
+  {
+   "name": "Flamekin Bladewhirl",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Warrior"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 1,
+   "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}. [ADDITIONAL COST (CR 601.2b/f): reveal_or_pay_subtype Elemental + reveal_or_pay_cost {3} -- the Daring Buccaneer / Goldmeadow Stalwart shape. The shared EffectiveSpellCost adds {3} generic iff the hand holds NO OTHER Elemental card (CanRevealForAdditionalCost skips ONE hand copy of this card's own name as the spell itself, so a second Bladewhirl IS a legal reveal; staged cards are not in hand). 'Elemental card' = the PRINTED subtype off the CardDefinition: a Metallic Mimic in hand is only a Shapeshifter artifact creature and does NOT enable the reveal (its chosen type exists only on the battlefield). No changeling card exists in the pool (a changeling would carry every creature type in its cards.json subtypes). REVEAL-VS-PAY is auto-resolved to REVEAL whenever possible: revealing costs nothing, the passive opponent gains nothing from the information and nothing reads revealed cards, so paying {3} is strictly dominated; WHICH Elemental is revealed is inert (it stays in hand). Order within a turn is priced live (an Elemental cast earlier leaves the hand; SameSubsetRevealSurcharge). Not a cost when put onto the battlefield without casting (Incandescent Soulstoke). Vanilla 2/1 otherwise.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reveal_or_pay_subtype": "Elemental",
+    "reveal_or_pay_cost": "{3}"
+   }
+  },
+  {
+   "name": "Sunspine Lynx",
+   "mana_cost": "{2}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Cat"
+   ],
+   "keywords": [],
+   "power": 5,
+   "toughness": 4,
+   "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls. [STATICS while on the battlefield: static_players_cant_gain_life (GainLife / OpponentGainsLife refuse every gain while any Lynx is on the battlefield -- PlayersCantGainLifeNow, the same sites Skullcrack's this-turn flag binds) and static_damage_cant_be_prevented (DamageCantBePreventedNow at every prevention site the engine models: Purity's noncombat-damage replacement). Both are INERT in Red Elementals (no lifegain and no prevention in the list; the goldfish opponent never gains life or prevents) but modelled, so the card is right in any deck. Deck-gated by GameState::deck_has_static_life_locks (an unstamped state scans). ETB: etb_damage_each_player_per_nonbasic_land 1 -- 'deals damage to each player equal to the number of nonbasic lands that player controls', through the shared ResolveNonbasicLandDamage (Price of Progress's resolver) in the universal own-ETB cascade (cast or put alike). It HITS US: our Fiery Islets and Legion Stronghold (Legion Leadership's land face) are nonbasic, and own_death_live is armed by the param, so a Lynx that takes us to 0 loses the game (the search sees the life). The passive opponent's three inert placeholder lands include 0-3 'Opponent Nonbasic Land's by game index (GoldFishRunner), so it takes 0-3 -- real damage toward the win, read live. Vanilla 5/4 body.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "static_players_cant_gain_life": true,
+    "static_damage_cant_be_prevented": true,
+    "etb_damage_each_player_per_nonbasic_land": 1
+   }
+  },
+  {
+   "name": "Hellspark Elemental",
+   "mana_cost": "{1}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental"
+   ],
+   "keywords": [
+    "Trample",
+    "Haste",
+    "Unearth"
+   ],
+   "power": 3,
+   "toughness": 1,
+   "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.) [Trample + Haste (keywords; trample inert vs the never-blocking opponent) and endstep_sacrifice_self (sacrificed at the beginning of each end step, the Spark Elemental shape). UNEARTH (CR 702.84): unearth_cost {1}{R} -- Action::Kind::Unearth, an ACTIVATED ability from the GRAVEYARD at sorcery speed (the main-phase enumeration; empty stack), NOT a cast (no cast triggers, no storm/prowess, not a spell). One action per graveyard copy, interchangeable copies folded to a canonical prefix (equiv_tag), so a plan may unearth any number of copies it can pay for and the SEARCH decides whether and how many (never a heuristic pick); pre-combat its hasted power is stamped into the this-turn attack projection, post-combat it is priced -2 (no attack left, and it costs the card). Applied in the trailing pass after the plan's casts (a same-plan Metallic Mimic counts). ApplyUnearth (both worlds): the card leaves the graveyard and ENTERS through PutCardOntoBattlefield under GraveyardEnterScope (ETB watchers fire -- Metallic Mimic's +1/+1 counter if it named Elemental; Soulstoke's lord applies by live subtype) with Permanent::unearthed set and temp_haste ('It gains haste'). 'Exile it at the beginning of the next end step': the delayed trigger sweeps every unearthed permanent to EXILE at the top of both end-step sites (PerformEndStepUnearthExiles, lockstep), before its own sacrifice trigger -- and in either order it ends in exile. 'If it would leave the battlefield, exile it instead of putting it anywhere else' is a CR 614 REPLACEMENT (no stack), applied at the shared sacrifice chokepoint (SacrificePermanentAt -- its own end-step sacrifice, Soulstoke/Thunderkin delayed sacrifices, sac outlets; the other end-step delayed triggers run after the exile sweep and find it gone): the card goes to exile, the sacrifice still happened (sacrifice watchers fire) but it did NOT die (no dies/morbid triggers; LTB triggers fire). So an unearthed creature never returns to the graveyard (no second unearth, no later reanimation). The unearthed status is a PER-OBJECT flag (Permanent::unearthed) dropped on any zone change, so an effect that itself EXILES the creature and later returns it (champion) returns a new object no longer under unearth (Scryfall ruling). [PARTIAL/PROVISIONAL (user sign-off owed): the replacement is NOT routed through a destroy effect, the lethal-damage / toughness-0 state-based-action deaths, the legend rule, the symmetric creature sweeps or a bounce -- none of which can befall an unearthed creature in this list (the goldfish opponent never blocks or removes, and nothing here damages or shrinks our creatures); a deck that can kill or bounce an unearthed creature that way would need those sites routed.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "endstep_sacrifice_self": true,
+    "unearth_cost": "{1}{R}"
+   }
   }
  ]
 }

@@ -304,7 +304,16 @@ struct Action
                              // the ActivateBlink convention: untapping a mana creature refunds its
                              // yield, so the loop is self-funding and the shared resolver
                              // (ApplyActivatedUntap, both worlds) pays per activation and stops at
-                             // the first it cannot pay. Applied in the trailing pass. Appended LAST.
+                             // the first it cannot pay. Applied in the trailing pass.
+        Unearth,             // UNEARTH (CR 702.84a; CardParams::unearth_cost -- Hellspark Elemental):
+                             // "{cost}: Return this card from your graveyard to the battlefield. It
+                             // gains haste. Exile it at the beginning of the next end step or if it
+                             // would leave the battlefield. Unearth only as a sorcery." A GRAVEYARD
+                             // activation, not a cast: card_name = the graveyard card, hand_index = -1,
+                             // sac_source_id = that copy's m_number (the fold's source key; copies are
+                             // interchangeable, so equiv_tag folds them to a canonical prefix and a
+                             // plan may unearth k of n), cost = unearth_cost. Resolved by the shared
+                             // ApplyUnearth in the trailing pass of both worlds. Appended LAST.
     };
 
     // ActivatePermAbility sub-mode. Defined in the CORE layer (core/Permanent.h) because the shared
@@ -3986,6 +3995,9 @@ public:
         // "eternalize=<graveyard card name>": Timeless Witness's Eternalize, activated from the
         // GRAVEYARD (no battlefield source, not a cast) -- its own verb, the GUI's graveyard click.
         std::vector<std::string> eternalizes;
+        // "unearth=<graveyard card name>": an Unearth activation (Hellspark Elemental), one entry per
+        // activation -- from the GRAVEYARD, not a cast; its own verb, the GUI's graveyard click.
+        std::vector<std::string> unearths;
         // "blink=<outlet name>[@<target m_number>]": Emiel the Blessed's "{3}:" / Eldrazi
         // Displacer's "{2}{C}:" exile-and-return, one entry per activation.
         //
