@@ -1332,3 +1332,61 @@ TEST_CASE("Soulstoke eot: the hold twin's gate and contested test")
     t.deck_has_eot_tap_put = false;
     CHECK_FALSE(EotHoldTwinGate(t));
 }
+
+// ---- STAGE 5f: THE DEAD-TRICK FOLD (RedElementalsProvider::TrickTargetsAttackersOnly / TrickTargetCandidates) ----
+// Legion Leadership doubles power until end of turn and nothing in the list reads a non-attacker's power, so a
+// Leadership aimed at a creature that cannot attack this turn, or cast after combat, is dominated by keeping it.
+#include "ai/HeuristicArm.h"
+namespace
+{
+// The Leadership CastFromHand variants: battlefield targets by card number, same-plan hand targets by name.
+struct LeadershipTargets { std::vector<int> bf; std::vector<std::string> hand; int casts = 0; };
+LeadershipTargets LeadershipVariants(const GameState& s, bool pre_combat)
+{
+    LeadershipTargets t;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    {
+        if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != "Legion Leadership") { continue; }
+        ++t.casts;
+        if (!a.trick_hand_target.empty()) { t.hand.push_back(a.trick_hand_target); }
+        else { t.bf.push_back(a.enchant_target); }
+    }
+    return t;
+}
+template <class V, class T> bool Has(const V& v, const T& x) { return std::find(v.begin(), v.end(), x) != v.end(); }
+}   // namespace
+
+TEST_CASE("Legion Leadership: no target that cannot attack this turn; no cast after combat (sound fold)")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 6; ++k) { PutRe(s, "Mountain"); }
+    const int ball = PutRe(s, "Ball Lightning");                 // attack-eligible
+    const int blade = PutRe(s, "Flamekin Bladewhirl");           // summoning sick, no haste
+    s.battlefield[static_cast<std::size_t>(BfIdx(s, "Flamekin Bladewhirl"))].entered_this_turn = true;
+    const int stoke = PutRe(s, "Incandescent Soulstoke", 0, /*tapped=*/true);   // tapped (paid for a put)
+    HandRe(s, "Legion Leadership");
+    HandRe(s, "Spark Elemental");                                // a hasty same-plan body
+    HandRe(s, "Metallic Mimic");                                 // no haste: it cannot attack this turn
+
+    s.phase = Phase::PreCombatMain;
+    const LeadershipTargets pre = LeadershipVariants(s, /*pre_combat=*/true);
+    CHECK(Has(pre.bf, ball));
+    CHECK_FALSE(Has(pre.bf, blade));
+    CHECK_FALSE(Has(pre.bf, stoke));
+    CHECK(Has(pre.hand, std::string("Spark Elemental")));
+    CHECK_FALSE(Has(pre.hand, std::string("Metallic Mimic")));
+
+    s.phase = Phase::PostCombatMain;
+    CHECK(LeadershipVariants(s, /*pre_combat=*/false).casts == 0);
+
+    // The lever off (heurarm REDELEM_TRICK_FOLD = 0): every target again, and the post-combat cast is back.
+    heurarm::t_arm[static_cast<int>(heurarm::REDELEM_TRICK_FOLD)] = 0;
+    s.phase = Phase::PreCombatMain;
+    const LeadershipTargets open = LeadershipVariants(s, /*pre_combat=*/true);
+    CHECK(Has(open.bf, blade));
+    CHECK(Has(open.bf, stoke));
+    CHECK(Has(open.hand, std::string("Metallic Mimic")));
+    s.phase = Phase::PostCombatMain;
+    CHECK(LeadershipVariants(s, /*pre_combat=*/false).casts > 0);
+    heurarm::Clear();
+}

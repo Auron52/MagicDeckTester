@@ -992,6 +992,47 @@ bool RedElementalsProvider::OrderOpaqueCastsByRank() const
     static const bool env = EnvOn("MTG_REDELEM_OPAQUE_ORDER", true);   // DEFAULT ON; =0 -> the search owns the order
     return heurarm::Flag(heurarm::REDELEM_OPAQUE_ORDER, env);
 }
+// THE DEAD-TRICK FOLD (Stage 5f, 2026-11-14) -- a SOUND DOMINANCE FOLD, not a heuristic: the two halves Morph has for its
+// own list (MorphProvider::TrickTargetsAttackersOnly and INT-10's no-post-combat trick), re-proved for THIS list rather
+// than inherited. The list's only solo-target trick is Legion Leadership: "Until end of turn, double target creature's
+// power and it gains first strike." Premises:
+//   (a) its whole payload is until-end-of-turn COMBAT value (doubled power; first strike is unmodelled and inert
+//       against the never-blocking goldfish), and it has no rider (no draw, no token, no mana);
+//   (b) nothing in the 60 reads a creature's power outside its own combat damage this turn: Nova Chaser's champion
+//       exiles by subtype, Thunderkin Awakener's trigger reads TOUGHNESS (and the returned card's printed card),
+//       Metallic Mimic / the Soulstoke lord / Bladewhirl's reveal / Sunspine Lynx / Lightning Bolt read no power, and
+//       no card counts instants in the graveyard or spells cast.
+// So a Leadership on a creature that cannot deal combat damage this turn changes nothing but the mana spent and the
+// card's zone -- and keeping the card in hand keeps its land face (Legion Stronghold) for a later turn -- so not
+// casting it DOMINATES. Two shapes:
+//   * pre-combat, TrickTargetsAttackersOnly: CollectActions' target loops skip a battlefield creature that is not
+//     attack-eligible now (TrickRecipientCanAttackThisTurn: summoning-sick without haste, tapped -- a Soulstoke that
+//     paid for a put) and a same-plan HAND creature without haste access. A Soulstoke-PUT creature is not lost: a
+//     same-plan hand target needs a CAST of that name (SubsetHasMissingTrickTarget), so a put body is only ever a
+//     target once it is on the battlefield with its temp haste, where it is attack-eligible;
+//   * once this turn's combat is over (StealCombatOver; the list has no extra combat), TrickTargetCandidates returns
+//     the "narrowed, no candidate" sentinel {0}: no creature can attack any more, so every target is dead.
+// Never under human play or MTG_UNPRUNED / MTG_UNPRUNE=tricktarget (the engine checks the first; the second checks
+// here). A list revision that adds a power reader (ferocious, a power-threshold, a fling), a spell-count / graveyard
+// instant payoff or an extra combat must drop this. MTG_REDELEM_TRICK_FOLD=0 (heurarm REDELEM_TRICK_FOLD, per-job)
+// restores every target.
+static bool RedElemTrickFoldOn()
+{
+    static const bool env = EnvOn("MTG_REDELEM_TRICK_FOLD", true);   // DEFAULT ON; =0 -> every target, in every main
+    return heurarm::Flag(heurarm::REDELEM_TRICK_FOLD, env);
+}
+bool RedElementalsProvider::TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const
+{
+    (void)s; (void)def;
+    return RedElemTrickFoldOn();
+}
+void RedElementalsProvider::TrickTargetCandidates(const GameState& s, const CardDefinition& def,
+                                                  std::vector<int>& out) const
+{
+    (void)def;
+    if (!RedElemTrickFoldOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::TrickTarget)) { return; }
+    if (StealCombatOver(s) && !s.deck_has_extra_combat && s.pending_extra_combats == 0) { out.push_back(0); }
+}
 bool RedElementalsProvider::RestrictsCollectedActions() const
 {
     return RedElemNovaMain2On() && !DecisionUnpruned(UnprunedGate::ChampionMain2);

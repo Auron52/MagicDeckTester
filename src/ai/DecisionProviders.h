@@ -3786,6 +3786,9 @@ public:
 //     follows the bodies it doubles. MTG_REDELEM_OPAQUE_ORDER (heurarm, default ON). It is the ONE Morph hook the
 //     Stage 4a A/B showed this deck was living on (every slower game of the bare DeckProvider derivation is
 //     recovered by it alone); Morph's own tiered CastOrderRank is NOT taken.
+//   * TrickTargetsAttackersOnly / TrickTargetCandidates -- SOUND DOMINANCE FOLD (Stage 5f), MTG_REDELEM_TRICK_FOLD
+//     (heurarm, default ON): Legion Leadership is not aimed at a creature that cannot attack this turn and is not cast
+//     once combat is over. The proof (both premises, for THIS list) is at the definition.
 class RedElementalsProvider : public DeckProvider
 {
 public:
@@ -3795,6 +3798,8 @@ public:
     bool RestrictsCollectedActions() const override;
     bool CollectedActionAllowed(const GameState& s, const Action& a, bool is_pre_combat) const override;
     bool OrderOpaqueCastsByRank() const override;
+    bool TrickTargetsAttackersOnly(const GameState& s, const CardDefinition& def) const override;
+    void TrickTargetCandidates(const GameState& s, const CardDefinition& def, std::vector<int>& out) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. Damage is combat plus Lightning Bolt (3) and Sunspine Lynx's ETB (1 per opponent "
