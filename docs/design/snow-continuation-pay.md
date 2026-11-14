@@ -70,4 +70,57 @@ re-solve offers [Astrolabe] (no phantom activation). Measured below as its own a
 
 ## 4. Measurement
 
-(pending -- see below)
+### 4.1 Single-game repros (binary c711324b6; `build/scratch/snowcp/nine3.txt`, `others3.txt`)
+
+Unit 2971/2971, scenarios 513/513; the new scenario passes with the lever and fails at `=0`.
+
+- The six Owl xK shortfalls are gone (g57 T6, g42 T6, g87 T7, g27 T6, g188 T6, g66 T5). Win turns are
+  unchanged in all eight games.
+- Still present: the three continuation re-plans (class CONT: g30 T4, g42 T3, g120 T5).
+- Three `unpayable joint1=no` lines remain: g30 T5 and g57 T4 (present before fix (b)) and g66 T6 (new, reached
+  only once the T5 fix changed the game: `[Slumber, Sheets(act), Owl x2, Sheets(act)]`). With
+  `MTG_RESCUE_TAP_SOURCE=1` all three disappear, so they are the fix (a) self-funding phantom, not a fix (b)
+  residue.
+- Selesnya v2 g68 / g156 and EDF g36: unchanged (cast-only producer lines; the mana agent's area).
+
+### 4.2 Pooled A/B (binary c711324b6, play settings, `MTG_LINE_PAY_AUDIT=2`, 24 threads)
+
+Arms: `off` = `MTG_REPEAT_EXTRAS_RESERVE=0`; `b` = fix (b) (default); `ba` = fix (b) + `MTG_RESCUE_TAP_SOURCE=1`
+(measured only; it stays OFF, a USER decision). Batch 1: 3600 games (Snow 600 x3 arms; Selesnya v2, EDF, Kithkin
+300 x off/b; seeds 61000+, game_index 0+, chunks of 20, arms interleaved). Heartbeat 24/24 busy. **Seeds 61000+
+are the sample the nine Snow cases were found in (selection, not held out).** Batch 1 ran without
+`--game-log-dir`, so batch 2 re-ran every chunk whose case digest differed from `off` (Snow 28 chunks x3, EDF c6 x2;
+digests reproduced 12/12 against batch 1) plus a HELD-OUT Snow sample (seed base 81000, 300 x3) with per-game
+outcomes. Chunks whose digest equals `off` are the same games.
+
+| deck | arm | n | avg | delta | faster | slower | play-changed games | units | Snow short-plan games |
+|---|---|---|---|---|---|---|---|---|---|
+| Snow (61000+) | off | 600 | 5.6667 | | | | | 1.0000 | 144 |
+| | b | 600 | 5.6667 | 0 | 0 | 0 | 10 | 1.0001 | 138 |
+| | ba | 600 | 5.6667 | 0 | 0 | 0 | 81 | 0.9740 | 25 |
+| Snow held-out (81000+) | off | 300 | 5.6267 | | | | | 1.0000 | 68 |
+| | b | 300 | 5.6267 | 0 | 0 | 0 | 12 | 1.0006 | 58 |
+| | ba | 300 | 5.6267 | 0 | 0 | 0 | 51 | 0.9766 | 9 |
+| Selesnya v2 | b | 300 | 4.4700 | 0 | 0 | 0 | 0 | 1.0000 | (36 games, unchanged) |
+| EDF | b | 300 | 4.0567 | 0 | 0 | 0 | 1 | 1.0000 | (57 games, unchanged) |
+| Kithkin | b | 300 | 4.5500 | 0 | 0 | 0 | 0 | 1.0000 | 0 |
+
+Snow shortfall lines by class (batch 1, 600 games per arm):
+
+| class | off | b | ba |
+|---|---|---|---|
+| Owl xK, payable billed once (`joint1=YES`): fix (b)'s target | 10 | 0 | 0 |
+| `unpayable joint1=no`: the rescue self-funding phantom (fix (a)) | 167 | 168 | 12 |
+| CONT (continuation re-plan) | 18 | 18 | 13 |
+
+Reading:
+- **Fix (b)** removes every shortfall it targets and changes no win turn: 0 faster / 0 slower in 860 paired Snow
+  games, 0 / 0 on the other three decks. Units 1.0001 / 1.0006. It meets the adoption bar trivially (no slower
+  game, every deck net 0).
+- **`ba`** (rescue tap-source) removes ~93% of Snow's remaining shortfall lines, also with 0 faster / 0 slower
+  (81 + 51 games play differently, none at a different turn) and 2.5% fewer units. The win-turn effect is zero
+  on both samples, so this is a correctness and work result, not a speed result. It stays OFF: a USER decision
+  (`snow-intractable-games.md`).
+- Selesnya v2 and EDF keep their cast-only producer `DEFECT` lines (the mana agent's area).
+- No slower game, so no `--depth 8 --budget-ms 0` repros were needed. Outputs: `build/scratch/snowcp/ab/`,
+  `build/scratch/snowcp/ab2/` (report.txt in each).
