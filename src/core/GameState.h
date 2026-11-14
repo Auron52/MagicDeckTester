@@ -589,9 +589,16 @@ struct GameState
     // drain pays a generic pip from them before any pinned colour (SpendFloatingTowardCost). Only multi-colour masks
     // stay in gen[] / cre[], and a slot packs (mask, count): bits 0-4 the mask, bits 5-7 count-1 (so a slot holds up
     // to 8 units of one mask; the lever off writes one unit per slot, the historical encoding).
+    // THE GENERIC PIP'S SOURCE STAYS RE-ASSIGNABLE (MTG_PREPAY_WILD_DEFER, item W; general pool only): gheld[c] counts
+    // the generic pips paid out of this float, within this phase, by a colour-c unit -- each may give that unit back
+    // to a later colour-c pip and take any other unit of the float instead (the float shows the CURRENT legal
+    // assignment, in literal colours; the pip's choice is not final). gtot = the float's total when the record was
+    // written: a float that has changed since (mana added or spent outside a recorded drain) drops the credits, since
+    // a generic pip may only ever have been paid with a unit that existed when it was paid. 0xFF = no credits.
     struct PrepayWildTrue { static constexpr int kSlots = 8;
                             std::uint8_t gen[kSlots] = {}; std::uint8_t cre[kSlots] = {};
                             std::uint8_t gfund[5] = {}; std::uint8_t cfund[5] = {};
+                            std::uint8_t gheld[5] = {}; std::uint8_t gtot = 0xFF;
                             std::uint8_t stamp = 0xFF; };
     PrepayWildTrue           prepay_wild_true;
     // Graveyard-shuffle trigger BATCHING (FireGraveyardEntryTriggers / GyShuffleBatch, SpellEffects.h):

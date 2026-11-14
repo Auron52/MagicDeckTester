@@ -432,31 +432,30 @@ TEST_CASE("prepay wild-literal: the line-float rung's replay spends the funding,
     CHECK(s.floating_mana.blue == 1);
 }
 
-// ITEM W (MTG_PREPAY_WILD_MERGE): Dragons gi363 T5. Bill {Urza's Incubator, Lathliss} priced {5}{R}{R} at plan start
-// (the second Incubator's discount is not in it), funded by Sol Ring {C}{C} + two Mountains' {R} + Gruul Turf's {G};
-// the pins are {R}{R}. The Incubator's {3} pays {C}{C} + ONE funding unit; Lathliss then costs {R}{R} (pins), and the
-// SECOND Lathliss ({R}{R}) needs the funding unit the {3} did NOT take to be {R}. Committing the {3} to the colour with
-// the most funding left ({R}) refused it; the merge keeps "the {R} or the {G}" open, so {G}-on-the-{3} is found.
-TEST_CASE("prepay wild-merge: a generic pip keeps the funding's colour open (the {G} paid the {3}, the {R} pays Lathliss)")
+// ITEM W (MTG_PREPAY_WILD_DEFER): Dragons gi363 T5. Bill {Urza's Incubator, Lathliss} funded by Sol Ring {C}{C} +
+// two Mountains' {R} + Gruul Turf's {G}, pins {R}{R}; the second Lathliss ({R}{R} after the second Incubator) is paid
+// from what the bill left. The Incubator's {3} took the funding {R}{R}{G}, so the second Lathliss met {C}{C} -- yet
+// {C}{C}{G} on the {3} pays everything legally. The {3}'s generic pips keep a credit per colour unit they took, and
+// each {R} pip of the second Lathliss takes an {R} back while its generic moves onto a {C} (the payer's {C}-first cap).
+TEST_CASE("prepay wild-defer: a generic pip gives its {R} back to a later {R} pip and takes the {C}")
 {
     ManaPool r; r.red = 4; r.green = 1; r.colorless = 2;
     WildTrueRec wt; wt.lim = WildTrueRec::kCap; wt.fund[3] = 2; wt.fund[4] = 1;
     WildTrueScope _s(&wt, /*enforce=*/true);
+    auto pay = [&](ManaCost c) { GenericCFirstScope _gcf(r.colorless); SpendFloatingTowardCost(r, c); return c; };
     ManaCost inc; inc.generic = 3;
-    { GenericCFirstScope _gcf(2); SpendFloatingTowardCost(r, inc); }   // the payer's {C}-first cap (the kept {C})
-    CHECK(inc.generic == 0);
-    ManaCost l1; l1.red = 2;
-    SpendFloatingTowardCost(r, l1);
-    CHECK(l1.red == 0);
-    ManaCost l2; l2.red = 2;
-    SpendFloatingTowardCost(r, l2);
-    CHECK(l2.red == 0);                       // lever off: one {R} refused (the {G} cannot pay it)
+    CHECK(pay(inc).ManaValue() == 0);
+    CHECK(wt.HeldTotal() == 3);               // every colour unit the {3} took is re-assignable
+    ManaCost l; l.red = 2;
+    CHECK(pay(l).ManaValue() == 0);
+    CHECK(pay(l).ManaValue() == 0);           // lever off: both {R} refused (the float is {C}{C})
     CHECK(r.Total() == 0);
+    CHECK(wt.held[4] == 1);                   // the {G} paid the {3}
 }
 
-// The merge never admits an illegal pip: after the {3} took one of {R} / {G}, a later {R}{G} pays (one each), but a
-// {G}{G} does not (there was only one {G} ever).
-TEST_CASE("prepay wild-merge: the merged unit pays one of its colours, never both")
+// The credit never admits an illegal pip: after a generic took the {R} out of {R}{G}{W}, a {G}{G} pays one {G}
+// only (there was only one {G} ever), and {R}{W} pays in full (the generic moves to the {G}).
+TEST_CASE("prepay wild-defer: a credit pays the colour its unit was, never a colour the float never held")
 {
     ManaPool r; r.red = 1; r.green = 1; r.white = 1;
     WildTrueRec wt; wt.lim = WildTrueRec::kCap; wt.fund[3] = 1; wt.fund[4] = 1;
@@ -470,10 +469,40 @@ TEST_CASE("prepay wild-merge: the merged unit pays one of its colours, never bot
         WildTrueScope _s2(&wt2, true);
         ManaCost gg; gg.green = 2;
         SpendFloatingTowardCost(r2, gg);
-        CHECK(gg.green == 1);                 // only ONE {G} ever existed
+        CHECK(gg.green == 1);
     }
     ManaCost rw; rw.red = 1; rw.white = 1;
     SpendFloatingTowardCost(r, rw);
     CHECK(rw.red == 0);
     CHECK(rw.white == 0);
+    CHECK(r.Total() == 0);
+}
+
+// The credits ride the record (GameState::PrepayWildTrue::gheld) through the real payer, and hold only while the
+// float is exactly what the last recorded drain left: mana added since (it did not exist when the generic was paid)
+// drops them.
+TEST_CASE("prepay wild-defer: the payer keeps the credits across casts, and a changed float drops them")
+{
+    GameState s = BaseWt(5);
+    s.deck_spends_c_pip = false;
+    s.floating_mana.red = 4; s.floating_mana.green = 1; s.floating_mana.colorless = 2;
+    s.prepay_wild_true.gfund[3] = 2; s.prepay_wild_true.gfund[4] = 1;
+    s.prepay_wild_true.stamp = PrepayCStampNow(s);
+    ManaCost inc; inc.generic = 3;
+    REQUIRE(TapForCostDirect(s, inc, /*for_creature=*/false));
+    ManaCost l; l.red = 2;
+    REQUIRE(TapForCostDirect(s, l, false));
+    {
+        GameState t = s;
+        REQUIRE(TapForCostDirect(t, l, false));
+        CHECK(t.floating_mana.Total() == 0);
+    }
+    {
+        GameState t = s;
+        t.floating_mana.white += 1;          // mana added outside the recorded drains
+        WildTrueRec out;
+        PrepayWildTrueLoad(t, 0, out);
+        CHECK(out.HeldTotal() == 0);
+        CHECK_FALSE(TapForCostDirect(t, l, false));
+    }
 }

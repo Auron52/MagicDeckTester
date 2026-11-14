@@ -1601,22 +1601,25 @@ inline bool PrepayWildLiteralOn()
     static const bool env = EnvOn("MTG_PREPAY_WILD_LITERAL", true);
     return PrepayWildTrueOn() && heurarm::Flag(heurarm::PREPAY_WILD_LITERAL, env);
 }
-// THE GENERIC PIP DEFERS ITS COLOUR (MTG_PREPAY_WILD_MERGE; item W, overnight 2026-11-14). A generic pip paid out of
-// the prepay's restricted funding used to COMMIT to one unit (the colour with the most funding left, the fewest-colours
-// mask), and a later pip of the colour it took was refused although the same units pay it legally the other way round:
-// Dragons gi363 T5, bill {Urza's Incubator, Lathliss} = {5}{R}{R} funded by Sol Ring {C}{C} + Mountain {R}{R} + Gruul
-// Turf's {G}; the Incubator's {3} took {C}{C}{R}, so the second Lathliss ({R}{R} after the second Incubator) met
-// {R} + {G} and was unpayable -- G on the {3} and both {R} on Lathliss is the legal assignment (the tag version paid it
-// with the {G} as {R}, CR 106.1b). So the pip MERGES two units of different masks into ONE unit of their union mask
-// (restricted `wild`, recorded): the remainder really is one unit or the other, and that unit pays exactly the colours
-// either could, so nothing legal is refused and nothing illegal admitted (exact for any pair; with three or more
-// kinds the merge keeps one pair's choice open and commits the rest, never more permissive). The prepay's PINNED
-// units are never merged (only fund[] units and recorded masks). Rides on MTG_PREPAY_WILD_LITERAL. Default ON;
-// =0 -> the generic consumes one unit, as before.
-inline bool PrepayWildMergeOn()
+// THE GENERIC PIP'S SOURCE STAYS RE-ASSIGNABLE (MTG_PREPAY_WILD_DEFER; item W, overnight 2026-11-14). A generic pip
+// paid out of the recorded float by a colour unit used to SETTLE which unit it took (the colour with the most funding
+// left), and a later pip of that colour was refused although the same units pay both legally the other way round:
+// Dragons gi363 T5, bill {Urza's Incubator, Lathliss} funded by Sol Ring {C}{C} + Mountains {R} + Gruul Turf's {G};
+// the Incubator's {3} took {R}{R}{G} and the second Lathliss ({R}{R}) met {C}{C} -- {C}{C}{G} on the {3} is the legal
+// assignment (the tag version paid it with the {G} as {R}, CR 106.1b). So each such generic pip leaves a CREDIT
+// (WildTrueRec::held[c], GameState::PrepayWildTrue::gheld): a later colour-c pip the float cannot pay takes that unit
+// back, and the generic moves to ANY other unit of the float ({C} first when the payer's {C}-first cap allows it,
+// then a colour unit, funding first). A generic pip accepts any unit, so this finds every legal assignment of the
+// generic pips (a matching over the float, kept incrementally: the credit survives each move); and it admits
+// nothing illegal, because the moved generic only ever takes a unit the float held when the credit was written (a
+// float that changed outside the recorded drains drops the credits: GameState::PrepayWildTrue::gtot). The float
+// always shows the CURRENT legal assignment in literal colours -- never a merged or `wild` unit. A coloured pip's
+// colour on a dual's unit is still committed at spend (USER: any-colour mana is not a per-colour branch); only the
+// generic pip's SOURCE stays open. Rides on MTG_PREPAY_WILD_LITERAL. Default ON; =0 -> the generic's unit is final.
+inline bool PrepayWildDeferOn()
 {
-    static const bool env = EnvOn("MTG_PREPAY_WILD_MERGE", true);
-    return PrepayWildLiteralOn() && heurarm::Flag(heurarm::PREPAY_WILD_MERGE, env);
+    static const bool env = EnvOn("MTG_PREPAY_WILD_DEFER", true);
+    return PrepayWildLiteralOn() && heurarm::Flag(heurarm::PREPAY_WILD_DEFER, env);
 }
 inline int PrepayWildAuditLevel() { static const int v = EnvInt("MTG_PREPAY_WILD_AUDIT", 0); return v; }
 inline bool PrepayWildTrack() { return PrepayWildTrueOn() || PrepayWildAuditLevel() > 0; }
@@ -1689,6 +1692,8 @@ struct WildTrueRec
     int n = 0;
     int lim = 16;            // the tag version's capacity (byte-identity of =0); literal raises it to kCap
     int fund[5] = {};
+    int held[5] = {};        // MTG_PREPAY_WILD_DEFER: generic pips holding a colour-c unit, re-assignable (gheld)
+    int HeldTotal() const { return held[0] + held[1] + held[2] + held[3] + held[4]; }
     int Count(unsigned mask) const { int k = 0; for (int i = 0; i < n; ++i) { k += m[i] == mask; } return k; }
     void Erase(int i) { for (int j = i; j + 1 < n; ++j) { m[j] = m[j + 1]; } --n; }
     void Push(unsigned mask) { if (n < lim && n < kCap) { m[n++] = static_cast<std::uint8_t>(mask & 0x1Fu); } }
@@ -1722,7 +1727,7 @@ inline void PwtPoolColours(const ManaPool& p, int* col)
 inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
 {
     out.n = 0;
-    for (int c = 0; c < 5; ++c) { out.fund[c] = 0; }
+    for (int c = 0; c < 5; ++c) { out.fund[c] = 0; out.held[c] = 0; }
     if (s.prepay_wild_true.stamp != PrepayCStampNow(s) || !PrepayWildTrack()) { return false; }
     const bool literal = PrepayWildLiteralOn();
     if (literal) { out.lim = WildTrueRec::kCap; }
@@ -1735,8 +1740,11 @@ inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
         const std::uint8_t* f = which == 0 ? s.prepay_wild_true.gfund : s.prepay_wild_true.cfund;
         int col[5]; PwtPoolColours(pool, col);
         for (int c = 0; c < 5; ++c) { out.fund[c] = std::min<int>(f[c], std::max(0, col[c])); }
+        // The generic pips' credits hold only while the float is exactly as the last recorded drain left it.
+        if (which == 0 && s.prepay_wild_true.gtot != 0xFF && s.prepay_wild_true.gtot == pool.Total() && PrepayWildDeferOn())
+        { for (int c = 0; c < 5; ++c) { out.held[c] = s.prepay_wild_true.gheld[c]; } }
     }
-    if (out.n == 0 && out.FundTotal() == 0) { return false; }
+    if (out.n == 0 && out.FundTotal() == 0 && out.HeldTotal() == 0) { return false; }
     if (out.n > wild)
     {
         // MTG_PREPAY_WILD_AUDIT=3 (diagnostic, Linux): the first 12 inconsistent loads print their call stack
@@ -1756,7 +1764,7 @@ inline bool PrepayWildTrueLoad(const GameState& s, int which, WildTrueRec& out)
         g_pwt_inconsistent.fetch_add(1, std::memory_order_relaxed);
         out.n = std::max(0, wild);   // canonical order: the tail is the most flexible
     }
-    return out.n > 0 || out.FundTotal() > 0;
+    return out.n > 0 || out.FundTotal() > 0 || out.HeldTotal() > 0;
 }
 inline void PrepayWildTrueStore(GameState& s, int which, WildTrueRec in)
 {
@@ -1786,6 +1794,14 @@ inline void PrepayWildTrueStore(GameState& s, int which, WildTrueRec in)
     int col[5]; PwtPoolColours(which == 0 ? s.floating_mana : s.floating_creature_mana, col);
     for (int c = 0; c < 5; ++c)
     { f[c] = static_cast<std::uint8_t>(std::clamp(std::min(in.fund[c], col[c]), 0, 255)); }
+    if (which == 0)
+    {
+        // MTG_PREPAY_WILD_DEFER: the credits, and the float total they are valid for (0xFF = none).
+        const int tot = s.floating_mana.Total();
+        const bool any = in.HeldTotal() > 0 && tot < 0xFF && PrepayWildDeferOn();
+        for (int c = 0; c < 5; ++c) { s.prepay_wild_true.gheld[c] = any ? static_cast<std::uint8_t>(std::clamp(in.held[c], 0, 255)) : std::uint8_t{0}; }
+        s.prepay_wild_true.gtot = any ? static_cast<std::uint8_t>(tot) : std::uint8_t{0xFF};
+    }
 }
 // Restricted units still live in both pools (0 when stale): the main-phase key folds it (value-gated).
 inline std::uint64_t PrepayWildTrueKey(const GameState& s)
@@ -1800,6 +1816,8 @@ inline std::uint64_t PrepayWildTrueKey(const GameState& s)
     mix(0xC5ull + static_cast<std::uint64_t>(c.n)); for (int i = 0; i < c.n; ++i) { mix(c.m[i]); }
     if (g.FundTotal() + c.FundTotal() > 0)   // literal only (0 with the lever off: the tag version's key)
     { for (int x = 0; x < 5; ++x) { mix(0xF0ull + static_cast<std::uint64_t>(g.fund[x]) * 64u + static_cast<std::uint64_t>(c.fund[x])); } }
+    if (g.HeldTotal() > 0)                   // MTG_PREPAY_WILD_DEFER's credits (0 with the lever off)
+    { for (int x = 0; x < 5; ++x) { mix(0x1D0ull + static_cast<std::uint64_t>(g.held[x])); } }
     return k | 1ull;
 }
 
@@ -44083,11 +44101,69 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         reserve.wild = wild_left;
         for (int u = wt->n - 1; u >= 0; --u) { if (pip_of[u] >= 0) { wt->Erase(u); } }
     }
+    // 2b) MTG_PREPAY_WILD_DEFER (see PrepayWildDeferOn): a colour pip the float could not pay takes back the unit an
+    //     earlier GENERIC pip of this float holds (WildTrueRec::held), and that generic moves to another unit of the
+    //     float -- {C} first (only under the payer's {C}-first cap, and never while a {C} pip holds colourless back),
+    //     then a colour unit (generic funding first, then the colour with the most to spare over this cost's own
+    //     pips), then a restricted `wild` unit, then an any-colour one. The credit follows the generic onto a colour
+    //     unit, so the assignment stays open for the next pip as well.
+    if (wt != nullptr && t_wild_true_enforce && wt->HeldTotal() > 0 && PrepayWildDeferOn()
+        && (cost.white | cost.blue | cost.black | cost.red | cost.green) != 0)
+    {
+        int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };
+        int* colp[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
+        static const bool s_hold_c_own_sw = EnvOn("MTG_HOLD_C_FOR_PIPS", true);
+        const bool hold_c_sw = g_hold_colorless_for_pips || (s_hold_c_own_sw && _own_c) || g_line_unpaid_cost.colorless > 0;
+        for (int x = 0; x < 5; ++x)
+        {
+            while (*pips[x] > 0 && wt->held[x] > 0)
+            {
+                if (!hold_c_sw && t_generic_c_first > 0 && reserve.colorless > 0)
+                { --reserve.colorless; --t_generic_c_first; }
+                else
+                {
+                    int y = -1, y_key = 0;
+                    for (int c = 0; c < 5; ++c)
+                    {
+                        if (c == x || *colp[c] <= 0) { continue; }
+                        const int key = (std::min(wt->fund[c], *colp[c]) > 0 ? 1000 : 0) + (*colp[c] - *pips[c]) + 100;
+                        if (y < 0 || key > y_key) { y = c; y_key = key; }
+                    }
+                    if (y >= 0)
+                    {
+                        --*colp[y];
+                        if (wt->fund[y] > 0) { --wt->fund[y]; }
+                        ++wt->held[y];
+                    }
+                    else if (reserve.wild > 0)
+                    {
+                        // A restricted unit (least flexible first), else an any-colour one.
+                        if (wt->n > 0) { wt->Erase(0); }
+                        --reserve.wild;
+                    }
+                    else { break; }   // nothing for the generic to move to: the pip stays unpaid
+                }
+                --wt->held[x]; --*pips[x];
+            }
+        }
+    }
+    // MTG_PREPAY_WILD_DEFER: every colour unit a GENERIC pip of this cost takes below leaves a credit (the RAII
+    // compares the colours before and after, on every return path).
+    struct HeldRecord
+    {
+        WildTrueRec* w; const ManaPool& r; int pre[5];
+        HeldRecord(WildTrueRec* w_, const ManaPool& r_) : w(w_), r(r_), pre{ r_.white, r_.blue, r_.black, r_.red, r_.green } {}
+        ~HeldRecord()
+        {
+            if (w == nullptr) { return; }
+            const int now[5] = { r.white, r.blue, r.black, r.red, r.green };
+            for (int c = 0; c < 5; ++c) { if (pre[c] > now[c]) { w->held[c] += pre[c] - now[c]; } }
+        }
+    } _held_rec((wt != nullptr && t_wild_true_enforce && PrepayWildDeferOn()) ? wt : nullptr, reserve);
     // A generic pip paid from `wild` spends a restricted unit before an any-colour one (the most flexible mana
     // survives): the fewest-colours unit first, the most numerous of those first. Same unit count either way --
     // only the record differs.
-    const bool merge = wt != nullptr && PrepayWildMergeOn();   // MTG_PREPAY_WILD_MERGE (see PrepayWildMergeOn)
-    auto drain_wild_generic = [&reserve, wt, merge](int& pip)
+    auto drain_wild_generic = [&reserve, wt](int& pip)
     {
         while (pip > 0 && reserve.wild > 0)
         {
@@ -44101,22 +44177,7 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
                     const int c = wt->Count(wt->m[u]);
                     if (c > best_n) { best = u; best_n = c; }
                 }
-                // MERGE: that unit and the least flexible unit of a mask it does not cover become one unit of
-                // their union (the pip paid one of the two; which one stays open). An every-colour union is no
-                // restriction at all, so it is not recorded.
-                int other = -1;
-                if (merge)
-                {
-                    for (int u = 0; u < wt->n; ++u)
-                    { if (u != best && (wt->m[u] & ~wt->m[best] & 0x1Fu) != 0) { other = u; break; } }
-                }
-                if (other >= 0)
-                {
-                    const unsigned um = (wt->m[best] | wt->m[other]) & 0x1Fu;
-                    wt->Erase(std::max(best, other)); wt->Erase(std::min(best, other));
-                    if (um != 0x1Fu) { wt->Push(um); PwtCanon(*wt); }
-                }
-                else { wt->Erase(best); }
+                wt->Erase(best);
             }
             --pip; --reserve.wild;
         }
@@ -44174,36 +44235,6 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
                 if (avail > best_n) { best = x; best_n = avail; }
             }
             if (best < 0) { break; }
-            // MERGE (MTG_PREPAY_WILD_MERGE): with a second funding colour, or a recorded mask that is not
-            // `best`'s colour, the pip takes ONE of the two and the pair becomes one restricted unit of their union.
-            if (merge && wt->n < wt->lim && wt->n < WildTrueRec::kCap)
-            {
-                int second = -1, second_n = 0;
-                for (int x = 0; x < 5; ++x)
-                {
-                    if (x == best) { continue; }
-                    const int avail = std::min(wt->fund[x], *colp[x]);
-                    if (avail > second_n) { second = x; second_n = avail; }
-                }
-                if (second >= 0)
-                {
-                    { static std::atomic<int> k{0}; if (std::getenv("MTG_W_PPDBG") != nullptr && k.fetch_add(1) < 5) { std::fprintf(stderr, "[mergedbg] fund %d+%d real=%d\n", best, second, g_real_resolution ? 1 : 0); } } // TEMP W
-                    --cost.generic; --*colp[best]; --wt->fund[best]; --*colp[second]; --wt->fund[second];
-                    ++reserve.wild; wt->Push((1u << best) | (1u << second)); PwtCanon(*wt);
-                    continue;
-                }
-                int um = -1;
-                for (int u = 0; u < wt->n && u < reserve.wild; ++u)
-                { if ((wt->m[u] & (1u << best)) == 0) { um = u; break; } }
-                if (um >= 0)
-                {
-                    const unsigned nm = (wt->m[um] | (1u << best)) & 0x1Fu;
-                    --cost.generic; --*colp[best]; --wt->fund[best];
-                    wt->Erase(um);
-                    if (nm != 0x1Fu) { wt->Push(nm); PwtCanon(*wt); } else { /* every colour: unrestricted */ }
-                    continue;
-                }
-            }
             --cost.generic; --*colp[best]; --wt->fund[best];
         }
     }
