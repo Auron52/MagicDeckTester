@@ -566,3 +566,26 @@ case passed 73/73 assertions, all six Mihail cases passed 148/148, and the
 final related-card run passed 359/359 across 20 cases. The final source changes
 were rebuilt and rerun after this result was recorded. No full analyzer,
 regression, external-play server, or profile generation was run for this fix.
+
+### 2026-11-14 Prophets combat fan memory fix
+
+The standard d5 card-score pass reached game 68 and the 28 GiB RSS watchdog
+stopped it. A one-game replay (`--seed 3000069 --game-index 68 --depth 5
+--budget-ms 20`) reproduced the failure. At turn 6, a list with one ready
+Prophets, possible fresh Prophets, two Seahunter sources, and many Pilgrimage
+tokens had 217,522 plans after the champion axis. The eager combat sacrifice
+axis then multiplied those plans by both trigger choices and exceeded 29 GiB
+before scoring. The earlier seed-10 d3 case exercised the champion fan; this
+case exposed the later combat fan.
+
+The Prophets pins now use the existing lazy-candidate layout. Champion variants
+are materialized before the combat axis because the latter must also branch
+from them; the much larger combat variants remain synthesized on demand.
+This keeps the same candidate order and mixed-radix pin values as the eager
+list. `MTG_PB_LAZY_CANDS_VERIFY=1` on seed 3000011/game 10 at d3/b20
+compared 5,350,908 list entries with zero mismatches. The exact seed-68
+d5/b20 replay completed in 156 seconds, won on turn 6, and never reached the
+watchdog's 21 GiB warning threshold. The focused Merfolk tests passed 22
+cases/384 assertions. The change is committed and backed up on
+`origin/wip/merfolk-turns` as `25e86c28a`. The standard profile run was
+restarted from this build; its result and the suite cost gate remain pending.
