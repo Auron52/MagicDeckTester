@@ -1,0 +1,43 @@
+{
+  "_comment": [
+    "SNOW SITE-8 CONTINUATION ACTIVATIONS INLINE (MTG_EXEC_SITE8_CONT_INLINE, 2026-11-14; from Snow regression",
+    "d5 s2002 gi101 T8, the max turn). The searched line is [Scrying Sheets(act), Rimefeather Owl(act)x3, Scrying",
+    "Sheets(act)] with bp_choice 0 at the first Sheets look: MTG_REPEAT_EXTRAS_RESERVE caps the Owl at x1 so both looks",
+    "stay payable, the first look finds Abominable Treefolk (playable -> breakpoint site 8), and the searched",
+    "continuation [Owl x2, Sheets] puts the two ice counters back -- the kill. The rollout applies that continuation's",
+    "activations inline; the executor queued them and the queue was cleared unrun when the trailing pass ended, so the",
+    "real game left the opponent at 1 and lost. MTG_EXEC_SITE8_CONT_INLINE=0 -> no win."
+  ],
+  "deck": "decks/Snow/Snow.cod",
+  "profile": "decks/Snow/Snow.profile.json",
+  "turn": 8,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 14,
+  "resume_at": "main1",
+  "lands_played_this_turn": 0,
+  "battlefield": [
+    {"name": "Scrying Sheets", "controller": 0},
+    {"name": "Arcum's Astrolabe", "controller": 0},
+    {"name": "Rimewood Falls", "controller": 0},
+    {"name": "Boreal Druid", "controller": 0, "sick": false},
+    {"name": "Coldsteel Heart", "controller": 0, "color": "U"},
+    {"name": "Boreal Druid", "controller": 0, "sick": false},
+    {"name": "Coldsteel Heart", "controller": 0, "color": "G"},
+    {"name": "Snow-Covered Forest", "controller": 0},
+    {"name": "Snow-Covered Forest", "controller": 0},
+    {"name": "Rimefeather Owl", "controller": 0, "sick": false},
+    {"token": true, "power": 20, "toughness": 20, "controller": 0, "sick": true},
+    {"name": "Mountain", "controller": 1},
+    {"name": "Mountain", "controller": 1},
+    {"name": "Mountain", "controller": 1}
+  ],
+  "hand": ["Skred", "Scrying Sheets", "Frost Augur"],
+  "library_top": ["Abominable Treefolk", "Snow-Covered Island", "Boreal Druid", "Scrying Sheets", "Ice-Fang Coatl", "Boreal Druid"],
+  "library_filler": "Snow-Covered Island",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 8,
+  "expect_win_turn": 8
+}

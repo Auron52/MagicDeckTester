@@ -6300,6 +6300,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const std::string site8_committed_found = std::move(rdb_site8_committed_found);
         rdb_site8_committed_found.clear();
         if (bp_depth >= kMaxDrawBreakpointDepth || ++rdb_calls > kMaxDrawBreakpointCalls) { return; }
+        // Taken on entry, before the continuation's casts (a nested cast-armed site resets the flag): this
+        // breakpoint was raised by a TRAILING-PASS look (site 8), whose continuation activations apply inline.
+        const bool rdb_acts_inline = rdb_site_activated && ExecSite8ContInlineOn();
         // BREAKPOINT LEFTOVERS: taken here, before any nested breakpoint can hand over its own.
         std::vector<Action> my_leftovers;
         my_leftovers.swap(rdb_leftovers);
@@ -6824,7 +6827,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // ...then the continuation's BOARD ACTIVATIONS, after its casts -- lockstep twin of
         // ApplyPlanDirect's apply_continuation_activations (the Sheets look an Ice-Fang Coatl draw
         // offers: Snow s5005 gi147). The trailing pass is a no-op on a cast-only continuation.
-        if (!extra.cont_canon) { exec_continuation_activations(extra.actions); }   // Plan::cont_canon (lockstep)
+        // A site-8 continuation's activations run AT ONCE, inside the trailing pass that raised it -- the
+        // rollout's site-8 branch calls apply_trailing_activations(extra.actions) right there. Queueing them
+        // (exec_continuation_activations while main_trailing_done is false) lost them: the queue is cleared
+        // unrun when that same pass ends. MTG_EXEC_SITE8_CONT_INLINE (EngineFlags.h).
+        if (!extra.cont_canon)   // Plan::cont_canon (lockstep)
+        {
+            if (rdb_acts_inline) { exec_trailing_activations(extra.actions); }
+            else                 { exec_continuation_activations(extra.actions); }
+        }
         // Flood-keep (fallback path): if the draw overfilled the hand and the land drop is
         // still open (deferred before Treasure Hunt), play it now -- TryPlayLand prioritizes a
         // drawn Reliquary Tower when flooding (see its pre-pass), keeping the whole draw as

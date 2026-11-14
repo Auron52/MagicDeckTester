@@ -85,6 +85,22 @@ inline bool RepeatExtrasReserveOn()
     return heurarm::Flag(heurarm::REPEAT_EXTRAS_RESERVE, env);   // per-job override (one pooled A/B batch)
 }
 
+// MTG_EXEC_SITE8_CONT_INLINE (2026-11-14, Snow fix (b) amendment; DEFAULT ON, =0 restores the old executor for the
+// A/B arm). A Scrying Sheets / Frost Augur look (breakpoint site 8) fires INSIDE the trailing pass, and the rollout
+// applies the searched continuation's board activations right there (ApplyPlanDirect's site-8 branch:
+// apply_trailing_activations(extra.actions), before the pass's remaining steps). The executor routed the same
+// activations through exec_continuation_activations, which QUEUES them while main_trailing_done is false -- and the
+// queue is cleared, unrun, when the pass it was raised inside ends. So a committed line whose site-8 continuation
+// re-activates the Owl (Snow regression d5 s2002 gi101 T8: Owl x1, look finds Treefolk, continuation [Owl x2,
+// Sheets] = the kill) realised without the continuation's activations: played != scored. With this on the executor
+// applies them inline at the same point, as the rollout does. Site 9 (after the pass) is unaffected: it already
+// applies at once. Reads no budget; the same at every budget.
+inline bool ExecSite8ContInlineOn()
+{
+    static const bool env = EnvOn("MTG_EXEC_SITE8_CONT_INLINE", true);
+    return heurarm::Flag(heurarm::EXEC_SITE8_CONT_INLINE, env);   // per-job override (one pooled A/B batch)
+}
+
 inline bool DoublerAfterExaltedOn()
 {
     static const bool env = EnvOn("MTG_DOUBLER_AFTER_EXALTED", true);
