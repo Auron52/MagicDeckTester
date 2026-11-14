@@ -64,13 +64,40 @@ run stands and what to do next.
     moved Galadriel 15/20, Unpredictable Cyclone 2/20, Melira Pod 1/20, Prevent Damage 1/20; Boars 5.225 identical.
   * **Stage 3 DONE** (19/19 full; cost 616/616; fields clean). **Stage 4 DONE** `d16666093` (profile; BoarsProvider;
     NO_COST_INTERACTIONS; discard NO_RULE_CONSIDER_SEARCH on only 9 decisions in 400 games).
-  * **4-bis IN FLIGHT** (first attempt died with the 9p mount, 22:31 UTC 11-13; USER restarted WSL). Backstop screen done
-    (build/scratch/boars/bs_*): clean 5-game blocks regression `boars 3/5 30261 5 0`, overnight `boars 3/5 30101 5 0`
-    (spares 30041, 30021). USER Q: d5 unbudgeted tail heavy (~16% of d5 budget-0 games hit the 2e6 abandon cap).
-    Rows (martyr pre-keep-table shape): SMOKE d0 1000 / d3 50 b10 / d5 100 b20 / boars2hg d5 25 b20; REGRESSION d0 1000 /
-    d3 50 b10 / d5 150 b20 on 2002+3003 / boars2hg 75; OVERNIGHT d0 4x2000 / d3 4004 125 b10 / d5 4x300 / boars2hg 4x75.
-    Then cost gate, pooled smoke + regression accept (movers: Anti-Lifegain, Creature Giving, Five Colour [Heath];
-    Galadriel, Cyclone, Melira, PD [legend SBA]), overnight boars-only accept, check_gt_logs.
+  * **4-bis DONE** `bca43941d` (rows in all 3 tiers; cost gate 1.05x Hinata -- but the gate's Boars figure was
+    ~2.4x inflated vs the full regression run (boars2hg 4.4 s/game vs 10.8 measured; Hinata matched) -> re-measure
+    on an idle box; USER Q: gate on units?). Then found + fixed:
+    * Fetch-crack fix `26c08b53e` (casts priced against the pre-crack board; crack-first roots).
+    * USER 2026-11-14: "We shouldn't fetch hold for the decks. Only very specific decks care about the hold." ->
+      `124950596` ConsiderFetchHold default false. Smoke GT accepted on that binary `35a421903`.
+    * USER: "Human play doesn't need to keep the hold, at least by default" + "allow deferring the fetch in the choice
+      dialog" + "okay with it being on all of the time" -> viewer fix `b96880022`+`74d8e579d`: human fetch dialog =
+      every legal target + "(hold: crack later)"; act=<fetch>;cast=... one-shot line accepted; hold-era refs replay
+      via --legacy-human-fetch-hold; 836 refs 0 drift; autonomous byte-identical.
+    * Regression+overnight run on 74d8e579d (NOT accepted): only Boars/CG move, all better in aggregate, but same-draw
+      slower games (overnight s5005 gi153 etc.) traced to the on-play fetch target = top-1 of LIBRARY ORDER (fetched
+      Mountain with Birds in hand). USER: "why do we only try the first candidate by default? That sounds bad. It's a
+      different story if we have an intentional prune." then "We should obviously use the same heuristic that just
+      grabs Stomping Ground." -> `43afd29fd`: on-play battlefield fetch uses the activation's LandSearchPicksMemo
+      (needed-and-lacking colours first), base width ALL; AL/5C/Morph/Cyclone keep explicit top-1 (USER Q: keep?).
+      3029/3029.
+    * Measurement `build/scratch/boars/rank/r3b/cmp_*.txt` (300 g held-out seed 71001, + shuffle-decoupled salts):
+      ORDER (shared heuristic, top-1) better/neutral everywhere (Boars d3 -0.018 t-2.7; CG play -0.012 t-2.3); all 5
+      repros recover; controls identical. WIDTH all vs top-1 mixed: Boars play -0.033, Boars2hg +0.020, CG play +0.027
+      (t3.4), CG2hg d3 +0.042. USER: "Searching every target is something that enables clairvoyance. I'm suspicious of
+      your claims as a result." Answer given: decoupled salts close the post-fetch-shuffle channel; coupled vs
+      decoupled width deltas are similar here. RECOMMENDED (awaiting USER): shared order + explicit TOP-1 fetch width
+      (intentional prune, reason: extra targets mostly buy clairvoyance; costs CG at budget); alternative = budget-staged
+      waves. **Do NOT run the tiers on 43afd29fd until the USER picks.** Then: re-run smoke/regression/overnight-boars,
+      accept, check_gt_logs.
+  * **Hinata perf question (USER surprised by ~10 s/game):** TIMINGS.md says d3 b10 0.59 s/game, d5 b20 1.25 s/game
+    (1 thread, post 9229b25ca); now d3 6.4 / d5 9-11.5 s/game (32-thread full load, d5 b30), 8 tail games = 41% of the
+    d5 s3003 row; Hinata ~145 ms/kunit vs Boars ~50 and the 2e6-units~45s calibration (~23). NEXT (not started):
+    idle-box single-thread timing at HEAD vs 9229b25ca on the TIMINGS shapes, then profile a typical 7-10 s game.
+  * Also open: Boars d5 unbudgeted tail (~16% abandon); d5 b0 backstop rows identical to d3 b0 on 30/46 decks
+    (they do run at depth 5); Raggadragga `target` viewer HARD_MISS (pre-existing); claude-play "hold then crack in
+    the same plan" duplicate lines (USER Q: drop?).
+  * AFTER the fetch decision + tiers: Stage 5 (verify_deck, 5a-5h, claude-play sweep fan-out, discard policy), Stage 6.
   * I5b TODO (original list; ALL DONE): (1) Ilharg death clause `dies_to_library_position` 3 + its searched "may" + dig viewer; (2) exalted
     declared-count fix in both combats + the projection; (3) put creatures firing pre-existing attack triggers --
     ApplyAttackSelfPumps / ApplyBattleCry / ApplyAnnihilator / ApplyAttackExileDefenderTop / ApplyAttackDrawTriggers
