@@ -9694,8 +9694,35 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     // A searched line may need the Lake's four black mana for later casts or an activation even
     // when this individual bill is payable by tapping it for one. Try that line on a copy before
     // committing the sacrifice. The pin remains for a later payment if no Lake is crackable yet.
+    // KEEP THE LINE'S COLOURS (MTG_ONDEMAND_KEEP_COLOUR, default ON; item D round 3, mana-clean). Step 1's
+    // dominance ("an uncracked, untapped Lake leaves the board a superset") holds for QUANTITY, not for COLOUR:
+    // holding the Lake forces the bill onto another source, and when that source is the line's only maker of a
+    // colour the rest of the line owes, the payment strands the pip for good. Shadowborn s30055067 T8 {Sire +
+    // Dark Ritual} on Lake + Blood Crypt: Ritual's {B} tapped the Crypt (the Lake held for a crack whose only
+    // victim IS the Crypt), and Sire's {R} had no source left; the Lake's plain {B} pays the Ritual and keeps
+    // the Crypt. The test is a NECESSARY condition read off AvailableManaPool (a coloured pip of the rest needs
+    // that colour's units + wild units on the board; cracks and the float are counted), so it fires only where
+    // the held payment provably cannot finish the rest of the line from the board. Then the plain tap / crack
+    // ladder below runs under the same no-strand test, and the held payment is the fallback when nothing else
+    // keeps the colour -- so this only ever REPLACES a payment that strands a pip by one that pays this bill
+    // and does not. Mana-payment exemption (which source pays); lockstep (executor, rollout and the human's
+    // automatic payment all pay here). Only an on-demand land deck reaches it (the `lands.empty()` exit above).
+    static const bool s_keep_colour = EnvOn("MTG_ONDEMAND_KEEP_COLOUR", true);
+    const bool keep_colour = heurarm::Flag(heurarm::ONDEMAND_KEEP_COLOUR, s_keep_colour) && !lands.empty();
+    int keep_pips[5] = { 0, 0, 0, 0, 0 };
+    bool held_strands = false;
+    std::unique_ptr<GameState> held_board;
+    // A pip colour `b` leaves short: c's units + wild units < the rest's c pips.
+    auto strands = [&](const GameState& b) -> bool
+    {
+        const ManaPool pool = AvailableManaPool(b);
+        const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+        for (int c = 0; c < 5; ++c) { if (keep_pips[c] > 0 && have[c] + pool.wild < keep_pips[c]) { return true; } }
+        return false;
+    };
     if (state.scripted_early_ondemand_crack)
     {
+        const bool keep_early = keep_colour && LineRestAfter(cost_in, keep_pips) > 0;
         for (const OnDemandCrack& k : lands)
         {
             if (k.color.empty()) { continue; }
@@ -9703,12 +9730,55 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             ManaPool trial_avail;
             if (!OnDemandTrial(state, {k}, true, cost_in, for_creature, available, trial_avail,
                                honor_legacy_cco, *scratch)) { continue; }
-            if (OnDemandPayWith(state, {k}, true, cost_in, for_creature, available, honor_legacy_cco))
+            // The searched early crack's victim tap-first colour (SacVictimFloatPin), under the keep-colour rule
+            // below: when the shared commit's colour strands a pip the rest of the line owes (Blood Crypt tapped for
+            // {B} before it is eaten, Sire's {R} gone), the first pin -- the cost's pips first, then WUBRG -- that
+            // pays and keeps the line's colours is made instead.
+            OnDemandCrack kk = k;
+            if (keep_early && strands(*scratch))
+            {
+                const int pip[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+                int corder[5] = { 0, 1, 2, 3, 4 };
+                std::stable_sort(corder, corder + 5, [&](int x, int y) { return pip[x] > pip[y]; });
+                for (int c : corder)
+                {
+                    OnDemandCrack pin = k;
+                    pin.victim_color = c;
+                    if (OnDemandTrial(state, {pin}, true, cost_in, for_creature, available, trial_avail,
+                                      honor_legacy_cco, *scratch) && !strands(*scratch))
+                    { kk = pin; break; }
+                }
+            }
+            if (OnDemandPayWith(state, {kk}, true, cost_in, for_creature, available, honor_legacy_cco))
             { state.scripted_early_ondemand_crack = false; return true; }
             return false;
         }
     }
+    if (keep_colour && LineRestAfter(cost_in, keep_pips) > 0)
+    {
+        // Cheap pre-filter: a payment spends at most the bill's mana value of supply (its leftover floats), so a
+        // colour whose units + wild exceed the rest's pips by that much cannot be stranded, and a colour already
+        // short before paying is not this payment's doing.
+        const ManaPool pool = AvailableManaPool(state);
+        const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+        bool at_risk = false;
+        for (int c = 0; c < 5; ++c)
+        {
+            if (keep_pips[c] <= 0) { continue; }
+            const int sup = have[c] + pool.wild;
+            if (sup < keep_pips[c]) { at_risk = false; break; }
+            if (sup - cost_in.ManaValue() < keep_pips[c]) { at_risk = true; }
+        }
+        if (at_risk)
+        {
+            held_board = std::make_unique<GameState>();
+            ManaPool held_avail;
+            held_strands = OnDemandTrial(state, {}, true, cost_in, for_creature, available, held_avail,
+                                         honor_legacy_cco, *held_board) && strands(*held_board);
+        }
+    }
     // 1. Ordinary payment, the crackable lands held. (A failed payment leaves the board as it found it.)
+    if (!held_strands)
     {
         std::uint64_t land_hold = 0;
         for (const OnDemandCrack& k : lands) { land_hold |= SelfTapSourceHoldBit(state, k.num); }
@@ -9737,7 +9807,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     bool plain_ok = false;
     if (!lands.empty())
     {
-        plain_ok = trial({}, false);
+        plain_ok = trial({}, false) && !(held_strands && strands(*scratch));
         if (plain_ok)
         {
             int rest_pips[5];
@@ -9745,12 +9815,15 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             if (rest <= 0 || AvailableManaPool(*scratch).Total() >= rest) { return commit({}, false); }
         }
     }
+    // Under a stranding held payment (above), a recipe counts only when it keeps the line's colours too.
+    auto trial_keeps = [&](const std::vector<OnDemandCrack>& recipe, bool hold_lands) -> bool
+    { return trial(recipe, hold_lands) && !(held_strands && strands(*scratch)); };
     // 3. Crack, one source at a time.
     std::vector<OnDemandCrack> recipe;
     for (const OnDemandCrack& k : lands)
     {
         recipe.push_back(k);
-        if (trial(recipe, true)) { return commit(recipe, true); }
+        if (trial_keeps(recipe, true)) { return commit(recipe, true); }
         // The victim's tap-first colour (SacVictimFloatPin): the cost's coloured pips first, then WUBRG. A
         // colour the victim cannot make is refused by ApplyOnDemandCrack, so only real alternatives pay.
         if (!k.color.empty())
@@ -9761,7 +9834,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             for (int c : corder)
             {
                 recipe.back().victim_color = c;
-                if (trial(recipe, true)) { return commit(recipe, true); }
+                if (trial_keeps(recipe, true)) { return commit(recipe, true); }
             }
             recipe.back().victim_color = -1;
         }
@@ -9782,7 +9855,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             OnDemandCrack k = k0;
             k.color = kCol[order[c]];
             recipe.push_back(k);
-            if (trial(recipe, true)) { return commit(recipe, true); }
+            if (trial_keeps(recipe, true)) { return commit(recipe, true); }
             recipe.pop_back();
         }
         // No colour of this lump completes the payment alone: crack it in its first colour and add the next.
@@ -9792,6 +9865,12 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     }
     // Nothing paid with a crack: a plain land tap that strands the rest of the line still pays THIS cost.
     if (plain_ok) { return commit({}, false); }
+    // Nothing keeps the line's colours: the held ordinary payment (step 1, skipped above) still pays THIS cost.
+    if (held_strands)
+    {
+        const dmgev::PayHoldScope h(dmgev::t_pay_hold | OnDemandLandHold(state));
+        return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco);
+    }
     return false;
 }
 
