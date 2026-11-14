@@ -2565,6 +2565,11 @@ public:
     // above, so both worlds filter against the same set. Keys are BpActivationKey values, private
     // to TurnSolver.cpp: callers only carry the vector.
     static std::vector<std::uint64_t> PrePlanAvailabilityKeys(const GameState& state);
+    // MTG_BP_NEW_ONLY_GY_TARGETS: the same set also carries the pre-plan graveyard's lands while a
+    // graveyard-land-targeting card (Life from the Loam) is in hand. Test hook for the per-cast verdict:
+    // is `a` (a cast of the old hand card `c`) new because a chosen target arrived in the graveyard?
+    static bool BpGyTargetOptionNewForTest(const std::vector<std::uint64_t>& acts, const GameState& state,
+                                           const Card& c, const Action& a);
 
     // BREAKPOINT SITE 6 -- the equipment-ETB draw (Puresteel Paladin). True when resolving `def`
     // puts an Equipment onto the battlefield while the active player controls a

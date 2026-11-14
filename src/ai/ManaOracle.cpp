@@ -366,6 +366,7 @@ std::atomic<long long> g_cost_main{0}, g_cost_sibpay{0}, g_cost_orders{0};
 // (hidden); the menu reaches its board with every land Aura's host aside and at least its resources (host_blind).
 // (cont_land): a land drop the plan did not make paid for it.
 std::atomic<long long> g_eg_noop{0}, g_eg_hidden{0}, g_eg_host_blind{0}, g_eg_cont_land{0};
+std::atomic<long long> g_eg_demoted{0};   // ...a menu plan's demoted-wave continuation reaches it (DemotedCores)
 // The equip route's macros audited link by link (AuditRoute), and the links audited.
 std::atomic<long long> g_route_macros{0}, g_route_links{0}, g_route_us{0};   // ...and the audit's wall (us)
 // ROLLBACK CENSUS (USER 2026-10-27: "how many lines are fully inaccessible and which are accessible only
@@ -415,8 +416,9 @@ struct Reporter
             by += std::string(" ") + kClsName[c] + "=" + std::to_string(g_cls[c].load());
         }
         std::fprintf(stderr, "=== MANA ORACLE classes:%s ===\n", by.empty() ? " (none)" : by.c_str());
-        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld ===\n",
-                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load());
+        std::fprintf(stderr, "=== MANA ORACLE enum-gap rejections: noop=%lld hidden=%lld host_blind=%lld cont_land=%lld demoted=%lld ===\n",
+                     g_eg_noop.load(), g_eg_hidden.load(), g_eg_host_blind.load(), g_eg_cont_land.load(),
+                     g_eg_demoted.load());
         if (CostTrace())
         {
             std::fprintf(stderr, "=== MANA ORACLE audit applies by stage: own=%lld sibling-payments=%lld other-orders=%lld ===\n",
@@ -4585,7 +4587,68 @@ struct MenuView
     // built on first use.
     mutable bool                                                        hb_built = false;
     mutable std::multimap<std::uint64_t, std::pair<Res, std::size_t>>   hb_cores;
+    // The DEMOTED-WAVE boards (MTG_BP_NEW_ONLY_GY_TARGETS): the root's walker hands every menu plan's first
+    // breakpoint's demoted continuations out last (kBpDemotedChoice + j), so a board one of them reaches is on
+    // the search's menu even though no canon apply reaches it. Built on first use (DemotedCores), and only
+    // where a demoted wave can exist (DemotedWavePossible). Unset (`plans` null) = not consulted.
+    const GameState*                       root  = nullptr;
+    bool                                   pre   = false;
+    const std::vector<TurnSolver::Plan>*   plans = nullptr;
+    mutable bool                                dem_built = false;
+    mutable std::multimap<std::uint64_t, Res>   dem_cores;
 };
+
+// Can the root's walker hand out a demoted wave at all? Mirrors TurnSolver's BpGyOptDemotedLive (a
+// graveyard-land-targeting card in hand at the root; the general MTG_BP_NEW_ONLY_DEMOTE stays a USER decision
+// and is not mirrored here) -- every other decision skips the extra applies.
+bool DemotedWavePossible(const GameState& root)
+{
+    if (!EnvOn("MTG_BP_NEW_ONLY_GY_TARGETS", true)) { return false; }
+    for (const Card& c : root.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.return_up_to_gy_lands > 0) { return true; }
+    }
+    return false;
+}
+// Each menu plan (no bp_choice of its own) applied with its first breakpoint's demoted entry j = 0, 1, ... until
+// the entry overruns the list -- which the apply realises as EMPTY, so the first board equal to the EMPTY arm's
+// ends the walk (a demoted entry always acts, so it cannot reach the EMPTY board itself).
+const std::multimap<std::uint64_t, Res>& DemotedCores(const MenuView& mv)
+{
+    if (mv.dem_built) { return mv.dem_cores; }
+    mv.dem_built = true;
+    if (mv.plans == nullptr || mv.root == nullptr || !DemotedWavePossible(*mv.root)) { return mv.dem_cores; }
+    // The walker opens a demoted slot at every breakpoint index of the base plan's apply (a nested one included:
+    // a dredge replacement can open the first), so the first few indices are walked; an index the apply never
+    // reaches realises the canon line for every j and ends at j = 0.
+    constexpr int kMaxDemoted = 64, kMaxAt = 4;
+    for (const TurnSolver::Plan& p : *mv.plans)
+    {
+        if (p.bp_choice >= 0) { continue; }
+        for (int at = 0; at < kMaxAt; ++at)
+        {
+            TurnSolver::Plan e = p;
+            e.bp_choice = TurnSolver::kBpEmptyChoice;
+            e.bp_at     = at;
+            const std::uint64_t empty_key = CoreKey(EngineApply(*mv.root, mv.pre, e).st);
+            int found = 0;
+            for (int j = 0; j < kMaxDemoted; ++j)
+            {
+                TurnSolver::Plan q = p;
+                q.bp_choice = TurnSolver::kBpDemotedChoice + j;
+                q.bp_at     = at;
+                const EngineReal r = EngineApply(*mv.root, mv.pre, q);
+                const std::uint64_t k = CoreKey(r.st);
+                if (k == empty_key) { break; }
+                ++found;
+                if (r.Full()) { mv.dem_cores.emplace(k, Resources(r.st, /*with_float=*/false)); }
+            }
+            if (found == 0 && at > 0) { break; }   // no demoted wave here: deeper indices are not walked
+        }
+    }
+    return mv.dem_cores;
+}
 
 // Level-3 trace of the ENUM-GAP pass's rejections (which rule set a paying realisation aside, and why).
 void EgTrace(const GameState& root, bool pre, const TurnSolver::Plan& t, const std::string& what)
@@ -4660,6 +4723,19 @@ GapVerdict JudgeHit(const GameState& state, bool pre, const TurnSolver::Plan& t,
             EgTrace(state, pre, t, "host-blind: paying it with " + ScriptText(o.script) + " ends " + BoardText(o.st)
                                    + "; menu entry #" + std::to_string(it->second.second) + " ends "
                                    + BoardText(*mv.boards[it->second.second]));
+            return v;
+        }
+    }
+    // ...or through a menu plan's DEMOTED-WAVE continuation, which the root's walker hands out (MTG_BP_NEW_ONLY_GY_TARGETS).
+    {
+        const auto& dc = DemotedCores(mv);
+        const auto dr = dc.equal_range(CoreKey(o.st));
+        for (auto it = dr.first; it != dr.second; ++it)
+        {
+            if (!Covers(it->second, hr, nullptr)) { continue; }
+            g_eg_demoted.fetch_add(1, std::memory_order_relaxed);
+            EgTrace(state, pre, t, "demoted: paying it with " + ScriptText(o.script)
+                                   + " reaches a board a menu plan's demoted-wave continuation reaches");
             return v;
         }
     }
@@ -5123,7 +5199,8 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // puts the Hulk and the Craterhoof it would otherwise have cast) is no missing option -- if it is
     // reached with at least the resources (life, energy, haste, sources left untapped): the same board
     // with less is still an option the menu does not have.
-    const MenuView mv = MakeMenuView(keys, real, observed);
+    MenuView mv = MakeMenuView(keys, real, observed);
+    mv.root = &state; mv.pre = is_pre_combat; mv.plans = &plans;
     std::set<std::string> done;
     int checked = 0;
     for (const TurnSolver::Plan& p : observed)

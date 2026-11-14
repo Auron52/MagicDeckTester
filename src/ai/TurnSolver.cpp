@@ -1173,6 +1173,7 @@ static std::atomic<long long> g_bp_newonly_seen{0};
 static std::atomic<long long> g_bp_newonly_dropped{0};
 static std::atomic<long long> g_bp_newonly_kept_new{0};
 static std::atomic<long long> g_bp_newonly_kept_plan{0};
+static std::atomic<long long> g_bp_newonly_kept_opt{0};      // kept by a new graveyard-target option (GY_TARGETS)
 static std::atomic<long long> g_bp_newonly_kept_act{0};      // kept by a newly AVAILABLE activation
 static std::atomic<long long> g_bp_newonly_kept_unknown{0};  // kept because the kind is not keyed
 // WAVE 0's STILLBORN TEST firing counters (see ArmNewDupAll, far below). `measured` = base-plan
@@ -2440,7 +2441,8 @@ namespace
                           << " kept_new=" << g_bp_newonly_kept_new.load()
                           << " kept_act=" << g_bp_newonly_kept_act.load()
                           << " kept_unknown=" << g_bp_newonly_kept_unknown.load()
-                          << " kept_plan=" << g_bp_newonly_kept_plan.load() << "\n";
+                          << " kept_plan=" << g_bp_newonly_kept_plan.load()
+                          << " kept_gyopt=" << g_bp_newonly_kept_opt.load() << "\n";
             }
             // Stillborn-test firing counters (see ArmNewDupAll). `declined` == 0 with measured > 0 is
             // the inert-arm signature: the rule looked at breakpoints and never skipped anything.
@@ -6396,6 +6398,65 @@ bool TurnSolver::NewOnlyBreakpointContinuationsActive(const GameState& state)
     return BpNewOnlyActive(state);
 }
 
+// MTG_BP_NEW_ONLY_GY_TARGETS -- AN OLD CARD WITH A NEW OPTION IS A NEW CARD (item E, USER decision 12,
+// 2026-11-13: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
+// breakpoint. Same thing for the land drops that you pull from life."*). DEFAULT ON; =0 is the A/B hatch.
+//
+// THE GAP. Gods' {Faithless Looting / Careful Study, THEN the land, THEN Life from the Loam on the lands the
+// draw discarded or dredge milled}: the base plan {no land + Looting} reaches the draw breakpoint, and its
+// continuation {land=Forest + Loam} holds two OLD cards (both in hand before the site), so the rule above
+// dropped it as "a sibling's line". It is not one: the sibling {land=Forest + Looting + Loam} plays the land
+// BEFORE the draw (the Gods dredge rule reads lands in play / in hand, so its dredge answer and therefore its
+// graveyard differ), and {no land + Looting + Loam} cannot pay. Every gods ENUM-GAP of the 2026-11-13 gate
+// (106 flags on 25000-29999) is this line; MTG_BP_NEW_ONLY=0 clears the repros (s30025175, s30027132).
+//
+// THE RULE, mechanism-level. "Uses a card that arrived" extends to "uses a card whose OPTIONS arrived": a cast
+// of an old card whose effect TARGETS land cards in our graveyard (`return_up_to_gy_lands`: "return up to N
+// target land cards from your graveyard to your hand") is new when our graveyard holds a land card that was
+// NOT there when the plan started -- its legal target set changed. The card is new, so every target choice of
+// it is (the zero-target cast included: s30025175's gap line is Loam for NO targets after the dredge, a
+// graveyard-size line). "Previously" is the pre-plan state, the reference the activation half already uses
+// (PrePlanAvailabilityKeys, captured at the same two points in both worlds, so the executor's replay of the
+// list reads the identical verdict). A Loam whose target set is unchanged is the sibling's line as before and
+// stays dropped.
+//
+// The returned lands themselves need nothing here: Loam's resolution adds them to the hand, which arms the
+// general put-in-hand breakpoint (site 10, MTG_BP_PUT_IN_HAND), and there they are cards that arrived, so a
+// land drop of one is a new-card continuation already (by name, as for any draw).
+//
+// LOSSLESS AND NO-GREEDY BY CONSTRUCTION: it only ADMITS continuations the rule would have deleted; the search
+// branches over them like any other. Inert on a board with no return_up_to_gy_lands card in hand at the
+// plan's start (no keys are captured), so every other deck is byte-identical.
+static bool BpNewOnlyGyTargetsOn()
+{
+    static const bool on = EnvOn("MTG_BP_NEW_ONLY_GY_TARGETS", true);   // DEFAULT ON; =0 drops as before
+    return heurarm::Flag(heurarm::BP_NEW_ONLY_GY_TARGETS, on);
+}
+// The pre-plan graveyard rides PrePlanAvailabilityKeys' sorted key set under a reserved ability tag, so it
+// needs no new binding: one key per land card in our graveyard, plus a number-0 sentinel saying the set was
+// captured at all (an empty graveyard is then "every target is new", not "nothing captured").
+static constexpr int kBpGyLandTag = 0xFE;
+// WHY THE DEMOTED WAVE, not the list (measured 2026-11-14, gods held-out 5000/arm at 7480001+). Admitted INTO the
+// list, the entries changed what the filtered list feeds: a breakpoint whose list the rule emptied (EMPTY = the
+// base plan's own line) now had a front, and MTG_BP_BASE_CANON's cands.front() is the base plan's line at every
+// host that does not walk the slot -- so "Looting, then nothing" became "Looting, then Loam" in the line search's
+// later turns, and gi2082 lost its T5 win AT --depth 8 --budget-ms 0 (net +3 over the block). The entries are
+// therefore DEMOTED (the MTG_BP_NEW_ONLY_DEMOTE machinery, which hands them out after a slot's ranks and its EMPTY,
+// the budget-staged admission the doctrine asks for): the list, its canon, wave 0, ArmNew and NSKIP see exactly
+// what they saw before, and the walker reaches the new-option lines last at every searched host -- all of them at
+// an unlimited budget. The walker reads the demoted wave only where one can exist (a graveyard-land-targeting card
+// in hand at the host's root), so every other deck, and every Gods board without one, is byte-identical.
+static bool BpGyOptDemotedLive(const GameState& state)
+{
+    if (!BpNewOnlyGyTargetsOn()) { return false; }
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d != nullptr && d->params.return_up_to_gy_lands > 0) { return true; }
+    }
+    return false;
+}
+
 // MTG_BP_NEW_ONLY_DEMOTE -- the rule above, made a budget ORDER instead of a deletion (2026-10-14).
 //
 // WHERE THE SIBLING ARGUMENT FAILS. "A continuation of P that casts only old cards is that sibling's
@@ -6464,6 +6525,38 @@ static std::uint64_t BpActivationKey(int number, int ability)
 {
     return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(number)) << 8)
          | static_cast<std::uint64_t>(ability & 0xFF);
+}
+
+// MTG_BP_NEW_ONLY_GY_TARGETS's verdict for ONE continuation cast (see BpNewOnlyGyTargetsOn): is `a`, a cast of
+// the OLD hand card `c`, a graveyard-land-targeting cast whose OPTION SET changed since the plan started -- does
+// our graveyard now hold a land card it did not hold then? `acts` is the bound pre-plan set
+// (PrePlanAvailabilityKeys), which carries that graveyard under kBpGyLandTag; without its sentinel nothing was
+// captured (no such card in hand then, or the lever off) and the answer is no. The CARD is new, not one target
+// subset of it: every target choice of a card whose options changed is a continuation of the new option set,
+// the zero-target cast included (Gods s30025175 T3: Looting dredges two lands into the graveyard, then the land,
+// then Loam for NO targets -- graveyard size feeds Cephalid Coliseum, and the land-first sibling dredges
+// differently, so no base plan reaches that board).
+static bool BpGyTargetOptionNew(const std::vector<std::uint64_t>* acts, const Player& ap, const Card& c,
+                                const Action& a)
+{
+    if (acts == nullptr || !BpNewOnlyGyTargetsOn()) { return false; }
+    auto was_there = [&](int number)
+    { return std::binary_search(acts->begin(), acts->end(), BpActivationKey(number, kBpGyLandTag)); };
+    if (!was_there(0)) { return false; }   // the sentinel: nothing captured
+    const CardDefinition* d = a.def != nullptr ? a.def : CardDatabase::Instance().LookupCached(c);
+    if (d == nullptr || d->params.return_up_to_gy_lands <= 0) { return false; }
+    for (const Card& g : ap.graveyard)
+    {
+        const CardDefinition* gd = CardDatabase::Instance().LookupCached(g);
+        if (g.m_number > 0 && (gd != nullptr ? gd->card.IsLand() : g.IsLand()) && !was_there(g.m_number))
+        { return true; }
+    }
+    return false;
+}
+bool TurnSolver::BpGyTargetOptionNewForTest(const std::vector<std::uint64_t>& acts, const GameState& state,
+                                            const Card& c, const Action& a)
+{
+    return BpGyTargetOptionNew(&acts, state.ActivePlayer(), c, a);
 }
 
 // The enumerator's availability test for the "{cost}[, {T}]: <effect>" modes, mirrored from the
@@ -31974,6 +32067,31 @@ std::vector<std::uint64_t> TurnSolver::PrePlanAvailabilityKeys(const GameState& 
         {
             const int mode = std::countr_zero(rest);
             out.push_back(BpActivationKey(p.card.m_number, mode));
+        }
+    }
+    // MTG_BP_NEW_ONLY_GY_TARGETS: the pre-plan graveyard's land cards, only when a graveyard-land-targeting
+    // card is in hand (the only cast whose option set the keys describe; a copy that arrives mid-plan is new
+    // by number already). See BpNewOnlyGyTargetsOn.
+    static_assert(static_cast<int>(PermAbilityMode::TurnFaceUpLate) < kBpGyLandTag,
+                  "PermAbilityMode reached the reserved graveyard tag -- move kBpGyLandTag");
+    if (BpNewOnlyGyTargetsOn())
+    {
+        const Player& ap = state.ActivePlayer();
+        bool targeter = false;
+        for (const Card& c : ap.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->params.return_up_to_gy_lands > 0) { targeter = true; break; }
+        }
+        if (targeter)
+        {
+            out.push_back(BpActivationKey(0, kBpGyLandTag));   // captured
+            for (const Card& c : ap.graveyard)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (c.m_number > 0 && (d != nullptr ? d->card.IsLand() : c.IsLand()))
+                { out.push_back(BpActivationKey(c.m_number, kBpGyLandTag)); }
+            }
         }
     }
     std::sort(out.begin(), out.end());
@@ -87801,7 +87919,7 @@ public:
         // levers below have an option to add; elsewhere they would only re-score the base plan.
         const bool searched_apply = g_rollout_nest == 0 && g_bp_enum_depth == 0;
         m_empty  = searched_apply && BpWaveEmptyOn();
-        m_demote = searched_apply && BpNewOnlyDemoteOn();
+        m_demote = searched_apply && (BpNewOnlyDemoteOn() || BpGyOptDemotedLive(state));
         // MTG_BP_DEV_SEQ: compound slots (deviation sequences). Searched applies only, for the reason
         // the two levers above are: inside a playout an untargeted occurrence is EMPTY, not the canon
         // the sequences are relative to. Rides on nested discovery, whose generalisation it is.
@@ -88414,7 +88532,7 @@ static void NodeRecordChild0(std::vector<NodeNested>& out, std::size_t idx, int 
 {
     if (g_rollout_nest != 0 || g_bp_enum_depth != 0) { return; }
     const bool nested  = BpNodeNestedSlotsOn() && g_bp_seen_last > pend_at + 1;
-    const bool demoted = BpNewOnlyDemoteOn() && g_bp_demoted_last > 0;
+    const bool demoted = (BpNewOnlyDemoteOn() || BpNewOnlyGyTargetsOn()) && g_bp_demoted_last > 0;
     if (nested || demoted)
     {
         out.push_back(NodeNested{ idx, pend_at, nested ? g_bp_seen_last : pend_at + 1,
@@ -121175,8 +121293,15 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         // cards, which the user ruled the wrong layer -- *"the right fix might be to credit it
         // correctly instead"*. A drawn mana source is a new card and keeps its line on the uses_new
         // ground above.
-        long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, dropped = 0;
+        long long kept_new = 0, kept_act = 0, kept_unknown = 0, kept_plan = 0, kept_opt = 0, dropped = 0;
         const char* last_why = "";   // the trace's verdict reason (set by keep)
+        bool last_gyopt = false;     // keep() said: an old card with a new option -> the demoted wave
+        // AN OLD CARD WITH A NEW OPTION (MTG_BP_NEW_ONLY_GY_TARGETS; see BpNewOnlyGyTargetsOn): a cast of a
+        // graveyard-land-targeting card is new when a chosen target was not in our graveyard at the plan's
+        // start. The pre-plan graveyard rides the activation set (kBpGyLandTag); no sentinel = nothing was
+        // captured (no such card in hand then, or the lever off), and the card stands as an old card.
+        auto gy_option_new = [&](const Card& c, const Action& a) -> bool
+        { return BpGyTargetOptionNew(g_bp_acts_before, ap, c, a); };
         // THE HAND A PLAN'S hand_index INDEXES. A land-carrying plan was enumerated on a COPY of the
         // state with its land already played (EnumeratePlansWithLandUncached: PlayLandByName(copy)
         // then EnumeratePlans(copy)), so its hand_index counts the POST-drop hand. Reading it against
@@ -121216,7 +121341,8 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         };
         auto keep = [&](const TurnSolver::Plan& p) -> bool
         {
-            bool uses_new = false, new_act = false, unknown = false, plan_pending = false;
+            last_gyopt = false;
+            bool uses_new = false, new_act = false, unknown = false, plan_pending = false, new_opt = false;
             if (p.land_decided && !p.land_to_play.empty() && name_is_new(p.land_to_play))
             { uses_new = true; }
             // A LIBRARY-TOP land (Courser of Kruphix) is never in the hand snapshot, so the by-hand
@@ -121236,6 +121362,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                     {
                         if (is_new_number(c->m_number))       { uses_new = true; }
                         else if (BpPlanCasts(c->m_name_hash)) { plan_pending = true; }
+                        else if (gy_option_new(*c, a))        { new_opt = true; }
                         // NO "was it castable at the base" clause here, by the USER's ruling
                         // (2026-09-22): an old card that only the plan's own Astrolabe makes
                         // castable is the ENUMERATOR's business (PendingFilterInHand arms the
@@ -121297,7 +121424,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             // copies uses an arrived card. Evaluated only when the plan would otherwise be
             // dropped (every other keep is cheaper). (That seed's own 5 -> 6 is a separate
             // main-1 tie-break artifact, not this drop -- see bp-new-only-continuations.md.)
-            if (!uses_new && !new_act && !unknown && !plan_pending)
+            if (!uses_new && !new_act && !unknown && !plan_pending && !new_opt)
             {
                 for (const Action& a : p.actions)
                 {
@@ -121315,6 +121442,9 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             if (new_act)      { ++kept_act;     last_why = "act";     return true; }
             if (unknown)      { ++kept_unknown; last_why = "unknown"; return true; }
             if (plan_pending) { ++kept_plan;    last_why = "plan";    return true; }
+            // An old card with a NEW OPTION goes to the DEMOTED wave, never into the list (see
+            // BpNewOnlyGyTargetsOn, "WHY THE DEMOTED WAVE"): returned false with last_gyopt set.
+            if (new_opt)      { ++kept_opt;     last_why = "gyopt";   last_gyopt = true; return false; }
             ++dropped;
             last_why = "";
             return false;
@@ -121342,6 +121472,9 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         // MTG_BP_NEW_ONLY_DEMOTE: a dropped entry is kept for the walker's last wave instead of
         // deleted (see BpNewOnlyDemoteOn). Read per job (the memo key folds the whole heurarm arm).
         const bool demote = demoted_out != nullptr && !s_newonly_dry && BpNewOnlyDemoteOn();
+        // MTG_BP_NEW_ONLY_GY_TARGETS's entries ride the same demoted wave whether or not the general demote
+        // is on (with it off they are the wave's only members; a nullptr sink -- the verifier -- drops them).
+        const bool gy_demote = demoted_out != nullptr && !s_newonly_dry;
         // M1: on a lazy list the verdict is read off each position's entry -- a synthesised one's from its
         // fan's prototype, which carries every field keep() reads (the actions and the land fields; a clone
         // differs only in the one field its fan varies) -- and the survivors are the positions kept.
@@ -121353,16 +121486,17 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             for (const std::uint32_t fi : sel)
             {
                 const bool k = keep(lazy_key(fi));
+                const bool dem = !k && (demote || (last_gyopt && gy_demote));
                 if (trace_here)
                 {
                     const TurnSolver::Plan& p = lazy_at(fi, syn);
-                    std::cerr << "   " << (k ? "KEEP " : (demote ? "DEMOTE " : "DROP ")) << PlanDesc(p)
+                    std::cerr << "   " << (k ? "KEEP " : (dem ? (last_gyopt ? "GYDEMOTE " : "DEMOTE ") : "DROP ")) << PlanDesc(p)
                               << (p.land_decided && !p.land_to_play.empty() ? ("  land[" + p.land_to_play + "]") : "")
                               << (k ? std::string("  <") + last_why + ">" : std::string{})
                               << "\n";
                 }
                 if (k || s_newonly_dry) { kept_sel.push_back(fi); }
-                else if (demote)        { const TurnSolver::Plan& p = lazy_at(fi, syn); demoted_out->push_back(p); }
+                else if (dem)           { const TurnSolver::Plan& p = lazy_at(fi, syn); demoted_out->push_back(p); }
             }
             if (count_stats && s_rollout_stats)
             {
@@ -121373,6 +121507,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
                 g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
                 g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
+                g_bp_newonly_kept_opt.fetch_add(kept_opt, std::memory_order_relaxed);
             }
             sel.swap(kept_sel);
         }
@@ -121383,15 +121518,16 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
         for (TurnSolver::Plan& p : plans)
         {
             const bool k = keep(p);
+            const bool dem = !k && (demote || (last_gyopt && gy_demote));
             if (trace_here)
             {
-                std::cerr << "   " << (k ? "KEEP " : (demote ? "DEMOTE " : "DROP ")) << PlanDesc(p)
+                std::cerr << "   " << (k ? "KEEP " : (dem ? (last_gyopt ? "GYDEMOTE " : "DEMOTE ") : "DROP ")) << PlanDesc(p)
                           << (p.land_decided && !p.land_to_play.empty() ? ("  land[" + p.land_to_play + "]") : "")
                           << (k ? std::string("  <") + last_why + ">" : std::string{})
                           << "\n";
             }
             if (k || s_newonly_dry) { survivors.push_back(std::move(p)); }
-            else if (demote)        { demoted_out->push_back(std::move(p)); }
+            else if (dem)           { demoted_out->push_back(std::move(p)); }
         }
         if (count_stats && s_rollout_stats)
         {
@@ -121402,6 +121538,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
             g_bp_newonly_kept_act.fetch_add(kept_act, std::memory_order_relaxed);
             g_bp_newonly_kept_unknown.fetch_add(kept_unknown, std::memory_order_relaxed);
             g_bp_newonly_kept_plan.fetch_add(kept_plan, std::memory_order_relaxed);
+                g_bp_newonly_kept_opt.fetch_add(kept_opt, std::memory_order_relaxed);
         }
         plans.swap(survivors);
         }

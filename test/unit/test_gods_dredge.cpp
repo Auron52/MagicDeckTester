@@ -3,6 +3,7 @@
 #include "core/HandEntry.h"
 #include "core/SpellEffects.h"
 #include "ai/TurnSolver.h"
+#include "ai/HeuristicArm.h"
 #include "ai/DecisionProviders.h"
 #include "core/HeuristicDefaults.h"
 #include <cstdio>
@@ -614,6 +615,94 @@ TEST_CASE("Life from the Loam exposes every physical land target subset to searc
     targets.erase(std::unique(targets.begin(), targets.end()), targets.end());
     CHECK(targets.size() == 8); // sum C(3, k), k = 0..3
     CHECK(std::find(targets.begin(), targets.end(), "L40,41,42") != targets.end());
+}
+
+// MTG_BP_NEW_ONLY_GY_TARGETS (item E, USER decision 12): at a draw breakpoint an OLD Life from the Loam counts
+// as a new card for MTG_BP_NEW_ONLY when its legal target set changed (a land card arrived in the graveyard
+// after the plan started)
+// (Gods s30025175 T3: Faithless Looting, THEN the land, THEN Loam on the discarded lands).
+TEST_CASE("New-only: an old Loam whose graveyard gained a land target is a new card")
+{
+    CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+    const CardDefinition* loam = CardDatabase::Instance().Lookup("Life from the Loam");
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(loam != nullptr);
+    REQUIRE(forest != nullptr);
+    GameState s;
+    s.turn_number = 3;
+    const Card loam_card = MakeCard("Life from the Loam", 30, loam);
+    s.players[0].hand.push_back(loam_card);
+    s.players[0].graveyard.push_back(MakeCard("Forest", 40, forest));
+    s.players[0].graveyard.push_back(MakeCard("Forest", 41, forest));
+    auto cast = [&](const char* target)
+    {
+        Action a;
+        a.kind = Action::Kind::CastFromHand;
+        a.card_name = loam_card.m_name;
+        a.def = loam;
+        a.tutor_target = target;
+        return a;
+    };
+    // The breakpoint's board: the site's loot discarded Forest #50.
+    GameState after = s;
+    after.players[0].graveyard.push_back(MakeCard("Forest", 50, forest));
+
+    SUBCASE("lever on: a target that was there at the plan's start is old, an arrived one is new")
+    {
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = 1;
+        const std::vector<std::uint64_t> acts = TurnSolver::PrePlanAvailabilityKeys(s);
+        // The option set changed (Forest #50 arrived), so the CARD is new: every target choice of it,
+        // the zero-target cast and an all-old subset included.
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L40,50")));
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L50")));
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L40,41")));
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L")));
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L?")));
+        // An unchanged graveyard: the old Loam stays old.
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, s, loam_card, cast("L40")));
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, s, loam_card, cast("L")));
+        // A land LEAVING the graveyard is no new option either.
+        GameState fewer = s;
+        fewer.players[0].graveyard.pop_back();
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, fewer, loam_card, cast("L40")));
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = -1;
+    }
+    SUBCASE("an empty pre-plan graveyard: every target is new")
+    {
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = 1;
+        GameState empty = s;
+        empty.players[0].graveyard.clear();
+        const std::vector<std::uint64_t> acts = TurnSolver::PrePlanAvailabilityKeys(empty);
+        CHECK(TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L40")));
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = -1;
+    }
+    SUBCASE("no Loam in hand at the plan's start: nothing is captured, so nothing reads as new")
+    {
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = 1;
+        GameState no_loam = s;
+        no_loam.players[0].hand.clear();
+        const std::vector<std::uint64_t> acts = TurnSolver::PrePlanAvailabilityKeys(no_loam);
+        CHECK(acts.empty());
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L50")));
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = -1;
+    }
+    SUBCASE("lever off: no graveyard keys and the old Loam stays old")
+    {
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = 0;
+        const std::vector<std::uint64_t> acts = TurnSolver::PrePlanAvailabilityKeys(s);
+        CHECK(acts.empty());
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, after, loam_card, cast("L50")));
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = -1;
+    }
+    SUBCASE("a card that does not target graveyard lands is never new by this rule")
+    {
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = 1;
+        const std::vector<std::uint64_t> acts = TurnSolver::PrePlanAvailabilityKeys(s);
+        Action a = cast("L50");
+        a.def = forest;
+        CHECK(!TurnSolver::BpGyTargetOptionNewForTest(acts, after, MakeCard("Forest", 60, forest), a));
+        heurarm::t_arm[heurarm::BP_NEW_ONLY_GY_TARGETS] = -1;
+    }
 }
 
 TEST_CASE("Life from the Loam target declaration sees earlier Mine sacrifice, not its own payment")
