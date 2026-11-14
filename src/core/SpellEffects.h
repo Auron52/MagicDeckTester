@@ -1669,6 +1669,14 @@ struct WildTrueHybridScope
     WildTrueHybridScope& operator=(const WildTrueHybridScope&) = delete;
 };
 inline thread_local bool t_wild_true_enforce = false;
+inline thread_local bool t_wild_true_credit_allowed = true;
+struct WildTrueCreditScope
+{
+    bool prev;
+    explicit WildTrueCreditScope(bool allow) : prev(t_wild_true_credit_allowed)
+    { t_wild_true_credit_allowed = allow; }
+    ~WildTrueCreditScope() { t_wild_true_credit_allowed = prev; }
+};
 struct WildTrueScope
 {
     WildTrueRec* prev_p; bool prev_e;
@@ -44107,7 +44115,8 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     //     then a colour unit (generic funding first, then the colour with the most to spare over this cost's own
     //     pips), then a restricted `wild` unit, then an any-colour one. The credit follows the generic onto a colour
     //     unit, so the assignment stays open for the next pip as well.
-    if (wt != nullptr && t_wild_true_enforce && wt->HeldTotal() > 0 && PrepayWildDeferOn()
+    if (wt != nullptr && t_wild_true_enforce && t_wild_true_credit_allowed
+        && wt->HeldTotal() > 0 && PrepayWildDeferOn()
         && (cost.white | cost.blue | cost.black | cost.red | cost.green) != 0)
     {
         int* pips[5] = { &cost.white, &cost.blue, &cost.black, &cost.red, &cost.green };

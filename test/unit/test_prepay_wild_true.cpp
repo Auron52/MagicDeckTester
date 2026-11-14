@@ -506,3 +506,36 @@ TEST_CASE("prepay wild-defer: the payer keeps the credits across casts, and a ch
         CHECK_FALSE(TapForCostDirect(t, l, false));
     }
 }
+
+TEST_CASE("prepay wild-defer: a Karoo generic payment can give back its other colour")
+{
+    GameState s = BaseWt(4);
+    PutWt(s, "Azorius Chancery", 70);
+    ManaCost generic; generic.generic = 1;
+    REQUIRE(TapForCostDirect(s, generic, false));
+    REQUIRE(s.floating_mana.Total() == 1);
+    WildTrueRec rec;
+    REQUIRE(PrepayWildTrueLoad(s, 0, rec));
+    REQUIRE(rec.HeldTotal() == 1);
+    ManaCost needed;
+    needed.white = rec.held[0]; needed.blue = rec.held[1];
+    REQUIRE(needed.ManaValue() == 1);
+    REQUIRE(TapForCostDirect(s, needed, false));
+    CHECK(s.floating_mana.Total() == 0);
+}
+
+TEST_CASE("prepay wild-defer: a Wish uses available lands before exchanging a reserved blue")
+{
+    GameState s = BaseWt(4);
+    PutWt(s, "Azorius Chancery", 70);
+    PutWt(s, "Plains", 71);
+    PutWt(s, "Forest", 72);
+    ManaCost generic; generic.generic = 1;
+    REQUIRE(TapForCostDirect(s, generic, false));
+    REQUIRE(s.floating_mana.blue == 1);
+    ManaCost wish; wish.white = 1; wish.green = 1;
+    REQUIRE(TapForCostDirect(s, wish, false));
+    CHECK(s.floating_mana.blue == 1);
+    ManaCost bruna_blue; bruna_blue.blue = 1;
+    REQUIRE(TapForCostDirect(s, bruna_blue, false));
+}
