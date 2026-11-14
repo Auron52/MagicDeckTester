@@ -13,7 +13,8 @@ re-running them. Both tiers had zero slower games; `test/check_gt_logs.py`
 reported 1170 consistent logs, zero stale, zero missing.
 
 Snow and its accepted GT were committed as `32da5c41a` and pushed to
-`origin/phase-1-2-deck-analyzer`. CI build run `43596869487` was started.
+`origin/phase-1-2-deck-analyzer`. The combined Snow/harness build CI run
+`43598399681` passed on Ubuntu and Windows.
 The pooled harness was squash-merged into the Snow worktree and built. A single
 `--smoke --regression --overnight --deck=th` run passed all three tiers; the
 scenario-failure probe aborted and killed its batch; the explicit serial
