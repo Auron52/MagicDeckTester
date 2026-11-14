@@ -2445,7 +2445,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','champion','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -2533,7 +2533,7 @@ function renderBoard() {
   // clickable) underneath.
   const isMain = !S.over && d.type === 'main_phase';
   const dec = (!S.over && SUBDECISIONS.includes(d.type)) ? d.type : null;
-  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='face_up' || dec==='treasurify';
+  const boardClick = dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='vial_charge' || dec==='attach_host' || dec==='flicker' || dec==='champion' || dec==='face_up' || dec==='treasurify';
   if (boardClick && S._selFor !== d.decision_index) initBoardSel(d);
   // HAND-CLICK decisions -- the hand's answer to boardClick. The objects being chosen among are
   // cards sitting in YOUR HAND, so they are picked by clicking them where they already are, not in a
@@ -4469,7 +4469,7 @@ function initBoardSel(d){
     // the AI is recommending for pairing").
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default);
     if (def) S.boardSel.add('m:'+def.perm_index);
-  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='face_up'){
+  } else if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='champion' || d.type==='face_up'){
     const def=(d.options||[]).find(o=>o.index===d.heuristic_default)||(d.options||[])[0];
     if (def) S.boardSel.add('m:'+def.perm_index);
     // Multi-victim burst: seed the WHOLE cost, not one body of it -- the engine's whole default when it
@@ -4497,7 +4497,7 @@ function initHandSel(d){
 function toggleHandSel(oi){ S.handSel = (S.handSel===oi) ? null : oi; renderBoard(); }
 function legalTargetKeys(d){
   if (d.type==='target') return new Set((d.legal_targets||[]).map(tgtKey));
-  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='face_up' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
+  if (d.type==='bounce' || d.type==='sacrifice' || d.type==='legend_keep' || d.type==='attach_host' || d.type==='flicker' || d.type==='champion' || d.type==='face_up' || d.type==='treasurify') return new Set((d.options||[]).map(o=>'m:'+o.perm_index));
   return new Set();
 }
 function toggleSel(d, key, max){
@@ -4517,14 +4517,14 @@ function wireDecisionBoard(d, dec){
       t.onclick=e=>{ e.stopPropagation(); toggleHandSel(+t.dataset.hpick); };
     });
   }
-  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='face_up' || dec==='treasurify'){
+  if (dec==='target' || dec==='bounce' || dec==='sacrifice' || dec==='legend_keep' || dec==='soulfire_targets' || dec==='attach_host' || dec==='flicker' || dec==='champion' || dec==='face_up' || dec==='treasurify'){
     const legal=legalTargetKeys(d);
     // A multi-victim sacrifice takes `need` bodies, not one -- and when need === the candidate count
     // every one of them dies, so the board is highlighted (they ARE the victims) but NOT clickable:
     // there is no choice to make and letting a click deselect one would only be able to produce an
     // un-confirmable state.
     const ro = dec==='sacrifice' && sacBurstForced(d);
-    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='face_up'||dec==='treasurify')?1
+    const max = (dec==='bounce'||dec==='legend_keep'||dec==='attach_host'||dec==='flicker'||dec==='champion'||dec==='face_up'||dec==='treasurify')?1
               : dec==='sacrifice' ? sacBurstNeed(d)
               : (dec==='soulfire_targets'?(d.count||1):(d.max_targets||1));
     board.querySelectorAll('.thumb[data-idx]').forEach(t=>{
@@ -5573,9 +5573,16 @@ function promptPanelHtml(d, dec){
       `<span class="spacer"></span><button id="decnoattach" class="ghost">Leave unattached</button>`+
       `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
   }
-  if (dec==='flicker'){
+  if (dec==='flicker' || dec==='champion'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
+    if (dec==='champion'){
+      return `<h3>Wanderwine Prophets — champion which Merfolk?</h3>`+
+        `<div class="sub">Exile another Merfolk you control until these Prophets leave the battlefield. An exiled token ceases to exist. Declining sacrifices these Prophets.</div>`+
+        `<div class="pbtns"><span class="pcount">Championing: <b>${opt?esc(opt.name):'(pick a Merfolk)'}</b></span>`+
+        `<span class="spacer"></span><button id="decnoattach" class="ghost">Decline and sacrifice Prophets</button>`+
+        `<button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Confirm</button></div>`;
+    }
     if (d.source==='Extraplanar Lens'){
       return `<h3>Extraplanar Lens — imprint a land?</h3>`+
         `<div class="sub">Click a land you control to exile it under this Lens, or decline. Lands with that name produce one additional mana when tapped.</div>`+
@@ -5819,6 +5826,7 @@ function wireDecisionPanel(d, dec){
     // flicker reuses the same button as its "Decline" (reply -1 = no flicker at all).
     const na=panel.querySelector('#decnoattach');
     if (na) na.onclick=()=>pushChoice(d, -1, dec==='face_up' ? `Opponent's end step: done turning face up`
+                                           : dec==='champion' ? `${d.source}: decline champion; sacrifice Prophets`
                                            : dec==='flicker' ? `${d.source}: decline ${d.source==='Extraplanar Lens'?'imprint':'flicker'}`
                                            : dec==='treasurify' ? `${d.source}: no Treasure (${d.side==='opponent'?'opponent':'yours'})`
                                            : (dec==='attach_host' && d.soulbond) ? `${d.source}: soulbond — not paired`
@@ -6484,10 +6492,11 @@ function commitBoardSel(d, dec){
     lab=d.soulbond ? `${d.source}: soulbond → pair with ${opt?opt.name:'creature'}`
        : d.pick==='equipment' ? `${d.source}: attach ${opt?opt.name:'Equipment'} →`
                    : `${d.source}: attach to ${opt?opt.name:'creature'}`;
-  } else if (dec==='flicker'){
+  } else if (dec==='flicker' || dec==='champion'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default;
-    lab=d.source==='Extraplanar Lens' ? `${d.source}: imprint ${opt?opt.name:'land'}`
+    lab=dec==='champion' ? `${d.source}: champion ${opt?opt.name:'Merfolk'}`
+       : d.source==='Extraplanar Lens' ? `${d.source}: imprint ${opt?opt.name:'land'}`
                                      : `${d.source}: flicker ${opt?opt.name:'permanent'}`;
   } else if (dec==='face_up'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);

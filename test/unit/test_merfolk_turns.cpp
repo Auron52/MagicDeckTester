@@ -5,6 +5,8 @@
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <vector>
+
 namespace
 {
 void LoadMerfolkCards()
@@ -147,4 +149,82 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     for (const Permanent& p : two.battlefield)
     { if (p.is_token && CardHasSubtype(p.card, "Merfolk")) { ++tokens; } }
     CHECK(tokens == 1);
+}
+
+TEST_CASE("Wanderwine Prophets champions a selected copy and returns it under its owner")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Rishadan Dockhand", 501);
+    AddPermanent(state, "Tidal Warrior", 502);
+    AddPermanent(state, "Wanderwine Prophets", 503);
+    state.battlefield[1].owner_index = 1;
+    const std::vector<int> pin{1};
+    {
+        ScriptedProphetsChampion choice(pin);
+        ResolveMerfolkChampion(state, 0, 2);
+    }
+    REQUIRE(state.battlefield.size() == 2);
+    CHECK(state.battlefield[1].card.m_number == 503);
+    REQUIRE(state.exile.size() == 1);
+    CHECK(state.exile[0].m_number == 502);
+    CHECK(state.battlefield[1].linked_exile_number == 502);
+    Card left = state.battlefield[1].card;
+    state.battlefield.erase(state.battlefield.begin() + 1);
+    FireLeavesBattlefieldTriggers(state, 0, left);
+    REQUIRE(state.battlefield.size() == 2);
+    CHECK(state.battlefield[1].card.m_number == 502);
+    CHECK(state.battlefield[1].controller_index == 1);
+    CHECK(state.battlefield[1].owner_index == 1);
+    CHECK(state.exile.empty());
+}
+
+TEST_CASE("Wanderwine Prophets token champion ceases to exist; decline sacrifices Prophets")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Rishadan Dockhand", 511);
+    state.battlefield[0].is_token = true;
+    AddPermanent(state, "Wanderwine Prophets", 512);
+    ResolveMerfolkChampion(state, 0, 1);
+    REQUIRE(state.battlefield.size() == 1);
+    CHECK(state.battlefield[0].card.m_number == 512);
+    CHECK(state.exile.empty());
+
+    AddPermanent(state, "Rishadan Dockhand", 513);
+    AddPermanent(state, "Wanderwine Prophets", 514);
+    const std::vector<int> decline{-2};
+    {
+        ScriptedProphetsChampion choice(decline);
+        ResolveMerfolkChampion(state, 0, 2);
+    }
+    REQUIRE(state.battlefield.size() == 2);
+    CHECK(state.battlefield[0].card.m_number == 512);
+    CHECK(state.battlefield[1].card.m_number == 513);
+}
+
+TEST_CASE("Wanderwine Prophets combat trigger sacrifices each chosen Merfolk and queues extra turns")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Wanderwine Prophets", 521);
+    AddPermanent(state, "Rishadan Dockhand", 522);
+    AddPermanent(state, "Tidal Warrior", 523);
+    state.scripted_prophets_sac = {1, 1};
+    ResolveProphetsCombatDamage(state, 0, {521, 521});
+    CHECK(state.pending_extra_turns == 2);
+    REQUIRE(state.battlefield.size() == 1);
+    CHECK(state.battlefield[0].card.m_number == 521);
+    CHECK(state.players[0].graveyard.size() == 2);
+
+    GameState decline;
+    decline.active_player_index = 0;
+    AddPermanent(decline, "Wanderwine Prophets", 531);
+    decline.scripted_prophets_sac = {-2};
+    ResolveProphetsCombatDamage(decline, 0, {531});
+    CHECK(decline.pending_extra_turns == 0);
+    CHECK(decline.battlefield.size() == 1);
 }

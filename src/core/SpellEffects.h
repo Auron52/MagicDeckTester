@@ -12082,6 +12082,25 @@ inline std::vector<int> VoraciousFightTargets(const GameState& state, int contro
 
 // The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
+inline thread_local const std::vector<int>* g_prophets_champion_pins = nullptr;
+inline thread_local int g_prophets_champion_cursor = 0;
+struct ScriptedProphetsChampion
+{
+    const std::vector<int>* saved;
+    int saved_cursor;
+    explicit ScriptedProphetsChampion(const std::vector<int>& pins)
+        : saved(g_prophets_champion_pins), saved_cursor(g_prophets_champion_cursor)
+    { g_prophets_champion_pins = pins.empty() ? nullptr : &pins; g_prophets_champion_cursor = 0; }
+    ~ScriptedProphetsChampion()
+    { g_prophets_champion_pins = saved; g_prophets_champion_cursor = saved_cursor; }
+};
+inline int ConsumeProphetsChampionPin()
+{
+    const int ordinal = g_prophets_champion_cursor++;
+    return g_prophets_champion_pins != nullptr
+        && ordinal < static_cast<int>(g_prophets_champion_pins->size())
+        ? (*g_prophets_champion_pins)[static_cast<std::size_t>(ordinal)] : -1;
+}
 inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
                                    const std::string& chosen_tutor, int etb_kx)
@@ -17318,7 +17337,9 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
     }
     // A player may decline champion even with a legal Merfolk. The searched
     // pin and human chooser override this front option at resolution.
-    int choice = legal.empty() ? -1 : 0;
+    const int pin = ConsumeProphetsChampionPin();
+    int choice = legal.empty() ? -1 : (pin == -2 ? -1 : pin >= 0
+        ? std::min(pin, static_cast<int>(legal.size()) - 1) : 0);
     if (g_play_flicker_chooser != nullptr && !legal.empty())
     { choice = (*g_play_flicker_chooser)(state, controller, "Wanderwine Prophets champion", legal, choice); }
     if (choice < 0 || choice >= static_cast<int>(legal.size()))
@@ -17345,6 +17366,40 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
         state.exile.push_back(exiled);
         for (Permanent& q : state.battlefield)
         { if (q.card.m_number == self) { q.linked_exile_number = victim_number; break; } }
+    }
+}
+
+// One trigger for each Prophets combat-damage event, including each strike of
+// double strike. The connector IDs are captured at damage assignment, so a
+// sacrifice made by an earlier trigger cannot erase a later trigger already
+// placed on the stack.
+inline void ResolveProphetsCombatDamage(GameState& state, int controller,
+                                         const std::vector<int>& connector_ids)
+{
+    for (int source_id : connector_ids)
+    {
+        (void)source_id; // the trigger survives even if a previous trigger sacrificed its source
+        std::vector<int> legal;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& q = state.battlefield[i];
+            if (q.controller_index == controller && q.card.IsCreature()
+                && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk")))
+            { legal.push_back(i); }
+        }
+        int pick = legal.empty() ? -2 : 0;
+        if (state.scripted_prophets_sac_cursor < static_cast<int>(state.scripted_prophets_sac.size()))
+        {
+            const int pin = state.scripted_prophets_sac[
+                static_cast<std::size_t>(state.scripted_prophets_sac_cursor)];
+            if (pin == -2 || pin >= 0) { pick = pin; }
+        }
+        ++state.scripted_prophets_sac_cursor;
+        if (g_play_fling_chooser != nullptr && !legal.empty())
+        { pick = (*g_play_fling_chooser)(state, controller, "Wanderwine Prophets", legal, pick); }
+        if (pick < 0 || pick >= static_cast<int>(legal.size())) { continue; }
+        SacrificePermanentAt(state, controller, legal[static_cast<std::size_t>(pick)]);
+        state.QueueExtraTurn(controller);
     }
 }
 

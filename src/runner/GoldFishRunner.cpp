@@ -1282,7 +1282,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && (d->params.cast_trigger_extra_turns > 0
-                      || d->params.extra_turns_on_resolve > 0)) { return true; }
+                      || d->params.extra_turns_on_resolve > 0
+                      || d->params.combat_damage_sac_merfolk_extra_turn)) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_prophets = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.champion_merfolk) { return true; }
         }
         return false;
     }();

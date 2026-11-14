@@ -943,7 +943,8 @@ static bool PlanHasAttackTriggerPin(const TurnSolver::Plan& p)
 }
 static bool PlanHasCombatPin(const TurnSolver::Plan& p)
 {
-    return p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
+    return !p.prophets_sac_choice.empty()
+        || p.bruna_gather_choice >= 0 || p.combat_aura_swap_choice >= 0
         || p.attack_land_search_choice >= 0    // Primeval Titan's attack pick: read in THIS combat only
         || p.combat_crack_choice >= 0          // ...and the in-combat Khalni crack
         || p.combat_transform_choice >= 0      // ...and Bloodline Keeper's in-combat transform (Vampires B)
@@ -28680,6 +28681,10 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // Shadowborn INT-2's demon-trigger pin -- same must-fold rule, value-gated (own domain tag).
     if (p.demon_trigger_choice >= 0)
     { fold(0x44454D4F4Eull); fold(static_cast<uint64_t>(p.demon_trigger_choice)); }   // "DEMON"
+    if (!p.champion_pins.empty())
+    { fold(0x4348414Dull); for (int v : p.champion_pins) { fold(static_cast<uint64_t>(v + 3)); } }
+    if (!p.prophets_sac_choice.empty())
+    { fold(0x50524F50ull); for (int v : p.prophets_sac_choice) { fold(static_cast<uint64_t>(v + 3)); } }
     // The searched echo pin (next upkeep's pay/decline): the same must-fold, value-gated rule.
     if (p.echo_choice >= 0) { fold(0x4543484Full); fold(static_cast<uint64_t>(p.echo_choice)); }   // "ECHO"
     // The searched Defense of the Heart put list (next upkeep): the same must-fold, value-gated rule.
@@ -29076,6 +29081,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.scry_choice == -1 && p.etbdig_choice == -1 && p.tutor_choice == -1 && p.rad_mode == -1
         && p.bounce_choice == -1
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
+        && p.champion_pins.empty() && p.prophets_sac_choice.empty()
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
         && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1 && p.mihail_pay_mask == -1
@@ -29130,6 +29136,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         // inert-duplicate shape this skip exists for. Safe because the two STATE pins are folded
         // into BuildDedupKey's pending pins (a post-apply state still carrying one is distinct).
         || !p.land_search_pins.empty() || p.attack_land_search_choice >= 0
+        || !p.champion_pins.empty() || !p.prophets_sac_choice.empty()
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
@@ -30105,6 +30112,10 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     { h = Mix(h, 0x46435550ull + static_cast<std::uint64_t>(p.eot_face_up_choice)); }
     if (p.demon_trigger_choice >= 0)
     { h = Mix(h, 0x444Dull + static_cast<std::uint64_t>(p.demon_trigger_choice)); }   // value-gated (Shadowborn)
+    if (!p.champion_pins.empty())
+    { h = Mix(h, 0x4348414Dull); for (int v : p.champion_pins) { h = Mix(h, static_cast<std::uint64_t>(v + 3)); } }
+    if (!p.prophets_sac_choice.empty())
+    { h = Mix(h, 0x50524F50ull); for (int v : p.prophets_sac_choice) { h = Mix(h, static_cast<std::uint64_t>(v + 3)); } }
     if (p.echo_choice >= 0) { h = Mix(h, 0xEC40ull + static_cast<std::uint64_t>(p.echo_choice)); }   // value-gated
     if (p.doth_put_choice >= 0)
     { h = Mix(h, 0xD0E70000ull + static_cast<std::uint64_t>(p.doth_put_choice)); }   // value-gated
@@ -56635,6 +56646,8 @@ namespace solvememo
             || a.bounce_choice != b.bounce_choice
             || a.tutor_choice != b.tutor_choice || a.sac_pins != b.sac_pins
             || a.land_search_pins != b.land_search_pins
+            || a.champion_pins != b.champion_pins
+            || a.prophets_sac_choice != b.prophets_sac_choice
             || a.look_top_pins != b.look_top_pins || a.dredge_pins != b.dredge_pins
             || a.keranos_targets != b.keranos_targets
             || a.incinerator_targets != b.incinerator_targets
@@ -66015,6 +66028,7 @@ struct BpPrefixSnap
                                      // sac_pins, re-installed by the resumed apply's entry guard;
                                      // only the cursor is prefix state)
     int  pin_land_search_cursor = 0; // the same for Plan::land_search_pins (core/LandSearch.h)
+    int  pin_champion_cursor = 0;
     std::size_t pin_incinerator_cursor = 0;
     int  pin_look_top_land_cursor  = 0;   // ...and Plan::look_top_pins' two streams (Risen Reef):
     int  pin_look_top_order_cursor = 0;   // the list is re-installed by _slt, the cursors are prefix state
@@ -67709,6 +67723,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                // resolved at the true mid-plan state (MTG_SAC_AXIS);
                                                // empty inert
     ScriptedLandSearch _sls(plan.land_search_pins);   // searched land-search picks, one per land-search
+    ScriptedProphetsChampion _spc(plan.champion_pins);
                                                       // ordinal (core/LandSearch.h); empty inert
     IncineratorPinScope _incinerator_pins(plan.incinerator_targets);
     ScriptedLookTop _slt(plan.look_top_pins);   // searched Risen Reef land / trigger-order entries (two
@@ -75039,6 +75054,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         g_scripted_putback_choice= bp_resume->pin_putback;
         g_scripted_sac_cursor    = bp_resume->pin_sac_cursor; // list already re-installed by _ssac
         g_scripted_land_search_cursor = bp_resume->pin_land_search_cursor;   // ...and by _sls
+        g_prophets_champion_cursor = bp_resume->pin_champion_cursor;
         g_incinerator_pin_cursor = bp_resume->pin_incinerator_cursor;
         g_scripted_look_top_land_cursor  = bp_resume->pin_look_top_land_cursor;    // ...and by _slt
         g_scripted_look_top_order_cursor = bp_resume->pin_look_top_order_cursor;
@@ -75565,6 +75581,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
@@ -75604,6 +75621,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             bp_capture->pin_putback  = g_scripted_putback_choice;
             bp_capture->pin_sac_cursor = g_scripted_sac_cursor;
             bp_capture->pin_land_search_cursor = g_scripted_land_search_cursor;
+            bp_capture->pin_champion_cursor = g_prophets_champion_cursor;
             bp_capture->pin_incinerator_cursor = g_incinerator_pin_cursor;
             bp_capture->pin_look_top_land_cursor  = g_scripted_look_top_land_cursor;
             bp_capture->pin_look_top_order_cursor = g_scripted_look_top_order_cursor;
@@ -76878,6 +76896,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.hand_size_at_combat   = -1;              // post-combat productivity markers are per turn (see
     state.battlefield_at_combat = -1;              // GameState); lockstep with GameEngine's turn start
     state.scripted_cheat_choice   = -1;            // searched Lackey put is per-turn (lockstep w/ GameEngine::UntapStep)
+    state.scripted_prophets_sac.clear();
+    state.scripted_prophets_sac_cursor = 0;
     state.scripted_fling_victim   = -1;            // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode  = -1;            // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice   = -1;            // searched Abiding Grace pin is per-turn (same lockstep)
@@ -94737,6 +94757,110 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         branchstats::RecordAxis("axis: fresh-spend", fresh);
     }
 
+    // Prophets' champion happens inside each cast or put's enter cascade. Fan
+    // every legal victim rank and the decline before applying the plan. Each
+    // event gets its own ordinal, so two Prophets may champion different bodies.
+    if (state.deck_has_prophets && !HumanPlayActive())
+    {
+        std::vector<TurnSolver::Plan> extra;
+        const int me = state.active_player_index;
+        int board_merfolk = 0;
+        for (const Permanent& q : state.battlefield)
+        { if (q.controller_index == me && q.card.IsCreature()
+              && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk"))) { ++board_merfolk; } }
+        for (const TurnSolver::Plan& p : all)
+        {
+            if (!p.champion_pins.empty()) { continue; }
+            int entries = 0, added = 0;
+            for (const Action& a : p.actions)
+            {
+                const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                const bool entering = a.kind == Action::Kind::CastFromHand
+                    || a.kind == Action::Kind::ActivateVial;
+                if (entering && d && d->params.champion_merfolk) { ++entries; }
+                if (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::TapTutorPut
+                    && a.tutor_target.str() == "Wanderwine Prophets") { ++entries; }
+                if (entering && d && d->card.IsCreature()) { ++added; }
+            }
+            if (entries == 0) { continue; }
+            // The upper bound includes potential same-plan token makers. A rank
+            // beyond the actual list clamps at resolution and post-apply dedup
+            // removes it; under-sizing would make a choice unreachable.
+            const int width = board_merfolk + added + static_cast<int>(p.actions.size()) * 4;
+            if (width <= 0) { continue; }
+            std::vector<int> code(static_cast<std::size_t>(entries), 0);
+            for (;;)
+            {
+                int k = 0;
+                while (k < entries && ++code[static_cast<std::size_t>(k)] > width)
+                { code[static_cast<std::size_t>(k)] = 0; ++k; }
+                if (k == entries) { break; }
+                TurnSolver::Plan v = p;
+                v.champion_pins = code;
+                for (int& x : v.champion_pins) { if (x == width) { x = -2; } }
+                extra.push_back(std::move(v));
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    }
+    if (state.deck_has_prophets && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive())
+    {
+        int ready_prophets = 0, merfolk = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != state.active_player_index || !q.card.IsCreature()) { continue; }
+            if (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk")) { ++merfolk; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d && d->params.combat_damage_sac_merfolk_extra_turn
+                && CanAttackFull(q, state.battlefield, state.active_player_index))
+            { ready_prophets += CreatureHasDoubleStrike(q, state) ? 2 : 1; }
+        }
+        // A Seahunter put can supply the first Prophets even with an empty hand.
+        if (!all.empty())
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (!p.prophets_sac_choice.empty()) { continue; }
+                int added = 0, new_prophets = 0;
+                for (const Action& a : p.actions)
+                {
+                    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+                    if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::ActivateVial)
+                        && d && d->card.IsCreature()
+                        && CardHasSubtype(d->card, "Merfolk"))
+                    {
+                        ++added;
+                        if (d->params.combat_damage_sac_merfolk_extra_turn) { ++new_prophets; }
+                    }
+                    if (a.kind == Action::Kind::ActivatePermAbility
+                        && a.ability_mode == Action::AbilityMode::TapTutorPut
+                        && a.tutor_target.str() == "Wanderwine Prophets")
+                    { ++added; ++new_prophets; }
+                }
+                // A freshly entered Prophets can attack if the line equips Lightning Greaves.
+                // An already-ready double striker has one trigger in each combat-damage step.
+                const int events = ready_prophets + new_prophets;
+                if (events == 0) { continue; }
+                const int width = merfolk + added + static_cast<int>(p.actions.size()) * 4;
+                if (width <= 0) { continue; }
+                std::vector<int> code(static_cast<std::size_t>(events), 0);
+                for (;;)
+                {
+                    int k = 0;
+                    while (k < events && ++code[static_cast<std::size_t>(k)] > width)
+                    { code[static_cast<std::size_t>(k)] = 0; ++k; }
+                    if (k == events) { break; }
+                    TurnSolver::Plan v = p;
+                    v.prophets_sac_choice = code;
+                    for (int& x : v.prophets_sac_choice) { if (x == width) { x = -2; } }
+                    extra.push_back(std::move(v));
+                }
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+        }
+    }
     // ---- A CLONE DID NOT INHERIT WAVE 0's FAN-OUT (MTG_BP_AXIS_W0_CLEAR) ----------------------
     // `bp_wave0` is a record of a FACT ABOUT ONE PLAN: "wave 0 emitted ranks 0..W-1 for this plan,
     // so its continuations below W are already scored". Every axis above builds its variants with
@@ -95502,7 +95626,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 656;   // Integrated size; checked by static_assert below.
+static constexpr std::size_t kPlanDomAssertedSize = 704;   // Two Prophets pin vectors; checked below.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -95701,6 +95825,10 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (int s : pl.sac_pins)             { add(s); }
             x += "|ls";
             for (int s : pl.land_search_pins)     { add(s); }
+            x += "|champion";
+            for (int s : pl.champion_pins)        { add(s); }
+            x += "|prophets";
+            for (int s : pl.prophets_sac_choice) { add(s); }
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
@@ -97549,6 +97677,8 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     for (const std::string& s : p.would_drop) { b += s.capacity(); }
     b += p.sac_pins.capacity() * sizeof(int);
     b += p.land_search_pins.capacity() * sizeof(int);
+    b += p.champion_pins.capacity() * sizeof(int);
+    b += p.prophets_sac_choice.capacity() * sizeof(int);
     b += p.look_top_pins.capacity() * sizeof(int);
     b += p.dredge_pins.capacity() * sizeof(int);
     b += p.keranos_targets.capacity() * sizeof(int);
@@ -97990,6 +98120,11 @@ std::string enummemo::Fingerprint(const GameState& state)
                   state.scripted_tectonic_mode,
                   (unsigned long long)state.search_count);
     s += buf;
+    if (!state.scripted_prophets_sac.empty())
+    {
+        s += "prophets=" + std::to_string(state.scripted_prophets_sac_cursor) + ':';
+        for (int x : state.scripted_prophets_sac) { s += std::to_string(x) + ','; }
+    }
     // Mode-B keep pin, appended VALUE-GATED for the same reason the dominance fold is gated: an
     // unconditional `;tkeep=-1` would lengthen the key of every state in every deck. Appending
     // only when the pin is set leaves all existing keys byte-identical while still separating the
@@ -98171,6 +98306,12 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
             state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        if (!state.scripted_prophets_sac.empty())
+        {
+            mix(0x50524F50ull);
+            mix(static_cast<std::uint64_t>(state.scripted_prophets_sac_cursor));
+            for (int v : state.scripted_prophets_sac) { mix(static_cast<std::uint64_t>(v + 3)); }
+        }
         if (state.scripted_mihail_pay_mask >= 0 || state.scripted_mihail_trigger_ordinal > 0)
         {
             mix(0x1A63000000ull);
@@ -99588,6 +99729,13 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     Fold(k, static_cast<uint64_t>(state.turn_number));
     Fold(k, static_cast<uint64_t>(state.active_player_index));
     if (state.scripted_early_ondemand_crack) { Fold(k, 0xEA4CCA11ull); }
+    if (state.scripted_prophets_sac_cursor < static_cast<int>(state.scripted_prophets_sac.size()))
+    {
+        Fold(k, 0x50524F50ull);
+        for (std::size_t i = static_cast<std::size_t>(state.scripted_prophets_sac_cursor);
+             i < state.scripted_prophets_sac.size(); ++i)
+        { Fold(k, static_cast<uint64_t>(state.scripted_prophets_sac[i] + 3)); }
+    }
     Fold(k, state.on_the_play ? 1u : 0u);
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
     if (state.deck_has_turn_gods)
@@ -116542,6 +116690,10 @@ TurnSolver::Plan TurnSolver::SolveWithLookahead(const GameState& state, bool is_
                 mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
                 mix(p.land_search_pins.size());
                 for (int v : p.land_search_pins) { mix(static_cast<std::uint64_t>(v + 7)); }
+                if (!p.champion_pins.empty())
+                { mix(0x4348414Dull); for (int v : p.champion_pins) { mix(static_cast<std::uint64_t>(v + 7)); } }
+                if (!p.prophets_sac_choice.empty())
+                { mix(0x50524F50ull); for (int v : p.prophets_sac_choice) { mix(static_cast<std::uint64_t>(v + 7)); } }
                 if (!p.incinerator_targets.empty())
                 { mix(0x1C1DE); for (int id : p.incinerator_targets) { mix(static_cast<std::uint64_t>(id)); } }
                 if (!p.look_top_pins.empty())   // value-gated: every other deck's bucket hash unchanged
@@ -119689,6 +119841,14 @@ static TranspositionTable::Key BuildBreakpointKey(const GameState& state, bool i
         for (std::size_t i = static_cast<std::size_t>(g_scripted_land_search_cursor);
              i < g_scripted_land_search_pins->size(); ++i)
         { Fold(k, static_cast<uint64_t>((*g_scripted_land_search_pins)[i] + 2)); }
+    }
+    if (g_prophets_champion_pins != nullptr
+        && g_prophets_champion_cursor < static_cast<int>(g_prophets_champion_pins->size()))
+    {
+        Fold(k, 0x4348414Dull);
+        for (std::size_t i = static_cast<std::size_t>(g_prophets_champion_cursor);
+             i < g_prophets_champion_pins->size(); ++i)
+        { Fold(k, static_cast<uint64_t>((*g_prophets_champion_pins)[i] + 3)); }
     }
     // LOOK-TOP pins (Plan::look_top_pins; Risen Reef): the same rule per stream -- live only while
     // that stream has unconsumed entries, and then its remaining entries fold (each stream's cursor
@@ -128405,6 +128565,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     if (p.early_ondemand_crack >= 0) { s.scripted_early_ondemand_crack = p.early_ondemand_crack != 0; }
     // Goblin Lackey's put: this turn's combat-damage step.
     if (p.lackey_choice >= 0) { s.scripted_cheat_choice = p.lackey_choice; }
+    if (!p.prophets_sac_choice.empty())
+    { s.scripted_prophets_sac = p.prophets_sac_choice; s.scripted_prophets_sac_cursor = 0; }
     // Surtland Flinger's victim, at declare-attackers. -2 (decline) is a real pinned choice: != -1.
     if (p.fling_victim_choice != -1) { s.scripted_fling_victim = p.fling_victim_choice; }
     // Tectonic Giant's mode and mode-B keep, at declare-attackers.

@@ -4301,7 +4301,8 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
 {
     DecisionJson d(os, decision_index);
     const bool lens = source == "Extraplanar Lens";
-    d.Type("flicker").Source(source).Turn(s)
+    const bool champion = source == "Wanderwine Prophets champion";
+    d.Type(champion ? "champion" : "flicker").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", legal.size(), [&](std::size_t i)
     {
@@ -4313,6 +4314,8 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
     if (lens)
     { d.Note("reply a land option index to exile and imprint on this Lens, or -1 to decline. "
              "The Lens adds mana only for lands with that exact name. Default = the searched pick."); }
+    else if (champion)
+    { d.Note("reply a Merfolk option index to exile under this Prophets until it leaves, or -1 to sacrifice Prophets instead. A token ceases to exist on exile."); }
     else
     { d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
              "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick."); }

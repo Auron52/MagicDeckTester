@@ -50,6 +50,7 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    std::vector<int> champion;      // Prophets ETB choices inside a continuation
     std::vector<int> incinerator_targets;
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     std::vector<int> dredge;        // physical graveyard card number per optional draw; 0 = normal draw
@@ -60,7 +61,8 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty();
+            || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty()
+            || !champion.empty();
     }
 };
 
@@ -1706,6 +1708,7 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        std::vector<int> champion_pins; // one resolution-time choice per Prophets ETB this apply
         std::vector<int> dredge_pins; // one physical card number per in-plan optional draw, 0 = normal
         std::vector<int> keranos_targets; // one live target rank per in-plan nonland reveal
         std::int16_t next_draw_dredge_choice = -1; // draw step after this turn's boundary
@@ -1811,6 +1814,7 @@ public:
         // step consumes the low byte, the NEXT upkeep the rest. In the 2-byte hole after the field above
         // (gdb ptype /o, 2026-11-03: no size change); folded into the census Xaxes key by hand.
         std::int16_t demon_trigger_choice = -1;
+        std::vector<int> prophets_sac_choice; // one victim/decline per combat-damage trigger
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);

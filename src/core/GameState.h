@@ -1477,6 +1477,12 @@ struct GameState
     // each trigger reads ordinal 0 and shifts the rest down; MTG_LACKEY_PIN_FOLD spends whatever is left at
     // the end of combat damage.
     int                      scripted_cheat_choice = -1;
+    // Wanderwine Prophets: one resolution-time sacrifice rank per combat-damage
+    // trigger this turn. -2 declines, -1 uses the front legal Merfolk; nonnegative
+    // ranks select a legal permanent after earlier triggers have resolved.
+    std::vector<int>          scripted_prophets_sac;
+    int                       scripted_prophets_sac_cursor = 0;
+    bool                      deck_has_prophets = false;
     // Searched SURTLAND FLINGER victim (Plan::fling_victim_choice): the CARD NUMBER of the
     // creature this turn's first fling sacrifices, -2 = DECLINE ("you may sacrifice"), -1 = the
     // ranked default (FlingVictimCandidates' front). Same state-pin shape as

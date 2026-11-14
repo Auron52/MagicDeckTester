@@ -393,6 +393,8 @@ void GameEngine::UntapStep(GameState& state)
     state.hand_size_at_combat   = -1;   // post-combat productivity markers are per turn (see GameState);
     state.battlefield_at_combat = -1;   // -1 = no combat yet this turn = "assume productive"
     state.scripted_cheat_choice = -1;   // searched Lackey put is per-turn (lockstep w/ SimulateEndAndStartNextTurn)
+    state.scripted_prophets_sac.clear();
+    state.scripted_prophets_sac_cursor = 0;
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)

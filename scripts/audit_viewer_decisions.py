@@ -68,6 +68,8 @@ def positive(v):      return isinstance(v, (int, float)) and v > 0
 def real_target(v):   return isinstance(v, str) and v not in ("none", "player", "")
 
 MANIFEST = {
+    "champion_merfolk": ("champion", truthy),
+    "combat_damage_sac_merfolk_extra_turn": ("sacrifice", truthy),
     # Temporal Mastery: the first drawn card each turn can be revealed and
     # cast immediately for its miracle cost. The hand-zone paid-cast prompt
     # uses the shared optional-cast protocol at the draw event.
