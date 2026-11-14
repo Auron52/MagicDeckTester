@@ -84675,12 +84675,15 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
 // recursively, one canonical order per set (each nested call cracks only sources numbered above the
 // outer one: pre-cast cracks back to back commute up to the shuffle key, which reads only the count).
 // IDENTITY FOLDS only: copies of one fetch on the battlefield are one root (the lowest number); a root
-// whose inner plan casts and activates nothing is the base plan's own crack-only line. Human play is
-// untouched (the human orders the crack itself; human_v2 lines ignore the slot).
+// whose inner plan casts and activates nothing is the base plan's own crack-only line. HUMAN PLAY gets the
+// roots too (2026-11-14, USER: "Let's fix that viewer line"): without them the human menu had no plan for
+// "crack the held Arid Mesa, then Lava Spike off the fetched land", so CheckLine rejected the one-shot
+// `act=Arid Mesa;cast=Lava Spike` ("can't pay"). The human answers the land search at resolution
+// (tutor_etb, whose default is the root's pinned pick), and a "**" line runs the crack at its queued step.
 static void CrackFirstSources(const GameState& s, int floor_num, std::vector<int>& out)
 {
     out.clear();
-    if (!s.deck_has_land_search || HumanPlayActive()) { return; }
+    if (!s.deck_has_land_search) { return; }
     const int me = s.active_player_index;
     const Player& ap = s.players[static_cast<std::size_t>(me)];
     std::vector<std::pair<std::string, int>> best;   // name -> lowest live number above the floor
@@ -96027,6 +96030,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         {
             std::vector<std::string> cands =
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
+            // Human play: the human picks among EVERY legal target, not the provider's (narrowed) list.
+            WidenHumanFetchTargets(state, state.active_player_index, ld->params, cands);
             if (cands.size() > 1)
             {
                 if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
@@ -96083,6 +96088,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 // FetchSearchCandidates outside the unpruned audit and human play).
                 std::vector<std::string> cands =
                     ResolveProvider(state).FetchCandidates(state, state.active_player_index, tl->params);
+                WidenHumanFetchTargets(state, state.active_player_index, tl->params, cands);
                 if (cands.size() > 1)
                 {
                     if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())

@@ -1,0 +1,49 @@
+{
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 3,
+  "resume_at": "main2",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    {
+      "name": "Arid Mesa"
+    }
+  ],
+  "hand": [
+    "Lava Spike",
+    "Skewer the Critics"
+  ],
+  "library_top": [
+    "Mountain"
+  ],
+  "library_filler": "Mountain",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 3,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "human_lines": [
+    "landsearch=Arid Mesa;cast=Lava Spike"
+  ],
+  "human_cast_orders": [
+    [
+      "**",
+      "landsearch=Arid Mesa",
+      "cast=Lava Spike"
+    ]
+  ],
+  "expect_line_order": [
+    "landsearch Arid Mesa",
+    "cast Lava Spike"
+  ],
+  "expect_win_turn": 3,
+  "expect_active_life": 19,
+  "_comment": [
+    "HELD-FETCH CRACK-THEN-CAST IN HUMAN PLAY (2026-11-14, USER: \"Let's fix that viewer line\"). Arid Mesa on the battlefield untapped (the drop spent), Lava Spike in hand, no other mana. The one-shot line cracks the Mesa and casts the Spike off the fetched land. Before: CheckLine rejected it (\"can't pay for 'Lava Spike': no untapped source produces red\") -- the human menu had no crack-first plan (CrackFirstSources returned nothing under human play) and the stage-2 affordability sim priced the Spike on the pre-crack board. Now the crack-first roots run in human play too.",
+    "Executed in main2: the crack resolves (the human prompt takes its default), then the Spike kills from 3."
+  ]
+}

@@ -15,7 +15,12 @@ crack-first roots, `analysis-Boars.md` "Fetch-crack fix"). Most
 other fetchlands in current decklists still use the older immediate-on-play
 card data; the deck analyzer reports both cases in `fetch_hold_review` so a
 new deck review must decide whether to add hold and when its provider should
-consider it. Human play keeps every modelled legal timing choice.
+consider it. Human play resolves a zero-mana one-life fetch ON PLAY by default too (USER 2026-11-14: "Human play
+doesn't need to keep the hold, at least by default"): the land drop is one plan per legal target, widened past the
+provider's list (`WidenHumanFetchTargets`), so the human still picks the land. `MTG_HUMAN_FETCH_HOLD=1` restores the
+battlefield hold in human play; a reference recorded under the hold (`fetch_activation` without `fetch_on_play`)
+replays with `--legacy-human-fetch-hold`. Where the hold remains (3 life or less, the lever, a fetch already on the
+battlefield) the crack-first roots run in human play as well, so `act=Arid Mesa;cast=Lava Spike` is one line.
 
 The Modern RW Burn provider skips battlefield hold in autonomous play except
 at three life or less, where cracking or shocking in a fetched land could be

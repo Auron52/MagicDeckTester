@@ -1,0 +1,31 @@
+{
+  "deck": "decks/Modern RW Burn/Modern RW Burn.cod",
+  "turn": 1,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 20,
+  "resume_at": "main1",
+  "hand": [
+    "Arid Mesa",
+    "Lava Spike"
+  ],
+  "library_top": [
+    "Mountain",
+    "Sacred Foundry"
+  ],
+  "library_filler": "Lava Spike",
+  "library_size": 30,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 1,
+  "env": {
+    "MTG_HUMAN_PLAY": "1",
+    "MTG_HUMAN_FETCH_HOLD": "1"
+  },
+  "validate_line": "land=Arid Mesa;cast=Lava Spike",
+  "expect_verdict": "illegal",
+  "_comment": [
+    "HUMAN-PLAY FETCH RESOLVES ON PLAY (USER 2026-11-14: \"Human play doesn't need to keep the hold, at least by default\"). FetchResolvesOnPlay no longer forces the battlefield hold under human play (MTG_HUMAN_FETCH_HOLD=1 opts back in); the land drop is one plan per legal target, widened past the provider's narrowed list (WidenHumanFetchTargets: Modern RW Burn's FetchCandidates returns ONE pick), so the target is the human's.",
+    "CONTROL: with the opt-in hold the Mesa enters uncracked, so the same one-shot line cannot pay the Spike (the viewer splits it into land, crack, cast -- linebuild.js fetchManaRoute)."
+  ]
+}

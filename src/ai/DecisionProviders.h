@@ -30,6 +30,12 @@ bool DecisionUnpruned();
 
 // Shared land-drop policy, read by both plan enumeration and its executor.
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
+// HUMAN PLAY's on-play fetch fan: `cands` (the provider's FetchCandidates, in its order) widened with every
+// other legal target (distinct library land names of a fetched subtype, library order), so the human --
+// not the provider -- picks what the land drop fetches. A no-op outside human play and on a legacy
+// immediate-fetch replay (a recording made before the hold model, when the provider's list was the menu).
+void WidenHumanFetchTargets(const GameState& state, int controller, const CardParams& fetch_pp,
+                            std::vector<std::string>& cands);
 
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a

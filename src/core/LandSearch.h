@@ -771,6 +771,14 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
                                    t_credit_idx);
             if (!t_credit_idx.empty()) { def_k = static_cast<std::size_t>(t_credit_idx.front()); }
         }
+        // ...else the pick the PLAN was priced with (a crack-first root's pin, TurnSolver.cpp "CRACK-FIRST
+        // ROOTS": its casts were enumerated on the board this pick produces). Only the default moves.
+        else if (pin >= 0 && !picks.empty())
+        {
+            def_k = static_cast<std::size_t>(
+                LandSearchPinDecode(LandSearchMemoSlot(state, controller, spec), pin).pick);
+            if (def_k >= picks.size()) { def_k = 0; }
+        }
         // The picks hold CLASS REPRESENTATIVES (Evolving Wilds stands for Terramorphic Expanse too) and
         // the prompts offer REAL names, so the two are matched by identity class, never by name: with
         // the Wilds already taken, a {Wilds, Wilds} pick's second land IS the Terramorphic Expanse (USER

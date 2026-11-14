@@ -417,6 +417,7 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     return all;
 }
 
+static std::vector<std::string> AllLegalFetchTargets(const GameState& s, int controller, const CardParams& fetch_pp);
 std::vector<std::string>
 GenericProvider::FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const
 {
@@ -426,6 +427,13 @@ GenericProvider::FetchCandidates(const GameState& s, int controller, const CardP
     // deck's doubled colours), so it is NOT a safe deck-agnostic default; it stays an archetype
     // override. A generic fetchland deck thus searches its fetch targets rather than whiffing.
     // (Previously returned {} -> a generic fetch paid 1 life and fetched nothing.)
+    return AllLegalFetchTargets(s, controller, fetch_pp);
+}
+
+// Every legal target of a fetchland: the distinct library land names carrying one of its subtypes, in
+// library order. GenericProvider's list, and the full set human play widens a narrowed provider list to.
+static std::vector<std::string> AllLegalFetchTargets(const GameState& s, int controller, const CardParams& fetch_pp)
+{
     const Player& ap = s.players[controller];
     std::vector<std::string>        all;
     std::unordered_set<std::string> seen;
@@ -22357,6 +22365,14 @@ std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
     return all;
 }
 
+void WidenHumanFetchTargets(const GameState& state, int controller, const CardParams& fetch_pp,
+                            std::vector<std::string>& cands)
+{
+    if (!HumanPlayActive() || LegacyFetchImmediateOn()) { return; }
+    for (std::string& nm : AllLegalFetchTargets(state, controller, fetch_pp))
+    { if (std::find(cands.begin(), cands.end(), nm) == cands.end()) { cands.push_back(std::move(nm)); } }
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
@@ -22367,7 +22383,12 @@ bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
     if (p.land_search_activation_cost->ManaValue() != 0 || p.land_search_activation_life_cost != 1
         || !p.land_search_activation_sacrifice_self || p.land_search_count != 1
         || state.players[state.active_player_index].life <= 3) { return false; }
-    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    if (DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    // HUMAN PLAY follows the same on-play default (USER 2026-11-14: "Human play doesn't need to keep the
+    // hold, at least by default"): the land drop is one plan per legal target (the enumeration's human
+    // bypass keeps the FULL FetchCandidates list), so the target stays the human's. MTG_HUMAN_FETCH_HOLD=1
+    // / --legacy-human-fetch-hold (a reference recorded under the hold) keeps the battlefield hold.
+    if (HumanPlayActive() && HumanFetchHoldOn()) { return false; }
     return !ResolveProvider(state).ConsiderFetchHold(state, land);
 }
 

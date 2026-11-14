@@ -465,6 +465,12 @@ def recording_rule_args(ref):
     fetchland collapse, so their same land pick produced different mana and shuffle timing. Replay
     those recordings with --legacy-fetch-immediate; new recordings carry the stamp.
 
+    `fetch_on_play` (2026-11-14, USER: "Human play doesn't need to keep the hold, at least by default"):
+    from then on a human-play zero-mana one-life fetch resolves ON PLAY (the land drop names its target)
+    unless the hold is opted in (MTG_HUMAN_FETCH_HOLD=1). A `fetch_activation` recording without the
+    stamp was played under the hold (land drop, then a separate crack and its `tutor_etb` pick), so it
+    replays with --legacy-human-fetch-hold.
+
     `pain_defer` (2026-10-08, USER report on Prevent_Damage/claude_s11_gi10: "I had to use the
     manual-tap option"): from then on an auto-tapped payment that funds a lifegain amplifier (Rhox
     Faithmender, Vito, ...) keeps the painful lands for the end-of-main sweep (dmgev::PainDeferEnabled).
@@ -494,6 +500,8 @@ def recording_rule_args(ref):
         args.append("--legacy-karoo-float")
     if not ref.get("fetch_activation"):
         args.append("--legacy-fetch-immediate")
+    elif not ref.get("fetch_on_play"):
+        args.append("--legacy-human-fetch-hold")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):
