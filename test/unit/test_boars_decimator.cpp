@@ -395,3 +395,41 @@ TEST_CASE("Decimator: an emerge pays EXACTLY -- the victim's mana, Sage's creatu
     CHECK(g_cast_trigger_mana_spent_probe == 8);
     check(exec);
 }
+
+TEST_CASE("Decimator: the human emerge victim click offers only victims whose bill the board pays (sweep 97001)")
+{
+    // Boars 5d sweep, seed 97001 T3: Ignoble Hierarch, Somberwald Sage, two Stomping Grounds. Sage (MV 3) as the victim
+    // costs {3}{G}{G}{G} = 6 and the board makes exactly 6 (Sage's own GGG + Hierarch + two lands); Hierarch (MV 1)
+    // costs 8 -- unpayable, so picking it silently dropped the cast. The click lists the payable victims only.
+    auto board = [] {
+        GameState s = DBase();
+        s.turn_number = 3;
+        DPut(s, "Stomping Ground", 50);
+        DPut(s, "Stomping Ground", 48);
+        DPut(s, "Ignoble Hierarch", 30);
+        DPut(s, "Somberwald Sage", 43);
+        s.players[0].hand.push_back(DCard(kDec, 5));
+        return s;
+    };
+    std::vector<std::vector<int>> asked;
+    BounceChooser fn = [&asked](const GameState& st, int, const std::string&, const std::vector<int>& legal, int) -> int
+    {
+        std::vector<int> nums;
+        for (int i : legal) { nums.push_back(st.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+        asked.push_back(nums);
+        return 0;
+    };
+    BounceChooser* const saved = g_play_sacrifice_chooser;
+    g_play_sacrifice_chooser = &fn;
+    GameState roll = board();
+    TurnSolver::ApplyPlan(roll, DPlan({ DEmerge(43) }), /*is_pre_combat=*/true);
+    GameState exec = board();
+    ExecEmerge(exec, 43);
+    g_play_sacrifice_chooser = saved;
+    // One unpayable candidate is removed, which leaves Sage alone: a forced victim asks nothing.
+    for (const std::vector<int>& a : asked) { CHECK(std::find(a.begin(), a.end(), 30) == a.end()); }
+    CHECK(DNum(roll, 5) != nullptr);   // the cast happened off Sage
+    CHECK(DNum(roll, 43) == nullptr);
+    CHECK(DNum(exec, 43) == nullptr);
+    CHECK(exec.players[0].hand.empty());
+}

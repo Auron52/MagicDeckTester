@@ -68656,7 +68656,19 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         int em_victim = 0;
         if (em_cast)
         {
-            em_victim = EmergeResolveVictim(state, name, own_targets);
+            // Human play (the board click is the only reader -- null in every search scope): offer only victims
+            // whose bill this board pays, probed with this apply's own payer on a scratch copy, the victim's mana free
+            // (PaySacVictimScope). Executor twin: CastSpellFromHand.
+            const std::function<bool(int)> em_payable = [&](int victim_num) -> bool
+            {
+                GameState probe = state;
+                const RevealLogPause quiet;
+                const ManaCost bill = EmergeCastCost(def, probe, EmergeVictimMv(probe, victim_num));
+                PaySacVictimScope _pv(victim_num);
+                SpellSubtypePayScope _ss(&def.card);
+                return TapForCostDirect(probe, bill, /*for_creature=*/true);
+            };
+            em_victim = EmergeResolveVictim(state, name, own_targets, g_play_sacrifice_chooser ? &em_payable : nullptr);
             own_targets = em_victim;
             ec = EmergeCastCost(def, state, EmergeVictimMv(state, em_victim));
         }

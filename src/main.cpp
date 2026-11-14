@@ -264,8 +264,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // Current P/T (sweep: "creature current power/toughness incl. temp pumps not exposed"). The
         // shared combat readers, so the number shown is the number combat deals / SBA checks.
         const bool has_pt = p.card.IsCreature() || p.is_animated;
-        const int  pw     = has_pt ? CombatPowerOf(p, s) : 0;
-        const int  tf     = has_pt ? LethalToughness(p, s) : 0;
+        // ...plus a lone attacker's exalted +N/+N (until end of turn), which combat adds to its damage rather than
+        // writing a temp pump: the display-only PlayCombatDisplay hint (Boars 5d sweep, seed 97004).
+        const int  exl    = has_pt ? PlayCombatShownExalted(s, p) : 0;
+        const int  pw     = has_pt ? CombatPowerOf(p, s) + exl : 0;
+        const int  tf     = has_pt ? LethalToughness(p, s) + exl : 0;
         bool sick = false;
         if (has_pt && p.entered_this_turn)
         {
@@ -1922,10 +1925,13 @@ public:
 
     // The pre-game board: mulligan and bottoming happen before any permanent exists, so they emit
     // a fixed empty board rather than reading one off a GameState they do not have.
+    // The life shown is the game's STARTING life (gamesetup::StartingLife: MTG_START_LIFE / the job's
+    // starting_life), both seats -- a literal 20 read wrong under 2HG's 30 (Boars 5d sweep, seed 97013).
     DecisionJson& PregameBoard()
     {
-        m_os << "  \"me\": { \"life\": 20, \"battlefield\": [] },\n";
-        m_os << "  \"opponent\": { \"life\": 20, \"battlefield\": [] },\n";
+        const int life = gamesetup::StartingLife();
+        m_os << "  \"me\": { \"life\": " << life << ", \"battlefield\": [] },\n";
+        m_os << "  \"opponent\": { \"life\": " << life << ", \"battlefield\": [] },\n";
         return *this;
     }
 
@@ -2322,6 +2328,86 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 }
                 if (!arm) { continue; }
                 if (!cv_seen.insert(SummarizePlan(plans[i], s)).second) { hide_bundle[i] = 1; }
+            }
+        }
+        // EXACT-TWIN FOLDS (Boars 5d sweep, 2026-11-14). Two plan shapes whose rows are the same line as a plan
+        // already shown, in human play. A row is hidden only when an EARLIER VISIBLE plan equals it field for field
+        // (Plan::operator==) once the one axis below is normalised -- so no line leaves the menu. Hidden, not
+        // removed: enumeration, scoring, every REAL index and CheckLine's matching are untouched.
+        if (HumanPlayActive())
+        {
+            auto twin_key = [](const TurnSolver::Plan& p) {
+                return p.land_to_play + "|" + p.fetch_target + "|" + p.land_face + "|"
+                     + std::to_string(static_cast<int>(p.land_slot)) + (p.land_from_top ? "T|" : "|")
+                     + std::to_string(p.actions.size());
+            };
+            // (1) LAND-SEARCH PIN TWINS (item 3: every sweep agent saw "hold, then crack this main + cast X" once
+            //     per fetch target, identical summary, actions and "(hold: crack later)"). A plan's
+            //     land_search_pins only choose the DEFAULT of the tutor_etb picker in human play
+            //     (PerformLandSearch asks g_play_tutor_chooser at every land search, the pin seeding its default),
+            //     so a plan that differs from a shown one in its pins alone is the same line asking the same
+            //     question -- the human picks the target at the crack.
+            if (s.deck_has_land_search)
+            {
+                std::unordered_map<std::string, std::vector<size_t>> shown;
+                for (size_t i = 0; i < plans.size(); ++i)
+                {
+                    if (hide_bundle[i]) { continue; }
+                    std::vector<size_t>& bucket = shown[twin_key(plans[i])];
+                    bool twin = false;
+                    if (!plans[i].land_search_pins.empty())
+                    {
+                        for (size_t j : bucket)
+                        {
+                            TurnSolver::Plan q = plans[i];
+                            q.land_search_pins = plans[j].land_search_pins;
+                            q.value            = plans[j].value;
+                            if (q == plans[j]) { twin = true; break; }
+                        }
+                    }
+                    if (twin) { hide_bundle[i] = 1; } else { bucket.push_back(i); }
+                }
+            }
+            // (2) DEAD EQUIP ONTO THE EMERGE VICTIM (item 5, seed 97010: "Decimator (emerge, sacrificing Ignoble
+            //     Hierarch #31), equip Lightning Greaves -> #31"). The plan's equips run in the trailing pass, after
+            //     its casts, by when the victim is in the graveyard and the equip refuses -- the row realises the
+            //     same plan without that equip. The one EARLY equip (the haste unlock, FireManaUnlockEquips) fires
+            //     only onto a still-locked mana source, i.e. a summoning-sick host: that line (equip a sick dork,
+            //     tap it, sacrifice it) is real and stays. Hidden only when the equip-less twin is shown.
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (hide_bundle[i]) { continue; }
+                const std::vector<Action>& acts = plans[i].actions;
+                std::vector<int> victims;
+                for (const Action& a : acts)
+                {
+                    if (a.kind == Action::Kind::CastFromHand && a.emerge && a.soulfire_own_targets > 0)
+                    { victims.push_back(a.soulfire_own_targets); }
+                }
+                if (victims.empty()) { continue; }
+                size_t dead = acts.size();
+                for (size_t x = 0; x < acts.size() && dead == acts.size(); ++x)
+                {
+                    const Action& e = acts[x];
+                    if (e.kind != Action::Kind::Equip
+                        || std::find(victims.begin(), victims.end(), e.sac_victim_id) == victims.end()) { continue; }
+                    const Permanent* host = nullptr;
+                    for (const Permanent& q : s.battlefield)
+                    { if (q.card.m_number == e.sac_victim_id && q.controller_index == s.active_player_index) { host = &q; break; } }
+                    if (host == nullptr || host->entered_this_turn) { continue; }   // a hand / sick host: keep
+                    dead = x;
+                }
+                if (dead == acts.size()) { continue; }
+                TurnSolver::Plan q = plans[i];
+                q.actions.erase(q.actions.begin() + static_cast<std::ptrdiff_t>(dead));
+                const std::string k = twin_key(q);
+                for (size_t j = 0; j < plans.size(); ++j)
+                {
+                    if (j == i || hide_bundle[j] || twin_key(plans[j]) != k) { continue; }
+                    TurnSolver::Plan r = q;
+                    r.value = plans[j].value;
+                    if (r == plans[j]) { hide_bundle[i] = 1; break; }
+                }
             }
         }
     }
@@ -4267,7 +4353,9 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
             }
             os << ", \"is_creature\": " << (p.card.IsCreature() ? "true" : "false")
                << ", \"sick\": " << (sick ? "true" : "false")
-               << ", \"attacked\": " << (p.AttacksThisTurn() != 0 ? "true" : "false")
+               // declared this turn (the attack count, kept only for an attack-count deck) OR attacking in this
+               // turn's combat -- incl. a body put onto the battlefield attacking (Boars 5d sweep, seed 97007)
+               << ", \"attacked\": " << (p.AttacksThisTurn() != 0 || PlayCombatShownAttacking(s, p) ? "true" : "false")
                << ", \"plus_counters\": " << plus << ", \"minus_counters\": " << minus
                << ", \"damage\": " << p.damage
                << ", \"returns_at_end\": " << (p.return_at_end_step ? "true" : "false")
@@ -9953,6 +10041,54 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // a win turn cannot tell "the line is legal and offered" from "the line does not exist". Issue 6
     // (the hasted-dork mana unlock) is exactly that shape. Runs on the board as authored -- no untap
     // or draw step -- which is what makes it a deterministic statement about THIS position.
+    // Optional MENU assertion ("expect_menu": [{"summary_contains": "...", "count": N}, ...]): the main-phase menu
+    // the viewer / --claude-play would SHOW on this board (WriteDecisionJson, incl. its display folds), counted by
+    // summary substring. Guards menu-display collapses, which no line verdict can see (a hidden twin row still
+    // matches every line). Optional per entry: "fetch_target" (exact) narrows the rows counted. Runs on the board
+    // as authored, like validate_line, and returns.
+    if (j.contains("expect_menu"))
+    {
+        GameState s = state;
+        s.turn_number = turn;
+        const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        std::ostringstream ms;
+        WriteDecisionJson(ms, s, menu, /*is_pre_combat=*/true, 0, 0);
+        const std::string txt = ms.str();
+        const std::size_t a = txt.find('{'), b = txt.rfind('}');
+        json dj;
+        try { dj = json::parse(txt.substr(a, b - a + 1)); }
+        catch (const std::exception& e) { std::cout << "scenario: FAIL menu JSON did not parse: " << e.what() << "\n"; return 1; }
+        const json rows = dj.value("plans", json::array());
+        std::cout << "scenario: menu rows=" << rows.size() << " plans=" << menu.size() << "\n";
+        bool ok = true;
+        for (const auto& want : j.at("expect_menu"))
+        {
+            const std::string sub = want.value("summary_contains", std::string());
+            const bool has_ft = want.contains("fetch_target");
+            const std::string ft = has_ft ? want.at("fetch_target").get<std::string>() : std::string();
+            int n = 0;
+            for (const auto& r : rows)
+            {
+                if (r.value("summary", std::string()).find(sub) == std::string::npos) { continue; }
+                if (has_ft && (!r.contains("fetch_target") || !r.at("fetch_target").is_string()
+                               || r.at("fetch_target").get<std::string>() != ft)) { continue; }
+                ++n;
+            }
+            const int want_n = want.value("count", -1);
+            std::cout << "scenario:   rows with \"" << sub << "\"" << (has_ft ? " fetch_target=" + ft : std::string())
+                      << ": " << n << " (want " << want_n << ")\n";
+            if (n != want_n) { ok = false; }
+        }
+        if (!ok)
+        {
+            for (const auto& r : rows)
+            { std::cout << "scenario:   row " << r.value("index", -1) << " " << r.value("summary", std::string()) << "\n"; }
+            std::cout << "scenario: FAIL menu counts\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (menu)\n";
+        return 0;
+    }
     if (j.contains("validate_line"))
     {
         GameState s = state;

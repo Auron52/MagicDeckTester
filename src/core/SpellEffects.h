@@ -25,6 +25,7 @@
 #include <array>
 #include <bit>     // std::popcount -- MSVC has no __builtin_popcount (Windows CI, 2026-11-12)
 #include <cstdint>
+#include <functional>   // EmergeResolveVictim's payable probe (human play)
 #include <cstring>   // LandAuraMemo: UntapLandHosts stored by memcpy
 #include <type_traits>
 #include <atomic>
@@ -4363,6 +4364,74 @@ inline int ExaltedBonusForCombat(GameState& state, const std::vector<int>& atk_i
     lone.temp_power_bonus += exalted_at_declare;
     lone.temp_tough_bonus += exalted_at_declare;
     return 0;
+}
+
+// DISPLAY-ONLY COMBAT HINT for the human-play board writers (Boars 5d sweep, 2026-11-14: seed 97004's post-combat
+// board showed a lone exalted attacker without its +1/+1; seed 97007's legend_keep read `attacked: false` for a
+// declared Ilharg and for the copy it put onto the battlefield attacking). Two facts the GameState does not carry:
+//   * which creatures are ATTACKING this turn -- Permanent::AttacksThisTurn is counted only for a deck with an
+//     attack-count reader (NoteAttacksDeclared), and a body put onto the battlefield attacking never attacked
+//     (CR 508.4) though it IS attacking;
+//   * the lone-attacker exalted bonus, which ResolveCombatDamage adds to the damage (ExaltedBonusForCombat returns
+//     it rather than writing a temp pump, so every key and both worlds are unchanged) -- but the card says "+1/+1
+//     until end of turn", so the board shown after combat should read it.
+// Written ONLY by the real game with an event sink bound (the viewer / --claude-play / human-line scenarios) and
+// never under speculation, so autonomous play and every search scope never write it; read only by the display.
+struct PlayCombatDisplay
+{
+    int              turn          = -1;
+    std::vector<int> attacking;          // card m_numbers (> 0) attacking in this turn's combat
+    int              exalted_num   = 0;  // the lone attacker carrying the exalted bonus, 0 = none
+    int              exalted_bonus = 0;
+};
+inline thread_local PlayCombatDisplay g_play_combat_display;
+inline bool PlayCombatDisplayLive() { return g_play_event_sink != nullptr && !g_tap_speculating; }
+// Declared attackers (CR 508.1): starts this turn's record.
+inline void NotePlayCombatDeclared(const GameState& state, const std::vector<int>& atk_idx)
+{
+    if (!PlayCombatDisplayLive()) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    for (int i : atk_idx)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const int n = state.battlefield[static_cast<std::size_t>(i)].card.m_number;
+        if (n > 0 && std::find(d.attacking.begin(), d.attacking.end(), n) == d.attacking.end())
+        { d.attacking.push_back(n); }
+    }
+}
+// A body put onto the battlefield attacking (Ilharg's put, CR 508.4): attacking, never declared.
+inline void NotePlayCombatAttackingNum(const GameState& state, int num)
+{
+    if (!PlayCombatDisplayLive() || num <= 0) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    if (std::find(d.attacking.begin(), d.attacking.end(), num) == d.attacking.end()) { d.attacking.push_back(num); }
+}
+inline void NotePlayCombatExalted(const GameState& state, const std::vector<int>& atk_idx, int bonus)
+{
+    if (!PlayCombatDisplayLive() || bonus <= 0 || atk_idx.empty()) { return; }
+    const int i = atk_idx.front();
+    if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    d.exalted_num   = state.battlefield[static_cast<std::size_t>(i)].card.m_number;
+    d.exalted_bonus = bonus;
+}
+// The readers (display only). A record from an earlier turn reads as nothing.
+inline bool PlayCombatShownAttacking(const GameState& state, const Permanent& p)
+{
+    const PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number || p.card.m_number <= 0 || p.controller_index != state.active_player_index)
+    { return false; }
+    return std::find(d.attacking.begin(), d.attacking.end(), p.card.m_number) != d.attacking.end();
+}
+inline int PlayCombatShownExalted(const GameState& state, const Permanent& p)
+{
+    const PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number || d.exalted_num <= 0 || p.card.m_number != d.exalted_num
+        || p.controller_index != state.active_player_index) { return 0; }
+    return d.exalted_bonus;
 }
 
 // ---- Board-level HASTE SOURCES, gathered once -------------------------------------------------
@@ -27259,6 +27328,7 @@ inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<
         perm.return_at_end_step = sd->params.attack_put_return_at_end_step;
         state.battlefield.push_back(perm);
         int slot = static_cast<int>(state.battlefield.size()) - 1;
+        if (live) { NotePlayCombatAttackingNum(state, raw.m_number); }   // display-only (PlayCombatDisplay)
         if (live && RevealVisible())
         {
             EmitReveal(state.turn_number, sd->card.m_name.str() + " (put attacking)",
@@ -48496,7 +48566,13 @@ inline int EmergeVictimMv(const GameState& state, int victim_id)
 // additional cost of fixed price, wrong for emerge); the caller then sacrifices with the chooser muted
 // (SacChooserMute), one prompt not two. The chooser is null in every search / rollout scope (RevealLogPause),
 // so autonomous play never reaches it. Returns the victim's card m_number, 0 = no creature (drop the cast).
-inline int EmergeResolveVictim(const GameState& state, const std::string& spell_name, int pin)
+// `payable` (human play only -- the chooser branch is the only reader): does the emerge bill priced off THIS victim
+// pay on the current board? The board click then offers only victims whose cast can actually happen (Boars 5d sweep,
+// seeds 97001 / 97009: a "sacrificing Sage" plan's click listed Ignoble Hierarch, whose {5}{G}{G}{G} the board could
+// not pay, and picking it silently dropped the cast). Nothing is lost: an unpayable victim's cast is dropped anyway.
+// If no candidate pays, the click keeps every candidate (the cast drops whichever is picked, and says so).
+inline int EmergeResolveVictim(const GameState& state, const std::string& spell_name, int pin,
+                               const std::function<bool(int victim_num)>* payable = nullptr)
 {
     const int active = state.active_player_index;
     const int id = ResolveSacReadinessVictimId(state, pin);
@@ -48516,7 +48592,18 @@ inline int EmergeResolveVictim(const GameState& state, const std::string& spell_
     }
     if (g_play_sacrifice_chooser && idx >= 0)
     {
-        const std::vector<int> cands = SacCreatureCandidateIndices(state, active, std::string{});
+        std::vector<int> cands = SacCreatureCandidateIndices(state, active, std::string{});
+        if (payable != nullptr && *payable && cands.size() > 1)
+        {
+            std::vector<int> ok;
+            for (int ci : cands)
+            { if ((*payable)(state.battlefield[static_cast<std::size_t>(ci)].card.m_number)) { ok.push_back(ci); } }
+            if (!ok.empty())
+            {
+                if (std::find(ok.begin(), ok.end(), idx) == ok.end()) { idx = ok.front(); }
+                cands.swap(ok);
+            }
+        }
         if (cands.size() > 1)   // a single legal victim is forced -- no prompt for a non-choice
         {
             int def_opt = 0;

@@ -10285,7 +10285,20 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     int em_victim = 0;
     if (em_cast)
     {
-        em_victim = EmergeResolveVictim(state, def->card.m_name.str(), own_targets);
+        // Human play (the board click is the only reader): offer only victims whose bill this board pays -- the
+        // same payer this cast uses below, on a scratch copy, with the victim's own mana free (PaySacVictimScope).
+        const std::function<bool(int)> em_payable = [&](int victim_num) -> bool
+        {
+            GameState probe = state;
+            const RevealLogPause quiet;
+            const ManaCost bill = EmergeCastCost(*def, probe, EmergeVictimMv(probe, victim_num));
+            PaySacVictimScope _pv(victim_num);
+            SpellSubtypePayScope _ss(&def->card);
+            ManaPool av = AvailableManaPool(probe);
+            return TapForCost(probe, bill, av, /*for_creature=*/true);
+        };
+        em_victim = EmergeResolveVictim(state, def->card.m_name.str(), own_targets,
+                                        g_play_sacrifice_chooser ? &em_payable : nullptr);
         own_targets = em_victim;
         entry.soulfire_own_targets = em_victim;
         effective = EmergeCastCost(*def, state, EmergeVictimMv(state, em_victim));
