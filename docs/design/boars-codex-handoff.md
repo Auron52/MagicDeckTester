@@ -212,3 +212,38 @@ If a file is missing, that agent stopped before writing it; redo its step from i
   casts a second Ilharg into the legend rule. MTG_UNPRUNE=fetch also restores the hold (not a clean revert of the width).
   => every searched slower game now has a verdict: the accept (next step 2) is unblocked. Report gi36 (cast order) and the
   ranking-tie games to the USER with it.
+
+## Codex fetch-ranking follow-up (2026-11-14; pending USER review)
+
+The accepted Boars/search changes are on `boars-analysis` through `5028fd747`. The fetch-ranking lever remains OFF and
+unmerged. Its separate worktree `boars-rank` now has local commit `142303454` (no push): count each mana producer's
+`produces_amount` when deciding which spells' colour pips the fetch ranking should consider. The previous count treated
+Azorius Chancery as one mana and excluded Massacre Wurm {3}{B}{B}{B} from Creature Giving 2HG d3 gi165 on T5. The
+top-1 fetch then took Breeding Pool instead of Overgrown Tomb, leaving only two black sources. The corrected binary
+takes Tomb and wins T5 (old ranking T7 in blind salt 1; T6 in the original A/B salt1 cell). The new unit fixture
+checks this exact target. The rule still approximates the candidate line using castable spells in hand; the search does
+not pass its selected spell sequence to the fetch provider.
+
+Validation of `142303454`: 3,042/3,042 unit tests; 516/516 scenarios. One pooled 6,000-game A/B at 12 workers,
+`build/scratch/boars/rank2/capacity_ab/`, compared the corrected binary with the frozen previous ranking across
+Boars, Boars 2HG, Creature Giving, Creature Giving 2HG and Minotaur, both play/depth-3 settings and both search salts.
+Exactly ONE game changed digest or win turn: CG 2HG d3 salt1 gi165, T6 -> T5. No game got slower. Relative to the
+ranking-OFF arm, deck aggregates are Boars -18, Boars 2HG -6, CG +4, CG 2HG -1, Minotaur -2. The CG +4 is entirely
+the play-profile gi125 and gi138 in both salts: those four original T4 -> T5 losses tie under five known-respecting
+blind-search salts, and their old T4 lines depend on post-fetch draw order. The candidate is NOT default-on yet.
+
+Other loss audit: Boars d3 gi84, Boars 2HG d3 gi42, and Boars 2HG play gi22 retain losses with a fixed realised
+shuffle, but each first differs at Forest versus Stomping Ground and then draws different cards. With 20 fresh real
+shuffle salts plus blind search, their paired turn deltas sum +1, 0, and 0 respectively; no consistent downside to
+the shock. CG 2HG d3 gi205 similarly totals +1 over 20 real salts (2 faster, 3 slower, 15 ties). CG 2HG play gi258's
+original T4 -> T5 loss ties under all five blind-search salts; with 20 real shuffle salts, two outcomes still favour
+the old ranking. In those two, the new red fetch makes T2 War-Riders castable and the search chooses it over two Birds;
+the two-Birds line remains legal after the red fetch, but the search does not take it at 16x budget. This is a separate
+search-line judgment, not a missing colour in the fetch target. See `rank2/rc/cg2hg_real_focus/` and the final report.
+
+Review request: consider enabling `MTG_FETCH_RANK_PIPS` by default with the capacity correction; the only failing raw
+per-deck aggregate is the four clairvoyant CG play results, which the USER said to ignore. Keep the top-1 width and
+do not add a Creature Giving width-2 fallback without separate evidence and USER review. Five Colour's shared-list
+change remains a separate question: the single provider pick becomes an unnamed land plan and is reranked after the
+fetch moves to the graveyard; its observed earlier win relied on retaining a known library top, but the choice-timing
+change itself is real. No fetch-ranking work is running at this checkpoint.
