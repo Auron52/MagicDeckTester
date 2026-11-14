@@ -887,3 +887,18 @@ claude-play sweep (recorded at 35b021047, before the fetch/cast-order/lord chang
 - Flooded Strand's card note said "SpiritsProvider keeps the hold" -- updated to the USER's drop (text edit).
 - **Next:** shared-branch push not before ~03:55 UTC 2026-11-14 (check_references_safe, rebase, rebuild + smoke +
   check_gt_logs if src/GT replays, CI watch --interval 60); Stage 6 report.
+
+### USER on the Stage 6 report (2026-11-14 ~01:40 UTC), verbatim
+*"The default shipped play settings are depth 5 and 20 ms budget. That one can be changed after measurements. To be
+clear, the lands are counted as a total, whereas I would try to keep the full 3-4 threats regardless. Otherwise 5
+looks good. Though I should mention that we still want to make sure that things like Metallic Mimic's choice is a
+provider heuristic in this case."*
+- **Discard buckets: matches the code.** Lands are counted in TOTAL (`cap3 = 3 - board_lands`, `cap5 = 5 - board_lands`,
+  so lands on the battlefield use up the quota); threats are counted in HAND only (4 kept, whatever is on the
+  battlefield), and the 4th threat is shed only after the 4th-5th lands.
+- **Disclosure section 5 signed off**, including the five PROVISIONAL inert simplifications (Drogskol hexproof grant,
+  Shacklegeist tap/block clauses, Wanderer sacrifice/counter, Mimic type choice, Courtyard "any creature").
+- **Mimic's choice IS a provider heuristic**: every site calls `ResolveProvider(state).ChosenCreatureSubtypeId`
+  (DecisionProvider.h:208; SpellEffects.h enter cascade, TurnSolver.cpp x3); the default (dominant subtype) is the base
+  provider's, overridable per deck (Kithkin does). Spirits inherits it -> Spirit. Card note reworded to say so.
+- **Play settings d5 / b20 stay** until a measurement says otherwise (USER: "can be changed after measurements").
