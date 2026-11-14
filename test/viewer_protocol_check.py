@@ -792,9 +792,13 @@ class _ReplaySession:
     def _stderr_has_error(self):
         """Whether the child's stderr so far holds "Error:" -- scanned INCREMENTALLY (the stateless
         route sees the whole of it in every step's output, so a hit anywhere is a hit)."""
-        self.errf.seek(max(0, self.err_pos - 8))
-        data = self.errf.read()
-        self.err_pos = max(self.err_pos, self.errf.tell())
+        # pread, never seek: the child shares this file's OFFSET (one open file description), so
+        # moving it would make the child's next write land over earlier bytes.
+        fd = self.errf.fileno()
+        start = max(0, self.err_pos - 8)
+        size = os.fstat(fd).st_size
+        data = os.pread(fd, max(0, size - start), start) if size > start else b""
+        self.err_pos = max(self.err_pos, size)
         return b"Error:" in data
 
     def _read_step(self):
