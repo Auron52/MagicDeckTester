@@ -1,5 +1,35 @@
 # Queue item C2 handoff (2026-11-14) -- pirates residual Bolt APPLY-DROPs
 
+## Round 2 agent (2026-11-14, ~06:00-08:30Z) -- READ THIS FIRST
+Done (LOCAL commits, not pushed; the owner pushes):
+- Round-2 regression 322/322 unchanged + A/B 89500000 all nets 0 (coordinator commit 39762088d).
+- e11c9a28e gate pirates-C2r2-20261114 (74000-78999, PGO 316eac74bf1d, oracle-off byte-identical): 39 -> 10 issues.
+- a0c51f63d MTG_CCO_RESERVE_OTHER (heurarm slot CCO_RESERVE_OTHER, default ON, =0 -> historical reserve; ordering
+  only): the CCO LINE RESERVE (1) holds a creature-only land only for a colour whose shortfall exceeds what the OTHER
+  untapped creature-only lands make (counted LIVE per candidate, so lands this payment already tapped do not count),
+  and (2) counts a spendable one-shot (Treasure) as unrestricted supply, as the hand scan does. Units +2 cases
+  (3073/3073). Repros on/off: s30070533 16 -> 3 (the parked one), s30074443 T4 1 -> 0, s30075333 T4 1 -> 0; every
+  round-1/2 repro unchanged; s30077738 (8, no creature-only land: Dire Fleet Captain {B}{R} vs Fiery Islet pain
+  tie-break) is a different class, unmoved.
+- defa8af4e SMOKE GT (pirates_smoke_d0_s1001 digest only; lever=0 reproduces d1510d52c11a9fa0).
+- 6ce234658 REGRESSION GT (pirates_regression_d0_s2002 digest only; lever=0 reproduces 422c3c239c66fd57). Searched
+  rows slower 0 / play-changed 0 in both tiers. check_gt_logs clean (1170).
+- A/B seed 89600000, lever off vs on, 32,000 games (same decks/sizes as round 1): 0 changed outcomes, every net 0
+  (logs/mana-clean-chain/itemC2/ab3_report.txt; ab2_report.txt = round-2 scan A/B).
+- b5630192a gate pirates-C2r3-20261114 (79000-83999, PGO d83e185eb1db, byte-identical): 12 issues, all Bolt, 5 sigs.
+  Next pirates block 84000-88999.
+Remaining (next round):
+1. Residual mechanism A (s30080205 T3 x4, s30079131 T3, s30079307 T3; code-reading diagnosis, NOT yet traced): the
+   hand-demand KEEP (cch_keep / part 3) holds a creature-only land for a HAND creature's colour (Siren Stormtamer x2
+   {U}; Corsair Captain {U}) that the line does not cast and cannot cast this turn, while the line's own Lightning Bolt
+   loses its {R}. Candidate fix: under a line hold, weigh the keep against the line's owed noncreature pips (or cap the
+   creature demand by this turn's castability). Ordering only; needs its own lever + full validation.
+2. s30083181 T3 x6 ({land=Mountain + vial:Staunch Crewmate}, Territory + 2 Mountains, oracle pay1[Territory:C
+   Mountain:R] pay2[Mountain:R]): not analysed.
+3. s30070533 residual 3 + "a lost action was not declared in the plan": the Crewmate dig continuation's undeclared
+   cast (Stormtamer / Corsair Captain) is outside the line hold, so no reserve can see it (need_later class).
+4. s30077738 (other block): Fiery Islet pain tie-break vs a later {B}{R} -- not a creature-only-land shape.
+
 ## Diagnosis
 Both shapes were INPUT bugs in item C's `CcoHandDemandScan` (src/ai/ManaPayment.cpp), so the MTG_CCO_HAND_DEMAND rung
 (the USER's "the inflexible spell needs to be considered early") never fired:
