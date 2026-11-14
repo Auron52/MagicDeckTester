@@ -1613,3 +1613,17 @@ fungus 1,880, gods 4,300 (first run).
   Fresh held-out 3,000 paired Hydras games (seed 7600001, profile depth, b20) had 0 changed win turns, average
   5.4000 on both arms. Three Hydras play digests and their `.wins` files were accepted locally. L is ready for
   rebase onto the shared head and landing checks.
+
+* **Queue item N, Q9/Q16 (Codex, 2026-11-14): Fungus v3 landing Burst site 9 -- validated in isolated
+  `wip/n-fungus`, based on H/K/L.** A freshly cast Saproling Burst did not open the post-entry activation
+  breakpoint: its fade ability was absent from the activation-key delta and from the card fanout. The v3 fixture
+  with Crossroads on board, Season + Burst in hand, and ten Forests went from no T4 damage (pops in main 2) to a
+  T4 win (two pops in main 1). `MTG_BP_FADE_POST_ENTRY=0` restores the old result. Units 3132/3132. Full combined
+  fleet gate: 534 jobs, 157,092 games, 545/545 scenarios, strict references 343 ok/493 repaired/1 beaten with
+  zero drift/divergence/gap. Only eight Fungus tier digests changed; 28 searched games faster, zero slower, d0
+  unchanged. Fresh paired A/B in one 44,000-game batch: v3 shipped -104/4000 turn-games, v3 d3 -87/4000,
+  v3 d0 0/10000, 2HG shipped -61/2000, 2HG d3 -70/2000. All 21 slower held-out games recovered their old
+  win turn at depth 8 with no budget. Fungus tier digests and `.wins` accepted locally. Q16 diagnosis:
+  post-entry `ReadFadeBoard` sees same-plan Season/Sporecrown, but the pre-cast menu cannot; Shroofus trigger
+  value and the postcombat phase are absent from the menu projection. Details and remaining menu work:
+  `docs/design/fungus-site9-q9-q16-codex-2026-11-14.md`.
