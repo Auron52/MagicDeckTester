@@ -1103,6 +1103,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
     p.library_top_revealed           = params.value("library_top_revealed", false);
     p.play_lands_from_library_top    = params.value("play_lands_from_library_top", false);
+    p.cast_merfolk_from_library_top  = params.value("cast_merfolk_from_library_top", false);
     p.stages_cards           = params.value("stages_cards", false);
     p.death_trigger_damage   = params.value("death_trigger_damage", 0);
     p.scales_per_matching    = params.value("scales_per_matching", false);
@@ -1307,6 +1308,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     p.cast_trigger_subtype         = params.value("cast_trigger_subtype", std::string{});
     p.cast_trigger_creates_tokens  = params.value("cast_trigger_creates_tokens", 0);
+    if (params.contains("cast_subtype_pay_token_cost"))
+    { p.cast_subtype_pay_token_cost = ManaCostFromString(params["cast_subtype_pay_token_cost"].get<std::string>()); }
     p.cast_token_power             = params.value("cast_token_power", 0);
     p.cast_token_toughness         = params.value("cast_token_toughness", 0);
     for (const std::string& s : params.value("cast_token_subtypes", json::array()))

@@ -754,6 +754,7 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.militia_pride_pay_choice >= 0
+        || p.mihail_pay_mask >= 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 // A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
@@ -792,6 +793,8 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_combat_transform != p.combat_transform_choice)                               { ok = false; }
     if (p.militia_pride_pay_choice >= 0
         && s.scripted_militia_pride_pay != p.militia_pride_pay_choice)                               { ok = false; }
+    if (p.mihail_pay_mask >= 0
+        && s.scripted_mihail_pay_mask != p.mihail_pay_mask)                                         { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
@@ -5488,7 +5491,15 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             }
         }
         last_cast_paid = false;
-        if (it == zone.end()) { return; }   // a miss: its riders were already taken above
+        Card* cast_card = it == zone.end() ? nullptr : &*it;
+        if (riders.cast_from_top)
+        {
+            cast_card = nullptr;
+            if (PlayableTopMerfolkNumber(state) != 0 && !ap.library.empty()
+                && ap.library.front().m_name == name)
+            { cast_card = &ap.library.front(); }
+        }
+        if (cast_card == nullptr) { return; }
         ManaPool available = AvailableManaPool(state);
         // MTG_EXEC_TAP_TRACE=1 (diagnosis only, default off): which permanents this EXECUTOR cast
         // tapped, and the float it left -- the executor-only twin of MTG_FLOAT_TRACE, which prints
@@ -5500,16 +5511,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             for (const Permanent& p : state.battlefield) { tapped_before.push_back(p.tapped); }
             const ManaPool& f0 = state.floating_mana;
             std::fprintf(stderr, "[exec-tap] T%d before %s: float{w%d u%d b%d r%d g%d c%d *%d} untapped:",
-                         state.turn_number, it->m_name.str().c_str(), f0.white, f0.blue, f0.black,
+                         state.turn_number, cast_card->m_name.str().c_str(), f0.white, f0.blue, f0.black,
                          f0.red, f0.green, f0.colorless, f0.wild);
             for (const Permanent& p : state.battlefield)
             { if (!p.tapped) { std::fprintf(stderr, " %s", p.card.m_name.str().c_str()); } }
             std::fprintf(stderr, "\n");
         }
-        const std::string cast_name = it->m_name.str();
-        const int         cast_num  = it->m_number;
-        const bool        cast_staged = it->m_is_staged;   // MTG_USER_ORDER_TRACE only
-        CastSpellFromHand(state, *it, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
+        const std::string cast_name = cast_card->m_name.str();
+        const int         cast_num  = cast_card->m_number;
+        const bool        cast_staged = cast_card->m_is_staged;   // MTG_USER_ORDER_TRACE only
+        CastSpellFromHand(state, *cast_card, available, 0, tutor_target, chosen_x, own_targets, ponder_keep,
                           crackle_targets, splice_count, chosen_float_color, enchant_target, free_cast,
                           bestow, replicate_count, convoke_green, convoke_other, phyrexian_life, evoke,
                           adventure, kicked, riders);
@@ -5517,8 +5528,10 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         // cannot be told apart from a copy, so it keeps the old always-armed reading. A REMANDED cast
         // is paid although the card is back in hand (m_last_cast_remanded, set by CastSpellFromHand).
         last_cast_paid = cast_num <= 0 || m_last_cast_remanded
-            || std::none_of(zone.begin(), zone.end(),
-                            [&](const Card& c) { return c.m_number == cast_num; });
+            || (riders.cast_from_top
+                ? (ap.library.empty() || ap.library.front().m_number != cast_num)
+                : std::none_of(zone.begin(), zone.end(),
+                               [&](const Card& c) { return c.m_number == cast_num; }));
         // MTG_LINE_PAY_AUDIT: a cast of the audited plan that did not happen BECAUSE ITS OWN COST no longer pays
         // on this board (a probe on a copy) -- a payment shortfall, not a legality refusal.
         if (!last_cast_paid && g_line_pay_frame != nullptr && t_lpa_acts)
@@ -10326,7 +10339,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // the definition, so it does NOT carry m_is_staged -- the gate MUST read hand_card. Inert (colour
     // empty, cast_from_hand unused) for every non-impulse spell.
     entry.chosen_float_color = chosen_float_color;
-    entry.cast_from_hand     = !(*hand_card_p).m_is_staged;
+    entry.cast_from_hand     = !riders.cast_from_top && !(*hand_card_p).m_is_staged;
     // Aura (Bogles): carry the searched creature to enchant so EffectHandler's aura-enter branch sets
     // aura_attached_to to the same creature the rollout's apply_one did (lockstep). 0 = not an aura /
     // heuristic fallback (ResolveEnchantTarget). Inert for every non-aura spell.
@@ -10829,7 +10842,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     }
     // Re-find the cast card by its stable number: the payment above may have sacrificed creatures
     // whose death triggers reallocated the hand (see hand_card_p). Same element when nothing moved.
-    for (Card& hc : cast_zone) { if (hc.m_number == hand_card_number) { hand_card_p = &hc; break; } }
+    if (riders.cast_from_top)
+    {
+        if (ap.library.empty() || ap.library.front().m_number != hand_card_number) { return; }
+        hand_card_p = &ap.library.front();
+    }
+    else for (Card& hc : cast_zone)
+    { if (hc.m_number == hand_card_number) { hand_card_p = &hc; break; } }
 
     if (m_logger)
     {
@@ -10937,7 +10956,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     const int pitch_cast_number = (*hand_card_p).m_number;   // `hand_card` dies with the erase below
     // Lurrus: the cast is paid, so its permission is spent (apply_one spends at the same point).
     if (gy_cast_src >= 0) { ConsumeGyCastPermission(state, state.active_player_index, gy_cast_src); }
-    cast_zone.erase(std::find_if(cast_zone.begin(), cast_zone.end(),
+    if (riders.cast_from_top) { ap.library.DrawTop(); }
+    else cast_zone.erase(std::find_if(cast_zone.begin(), cast_zone.end(),
         [hand_card_p](const Card& c) { return &c == hand_card_p; }));
     // ...and the PITCH half of the evoke cost (validated before payment above): exile the pinned red
     // card -- any copy of that name other than the cast card (lockstep twin of apply_one).

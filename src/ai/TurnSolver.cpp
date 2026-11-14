@@ -1606,6 +1606,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
     pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
+    pl("mihailpay", first.mihail_pay_mask != dup.mihail_pay_mask);
     pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
@@ -11251,6 +11252,7 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
         // (fungus-v2-fd-diverge-7021.md).
         if (a.adventure) { s += "[adv]"; }
         if (a.kicked)    { s += "[kick]"; }
+        if (a.cast_from_top) { s += "[library top]"; }
         if (a.face_down != 0) { s += a.face_down == 2 ? "[facedown+up]" : "[facedown]"; }
         if (a.awaken)    { s += "[awaken]"; }
         if (a.bestow)    { s += "[bestow]"; }
@@ -28769,6 +28771,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
     if (p.militia_pride_pay_choice != -1)
     { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
+    if (p.mihail_pay_mask != -1)
+    { fold(0x1A630000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.mihail_pay_mask + 2))); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -29074,7 +29078,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.sac_pins.empty() && p.tapmode_choice == 0 && p.freshmode_choice == 0
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
-        && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1
+        && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1 && p.mihail_pay_mask == -1
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
@@ -29129,6 +29133,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
+        || p.mihail_pay_mask >= 0
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -30068,7 +30073,8 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
         if (ax != kLandSlot && ax != kLandHold) { h = Mix(h, static_cast<std::uint64_t>(p.land_slot + 7)); }
     }
     const int extra[] = { p.discard_choice, p.dig_choice, p.scry_choice, p.tutor_choice, p.fb_hold_choice,
-                          p.landfall_target_choice, p.combat_transform_choice, p.militia_pride_pay_choice, p.tapmode_choice,
+                          p.landfall_target_choice, p.combat_transform_choice, p.militia_pride_pay_choice,
+                          p.mihail_pay_mask, p.tapmode_choice,
                           p.freshmode_choice, p.vial_charge_choice, p.atk_dork_release, p.bounce_choice,
                           p.etbdig_choice, p.etbcounter_choice, p.ponder_choice, p.putback_choice,
                           p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
@@ -43179,6 +43185,32 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     actions.push_back(std::move(v));
                 }
             }
+        }
+    }
+
+    // Mihail grants a second spell source. This candidate has no hand slot: the exact
+    // physical top card is checked again when it is cast, after earlier actions may
+    // have drawn or shuffled. It remains a cast for sequencing and payment.
+    if (const int top_num = PlayableTopMerfolkNumber(state); top_num != 0)
+    {
+        const Card& top = ap.library.front();
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
+        if (td && CastableOnItsOwn(*td)
+            && (td->card.IsInstant() || td->card.HasKeyword(Keyword::Flash) || state.stack.empty())
+            && CanRevealAdditionalCost(state, state.active_player_index,
+                                       top_num, td->params.reveal_subtype_or_pay))
+        {
+            Action a;
+            a.kind = Action::Kind::CastFromHand;
+            a.card_name = top.m_name;
+            a.hand_index = -1;
+            a.cast_from_top = true;
+            a.cost = EffectiveCost(*td, state);
+            a.eval = EvalCard(*td, state);
+            a.is_noncreature = !td->card.IsCreature();
+            a.card_mv = td->card.m_mana_cost.ManaValue();
+            a.def = td;
+            actions.push_back(std::move(a));
         }
     }
 
@@ -56617,6 +56649,7 @@ namespace solvememo
             || a.combat_crack_choice != b.combat_crack_choice
             || a.combat_transform_choice != b.combat_transform_choice
             || a.militia_pride_pay_choice != b.militia_pride_pay_choice
+            || a.mihail_pay_mask != b.mihail_pay_mask
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
@@ -66371,7 +66404,7 @@ static bool HumanVerbMatchesKind(const std::string& verb, Action::Kind k)
 {
     using K = Action::Kind;
     if (verb.empty())         { return true; }
-    if (verb == "cast")       { return k == K::CastFromHand; }
+    if (verb == "cast" || verb == "casttop") { return k == K::CastFromHand; }
     if (verb == "vial")       { return k == K::ActivateVial; }
     if (verb == "retrace")    { return k == K::CastFromGraveyard; }
     if (verb == "gycast")     { return k == K::CastFromGraveyard; }   // a Lurrus permission cast
@@ -66593,6 +66626,8 @@ static bool HumanStepMatches(const HumanStepToken& st, const Action& a, const Ga
             && a.tutor_target.str() == st.name;
     }
     if (a.card_name.str() != st.name || !HumanVerbMatchesKind(st.verb, a.kind)) { return false; }
+    if (a.kind == Action::Kind::CastFromHand
+        && ((st.verb == "casttop") != a.cast_from_top)) { return false; }
     if (a.kind == Action::Kind::CastFromHand
         && (a.kicked != st.kicked || a.adventure != st.adventure || a.face_down != st.face_down))
     { return false; }
@@ -69399,6 +69434,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // entry, so the census can report what happens outside it. Inert (and untouched) otherwise.
         HandEntryCastScope _hec;
 
+        const bool from_top = riders.cast_from_top;
         std::vector<Card>& zone = from_graveyard ? ap.graveyard : ap.hand;
         // Choose WHICH copy of `name` to cast: prefer the EARLIEST-EXPIRING copy, so a staged
         // (exiled, expires end-of-turn) copy is spent before a persistent hand copy. Otherwise the
@@ -69420,7 +69456,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                 it = c;                                             // earlier-expiring staged copy wins
             }
         }
-        if (it == zone.end())
+        Card* cast_card = it == zone.end() ? nullptr : &*it;
+        if (from_top)
+        {
+            cast_card = nullptr;
+            if (PlayableTopMerfolkNumber(state) != 0 && !ap.library.empty()
+                && ap.library.front().m_name == name)
+            { cast_card = &ap.library.front(); }
+        }
+        if (cast_card == nullptr)
         {
             // A positioned human plan can name a cast that only becomes available
             // after its declared slot. Keep the apply silent in search, but tell
@@ -69440,8 +69484,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // `zone.erase(it)` then run on freed memory; ASan caught exactly that on Goblins. Card
         // m_number is a per-copy stable id, so re-finding by it is exact and -- on the overwhelming
         // majority of payments, which mutate no zone -- returns the same element.
-        const int cast_zone_number = it->m_number;
-        const CardDefinition* opt = CardDatabase::Instance().LookupCached(*it);
+        const int cast_zone_number = cast_card->m_number;
+        const CardDefinition* opt = CardDatabase::Instance().LookupCached(*cast_card);
         if (!opt) { return; }
         // BESTOW: the card leaves the hand exactly as it would for a normal cast, but everything
         // downstream -- the cost paid, the permanent that enters, its params -- comes from the DB's
@@ -69489,8 +69533,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (fopt != nullptr) { opt = fopt; }
         }
         const CardDefinition& def = *opt;
-        if (it != ap.hand.end() && !CanRevealAdditionalCost(state, state.active_player_index,
-                it->m_number, def.params.reveal_subtype_or_pay)) { return; }
+        if (cast_card != nullptr && !CanRevealAdditionalCost(state, state.active_player_index,
+                cast_card->m_number, def.params.reveal_subtype_or_pay)) { return; }
         // LURRUS OF THE DREAM-DEN: a graveyard cast made under a cast PERMISSION (the rider) is legal only
         // while that permission is open and covers this card -- the SHARED GyCastPermissionLegal, checked
         // before anything is paid (AIEngine::CastSpellFromHand returns on the same predicate). A plan whose
@@ -69573,7 +69617,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (cast_pitch
             && (riders.pitch_name.empty()
                 || FindPitchHandIndex(ap, riders.pitch_name.str(), def.params.evoke_exile_color,
-                                      it->m_number) < 0))
+                                      cast_card->m_number) < 0))
         { return; }
 
         // REMAND: the rider is LIVE only for a plain paid hand cast with a copy of the Remand in hand
@@ -69590,7 +69634,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             if (rd != nullptr && rd->params.counters_target_spell_to_hand)
             {
                 for (const Card& hc : ap.hand)
-                { if (hc.m_name == cast_remand && hc.m_number != it->m_number) { remand_def = rd; break; } }
+                { if (hc.m_name == cast_remand && hc.m_number != cast_card->m_number) { remand_def = rd; break; } }
             }
         }
         // REMAND-ON-REMAND (Action::remand_chain_by): two Remand copies besides X and three casts left
@@ -69600,7 +69644,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         if (remand_def != nullptr && !cast_remand_chain.empty())
         {
             remand_chain_def = RemandChainLive(state, state.active_player_index, cast_remand_chain, cast_remand,
-                                               it->m_number);
+                                               cast_card->m_number);
             if (remand_chain_def == nullptr) { remand_def = nullptr; }
         }
         // Cast-time guard for a risky alt payload (Reverent Silence): the search may commit it
@@ -69950,17 +69994,20 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // another Apex's staged exile has m_is_staged == true -> false (float withheld). Inert otherwise.
         // Re-find the copy (see cast_zone_number above): the payment may have reallocated `zone`.
         it = zone.end();
-        for (auto c = zone.begin(); c != zone.end(); ++c)
+        for (auto c = zone.begin(); !from_top && c != zone.end(); ++c)
         { if (c->m_number == cast_zone_number) { it = c; break; } }
-        if (it == zone.end()) { return; }   // the payment consumed the very copy being cast
-        const bool cast_from_hand = !it->m_is_staged;
+        cast_card = from_top
+            ? (!ap.library.empty() && ap.library.front().m_number == cast_zone_number ? &ap.library.front() : nullptr)
+            : (it == zone.end() ? nullptr : &*it);
+        if (cast_card == nullptr) { return; }
+        const bool cast_from_hand = !from_top && !cast_card->m_is_staged;
         // Per-copy stable ID of the card being cast. The permanent must carry it (like the
         // executor's EffectHandler::EnterBattlefield does via entry.source.m_number) so that
         // aura attachment (Permanent::aura_attached_to == creature m_number) resolves to the
         // SPECIFIC creature. Without this every rollout permanent kept the definition's m_number
         // of 0, so ResolveEnchantTarget returned 0 and AuraBonusFor matched every aura (att 0)
         // against every creature (m_number 0) -- a systematic aura over-count vs the executor.
-        const int cast_number = it->m_number;
+        const int cast_number = cast_card->m_number;
         if (IsFireblastAlternative(def, tutor_target)
             && !PayFireblastAlternative(state, state.active_player_index, tutor_target)) { return; }
         if (IsWalkBuyback(def, tutor_target)
@@ -69969,13 +70016,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // REMAND: X goes back to its owner's hand if countered -- keep the physical card (its number:
         // the breakpoint diff reads it as the SAME card, not a new one).
         Card remand_x_card;
-        if (remand_def != nullptr) { remand_x_card = *it; }
+        if (remand_def != nullptr) { remand_x_card = *cast_card; }
         // Does the Remand counter X? Not when X can't be countered: then X resolves after it.
         const bool remand_countered = remand_def != nullptr && remand_chain_def == nullptr
                                    && !def.params.cant_be_countered;
         // Lurrus: the cast is paid, so its permission is spent (the executor spends at the same point).
         if (gy_cast_src >= 0) { ConsumeGyCastPermission(state, state.active_player_index, gy_cast_src); }
-        zone.erase(it);
+        if (from_top) { ap.library.DrawTop(); }
+        else { zone.erase(it); }
         // "As an additional cost to cast this spell, sacrifice a creature" -- the GENERIC route
         // (sac_additional_creature: Diabolic Intent, Culling the Weak). Paid here, at CAST, with the
         // mana (CR 601.2h), for EVERY resolution shape -- a to-hand tutor and a ritual alike. This is
@@ -70280,6 +70328,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             rec.kind = from_graveyard ? Action::Kind::CastFromGraveyard
                                       : Action::Kind::CastFromHand;
             rec.card_name      = name;
+            rec.cast_from_top  = from_top;
             rec.sacrifice_land = is_sacrifice;
             rec.discard_lands  = discard_lands;
             rec.alt_cost       = alt_cost;
@@ -76844,6 +76893,8 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
+    state.scripted_mihail_pay_mask = -1;
+    state.scripted_mihail_trigger_ordinal = 0;
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     ++combatpin::t_reads;                          // a pin write a share must see (COMBAT-PIN READ WITNESS)
@@ -78554,6 +78605,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 const CardDefinition* d = act.def;
                 w.Begin(act.sacrifice_land ? kSigA : kSigS);
                 w.Put(act.card_name);
+                if (act.cast_from_top) { w.Put("#TOP"); }
                 if (!act.chosen_float_color.empty()) { w.Put('#'); w.Put(act.chosen_float_color); }
                 if (act.free_cast) { w.Put("#FREE"); }
                 if (d && d->params.modal_choose_n > 0) { w.Put("#S"); w.Int(act.chosen_x); }
@@ -83884,6 +83936,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
                         // Every term below appends exactly the bytes its ternary contributed, in the same order.
                         std::string& k = (act.sacrifice_land ? a : s).next();
                         k.assign(act.card_name.str());
+                        if (act.cast_from_top) { k += "#TOP"; }
                         if (!act.chosen_float_color.empty()) { k += '#'; k += act.chosen_float_color.str(); }
                         if (act.free_cast) { k += "#FREE"; }
                         const CardDefinition* const cd = act.def;
@@ -93342,6 +93395,52 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                               std::make_move_iterator(extra.end()));
     }
 
+    // Emperor Mihail II: each cast trigger is an independent optional {1}
+    // payment. A bit is read when that trigger resolves, so two copies and
+    // two casts retain all four pay/decline decisions and their timing.
+    if (!HumanPlayActive() && !cont_axes_only)
+    {
+        int mihails = 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != state.active_player_index) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            if (d && d->params.cast_subtype_pay_token_cost) { ++mihails; }
+        }
+        if (mihails > 0 || std::any_of(all.begin(), all.end(), [](const TurnSolver::Plan& p)
+            { return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+                { return a.card_name == "Emperor Mihail II" && a.kind == Action::Kind::CastFromHand; }); }))
+        {
+            std::vector<TurnSolver::Plan> extra;
+            for (const TurnSolver::Plan& p : all)
+            {
+                if (p.mihail_pay_mask >= 0 || PlanIsAxisVariantExceptOrder(p)) { continue; }
+                int sources = mihails, bound = 0;
+                for (const Action& a : p.actions)
+                {
+                    if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
+                    { continue; }
+                    const CardDefinition* d = ActionCastDef(a);
+                    if (!d) { continue; }
+                    for (const std::string& sub : d->card.m_subtypes)
+                    { if (sub == "Merfolk") { bound += sources; break; } }
+                    if (d->params.cast_subtype_pay_token_cost) { ++sources; }
+                }
+                // A phase can hold at most the available Merfolk cards; the mask is
+                // deliberately wide enough for every trigger this deck can produce.
+                if (bound <= 0 || bound >= 20) { continue; }
+                for (int mask = 1; mask < (1 << bound); ++mask)
+                {
+                    TurnSolver::Plan v = p;
+                    v.mihail_pay_mask = mask;
+                    extra.push_back(std::move(v));
+                }
+            }
+            all.insert(all.end(), std::make_move_iterator(extra.begin()),
+                                  std::make_move_iterator(extra.end()));
+        }
+    }
+
     // Militia's Pride: how many optional {W} attack triggers to pay. The trigger
     // resolver walks the declared nontoken attackers and Pride copies in stable
     // order; each paid trigger creates an identical tapped, attacking token.
@@ -93644,7 +93743,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
                 && p.combat_crack_choice == -1 && p.combat_transform_choice == -1
-                && p.militia_pride_pay_choice == -1;
+                && p.militia_pride_pay_choice == -1 && p.mihail_pay_mask == -1;
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -95458,6 +95557,7 @@ static std::string PlanDomKey(const Action& a)
     std::string k(1, cls);
     k += std::to_string(static_cast<int>(a.kind));
     k += '|'; k += a.card_name.str();
+    if (a.cast_from_top) { k += "|TOP"; }
     if (a.face_down != 0) { k += "#FD"; k += std::to_string(a.face_down); }   // morph: face-down vs hard cast of one name (they collided)
     if (a.def != nullptr && a.def->params.solo_target_trick)   // the trick's target / strive count (INT-5)
     { k += "|TT"; k += std::to_string(a.enchant_target); k += '/'; k += a.trick_hand_target;
@@ -95605,6 +95705,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
             add(pl.militia_pride_pay_choice);
+            add(pl.mihail_pay_mask);
             add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
@@ -95804,6 +95905,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
+    if (a.mihail_pay_mask != b.mihail_pay_mask) { d += " mihail_pay_mask"; }
     if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
@@ -96047,6 +96149,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.bp_choice >= 0) { s += " | bp" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
             if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
             if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
+            if (p.mihail_pay_mask >= 0) { s += " | mihail" + std::to_string(p.mihail_pay_mask); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -98068,6 +98171,12 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             state.battlefield_at_combat, state.dep_enabler_main1 ? 1 : 0, state.dep_castpayoff_main1 ? 1 : 0,
             state.top_stacked_turn, state.top_stacked_card_number, state.floating_haste_c, state.draw_trigger_mark };
         for (std::int64_t v : sc) { mix(static_cast<std::uint64_t>(v)); }
+        if (state.scripted_mihail_pay_mask >= 0 || state.scripted_mihail_trigger_ordinal > 0)
+        {
+            mix(0x1A63000000ull);
+            mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_mihail_pay_mask)));
+            mix(static_cast<std::uint64_t>(state.scripted_mihail_trigger_ordinal));
+        }
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
         if (const int pk = PrepayKeptC(state); pk != 0) { mix(0xC0F1u + static_cast<std::uint64_t>(pk)); }
         // The prepay's colour-restricted `wild` (MTG_PREPAY_WILD_TRUE): which colour pips the float can still pay.
@@ -102470,6 +102579,12 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
             if (cpins[i] != -1)
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
+        }
+        if (state.scripted_mihail_pay_mask >= 0 || state.scripted_mihail_trigger_ordinal > 0)
+        {
+            Fold(k, 0x1A63000000ull ^ static_cast<std::uint64_t>(
+                static_cast<std::uint32_t>(state.scripted_mihail_pay_mask)));
+            Fold(k, 0x1A64000000ull ^ static_cast<std::uint64_t>(state.scripted_mihail_trigger_ordinal));
         }
     }
     // The doubler-after-exalted run (MTG_DOUBLER_AFTER_EXALTED): which doublers trail the plan decides
@@ -123518,7 +123633,7 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                        ? "look at top; put a snow card into hand"
                        : PermAbilityLabelFor(a.ability_mode, a.def)));
         }
-        else { cast_names.push_back(a.card_name); }
+        else { cast_names.push_back(a.card_name.str() + (a.cast_from_top ? " (from library top)" : "")); }
     }
     s += "cast: ";
     if (cast_names.empty()) { s += "(nothing)"; }
@@ -124570,6 +124685,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         std::map<std::string, int> tok;
         for (const std::string& n : spec.casts) { ++tok[n]; }
         for (const std::string& n : spec.board_acts) { --tok[n]; }
+        for (const std::string& n : spec.cast_tops) { --tok[n]; }
         const Player& me = state.ActivePlayer();
         for (const auto& kv : tok)
         {
@@ -124753,7 +124869,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         //                         multiset. planSacs counts them so a line affordable WITHOUT saccing
         //                         prefers the no-sac plan (saving the one-shot source; see the pool sort).
         int planLE = 0, planSacs = 0;
-        std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames;
+        std::vector<std::string> orderNames, vialNames, retraceNames, sacOutNames, topCastNames;
         // Outlet names that appear in this plan as a LOOP action (SacCreatureOutlet, sac_count
         // >= 2) -- the flexible sacout fallback below only bends counts for these.
         std::vector<std::string> sacLoopNames;
@@ -124798,6 +124914,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (a.kind == Action::Kind::DigDraw)
             { (a.dig_sacrifice ? sacDrawNames : cycleNames).push_back(a.card_name.str()); continue; }
             if (a.kind == Action::Kind::CastFromGraveyard)  { retraceNames.push_back(a.card_name); continue; }
+            if (a.cast_from_top) { topCastNames.push_back(a.card_name.str()); }
             // A declared sac-outlet line matches BOTH outlet kinds against spec.sac_outlets, with
             // one entry per ACTIVATION (a burst of k sacs is k entries -- sac_count is how many
             // creatures one activation eats, and the human declared each of them).
@@ -124924,6 +125041,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (a.kind != Action::Kind::CastFromHand) { boardActNames.push_back(a.card_name.str()); }
         }
         if (planLE != spec.lands_edge) { continue; }
+        std::sort(topCastNames.begin(), topCastNames.end());
+        std::vector<std::string> wantedTop = spec.cast_tops;
+        std::sort(wantedTop.begin(), wantedTop.end());
+        if (topCastNames != wantedTop) { continue; }
         // A declared board activation (`act=`) must be an ACTIVATION in this plan, not a hand cast
         // of a same-named copy (see LineSpec::board_acts).
         if (!spec.board_acts.empty())
@@ -124944,7 +125065,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         {
             std::map<std::string, int> cast_n;
             for (const Action& a : p.actions)
-            { if (a.kind == Action::Kind::CastFromHand) { ++cast_n[a.card_name.str()]; } }
+            { if (a.kind == Action::Kind::CastFromHand && !a.cast_from_top) { ++cast_n[a.card_name.str()]; } }
             bool ok = true;
             for (const auto& kv : hand_cast_need) { if (cast_n[kv.first] < kv.second) { ok = false; break; } }
             if (!ok) { continue; }
@@ -127499,7 +127620,8 @@ int TurnSolver::PositionedLandTwinIndex(const GameState& state, const std::vecto
                               a.phyrexian_life, a.twobrid_colored, a.convoke_green, a.convoke_other,
                               a.soulfire_own_targets, a.crackle_targets, a.ponder_keep, a.evoke ? 1 : 0,
                               a.adventure ? 1 : 0, a.bestow ? 1 : 0, a.gy_exile_mode, a.loyalty_ability,
-                              a.land_from_top ? 1 : 0, a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
+                              a.land_from_top ? 1 : 0, a.cast_from_top ? 1 : 0,
+                              a.land_rad_mode, a.dig_sacrifice ? 1 : 0,
                               a.attach_equip_id, a.convoke_plan_pip, a.convoke_plan_other, a.draw_target,
                               a.trick_redirect, static_cast<int>(a.face_down) };
             for (int v : f) { k += "|" + std::to_string(v); }
@@ -128331,6 +128453,8 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Bloodline Keeper's in-combat transform mask (Vampires B), read at THIS turn's declare-attackers.
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
+    s.scripted_mihail_pay_mask = p.mihail_pay_mask;
+    s.scripted_mihail_trigger_ordinal = 0;
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).
     if (p.combat_landfall_target_choice >= 0)

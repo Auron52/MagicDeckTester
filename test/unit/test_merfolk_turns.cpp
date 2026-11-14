@@ -96,3 +96,55 @@ TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefi
     CHECK(state.battlefield.size() == 1);
     CHECK(state.players[0].library.size() == 1);
 }
+
+TEST_CASE("Emperor Mihail II sees the private top only under its controller's permission")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    const CardDefinition* merfolk = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    REQUIRE(merfolk != nullptr);
+    Card top = merfolk->card;
+    top.m_number = 301;
+    state.players[0].library.push_back(top);
+    CHECK(PlayableTopMerfolkNumber(state) == 0);
+    AddPermanent(state, "Emperor Mihail II", 302);
+    CHECK(MayCastTopMerfolk(state));
+    CHECK(PlayableTopMerfolkNumber(state) == 301);
+    CHECK_FALSE(LibraryTopVisible(state));
+    state.battlefield[0].controller_index = 1;
+    CHECK(PlayableTopMerfolkNumber(state) == 0);
+}
+
+TEST_CASE("Emperor Mihail II pays each cast trigger independently")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Emperor Mihail II", 401);
+    const CardDefinition* merfolk = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    REQUIRE(merfolk != nullptr);
+    state.floating_mana.colorless = 2;
+    state.scripted_mihail_pay_mask = 1; // pay first, decline second
+    FireOnCastTriggers(state, *merfolk);
+    FireOnCastTriggers(state, *merfolk);
+    CHECK(state.scripted_mihail_trigger_ordinal == 2);
+    CHECK(state.floating_mana.colorless == 1);
+    int tokens = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.is_token && CardHasSubtype(p.card, "Merfolk")) { ++tokens; } }
+    CHECK(tokens == 1);
+
+    GameState two;
+    two.active_player_index = 0;
+    AddPermanent(two, "Emperor Mihail II", 411);
+    AddPermanent(two, "Emperor Mihail II", 412);
+    two.floating_mana.colorless = 2;
+    two.scripted_mihail_pay_mask = 2; // decline first copy, pay second
+    FireOnCastTriggers(two, *merfolk);
+    CHECK(two.scripted_mihail_trigger_ordinal == 2);
+    tokens = 0;
+    for (const Permanent& p : two.battlefield)
+    { if (p.is_token && CardHasSubtype(p.card, "Merfolk")) { ++tokens; } }
+    CHECK(tokens == 1);
+}

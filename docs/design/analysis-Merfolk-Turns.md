@@ -226,6 +226,31 @@ manifest/cross-check mapping needs review after the actual protocol sweep.
    changes, fix compile/test failures, run focused unit tests and the viewer
    decision audit. Parent owns regression, GT, push, play server and play sweep.
 
+### 2026-11-14 Mihail source checkpoint (unbuilt)
+
+Emperor Mihail II now has a card definition and parameters for private
+library-top permission and optional {1} cast-trigger tokens. The solver emits a
+distinct library-top Merfolk cast action, verifies the same physical top card
+when paying, and removes it from the library in the rollout and executor.
+Replay carries `cast_from_top`; the viewer publishes the top privately to its
+controller, queues it as `casttop=`, and checks that source separately from a
+same-named hand copy. Each Mihail trigger reads an ordinal bit in the searched
+pay mask or asks the human through the dig chooser, then pays {1} before making
+a blue 1/1 Merfolk. State keys and turn resets carry the mask and ordinal.
+The viewer decision manifest maps the new choice and source.
+
+The focused viewer line builder check passed: 4,713 main-phase lines
+reconstructed, 0 failures, including the new top Merfolk source test. New
+`test_merfolk_turns.cpp` cases check private-top access and independent paid
+triggers; they are **UNBUILT/UNRUN**. The full source change is still
+**UNBUILT** under the user's one-build constraint. The paid-mask axis currently
+declines to fan plans with 20 or more trigger occurrences; remove that bound
+or establish a sound bounded alternative before calling the source task
+complete. Confirm top-cast eligibility for alternate Merfolk spell costs,
+run the focused compiled tests, card cost/field audits, coverage, viewer
+decision audit and provider audit after the single build. Prophets, City type
+chooser, and the remaining Seahunter/Svyelun reviews remain open.
+
 ### 2026-11-14 continuation checkpoint after b882f8340
 
 Source edits in this checkpoint: `ScaledManaNetYield` now accepts its specific

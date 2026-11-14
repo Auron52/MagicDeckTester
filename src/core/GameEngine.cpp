@@ -408,6 +408,8 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_combat_landfall_target = -1;     // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;           // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
+    state.scripted_mihail_pay_mask = -1;
+    state.scripted_mihail_trigger_ordinal = 0;
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)

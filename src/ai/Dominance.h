@@ -1041,6 +1041,11 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     if (s.scripted_militia_pride_pay >= 0)
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
+    if (s.scripted_mihail_pay_mask >= 0)
+    {
+        fold(0x1A63000000ull + static_cast<std::uint64_t>(s.scripted_mihail_pay_mask));
+        fold(0x1A64000000ull + static_cast<std::uint64_t>(s.scripted_mihail_trigger_ordinal));
+    }
     if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with

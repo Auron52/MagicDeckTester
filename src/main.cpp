@@ -717,6 +717,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::CastFromHand:
             {
                 tag = a.card_name;
+                if (a.cast_from_top) { tag += " (from library top)"; }
                 // An {X} spell's X is the whole difference between its variants (claude-play sweep
                 // gi5: every Rolling Earthquake X read "Rolling Earthquake"). X=0 is a real line
                 // (the Spellshock trigger), so it prints too. A tutor-put cast prints its X beside
@@ -1699,14 +1700,16 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // played as the land drop right now as far as its source goes (PlayableTopLandNumber -- a land
     // under a play-from-top permanent); whether a drop is left is land_drops_left, as for a hand land.
     // RawAt, not front(): the viewer reading a revealed card is not a decision reading the library.
-    if (!me.library.empty() && LibraryTopVisible(s))
+    if (!me.library.empty() && (LibraryTopVisible(s) || MayCastTopMerfolk(s)))
     {
         const Card& top = me.library.RawAt(0);
         const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
         os << ", \"library_top\": {\"name\": "; JsonStr(os, top.m_name.str());
         os << ", \"number\": " << top.m_number
            << ", \"kind\": \"" << (td && td->card.IsLand() ? "land" : "spell") << "\""
-           << ", \"playable_land\": " << (PlayableTopLandNumber(s) != 0 ? "true" : "false") << "}";
+           << ", \"playable_land\": " << (PlayableTopLandNumber(s) != 0 ? "true" : "false")
+           << ", \"playable_spell\": " << (PlayableTopMerfolkNumber(s) != 0 ? "true" : "false")
+           << ", \"private\": " << (LibraryTopVisible(s) ? "false" : "true") << "}";
     }
     // Land drops still available this turn (1 normally; more after a Scale the Heights / Explore
     // grants one). A committed segment carries at most ONE land -- Plan::land_to_play is a single
@@ -2770,6 +2773,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             const size_t a = disp_order[di];
             const Action& ac = p.actions[a];
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
+            if (ac.cast_from_top) { os << ", \"cast_from_top\": true, \"verb\": \"casttop\""; }
             // PER-COPY IDENTITY of a board activation's source (Action::sac_source_id is the
             // permanent's stable card.m_number). Without it, two plans that activate DIFFERENT
             // COPIES of the same card serialise byte-identically -- same summary, same casts, same
@@ -5632,6 +5636,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             }
         }
         else if (key == "cast")      { ls.casts.push_back(val); }
+        else if (key == "casttop")   { ls.casts.push_back(val); ls.cast_tops.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }

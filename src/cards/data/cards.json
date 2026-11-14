@@ -1373,6 +1373,28 @@
    "parameters": {}
   },
   {
+   "name": "Emperor Mihail II",
+   "mana_cost": "{1}{U}{U}",
+   "types": ["Creature"],
+   "supertypes": ["Legendary"],
+   "subtypes": ["Merfolk", "Noble"],
+   "keywords": [],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "You may look at the top card of your library any time. You may cast Merfolk spells from the top of your library. Whenever you cast a Merfolk spell, you may pay {1}. If you do, create a 1/1 blue Merfolk creature token.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "cast_merfolk_from_library_top": true,
+    "cast_trigger_subtype": "Merfolk",
+    "cast_subtype_pay_token_cost": "{1}",
+    "cast_trigger_creates_tokens": 1,
+    "cast_token_power": 1,
+    "cast_token_toughness": 1,
+    "cast_token_subtypes": ["Merfolk"],
+    "created_token_color": "U"
+   }
+  },
+  {
    "name": "Worthy Knight",
    "mana_cost": "{1}{W}",
    "types": [

@@ -377,6 +377,7 @@ struct Action
     // than a hand copy. Same reason as the three above -- the record must carry the WHOLE land choice,
     // or the replay plays a hand copy the search never played.
     bool        land_from_top  = false;
+    bool        cast_from_top  = false; // Mihail: this cast uses the exact current library top, not a hand copy.
     bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
     bool        awaken         = false; // Part the Waterveil: alternative mana cost and target land.
                                        // Skyshroud Cutter / Reverent Silence): pay no mana and
@@ -1108,6 +1109,7 @@ inline void AddSpellRedirectPip(ManaCost& c)
 
 struct CastRiders
 {
+    bool     cast_from_top   = false;
     bool     miracle         = false;   // exact first-drawn card, offered only in its trigger window
     bool     awaken          = false;
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -1154,6 +1156,7 @@ struct CastRiders
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.cast_from_top = a.cast_from_top;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
@@ -1740,6 +1743,7 @@ public:
         // Militia's Pride: number of declared nontoken attacker triggers for which to pay {W}.
         // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
         std::int16_t militia_pride_pay_choice = -1;
+        std::int32_t mihail_pay_mask = -1; // optional {1} pay/decline, one bit per trigger
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -3661,6 +3665,7 @@ public:
         // unchanged.
         bool        land_from_top = false;
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
+        std::vector<std::string> cast_tops;  // casttop= spells; included in casts order, but exact source matched
         // "seq=<step>|...": the "**" whole-sequence pin the commit will use (the viewer's
         // validationLine). Never a matching key; the validation previews the commit in this order.
         std::vector<std::string> sequence;

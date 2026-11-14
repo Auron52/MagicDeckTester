@@ -96,6 +96,7 @@ MANIFEST = {
     # as `dig` "(trigger order)" (ResolveLookTopGroup).
     "enters_look_top_land_or_hand": ("dig",           truthy),
     "attack_nontoken_pay_token_cost": ("dig",       truthy),   # Militia's Pride: pay or decline for each nontoken attacker
+    "cast_subtype_pay_token_cost": ("dig",          truthy),   # Emperor Mihail II: pay {1} or decline on each Merfolk cast trigger
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -1850,6 +1851,7 @@ MAINPHASE_PARAMS = {
     # verb is `landtop=<name>` (`landtop=<name>;landat=all` for after the casts). The top land's own
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
+    "cast_merfolk_from_library_top": "Emperor Mihail II's permission is a distinct main_phase cast source (Action::cast_from_top; casttop= verb; private library_top field)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
     # Street Wraith (2026-10-26): "Cycling--Pay 2 life" -- the LIFE half of the cycling cost. It prices the
     # same cycling_cost main_phase play (offered only while life > N; the viewer's offer probe and every

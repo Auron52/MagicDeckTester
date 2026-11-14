@@ -340,6 +340,7 @@ struct CardParams
     // body, so every land ETB and the landfall dispatch fire exactly as for a hand land. Searched as
     // its own land option (Plan::land_from_top); never folded into a same-name hand land.
     bool                     play_lands_from_library_top    = false;
+    bool                     cast_merfolk_from_library_top  = false;
 
     // If true, drawn cards are placed in the staged exile zone rather than the hand
     // and expire at the end of the player's next turn (e.g. Light Up the Stage).
@@ -1120,6 +1121,7 @@ struct CardParams
     // given P/T and subtypes. Fired from FireOnCastTriggers (both real game and rollout).
     std::string              cast_trigger_subtype;       // subtype the CAST spell must have
     int                      cast_trigger_creates_tokens = 0;
+    std::optional<ManaCost>  cast_subtype_pay_token_cost;
     int                      cast_token_power     = 0;
     int                      cast_token_toughness = 0;
     std::vector<std::string> cast_token_subtypes;

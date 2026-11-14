@@ -2392,6 +2392,28 @@ inline bool LibraryTopVisible(const GameState& s)
     return false;
 }
 
+inline bool MayCastTopMerfolk(const GameState& s)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.cast_merfolk_from_library_top) { return true; }
+    }
+    return false;
+}
+
+inline int PlayableTopMerfolkNumber(const GameState& s)
+{
+    if (!MayCastTopMerfolk(s) || s.ActivePlayer().library.empty()) { return 0; }
+    const Card& top = s.ActivePlayer().library.front();
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(top);
+    if (!d || d->card.IsLand()) { return 0; }
+    for (const std::string& sub : d->card.m_subtypes)
+    { if (sub == "Merfolk") { return top.m_number; } }
+    return 0;
+}
+
 // THE SAMPLED UNSEEN FUTURE (the non-clairvoyant search, honest labels, the blind search; 2026-11-11, queue 5c):
 // re-randomise only what the active player does NOT know. Library::ShuffleUnseen keeps the cards he placed
 // (put-backs, keep-on-top, the placed bottom block); a top shown by a continuous reveal (Courser of Kruphix,
@@ -2400,7 +2422,7 @@ inline bool LibraryTopVisible(const GameState& s)
 inline void NoteVisibleLibraryTop(GameState& s)
 {
     Library& lib = s.ActivePlayer().library;
-    if (!lib.empty() && LibraryTopVisible(s)) { lib.NoteKnownAt(0); }
+    if (!lib.empty() && (LibraryTopVisible(s) || MayCastTopMerfolk(s))) { lib.NoteKnownAt(0); }
 }
 inline void ShuffleUnseenFuture(GameState& s, uint64_t seed)
 {
@@ -6163,6 +6185,7 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
     }
 }
 
+bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 {
     int mv = cast_def.card.m_mana_cost.ManaValue();
@@ -6327,6 +6350,29 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
             }
             if (subtype_match)
             {
+                if (def->params.cast_subtype_pay_token_cost)
+                {
+                    // Mihail says "you cast": an opponent's spell never earns this trigger.
+                    if (p.controller_index != active) { continue; }
+                    const ManaCost& cost = *def->params.cast_subtype_pay_token_cost;
+                    const int ordinal = state.scripted_mihail_trigger_ordinal++;
+                    bool pay = state.scripted_mihail_pay_mask >= 0 && ordinal < 30
+                        && ((state.scripted_mihail_pay_mask >> ordinal) & 1) != 0;
+                    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+                    {
+                        GameState probe = state;
+                        if (!TapForCostDirect(probe, cost, false)) { pay = false; }
+                        else
+                        {
+                            const std::vector<Card> examined{cast_def.card};
+                            const std::vector<int> legal{0};
+                            pay = (*g_play_dig_chooser)(state, active,
+                                def->card.m_name.str() + " (Merfolk cast pay {1})",
+                                examined, legal, pay ? 0 : -1) == 0;
+                        }
+                    }
+                    if (!pay || !TapForCostDirect(state, cost, false)) { continue; }
+                }
                 to_create.push_back({def->params.cast_trigger_creates_tokens,
                                      def->params.cast_token_power,
                                      def->params.cast_token_toughness,
