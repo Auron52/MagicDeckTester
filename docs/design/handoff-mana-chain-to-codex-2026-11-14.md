@@ -20,6 +20,16 @@ recovering at `--depth 8 --budget-ms 0`, `python3 test/check_gt_logs.py`. No ove
   Windows build green; ubuntu + determinism parity had not landed at handoff. Check `gh run view 43578742559`.
 - `wip/item-W-merge` (local): item W WIP (see below). `wip/gods-gy-option-demoted` 847943ebf (pushed): item E.
 
+## CI: ubuntu hang in the viewer line-build check (check FIRST)
+Runs 43573881414 and 43578742559 (both contain this chain's push 246e34da6..78ba73d2d) were cancelled by newer pushes,
+and in the second the ubuntu job sat in `node test/viewer_linebuild_check.js` for 3 h 12 m after printing all 22
+sub-checks (0 FAIL, 835 references). The last green run 43564679055 (before the push) ran that step in 1 s on the same
+runner image; locally on the current tree the script exits 0 in 4 s (`process.exit(main())`, no child processes), and
+the pushed range touches none of its inputs. So determinism parity has NOT run for this code yet. Newest run
+43596869487 was being watched (log `build/scratch/claude1110/ci-push3c.log`). If ubuntu hangs in that step again it
+is a repeatable Linux CI hang to root-cause. Open USER question: add `timeout-minutes` to that workflow step? (The
+repo's no-timeout rule covers commands agents run; a CI step limit is the USER's call -- not changed.)
+
 ## RUNNING / IN PROGRESS at handoff
 **Item W -- wild-mana prepay is lossy in places** (from the Spirits session's
 `docs/design/handoff-mana-overnight-2026-11-14.md`; its status section is to be appended when W resolves).
