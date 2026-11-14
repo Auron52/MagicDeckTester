@@ -818,7 +818,7 @@ on both routes; the base width vs the explicit top-1 providers.
 ## Claude-play sweep
 - commit: `4a59c17f6` (frozen binary `build/scratch/boars/sweep/mtg.sweep`)
 - seeds: 97001-97016 (12 standard, 97013-97016 2HG), one Opus agent per game, 2026-11-14
-- games: 16; Claude vs search (d5 b20): equal 11, Claude faster 4 (97002, 97005, 97009 T4 vs T5... see below), Claude slower 1 (97010: different post-fetch shuffle, not a misplay)
+- games: 16; Claude vs search (d5 b20): equal 12, Claude faster 3 (97002 T5 vs T6, 97005 T5 vs T6, 97009 T4 vs T5), Claude slower 1 (97010: a different post-fetch shuffle, not a misplay)
 - flags: 6 unresolved
   - 97009 CONFIRMED completeness: the T2 root never finds Flinthoof cast + {R} self-haste in the same main (T4 kill; search T5 at d5 b20, d5 b0, d8 b0; found once Flinthoof is on the battlefield). Investigating (`boars-haste`).
   - 97002: search T6 at every budget incl. d8 b0 and MTG_UNPRUNE=fetch,landpick; MTG_UNPRUNED d5 b0 finds T5 -> a narrowing gate hides the line. Investigating (`boars-haste`).
