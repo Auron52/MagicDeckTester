@@ -1484,3 +1484,26 @@ fungus 1,880, gods 4,300 (first run).
   creature-only land for a hand creature the line does not cast this turn (Stormtamer x2 / Corsair Captain) over the
   line's Bolt (s30080205, s30079131, s30079307; 6 flags); s30083181 (6) unanalysed; s30070533's undeclared
   dig-continuation residual. Next pirates block 84000-88999.
+* **Queue item E (2026-11-14): gods ENUM-GAP, Loam after a dredging draw (USER decision 12) -- BUILT, A/B net +3 ->
+  PARKED, USER DECISION.** USER: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
+  breakpoint. Same thing for the land drops that you pull from life."* `wip/gods-gy-option-demoted` 847943ebf (pushed;
+  NOT on the shared branch): `MTG_BP_NEW_ONLY_GY_TARGETS` (heurarm, default ON there) -- at a breakpoint an OLD
+  `return_up_to_gy_lands` card (Life from the Loam) is new for MTG_BP_NEW_ONLY when our graveyard holds a land card it
+  did not hold at the plan's start (pre-plan graveyard rides PrePlanAvailabilityKeys, tag 0xFE, only with such a card
+  in hand -> inert elsewhere); every target choice counts (s30025175's gap line is Loam for ZERO targets). Lands Loam
+  returns are already new cards at the site-10 put-in-hand breakpoint (no change needed). Oracle: DemotedCores counts
+  a menu plan's demoted-wave boards as on the menu. Repros (whole game): 12 of 13 ENUM-GAP seeds -> 0 (s30005620,
+  13694, 12463, 12038, 11070, 27132, 27310, 27793, 26463, 25860, 27371, 26993); s30025175 keeps 17 = a payment
+  allocation inside the continuation (engine spends Vivid Creek's counter for Looting's {R}, the gap Tendo's).
+  **Round 1 (entries admitted INTO the list): gods 5000/arm @7480001 net +3, 4 slower / 3 faster; gi2082 did NOT recover
+  at d8 b0 (6 vs 5).** Cause: a list the rule used to empty gained a front, and MTG_BP_BASE_CANON's cands.front() is
+  the base line at un-walked hosts, so "Looting, then nothing" became "Looting, then Loam" in the line search's later
+  turns (probes: admitting nothing but capturing the keys -> 5). So the entries now ride the DEMOTED wave (after a slot's
+  ranks and EMPTY; list + canon unchanged) even with MTG_BP_NEW_ONLY_DEMOTE off. **Round 2 (demoted): same seeds, one
+  pooled batch, off arm byte-identical to round 1: net +3 at unwon=9, 7 digest diffs, 0 faster / 2 slower (gi4361 7 ->
+  unwon, gi4860 6 -> 7), units +0.2%; both recover at --depth 8 --budget-ms 0 (4361 7=7, 4860 6=6).** Fails "net <= 0".
+  USER DECISION: adopt (completeness: the Loam-after-draw lines become findable at every searched host; +3 turns /
+  5000 games, one game loses its win within max_turns at the shipped budget, all recover at d8 b0) or keep it off.
+  Recommendation: adopt -- the residual is budget displacement on 2 games in 5000, against the ENUM-GAP family the
+  USER asked to fix. Not run (adoption-only): smoke/regression accept, PGO gate 30000-34999. Scratch:
+  build/scratch/claudeE/{ab,ab2,d8,g2082}; handoff logs/mana-clean-chain/E-handoff.md.
