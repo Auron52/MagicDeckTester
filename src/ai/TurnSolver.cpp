@@ -61735,7 +61735,6 @@ const bool g_prepay_producer_on = EnvOn("MTG_PREPAY_PRODUCER");
 inline bool Pp(PrepayOutcome o)
 {
     if (g_prepay_probe_on) { g_prepay_probe.n[o].fetch_add(1, std::memory_order_relaxed); }
-    if (g_real_resolution && std::getenv("MTG_W_PPDBG") != nullptr) { std::fprintf(stderr, "[ppdbg] %s\n", kPrepayName[o]); } // TEMP W
     return false;   // every decline site returns false, so `return Pp(...)` reads as the decline
 }
 
@@ -63505,6 +63504,33 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             || (d->params.spectacle_cost.has_value() && !state.opponent_lost_life_this_turn))
         { return Pp(PP_DYNAMIC_COST); }
         ManaCost ec = EffectiveCost(*d, state);
+        // A reducer cast earlier in this line is absent from the board priced by EffectiveCost.
+        // The subset enumerator already credits it; the joint payment must use the same bill or
+        // it can reject a payable line before the deferred generic assignment gets a chance.
+        if (PrepayWildDeferOn() && ec.generic > 0 && !a.evoke)
+        {
+            std::vector<int> preceding_reducers;
+            for (const Action& r : acts)
+            {
+                if (&r == &a) { break; }
+                if (r.kind != Action::Kind::CastFromHand || r.def == nullptr) { continue; }
+                const CardParams& rp = r.def->params;
+                if (rp.reduces_spell_color.empty() && rp.reduces_spell_subtype.empty()
+                    && !rp.chooses_creature_type && rp.reduces_graveyard_cast_generic <= 0)
+                { continue; }
+                bool still_in_hand = false;
+                for (const Card& hc : state.players[active].hand)
+                { if (hc.m_name == r.card_name) { still_in_hand = true; break; } }
+                if (still_in_hand) { preceding_reducers.push_back(static_cast<int>(&r - acts.data())); }
+            }
+            if (!preceding_reducers.empty())
+            {
+                const SameTurnReducerCounts rc = CountSameTurnReducers(state, acts, preceding_reducers);
+                if (rc.Any())
+                { ec.generic -= std::min<int>(ec.generic, SameTurnReducerDiscountFor(state, rc, acts,
+                    static_cast<int>(&a - acts.data()))); }
+            }
+        }
         // SAME-LINE COLOURED-PIP REDUCER (MTG_PREPAY_LINE_REDUCER, default ON; =0 -> the board-only
         // price). EffectiveCost prices this cast on the CURRENT board, but a Ragemonger the line puts
         // with Aether Vial (or casts earlier in the line) is not on it yet: Vial puts ride the cast
@@ -65016,7 +65042,6 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
             _decl.ok = true;   // the retry counts its own decline (tapstats sees it as a second call)
             return unheld;
         }
-        if (g_real_resolution && std::getenv("MTG_W_PPDBG") != nullptr) { std::string an; for (const Action& a : acts) { an += a.card_name.str() + ","; } std::fprintf(stderr, "[ppdbg] T%d combined=%s produced=W%dU%dB%dR%dG%dC%dw%d acts=%s\n", state.turn_number, combined.ToString().c_str(), produced.white, produced.blue, produced.black, produced.red, produced.green, produced.colorless, produced.wild, an.c_str()); } // TEMP W
         return Pp(ok ? PP_WILD : PP_UNPAYABLE);
     }
 
@@ -65740,7 +65765,6 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     // it resolves its own tap triggers here, once the whole-turn solve has committed.
     dmgev::FlushDamageEvents(state);
     if (aura_staged) { t_prepay_partial_made = true; ++t_prepay_staged_n; return Pp(PP_AURA_PARTIAL); }   // the rest pays per cast
-    if (g_real_resolution && std::getenv("MTG_W_PPDBG") != nullptr) { std::string an; for (const Action& a : acts) { an += a.card_name.str() + ","; } std::fprintf(stderr, "[ppdbg] T%d OK combined=%s pool=W%dU%dB%dR%dG%dC%dw%d acts=%s\n", state.turn_number, combined.ToString().c_str(), state.floating_mana.white, state.floating_mana.blue, state.floating_mana.black, state.floating_mana.red, state.floating_mana.green, state.floating_mana.colorless, state.floating_mana.wild, an.c_str()); } // TEMP W
     Pp(mixed_ok ? PP_OK_MIXED : PP_OK);
     _decl.ok = true; return true;
 }
