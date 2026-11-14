@@ -1,0 +1,13 @@
+cell                 n  chg slow fast   net  old_avg  new_avg
+dragonstorm       1000    0    0    0    +0   4.3950   4.3950
+elementals        1000    0    0    0    +0   4.3480   4.3480
+goblins           1000    0    0    0    +0   3.7840   3.7840
+knights           1000    0    0    0    +0   4.3360   4.3360
+merfolk           1000    0    0    0    +0   4.1950   4.1950
+minotaur          1000    0    0    0    +0   4.8640   4.8640
+pirates           3000    0    0    0    +0   4.3573   4.3573
+pirates2hg        3000    0    0    0    +0   5.0147   5.0147
+slivers           1000    0    0    0    +0   4.2090   4.2090
+soldiers          1000    0    0    0    +0   4.2630   4.2630
+spirits           1000    0    0    0    +0   4.6330   4.6330
+vampires          1000    0    0    0    +0   4.2890   4.2890
