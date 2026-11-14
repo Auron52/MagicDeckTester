@@ -1,9 +1,11 @@
-# Regression ground truth -- commit fc0653cc6  date 2026-11-14
+# Regression ground truth -- commit 6320c8080  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # accepted-with-regressions (overnight, 2026-11-13): Spirits admitted (integrator G); regenerated under the rebased binary, byte-identical to the pre-rebase accept
 # accepted-with-regressions (smoke, 2026-11-14): Integration rebase of items B/C+I/D onto a819bc2d6 (2026-11-14): 20 rows equal the pre-rebase lever-attributed accepts byte-for-byte (origin never moved them); martyr d5 digest-only (avg same, 0 searched slower) from origin's martyr graveyard-cast change + MTG_MARTYR_SAC_FIRST, lever-off check reproduces origin; carried: Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained); Spirits admitted (integrator G)
 # accepted-with-regressions (regression, 2026-11-14): Integration rebase of items B/C+I/D onto a819bc2d6 (2026-11-14): 21 rows equal the pre-rebase lever-attributed accepts byte-for-byte (origin never moved them); martyr d3/d5 s2002 and spirits d0 s2002 digest-only (avg same, 0 searched slower), lever-off check reproduces origin; carried: Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained, 0 searched slower); Spirits admitted (integrator G)
+# accepted-with-regressions (smoke, 2026-11-14): martyr d3/d5 over the new keep table (3b0364cb3): digest-only, 11 same-score line changes, 0 slower, from MTG_MARTYR_SAC_FIRST/C+I levers; lever-off reproduces origin
+# accepted-with-regressions (regression, 2026-11-14): martyr d3/d5 s2002 + d5 s3003 over the new keep table (3b0364cb3): digest-only, 25 same-score line changes, 0 slower, refs 0 drift, from MTG_MARTYR_SAC_FIRST/C+I levers; lever-off reproduces origin
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -204,8 +206,8 @@ elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
 martyr_smoke_d0_s1001=5.8430/313c984b7fa0e075
-martyr_smoke_d3_s1001=5.1000/8063ba1126540a16
-martyr_smoke_d5_s1001=5.0600/261b5ebdb1b91f93
+martyr_smoke_d3_s1001=5.1000/bf8a29dbfd0a0b40
+martyr_smoke_d5_s1001=5.0600/492153bbcfb5879b
 martyr2hg_smoke_d5_s1001=5.1200/e6130d94ad5b9ae4
 spirits_smoke_d0_s1001=5.1240/840753f63d453d5e
 spirits_smoke_d3_s1001=4.5600/5ae199dc10023a65
@@ -527,9 +529,9 @@ merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
 martyr_regression_d0_s2002=5.8580/8f240d01f05526fd
-martyr_regression_d3_s2002=5.2000/7e0a9aec339b9c4d
-martyr_regression_d5_s2002=5.1800/3336e658da8523a1
-martyr_regression_d5_s3003=5.0600/2b0d0d8375d412ab
+martyr_regression_d3_s2002=5.2000/44ffd827f3296ef1
+martyr_regression_d5_s2002=5.1800/97eb71b0930aefa9
+martyr_regression_d5_s3003=5.0600/8718770d28de6c15
 martyr2hg_regression_d5_s2002=5.2933/473bef39ea151b28
 spirits_regression_d0_s2002=5.0770/95fc4971a016df1c
 spirits_regression_d3_s2002=4.6533/f4f1e5e6f8ec3c7e
