@@ -94797,6 +94797,23 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (entering && d && d->card.IsCreature()) { ++added; }
             }
             if (entries == 0) { continue; }
+            // A championed Prophets can return during one of these entries and
+            // resolve another champion ability before the plan resumes. Count
+            // each linked battlefield copy and each copy linked in exile as a
+            // possible additional resolution; an explicit-entry count loses B's
+            // choice when D champions A and A returns B.
+            for (const Permanent& q : state.battlefield)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+                if (d && d->params.champion_merfolk && q.linked_exile_number != 0)
+                { ++entries; }
+            }
+            for (const Card& c : state.exile)
+            {
+                if (!IsMerfolkChampionExile(c)) { continue; }
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d && d->params.champion_merfolk) { ++entries; }
+            }
             // The upper bound includes potential same-plan token makers. A rank
             // beyond the actual list clamps at resolution and post-apply dedup
             // removes it; under-sizing would make a choice unreachable.

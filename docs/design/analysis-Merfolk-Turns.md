@@ -1,5 +1,38 @@
 # Merfolk Turns analysis checkpoint
 
+## 2026-11-14 nested Prophets champion correction (finding 1)
+
+The independent static review at `01ca7fc04` found that championing a Prophets
+fired its leaves trigger before the incoming Prophets recorded the exile link.
+In the concrete chain B champions C, A champions B, then D champions A, A's
+leaves trigger returns B. If returned B champions D, D's leaves trigger must
+find A already exiled under D and return it. The old synchronous order returned
+B before recording A, so D found nothing and A remained stranded in exile.
+
+`ResolveMerfolkChampion` now removes and links the chosen victim before firing
+that victim's leaves trigger. The shared core path is used by normal execution,
+rollout application, and replay. The autonomous champion fan now reserves a pin
+for each linked Prophets on the battlefield or linked in exile in addition to
+explicit cast/Vial/Seahunter entries. This exposes returned B's own victim and
+decline choices, plus the next returned Prophets choice, to plan search. A
+scripted plan that exhausts its pins declines further champion triggers;
+human prompts still override the scripted choice at each resolution.
+
+The concrete replay found a second ordering defect in the linked-return helper:
+while A's old leaves trigger was returning B, A could reenter and champion E;
+the still-running helper then returned E from exile too, despite E belonging to
+the new A instance. The helper now snapshots its linked return set before any
+return ETBs run, so an old leaves trigger cannot consume a new link.
+
+Validation: `MTG_BUILD_JOBS=6 ./build.sh` passed (six jobs kept the build below
+30 GiB used memory). `build/Release/mtg-test --test-case='*Prophets*'` passed:
+8 cases, 100 assertions. The focused cases check the live state during B's
+returned champion prompt, all three linked exile/return transitions, B's
+alternative victim and decline, the autonomous second and third pin choices,
+and replay of the selected Vial plan. No full analyzer, regression, or play
+server was run. This worktree covers finding 1 only; the separate Mihail
+payment-axis finding is owned by another worktree.
+
 Started 2026-11-14. Source deck: `decks/Merfolk Turns/Merfolk Turns.cod`
 (copied unchanged from the user's untracked file in the primary checkout).
 

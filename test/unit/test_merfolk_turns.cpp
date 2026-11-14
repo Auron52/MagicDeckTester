@@ -35,6 +35,43 @@ void AddPermanent(GameState& state, const char* name, int number, uint16_t chose
     p.chosen_subtype_id = chosen;
     state.battlefield.push_back(p);
 }
+
+bool HasPermanent(const GameState& state, int number)
+{
+    return std::any_of(state.battlefield.begin(), state.battlefield.end(),
+        [number](const Permanent& p) { return p.card.m_number == number; });
+}
+
+bool ExiledUnder(const GameState& state, int number, int source)
+{
+    return std::any_of(state.exile.begin(), state.exile.end(),
+        [number, source](const Card& c) {
+            return c.m_number == number && IsMerfolkChampionExile(c)
+                && MerfolkChampionSource(c) == source;
+        });
+}
+
+GameState NestedProphetsSetup()
+{
+    GameState state;
+    state.active_player_index = 0;
+    state.deck_has_prophets = true;
+    AddPermanent(state, "Rishadan Dockhand", 601); // C
+    AddPermanent(state, "Tidal Warrior", 605);     // alternative victim
+    AddPermanent(state, "Wanderwine Prophets", 602); // B
+    {
+        const std::vector<int> pins{0};
+        ScriptedProphetsChampion choice(pins);
+        ResolveMerfolkChampion(state, 0, 2);
+    }
+    AddPermanent(state, "Wanderwine Prophets", 603); // A
+    {
+        const std::vector<int> pins{1};
+        ScriptedProphetsChampion choice(pins);
+        ResolveMerfolkChampion(state, 0, 2);
+    }
+    return state;
+}
 }
 
 TEST_CASE("Three Tree City counts the chosen type of each source copy")
@@ -367,6 +404,118 @@ TEST_CASE("Wanderwine Prophets champions a selected copy and returns it under it
     CHECK(state.battlefield[1].owner_index == 1);
     CHECK(state.battlefield[1].entered_this_turn);
     CHECK(state.exile.empty());
+}
+
+TEST_CASE("Nested Prophets links D to A before B returns and champions D")
+{
+    LoadMerfolkCards();
+    GameState state = NestedProphetsSetup();
+    REQUIRE(HasPermanent(state, 603));
+    REQUIRE(HasPermanent(state, 601)); // B leaving returned C
+    REQUIRE(ExiledUnder(state, 602, 603));
+    AddPermanent(state, "Wanderwine Prophets", 604); // D
+    const std::vector<int> pins{1, 2, 0}; // D -> A, returned B -> D, returned A -> 605
+    int prompts = 0;
+    BounceChooser chooser = [&](const GameState& during, int, const std::string& source,
+                                const std::vector<int>& legal, int proposed) {
+        CHECK(source == "Wanderwine Prophets champion");
+        if (++prompts == 2)
+        {
+            CHECK(ExiledUnder(during, 603, 604));
+            CHECK(HasPermanent(during, 604));
+            CHECK(HasPermanent(during, 602));
+        }
+        if (prompts == 3)
+        { CHECK(during.battlefield[legal[0]].card.m_number == 605); CHECK(proposed == 0); }
+        return proposed;
+    };
+    BounceChooser* saved = g_play_flicker_chooser;
+    g_play_flicker_chooser = &chooser;
+    {
+        ScriptedProphetsChampion choice(pins);
+        ResolveMerfolkChampion(state, 0, 3);
+    }
+    g_play_flicker_chooser = saved;
+    CHECK(prompts == 3);
+    CHECK(HasPermanent(state, 603)); // D's linked return found A
+    CHECK(HasPermanent(state, 602));
+    CHECK_FALSE(HasPermanent(state, 604));
+    CHECK_FALSE(HasPermanent(state, 605));
+    CHECK(ExiledUnder(state, 604, 602));
+    CHECK(ExiledUnder(state, 605, 603));
+    CHECK_FALSE(ExiledUnder(state, 603, 604));
+}
+
+TEST_CASE("Returned B's nested champion choice may select another victim or decline")
+{
+    LoadMerfolkCards();
+    const GameState setup = NestedProphetsSetup();
+    for (const std::vector<int>& pins : {std::vector<int>{1, 0}, std::vector<int>{1, -2}})
+    {
+        GameState state = setup;
+        AddPermanent(state, "Wanderwine Prophets", 604);
+        {
+            ScriptedProphetsChampion choice(pins);
+            ResolveMerfolkChampion(state, 0, 3);
+        }
+        CHECK(HasPermanent(state, 604));
+        CHECK(HasPermanent(state, 602) == (pins[1] == 0));
+        CHECK(ExiledUnder(state, 603, 604));
+        if (pins[1] == 0) { CHECK(ExiledUnder(state, 605, 602)); }
+        else { CHECK_FALSE(ExiledUnder(state, 605, 602)); }
+    }
+}
+
+TEST_CASE("Autonomous Vial plans expose the returned Prophets' second champion choice")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state = NestedProphetsSetup();
+    state.m_provider = &provider;
+    AddPermanent(state, "Aether Vial", 606);
+    state.battlefield.back().charge_counters = 6;
+    const CardDefinition* prophets = CardDatabase::Instance().Lookup("Wanderwine Prophets");
+    REQUIRE(prophets != nullptr);
+    Card d = prophets->card;
+    d.m_number = 604;
+    state.players[0].hand.push_back(d);
+    const auto plans = TurnSolver::EnumerateMainPlans(state, false);
+    bool choose_d = false, choose_other = false, decline = false, replayed = false;
+    bool third_c = false, third_b = false, third_decline = false;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (p.actions.size() != 1 || !std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a) {
+            return a.kind == Action::Kind::ActivateVial
+                && a.card_name == "Wanderwine Prophets";
+        }) || p.champion_pins.size() < 2 || p.champion_pins[0] != 1) { continue; }
+        choose_d |= p.champion_pins[1] == 2;
+        choose_other |= p.champion_pins[1] == 0;
+        decline |= p.champion_pins[1] == -2;
+        if (p.champion_pins.size() >= 3 && p.champion_pins[1] == 2)
+        {
+            third_c |= p.champion_pins[2] == 1;
+            third_b |= p.champion_pins[2] == 2;
+            third_decline |= p.champion_pins[2] == -2;
+        }
+        if (!replayed && p.champion_pins.size() >= 3
+            && p.champion_pins[1] == 2 && p.champion_pins[2] == 0)
+        {
+            GameState replay = state;
+            TurnSolver::ApplyPlan(replay, p, false);
+            CHECK(HasPermanent(replay, 603));
+            CHECK(HasPermanent(replay, 602));
+            CHECK(ExiledUnder(replay, 604, 602));
+            CHECK(ExiledUnder(replay, 605, 603));
+            replayed = true;
+        }
+    }
+    CHECK(choose_d);
+    CHECK(choose_other);
+    CHECK(decline);
+    CHECK(third_c);
+    CHECK(third_b);
+    CHECK(third_decline);
+    CHECK(replayed);
 }
 
 TEST_CASE("Wanderwine Prophets token champion ceases to exist; decline sacrifices Prophets")

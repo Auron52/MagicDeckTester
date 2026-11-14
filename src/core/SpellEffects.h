@@ -12099,7 +12099,8 @@ inline int ConsumeProphetsChampionPin()
     const int ordinal = g_prophets_champion_cursor++;
     return g_prophets_champion_pins != nullptr
         && ordinal < static_cast<int>(g_prophets_champion_pins->size())
-        ? (*g_prophets_champion_pins)[static_cast<std::size_t>(ordinal)] : -1;
+        ? (*g_prophets_champion_pins)[static_cast<std::size_t>(ordinal)]
+        : g_prophets_champion_pins != nullptr ? -2 : -1;
 }
 inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
@@ -13549,6 +13550,7 @@ inline int MerfolkChampionOwner(const Card& c)
 { return (kMerfolkChampionExileBase - c.m_staged_expiry) & 1; }
 inline void ReturnMerfolkChampion(GameState& state, int source_number)
 {
+    std::vector<std::pair<Card, int>> returning;
     for (std::size_t i = 0; i < state.exile.size(); )
     {
         if (!IsMerfolkChampionExile(state.exile[i])
@@ -13557,6 +13559,13 @@ inline void ReturnMerfolkChampion(GameState& state, int source_number)
         Card back = state.exile[i];
         back.m_staged_expiry = 0;
         state.exile.erase(state.exile.begin() + static_cast<long>(i));
+        returning.emplace_back(std::move(back), owner);
+    }
+    // Returning a Prophets can immediately exile another card under a new
+    // instance of this same physical card. This leaves trigger must return only
+    // the cards linked when it began resolving.
+    for (const auto& [back, owner] : returning)
+    {
         PutCardOntoBattlefield(state, owner, back, "Wanderwine Prophets");
     }
 }
@@ -17357,7 +17366,6 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
         if (q.aura_attached_to == victim_number) { q.aura_attached_to = 0; }
     }
     state.battlefield.erase(state.battlefield.begin() + victim_index);
-    FireLeavesBattlefieldTriggers(state, victim.controller_index, victim.card);
     if (!victim.is_token)
     {
         Card exiled = victim.card;
@@ -17367,6 +17375,10 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
         for (Permanent& q : state.battlefield)
         { if (q.card.m_number == self) { q.linked_exile_number = victim_number; break; } }
     }
+    // The champion exile finishes before the exiled permanent's leaves trigger
+    // resolves. A returning Prophets may champion this entrant and must find its
+    // newly linked card in exile when the entrant leaves.
+    FireLeavesBattlefieldTriggers(state, victim.controller_index, victim.card);
 }
 
 // One trigger for each Prophets combat-damage event, including each strike of
