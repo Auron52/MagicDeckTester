@@ -454,6 +454,21 @@ inline DrawAttemptResult AttemptDrawIntoHand(GameState& state, int player_index,
         }
     }
     if (p.library.empty()) { return {}; }
+    if (p.library.WatchingActualDraw())
+    {
+        // A continuous top-card reveal is known to the player even though the REAL library
+        // mask tracks only placed cards; ShuffleUnseenFuture marks it on its search copy.
+        bool top_visible = false;
+        for (const Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != player_index || perm.def_absent) { continue; }
+            const CardDefinition* pd = CardDatabase::Instance().LookupCached(perm.card);
+            if (pd != nullptr && (pd->params.library_top_revealed
+                                  || pd->params.play_lands_from_library_top))
+            { top_visible = true; break; }
+        }
+        p.library.NoteActualDraw(top_visible);
+    }
     Card drawn = p.library.DrawTop();
     const int number = drawn.m_number;
     const InternedName name = drawn.m_name;

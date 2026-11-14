@@ -4566,7 +4566,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // turn, no committed line). MTG_NC_K / MTG_NC_DEPTH tune the averaging / lookahead
             // (depth 0 = greedy non-clairvoyant). Byte-identical when unset. See
             // TurnSolver::ReshuffleAvgChoosePlan and learned-d0-policy.md.
-            static const bool s_nc_search = EnvOn("MTG_NC_SEARCH");
+            const bool s_nc_search = NcSearchOn();
             static const int  s_nc_k     = []{ const char* e = std::getenv("MTG_NC_K");
                                                return (e && *e) ? std::atoi(e) : 8; }();
             static const int  s_nc_depth = []{ const char* e = std::getenv("MTG_NC_DEPTH");

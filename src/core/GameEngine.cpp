@@ -13,6 +13,7 @@
 #include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <iostream>   // MTG_FB_TRACE diagnostic
+#include <optional>
 
 GameEngine::GameEngine(AIEngine& ai) : m_ai(ai) {}
 
@@ -958,14 +959,26 @@ void GameEngine::MainPhase(GameState& state, bool is_pre_combat)
     // prints the turns where that happens so the claim is measured, not assumed.
     static const bool s_fb_trace = EnvOn("MTG_FB_TRACE");
     const int fb_casts_before = state.spells_cast_this_turn;
+    const bool nc_redraw = NcSearchOn() && NcRedrawOn();
+    int nc_unknown_draws = 0;
+    std::optional<Library::UnknownDrawScope> nc_draw_watch;
+    if (nc_redraw) { nc_draw_watch.emplace(state.ActivePlayer().library, nc_unknown_draws); }
     bool may_draw_spells = m_ai.TakeTurn(state, is_pre_combat, resolver);
     ResolveStack(state);  // resolve any trailing entries; usually empty after sequential casts
+    if (nc_redraw) { may_draw_spells = nc_unknown_draws > 0; }
 
     // Give the AI a second opportunity to cast those newly drawn spells.
-    if (may_draw_spells)
+    // Each NC re-entry requires an unknown draw from this finite library, so this bound is
+    // exhaustive for the phase; it cannot spin on a draw-free pass.
+    const int draw_reentries = nc_redraw
+        ? static_cast<int>(state.ActivePlayer().library.size()) + 1 : 1;
+    for (int pass = 0; may_draw_spells && pass < draw_reentries; ++pass)
     {
-        m_ai.TakeTurn(state, is_pre_combat, resolver);
+        if (nc_redraw && OpponentHasLost(state)) { break; }
+        nc_unknown_draws = 0;
+        may_draw_spells = m_ai.TakeTurn(state, is_pre_combat, resolver);
         ResolveStack(state);
+        if (nc_redraw) { may_draw_spells = nc_unknown_draws > 0; }
     }
 
     // M2 FIXPOINT (MTG_M2_FIXPOINT; see AIEngine::HasCommittedPhasePlan and

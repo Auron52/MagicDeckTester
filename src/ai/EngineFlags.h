@@ -1393,6 +1393,22 @@ inline bool M2FixpointEnabled()
     return heurarm::Flag(heurarm::M2_FIXPOINT, env_on)
         || heurarm::Flag(heurarm::M2_FIX_RESOLVE, false);
 }
+
+// MTG_NC_SEARCH is an opt-in non-clairvoyant play instrument. MTG_NC_REDRAW (DEFAULT ON;
+// =0 restores one decision per main) lets that policy choose again after an UNKNOWN library
+// draw. GameEngine watches actual draws from the real player's library (search copies do not count), skips
+// a known-top or continuously visible draw, and bounds the same-main loop. Every choice still uses
+// ReshuffleAvgChoosePlan on the revealed state.
+inline bool NcSearchOn()
+{
+    static const bool env_on = EnvOn("MTG_NC_SEARCH");
+    return env_on;
+}
+inline bool NcRedrawOn()
+{
+    static const bool env_on = EnvOn("MTG_NC_REDRAW", true);
+    return env_on;
+}
 // Fixpoint MODE (USER direction 2026-09-06: "we need to re-evaluate" at the post-draw points;
 // condemnation prunes WHAT gets re-evaluated, not WHETHER):
 //   1 = KILL-SCAN only (probe projected-lethal post-draw plans, commit on a verified win).

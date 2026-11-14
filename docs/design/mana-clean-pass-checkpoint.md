@@ -594,6 +594,20 @@ oracle off byte-identical; record 43e700b5c):
   The in-continuation DOMINATED-CREATURE (tap the attacker before a same-turn Treasure) belongs with the open
   Mirrorwing DOMINATED-CREATURE class, not here.
 
+* **Item H (Codex 2026-11-14): NC re-decision after an unknown draw -- VALIDATED (instrument only).**
+  `MTG_NC_SEARCH=1` now runs a fresh `ReshuffleAvgChoosePlan` after the real executor draws a card it did not
+  previously know. `MTG_NC_REDRAW=0` restores the old one-decision-per-main instrument. The shared
+  `AttemptDrawIntoHand` draw path signals the main-phase loop; search-copy draws, known top cards (including
+  a continuously visible top), dredge replacements, and library removals for milling/exile do not signal it.
+  Every re-entry requires a consumed
+  library card, giving the loop a finite library-size bound. Shipped play remains outside the flag.
+  Mirrorwing seed 73000662 gi662 at K=32, b20: NC-redraw wins T4, versus T6 with `MTG_NC_REDRAW=0`;
+  T4 executes the Anger draw, plays the newly drawn Forest, and casts the newly drawn Restoration chain.
+  Final source: units 3,097/3,097 (3,596,725 assertions), smoke 203/203 byte-identical and per-game audit clean;
+  exact on/off replay T4/T6. The prior hook revision (same default-off shipped path) passed the full pooled
+  smoke/regression gate 203/322, 544/544 scenarios, strict references and per-game audit. The final visibility
+  refinement is active only under `MTG_NC_SEARCH=1` and was rebuilt, unit-tested and smoke-tested afterward.
+
 ## 2026-11-12: item 6, remaining DUE decks (smallest issue count first)
 Pooled gate `due6-20261112` (PGO src fb2903808, 5,000 games each on the next fresh block, play identity with the
 oracle off byte-identical; record af059782a). Fresh counts: vampires 0, martyr_lifegain 10 (first run), slivers_vial 32,

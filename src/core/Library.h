@@ -33,6 +33,33 @@ public:
 
     Library() = default;
 
+    // The NC play instrument observes UNKNOWN real draws only. Search samples copy the library,
+    // so their draw calls have a different `this` and cannot request an executor re-decision.
+    // A known top (placed by a prior action) was already visible to the policy before the draw.
+    class UnknownDrawScope
+    {
+    public:
+        UnknownDrawScope(const Library& library, int& count)
+            : m_old_target(s_unknown_draw_target), m_old_count(s_unknown_draw_count)
+        { s_unknown_draw_target = &library; s_unknown_draw_count = &count; }
+        ~UnknownDrawScope()
+        { s_unknown_draw_target = m_old_target; s_unknown_draw_count = m_old_count; }
+        UnknownDrawScope(const UnknownDrawScope&) = delete;
+        UnknownDrawScope& operator=(const UnknownDrawScope&) = delete;
+    private:
+        const Library* m_old_target;
+        int* m_old_count;
+    };
+
+    // Called only by AttemptDrawIntoHand, before it removes the top card. Library removal for
+    // milling, exile, or playing the top card is not a draw and must not re-enter the NC policy.
+    bool WatchingActualDraw() const { return this == s_unknown_draw_target; }
+    void NoteActualDraw(bool top_visible = false)
+    {
+        if (WatchingActualDraw() && s_unknown_draw_count != nullptr && !KnownAt(0) && !top_visible)
+        { ++*s_unknown_draw_count; }
+    }
+
     // Copy drops the drawn prefix: a deep-copied state only needs the live library, and
     // dropping keeps the per-node copy cost equal to the old (erase-shrunk) vector form.
     Library(const Library& o)
@@ -421,6 +448,8 @@ public:
     }
 
 private:
+    static inline thread_local const Library* s_unknown_draw_target = nullptr;
+    static inline thread_local int* s_unknown_draw_count = nullptr;
     void NotePlacedBottom() { if (m_bottom_placed < 0xFF) { ++m_bottom_placed; } }
     // Remove live position idx from the known mask (positions below it move up one).
     void KnownErase(std::size_t idx)
