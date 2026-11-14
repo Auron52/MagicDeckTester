@@ -439,7 +439,10 @@ emit_jobs() {
     # regression_cases.sh). They were screened to games far below this ceiling, so it never binds on a
     # healthy engine; it exists so a change that makes one of them DEGENERATE abandons that game
     # deterministically (the case's avg/digest then moves and the tier FAILS) instead of hanging the
-    # tier for hours. 2,000,000 units is ~45 s of search on this box. Weight 1 starts them ahead of
+    # tier for hours. The WALL of 2,000,000 units is deck-dependent (measured 2026-11-14: Cyclone ~88 us/unit
+    # alone, so 2M = 177 s, and 253 s with all 24 workers busy; ~45 s held only for the decks it was first
+    # timed on). The cap is in units on purpose (deterministic), so a costly deck's abandoned game is a
+    # row-screening question (pick a block that finishes), not an uncounted cost. Weight 1 starts them ahead of
     # every weight-0 job: by the batch's own depth/budget order budget 0 sorts LAST at its depth, which
     # would put unbounded games on the tail (Hinata's weight, if any, still outranks them).
     if [ "$depth" -gt 0 ] && [ "$bud" -eq 0 ]; then

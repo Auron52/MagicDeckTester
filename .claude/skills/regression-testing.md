@@ -108,8 +108,10 @@ smoke and regression full together when we intend to."* So:
 * **Every stage stamps its wall.** `[stage] <name> <s>` lines go to the console live and into each tier's
   `regression_result_<mode>.txt` just above its `Result:` line ("stage wall times"). Read them; never guess
   where a tier's time went.
-* **Scenario sanity runs in parallel** (`test/scenarios.sh`, `SCEN_JOBS` = `THREADS` or `nproc`; output and
-  exit code identical to the serial loop, printed in fixture order). ~90 s serial -> seconds.
+* **Scenario sanity runs in parallel, longest fixture first, BESIDE the batch** (`test/scenarios.sh`, `SCEN_JOBS`
+  = `THREADS` or `nproc`, one shared token per fixture; output and exit code identical to the serial loop, printed
+  in fixture order; per-fixture walls in `test/logs/scenario_times.tsv`). A FAIL kills the batch and aborts the
+  tier, as the up-front gate did. Without the jobserver it runs up front.
 * **The reference stages run CONCURRENTLY with the game batch** (regression tier, or wherever `VPC_ALWAYS=1`):
   `viewer_protocol_check.py --strict` and `ref_bench.py --suboptimal --require-beat` start before the batch and
   all three processes draw from ONE jobserver FIFO of `THREADS`/`nproc` tokens (`MTG_JOBSERVER`; a batch worker
@@ -130,7 +132,19 @@ smoke and regression full together when we intend to."* So:
   per-game audit). Each tier PASSes/FAILs on its own keys; the exit code is 0 only when all pass. `--accept`
   with several tier flags simply accepts each tier in turn.
 
-  (Measured before/after stage walls: TODO -- see logs/tier-pool/handoff.md; not yet measured.)
+  **Measured 2026-11-14 (same binary for both harnesses; the per-game units, digests and `.wins` of all 525 cells
+  and the 837 reference verdict lines were byte-identical old vs new):**
+
+  | stage | old harness (serial) | new harness |
+  |---|---|---|
+  | scenario sanity (530 fixtures) | 226 s serial loop (~100-140 s of each tier's pre-batch wall) | runs beside the batch; 182 s of its own wall, 0 s of the tier's |
+  | reference sweep (837 refs) | 933 s AFTER the batch, 216 core-min, tail = one 926 s EDF reference | runs beside the batch; 178 s, ~18 core-min (engine 16 + Python 2); slowest ref 166 s |
+  | suboptimal require-beat | ~3 s after the batch | ~3 s beside the batch |
+  | outside the batch, regression tier | ~1,050 s | ~70 s (manifest 10 s + per-tier reports/audits) |
+
+  Read the wall of the batch itself off the `[stage]` line, and compare WORK (`units=` per job in batch.log), not
+  wall, across runs: another container on the host can inflate every game's ms uniformly (1.52x on 2026-11-14,
+  with identical units).
 
 ### The rows test what SHIPS (USER 2026-10-27)
 
