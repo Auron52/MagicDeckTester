@@ -305,6 +305,129 @@ Per game (840 games):
 
 **Unit suite** (`build/Release/mtg-test`, full): **3082/3082 test cases pass** (3,596,253 assertions), rc 0.
 
+## Soulstoke opponent end step (agents F / F2 / F3, 2026-11-14)
+
+**What.** Incandescent Soulstoke's "{1}{R}, {T}: You may put an Elemental creature card from your hand onto the
+battlefield. That creature gains haste until end of turn. Sacrifice it at the beginning of the next end step." can
+now be activated at the end of the OPPONENT's turn as a searched choice. Until now it was main-phase only (a
+PROVISIONAL partial in its `cards.json` note). The full design and code map are in
+`docs/design/opponent-end-step-window.md` §0. In short:
+
+- **Window.** Reuses morph's opponent-end-step window. `EotFaceUpMenu` (SpellEffects.h) crosses morph's flip menu
+  with `EotPutOptions`: "put nothing", or a multiset of the distinct Elemental creature names in hand, at most one
+  put per live source. A put Nova Chaser is crossed with its searched champion picks. One menu rank is the pin
+  (`Plan::eot_face_up_choice` -> `GameState::scripted_eot_face_up`, the same field the flips use). The BoundaryFan
+  fans it at every in-window crossing.
+- **Holding the source.** Attacking taps Soulstoke, and the goldfish attack policy swings with everything. The
+  HOLD is therefore searched in every host that decides a pre-combat main. In FSLineWin it is kind 4 of the
+  searched dork attack/hold (`DorkAtkContestedKind`). In every other host it is a PLAN TWIN with
+  `Plan::atk_dork_release = 4` (`AppendEotHoldTwins`, TurnSolver.cpp). Twins are gated on a usable source
+  (`EotHoldTwinGate`). A twin whose hold no longer differs from the natural attack after the apply is skipped
+  (`EotHoldContested`, a sound identity fold). A twin never takes a tie.
+- **The put creature's own enter choices** (Flamekin Harbinger's tutor, Risen Reef's look-top land / order) are
+  menu variants. That matters for Landfall Elementals only; no Red Elementals card has one.
+- **Delayed sacrifice** stays the bool `Permanent::sac_at_end_step`. The window runs after the opponent's end-step
+  sweeps, so the next sweep is OUR end step, which is "the next end step". An opponent-end-step delayed-sacrifice
+  sweep (Soulstoke decks only) covers an opponent extra turn. Two unit tests prove the timing: a main-phase put
+  dies at our end step that turn, and a window put survives our next turn's combat and dies at our end step.
+  This is the coordinator's Q5 ruling ("prove the bool with tests, or switch to a turn stamp").
+- **Viewer / claude-play:** a new `eot_put` decision (a modal card grid with "Put nothing"), after `face_up`.
+
+**F3 fixes found while validating.**
+1. *Twins were discarded as duplicates.* A twin's post-apply STATE equals its base's, because the hold is a
+   combat pin. So every post-apply state dedup a twin met discarded it as its base's duplicate. Three places did
+   this: the lookahead's axis-variant skip (`bp_seen_states` + `PlanDupSkippable`), `LaWaveDup` in the breakpoint
+   wave, and the group wave. In all three the hold was unreachable, which breaks the completeness rule. The fix,
+   `EotHoldFoldKey`, folds the kind-4 pin into those keys (and into the opt-in `MTG_CAND_DEDUP` key). It is
+   the identity for every plan without kind 4.
+2. *The look-top ORDER front.* Rank 0 of a top-tutor step under a Reef carried an order pin, so `menu[0]`
+   differed from the `front_only` entry the playout takes. The unpinned default row now comes first. One of the
+   k rows repeats it, as an inert duplicate (the default depends on the state at resolution). Caught by the unit
+   test "a window put under a Risen Reef fans the look-top land / order pins".
+
+**Validation (final binary = `build/scratch/redelem/F/new_bin`).**
+- Unit suite (full `mtg-test`): **3095/3095 test cases pass** (3,596,816 assertions). Before the F3 fixes, 1 failed
+  (the look-top front check, fix 2).
+- `test/scenarios.sh`: **533/533 pass**, including the new
+  `test/scenarios/redelem_soulstoke_opp_eot_firecat_leadership.json`. That fixture wins T4 only by holding
+  Soulstoke and putting Blistering Firecat at the opponent's end step. The baseline binary fails it ("no win",
+  opponent at 4).
+- Paired A/B at d3 b100, `MTG_DUMP_WINS` per game. Base = `F_base` (HEAD `854902a73`, before agent F); new = the
+  final binary. One pooled batch per arm (`build/scratch/redelem/F/man_ab.json`). Landfall Elementals runs with
+  `ignore_play_profile` (its profile locks d6 value-play; d3 b100 keeps both decks on one setting).
+
+| job | games | base avg | new avg | faster / slower | digest diffs | units base -> new |
+|---|---|---|---|---|---|---|
+| Red Elementals s300 | 120 | 4.3500 | 4.3500 | 0 / 0 | 0 | 2,435,831 -> 2,546,258 (**+4.5%**) |
+| Red Elementals s100 | 120 | 4.2917 | 4.2917 | 0 / 0 | 0 | 1,587,726 -> 1,635,241 (**+3.0%**) |
+| Red Elementals s5000 | 600 | 4.3817 | 4.3817 | 0 / 0 | 1 (gi104, same T5; a different T1 land) | 10,674,553 -> 11,086,020 (**+3.9%**) |
+| Landfall Elementals s300 | 120 | 4.3667 | 4.3667 | 0 / 0 | 0 | 6,049,875 -> 6,035,405 (-0.2%) |
+| Landfall Elementals s5000 | 600 | 4.3283 | 4.3283 | 0 / 0 | 2 (gi165, gi385, same turn) | 25,628,240 -> 25,530,926 (-0.4%) |
+
+  **Net 0 turns on both decks, and no game is slower**, so there is nothing to repro at `--depth 8 --budget-ms
+  0`. **No game is faster either: at d3 b100 the window put does not change a single win turn in 1,560 games.**
+  The scenario shows the line is findable when it is the only kill. On these seeds the main-phase put or the
+  attack is never worse. A traced re-run of both s300 jobs (240 games, `--game-trace-dir
+  build/scratch/redelem/F3/tr`) found **no real window put**. The check: no Elemental appears on the battlefield
+  between one turn's last phase and the next turn's draw. The only between-turn arrivals (4) were championed
+  creatures (3 Soulstoke, 1 Metallic Mimic) returning when Nova Chaser was sacrificed. The game log records no event for a window put or a
+  window flip; only the viewer's play-event sink does. So this count comes from the boards. Why the window
+  rarely wins in a goldfish: a main-phase put with haste hits the same turn, so the window only gains when a
+  body that arrives untapped next turn is worth more than this turn's hit. That happens with a lord or doubler
+  (the fixture). (A preliminary run without fix 2, `build/scratch/redelem/F3/ab_b7`, gave the same
+  digests and units for every job.)
+
+- Census (`MTG_FACEUP_AXIS_STATS=1`, the new arm, all 1,560 games): `searched-frame=0` for flips/puts and for champion
+  picks. `playout=24798`: beyond-horizon fronts, permitted. `outside-window=34`: crossings outside any search
+  window, also permitted. `real-end-step=0`. `eot-put enter choices: fanned steps=15002 unfanned=0` (all from
+  Landfall Elementals' Reef / Harbinger puts). `soulstoke hold: lookahead twins=603344 inert-skipped=158108
+  fslinewin-shadowed-by-dork-kind=0`.
+- **Byte-identity vs `F_base`** (`b3/ident_b3.sh`, 8 games, seed 4242, d3 b40 `--ignore-play-profile`):
+  **Morph 8/8 logs identical and stderr identical** apart from `runId` and the log path. Goblins: the same. Spirits:
+  logs identical, and stderr differs only in the wall-clock `SLOW-GAME` lines (same per-game units). Landfall
+  Elementals: 8/8 logs identical. Its search counters moved, as expected for a deck with Soulstoke.
+- Audits: `audit_card_costs.py` rc 0 (627/627 match Scryfall). `audit_card_fields.py` rc 0 (the three known
+  oracle-text paraphrases: Hellspark, Nova Chaser, Thunderkin). `audit_viewer_decisions.py --no-sweep` rc 0 for
+  both Red Elementals and Landfall Elementals; `eot_put` is expected for Soulstoke.
+
+**6a disclosures (Soulstoke window).**
+- ORDERING heuristic, `DecisionProvider::EotPutOrder` (base provider: printed power descending, then hand order). It
+  orders the window put menu. It decides the front (the playout beyond the horizon, and ties) and the human's
+  default. It prunes nothing. No deck provider overrides it.
+- TIE rule: a hold twin never takes a tie, so on equal value the natural attack is played. This matches
+  FSLineWin's strict `<` for kind 4.
+- Sound folds (no line lost): the twin gate (no usable source before the apply means no twin), the inert-twin
+  skip (after the apply the source would not attack, is tapped, or no matching card is left in hand, so the hold
+  equals the natural attack), and the interchangeable-source multiset (every Soulstoke untaps at our untap
+  step).
+- Not carried, structurally: the this-turn kill checks (`LethalCutKillIsReal`, `WinlessSeedApplyWins`, the
+  verify re-solve), because holding only removes damage. Also the diagnostic hosts (`EnumerateEarliestWins`, the
+  fd-pred dump).
+- Mana is held as in the morph precedent: whatever the turn leaves untapped is what the window can spend. There is
+  no reservation axis, and the plan enumeration offers the lines that spend less.
+- After a window put, the opponent's cleanup (CR 514.2) clears the put's until-end-of-turn haste. The put creature
+  attacks on our turn because it has been ours since that turn began, not because of haste.
+
+**Open questions (USER; none blocks work).**
+- S1. FSLineWin runs ONE alternative combat per plan, so where a mana-dork kind (1-3) fires at the same node, the
+  Soulstoke hold is not searched there. The census counts it (`fslinewin-shadowed-by-dork-kind`). Red Elementals
+  has no dork, so it reads 0 here; Landfall Elementals' Smokebraider could trigger it.
+- S2. Mana holding has no reservation axis (above). A multicolour payer that taps the wrong colour in main 2 could
+  strand the {R}. That cannot happen in mono-red.
+- S3. The put menu's front is the base `EotPutOrder` (largest power first). Should a Red Elementals order exist
+  (e.g. Firecat before Ball Lightning)? It decides only ties and the playout.
+- S4. Cost: the hold twins cost +4.5% / +3.0% / +3.9% search units on Red Elementals (s300 / s100 / s5000), and -0.2% / -0.4% on
+  Landfall Elementals, at equal turns. The brief's threshold for hunting a collapse was +25%, so no
+  narrowing was added.
+- S5. Logging gap (not a play defect): the goldfish game log (`--log-dir` / `--game-trace-dir`) writes no
+  action for a window put, just as it writes none for morph's window flip. The put creature simply appears on
+  the next turn's board. Only the viewer's play-event sink shows the "Opponent's end step: ... puts ..." line.
+  Should a logged `END_STEP_PUT` action be added? It would change log bytes for Morph too (its flips).
+- S6. In 1,560 paired games at d3 b100 the window changes no win turn, and the 240 traced games contain no real
+  window put. The window is a rules-completeness fix, and the units cost is S4. Keep it on by default? The
+  default taken: on. It is a card-rules model, not a heuristic, and the coordinator's completeness ruling
+  applies.
+
 ## Stage 5 — verification
 (not yet run)
 
