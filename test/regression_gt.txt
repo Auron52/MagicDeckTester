@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 4dfa91f10  date 2026-11-14
+# Regression ground truth -- commit a0c51f63d  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # accepted-with-regressions (overnight, 2026-11-13): Spirits admitted (integrator G); regenerated under the rebased binary, byte-identical to the pre-rebase accept
@@ -152,7 +152,7 @@ fluctuator_smoke_d5_s1001=3.5314/1719605529d48639
 giants_smoke_d0_s1001=6.0330/b44f550b033af9d5
 giants_smoke_d3_s1001=5.9000/36e129d00a2a3b84
 giants_smoke_d5_s1001=5.7600/1f1796e715568119
-pirates_smoke_d0_s1001=4.7310/d1510d52c11a9fa0
+pirates_smoke_d0_s1001=4.7310/07288b485467b7b0
 pirates_smoke_d3_s1001=4.3200/9f34e8d62b2d4abe
 pirates_smoke_d5_s1001=4.3543/afde838d4ca8f36d
 selesnyav2_smoke_d0_s1001=5.0810/7539da01ec284f5a
