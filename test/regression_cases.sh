@@ -91,6 +91,7 @@ declare -A DECK_FILE=(
   [extraturns]="decks/Extra Turns/Extra Turns.cod"
   [hydras]=decks/Hydras/Hydras.cod
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.cod"
+  [redelem]="decks/Red Elementals/Red Elementals.cod"
   [morph]=decks/Morph/Morph.cod
   [spirits]=decks/Spirits/Spirits.cod
   [mill]=decks/Mill/Mill.cod
@@ -148,6 +149,7 @@ declare -A DECK_PROF=(
   [extraturns]="decks/Extra Turns/Extra Turns.profile.json"
   [hydras]=decks/Hydras/Hydras.profile.json
   [martyr]="decks/Martyr Lifegain/Martyr Lifegain.profile.json"
+  [redelem]="decks/Red Elementals/Red Elementals.profile.json"
   [morph]=decks/Morph/Morph.profile.json
   [spirits]=decks/Spirits/Spirits.profile.json
   [mill]=decks/Mill/Mill.profile.json
@@ -541,6 +543,10 @@ SMOKE_CASES=(
   "colossus2hg 5  1001    50 20"
   # elementals2hg: a small searched canary (no per-opponent card in the list).
   "elementals2hg 5  1001    25 20"
+  # redelem2hg: a small searched canary. No card in the list reads heads or opponents: no "each opponent" effect,
+  # no attack_tokens_per_opponent, no life-total gate (Sunspine Lynx's ETB hits "each player" per NONBASIC land,
+  # inert vs the land-less goldfish; Lightning Bolt is "any target"). Only the 30-life clock moves.
+  "redelem2hg 5  1001    25 20"
   # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
   # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
   "pd2hg      5  1001    25 20"
@@ -732,6 +738,15 @@ SMOKE_CASES=(
   "martyr     3  1001    50 10"
   "martyr     5  1001   100 20"
   "martyr2hg  5  1001    25 20"
+  # redelem (Red Elementals): ADDED 2026-11-14 by the analysis (docs/design/analysis-Red Elementals.md, section
+  # "Regression suite (4-bis/5j)"), all three tiers at once (the all-or-none rule), at martyr's (= Hinata's) row
+  # shape and the overnight ENTRY set. Mono-R Elementals aggro: haste/sacrifice beaters (Spark, Ball Lightning,
+  # Hellspark unearth, Firecat morph), Nova Chaser champion, Thunderkin attack-trigger reanimation, Incandescent
+  # Soulstoke lord + put-from-hand (incl. the opponent-end-step window), Metallic Mimic. RedElementalsProvider.
+  # No value_play block (play = d5 b20), no value leaf and no keep table yet, so GT WILL move when they land.
+  "redelem 0 1001 1000 0"
+  "redelem    3  1001    50 10"
+  "redelem    5  1001   100 20"
   # Spirits: pre-keep-table ENTRY set on the Merfolk template (d5/b20 play setting, no value_play block).
   # spirits2hg is the small searched 2HG canary (no card scales with opponents or reads starting life).
   "spirits     0 1001 1000 0"
@@ -890,6 +905,12 @@ REGRESSION_CASES=(
   # finished every game at both depths (~0.28M units per block, ~13 core-s single-thread). Heavy-deck size (5 games).
   "martyr           3 30201   5 0"
   "martyr           5 30201   5 0"
+  # redelem: added 2026-11-14 with the deck. Screened 16 five-game blocks (30001..30301 step 20, d3+d5, budget 0,
+  # abandon_units 2000000): NO block abandoned a game, but the tail is heavy (s30121 d5 one game 0.97M units / 60 s;
+  # s30041 and s30301 one 18-22 s game each). 30201 and 30241 had no game over 5 s at either depth (~11-15k units
+  # per d5 block). Heavy-deck size (5 games). This deck spends ~130 us of wall per search unit unbudgeted.
+  "redelem          3 30201   5 0"
+  "redelem          5 30201   5 0"
   "melira           3 30001  20 0"
   "melira           5 30001  20 0"
   "minotaur         3 30001  20 0"
@@ -1214,6 +1235,11 @@ REGRESSION_CASES=(
   "martyr     5  2002   150 20"
   "martyr     5  3003   150 20"
   "martyr2hg  5  2002    75 20"
+  # redelem: see the SMOKE block.
+  "redelem 0 2002 1000 0"
+  "redelem    3  2002    50 10"
+  "redelem    5  2002   150 20"
+  "redelem    5  3003   150 20"
   # Spirits: pre-keep-table ENTRY set on the Merfolk template; most searched games use play settings.
   "spirits 0 2002 1000 0"
   "spirits 3 2002   75 10"
@@ -1406,6 +1432,9 @@ OVERNIGHT_CASES=(
   # martyr: see the REGRESSION backstop note (the other clean block).
   "martyr           3 30301   5 0"
   "martyr           5 30301   5 0"
+  # redelem: see the REGRESSION backstop note (the other clean block).
+  "redelem          3 30241   5 0"
+  "redelem          5 30241   5 0"
   "melira           3 30101  20 0"
   "melira           5 30101  20 0"
   "minotaur         3 30101  20 0"
@@ -2129,6 +2158,17 @@ OVERNIGHT_CASES=(
   "martyr2hg  5  5005   75 20"
   "martyr2hg  5  6006   75 20"
   "martyr2hg  5  7007   75 20"
+  # redelem: see the SMOKE block. Pre-keep-table overnight ENTRY set: one d3 b10 sanity row + d5 play rows (USER 2026-10-27).
+  # No redelem2hg overnight rows: the deck reads no heads/opponents (see the smoke canary note).
+  "redelem 0  4004 2000 0"
+  "redelem 0  6006 2000 0"
+  "redelem 0  8008 2000 0"
+  "redelem 0 10010 2000 0"
+  "redelem    3  4004  125 10"
+  "redelem    5  4004  300 20"
+  "redelem    5  5005  300 20"
+  "redelem    5  6006  300 20"
+  "redelem    5  7007  300 20"
   # Spirits: pre-keep-table overnight ENTRY set on the Merfolk template.
   "spirits 0  4004 2000 0"
   "spirits 0  6006 2000 0"
