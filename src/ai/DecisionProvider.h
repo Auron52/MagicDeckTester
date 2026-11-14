@@ -3222,6 +3222,18 @@ public:
         if (ranked.size() <= 1) { return ranked; }
         return { ranked.front() };
     }
+    // OnPlayFetchWidth -- how many of a fetchland's ordered targets the AUTONOMOUS search fans at the LAND DROP
+    // (the fetch resolving on play; NarrowOnPlayFetch). DEFAULT 1, the top of the shared fetch order: an
+    // INTENTIONAL, measured prune (agent default taken 2026-11-14 under the NEVER-BLOCK rule, pending the USER's
+    // ruling; the USER: "Searching every target is something that enables clairvoyance"). Held-out seed 71001,
+    // shuffle salts decoupled, 300 g/cell: the full fan vs top-1 was MIXED -- Boars play -0.033, but boars2hg
+    // +0.020, Creature Giving play +0.027 (t 3.4), cg2hg d3 +0.042 turns -- while the ORDER alone (top-1 of the
+    // hand-aware list) was better or neutral on every deck (logs/boars-research/rank-handoff.md). The width is
+    // a per-deck question: a provider whose fetch genuinely needs the alternatives returns more here (a
+    // USER-review gate, confidence-conditional per state when granted). Not read in human play or the
+    // unpruned audit (every legal target), and not the ACTIVATION of a held fetchland (LandSearchFetchPickWidth).
+    virtual int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
+    { (void)s; (void)fetch; return 1; }
 
     // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
     // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old

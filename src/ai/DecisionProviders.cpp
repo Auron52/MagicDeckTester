@@ -52,6 +52,83 @@ uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int cont
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
+// ---- BoarsProvider: the AI-DRAFTED cast order (MTG_BOARS_CAST_ORDER, DEFAULT OFF) -------------------
+//
+// docs/design/boars-cast-order-2026-11-14.md, drafted for the USER's review (USER 2026-11-14: "If you want a ruling
+// on the cast order I recommend you come up with a recommended order and I review it"). Cast order is USER-OWNED:
+// this ships OFF, and =0 / unset is DeckProvider::CastOrderRank byte-for-byte (every creature at the generic 10,
+// Greaves and Herald's Horn at 20). What in this list is order-sensitive, by the card text:
+//   * Herald's Horn's {1} reduction reaches only Boar spells cast AFTER it resolves -> first.
+//   * Herald of Ilharg counts only creature spells cast AFTER it is on the battlefield, and an MV >= 5 cast deals
+//     ALL its counters -> Herald first among the creatures, every cheap creature before every 5+ one.
+//   * Raggadragga's untap needs it on the battlefield before a 7+ spell -> in the <= 4 block, ahead of the big ones.
+//   * End-Raze's ETB pumps the OTHER creatures already there -> after every creature but Decimator.
+//   * Decimator's cast pump reaches the creatures already there, and an emerge victim must be there -> last.
+//   * Lightning Greaves is order-free by its text (equip is a separate activation); it is paid from lands before
+//     Somberwald Sage's creature-only mana is spent.
+// Every slot is read off PARAMS, so an unlisted card lands by its shape; the name breaks every tie.
+static bool BoarsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BOARS_CAST_ORDER");   // DEFAULT OFF (AI draft awaiting the USER); =1 enables
+    return heurarm::Flag(heurarm::BOARS_CAST_ORDER, on);
+}
+
+namespace
+{
+constexpr int kBoarsReducer  = 1;    // Herald's Horn
+constexpr int kBoarsEquip    = 2;    // Lightning Greaves
+constexpr int kBoarsCounter  = 3;    // Herald of Ilharg
+constexpr int kBoarsSmall    = 10;   // + mana value (0..4)
+constexpr int kBoarsBig      = 20;   // + mana value (5..9), clamped
+constexpr int kBoarsEtbPump  = 40;   // End-Raze Forerunners
+constexpr int kBoarsCastPump = 50;   // Decimator of the Provinces
+constexpr int kBoarsUnlisted = 100;  // + the generic rank
+}  // namespace
+
+int BoarsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (!def.card.IsCreature())
+    {
+        if (p.chooses_creature_type && p.reduces_spell_subtype_creature_only) { return kBoarsReducer; }
+        if (p.is_equipment)                     { return kBoarsEquip; }
+        return kBoarsUnlisted + DeckProvider::CastOrderRank(s, def);
+    }
+    if (p.creature_cast_trigger_plus_counters > 0) { return kBoarsCounter; }
+    if (p.cast_trigger_team_pump_power > 0)        { return kBoarsCastPump; }
+    if (p.etb_other_creatures_pump_power > 0)      { return kBoarsEtbPump; }
+    const int mv = def.card.m_mana_cost.ManaValue();
+    if (mv <= 4) { return kBoarsSmall + std::max(mv, 0); }
+    return kBoarsBig + std::min(mv, 19);
+}
+
+bool BoarsProvider::CastOrderTotalByName() const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderTotalByName(); }
+    return true;
+}
+
+const char* BoarsProvider::CastOrderTierName(int rank) const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case kBoarsReducer:  return "SUBTYPE COST REDUCER (Herald's Horn): first -- its {1} reaches only the Boars cast after it";
+        case kBoarsEquip:    return "EQUIPMENT (Lightning Greaves): order-free; paid from lands before Sage's creature-only mana";
+        case kBoarsCounter:  return "CAST-COUNTER (Herald of Ilharg): first creature -- every later creature cast adds two counters";
+        case kBoarsEtbPump:  return "ETB TEAM PUMP (End-Raze Forerunners): after every other creature but Decimator";
+        case kBoarsCastPump: return "CAST TEAM PUMP + EMERGE (Decimator of the Provinces): last";
+        default: break;
+    }
+    if (rank >= kBoarsSmall && rank < kBoarsBig)
+    { return "CREATURE MV <= 4: cheapest first, then by NAME -- they build Herald's counters before the 5+ casts"; }
+    if (rank >= kBoarsBig && rank < kBoarsEtbPump)
+    { return "CREATURE MV >= 5 (Ilharg): after the cheap creatures (Herald's damage reads every counter)"; }
+    if (rank >= kBoarsUnlisted) { return "UNLISTED NONCREATURE: generic rank + 100, then by NAME"; }
+    return nullptr;
+}
+
 uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                    const CardDefinition& entering) const
 {
@@ -22470,9 +22547,14 @@ std::vector<std::string> OnPlayFetchCandidates(const GameState& state, int contr
 void NarrowOnPlayFetch(const GameState& state, int controller, const CardDefinition& land,
                        std::vector<std::string>& cands)
 {
-    if (BattlefieldModelFetch(land.params)) { return; }   // LandSearchFetchPickWidth already applied
     if (cands.size() <= 1 || DecisionUnpruned(UnprunedGate::Fetch) || HumanPlayActive()) { return; }
-    cands = ResolveProvider(state).FetchSearchCandidates(state, controller, land.params, cands);
+    const DecisionProvider& prov = ResolveProvider(state);
+    // The battlefield list already carries LandSearchFetchPickWidth; the legacy one its FetchSearchCandidates.
+    if (!BattlefieldModelFetch(land.params))
+    { cands = prov.FetchSearchCandidates(state, controller, land.params, cands); }
+    // Then the land drop's own width (OnPlayFetchWidth, default the top pick -- see its declaration).
+    const int w = prov.OnPlayFetchWidth(state, land);
+    if (w > 0 && static_cast<int>(cands.size()) > w) { cands.resize(static_cast<std::size_t>(w)); }
 }
 
 // The modern zero-mana, one-life, sacrifice-self, single-land fetch template: the only activated search

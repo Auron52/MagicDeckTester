@@ -506,6 +506,13 @@ public:
     bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                      const CardDefinition& entering) const override;
+    // MTG_BOARS_CAST_ORDER (heurarm BOARS_CAST_ORDER, DEFAULT OFF -- an AI DRAFT awaiting the USER's review,
+    // docs/design/boars-cast-order-2026-11-14.md): Herald's Horn > Lightning Greaves > Herald of Ilharg > the
+    // creatures of mana value <= 4 cheapest first > the other 5+ creatures (Ilharg) > End-Raze Forerunners >
+    // Decimator of the Provinces; ties by NAME. =0 / unset -> DeckProvider's rank byte-for-byte.
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool CastOrderTotalByName() const override;
+    const char* CastOrderTierName(int rank) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every attacker that can still swing this "

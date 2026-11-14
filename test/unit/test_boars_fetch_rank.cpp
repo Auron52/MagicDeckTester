@@ -109,7 +109,8 @@ TEST_CASE("fetch targets: the gi153 T1 hand takes Stomping Ground on play, the s
     CHECK(c == ActivationNames(s, foothills.params));
     std::vector<std::string> n = c;
     NarrowOnPlayFetch(s, 0, foothills, n);
-    CHECK(n == c);            // no provider narrowing for Boars
+    // The land drop's own width (OnPlayFetchWidth, default the top pick of the shared order, 2026-11-14).
+    CHECK(n == std::vector<std::string>{ "Stomping Ground" });
     // No Stomping Ground left: Forest (green for the Birds) is not behind the library-first Mountain.
     SetLib(s, { "Mountain", "Forest" });
     c = OnPlayFetchCandidates(s, 0, foothills);
@@ -156,7 +157,7 @@ TEST_CASE("fetch targets: Creature Giving -- the battlefield Heath and the legac
     }
     {
         // Hunted Phantasm {1}{U}{U} with a Forest down: blue is the lacking colour -> Breeding Pool, through the
-        // legacy (FetchCandidates) route, and the search keeps every target (the base width, USER 2026-11-14).
+        // legacy (FetchCandidates) route; the land drop searches its top pick (OnPlayFetchWidth default 1).
         GameState s = BaseFr(cg, 2);
         PutFr(s, "Forest", 50);
         Hand(s, { "Hunted Phantasm", "Misty Rainforest" });
@@ -167,7 +168,7 @@ TEST_CASE("fetch targets: Creature Giving -- the battlefield Heath and the legac
         CHECK(c[0] == "Breeding Pool");
         std::vector<std::string> n = c;
         NarrowOnPlayFetch(s, 0, misty, n);
-        CHECK(n == c);
+        CHECK(n == std::vector<std::string>{ "Breeding Pool" });
     }
 }
 
