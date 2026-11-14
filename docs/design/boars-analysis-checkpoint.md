@@ -201,3 +201,13 @@ target branching cost unmeasured.
   Two read-only Opus agents root-causing the 16 (rc-boars: 9 Boars, rc-cg: 6 CG + 1 5C; brief
   logs/boars-research/rootcause-brief.md; output rootcause/rc-*.md). NEXT: their verdicts -> accept smoke + regression +
   overnight --deck=boars,boars2hg, check_gt_logs, commit GT.
+* 12:47Z state for compaction:
+  - fresh rank agent committed `23e2e67db` on boars-rank (USER rule: the line's colour, then shock over basic, then
+    names; MTG_FETCH_RANK_PIPS still default OFF) and launched the pooled A/B 12:35Z (rank2/ab.err heartbeat 24/24;
+    DONE + cmp.txt at the end).
+  - boars-d0haste agent: pooled A/B running (d0haste/ab/pooled.pid).
+  - rc-boars + rc-cg root-cause agents running (rootcause/rc-*.md).
+  - Cron faac6d71 deleted; NEW 2-hourly session timer e5606a1d (:43) watches both A/Bs + the root-cause agents.
+  NEXT: root-cause verdicts -> accept smoke, regression, overnight --deck=boars,boars2hg; check_gt_logs; commit GT. Then
+  integrate boars-rank (if the A/B passes <= 0 per deck) and boars-d0haste, re-run smoke + regression. Then remaining
+  Stage 5 (verify_deck, 5a-5h, discard policy), Stage 6 report, push (4h rhythm), worktree cleanup.
