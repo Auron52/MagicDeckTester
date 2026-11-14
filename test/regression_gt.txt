@@ -1,9 +1,9 @@
 # Regression ground truth -- commit fc0653cc6  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
-# accepted-with-regressions (regression, 2026-11-13): Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained, 0 searched slower); Spirits admitted (integrator G)
 # accepted-with-regressions (overnight, 2026-11-13): Spirits admitted (integrator G); regenerated under the rebased binary, byte-identical to the pre-rebase accept
 # accepted-with-regressions (smoke, 2026-11-14): Integration rebase of items B/C+I/D onto a819bc2d6 (2026-11-14): 20 rows equal the pre-rebase lever-attributed accepts byte-for-byte (origin never moved them); martyr d5 digest-only (avg same, 0 searched slower) from origin's martyr graveyard-cast change + MTG_MARTYR_SAC_FIRST, lever-off check reproduces origin; carried: Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained); Spirits admitted (integrator G)
+# accepted-with-regressions (regression, 2026-11-14): Integration rebase of items B/C+I/D onto a819bc2d6 (2026-11-14): 21 rows equal the pre-rebase lever-attributed accepts byte-for-byte (origin never moved them); martyr d3/d5 s2002 and spirits d0 s2002 digest-only (avg same, 0 searched slower), lever-off check reproduces origin; carried: Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained, 0 searched slower); Spirits admitted (integrator G)
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -356,10 +356,10 @@ hinata_regression_d0_s2002=6.8030/6c61a402de6efd5a
 hinata_regression_d3_s2002=5.6000/f60ea18cbf1a584e
 hinata_regression_d5_s2002=5.4067/379242fb79cc088b
 hinata_regression_d5_s3003=5.7067/c086e6def4c625c1
-gods_regression_d0_s2002=8.7520/c7abdb06bd6cc25e
-gods_regression_d3_s2002=5.4200/f78b14b908a115f4
-gods_regression_d5_s2002=5.1800/f7d03bd076c8d626
-gods2hg_regression_d5_s2002=5.2200/08832771848c62a7
+gods_regression_d0_s2002=8.7510/e33c8d399b371c42
+gods_regression_d3_s2002=5.4200/6cf6bc0fc84f8f3f
+gods_regression_d5_s2002=5.1800/5934d79288118522
+gods2hg_regression_d5_s2002=5.2200/c87481457e93bdf1
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8400/335bbf2218963743
 cyclone_regression_d3_s3003=4.9333/b1548eac97d34a49
@@ -531,7 +531,7 @@ martyr_regression_d3_s2002=5.2000/7e0a9aec339b9c4d
 martyr_regression_d5_s2002=5.1800/3336e658da8523a1
 martyr_regression_d5_s3003=5.0600/2b0d0d8375d412ab
 martyr2hg_regression_d5_s2002=5.2933/473bef39ea151b28
-spirits_regression_d0_s2002=5.0770/29eea603abe82d0f
+spirits_regression_d0_s2002=5.0770/95fc4971a016df1c
 spirits_regression_d3_s2002=4.6533/f4f1e5e6f8ec3c7e
 spirits_regression_d5_s2002=4.6733/7864119ab0190a5f
 spirits_regression_d5_s3003=4.6933/8534ce97ffadbc28
