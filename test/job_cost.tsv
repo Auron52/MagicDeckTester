@@ -926,12 +926,12 @@ mill_overnight_d3_s4004	194756
 mill_overnight_d5_s4004	238885
 mill_overnight_d5_s5005	193776
 mill_regression_d0_s2002	1
-mill_regression_d3_s2002	114943
-mill_regression_d5_s2002	188039
-mill_regression_d5_s3003	156269
+mill_regression_d3_s2002	131327
+mill_regression_d5_s2002	236923
+mill_regression_d5_s3003	152753
 mill_smoke_d0_s1001	1
-mill_smoke_d3_s1001	24946
-mill_smoke_d5_s1001	34339
+mill_smoke_d3_s1001	25126
+mill_smoke_d5_s1001	34497
 minotaur2hg_overnight_d5_s4004	8059
 minotaur2hg_overnight_d5_s5005	7983
 minotaur2hg_overnight_d5_s6006	6028

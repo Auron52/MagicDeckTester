@@ -7,9 +7,9 @@
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-mill_smoke_d0_s1001=6.8300/a1a20c69ec1cf8f1
-mill_smoke_d3_s1001=4.6000/b25c9fd7f2bf2c77
-mill_smoke_d5_s1001=4.6000/508ba095bc8ef8b8
+mill_smoke_d0_s1001=6.8000/62a408154adc97ad
+mill_smoke_d3_s1001=4.6000/32e1d9ad58c8e68d
+mill_smoke_d5_s1001=4.6000/1bcdec3c5c6b293e
 mill2hg_smoke_d5_s1001=4.6000/508ba095bc8ef8b8
 morph_smoke_d0_s1001=4.7380/2a16be40a3e862c3
 morph_smoke_d3_s1001=3.9800/e6391ce2fb15a901
@@ -220,10 +220,10 @@ merfolkturns_smoke_d5_s1001=5.6000/51d5d3a32a66d056
 merfolkturns2hg_smoke_d3_s1001=6.0000/e611dbc207b782f6
 
 # --- regression ---
-mill_regression_d0_s2002=6.7800/9efa9b0dbb121ab3
-mill_regression_d3_s2002=5.0000/1df91e645eefa7e6
-mill_regression_d5_s2002=4.8000/43d41cd965ddf57a
-mill_regression_d5_s3003=5.2000/318614b0794ded50
+mill_regression_d0_s2002=6.6600/303e3e8e345d7ea2
+mill_regression_d3_s2002=5.0000/18588312d1b016ff
+mill_regression_d5_s2002=4.6000/e9563a5ae7f26032
+mill_regression_d5_s3003=5.2000/1e261ff3187a5473
 mill2hg_regression_d5_s2002=4.8000/43d41cd965ddf57a
 morph_regression_d0_s2002=4.7730/258f39d48b3d2cb5
 morph_regression_d3_s2002=4.0267/532939362a099b06
