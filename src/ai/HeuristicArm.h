@@ -950,6 +950,7 @@ enum Slot : int
     SB_CULLING_FALLBACK,      // MTG_SB_CULLING_FALLBACK  fixed Shadowborn victim: when a same-plan hand Apostle cannot fund Culling before later casts, admit the battlefield Demon fallback only if the exact walk pays it. The plan search sees one payable victim route.
     REDELEM_NOVA_MAIN2,       // MTG_REDELEM_NOVA_MAIN2  Red Elementals Stage 4a (USER 2026-11-14: "Note that Nova Chaser should be cast main 2 if it is hardcast, but it might also be dropped in main 1 via Incandescent Soulstoke."): a champion card (champion_subtype) with no haste access is not HARDCAST in the pre-combat main (RedElementalsProvider::CollectedActionAllowed); the Soulstoke put stays in both mains. Human play and MTG_UNPRUNE=championmain2 keep both. Default ON; =0 -> the main-1 hardcast is offered
     REDELEM_OPAQUE_ORDER,     // MTG_REDELEM_OPAQUE_ORDER  Red Elementals Stage 4a: RedElementalsProvider::OrderOpaqueCastsByRank -- an order-opaque cast set (Legion Leadership with the casts around it) is rank-sorted (generic CastOrderRank: creatures 10 before noncreatures 20, so the doubler follows the bodies it doubles) instead of left to the search. The behaviour the deck had on MorphProvider; USER-owned cast-order item, surfaced. Default ON; =0 -> the search owns the order
+    REDELEM_TRICK_FOLD,       // MTG_REDELEM_TRICK_FOLD  Red Elementals Stage 5f (sound dominance fold): RedElementalsProvider::TrickTargetsAttackersOnly + TrickTargetCandidates -- Legion Leadership (a solo-target trick whose payload is until-end-of-turn combat power) is not aimed at a creature that cannot attack this turn, and not cast at all once this turn's combat is over; nothing in the list reads a non-attacker's power. Never under human play or MTG_UNPRUNE=tricktarget. Default ON; =0 -> every target
     COUNT
 };
 
@@ -1844,6 +1845,7 @@ inline const char* Name(int slot)
         "MTG_SB_CULLING_FALLBACK",
         "MTG_REDELEM_NOVA_MAIN2",
         "MTG_REDELEM_OPAQUE_ORDER",
+        "MTG_REDELEM_TRICK_FOLD",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
