@@ -23,7 +23,8 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
   4. Commit the GT, fetch, and rebase if origin moved. If src or GT replays, rebuild and re-run the tiers.
   5. Push the shared branch `phase-1-2-deck-analyzer`. This session last pushed at 06:06 UTC, so the window has been open since 10:06.
   6. Start a CI watch in the background: `gh run watch <id> --interval 60 --exit-status`.
-- **After landing:** re-test `MTG_RESCUE_TAP_SOURCE` with the re-weighted manifest in `build/scratch/snowcp/rts/` (rebuild the `mtg.ab` snapshot first). Adoption is the USER's call.
+- **Smoke result (11:30 UTC): 7 cases changed, none slower; Jumbo d0 has one game faster.** Besides the 3 Snow rows, play moved in `pd_smoke_d5` (gi33, still a loss), `edf_smoke_d0` (gi551, opponent 1 life higher at T5, same T6 win), and in `jumbo_smoke_d0` and `lhc_smoke_d0`. A single-game run with each flag off shows `MTG_REPEAT_EXTRAS_RESERVE` causes the PD and EDF changes; the other two flags change neither game. That reserve is generic: it applies to any {T}-less K-repeat activation (for example PD's Pyrohemia), so this is a play change reaching other decks, not a leak. The earlier held-out A/B (section 5.1) covered Snow, Selesnya v2 d6, EDF d5 and Kithkin d6, but not the d0 rows or PD. **Before accepting:** run ONE pooled held-out A/B over every deck the smoke and regression tiers moved, package off vs default. Every deck must be net <= 0. Data: `build/scratch/snowcp/mv/`. Both branches are also on origin as `wip/snow-contpay` and `wip/tier-pool`.
+- **After landing:** the `MTG_RESCUE_TAP_SOURCE` re-test goes to the MANA agent (below).
 
 ## 2. Tier pooling harness (branch `tier-pool`, worktree `.claude/worktrees/tier-pool`, LOCAL)
 
@@ -61,7 +62,10 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
 
 ## 5. Other outstanding items
 
-- **Snow, unfixed:** the 3 continuation re-plans (class CONT: g30 T4, g42 T3, g120 T5). They need tie-aware continuation choices; see the ledger `docs/design/snow-continuation-pay.md`. The selesnyav2/edf producer-cast shortfalls belong to the mana agent's session.
+- **Snow, unfixed: send to the MANA agent (USER 2026-11-14).** All the leftover items are about payment. See the ledger `docs/design/snow-continuation-pay.md`.
+  - g42 T3: the payment rescue lets Scrying Sheets fund its own {T} (`MTG_RESCUE_TAP_SOURCE`; its re-test with the manifest in `build/scratch/snowcp/rts/`; adoption is the USER's call).
+  - g30 T4 and g120 T5: a carried breakpoint continuation casts Jorn or Abominable Treefolk with mana the plan had counted on (a reservation problem in the continuation path).
+  - The Selesnya v2 and EDF producer-cast shortfalls are already the mana agent's.
 - **Worktree cleanup, ONLY when the USER asks.** Candidates once their work is on origin:
   - misc-config, morph, morph-dblprobe, morph-dblsplit, morph-exalted, morph-histfix, morph-integ, morph-merge, morph-payer, morph-viewer
   - tier-pool-old (the detached baseline for the timing A/B)
