@@ -55,7 +55,7 @@ No fetchlands; no sideboard.
 | Sunspine Lynx | 2 | `etb_damage_each_player_per_nonbasic_land` (shared ResolveNonbasicLandDamage in the own-ETB cascade; arms own_death_live) + `static_players_cant_gain_life` / `static_damage_cant_be_prevented` (PlayersCantGainLifeNow / DamageCantBePreventedNow at the Skullcrack sites; `deck_has_static_life_locks` stamp) | done (agent A, e313899fc) |
 | Hellspark Elemental | 3 | `endstep_sacrifice_self` + `unearth_cost` {1}{R}: NEW `Action::Kind::Unearth` (graveyard activation, one per copy, equiv_tag prefix fold), `ApplyUnearth`, `Permanent::unearthed` (end-step exile sweep + exile-instead at SacrificePermanentAt), `unearth=` viewer verb | done (agent A, e313899fc); replacement PARTIAL (see open questions) |
 | Nova Chaser | 3 | CHAMPION (new, generic `champion_subtype`): searched exile pick (cast + Soulstoke-put variants per identity class + decline), linked exile, LTB return as a new object; `DeckUsesSecondMain` opened for the post-combat champion line | done (agent B, see Agent B notes) |
-| Thunderkin Awakener | 3 | attack trigger: gy Elemental (toughness < own) tapped+attacking, sac next end step (new) | pending |
+| Thunderkin Awakener | 3 | NEW generic `attack_trigger_reanimate` (+ `_subtype` Elemental, `_toughness_lt_self`, `_sac_end_step`): shared `FireAttackReanimate` in both combat worlds, SEARCHED target (`Plan::attack_reanimate_choice` -> `scripted_attack_reanimate`, one rank per distinct name, a returned Nova expanded per champion pick), tapped + attacking through the enter cascade, delayed end-step sac on the object, projection `CountAttackReanimatePump`; viewer `gy_return_one` (mandatory) | done (agent C, f409f2e07; validated agent C2, see Agent C notes) |
 
 ### Agent A notes (2026-11-14) — Spark / Ball Lightning / Bladewhirl / Lynx / Hellspark
 - **Correction to the standing decisions:** the passive opponent DOES have lands -- three inert
@@ -173,6 +173,48 @@ Code: `b53c6f21c`. It SUPERSEDES the "unpinned ordinary cast ... kept only when
   value_play depth is enabled). Landfall Elementals, Morph, Goblins, Spirits: **32/32 logs identical** apart
   from `runId`, and the stderr search counters are identical too.
 
+### Agent C notes (2026-11-14) — Thunderkin Awakener
+Code: `f409f2e07` (implementation, 5 unit cases, scenario); `05b603a2e` (viewer INERT_PARAMS rows, pending
+user OK). Validation by agent C2 on the Release build of `f409f2e07`.
+- **Structures.** Params (`CardDatabase`): `attack_trigger_reanimate` (gate) + `_subtype` ("Elemental"),
+  `_toughness_lt_self`, `_sac_end_step`. `GameState::scripted_attack_reanimate` (packed pin) and
+  `deck_has_attack_reanimate` (stamp, GoldFishRunner; also feeds `GyR_CreatureNames`), both in existing
+  padding holes (sizeof 1464 unchanged). `Plan::attack_reanimate_choice` (4 bits x 7 trigger ordinals, ranks
+  into `AttackReanimateOptions`; Plan size 656 unchanged), plumbed at every `attack_attach_choice` site
+  (hash, SamePlan, empty-plan, axis-variant, combat-pin dedup, scalar plan-cache key, census, dumps, post-apply
+  pins, Dominance fold, turn-start resets). `SpellEffects.h`: `AttackReanimateFilter`,
+  `AttackReanimateOptions`, `ReturnGraveyardCardAttacking`, `FireAttackReanimate` (targets fixed as the
+  trigger goes on the stack, CR 603.3d; re-checked on resolution against the live toughness or LKI; atk_idx
+  repaired by number), called after `FireMilitiaPrideTokens` in `GameEngine::CombatPhase` and
+  `SimulateOneCombatAfterTitan`. `PutCardOntoBattlefield` gained `tapped` and `sac_at_end_step`. Projection
+  `CountAttackReanimatePump` (TurnSolver, copy-and-diff). Axis block "SEARCHED THUNDERKIN AWAKENER ATTACK
+  RETURN" (TRACE `thunderkinaxis`). Provider `DecisionProvider::AttackReanimateTargets` ORDERS only (printed
+  power desc, then a card without a graveyard ability first); no prune.
+- **Unit suite:** 3078/3079 cases pass; the one failure is the known `test_pirates_provider`
+  every-deck-resolves table (54 folders vs 53 pinned, Stage 4a).
+- **Scenarios:** `redelem_thunderkin_unearth_contest` (only unearth Hellspark + cast Thunderkin + the
+  trigger returning SPARK makes 7) PASS win T3 at b0 and b100; `redelem_nova_postcombat_champion` PASS win T5
+  at b0 and b100.
+- **Repro, seed 300 x120 d3 b100** vs the pre-Thunderkin baseline (`b53c6f21c`, where the card was
+  undefined): avg **4.6500 -> 4.3500**, 32 win turns differ, **32 faster, 0 slower** (net -36 turns; gi94
+  7->4, gi96 7->5, gi97 6->4). Census `searched-frame=0 playout=0 outside-window=0 real=0`. Axis trace: 21,495
+  frames, 4,068 emitted variants (70,672 in all, max 210 in one frame). Game logs: 91 returns over 120 games
+  (Spark 49, Ball Lightning 20, Hellspark 21, Firecat 1), every one tapped; each returned body is in the
+  graveyard at the next turn or the game ended (Hellspark 12/12 to the GRAVEYARD, never exile: a trigger
+  return is not an unearth). Combat damage equals the tapped bodies' printed power in 71/88 combats with a
+  return; the other 17 are Metallic Mimic counters, the Soulstoke lord and Legion Leadership pumps.
+- **Claude-play:** seed 302 surfaces `gy_return_one` "Thunderkin Awakener (attack)", mandatory (empty
+  `alt_text`), single-candidate at choices `1,0,0,0,7,0` and with the full legal list [Spark Elemental, Ball
+  Lightning], default 2 = Ball Lightning (provider order), at `1,0,0,0,7,0,1,0,0,0,1,0,0,0`. The dump shows
+  the attacking Thunderkin untapped: the engine taps attackers in `ResolveCombatDamage` (pre-existing,
+  engine-wide; nothing in this list reads it).
+- **Byte-identity** (`b3/ident_b3.sh`, `C_base` binary + cards.json vs new, 8 games seed 4242 d3 b40
+  `--ignore-play-profile`): Landfall Elementals, Morph, Goblins, Spirits **32/32 logs identical** apart from
+  `runId`; stderr search counters identical. The extra scalar plan-cache key slot causes no drift.
+- **Audits:** `audit_card_costs.py` rc 0 (627/627 match); Thunderkin is in `scryfall_reference.json`;
+  `audit_card_fields.py` rc 0; `--coverage-only` 0 missing, all 14 cards `full`; `audit_viewer_decisions.py
+  --no-sweep` rc 0 after `05b603a2e`.
+
 ## Stage 5 — verification
 (not yet run)
 
@@ -221,3 +263,19 @@ Code: `b53c6f21c`. It SUPERSEDES the "unpinned ordinary cast ... kept only when
   prevention, but are inert here (no lifegain or prevention in the list or from the opponent).
 - Viewer audit INERT_PARAMS additions (need the user's OK): `etb_damage_each_player_per_nonbasic_land`,
   `static_players_cant_gain_life`, `static_damage_cant_be_prevented` (no player choice).
+- Viewer audit INERT_PARAMS additions (Thunderkin Awakener, `05b603a2e`, need the user's OK):
+  `attack_trigger_reanimate_subtype`, `attack_trigger_reanimate_toughness_lt_self` (target filters of the
+  `gy_return_one` pick), `attack_trigger_reanimate_sac_end_step` (mandatory delayed sacrifice).
+- PROVISIONAL (Thunderkin Awakener): two triggers never target the same card (the second would only
+  fizzle) -- disclosed as dominated.
+- PROVISIONAL (Thunderkin Awakener): a RETURNED Nova championing a Nova -- the exiled Nova's own return
+  pick is unpinned (ret=0). An edge case; the census read 0 unpinned picks over the 120-game repro.
+- PROVISIONAL (Thunderkin Awakener): axis completeness rests on a toughness upper bound plus headroom
+  (champion cards in hand, same-line entrant names); ranks past the real list clamp to its last entry, and
+  the duplicates are folded after combat by `MTG_COMBAT_PIN_FOLD`.
+- PROVISIONAL (Thunderkin Awakener): the pin holds 7 trigger ordinals x 16 ranks; past that the front is
+  taken (unreachable in this list: 4 copies, at most 4 attack triggers).
+- 6a DISCLOSURE, provider ORDERING heuristic (Thunderkin Awakener): `DecisionProvider::AttackReanimateTargets`
+  orders the target ranks (printed power descending, then a card without a graveyard ability before an
+  unearthable one). It sets rank order, the beyond-horizon playout pick and the human's default; it prunes
+  nothing. Lives in the root provider; should move to the deck provider at Stage 4a.
