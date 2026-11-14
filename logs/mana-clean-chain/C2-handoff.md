@@ -52,3 +52,9 @@ No cast-order change was needed (PiratesProvider::CastOrderRank untouched; no US
    QUEUE.md line (build/scratch/claude1110/QUEUE.md). Do NOT push the shared branch.
 5. PARKED (do not start without the owner): s30070533 -- the CCO LINE RESERVE's cco_short_mask holds every cco land; the
    same other-cco-land count would apply there.
+
+## Chain finished (after handoff was written)
+- Round-2 regression: 322/322 PASS, nothing moved (no GT to accept). Steps 1 and 2 of "Remaining" are DONE.
+- Round-2 A/B (seed 89500000, 32,000 games): zero changed outcomes, every deck net 0, searched slower 0
+  (logs/mana-clean-chain/itemC2/ab2_report.txt).
+- Next: step 3 (`./build.sh pgo`, gate pirates 74000-78999 `--games 5000`), then step 4.
