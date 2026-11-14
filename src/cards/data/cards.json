@@ -11,6 +11,161 @@
    "parameters": {}
   },
   {
+   "name": "Merfolk Sovereign",
+   "mana_cost": "{1}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Noble"
+   ],
+   "keywords": [],
+   "oracle_text": "Other Merfolk creatures you control get +1/+1.\n{T}: Target Merfolk creature can't be blocked this turn.",
+   "template": "lord_effect",
+   "parameters": {
+    "subtypes_affected": [
+     "Merfolk"
+    ],
+    "power_bonus": 1,
+    "tough_bonus": 1,
+    "lord_excludes_self": true,
+    "tap_target_pump_cost": "",
+    "tap_target_pump_requires_subtype": "Merfolk",
+    "tap_target_pump_grants_unblockable": true
+   },
+   "power": 2,
+   "toughness": 2
+  },
+  {
+   "name": "Svyelun of Sea and Sky",
+   "mana_cost": "{1}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "God"
+   ],
+   "keywords": [],
+   "oracle_text": "Svyelun has indestructible as long as you control at least two other Merfolk.\nWhenever Svyelun attacks, draw a card.\nOther Merfolk you control have ward {1}. (Whenever another Merfolk you control becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_draw_cards": 1
+   },
+   "supertypes": [
+    "Legendary"
+   ],
+   "power": 3,
+   "toughness": 4
+  },
+  {
+   "name": "Stonybrook Banneret",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "keywords": [
+    "Landwalk",
+    "Islandwalk"
+   ],
+   "oracle_text": "Islandwalk (This creature can't be blocked as long as defending player controls an Island.)\nMerfolk spells and Wizard spells you cast cost {1} less to cast.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "reduces_spell_subtype": "Merfolk",
+    "reduces_spell_subtype_also": "Wizard"
+   },
+   "power": 1,
+   "toughness": 1
+  },
+  {
+   "name": "Silvergill Douser",
+   "mana_cost": "{1}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Wizard"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Target creature gets -X/-0 until end of turn, where X is the number of Merfolk and/or Faeries you control.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_target_pump_cost": "",
+    "tap_target_pump_power": -1,
+    "tap_target_pump_power_per_subtype": "Merfolk"
+   },
+   "power": 1,
+   "toughness": 1
+  },
+  {
+   "name": "Rogue's Passage",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{4}, {T}: Target creature can't be blocked this turn.",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "C"
+    ],
+    "tap_target_pump_cost": "{4}",
+    "tap_target_pump_grants_unblockable": true
+   }
+  },
+  {
+   "name": "Rishadan Dockhand",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk"
+   ],
+   "keywords": [
+    "Landwalk",
+    "Islandwalk"
+   ],
+   "oracle_text": "Islandwalk (This creature can't be blocked as long as defending player controls an Island.)\n{1}, {T}: Tap target land.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_target_pump_cost": "{1}",
+    "tap_target_pump_targets_land": true,
+    "tap_target_pump_taps_target_land": true
+   },
+   "power": 1,
+   "toughness": 2
+  },
+  {
+   "name": "Tidal Warrior",
+   "mana_cost": "{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Merfolk",
+    "Warrior"
+   ],
+   "keywords": [],
+   "oracle_text": "{T}: Target land becomes an Island until end of turn.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_target_pump_cost": "",
+    "tap_target_pump_targets_land": true,
+    "tap_target_pump_sets_island": true
+   },
+   "power": 1,
+   "toughness": 1
+  },
+  {
    "name": "Arid Mesa",
    "mana_cost": "",
    "types": ["Land"],
@@ -3630,13 +3785,14 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "As Three Tree City enters, choose a creature type.\n{T}: Add {C}.\n{2}, {T}: Add an amount of {R} equal to the number of creatures you control of the chosen type. [ETB type-choice simplified to Goblin (Cavern precedent). Base mode {T}: Add {C}. Board-scaled mode: {2}, {T} -> N colored mana where N = creatures you control of the chosen type, via mana_per_creature_subtype (Goblin) + mana_per_creature_feeder_generic 2. Legendary (deck runs 1 copy).]",
+   "oracle_text": "As Three Tree City enters, choose a creature type.\n{T}: Add {C}.\n{2}, {T}: Choose a color. Add an amount of mana of that color equal to the number of creatures you control of the chosen type.",
    "template": "basic_land",
    "parameters": {
     "produces": [
      "C"
     ],
     "mana_per_creature_subtype": "Goblin",
+    "choose_type_on_enter": true,
     "mana_per_creature_feeder_generic": 2
    }
   },

@@ -48,6 +48,14 @@ uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int co
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
+uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                       const CardDefinition& entering) const
+{
+    if (entering.params.choose_type_on_enter)
+    { return SubtypeRegistry::Instance().Id("Merfolk"); }
+    return DeckProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
                                          int dmg_unit, int& out) const
 {
@@ -23841,6 +23849,7 @@ namespace
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
     const MerfolkProvider        g_merfolk;
+    const MerfolkTurnsProvider   g_merfolk_turns;
     const SpiritsProvider        g_spirits;
     const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
@@ -26304,6 +26313,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool extra_turn_resolve = false, extra_turn_signature = false;
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
+    bool merfolk_turns = false;
     bool midrange_burn = false;
     bool modern_rw_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
@@ -26587,6 +26597,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // creature-type lands, or a generic lord: other tribal decks use those too.
         if (p.enter_as_copy_of_creature || p.kicked_etb_target_land_island
             || p.land_aura_sets_island) { merfolk = true; }
+        if (p.tap_target_pump_sets_island || !p.tap_target_pump_power_per_subtype.empty()
+            || p.tap_target_pump_taps_target_land) { merfolk_turns = true; }
         // Spirits -- see the flag's declaration for the terms and the exclusions.
         {
             const bool spirit_lord = std::find(p.subtypes_affected.begin(), p.subtypes_affected.end(),
@@ -27195,6 +27207,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // future Pirates card might trip can capture it first.
     if (pirates)     { return g_pirates; }
     // Above Vial: its cleanup discard is authored for Slivers, not for this deck.
+    if (merfolk_turns) { return g_merfolk_turns; }
     if (merfolk)     { return g_merfolk; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).

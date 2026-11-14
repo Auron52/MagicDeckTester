@@ -2924,6 +2924,10 @@ struct CardParams
     // like affinity_for_subtype. Empty = not a reducer.
     std::string reduces_spell_subtype;
 
+    // Stonybrook Banneret discounts Merfolk OR Wizard spells once per copy.
+    // A spell with both subtypes still receives only one reduction.
+    std::string reduces_spell_subtype_also;
+
     // How much GENERIC one matching reducer takes off (Goblin Warchief 1; Dragonspeaker Shaman
     // and Urza's Incubator both read "cost {2} less to cast" -> 2). Still floored at 0 and still
     // stacks per copy, so this only scales the per-reducer step. Defaults to 1 = the shipped
@@ -2953,6 +2957,8 @@ struct CardParams
     // cards across the controller's zones, i.e. what the deck is actually built around. false =
     // a printed-subtype reducer (Goblin Warchief / Dragonspeaker Shaman) -> byte-identical.
     bool chooses_creature_type = false;
+    // Type choice without a spell-cost discount (Three Tree City).
+    bool choose_type_on_enter = false;
 
     // ---- "As this creature enters, choose a creature type. This creature is the chosen type in
     // addition to its other types." (Metallic Mimic, Adaptive Automaton) -- 2026-09-26, Pirates.
@@ -4872,6 +4878,13 @@ struct CardParams
     int                      tap_target_pump_power = 0;
     int                      tap_target_pump_tough = 0;
     bool                     tap_target_pump_grants_trample = false;
+    // Merfolk Turns' targeted tap abilities reuse the searched target action.
+    std::string              tap_target_pump_requires_subtype;
+    std::string              tap_target_pump_power_per_subtype;
+    bool                     tap_target_pump_grants_unblockable = false;
+    bool                     tap_target_pump_targets_land = false;
+    bool                     tap_target_pump_taps_target_land = false;
+    bool                     tap_target_pump_sets_island = false;
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
     // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
     // (RefreshOppLifeHaste). 0 = no such clause.
@@ -5112,7 +5125,7 @@ struct CardDefinition
 // keeps reading chooses_creature_type alone, so the Mimic family never becomes a cost reducer.
 inline bool ChoosesCreatureTypeOnEnter(const CardParams& p)
 {
-    return p.chooses_creature_type || p.chosen_type_added_to_self
+    return p.chooses_creature_type || p.choose_type_on_enter || p.chosen_type_added_to_self
         || p.lord_affects_chosen_subtype || p.other_chosen_subtype_enters_counters > 0;
 }
 

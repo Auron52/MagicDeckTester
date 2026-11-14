@@ -29916,12 +29916,36 @@ inline bool IsScaledManaLand(const CardDefinition& def)
 
 // N = creatures the active player controls (simplified any-creature count -- the chosen TYPE is
 // collapsed to "any creature" per the analysis-goblins spec). This is the raw yield of one scaled tap.
-inline int ScaledManaCreatureCount(const GameState& state)
+inline int ScaledManaCreatureCount(const GameState& state, const Permanent* source = nullptr)
 {
     const int active = state.active_player_index;
+    uint16_t chosen = source ? source->chosen_subtype_id : SubtypeRegistry::kNone;
+    if (chosen == SubtypeRegistry::kNone && source)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(source->card);
+        if (d && IsScaledManaLand(*d))
+        { chosen = SubtypeRegistry::Instance().Id(d->params.mana_per_creature_subtype); }
+    }
+    if (chosen == SubtypeRegistry::kNone)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (p.controller_index == active && d && IsScaledManaLand(*d))
+            {
+                chosen = p.chosen_subtype_id != SubtypeRegistry::kNone ? p.chosen_subtype_id
+                       : SubtypeRegistry::Instance().Id(d->params.mana_per_creature_subtype);
+                break;
+            }
+        }
+    }
     int n = 0;
     for (const Permanent& p : state.battlefield)
-    { if (p.controller_index == active && p.card.IsCreature()) { ++n; } }
+    {
+        if (p.controller_index == active && p.card.IsCreature()
+            && chosen != SubtypeRegistry::kNone
+            && (p.AnimatedAllTypes() || p.card.m_subtypes.HasId(chosen))) { ++n; }
+    }
     return n;
 }
 
@@ -32947,6 +32971,18 @@ inline bool TapTargetPumpTargetLegal(const GameState& s, const Permanent& q, int
     return true;
 }
 
+inline bool TapTargetPumpTargetLegalFor(const GameState& s, const Permanent& q, int controller,
+                                        const CardDefinition& source)
+{
+    if (source.params.tap_target_pump_targets_land)
+    { return q.card.IsLand() && !LandHasShroud(q, s)
+          && !(q.controller_index != controller && q.card.HasKeyword(Keyword::Hexproof)); }
+    return TapTargetPumpTargetLegal(s, q, controller)
+        && (source.params.tap_target_pump_requires_subtype.empty()
+            || q.AnimatedAllTypes()
+            || CardHasSubtype(q.card, source.params.tap_target_pump_requires_subtype));
+}
+
 inline bool UntapLandTargetLegal(const GameState& s, const Permanent& q, int controller)
 {
     return q.card.IsLand() && !LandHasShroud(q, s)
@@ -34339,7 +34375,7 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             for (const Permanent& q : state.battlefield)
             {
                 if (want != 0 && q.card.m_number != want) { continue; }
-                if (TapTargetPumpTargetLegal(state, q, controller)) { target_ok = true; break; }
+                if (TapTargetPumpTargetLegalFor(state, q, controller, *td)) { target_ok = true; break; }
             }
             if (!target_ok) { return false; }
         }
@@ -34609,6 +34645,14 @@ inline std::string PermAbilityLabelFor(PermAbilityMode mode, const CardDefinitio
         && d != nullptr && (d->params.tap_target_pump_cost.has_value()
                             || d->params.target_pump_cost.has_value()))
     {
+        if (d->params.tap_target_pump_taps_target_land) { return "tap target land"; }
+        if (d->params.tap_target_pump_sets_island) { return "target land becomes an Island until end of turn"; }
+        if (d->params.tap_target_pump_grants_unblockable)
+        { return d->params.tap_target_pump_requires_subtype.empty()
+              ? "target creature can't be blocked this turn"
+              : "target Merfolk creature can't be blocked this turn"; }
+        if (!d->params.tap_target_pump_power_per_subtype.empty())
+        { return "target creature gets -X/-0 until end of turn (X = your Merfolk and Faeries)"; }
         const bool per_x = mode == PermAbilityMode::TapTargetPump
             && d->params.tap_target_pump_cost->has_x;
         auto amt = [per_x](int n) -> std::string
@@ -35609,7 +35653,7 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
             {
                 const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                if (!TapTargetPumpTargetLegal(state, q, controller)) { continue; }
+                if (!TapTargetPumpTargetLegalFor(state, q, controller, *d)) { continue; }
                 if (pin.target != 0)
                 {
                     if (q.card.m_number == pin.target) { ti = i; break; }
@@ -35621,9 +35665,37 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
             if (pin.target == 0 && !HumanPlayActive() && greedywindow::InWindow(0))
             { g_tap_target_pump_unpinned.fetch_add(1, std::memory_order_relaxed); }
             if (ti < 0) { break; }   // unreachable after PermAbilitySourceLive: never a phantom pump
+            if (mode == PermAbilityMode::TapTargetPump && d->params.tap_target_pump_targets_land)
+            {
+                Permanent& land = state.battlefield[static_cast<std::size_t>(ti)];
+                if (d->params.tap_target_pump_taps_target_land) { land.tapped = true; }
+                if (d->params.tap_target_pump_sets_island)
+                { land.islandize_target = land.card.m_number; }
+                if (g_play_event_sink && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "ability", src_name + " targets "
+                                  + land.card.m_name.str());
+                }
+                if (d->card.IsCreature() && !state.battlefield[idx].is_token
+                    && CardHasSubtype(d->card, "Merfolk"))
+                { ResolveDeeprootPilgrimageTap(state, controller); }
+                break;
+            }
             Permanent& t = state.battlefield[static_cast<std::size_t>(ti)];
             const int x  = (pin.x == kTapTargetPumpXAll) ? 0 : std::max(0, pin.x);
-            const int pp = TapTargetPumpPowerAt(*d, x);
+            int pp = TapTargetPumpPowerAt(*d, x);
+            if (!d->params.tap_target_pump_power_per_subtype.empty())
+            {
+                int count = 0;
+                for (const Permanent& own : state.battlefield)
+                {
+                    if (own.controller_index == controller
+                        && (own.AnimatedAllTypes()
+                            || CardHasSubtype(own.card, d->params.tap_target_pump_power_per_subtype)
+                            || CardHasSubtype(own.card, "Faerie"))) { ++count; }
+                }
+                pp *= count;
+            }
             const int pt = TapTargetPumpToughAt(*d, x);
             // Until end of turn: temp_power_bonus / temp_tough_bonus, which both cleanup sites zero
             // (CR 514.2) and the sim key folds. TRAMPLE is not applied -- structurally inert here
@@ -35639,6 +35711,10 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                               + (d->params.tap_target_pump_grants_trample ? " and trample" : "")
                               + " until end of turn");
             }
+            if (mode == PermAbilityMode::TapTargetPump
+                && d->card.IsCreature() && !state.battlefield[idx].is_token
+                && CardHasSubtype(d->card, "Merfolk"))
+            { ResolveDeeprootPilgrimageTap(state, controller); }
             break;
         }
         case PermAbilityMode::UntapLand:
@@ -49546,7 +49622,7 @@ inline int SourceMaxNetLive(const GameState& state, const Permanent& pp, const C
     int b = SourceMaxNet(pp, dd);
     // Scaled LAND (Three Tree City): N of a chosen colour, N = creatures you control, minus its feeder.
     if (IsScaledManaLand(dd))
-    { b = std::max(b, ScaledManaCreatureCount(state) - dd.params.mana_per_creature_feeder_generic); }
+    { b = std::max(b, ScaledManaCreatureCount(state, &pp) - dd.params.mana_per_creature_feeder_generic); }
     // Scaled DORK (Priest of Titania / Elvish Archdruid): the static bound reads 1; the real one-tap
     // yield is the live subtype count.
     if (IsScaledManaDork(dd))
@@ -49616,7 +49692,7 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
     amt = SourceMaxNetLive(state, pp, dd, nullptr, reserved_mask);
     if (dd.params.is_filter)    { amt = std::max(amt, 2); }
     if (dd.params.ramp_filter || dd.params.any_color_filter) { amt = std::max(amt, 1); }
-    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state)); }
+    if (IsScaledManaLand(dd))   { amt = std::max(amt, ScaledManaCreatureCount(state, &pp)); }
     if (dd.params.untap_creature_cost.has_value())
     {
         amt = std::max(amt, UntapBurstBestYield(state, pp.controller_index, dd,

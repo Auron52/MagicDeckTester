@@ -748,6 +748,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
     if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
     if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
+    if (s == "Islandwalk")    { return Keyword::Islandwalk; } // inert evasion tag; nothing blocks
     if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
     if (s == "Companion")     { return Keyword::Companion; }  // inert tag; main-deck card, no companion zone
     throw std::runtime_error("Unknown keyword: " + s);
@@ -1761,12 +1762,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     // --- Goblins tribal ---
     p.reduces_spell_subtype     = params.value("reduces_spell_subtype", std::string());
+    p.reduces_spell_subtype_also = params.value("reduces_spell_subtype_also", std::string());
     p.reduces_spell_subtype_amount = params.value("reduces_spell_subtype_amount", 1);
     p.reduces_spell_subtype_creature_only =
         params.value("reduces_spell_subtype_creature_only", false);
     p.reduces_graveyard_cast_generic =
         params.value("reduces_graveyard_cast_generic", 0);   // Patrician Geist
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
+    p.choose_type_on_enter      = params.value("choose_type_on_enter", false);
     p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
     p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
     p.own_creature_enters_opp_damage = params.value("own_creature_enters_opp_damage", 0);
@@ -2274,6 +2277,12 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_target_pump_power          = params.value("tap_target_pump_power", 0);
     p.tap_target_pump_tough          = params.value("tap_target_pump_tough", 0);
     p.tap_target_pump_grants_trample = params.value("tap_target_pump_grants_trample", false);
+    p.tap_target_pump_requires_subtype = params.value("tap_target_pump_requires_subtype", std::string());
+    p.tap_target_pump_power_per_subtype = params.value("tap_target_pump_power_per_subtype", std::string());
+    p.tap_target_pump_grants_unblockable = params.value("tap_target_pump_grants_unblockable", false);
+    p.tap_target_pump_targets_land = params.value("tap_target_pump_targets_land", false);
+    p.tap_target_pump_taps_target_land = params.value("tap_target_pump_taps_target_land", false);
+    p.tap_target_pump_sets_island = params.value("tap_target_pump_sets_island", false);
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 

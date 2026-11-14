@@ -69,3 +69,114 @@ After coverage becomes clean: full build/unit tests, analyzer baseline profile,
 provider routing audit, cost gate, and Stage 5 correctness/viewer checks.
 The parent agent owns smoke/full regression, overnight tier rows, GT, and the
 Codex-play sweep per the explicit worktree assignment.
+
+## Remaining implementation map
+
+All items below are open. Integrate one card at a time, then repeat build,
+coverage, cost/field audit, focused rules tests, and viewer decision checks.
+Do not generate a profile while coverage is incomplete.
+
+1. **Wanderwine Prophets:** Add another-Merfolk champion choice on entry,
+   record the exact exiled object on the Prophets permanent, and return it
+   when Prophets leaves. On combat damage to a player, offer a choice of any
+   controlled Merfolk to sacrifice (including Prophets); queue an extra turn
+   only after a successful sacrifice. The shared enter/leave hooks are in
+   `SpellEffects.h`; combat damage is in `Combat.cpp`; existing extra-turn
+   queue state is in `GameState.h`. Surface both champion and sacrifice
+   choices in human play and test Vial/Seahunter puts, Prophets sacrificing
+   itself, and multiple extra turns.
+2. **Emperor Mihail II:** Let only its controller inspect the library top
+   privately and cast a top-card Merfolk spell with normal cost and timing.
+   Extend action enumeration, apply, and human plan labels for that cast
+   source. Offer the optional `{1}` token trigger on *casts* from any zone,
+   before the spell resolves; battlefield puts must not trigger it. Test
+   top changes, costs, the optional payment, and no token on Vial/Seahunter.
+3. **Seahunter:** Implement `{3},{T}` as an activated search for any Merfolk
+   **permanent** card to battlefield, then shuffle. Reuse the library tutor
+   chooser for the human pick, including legal fail-to-find, and route the
+   entrant through the universal ETB cascade. Seahunter is Human; its own
+   tap must not make a Pilgrimage token.
+4. **Stonybrook Banneret:** Extend subtype cost reduction to the OR of
+   Merfolk and Wizard, counting each Banneret once for a Merfolk Wizard spell.
+   Keep the exact same reduction in `ManaPayment.cpp` and all same-turn
+   pricing/bounds in `TurnSolver.cpp`. Islandwalk is passive-opponent inert.
+5. **Silvergill Douser / Merfolk Sovereign:** Add searched `{T}` targeted
+   activations modeled after `PermAbilityMode::TapTargetPump` and its target
+   pins. Douser's `-X/-0` uses the live union count of own Merfolk/Faeries
+   at resolution; Sovereign targets a Merfolk creature for unblockable and
+   also grants +1/+1 to other own Merfolk. Human play must offer every legal
+   target. Call `ResolveDeeprootPilgrimageTap` after a legal source tap,
+   before the ability resolves (its new token can raise Douser's X).
+6. **Rishadan Dockhand / Rogue's Passage / Tidal Warrior:** Add searched
+   targeted activation modes and human target variants. Dockhand can tap
+   any land for `{1},{T}`; Passage makes any target creature unblockable for
+   `{4},{T}` and retains its `{C}` mana mode. Tidal Warrior changes any land
+   to an Island until end of turn, including its intrinsic mana ability;
+   extend `LandTypeChangedToIsland` and clear the temporary effect in both
+   cleanup paths. Dockhand and Warrior source taps fire Pilgrimage.
+7. **Svyelun of Sea and Sky:** `attack_draw_cards=1` already enables second
+   main in `GoldFishRunner`. Add live indestructible while two *other*
+   Merfolk are controlled; ward `{1}` to other controlled Merfolk is relevant
+   only when opponent targeting exists, and must be explicitly represented
+   or disclosed for the passive-opponent model.
+8. **Three Tree City:** Replace hardcoded Goblin/red. Its as-enters chosen
+   type must be stored per permanent (`chosen_subtype_id`); every scaled mana
+   count in `SpellEffects.h/.cpp` and `ManaPayment.cpp` must use that type
+   and include only controlled matching creatures. The fed mana color is
+   already a WUBRG human pre-tap choice. Add a human as-enters type choice;
+   `audit_viewer_decisions.py` currently calls `chooses_creature_type` inert.
+
+The remaining human choices should be audited against `tools/play/DECISIONS.md`
+and `scripts/audit_viewer_decisions.py`; plan variants must retain all legal
+targets in human play. The source deck file and this ledger are committed on
+the implementation branch. No parent-owned regression, GT, or play-server
+work has been run here.
+
+### Check results at handoff
+
+The final `./build.sh` passed after the Pilgrimage token-creation safety edit.
+The focused Pilgrimage doctest passed 3 cases / 36 assertions. A broader unit
+run reached 302 passing cases / 67,959 passing assertions before it was
+intentionally stopped; it is **not** a full-suite pass. The targeted
+`audit_card_costs.py` comparison passed Deeproot Pilgrimage (1/1 compared);
+the full repository-wide cost audit was stopped, so it is not a pass.
+`audit_card_fields.py` passed its hard fields. Coverage exits 1 with the ten
+missing cards listed above; it currently labels Three Tree City "full"
+despite the known hardcoded type/color gap, which must be repaired. The
+reference-safety check passed. Working tree was clean at handoff.
+
+### 2026-11-14 source batch in progress (Codex continuation)
+
+Live Oracle text/costs were refetched for all ten remaining cards and Three Tree City.
+Source changes are in progress; this section is an implementation ledger, not a
+claim that coverage is complete. The one full `./build.sh` belongs after the batch.
+
+- Added definitions for Stonybrook Banneret, Silvergill Douser, Svyelun of Sea and
+  Sky, Merfolk Sovereign, Rishadan Dockhand, Rogue's Passage and Tidal Warrior.
+- Extended the searched tap-target activation for Douser's live Merfolk/Faerie
+  count, Sovereign/Passage unblockable targets, Dockhand's land tap, and Tidal
+  Warrior's land-to-Island effect. Nontoken Merfolk activations call the existing
+  Deeproot Pilgrimage tap-event helper. Temporary Island conversion uses a
+  self-linked land marker cleared in both cleanup worlds.
+- Stonybrook Banneret has an OR subtype reducer (Merfolk or Wizard, once for a
+  spell with both); the same-turn reducer estimator is being aligned.
+- Three Tree City now stores an ETB creature-type choice and the mana counter
+  reads that subtype rather than every creature. Its Oracle text no longer says
+  red-only. The human ETB type choice still needs viewer wiring.
+- Svyelun's attack draw is wired by the existing shared `attack_draw_cards` path.
+  Its conditional indestructible and ward clauses still need a scoped
+  rules/engine audit before this card is considered finished.
+
+Remaining implementation tasks before coverage/audit/build: Emperor Mihail II
+(private top look, library-top Merfolk casts in both worlds, optional {1} paid
+trigger/token and viewer choice); Wanderwine Prophets (champion choice, linked
+return, combat-damage sacrifice and extra turn, viewer choices); Seahunter
+({3},{T} Merfolk **permanent** library search, shuffle, searched/human target);
+Three Tree City human ETB type choice and source-specific handling of multiple
+copies with different choices; review every new activated ability's target
+legality, liveness, mana payment, keys and human plan labels. Then complete the
+Banneret same-turn line validator, apply `audit_card_fields.py --update`, run
+`audit_viewer_decisions.py`, establish a dedicated Merfolk Turns provider and
+run `provider_audit.py --check`; finally run one full `./build.sh`, fix failures,
+run focused tests and coverage to zero. No full regression, GT, push or play
+server in this worktree.

@@ -8364,6 +8364,7 @@ struct SameTurnReducerCounts
     // printed subtype -- its type is decided at ETB and predicted here off the same shared helper.
     std::unordered_map<uint16_t, int> sub;
     std::unordered_map<uint16_t, int> sub_creature;
+    std::vector<std::pair<uint16_t, uint16_t>> sub_either;
     // Patrician Geist (reduces_graveyard_cast_generic) entering this plan, summed: discounts each
     // GRAVEYARD cast in the subset that resolves after it. A graveyard cast that TRAILS (the trailing pass
     // of both apply worlds) follows every Geist; one that RIDES the cast sequence (GyCastRidesCastSequence,
@@ -8372,7 +8373,7 @@ struct SameTurnReducerCounts
     int gy_cast = 0;
     std::vector<std::pair<int, int>> gy_cast_keys;
     bool Any() const
-    { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty() || gy_cast > 0; }
+    { return (red + white + blue + black + green) > 0 || !sub.empty() || !sub_creature.empty() || !sub_either.empty() || gy_cast > 0; }
 };
 
 // The per-copy "{N} less from your graveyard" a plan action puts onto the battlefield: a Patrician Geist
@@ -8427,8 +8428,10 @@ static SameTurnReducerCounts CountSameTurnReducers(const GameState& state,
             if (id != SubtypeRegistry::kNone)
             {
                 const int amt = std::max(1, d->params.reduces_spell_subtype_amount);
-                if (d->params.reduces_spell_subtype_creature_only) { rc.sub_creature[id] += amt; }
-                else                                              { rc.sub[id] += amt; }
+                if (!d->params.reduces_spell_subtype_also.empty())
+                { rc.sub_either.emplace_back(id, SubtypeRegistry::Instance().Id(d->params.reduces_spell_subtype_also)); }
+                else if (d->params.reduces_spell_subtype_creature_only) { rc.sub_creature[id] += amt; }
+                else                                                    { rc.sub[id] += amt; }
             }
         }
         if (d->params.reduces_spell_color.empty()) { continue; }
@@ -8495,6 +8498,9 @@ static int SameTurnReducerDiscountFor(const GameState& state, const SameTurnRedu
         { m -= std::max(1, dj->params.reduces_spell_subtype_amount); }
         reducers += m;
     }
+    for (const auto& [a, b] : rc.sub_either)
+    { if (dj->card.m_subtypes.HasId(a) || dj->card.m_subtypes.HasId(b)) { ++reducers; } }
+    if (!dj->params.reduces_spell_subtype_also.empty()) { --reducers; }
     // A colour reducer never discounts itself (a Ruby Medallion is {2}, colourless); Warchief's
     // own subtype match is excluded above.
     return std::min(reducers, cands[j].cost.generic);
@@ -12175,7 +12181,8 @@ static bool SeqWalkProvablyShort(const GameState& state, const std::vector<Actio
             const Action& o = cands[static_cast<std::size_t>(k)];
             if (o.kind != Action::Kind::CastFromHand || o.def == nullptr) { continue; }
             const CardParams& op = o.def->params;
-            if (!op.reduces_spell_subtype.empty() && CardHasSubtype(def.card, op.reduces_spell_subtype))
+            if ((!op.reduces_spell_subtype.empty() && CardHasSubtype(def.card, op.reduces_spell_subtype))
+                || (!op.reduces_spell_subtype_also.empty() && CardHasSubtype(def.card, op.reduces_spell_subtype_also)))
             { red += std::max(1, op.reduces_spell_subtype_amount); }
         }
         lb += (ec.ManaValue() - ec.generic) + std::max(0, ec.generic - red);
@@ -47132,7 +47139,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
                     {
                         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
-                        if (q.card.m_number == 0 || !TapTargetPumpTargetLegal(state, q, me)) { continue; }
+                        if (q.card.m_number == 0 || !TapTargetPumpTargetLegalFor(state, q, me, *sd)) { continue; }
                         if (!human)
                         {
                             if (q.controller_index != me) { continue; }
@@ -76676,6 +76683,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         p.temp_lifelink         = false;   // Heliod's until-EOT lifelink grant expires (same lockstep)
         p.temp_double_strike    = false;   // Valiant Knight's until-EOT team grant expires (CR 514.2)
         p.temp_indestructible   = false;
+        if (p.islandize_target == p.card.m_number) { p.islandize_target = 0; }
         p.is_animated           = false;
         p.animated_printed_types = false;   // qualifies the animation, so it expires with it (lockstep)
     }
@@ -126817,7 +126825,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             if (!vd->params.reduces_subtype_colored_subtype.empty()
                 && vd->params.reduces_subtype_colored_cost.has_value()) { col_reducers.push_back(vd); }
             if (!vd->params.reduces_spell_color.empty())   { reducers.push_back(vd->params.reduces_spell_color); }
-            if (!vd->params.reduces_spell_subtype.empty()) { sub_reducers.push_back(vd->params.reduces_spell_subtype); }
+            if (!vd->params.reduces_spell_subtype.empty())
+            { sub_reducers.push_back(vd->params.reduces_spell_subtype
+                + (vd->params.reduces_spell_subtype_also.empty() ? "" : "|" + vd->params.reduces_spell_subtype_also)); }
         }
         // Thalia's SYMMETRIC noncreature tax, the INCREASE twin of the reducer seeds above: a Vialed
         // taxer is on the board before every hand cast, and one CAST in-line taxes the noncreature
@@ -126854,7 +126864,10 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 {
                     for (const std::string& cs : pc.def->card.m_subtypes)
                     {
-                        if (cs == rs) { ++disc; break; }
+                        if (cs == rs || (!rs.empty() && rs.find('|') != std::string::npos
+                                         && (cs == rs.substr(0, rs.find('|'))
+                                             || cs == rs.substr(rs.find('|') + 1))))
+                        { ++disc; break; }
                     }
                 }
                 cost.generic = std::max(0, cost.generic - disc);
@@ -126888,7 +126901,9 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             }
             if (pc.def && !pc.def->params.reduces_spell_subtype.empty())
             {
-                sub_reducers.push_back(pc.def->params.reduces_spell_subtype);
+                sub_reducers.push_back(pc.def->params.reduces_spell_subtype
+                    + (pc.def->params.reduces_spell_subtype_also.empty() ? ""
+                       : "|" + pc.def->params.reduces_spell_subtype_also));
             }
             if (pc.def && !pc.def->params.reduces_subtype_colored_subtype.empty()
                 && pc.def->params.reduces_subtype_colored_cost.has_value())

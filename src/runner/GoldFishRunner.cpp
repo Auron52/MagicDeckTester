@@ -1695,7 +1695,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.land_tap_bonus > 0)          { land_aura = true; land_tap_bonus = true; }
-                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island) { islandize = true; }
+                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island
+                    || d->params.tap_target_pump_sets_island) { islandize = true; }
                 if (d->params.chosen_color_pump_power != 0
                     || d->params.chosen_color_pump_tough != 0) { chosen_color_pump = true; }
                 // Horn watches the land PLAY, so casting it before the drop is

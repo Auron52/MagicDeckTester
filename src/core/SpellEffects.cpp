@@ -3353,7 +3353,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
                                              | (1u << static_cast<int>(Color::Green)));
             // The scaled ability yields N; the basic {C} mode yields ManaProducedPerTap. Credit the
             // larger -- an N of zero (no creatures) leaves the plain land, which is exact.
-            const int scaled = std::max(ScaledManaCreatureCount(state), ManaProducedPerTap(*def));
+            const int scaled = std::max(ScaledManaCreatureCount(state, &p), ManaProducedPerTap(*def));
             if (scaled <= 0) { continue; }
             srcs.push_back({ nbits, scaled, scaled, i });
             continue;
@@ -5380,7 +5380,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
             if (IsScaledManaLand(*def))
             {
                 const int feeder = def->params.mana_per_creature_feeder_generic;
-                const int give   = ScaledManaCreatureCount(state);        // N of the chosen colour
+                const int give   = ScaledManaCreatureCount(state, &state.battlefield[i]);
                 if (give >= 1 && floating.Total() >= feeder && !((for_creature && g_bt_restricted > 0) || g_bt_restricted_big > 0))
                 {
                     const Color cols[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
@@ -5963,7 +5963,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         if (McScaled(d) && !scaled_done)
         {
             scaled_done = true;
-            const std::uint64_t nc = static_cast<std::uint64_t>(ScaledManaCreatureCount(state));
+            const std::uint64_t nc = static_cast<std::uint64_t>(ScaledManaCreatureCount(state, &p));
             mix(h1, 0x5CA1'ED'01ull + nc); mix(h2, 0x5CA1'ED'02ull ^ (nc << 24));
         }
         const std::uint64_t di = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(d));

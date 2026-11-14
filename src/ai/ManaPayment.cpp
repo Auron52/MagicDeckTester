@@ -4485,7 +4485,9 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
                 // The chosen type (Incubator) or the printed one (Warchief/Dragonspeaker).
                 const uint16_t rs = ReducerSubtypeId(*pd, p);
                 // Per-reducer step: Warchief 1, Dragonspeaker/Incubator 2 ("cost {2} less").
-                if (def.card.m_subtypes.HasId(rs))
+                if (def.card.m_subtypes.HasId(rs)
+                    || (!pp.reduces_spell_subtype_also.empty()
+                        && CardHasSubtype(def.card, pp.reduces_spell_subtype_also)))
                 { generic_reduction += std::max(1, pp.reduces_spell_subtype_amount); }
             }
             // (3) Ragemonger-style SUBTYPE COLOURED cost reduction: "Minotaur spells you cast cost
@@ -11384,7 +11386,7 @@ HumanPreTapOffer HumanPreTapOfferFor(const GameState& state, const Permanent& p)
     // filter. Offered only while N >= 1, as the backtracker requires: N = 0 pays {2} for nothing.
     if (IsScaledManaLand(*def))
     {
-        const int n = ScaledManaCreatureCount(state);
+        const int n = ScaledManaCreatureCount(state, &p);
         if (n >= 1)
         {
             o.feed = "{" + std::to_string(q.mana_per_creature_feeder_generic) + "}";
@@ -11651,7 +11653,7 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
                           + offer.feed + " first");
         }
         // N for a scaled land, read BEFORE the tap (tapping a land changes no creature count).
-        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state) : 0;
+        const int scaled_n = IsScaledManaLand(*def) ? ScaledManaCreatureCount(state, found) : 0;
         TapConversionSource(state, *found);
         if (scaled_n > 0) { state.floating_mana.Add(static_cast<Color>(t.color), scaled_n); }
         else if (combo)   { for (int c : t.combo) { state.floating_mana.Add(static_cast<Color>(c), 1); } }
