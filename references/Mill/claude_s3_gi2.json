@@ -1,0 +1,687 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 7, "won": true,
+  "mulligan": { "count": 3, "bottom": [12, 26, 23] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 27, "name": "Hedron Crab" }, { "num": 13, "name": "Drown in the Loch" }, { "num": 39, "name": "Ruin Crab" }, { "num": 17, "name": "Drowned Catacomb" }, { "num": 1, "name": "Archive Trap" }, { "num": 2, "name": "Archive Trap" }, { "num": 31, "name": "Island" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 19, "name": "Fatal Push" }, { "num": 23, "name": "Fractured Sanity" }, { "num": 15, "name": "Drown in the Loch" }, { "num": 38, "name": "Polluted Delta" }, { "num": 43, "name": "Scalding Tarn" }, { "num": 5, "name": "Counterspell" }, { "num": 57, "name": "Watery Grave" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 24, "name": "Fractured Sanity" }, { "num": 4, "name": "Archive Trap" }, { "num": 40, "name": "Ruin Crab" }, { "num": 44, "name": "Scalding Tarn" }, { "num": 51, "name": "Tasha's Hideous Laughter" }, { "num": 52, "name": "Tasha's Hideous Laughter" }, { "num": 25, "name": "Glimpse the Unthinkable" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 3,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 3,
+  "on_the_play": false,
+  "to_bottom": 3,
+  "hand": [{ "num": 28, "name": "Hedron Crab" }, { "num": 44, "name": "Scalding Tarn" }, { "num": 12, "name": "Darkslick Shores" }, { "num": 41, "name": "Ruin Crab" }, { "num": 23, "name": "Fractured Sanity" }, { "num": 31, "name": "Island" }, { "num": 26, "name": "Glimpse the Unthinkable" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 3 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 3,
+  "hand": [{ "num": 28, "name": "Hedron Crab", "win_optimal": true }, { "num": 44, "name": "Scalding Tarn", "win_optimal": true }, { "num": 12, "name": "Darkslick Shores", "win_optimal": true }, { "num": 41, "name": "Ruin Crab", "win_optimal": true }, { "num": 23, "name": "Fractured Sanity", "win_optimal": true }, { "num": 31, "name": "Island", "win_optimal": true }, { "num": 26, "name": "Glimpse the Unthinkable", "win_optimal": true }],
+  "ai_choice": { "index": 2, "num": 12, "name": "Darkslick Shores" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 3)"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 5,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 3,
+  "hand": [{ "num": 28, "name": "Hedron Crab", "win_optimal": true }, { "num": 44, "name": "Scalding Tarn", "win_optimal": true }, { "num": 41, "name": "Ruin Crab", "win_optimal": true }, { "num": 23, "name": "Fractured Sanity", "win_optimal": true }, { "num": 31, "name": "Island", "win_optimal": true }, { "num": 26, "name": "Glimpse the Unthinkable", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 23, "name": "Fractured Sanity" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 3)"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 6,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 2,
+  "bottom_total": 3,
+  "hand": [{ "num": 28, "name": "Hedron Crab", "win_optimal": true }, { "num": 44, "name": "Scalding Tarn", "win_optimal": true }, { "num": 41, "name": "Ruin Crab", "win_optimal": true }, { "num": 23, "name": "Fractured Sanity", "win_optimal": true }, { "num": 31, "name": "Island", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 23, "name": "Fractured Sanity" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 3 of 3)"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Watery Grave", "cast=Ruin Crab"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Watery Grave" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 1, "summary": "land=Island; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 2, "summary": "land=Watery Grave; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 3, "summary": "land=Watery Grave; cast: Ruin Crab", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": ["Ruin Crab"], "actions": [{ "card": "Ruin Crab" }] },
+    { "index": 4, "summary": "land=Scalding Tarn; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Scalding Tarn; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Watery Grave; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Watery Grave", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "land_entry",
+  "source": "Watery Grave",
+  "turn": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Ruin Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }, { "num": 59, "name": "Watery Grave", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ruin Crab", "idx": 6, "num": 41, "sick": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ruin Crab", "idx": 6, "num": 41, "sick": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 53, "hand_size": 7, "graveyard": [], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "cast=Hedron Crab", "land=Scalding Tarn"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Island" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Scalding Tarn", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 52, "hand_size": 7, "graveyard": ["Ethereal Armor"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Scalding Tarn; cast: Hedron Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Hedron Crab", "Scalding Tarn"], "actions": [{ "card": "Hedron Crab" }, { "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Scalding Tarn (after Hedron Crab); cast: Hedron Crab, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_slot": 1, "casts": ["Hedron Crab", "Scalding Tarn"], "actions": [{ "card": "Hedron Crab" }, { "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Scalding Tarn; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 3, "summary": "land=Scalding Tarn (after the casts); cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "land_after_casts": true, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 5, "summary": "land=Island; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 6, "summary": "land=Island (after the casts); cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Island", "land_after_casts": true, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 8, "summary": "land=none; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 9, "summary": "land=Scalding Tarn; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Scalding Tarn; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Scalding Tarn", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 2,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 12,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 2,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 10, "num": 44, "is_land": true }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 49, "hand_size": 7, "graveyard": ["Alpha Authority", "Ancestral Mask", "Ethereal Armor", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 2, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 10, "num": 44, "is_land": true }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Ethereal Armor", "Kor Spiritdancer", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 6, "num": 41, "tapped": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 10, "num": 44, "is_land": true }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 46, "hand_size": 7, "graveyard": ["Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Ethereal Armor", "Kor Spiritdancer", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Island", "landsearch=Scalding Tarn#44"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Drown in the Loch" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 10, "num": 44, "is_land": true }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 31, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 45, "hand_size": 7, "graveyard": ["Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Daybreak Coronet", "Ethereal Armor", "Kor Spiritdancer", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Island; cast: Drown in the Loch, Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drown in the Loch", "Scalding Tarn"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Scalding Tarn: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Scalding Tarn"], "actions": [{ "card": "Scalding Tarn", "src_num": 44, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Island; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 18, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 13, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Scalding Tarn", "idx": 10, "num": 44, "is_land": true }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 12, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 42, "hand_size": 7, "graveyard": ["Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Rancor", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 17,
+  "type": "tutor_etb",
+  "source": "Scalding Tarn -- land onto the battlefield",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 39, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Rancor", "Razorverge Thicket", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "Island" }, { "index": 1, "name": "Watery Grave" }],
+  "note": "reply a candidate index to search that card up, or -1 to decline the optional search. Default = the AI's pick."
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 18,
+  "type": "land_entry",
+  "source": "Watery Grave",
+  "turn": 3,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 17, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 39, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Rancor", "Razorverge Thicket", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 36, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "sacrifice", "text": "🔪 Scalding Tarn -- sacrificed (cost)" }, { "turn": 3, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "tutor", "text": "🔎 Scalding Tarn: Watery Grave onto the battlefield" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 33, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "tapped": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 33, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Island", "cast=Glimpse the Unthinkable"], "decision": {
+  "decision_index": 22,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Glimpse the Unthinkable" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 25, "name": "Glimpse the Unthinkable", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 33, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Scalding Tarn"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 32, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Glimpse the Unthinkable", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Glimpse the Unthinkable"], "actions": [{ "card": "Glimpse the Unthinkable" }] },
+    { "index": 1, "summary": "land=Island; cast: Drown in the Loch, Glimpse the Unthinkable", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drown in the Loch", "Glimpse the Unthinkable"], "cast_order_canonical": ["Drown in the Loch", "Glimpse the Unthinkable"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Glimpse the Unthinkable" }] },
+    { "index": 2, "summary": "land=none; cast: Glimpse the Unthinkable", "declared_order_payability": "not_verified", "land": null, "casts": ["Glimpse the Unthinkable"], "actions": [{ "card": "Glimpse the Unthinkable" }] },
+    { "index": 3, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Island; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 25, "name": "Glimpse the Unthinkable", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Scalding Tarn"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 29, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Forest", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "type": "target",
+  "source": "Glimpse the Unthinkable",
+  "turn": 4,
+  "mill_cards": 10,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "tapped": true, "is_land": true }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Scalding Tarn"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 26, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 10 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 25,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "tapped": true, "is_land": true }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 16, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 26,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "tapped": true, "is_land": true }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "tapped": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "tapped": true, "is_land": true }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 16, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Hedron Crab" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 30, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 15, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 1, "summary": "land=none; cast: Drown in the Loch, Hedron Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch", "Hedron Crab"], "cast_order_canonical": ["Drown in the Loch", "Hedron Crab"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Hedron Crab" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 4, "summary": "land=none; cast: Hedron Crab + Drown in the Loch on it (countered to graveyard)", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab", "Drown in the Loch"], "actions": [{ "card": "Hedron Crab", "remand_by": "Drown in the Loch", "remand_slot": 0 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 28,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "tapped": true, "is_land": true }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 15, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 29,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "tapped": true, "is_land": true }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "tapped": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 15, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 30,
+  "main_ordinal": 13,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Island" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 32, "name": "Island", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 14, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Island; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 31,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 6,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 11, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 32,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 6,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 8, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Lion Umbra", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 33,
+  "main_ordinal": 14,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" }, { "turn": 6, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 6, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 5, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Light-Paws, Emperor's Voice", "Lion Umbra", "Plains", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 34,
+  "main_ordinal": 15,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "tapped": true, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 5, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Light-Paws, Emperor's Voice", "Lion Umbra", "Plains", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 35,
+  "main_ordinal": 16,
+  "type": "main_phase",
+  "turn": 7,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 7, "card": "Swamp" }],
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 4, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Light-Paws, Emperor's Voice", "Lion Umbra", "Plains", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Swamp; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 36,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 7,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Swamp", "idx": 17, "num": 48, "is_land": true, "taps": "B" }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 1, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Light-Paws, Emperor's Voice", "Light-Paws, Emperor's Voice", "Light-Paws, Emperor's Voice", "Lion Umbra", "Plains", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 37,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 7,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Boulderloft Pathway"],
+  "me": { "life": 15, "battlefield": [{ "name": "Hedron Crab", "idx": 9, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 15, "num": 30, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Island", "idx": 12, "num": 31, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 14, "num": 33, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 16, "num": 32, "is_land": true, "taps": "U" }, { "name": "Ruin Crab", "idx": 6, "num": 41, "is_land": false, "power": 0, "toughness": 3 }, { "name": "Swamp", "idx": 17, "num": 48, "is_land": true, "taps": "B" }, { "name": "Watery Grave", "idx": 5, "num": 59, "is_land": true, "taps": "UB" }, { "name": "Watery Grave", "idx": 13, "num": 57, "is_land": true, "taps": "UB" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Glimpse the Unthinkable", "Scalding Tarn"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }], "library_size": 0, "hand_size": 7, "graveyard": ["All That Glitters", "Alpha Authority", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Ancestral Mask", "Armadillo Cloak", "Audacity", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Branchloft Pathway", "Brushland", "Brushland", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Daybreak Coronet", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Ethereal Armor", "Forest", "Forest", "Gladecover Scout", "Gladecover Scout", "Gryff's Boon", "Horizon Canopy", "Horizon Canopy", "Horizon Canopy", "Hyena Umbra", "Kor Spiritdancer", "Kor Spiritdancer", "Light-Paws, Emperor's Voice", "Light-Paws, Emperor's Voice", "Light-Paws, Emperor's Voice", "Light-Paws, Emperor's Voice", "Lion Umbra", "Plains", "Plains", "Plains", "Rancor", "Rancor", "Rancor", "Razorverge Thicket", "Razorverge Thicket", "Razorverge Thicket", "Slippery Bogle", "Slippery Bogle", "Slippery Bogle", "Spider Umbra", "Spirit Link", "Spirit Mantle"], "exile": [], "starting_deck": { "name": "Auras", "slot": 3, "cards": [["Lion Umbra", 1], ["Ethereal Armor", 4], ["Kor Spiritdancer", 2], ["Rancor", 4], ["Daybreak Coronet", 4], ["Light-Paws, Emperor's Voice", 4], ["Armadillo Cloak", 1], ["Hyena Umbra", 1], ["Forest", 2], ["Gladecover Scout", 3], ["Spirit Mantle", 1], ["Spider Umbra", 1], ["Ancestral Mask", 4], ["Alpha Authority", 1], ["Gryff's Boon", 1], ["Audacity", 1], ["All That Glitters", 1], ["Slippery Bogle", 4], ["Plains", 3], ["Horizon Canopy", 4], ["Razorverge Thicket", 4], ["Spirit Link", 1], ["Brushland", 4], ["Branchloft Pathway", 4]] }, "decked": true },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 7, "kind": "mill", "text": "Ruin Crab (landfall): opponent mill 3 card(s)" },
+    { "turn": 7, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 1 card(s)" },
+    { "turn": 7, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 0 card(s)" }
+  ]
+}
