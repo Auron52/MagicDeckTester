@@ -1,6 +1,7 @@
-# Regression ground truth -- commit 20b6a0936  date 2026-11-14
+# Regression ground truth -- commit 897dc32d4  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
+# accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -82,7 +83,7 @@ auras_smoke_d5_s1001=4.1089/a13f3545c6498631
 goblins_smoke_d0_s1001=3.9810/3ccef3879cfef236
 goblins_smoke_d3_s1001=3.6800/ec74319d1b322f1e
 goblins_smoke_d5_s1001=3.6000/24ea48d08fde94b5
-creature_giving_smoke_d0_s1001=5.5200/190baa428eac7f32
+creature_giving_smoke_d0_s1001=5.5210/edc0d99829ffd345
 creature_giving_smoke_d3_s1001=4.6400/eb80825afda62976
 creature_giving_smoke_d5_s1001=4.6533/d91fe8cdafe367e5
 mirrorwing_smoke_d0_s1001=5.7140/814f5533ebc4f190
