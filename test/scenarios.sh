@@ -5,6 +5,13 @@
 # interactions the seed-driven regression suite can't target deterministically. Cheap (< a few
 # seconds each), so the regression tester runs this as a sanity gate before the batch run.
 #
+# PARALLEL (2026-11-14). The fixtures are independent single-threaded processes, and run one after
+# another the ~540 of them cost ~90 s of wall on an otherwise idle box -- serially, in front of every
+# smoke and regression tier, i.e. 23 of 24 cores idle for a minute and a half each time. They now run
+# SCEN_JOBS at once (default: THREADS when >0, else nproc) into per-fixture output files, and the
+# report is printed afterwards IN FIXTURE ORDER, so the output and the exit code are exactly what the
+# serial loop produced. SCEN_JOBS=1 restores the serial run.
+#
 # Usage:  bash test/scenarios.sh            # run all fixtures
 #         MTG_BIN=path bash test/scenarios.sh
 set -u
@@ -17,9 +24,20 @@ shopt -s nullglob
 files=("$dir"/*.json)
 if [ ${#files[@]} -eq 0 ]; then echo "no scenarios in $dir"; exit 0; fi
 
+jobs=${SCEN_JOBS:-${THREADS:-0}}
+[ "$jobs" -gt 0 ] 2>/dev/null || jobs=$(nproc 2>/dev/null || echo 1)
+
+# Per-fixture output: <tmp>/<i>.out (combined stdout+stderr) and <tmp>/<i>.rc. Regenerable scratch.
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/scenarios.XXXXXX") || { echo "ERROR: mktemp failed" >&2; exit 2; }
+trap 'rm -f "$tmp"/*.out "$tmp"/*.rc; rmdir "$tmp" 2>/dev/null' EXIT
+export BIN tmp
+for i in "${!files[@]}"; do printf '%s\0%s\0' "$i" "${files[$i]}"; done \
+  | xargs -0 -n 2 -P "$jobs" bash -c '"$BIN" --scenario "$2" > "$tmp/$1.out" 2>&1; echo $? > "$tmp/$1.rc"' _
+
 pass=0; fail=0; err=0
-for f in "${files[@]}"; do
-  out="$("$BIN" --scenario "$f" 2>&1)"; rc=$?
+for i in "${!files[@]}"; do
+  f=${files[$i]}
+  out="$(cat "$tmp/$i.out" 2>/dev/null)"; rc=$(cat "$tmp/$i.rc" 2>/dev/null || echo 2)
   line="$(printf '%s\n' "$out" | grep '^scenario: win_turn' | head -1)"
   name="$(basename "$f" .json)"
   case $rc in

@@ -36,7 +36,7 @@ The harness lives in `test/`:
 | `regression_gt.txt` | ground truth, **aggregate**: `<deck>_<mode>_d<depth>_s<seed>=<avg_win_turn>[/<play_digest>]` (avg = mean turn-to-win, an unwon game scored `max_turns+1`, so a game going from a win to unwon shows up directly as a worse avg). The **play digest** (a per-case fold of per-game decision-stream hashes) makes a play change that keeps the same avg still FAIL — the coarse avg cannot see it. Legacy entries without a digest match on avg alone until re-accepted. | yes |
 | `gt_logs/<key>.wins` | ground truth, **per-game**: one `<game_index> <win_turn> <play_digest>` line per game (`-1` = loss; digest = 16 hex chars). Committed old-side baseline for the per-game audit — `--accept` promotes it with `regression_gt.txt`. The digest column is optional to every reader, so pre-digest logs still parse. | yes |
 | `TIMINGS.md` | measured per-case wall times; sizing reference for the matrix | yes |
-| `viewer_protocol_check.py` | **reference reproducibility gate**, run `--strict` (threaded, seconds) in **regression mode only** (`VPC_ALWAYS=1` forces it in smoke/overnight, `VPC_SKIP=1` skips it): replays each saved `references/<deck>/claude_*.json` by INTENT (content-anchored picks; engine defaults for decision points the ref predates — see `docs/design/reference-intent-replay.md`). `play-drift` (a recorded human line now ends differently), `ENUM-GAP` (a plan vanished for an identical state) or `BOARD-DIVERGED` (identical hand, different board -- an upstream payment/decision diverged) FAILS the suite; `repaired` is informational (no action -- NEVER ask the user to re-save); `shuffle-dead`/`mull-drift` do not gate, but a reference that stops replaying is an AGENT's to root-cause and restore (USER 2026-10-06: *"I shouldn't need to re-save a reference. It is up to you to fix it if the reference broke."*). **`references/suboptimal/` is replayed too** (USER 2026-10-22), where an EARLIER win than recorded is `beaten` (passes), and right after the sweep `ref_bench.py --suboptimal --require-beat` FAILS the suite unless the search strictly beats each one; a suboptimal game with a proper reference for the same game is superseded and skipped by both (`references/suboptimal/README.md`). | yes |
+| `viewer_protocol_check.py` | **reference reproducibility gate**, run `--strict` in **regression mode only**, CONCURRENTLY with the game batch on shared tokens (see "Where a tier's wall goes") (`VPC_ALWAYS=1` forces it in smoke/overnight, `VPC_SKIP=1` skips it): replays each saved `references/<deck>/claude_*.json` by INTENT (content-anchored picks; engine defaults for decision points the ref predates — see `docs/design/reference-intent-replay.md`). `play-drift` (a recorded human line now ends differently), `ENUM-GAP` (a plan vanished for an identical state) or `BOARD-DIVERGED` (identical hand, different board -- an upstream payment/decision diverged) FAILS the suite; `repaired` is informational (no action -- NEVER ask the user to re-save); `shuffle-dead`/`mull-drift` do not gate, but a reference that stops replaying is an AGENT's to root-cause and restore (USER 2026-10-06: *"I shouldn't need to re-save a reference. It is up to you to fix it if the reference broke."*). **`references/suboptimal/` is replayed too** (USER 2026-10-22), where an EARLIER win than recorded is `beaten` (passes), and `ref_bench.py --suboptimal --require-beat` (beside the sweep) FAILS the suite unless the search strictly beats each one; a suboptimal game with a proper reference for the same game is superseded and skipped by both (`references/suboptimal/README.md`). | yes |
 | `results/<mode>.env` | last run's fingerprints (what `--accept` promotes) | no (gitignored) |
 | `logs/<mode>/<key>.log` (+ `.err`) | full binary output per case | no (gitignored) |
 | `logs/<mode>/wins/<key>.wins` | **this run's** per-game outcomes (same `<index> <win_turn>` format); diff against `gt_logs/<key>.wins` for the per-game audit | no (gitignored) |
@@ -95,7 +95,42 @@ seeds. Budgets are shared across all decks — see "Adding a deck" below.
 bash test/regression.sh --smoke      # fast gate
 bash test/regression.sh              # pre-commit
 bash test/regression.sh --overnight  # deep sweep (run later, not inline)
+bash test/regression.sh --smoke --regression   # (= --both) BOTH tiers, ONE pooled batch
+bash test/regression.sh --both --accept        # accept both tiers' last run (one accept per tier)
 ```
+
+### Where a tier's wall goes: one pooled batch, side stages on shared tokens (2026-11-14)
+
+USER 2026-11-14: *"Regression is longer than it should be"*, the side stages *"should be a fraction at most"*,
+and *"All things that can be should be combined into one batch. This even includes the possibility to run
+smoke and regression full together when we intend to."* So:
+
+* **Every stage stamps its wall.** `[stage] <name> <s>` lines go to the console live and into each tier's
+  `regression_result_<mode>.txt` just above its `Result:` line ("stage wall times"). Read them; never guess
+  where a tier's time went.
+* **Scenario sanity runs in parallel** (`test/scenarios.sh`, `SCEN_JOBS` = `THREADS` or `nproc`; output and
+  exit code identical to the serial loop, printed in fixture order). ~90 s serial -> seconds.
+* **The reference stages run CONCURRENTLY with the game batch** (regression tier, or wherever `VPC_ALWAYS=1`):
+  `viewer_protocol_check.py --strict` and `ref_bench.py --suboptimal --require-beat` start before the batch and
+  all three processes draw from ONE jobserver FIFO of `THREADS`/`nproc` tokens (`MTG_JOBSERVER`; a batch worker
+  holds a token per game, a reference walk one per reference). Total running work never exceeds the token
+  count, and whichever side still has work absorbs the tokens the other stopped using. Scheduling only:
+  verdicts and digests are what the serial order produced. While the sweep holds tokens the batch heartbeat
+  reads below M/M -- that is the sharing, not starvation. `SIDE_STAGES_SERIAL=1` (and any box without
+  `mkfifo`) runs them after the batch, the old order.
+* **The reference sweep replays through ONE persistent `--interactive` child per reference** instead of a
+  fresh process per decision (which re-simulated the whole pick prefix every step, O(N^2): Kitty_Equipment
+  references cost 700-1,560 s apiece and the sweep ~360 core-min, half the tier's game batch). Anything
+  unusual (child death, an `Error:`, a non-extending prefix, changed side-channel argv) answers that step with
+  the stateless replay, which stays the source of truth. `MTG_REPLAY_INTERACTIVE=0` restores the stateless
+  chain.
+* **Combined tiers** (`--smoke --regression` / `--both`): every game of every named tier in ONE batch under
+  `test/logs/combined/`, then each tier gets exactly the files its own run writes (`test/logs/<mode>/batch.log`
+  holds its own job lines, `wins/<key>.*` are moved into its own `wins/`, its own results env, result file and
+  per-game audit). Each tier PASSes/FAILs on its own keys; the exit code is 0 only when all pass. `--accept`
+  with several tier flags simply accepts each tier in turn.
+
+  (Measured before/after stage walls: TODO -- see logs/tier-pool/handoff.md; not yet measured.)
 
 ### The rows test what SHIPS (USER 2026-10-27)
 
