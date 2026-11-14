@@ -91,6 +91,12 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
         // 2c-bis "resources generated during combat" bucket), and a main-2 swap can use mana combat
         // did not need. Without the second main that recast line is inexpressible.
         if (def->params.aura_swap_cost.has_value()) { return true; }
+        // CHAMPION (Nova Chaser, CR 702.72): a creature that ATTACKED this turn and dies at the end step
+        // (Spark Elemental, Ball Lightning, a Soulstoke put, an unearthed Hellspark) is a resource
+        // generated DURING COMBAT (2c-bis) that only a POST-COMBAT champion cast can spend -- exiling a
+        // body that has already dealt its damage and is doomed anyway. Pre-combat the same cast would
+        // cost that attack, so without a searched second main the line is structurally unreachable.
+        if (!def->params.champion_subtype.empty()) { return true; }
         // GARRUK, PRIMAL HUNTER (Hydras, 2026-11-11; USER: *"Second main -3 makes sense."*). "-3: Draw cards
         // equal to the greatest power among creatures you control" reads the power at RESOLUTION, and
         // COMBAT raises it: Kalonian Hydra's attack trigger doubles every creature's +1/+1 counters before

@@ -1663,6 +1663,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.eternalize_cost = ManaCostFromString(params["eternalize_cost"].get<std::string>());
     if (params.contains("unearth_cost"))
         p.unearth_cost = ManaCostFromString(params["unearth_cost"].get<std::string>());
+    p.champion_subtype = params.value("champion_subtype", std::string{});
     if (params.contains("transmute_cost"))
         p.transmute_cost = ManaCostFromString(params["transmute_cost"].get<std::string>());
     if (params.contains("life_gated_put_creatures_cost"))

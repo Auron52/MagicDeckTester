@@ -2592,6 +2592,16 @@ struct CardParams
     // (PerformEndStepUnearthExiles) and exiled INSTEAD at the shared sacrifice chokepoint
     // (SacrificePermanentAt -- a CR 614 replacement). Unset (nullopt) for every other card.
     std::optional<ManaCost> unearth_cost;
+    // CHAMPION (CR 702.72; Nova Chaser "Champion an Elemental"): "When this enters, sacrifice it unless you
+    // exile another <subtype> you control. When this leaves the battlefield, that card returns to the
+    // battlefield under its owner's control." The subtype is read LIVE (PermCountsAsSubtype: a Metallic
+    // Mimic that chose it counts, tokens count). WHICH permanent is exiled -- or declining, which
+    // sacrifices the champion -- is SEARCHED: one CastFromHand / PutFromHandAbility variant per distinct
+    // candidate (identity-folded, ChampionFoldKey) plus a decline, the pick riding Action::enchant_target
+    // into the shared ResolveChampionEtb (FireOwnEtbTriggers) through g_champion_pin. The exiled card is
+    // parked with an m_staged_expiry marker (kChampionExileBase) linked to the champion's m_number and
+    // returns as a NEW object from FireLeavesBattlefieldTriggers. Empty for every other card.
+    std::string champion_subtype;
     std::optional<ManaCost> transmute_cost;
     std::optional<ManaCost> life_gated_put_creatures_cost;
     int  activate_min_life                      = 0;

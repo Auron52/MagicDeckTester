@@ -54,7 +54,7 @@ No fetchlands; no sideboard.
 | Flamekin Bladewhirl | 1 | `reveal_or_pay_subtype` Elemental + `reveal_or_pay_cost` {3} (printed subtype; one own copy skipped; Mimic in hand is not an Elemental) | done (agent A, e313899fc) |
 | Sunspine Lynx | 2 | `etb_damage_each_player_per_nonbasic_land` (shared ResolveNonbasicLandDamage in the own-ETB cascade; arms own_death_live) + `static_players_cant_gain_life` / `static_damage_cant_be_prevented` (PlayersCantGainLifeNow / DamageCantBePreventedNow at the Skullcrack sites; `deck_has_static_life_locks` stamp) | done (agent A, e313899fc) |
 | Hellspark Elemental | 3 | `endstep_sacrifice_self` + `unearth_cost` {1}{R}: NEW `Action::Kind::Unearth` (graveyard activation, one per copy, equiv_tag prefix fold), `ApplyUnearth`, `Permanent::unearthed` (end-step exile sweep + exile-instead at SacrificePermanentAt), `unearth=` viewer verb | done (agent A, e313899fc); replacement PARTIAL (see open questions) |
-| Nova Chaser | 3 | CHAMPION an Elemental (new); post-combat main relevance | pending |
+| Nova Chaser | 3 | CHAMPION (new, generic `champion_subtype`): searched exile pick (cast + Soulstoke-put variants per identity class + decline), linked exile, LTB return as a new object; `DeckUsesSecondMain` opened for the post-combat champion line | done (agent B, see Agent B notes) |
 | Thunderkin Awakener | 3 | attack trigger: gy Elemental (toughness < own) tapped+attacking, sac next end step (new) | pending |
 
 ### Agent A notes (2026-11-14) — Spark / Ball Lightning / Bladewhirl / Lynx / Hellspark
@@ -87,6 +87,54 @@ No fetchlands; no sideboard.
 - `test_pirates_provider` "every deck in decks/ resolves" FAILS until the Red Elementals folder gets
   its routing row (Stage 4a; endstep_sacrifice_self is also a Morph-provider signature param).
 
+### Agent B notes (2026-11-14) — Nova Chaser / CHAMPION
+- **Param:** `CardParams::champion_subtype` ("Elemental"). Inert for every card without it.
+- **Pick plumbing (searched, never heuristic in the window):** `ChampionVariantTargets` (SpellEffects.h)
+  = one battlefield m_number per identity class (SOUND fold: `LandfallTargetFoldKey(..., mix_doom=true)`,
+  which KEYS temp haste / sac_at_end_step / unearthed / exile_at_end / destroy_at_end / attack count
+  instead of refusing them). CollectActions emits one `CastFromHand` per class (`Action::enchant_target`
+  = that m_number, the Protege precedent) + a decline (`-1`, eval 0). The unpinned ordinary cast
+  (`enchant_target 0` -> `DecisionProvider::OrderChampionCandidates` front AT RESOLUTION) is kept only
+  when `ChampionSamePlanEntrantPossible` (an Elemental creature card / a Mimic in hand) -- otherwise it
+  would duplicate the front variant and is skipped. The Soulstoke `PutFromHandAbility` gets the same
+  variants. Both worlds install the pick as `g_champion_pin` (`ChampionPinScope`): EffectHandler
+  `EnterBattlefield`, `apply_one`, and `ApplyPutFromHand(..., champion_pick)` (new trailing param; the 4
+  call sites pass `a.enchant_target`). Human play (`HumanPlayActive`) gets no variants: the `dig`
+  "(champion)" modal asks (main.cpp note + `index.html` branch; `-1` = exile nothing, the champion is
+  sacrificed). Registered in `audit_viewer_decisions.py` MANIFEST (`champion_subtype: dig`).
+- **Resolution:** `ResolveChampionEtb` runs at the END of the `FireOwnEtbTriggers` wrapper (after the
+  entrant's other own ETBs, so no early return skips it and no stale index is read). Exile = own removal
+  (detach, erase, card to exile with marker `kChampionExileBase - (2*champion + owner)`, champion's
+  `linked_exile_number`), then `UnearthedLeftBattlefield` (LTB triggers + refreshes; no dies, no
+  sacrifice watchers). A token ceases to exist. Decline / no candidate -> `SacrificePermanentAt`.
+- **Return:** `ReturnChampionedCard` from `FireLeavesBattlefieldTriggers` -> `PutCardOntoBattlefield`
+  (new object: sick, enter cascade, Mimic counter, no unearth / sac_at_end_step).
+- **End-step timing (CR 603.2), new:** `g_end_step_window` opens in `PerformEndStepUnearthExiles` and
+  closes in `PerformEndStepSelfSacrifices`, which skips cards that RETURNED during the sweeps
+  (`g_end_step_late_entrants`): a Soulstoke-put Nova sacrificed by its delayed trigger returns e.g. a
+  Spark that survives our end step (it dies at the opponent's). **Thunderkin agent:** a Thunderkin-
+  returned body that is championed and later returns is a new object -- your delayed sacrifice must key
+  on the object (a `sac_at_end_step` bit on the Permanent, like Soulstoke's) and will then correctly find
+  nothing. Nova (toughness 2) is never a Thunderkin target if Thunderkin's toughness is 2.
+- **Attack projection:** the Path-to-Exile self-target bit block also marks a champion variant's exiled
+  creature as out of this turn's attack.
+- **Validation:** unit (8 new cases in `test/unit/test_red_elementals.cpp`: chosen exile linked; no
+  candidate / decline sacrifices; Nova champions another Nova; Mimic counts; LTB return new object;
+  unearthed Hellspark returns free of unearth; post-combat champion survives end step + enumeration
+  offers per-candidate + decline and no duplicate; mid-end-step return misses the trigger; identical
+  doomed attackers fold). Full suite 3070/3071 (only the pre-existing pirates routing case). Scenario
+  `test/scenarios/redelem_nova_postcombat_champion.json` (opp 21: Spark attacks, MAIN-2 Nova champions it,
+  win T5) PASS at b0 and b100. Repros d3 b100: seed 100 x40 (avg 4.85) and seed 300 x120 (avg 4.65):
+  Nova lines seen -- Soulstoke-put Nova championing the tapped Soulstoke (6x), Nova championing
+  Bladewhirl / Mimic pre-combat, and seed 300 gi117 T5 MAIN 2: unmorphed Firecat attacks for 7, Nova cast
+  post-combat champions it, Nova kills T6 (line (a) found by the search). Claude-play seed 101 choices
+  `1,0,0,0,1,0,0,0,0,0,1` surfaces `dig` "Nova Chaser (champion)" over [Bladewhirl, Metallic Mimic];
+  answering 1 exiles the Mimic. Byte-identity (base vs new, 8 games each, seed 4242 d3 b40): Landfall
+  Elementals, Morph, Goblins, Spirits (the last three search a second main) -- 32/32 logs identical.
+- **Observation (tie, not a loss):** seed 300 gi83/gi108 cast Nova T4 on an Elemental-less board (it is
+  sacrificed) while still winning T5 -- the unpinned cast (kept because an Elemental is in hand) carries
+  the 10/2's eval; every line tied on win turn.
+
 ## Stage 5 — verification
 (not yet run)
 
@@ -94,6 +142,19 @@ No fetchlands; no sideboard.
 (none yet)
 
 ## Open questions for the user
+- PROVISIONAL (Nova Chaser, champion): an UNPINNED pick takes the provider's `OrderChampionCandidates`
+  front (doomed attacker first, then tapped/attacked, then smallest power). It is reached (1) beyond the
+  horizon (permitted playout greedy), (2) for a SAME-PLAN entrant -- a Nova cast in the same main as the
+  Elemental it would champion, which the cast's variants cannot name at enumeration (an in-window
+  narrowing; a post-combat main sees the attacker on board and IS fully searched), and (3) when a
+  championed Nova Chaser itself returns (end step / inside another champion). Sign-off owed.
+- PROVISIONAL (Nova Chaser): `DeckUsesSecondMain` now returns true for any champion deck, opening a full
+  searched post-combat main on every turn for Red Elementals (needed for the doomed-attacker line). Its
+  cost is unmeasured; a restricted main-2 (admit only champion casts/puts, the OMNITOOL_M2 shape) is the
+  alternative if it is expensive. The user's call.
+- PROVISIONAL (Nova Chaser): not modelled (unreachable in a goldfish) -- the champion leaving before its
+  enter trigger resolves; a same-plan Elemental TOKEN maker is not counted by
+  `ChampionSamePlanEntrantPossible` (none exists in any list).
 - PROVISIONAL (Hellspark Elemental, unearth): the "exile it if it would leave" replacement is routed
   only through the shared sacrifice chokepoint (and the end-step exile sweep); destroy effects, the
   lethal-damage / toughness-0 SBA, the legend rule, creature sweeps and bounce are NOT routed. None can

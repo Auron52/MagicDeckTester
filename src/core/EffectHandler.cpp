@@ -187,6 +187,10 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
     // Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal). No-op for
     // every non-Goblin permanent (early param return). entry.tutor_target carries a search/human
     // Goblin Matron fetch target (empty -> the provider's pick).
+    // CHAMPION (CardParams::champion_subtype): the searched exile pick rides Action::enchant_target ->
+    // StackEntry::enchant_target into ResolveChampionEtb (lockstep twin: apply_one). 0 for every other card.
+    const ChampionPinScope _champ(entry.source.m_number,
+                                  edef->params.champion_subtype.empty() ? 0 : entry.enchant_target);
     FireOwnEtbTriggers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1,
                    entry.tutor_target, entry.chosen_x.value_or(-1));
     // Devoured creatures' death triggers, per CR: the sacrifices happen as part of the enter, but

@@ -1258,6 +1258,32 @@ inline void ExileOppCreatureUntilLeaves(GameState& state, int controller, int so
 inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_number, int max_mv,
                                    const std::string& src_name);
 inline void FireExiledOwnerIllusion(GameState& state, const Card& left);
+// CHAMPION (CR 702.72; CardParams::champion_subtype -- Nova Chaser), defined beside
+// PermCountsAsSubtype below. The searched pick rides g_champion_pin: `entrant` = the champion's
+// card.m_number, `pick` = the m_number to exile (> 0), -1 = decline (the champion is sacrificed), 0 =
+// unpinned (the provider's OrderChampionCandidates front; the human's chooser asks). Installed by the
+// cast / put sites of BOTH worlds around the enter cascade (ChampionPinScope) and read only by
+// ResolveChampionEtb for the matching entrant, so a nested entry can never consume it.
+struct ChampionPin { int entrant = 0; int pick = 0; };
+inline thread_local ChampionPin g_champion_pin;
+struct ChampionPinScope
+{
+    ChampionPin prev;
+    ChampionPinScope(int entrant, int pick) : prev(g_champion_pin) { g_champion_pin = ChampionPin{entrant, pick}; }
+    ~ChampionPinScope() { g_champion_pin = prev; }
+    ChampionPinScope(const ChampionPinScope&) = delete;
+    ChampionPinScope& operator=(const ChampionPinScope&) = delete;
+};
+inline void ResolveChampionEtb(GameState& state, int controller, int champion_number, const CardDefinition& def);
+inline void ReturnChampionedCard(GameState& state, const Card& left);
+// "At the beginning of the end step" triggers all trigger when the step BEGINS (CR 603.2): a card that
+// returns to the battlefield DURING our end-step sweeps (a champion sacrificed by its delayed trigger
+// returns the card it exiled) is a NEW object that was not there, so no beginning-of-end-step trigger
+// of its own fires this end step. The window opens at the first sweep of both end-step sites
+// (PerformEndStepUnearthExiles) and closes at PerformEndStepSelfSacrifices, which skips the numbers
+// recorded here. Empty for every deck without a champion.
+inline thread_local bool             g_end_step_window = false;
+inline thread_local std::vector<int> g_end_step_late_entrants;
 inline void ResolveEtbDestroyNonbasicLandOptional(GameState& state, int controller, const std::string& pin,
                                                   const std::string& src_name);
 // The lethal-damage SBA's toughness (CR 704.5g) -- see the definition for why it is shared.
@@ -5967,8 +5993,9 @@ int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
 // source). The named card enters UNATTACHED through the shared enter cascade (Puresteel's draw
 // fires). Returns false (a no-op) when the source is gone/tapped/sick or the card left hand --
 // the stranded-outlet pattern, never a phantom.
+// `champion_pick` = the put creature's searched CHAMPION pick (Action::enchant_target; 0 = unpinned).
 bool ApplyPutFromHand(GameState& state, int controller, int source_id,
-                      const std::string& put_name);
+                      const std::string& put_name, int champion_pick = 0);
 
 // ApplyJitteMode -- body in SpellEffects.cpp. Umezawa's Jitte's counter-spend modes: remove one
 // charge counter from `jitte_id` for mode 1 = target_id gets -1/-1 until end of turn (the death
@@ -9942,15 +9969,20 @@ struct LandfallSimultaneousScope
 // boards that differ only in WHICH per-copy number holds them -- a relabelling no rule can observe.
 // Anything this does not recognise as plain returns false and stays a singleton, so a refusal costs
 // branching, never a line.
+//
+// `mix_doom` (CHAMPION's exile pick only, ChampionVariantTargets): the end-of-turn fate fields (temp
+// haste, the end-step sacrifice / exile / destroy marks, unearth, the attack count) are KEYED instead of
+// refused -- two Spark Elementals that both attacked and both die at this end step are the same choice
+// for an effect that removes one of them, since the survivor keeps exactly the state the other had.
 inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, std::uint64_t& key,
-                                  const std::vector<int>* linked = nullptr)
+                                  const std::vector<int>* linked = nullptr, bool mix_doom = false)
 {
     if (p.damage != 0 || p.pending_death_trigger != 0 || p.marked_for_destruction) { return false; }
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
-    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.unearthed
-        || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
+    if (p.temp_lifelink || p.temp_double_strike || p.skip_next_untap || p.etb_tap_pending) { return false; }
+    if (!mix_doom && (p.temp_haste || p.exile_at_end || p.sac_at_end_step
+                      || p.destroy_at_end_if_attacked || p.unearthed))           { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
         || p.storage_counters != 0 || p.loyalty != 0 || p.ice_counters != 0
@@ -9960,7 +9992,7 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
         || p.colored_cast_lifegain_used_this_turn || p.storied_draw_used_this_turn
         || p.lifegain_counters_used_this_turn || p.once_per_turn_used
         || p.landfall_resolved_once || p.landfall_resolved_twice
-        || p.AttacksThisTurn() != 0 || p.enduring_noncreature)                   { return false; }
+        || (!mix_doom && p.AttacksThisTurn() != 0) || p.enduring_noncreature)     { return false; }
     if (p.chosen_color != -1 || p.garth_chosen_mask != 0 || p.chosen_keyword_mask != 0
         || p.chosen_subtype_id != 0 || p.linked_exile_number != 0)                { return false; }
     if (!static_cast<const std::string&>(p.copy_printed_name).empty()
@@ -10006,6 +10038,12 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     mix(static_cast<std::uint64_t>(p.owner_index));
     mix(static_cast<std::uint64_t>(p.mana_tap_mark));
     mix(static_cast<std::uint64_t>(p.created_by_number));
+    if (mix_doom)
+    {
+        mix(0xD00Dull ^ ((p.temp_haste ? 1u : 0u) | (p.exile_at_end ? 2u : 0u) | (p.sac_at_end_step ? 4u : 0u)
+                         | (p.destroy_at_end_if_attacked ? 8u : 0u) | (p.unearthed ? 16u : 0u)));
+        mix(static_cast<std::uint64_t>(p.AttacksThisTurn()) + 0xA77ull);
+    }
     for (const Counter& c : p.counters)
     { mix((static_cast<std::uint64_t>(c.type) << 32) ^ static_cast<std::uint64_t>(c.count)); }
     key = h;
@@ -13185,8 +13223,22 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
 inline void FireOwnEtbTriggers(GameState& state, int controller, int entered_index,
                                const std::string& chosen_tutor = "", int etb_kx = -1)
 {
+    // CHAMPION (CR 702.72; CardParams::champion_subtype): "When this enters, sacrifice it unless you
+    // exile another <subtype> you control" -- resolved AFTER the entrant's other own ETBs (the controller
+    // orders its own triggers, CR 603.3b), here rather than in the body so none of the body's early
+    // returns can skip it and no later block reads a stale index. Every entry path (a cast, a Soulstoke
+    // put, a champion return), executor and rollout alike. One pointer test for every other entrant.
+    const CardDefinition* champ_def = nullptr;
+    int champ_number = 0;
+    if (entered_index >= 0 && entered_index < static_cast<int>(state.battlefield.size()))
+    {
+        const Permanent& ep = state.battlefield[static_cast<std::size_t>(entered_index)];
+        const CardDefinition* ed = ep.def_absent ? nullptr : CardDatabase::Instance().LookupCached(ep.card);
+        if (ed != nullptr && !ed->params.champion_subtype.empty()) { champ_def = ed; champ_number = ep.card.m_number; }
+    }
     ++g_own_etb_depth;
     FireOwnEtbTriggersBody(state, controller, entered_index, chosen_tutor, etb_kx);
+    if (champ_def != nullptr) { ResolveChampionEtb(state, controller, champ_number, *champ_def); }
     --g_own_etb_depth;
     if (g_own_etb_depth == 0 && !g_pending_look_top.empty()) { DrainPendingLookTop(state); }
 }
@@ -13453,6 +13505,8 @@ inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, cons
     { NormalizeLeftDayboundFace(state, controller, left, *d); }
     // Skyclave Apparition's LTB: the exiled card's owner creates an X/X blue Illusion (X = its MV).
     if (d && d->params.ltb_exiled_owner_illusion_token) { FireExiledOwnerIllusion(state, left); }
+    // Champion's LEAVE half: the championed card returns as a new object (CR 702.72a).
+    if (d && !d->params.champion_subtype.empty()) { ReturnChampionedCard(state, left); }
     if (!d || d->params.ltb_return_creatures <= 0) { return; }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -17156,6 +17210,8 @@ inline void UnearthedLeftBattlefield(GameState& state, const Permanent& leaving)
 // LTB trigger may append or remove permanents). No-op (one bit test per permanent) for every other deck.
 inline void PerformEndStepUnearthExiles(GameState& state)
 {
+    g_end_step_window = true;            // CR 603.2 -- see g_end_step_late_entrants
+    g_end_step_late_entrants.clear();
     std::vector<int> due;
     for (const Permanent& p : state.battlefield) { if (p.unearthed) { due.push_back(p.card.m_number); } }
     for (int num : due)
@@ -17368,11 +17424,16 @@ inline void DestroyAttackedAtEndStep(GameState& state)
 // survive into our turn. Gated on the deck constant GameState::deck_has_endstep_self_sac.
 inline void PerformEndStepSelfSacrifices(GameState& state)
 {
+    // A card that RETURNED during this end step's earlier sweeps (a champion's exile coming back) is a
+    // new object: its "at the beginning of the end step" trigger did not exist when the step began.
+    std::vector<int> late;
+    if (g_end_step_window) { late.swap(g_end_step_late_entrants); g_end_step_window = false; }
     if (!state.deck_has_endstep_self_sac) { return; }
     std::vector<std::pair<int, int>> due;   // (m_number, controller)
     for (const Permanent& p : state.battlefield)
     {
         if (p.def_absent) { continue; }
+        if (!late.empty() && std::find(late.begin(), late.end(), p.card.m_number) != late.end()) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d != nullptr && d->params.endstep_sacrifice_self)
         { due.emplace_back(p.card.m_number, p.controller_index); }
@@ -32506,6 +32567,204 @@ inline int CountControlledSubtypePermanents(const GameState& state, int controll
     for (const Permanent& q : state.battlefield)
     { if (q.controller_index == controller && PermCountsAsSubtype(q, sub)) { ++n; } }
     return n;
+}
+
+// ===== CHAMPION (CR 702.72; CardParams::champion_subtype -- Nova Chaser, Red Elementals 2026-11-14) =====
+// "Champion a <subtype>" = two linked triggers. ENTER: "sacrifice it unless you exile another <subtype>
+// you control" (not targeted -- hexproof is irrelevant; the subtype is read LIVE off the permanent, so a
+// Metallic Mimic that chose it and a token both count). LEAVE: "that card returns to the battlefield
+// under its owner's control" -- a NEW object (CR 400.7): summoning sick, no haste of its own unless
+// printed, every enter trigger fires again (the universal cascade, PutCardOntoBattlefield), and nothing
+// that pointed at the old object (unearth, a delayed end-step sacrifice, counters) survives. A token
+// exiled this way ceases to exist (CR 111.7) and never returns.
+//
+// The exiled card is parked in GameState::exile with m_staged_expiry = kChampionExileBase -
+// (2 * champion_number + owner): a range disjoint from Brutal Cathar's kLinkedExileBase (so
+// ReturnOrphanedLinkedExiles never touches it) and from Skyclave's kSkyclaveExileBase; the champion
+// records it in Permanent::linked_exile_number (already folded into both state keys and dominance).
+//
+// WHICH permanent -- or none, which sacrifices the champion -- is a SEARCH decision: the cast and the
+// Soulstoke put enumerate one variant per identity class of candidate (ChampionVariantTargets) plus a
+// decline, the pick riding Action::enchant_target -> g_champion_pin. Declining is NOT folded away: it is
+// not soundly dominated in general (it keeps the would-be-exiled permanent, a lord for instance, and
+// still fires the champion's cast and enter triggers).
+//
+// NOT MODELLED (unreachable in a goldfish): the champion leaving BEFORE its enter trigger resolves (the
+// exiled card would then stay exiled forever) -- nothing can respond between entering and resolving.
+constexpr int kChampionExileBase = -0x30000000;
+inline bool CardIsChampionExile(const Card& c)
+{
+    return !c.m_is_staged && c.m_staged_expiry <= kChampionExileBase
+        && c.m_staged_expiry > kChampionExileBase - 0x08000000;
+}
+inline int ChampionExileSource(const Card& c) { return (kChampionExileBase - c.m_staged_expiry) >> 1; }
+inline int ChampionExileOwner(const Card& c)  { return (kChampionExileBase - c.m_staged_expiry) & 1; }
+
+// Battlefield indices of the permanents `controller` could exile for the champion `champion_number`
+// (0 = the champion is not on the battlefield yet -- the enumeration side), in the provider's order.
+inline std::vector<int> ChampionCandidateIndices(const GameState& state, int controller, int champion_number,
+                                                 const std::string& sub)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.controller_index != controller || q.card.m_number == champion_number) { continue; }
+        if (PermCountsAsSubtype(q, sub)) { out.push_back(i); }
+    }
+    if (out.size() > 1) { ResolveProvider(state).OrderChampionCandidates(state, controller, out); }
+    return out;
+}
+
+// The ENUMERATION side: one representative card.m_number per identity class of candidate, in the
+// provider's order. SOUND IDENTITY FOLD (the LandfallTargetFoldKey bar, with the end-of-turn fate KEYED
+// rather than refused -- see its mix_doom note): exiling either of two candidates whose keys are equal
+// yields boards that differ only in which per-copy number the survivor carries. A candidate the key
+// does not recognise as plain stays a singleton (costs branching, never a line).
+inline std::vector<int> ChampionVariantTargets(const GameState& state, int controller, const std::string& sub)
+{
+    const std::vector<int> idx = ChampionCandidateIndices(state, controller, 0, sub);
+    std::vector<int> out;
+    if (idx.empty()) { return out; }
+    std::vector<int> links;
+    LandfallTargetLinks(state, links);
+    std::vector<std::uint64_t> seen;
+    for (int bi : idx)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        std::uint64_t key = 0;
+        if (LandfallTargetFoldKey(state, q, key, &links, /*mix_doom=*/true))
+        {
+            if (std::find(seen.begin(), seen.end(), key) != seen.end()) { continue; }
+            seen.push_back(key);
+        }
+        out.push_back(q.card.m_number);
+    }
+    return out;
+}
+
+// Could a permanent this same plan puts onto the battlefield BEFORE the champion become a candidate --
+// i.e. is the unpinned variant (enchant_target 0, the provider's front AT RESOLUTION) anything but a
+// duplicate of the front explicit variant? True when the hand holds, besides the champion copy at
+// `skip_number`, a creature card of the printed subtype or a card that adds a chosen
+// type to itself (Metallic Mimic). NOT counted (disclosed): a same-plan spell that creates a <subtype>
+// TOKEN -- none exists in any list that runs a champion today.
+inline bool ChampionSamePlanEntrantPossible(const GameState& state, int controller, int skip_number,
+                                            const std::string& sub)
+{
+    for (const Card& c : state.players[static_cast<std::size_t>(controller)].hand)
+    {
+        if (c.m_number == skip_number || c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& hc = d ? d->card : c;
+        if (hc.IsLand()) { continue; }
+        if (d != nullptr && d->params.chosen_type_added_to_self) { return true; }
+        if (hc.IsCreature() && (CardHasSubtype(hc, sub))) { return true; }
+    }
+    return false;
+}
+
+inline void ResolveChampionEtb(GameState& state, int controller, int champion_number, const CardDefinition& def)
+{
+    int ci = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == champion_number && q.controller_index == controller) { ci = i; break; }
+    }
+    if (ci < 0) { return; }   // already gone (see NOT MODELLED above)
+    const std::string src_name = def.card.m_name.str();
+    const std::vector<int> legal = ChampionCandidateIndices(state, controller, champion_number,
+                                                            def.params.champion_subtype);
+    // The pick: the searched pin when this entrant carries one, else the provider's front.
+    int k = legal.empty() ? -1 : 0;
+    if (g_champion_pin.entrant == champion_number && g_champion_pin.pick != 0)
+    {
+        if (g_champion_pin.pick < 0) { k = -1; }
+        else
+        {
+            for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+            {
+                if (state.battlefield[static_cast<std::size_t>(legal[li])].card.m_number == g_champion_pin.pick)
+                { k = li; break; }
+            }
+        }
+    }
+    // The human / claude-play chooser: every candidate, -1 = exile nothing (the champion is sacrificed).
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating && !legal.empty())
+    {
+        std::vector<Card> examined;
+        std::vector<int>  ix;
+        for (std::size_t li = 0; li < legal.size(); ++li)
+        {
+            examined.push_back(state.battlefield[static_cast<std::size_t>(legal[li])].card);
+            ix.push_back(static_cast<int>(li));
+        }
+        const int pick = (*g_play_dig_chooser)(state, controller, src_name + " (champion)", examined, ix, k);
+        k = (pick >= 0 && pick < static_cast<int>(legal.size())) ? pick : -1;
+    }
+    if (k < 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": champions nothing -- sacrificed"
+                          + (legal.empty() ? std::string(" (no other ") + def.params.champion_subtype + ")"
+                                           : std::string()));
+        }
+        SacrificePermanentAt(state, controller, ci);
+        return;
+    }
+    const int bi = legal[static_cast<std::size_t>(k)];
+    const Permanent gone = state.battlefield[static_cast<std::size_t>(bi)];
+    const int gnum = gone.card.m_number;
+    for (Permanent& e : state.battlefield)
+    {
+        if (e.aura_attached_to == gnum) { e.aura_attached_to = 0; }
+        if (e.equipped_to      == gnum) { e.equipped_to      = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + bi);
+    if (!gone.is_token)
+    {
+        // The CARD goes to exile with its printed characteristics (a Mimic's chosen type is a battlefield
+        // effect; an unearthed Hellspark's unearth bit dies with the object -- it is exiled by the
+        // champion's own effect, not by unearth's replacement).
+        Card c = RevealedCard(gone.card);
+        if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(c))
+        { const int n = c.m_number; c = gd->card; c.m_number = n; }
+        c.m_is_staged     = false;
+        c.m_staged_expiry = kChampionExileBase - (2 * champion_number + (gone.owner_index & 1));
+        state.exile.push_back(c);
+        for (Permanent& sp : state.battlefield)
+        { if (sp.card.m_number == champion_number) { sp.linked_exile_number = gnum; break; } }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x8F\x86 " + src_name + " champions " + gone.card.m_name.str()
+                      + (gone.is_token ? " (a token: it ceases to exist)" : " -- exiled until it leaves"));
+    }
+    // It LEFT the battlefield without dying: its own leave triggers and the board refreshes (the shared
+    // unearth-exile tail -- nothing in it is unearth-specific).
+    UnearthedLeftBattlefield(state, gone);
+}
+
+// The LEAVE half, from FireLeavesBattlefieldTriggers (every death, sacrifice, exile and blink route).
+inline void ReturnChampionedCard(GameState& state, const Card& left)
+{
+    for (std::size_t i = 0; i < state.exile.size(); ++i)
+    {
+        const Card& c = state.exile[i];
+        if (!CardIsChampionExile(c) || ChampionExileSource(c) != left.m_number) { continue; }
+        Card back = c;
+        const int owner = ChampionExileOwner(c);
+        state.exile.erase(state.exile.begin() + static_cast<std::ptrdiff_t>(i));
+        back.m_staged_expiry = 0;
+        if (g_end_step_window) { g_end_step_late_entrants.push_back(back.m_number); }
+        PutCardOntoBattlefield(state, owner, back, left.m_name.str() + " left the battlefield (champion)",
+                               0, false, owner);
+        return;
+    }
 }
 
 // ---- THE TAP SPEC: which five bodies a searched steal taps (an identity-folded multiset) ------------

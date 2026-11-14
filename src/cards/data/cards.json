@@ -16763,6 +16763,27 @@
     "endstep_sacrifice_self": true,
     "unearth_cost": "{1}{R}"
    }
+  },
+  {
+   "name": "Nova Chaser",
+   "mana_cost": "{3}{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Elemental",
+    "Warrior"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 10,
+   "toughness": 2,
+   "oracle_text": "Trample\nChampion an Elemental (When this enters, sacrifice it unless you exile another Elemental you control. When this leaves the battlefield, that card returns to the battlefield.) [10/2 Trample (keyword; inert vs the never-blocking opponent), no haste: it attacks the turn after it enters. CHAMPION (CR 702.72) = champion_subtype \"Elemental\", a generic param. ENTER: 'sacrifice it unless you exile another Elemental you control' -- the subtype is read LIVE (a Metallic Mimic that chose Elemental counts, tokens count), not targeted. WHICH Elemental is exiled, or none (the champion is then sacrificed through SacrificePermanentAt), is SEARCHED: the cast (and an Incandescent Soulstoke put) enumerates one variant per identity class of battlefield candidate (a SOUND fold: identical copies in identical state, end-of-turn fate keyed) plus a decline; the pick rides Action::enchant_target into the shared ResolveChampionEtb at the end of the enter cascade (FireOwnEtbTriggers), executor and rollout alike. An UNPINNED resolution takes DecisionProvider::OrderChampionCandidates' front (doomed first: an attacker sacrificed / exiled at this end step), used beyond the search horizon, for a same-plan entrant the cast could not name at enumeration (a Spark cast earlier in the same main), and when a championed Nova Chaser itself returns. The exiled card is parked in exile linked to this permanent (m_staged_expiry marker kChampionExileBase, Permanent::linked_exile_number); an unearthed Hellspark is exiled by the champion's own effect, not unearth's replacement. LEAVE: from FireLeavesBattlefieldTriggers (every death / sacrifice / exile route) the card returns under its owner's control as a NEW object (summoning sick, enter triggers fire again -- Mimic's counter; no unearth status, no delayed end-step sacrifice). A token championed ceases to exist. A card returning DURING our end-step sweeps (a Soulstoke-put Nova sacrificed by its delayed trigger) misses that end step's beginning-of-end-step triggers (CR 603.2). Key line: cast it in the POST-COMBAT main to champion an Elemental that already attacked and would be sacrificed at end step (Spark / Ball Lightning / Hellspark / Firecat / a Soulstoke put / an unearthed Hellspark) -- the deck searches a second main for it (GoldFishRunner::DeckUsesSecondMain reads champion_subtype). PARTIAL (unreachable here): the champion leaving before its enter trigger resolves (the card would stay exiled forever) -- nothing can respond in a goldfish.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "champion_subtype": "Elemental"
+   }
   }
  ]
 }

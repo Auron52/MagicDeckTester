@@ -22,7 +22,9 @@
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -281,4 +283,198 @@ TEST_CASE("Spark Elemental / Ball Lightning: hasty, sacrificed at the beginning 
     CHECK(s.battlefield.empty());
     CHECK(CountRe(s.players[0].graveyard, "Spark Elemental") == 1);
     CHECK(CountRe(s.players[0].graveyard, "Ball Lightning") == 1);
+}
+
+// ---- Nova Chaser: CHAMPION an Elemental (CR 702.72; CardParams::champion_subtype) ------------------
+namespace
+{
+// Enter a Nova Chaser the way every entry site does (push, then the enter cascade), the searched pick
+// installed as the cast / put sites install it. Returns its card number.
+int EnterNova(GameState& s, int pick, bool sac_at_end = false)
+{
+    Permanent p;
+    p.card              = DRe("Nova Chaser").card;
+    p.card.m_number     = g_nre++;
+    p.controller_index  = 0;
+    p.owner_index       = 0;
+    p.entered_this_turn = true;
+    p.sac_at_end_step   = sac_at_end;
+    s.battlefield.push_back(p);
+    const ChampionPinScope pin(p.card.m_number, pick);
+    FireEtbWatchers(s, 0, static_cast<int>(s.battlefield.size()) - 1);
+    FireOwnEtbTriggers(s, 0, static_cast<int>(s.battlefield.size()) - 1);
+    return p.card.m_number;
+}
+int BfNum(const GameState& s, int num)
+{
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()); ++i)
+    { if (s.battlefield[i].card.m_number == num) { return i; } }
+    return -1;
+}
+}   // namespace
+
+TEST_CASE("Nova Chaser: champion exiles the CHOSEN Elemental, linked; the champion stays")
+{
+    GameState s = BoardRe();
+    REQUIRE(DRe("Nova Chaser").params.champion_subtype == "Elemental");
+    CHECK(DRe("Nova Chaser").card.m_power.value_or(0) == 10);
+    CHECK(DRe("Nova Chaser").card.m_toughness.value_or(0) == 2);
+    CHECK(DRe("Nova Chaser").card.m_mana_cost.ManaValue() == 4);
+    CHECK_FALSE(DRe("Nova Chaser").card.HasKeyword(Keyword::Haste));
+    const int spark = PutRe(s, "Spark Elemental");
+    const int ball  = PutRe(s, "Ball Lightning");
+    PutRe(s, "Mountain");
+    const int nova = EnterNova(s, ball);   // the searched pick: Ball Lightning, not the provider's front
+    REQUIRE(BfNum(s, nova) >= 0);
+    CHECK(BfNum(s, ball) < 0);
+    CHECK(BfNum(s, spark) >= 0);
+    REQUIRE(CountRe(s.exile, "Ball Lightning") == 1);
+    CHECK(CardIsChampionExile(s.exile.back()));
+    CHECK(ChampionExileSource(s.exile.back()) == nova);
+    CHECK(s.battlefield[static_cast<std::size_t>(BfNum(s, nova))].linked_exile_number == ball);
+    CHECK(CountRe(s.players[0].graveyard, "Ball Lightning") == 0);   // exiled, not died
+    CHECK_FALSE(s.creature_died_this_turn);
+}
+
+TEST_CASE("Nova Chaser: no other Elemental (or a decline) -> the champion is sacrificed")
+{
+    GameState s = BoardRe();
+    PutRe(s, "Mountain");
+    const int nova = EnterNova(s, 0);
+    CHECK(BfNum(s, nova) < 0);
+    CHECK(CountRe(s.players[0].graveyard, "Nova Chaser") == 1);
+    // A decline with a candidate on the board: the candidate stays, the champion goes.
+    const int spark = PutRe(s, "Spark Elemental");
+    const int nova2 = EnterNova(s, -1);
+    CHECK(BfNum(s, nova2) < 0);
+    CHECK(BfNum(s, spark) >= 0);
+    CHECK(CountRe(s.players[0].graveyard, "Nova Chaser") == 2);
+    // Another Nova Chaser is "another Elemental": champions it rather than itself.
+    const int nova3 = EnterNova(s, 0);   // unpinned: the provider's front (the doomed Spark first)
+    CHECK(BfNum(s, nova3) >= 0);
+    CHECK(BfNum(s, spark) < 0);
+    CHECK(CountRe(s.exile, "Spark Elemental") == 1);
+}
+
+TEST_CASE("Nova Chaser: a Metallic Mimic that chose Elemental is an Elemental you control")
+{
+    GameState s = BoardRe();
+    const int mimic = PutRe(s, "Metallic Mimic");
+    s.battlefield.back().card.m_subtypes.push_back("Elemental");   // its chosen type (layer 4)
+    const int nova = EnterNova(s, mimic);
+    CHECK(BfNum(s, nova) >= 0);
+    CHECK(BfNum(s, mimic) < 0);
+    REQUIRE(CountRe(s.exile, "Metallic Mimic") == 1);
+}
+
+TEST_CASE("Nova Chaser: when it leaves, the championed card returns as a NEW object")
+{
+    GameState s = BoardRe();
+    const int spark = PutRe(s, "Spark Elemental");
+    s.battlefield.back().NoteAttackDeclared();
+    s.battlefield.back().tapped = true;
+    const int nova = EnterNova(s, spark);
+    REQUIRE(BfNum(s, spark) < 0);
+    SacrificePermanentAt(s, 0, BfNum(s, nova));
+    CHECK(CountRe(s.players[0].graveyard, "Nova Chaser") == 1);
+    const int i = BfNum(s, spark);
+    REQUIRE(i >= 0);
+    const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+    CHECK(static_cast<bool>(p.entered_this_turn));      // summoning sick (Spark has haste of its own, printed)
+    CHECK_FALSE(static_cast<bool>(p.tapped));
+    CHECK(p.AttacksThisTurn() == 0);
+    CHECK(CountRe(s.exile, "Spark Elemental") == 0);
+}
+
+TEST_CASE("Nova Chaser: an UNEARTHED Hellspark championed returns free of unearth")
+{
+    GameState s = BoardRe();
+    GyRe(s, "Hellspark Elemental");
+    REQUIRE(ApplyUnearth(s, 0, "Hellspark Elemental"));
+    const int hs = s.battlefield.back().card.m_number;
+    const int nova = EnterNova(s, hs);
+    REQUIRE(BfNum(s, hs) < 0);
+    REQUIRE(CountRe(s.exile, "Hellspark Elemental") == 1);
+    CHECK(CardIsChampionExile(s.exile.back()));
+    // The end step's unearth sweep finds nothing (the object is gone).
+    PerformEndStepUnearthExiles(s);
+    CHECK(CountRe(s.exile, "Hellspark Elemental") == 1);
+    // The champion leaves: Hellspark returns as a new object, not unearthed -- its later sacrifice puts
+    // it into the GRAVEYARD (unearthable again), not exile.
+    SacrificePermanentAt(s, 0, BfNum(s, nova));
+    const int i = BfNum(s, hs);
+    REQUIRE(i >= 0);
+    CHECK_FALSE(static_cast<bool>(s.battlefield[static_cast<std::size_t>(i)].unearthed));
+    CHECK_FALSE(static_cast<bool>(s.battlefield[static_cast<std::size_t>(i)].temp_haste));
+    SacrificePermanentAt(s, 0, i);
+    CHECK(CountRe(s.players[0].graveyard, "Hellspark Elemental") == 1);
+    CHECK(CountRe(s.exile, "Hellspark Elemental") == 0);
+}
+
+TEST_CASE("Nova Chaser: post-combat champion of a doomed attacker survives the end step")
+{
+    GameState s = BoardRe();
+    s.deck_has_endstep_self_sac = true;
+    for (int k = 0; k < 4; ++k) { PutRe(s, "Mountain"); }
+    const int spark = PutRe(s, "Spark Elemental");
+    s.battlefield.back().NoteAttackDeclared();
+    s.battlefield.back().tapped = true;
+    const int put = PutRe(s, "Blistering Firecat");       // a Soulstoke-style put: sacrificed at end step
+    s.battlefield.back().sac_at_end_step = true;
+    HandRe(s, "Nova Chaser");
+    // The post-combat enumeration offers one cast per candidate (+ a decline), the pick in enchant_target.
+    std::vector<int> picks;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/false))
+    {
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Nova Chaser")
+        { picks.push_back(a.enchant_target); }
+    }
+    CHECK(std::find(picks.begin(), picks.end(), spark) != picks.end());
+    CHECK(std::find(picks.begin(), picks.end(), put) != picks.end());
+    CHECK(std::find(picks.begin(), picks.end(), -1) != picks.end());
+    CHECK(std::find(picks.begin(), picks.end(), 0) == picks.end());   // no same-plan entrant: no dup
+    s.players[0].hand.clear();
+    const int nova = EnterNova(s, spark);
+    // The end step (both worlds' order): the delayed sacrifice, then the self-sacrifices.
+    PerformEndStepUnearthExiles(s);
+    PerformEndStepDelayedSacrifices(s);
+    DestroyAttackedAtEndStep(s);
+    PerformEndStepSelfSacrifices(s);
+    CHECK(BfNum(s, nova) >= 0);                                   // the champion lives
+    CHECK(CountRe(s.exile, "Spark Elemental") == 1);              // the attacker is preserved in exile
+    CHECK(CountRe(s.players[0].graveyard, "Spark Elemental") == 0);
+    CHECK(CountRe(s.players[0].graveyard, "Blistering Firecat") == 1);
+    // A delayed "sacrifice at end step" pointing at the championed object finds nothing when it returns.
+    SacrificePermanentAt(s, 0, BfNum(s, nova));
+    const int i = BfNum(s, spark);
+    REQUIRE(i >= 0);
+    CHECK_FALSE(static_cast<bool>(s.battlefield[static_cast<std::size_t>(i)].sac_at_end_step));
+}
+
+TEST_CASE("Nova Chaser: a card returning DURING the end step misses that end step's own trigger")
+{
+    GameState s = BoardRe();
+    s.deck_has_endstep_self_sac = true;
+    const int spark = PutRe(s, "Spark Elemental");
+    s.battlefield.back().NoteAttackDeclared();
+    const int nova = EnterNova(s, spark, /*sac_at_end=*/true);   // a Soulstoke-put Nova
+    REQUIRE(BfNum(s, spark) < 0);
+    PerformEndStepUnearthExiles(s);
+    PerformEndStepDelayedSacrifices(s);    // Nova sacrificed -> Spark returns, a new object
+    DestroyAttackedAtEndStep(s);
+    PerformEndStepSelfSacrifices(s);       // ...whose "at the beginning of the end step" never triggered
+    CHECK(BfNum(s, nova) < 0);
+    CHECK(BfNum(s, spark) >= 0);
+    // The NEXT end step (the opponent's) does sacrifice it.
+    PerformEndStepSelfSacrifices(s);
+    CHECK(BfNum(s, spark) < 0);
+    CHECK(CountRe(s.players[0].graveyard, "Spark Elemental") == 1);
+}
+
+TEST_CASE("Nova Chaser: identical doomed attackers fold to one variant; distinct states do not")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 2; ++k) { PutRe(s, "Spark Elemental"); s.battlefield.back().NoteAttackDeclared(); s.battlefield.back().tapped = true; }
+    PutRe(s, "Spark Elemental");            // untapped, did not attack: a different choice
+    CHECK(ChampionVariantTargets(s, 0, "Elemental").size() == 2);
 }

@@ -4930,6 +4930,23 @@ function digPanelHtml(d){
        `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">Destroy nothing${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
     return h;
   }
+  // CHAMPION ("(champion)"; Nova Chaser): exile another permanent of the subtype, or none -- which
+  // sacrifices the champion. Tiles = every candidate; the button declines.
+  if (/\s*\(champion\)\s*$/.test(d.source||'')) {
+    const src=(d.source||'').replace(/\s*\(champion\)\s*$/,'');
+    let h=`<h3>${esc(src)} — champion which permanent?</h3>`;
+    h+=`<div class="sub">${esc(src)} entered: sacrifice it unless you exile another permanent of the championed type you control. The exiled card returns to the battlefield (as a new object) when ${esc(src)} leaves. Click one to exile it, or exile nothing and sacrifice ${esc(src)}.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)} — exile it">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">Exile nothing (sacrifice ${esc(src)})${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
+    return h;
+  }
   // Skyclave Apparition ("(may exile)") / White Orchid Phantom ("(may destroy nonbasic land)"):
   // optional single-target ETBs -- the tiles are every legal target, the button takes none.
   {

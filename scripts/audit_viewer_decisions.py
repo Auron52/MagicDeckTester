@@ -459,6 +459,10 @@ MANIFEST = {
     # Skyclave Apparition: "exile up to one target nonland, nontoken permanent you don't control with MV
     # <= N" -- the `dig` "(may exile)" modal over every legal target (-1 = none) at ResolveEtbExileUpToOne.
     "etb_exile_opp_nonland_nontoken_max_mv": ("dig", lambda v: v is not None and v >= 0),
+    # CHAMPION (Nova Chaser): "sacrifice it unless you exile another <subtype> you control" -- the `dig`
+    # "(champion)" modal over every candidate (-1 = exile nothing, the champion is sacrificed) at
+    # ResolveChampionEtb (human play gets no champion cast variants).
+    "champion_subtype": ("dig", truthy),
     # White Orchid Phantom: "destroy up to one target nonbasic land" -- the `dig` "(may destroy nonbasic
     # land)" modal over every nonbasic land, both sides (-1 = none), then `tutor_etb` for our basic.
     "etb_destroy_nonbasic_land_optional": ("dig", truthy),
@@ -2237,6 +2241,9 @@ def modeled_tokens(card):
     # Skyclave Apparition's optional exile (the `dig` "(may exile)" pick IS its target choice); White
     # Orchid Phantom's optional nonbasic-land destroy (the `dig` pick) + our basic search (tutor_etb).
     if p.get("etb_exile_opp_nonland_nontoken_max_mv", -1) >= 0:
+        t.add("target")
+    # Nova Chaser's champion pick (the `dig` "(champion)" modal IS its exile choice).
+    if p.get("champion_subtype"):
         t.add("target")
     if p.get("etb_destroy_nonbasic_land_optional"):
         t.update({"target", "search"})

@@ -1653,7 +1653,7 @@ int PutFromHandLegalIndex(const GameState& state, int controller, int source_id,
 }
 
 bool ApplyPutFromHand(GameState& state, int controller, int source_id,
-                      const std::string& put_name)
+                      const std::string& put_name, int champion_pick)
 {
     const int hi = PutFromHandLegalIndex(state, controller, source_id, put_name);
     if (hi < 0) { return false; }
@@ -1695,9 +1695,13 @@ bool ApplyPutFromHand(GameState& state, int controller, int source_id,
                    /*dispositions*/ { "\xE2\x86\x92 battlefield (from hand)" });
     }
     FireEtbWatchers(state, controller, slot);   // universal cascade: Puresteel draw fires here
-    FireOwnEtbTriggers(state, controller, slot);
-    if (state.battlefield[slot].card.HasSupertype(Supertype::Legendary))
-    { EnforceLegendRule(state, controller); }
+    const bool legendary = state.battlefield[slot].card.HasSupertype(Supertype::Legendary);
+    {
+        const ChampionPinScope _champ(raw.m_number, champion_pick);   // Nova Chaser put by Soulstoke
+        FireOwnEtbTriggers(state, controller, slot);
+    }
+    // (a champion's enter trigger may have removed a permanent -- `slot` is stale from here on)
+    if (legendary) { EnforceLegendRule(state, controller); }
     return true;
 }
 
