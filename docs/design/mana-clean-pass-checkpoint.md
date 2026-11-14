@@ -1535,6 +1535,18 @@ fungus 1,880, gods 4,300 (first run).
   zero changed win turns. Gate pirates-C2r5-20261114 (89000-93999): **0** issues,
   oracle-off byte-identical. The known s30070533 residual is still open; a clean independent
   block does not erase its exact repro.
+  **Round 6, `MTG_PREPAY_CCO_VIAL_DIG` (6911ec69d, default ON; =0 restores joint prepay):**
+  a Vial-put ETB dig opens an undeclared continuation. When a castable noncreature already in
+  hand needs coloured mana, creature-only sources are up, and the joint bill plus that card
+  exceeds unrestricted supply, decline the joint prepay and pay the named casts in order.
+  This prevents prepay from tapping Mountain before Crewmate digs a further cast: s30070533
+  3 -> 0 APPLY-DROPs, =0 restores all three. Units 3096/3096. PGO b8d5fa00f80b;
+  combined smoke 203/203 and regression 322/322 byte-identical to GT, searched slower 0,
+  strict references 343 ok / 493 repaired / 1 beaten with no play drift or enum gap.
+  Held-out A/B seed 90300000, 18,000 pairs, every deck net 0, zero changed wins. Gate
+  pirates-C2r6-20261114 (94000-98999) **0** issues, oracle-off byte-identical. Exact
+  earlier residuals remain: s30088544 three need-later Captain APPLY-DROPs without a CCO
+  source on board, and s30086950 one DOMINATED-ONESHOT Treasure payment.
 * **Queue item E (2026-11-14): gods ENUM-GAP, Loam after a dredging draw (USER decision 12) -- BUILT, A/B net +3 ->
   PARKED, USER DECISION.** USER: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
   breakpoint. Same thing for the land drops that you pull from life."* `wip/gods-gy-option-demoted` 847943ebf (pushed;
