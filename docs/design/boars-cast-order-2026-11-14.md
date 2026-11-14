@@ -2,8 +2,10 @@
 
 ## Status
 
-**AI draft, not adopted.** The USER asked for a recommended order to review ("If you want a ruling on the cast
-order I recommend you come up with a recommended order and I review it"). Boars plays the generic order today.
+**APPROVED by the USER 2026-11-14** ("That order seems reasonable to me.", after the full list below). The USER
+asked for a recommended order to review ("If you want a ruling on the cast order I recommend you come up with a
+recommended order and I review it"). Adoption = `MTG_BOARS_CAST_ORDER` DEFAULT ON, landing after the in-flight
+fetch-width tiers (chain1) so the two play changes are accepted separately.
 
 The order applies to **the casts a plan has already chosen for this main phase**. Whether a card is cast at all,
 and which creature Ilharg puts into play, stays with the plan search. Card text below is taken from
@@ -25,7 +27,30 @@ Two problems follow from the card text:
 2. **Herald of Ilharg comes after the cheap creatures.** It gets counters only from creature spells cast *after*
    it is on the battlefield, so the dorks and Flinthoof cast before it add nothing.
 
-## Proposed order
+## Proposed order -- the full list
+
+Every card in the main deck, one position each. Ties within a tier are broken by mana value, then by name, so the
+order is total. A second copy of a card goes directly after the first.
+
+| # | Card | MV |
+|---:|---|---:|
+| 1 | Land drop (a fetchland resolves on play) | -- |
+| 2 | Herald's Horn | 3 |
+| 3 | Lightning Greaves | 2 |
+| 4 | Herald of Ilharg | 4 |
+| 5 | Birds of Paradise | 1 |
+| 6 | Ignoble Hierarch | 1 |
+| 7 | Flinthoof Boar | 2 |
+| 8 | Zhur-Taa Druid | 2 |
+| 9 | Somberwald Sage | 3 |
+| 10 | Raggadragga, Goreguts Boss | 4 |
+| 11 | Ilharg, the Raze-Boar | 5 |
+| 12 | End-Raze Forerunners | 8 |
+| 13 | Decimator of the Provinces (hard cast or emerge) | 10 |
+
+Positions 5-10 have no card-text reason to differ from each other. Their order is cheapest first, then by name.
+
+## Why each position (tiers)
 
 Earlier rows execute first.
 
