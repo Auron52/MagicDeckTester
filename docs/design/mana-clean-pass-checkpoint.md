@@ -1287,7 +1287,7 @@ fungus 1,880, gods 4,300 (first run).
   NEXT (USER 2026-11-13, "That shouldn't show up in anything"): literal route (a) -- no single-colour unit ever booked
   as `wild`; design notes in logs/mana-clean-chain/A-wild-handoff.md.
 
-* **Queue item W (Codex continuation, 2026-11-14): generic prepay reassignment -- validation IN PROGRESS on
+* **Queue item W (Codex continuation, 2026-11-14): generic prepay reassignment -- VALIDATED on
   `wip/item-W-defer`.** A literal-colour generic payment now retains a credit for the colour it spent, so a later
   pip can take that unit back and move the generic to another unit that was already floating. The per-cast payer
   creates the same credit for a one-of-each Karoo paying exactly one generic pip and floating its other colour.
@@ -1304,9 +1304,13 @@ fungus 1,880, gods 4,300 (first run).
   each line inspected), depth-zero Bruna gi708 T7->T8 after different T3 play and divergent draws. Fresh paired
   A/B (seed 89900000, 46,400 pairs across 52 main decks, 5,000/arm at d5 plus 3,000/arm at d3 for each of
   Dragons/Niv/EDF/Bruna): every deck net <= 0; Dragons net -2 turns (2 faster, 0 slower), Niv net 0
-  (1 faster, 1 slower at d5), every other deck net 0. **PENDING:** Niv d5 gi2565's depth-8 unlimited recovery
-  is running; 2HG held-out A/B, GT acceptance/check_gt_logs, then disposition item W and the residual hand-generic
-  issue. No fresh mana-clean 5000-game block has run for this item yet.
+  (1 faster, 1 slower at d5), every other deck net 0. Niv d5 gi2565's slower T6->T7 recovers to T6 at
+  depth 8 unlimited (4,353 seconds, 18.15M units). A second pooled A/B covers all 47 2HG variants on the same
+  fresh seed (16,200 pairs): every variant net 0, no faster or slower games; Dragons 2HG has 9 same-turn play
+  changes. All three searched smoke line changes were inspected. Accepted the 4 smoke and 5 regression
+  digest changes; `check_gt_logs.py` is clean at 1170/1170. The generic prepay reassignment is adopted;
+  Bruna's hand-generic sideboard demand and the older Niv/EDF literal losses remain separate residuals.
+  No fresh mana-clean 5000-game block has run for this item yet.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",

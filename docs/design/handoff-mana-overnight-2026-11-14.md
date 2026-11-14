@@ -89,7 +89,7 @@ completeness hole: when the true-colour booking refuses an ILLEGAL assignment it
 re-assignment of the same units (e.g. a bundle's G moved onto generic). Please re-check the round-2 claim "KNOWN GAPS
 (permissive, never lossy)" against items 1 and 4.
 
-## Mana-chain follow-up (Codex, 2026-11-14; WIP until gates finish)
+## Mana-chain follow-up (Codex, 2026-11-14; item W adopted)
 - **Item 1: repaired in `wip/item-W-defer`.** The prepay now prices the second Incubator's same-line discount;
   the literal generic credit permits reassignment. Dragons gi363 wins T5 at shipped settings and d8 b0.
 - **Item 2: correctness cost retained.** Niv gi380/522/244 remain T6/T7/T4; their old faster payments used
@@ -103,8 +103,11 @@ re-assignment of the same units (e.g. a bundle's G moved onto generic). Please r
 - Validation in the Codex worktree: units 3093/3093, PGO built; smoke searched slower 0 and regression
   searched slower 0, with four same-score regression line changes inspected. Strict reference replay had
   no play drift or enum gap. The held-out main-deck A/B (46,400 paired games) has per-deck net <= 0:
-  Dragons -2 turns, Niv 0 (one faster, one slower), all other decks 0. Niv's slower d5 gi2565 is
-  undergoing the required d8 b0 recovery check; 2HG A/B and GT promotion remain pending.
+  Dragons -2 turns, Niv 0 (one faster, one slower), all other decks 0. Niv's slower d5 gi2565
+  recovers from T7 to T6 at d8 b0 (72.5 minutes). Across all 47 2HG variants, 16,200 paired games
+  have net zero for every deck and no changed win turns. All three searched smoke line changes were
+  inspected; the 4 smoke and 5 regression digest changes were accepted, and `check_gt_logs.py` passes
+  at 1170/1170. Item W is adopted; items 3 and 4 above remain separate residuals.
 
 ## Not yours (kept by the Spirits session)
 - Spirits 8 games: all restored by `MTG_SPIRITS_NO_FETCH_HOLD=0` (the USER's fetch-hold drop) -- a Spirits provider
