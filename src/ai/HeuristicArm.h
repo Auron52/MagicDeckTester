@@ -918,6 +918,8 @@ enum Slot : int
     SPIRITS_NO_FETCH_HOLD,    // MTG_SPIRITS_NO_FETCH_HOLD  TEMPORARY A/B SELECTOR (Spirits Stage 1 fetch_hold_review): SpiritsProvider declines the battlefield fetch hold (Flooded Strand cracks on play). Default OFF = the hold is offered (root default). Measurement only; the hold policy is a USER decision
     SPIRITS_FETCH_PRIORITY,   // MTG_SPIRITS_FETCH_PRIORITY  the USER's Flooded Strand target rule (2026-11-13; SpiritsFetchRule): order every target, search the pick plus one maker per missing W/U/B colour. Default ON; =0 -> the lossless every-target fan
     SPIRITS_LORD_VALUE,       // MTG_SPIRITS_LORD_VALUE  Spirits Q8 (USER 2026-11-13 'try to adjust if it seems to make sense'): EvalCard (the d0 runner and the beyond-horizon playout) credits a Spirit lord with its +N on every other Spirit we control, not just its own body (SpiritsProvider::ComboCardValue). ADOPTED default ON 2026-11-13 (seed 630000: d0 -0.068, d3/d5 0 slower, cheaper); =0 -> the own-body price
+    REDELEM_NOVA_MAIN2,       // MTG_REDELEM_NOVA_MAIN2  Red Elementals Stage 4a (USER 2026-11-14: "Note that Nova Chaser should be cast main 2 if it is hardcast, but it might also be dropped in main 1 via Incandescent Soulstoke."): a champion card (champion_subtype) with no haste access is not HARDCAST in the pre-combat main (RedElementalsProvider::CollectedActionAllowed); the Soulstoke put stays in both mains. Human play and MTG_UNPRUNE=championmain2 keep both. Default ON; =0 -> the main-1 hardcast is offered
+    REDELEM_OPAQUE_ORDER,     // MTG_REDELEM_OPAQUE_ORDER  Red Elementals Stage 4a: RedElementalsProvider::OrderOpaqueCastsByRank -- an order-opaque cast set (Legion Leadership with the casts around it) is rank-sorted (generic CastOrderRank: creatures 10 before noncreatures 20, so the doubler follows the bodies it doubles) instead of left to the search. The behaviour the deck had on MorphProvider; USER-owned cast-order item, surfaced. Default ON; =0 -> the search owns the order
     COUNT
 };
 
@@ -1780,6 +1782,8 @@ inline const char* Name(int slot)
         "MTG_SPIRITS_NO_FETCH_HOLD",
         "MTG_SPIRITS_FETCH_PRIORITY",
         "MTG_SPIRITS_LORD_VALUE",
+        "MTG_REDELEM_NOVA_MAIN2",
+        "MTG_REDELEM_OPAQUE_ORDER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -344,6 +344,12 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Traft's end-of-combat Angel / affinity for Spirits. It rode Vial (Aether Vial) before its own
         // cards landed.
         {"Spirits", "Spirits"},
+        // Red Elementals (onboarding 2026-11-14, Stage 4a): its own RedElementalsProvider (a DeckProvider
+        // derivation holding the champion / Thunderkin heuristics and the USER's Nova Chaser main-2 rule),
+        // routed ABOVE `morph` by Nova Chaser's champion_subtype, Thunderkin Awakener's
+        // attack_trigger_reanimate or an Elemental's unearth_cost. It rode MorphProvider by accident
+        // (endstep_sacrifice_self / Firecat's morph_cost / Legion Leadership's trick_double_power).
+        {"Red Elementals", "RedElementals"},
     };
 
     namespace fs = std::filesystem;
