@@ -185,3 +185,5 @@ target branching cost unmeasured.
   other if all else fails and even then try to make it only 2 options."
   -> keep OnPlayFetchWidth = 1; fix the ORDER first (boars-rank: castable-pip bipartite match, MTG_FETCH_RANK_PIPS).
   A width-2 fallback only for top-1 misses no deliberate rule can resolve, never 3+. Relayed in rank-handoff.md.
+  USER follow-up (verbatim): "Boars and such do not fall into the same category. The search choices are obvious."
+  -> a width-2 fallback, if ever needed, is scoped to colour-complex decks (Creature Giving class); Boars stays top-1.
