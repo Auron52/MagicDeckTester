@@ -1,16 +1,15 @@
-# Regression ground truth -- commit 077404d06  date 2026-11-14
+# Regression ground truth -- commit b96880022  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
-# accepted-with-regressions (smoke, 2026-11-14): Boars engine work (2026-11-13), boars+boars2hg NEW. LEGEND RULE AS SBA (correctness): angels/critter/lhc/minotaur2hg/galadriel/melira/cyclone searched moves are same-score line changes or churn (cyclone d5 gi54, melira d5 gi64 recover at 4x); galadriel d0 gi322/gi768 T7->unwon = old model tapped a 2nd Grey Havens for mana before the legend rule removed it. WINDSWEPT HEATH battlefield fetchland (correctness model change): creature_giving searched 24 slower/2 faster (net +24; 13 churn, 11 persist with draws diverged), d0 +129; antilife d0 +30; fivecolour d0 +28, d3 gi11 churn, gi24 persists (draws diverge). OPEN DEFECT exposed, not fixed: the fetched land's mana is often unused in the crack turn (CG d0 gi8 T3 4 open mana, Defense of the Heart uncast; CG2hg d5 gi9 T2 Suture Priest uncast with 2 open mana, persists at 16x).
 # accepted-with-regressions (regression, 2026-11-14): Boars engine work (2026-11-13), boars+boars2hg NEW (incl. backstop 30261). LEGEND RULE AS SBA (correctness): angels/cyclone/galadriel/goblins/jumbo/lhc/melira/midrangeburn2hg/pd/snow/soldiers move same-score or churn (snow d5 gi54, soldiers d5 gi87 recover at 4x; soldiers gi87 T4 on both arms at budget 0). WINDSWEPT HEATH battlefield fetchland: creature_giving searched 124 slower/8 faster (net +119; 18 churn, 106 persist), d0 +132; antilife d0 +24, d5 s3003 gi332 T8->unwon churn (recovers at 4x); fivecolour d0 +3. OPEN DEFECT, not fixed (src frozen for this accept): after a battlefield-fetch crack the turn casts nothing -- CG backstop d3 s30001 gi14 at UNLIMITED budget: T1 Heath cracked to untapped Breeding Pool (life 17), Birds of Paradise + Essence Warden in hand, no cast in main 1 or main 2. GT moves again when it is fixed.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
-boars_smoke_d0_s1001=5.7800/5105de2ae37402b1
-boars_smoke_d3_s1001=5.0200/47960edc1805fecd
-boars_smoke_d5_s1001=5.0900/505cb4d4464fb2a7
-boars2hg_smoke_d5_s1001=5.4400/bae1c54400fac067
+boars_smoke_d0_s1001=5.4950/358dad2b6ea5c317
+boars_smoke_d3_s1001=4.8600/d15f9b0f5104a61b
+boars_smoke_d5_s1001=4.9200/ae1d4ae05d2cc68b
+boars2hg_smoke_d5_s1001=5.2000/5cf9fc78366613c3
 morph_smoke_d0_s1001=4.7380/34fc50d3a92be7bd
 morph_smoke_d3_s1001=4.0200/eb01ec2903a67eb6
 morph_smoke_d5_s1001=4.0900/3a8343cd0bfcea70
@@ -84,9 +83,9 @@ auras_smoke_d5_s1001=4.1089/a13f3545c6498631
 goblins_smoke_d0_s1001=3.9810/3ccef3879cfef236
 goblins_smoke_d3_s1001=3.6800/ec74319d1b322f1e
 goblins_smoke_d5_s1001=3.6000/24ea48d08fde94b5
-creature_giving_smoke_d0_s1001=5.6490/a4a492402c51d2f0
-creature_giving_smoke_d3_s1001=4.6800/4cfeee668254a434
-creature_giving_smoke_d5_s1001=4.7533/c8c293d63f08745e
+creature_giving_smoke_d0_s1001=5.5130/31d4efd05582e582
+creature_giving_smoke_d3_s1001=4.6400/35e8d0553195787a
+creature_giving_smoke_d5_s1001=4.6467/ad8565f5b4b13eb5
 mirrorwing_smoke_d0_s1001=5.7140/814f5533ebc4f190
 mirrorwing_smoke_d3_s1001=4.4000/f488a11246e364ca
 mirrorwing_smoke_d5_s1001=4.2000/c80d55fc1180cd2e
@@ -137,7 +136,7 @@ burn2hg_smoke_d5_s1001=5.8200/fcfef7f1ea43e8e2
 th2hg_smoke_d5_s1001=4.6600/810d26dcdb95f739
 dragonstorm2hg_smoke_d5_s1001=4.6800/98b5986ad8a8e499
 auras2hg_smoke_d5_s1001=4.4200/e756a3364e13656a
-creature_giving2hg_smoke_d5_s1001=5.0200/1cd65acf2ef6f3fd
+creature_giving2hg_smoke_d5_s1001=4.8800/a46ff167d033b5df
 mirrorwing2hg_smoke_d5_s1001=4.6400/9704035457911953
 stompy2hg_smoke_d5_s1001=4.2600/9bc766972b933e60
 kittyv32hg_smoke_d5_s1001=4.3600/73c63e6d63c8ab1d

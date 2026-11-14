@@ -121,7 +121,7 @@ boars2hg_overnight_d5_s5005	100010
 boars2hg_overnight_d5_s6006	134891
 boars2hg_overnight_d5_s7007	119827
 boars2hg_regression_d5_s2002	103808
-boars2hg_smoke_d5_s1001	249244
+boars2hg_smoke_d5_s1001	107087
 boars_overnight_d0_s10010	1
 boars_overnight_d0_s4004	1
 boars_overnight_d0_s6006	1
@@ -140,8 +140,8 @@ boars_regression_d5_s2002	77074
 boars_regression_d5_s3003	77876
 boars_regression_d5_s30261	9242
 boars_smoke_d0_s1001	1
-boars_smoke_d3_s1001	83979
-boars_smoke_d5_s1001	84891
+boars_smoke_d3_s1001	36492
+boars_smoke_d5_s1001	36895
 breaching2hg_smoke_d3_s1001	103
 breaching2hg_smoke_d5_s1001	56
 breaching_overnight_d0_s10010	1
@@ -247,7 +247,7 @@ colossus_smoke_d0_s1001	1
 colossus_smoke_d3_s1001	2404
 colossus_smoke_d5_s1001	1743
 creature_giving2hg_smoke_d3_s1001	10360
-creature_giving2hg_smoke_d5_s1001	24995
+creature_giving2hg_smoke_d5_s1001	13834
 creature_giving_overnight_d0_s10010	1
 creature_giving_overnight_d0_s4004	1
 creature_giving_overnight_d0_s6006	1
@@ -270,8 +270,8 @@ creature_giving_regression_d5_s2002	16230
 creature_giving_regression_d5_s30001	114753
 creature_giving_regression_d5_s3003	16081
 creature_giving_smoke_d0_s1001	1
-creature_giving_smoke_d3_s1001	12936
-creature_giving_smoke_d5_s1001	16750
+creature_giving_smoke_d3_s1001	9309
+creature_giving_smoke_d5_s1001	9282
 critter2hg_smoke_d3_s1001	4889
 critter2hg_smoke_d5_s1001	1177
 critter_overnight_d0_s10010	1
