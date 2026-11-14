@@ -28,6 +28,11 @@ Cyclone backstop decision: **keep the fixed 30031..30033 block**. Seed 30033
 now hits the two-million-unit cap, which is exactly the regression signal
 specified by `.claude/skills/regression-testing.md`; re-screening would hide it.
 The stale `test/regression_cases.sh` comment was corrected.
+Existing shipped game counts stay as-is. The regression-testing skill permits
+resizing the overnight entry rows when a keep table is adopted, with a
+like-for-like baseline first; a general trim would break that suite rule.
+The cheap-deck `fast` → `complete` keep-table queue idea remains with the
+artifact-queue work, which the USER previously paused.
 
 ## 1. Snow package (historical pre-landing snapshot; current status above)
 
