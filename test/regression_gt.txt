@@ -1,4 +1,4 @@
-# Regression ground truth -- commit bad810b98  date 2026-11-13
+# Regression ground truth -- commit fc0653cc6  date 2026-11-14
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-12): Full 2026-11-12 rebaseline (238 commits since 11-10): searched n=239002 net -688 turns (649 slower / 1149 faster; 24 newly unwon, 78 newly won), d0 net -6735. Every slower searched game classified: 183 churn (recover at 4x/16x); 93 Alchemist = attacker-tap legality fix 1ab127b24 (paired on these cells 1ab127b24^->1ab127b24 +126, 125 slower: old wins paid Ezuri pumps with tapped attackers; later commits incl. the Living Wish rules -47); 133 draw-divergent (variance); 240 same-draws line changes: Hinata/Hinata2HG 204 from the Hinata2 artifact refresh e55b07bd6 (VL adopted; its keep table landed although its verdict was TRADE = USER's call, surfaced; also Hinata d0 +72 unwon), Hydras 23 (USER cast order/MAX_X/discard buckets), Gods 6, Dragonstorm 4, EDF 1, Shadowborn 2 (s6006 gi72 = USER Ritual-after-Stone rule 496b4ae35; s7007 gi183 idles T4-T5, follow-up). Still binding from 11-10: Angels, Angels2HG, Bruna small searched slowdowns and TH oracle seeds 5216/8468 remain follow-ups.
 # accepted-with-regressions (smoke, 2026-11-13): Spirits integration (post-rebase): gods flashback state-key fix 8097213a2 + martyr graveyard cast at rank 507049f75 (explained); Spirits admitted (integrator G)
@@ -203,10 +203,10 @@ alchemist2hg_smoke_d5_s1001=5.1400/c93023e46ecbe419
 elementals_smoke_d0_s1001=5.6110/85ecb7b43dc61e1f
 elementals_smoke_d3_s1001=4.4400/72ba596c1b285a5d
 elementals_smoke_d5_s1001=4.3360/616b849211c6c5a1
-martyr_smoke_d0_s1001=6.0680/f9485c066a4d213a
-martyr_smoke_d3_s1001=5.1800/f52e2a549a880fcd
-martyr_smoke_d5_s1001=5.2500/d4ca095ade01985a
-martyr2hg_smoke_d5_s1001=5.4400/f3d0c6f764164401
+martyr_smoke_d0_s1001=5.8430/313c984b7fa0e075
+martyr_smoke_d3_s1001=5.1000/8063ba1126540a16
+martyr_smoke_d5_s1001=5.0600/261b5ebdb1b91f93
+martyr2hg_smoke_d5_s1001=5.1200/e6130d94ad5b9ae4
 spirits_smoke_d0_s1001=5.1240/840753f63d453d5e
 spirits_smoke_d3_s1001=4.5600/5ae199dc10023a65
 spirits_smoke_d5_s1001=4.6500/360cf28224b67fae
@@ -290,8 +290,8 @@ landfall_regression_d3_s30311=6.1000/dba49930fdcd0e92
 landfall_regression_d5_s30311=6.0000/130f612b6019652b
 elementals_regression_d3_s30001=4.2000/adccc6917e55e488
 elementals_regression_d5_s30001=4.2000/adccc6917e55e488
-martyr_regression_d3_s30201=5.4000/2ba439220df34f98
-martyr_regression_d5_s30201=5.2000/932815aca32b2dc5
+martyr_regression_d3_s30201=5.0000/8d50cb9aaad76d4e
+martyr_regression_d5_s30201=5.0000/8d50cb9aaad76d4e
 melira_regression_d3_s30001=4.5500/14a6ea695ade4937
 melira_regression_d5_s30001=4.5263/9ca9bdcb3e74d921
 minotaur_regression_d3_s30001=4.9000/f335d9b5734cc03b
@@ -526,11 +526,11 @@ merfolk_regression_d0_s2002=4.4450/dc0269a9f23bc850
 merfolk_regression_d3_s2002=4.2133/3844dd6262e39628
 merfolk_regression_d5_s2002=4.1800/6824241f83b7d727
 merfolk_regression_d5_s3003=4.1267/ec2e843240108e92
-martyr_regression_d0_s2002=6.0840/43b0bad1d8ed0c12
-martyr_regression_d3_s2002=5.5400/d2350721c3b73599
-martyr_regression_d5_s2002=5.5400/2a519c6298b73198
-martyr_regression_d5_s3003=5.4000/69759b43382fbc5f
-martyr2hg_regression_d5_s2002=5.7333/23b754057d0306da
+martyr_regression_d0_s2002=5.8580/8f240d01f05526fd
+martyr_regression_d3_s2002=5.2000/7e0a9aec339b9c4d
+martyr_regression_d5_s2002=5.1800/3336e658da8523a1
+martyr_regression_d5_s3003=5.0600/2b0d0d8375d412ab
+martyr2hg_regression_d5_s2002=5.2933/473bef39ea151b28
 spirits_regression_d0_s2002=5.0770/29eea603abe82d0f
 spirits_regression_d3_s2002=4.6533/f4f1e5e6f8ec3c7e
 spirits_regression_d5_s2002=4.6733/7864119ab0190a5f
