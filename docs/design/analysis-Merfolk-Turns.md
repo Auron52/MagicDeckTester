@@ -351,3 +351,50 @@ Oracle advisories are plan-variant choices. Python syntax check and
 verified**. Mihail and Prophets remain unimplemented, so the single full build
 is still owed after their source work. Add an actual as-enters prompt test
 and verify a selected non-default type changes only that copy's mana yield.
+
+### 2026-11-14 source integration and verification (supersedes earlier checkpoint statuses)
+
+Source checkpoints `84e7ac80b`, `615b975e3`, `7861faf1d`, `20d6bb88f`,
+`25b60829e`, and `b01b1ba7b` implement the six items in the exact remaining-task
+list above. Mihail has a real top-library cast source and per-copy paid token
+trigger; Prophets has linked champion exile/owner-aware return and searched
+combat sacrifice/extra turns; Three Tree City has a human type prompt and
+copy-specific scaled mana; Seahunter has searched target/fail-to-find variants;
+the viewer and Merfolk provider are wired. A normal hand land drop needed an
+explicit entry watcher call to show City's type chooser; that is in `b01b1ba7b`.
+Svyelun's conditional indestructible and ward are documented as unreachable
+in this passive-opponent deck's goldfish; attack draw remains implemented.
+
+The one full `./build.sh` was run after source integration. Its compile errors
+were fixed, and an incremental Release target rebuild passed. Focused tests
+passed: Three Tree City 2 cases/25 assertions, Seahunter 2/15, Mihail 2/18,
+Prophets 4/45. Coverage-only reports zero missing definitions. The static
+viewer audit (`--no-sweep`) and `node test/viewer_linebuild_check.js` pass;
+the latter reconstructs 4,713 lines with zero failures. A direct batch job
+reports `provider=MerfolkTurns`; `provider_audit.py --check` passes but its
+global profile list has no Merfolk Turns profile to route, so the direct job
+is the deck-specific route check. Live viewer replays reached Mihail `casttop`
+and `dig`, Prophets `champion` and `sacrifice`, City's type choice, and the
+Seahunter main-phase plan/target list. Parent retains regression, GT, push,
+play server and the full Codex-play sweep.
+
+The Scryfall snapshot update fetched the new Merfolk entries but returned
+HTTP 429 for 208 unrelated cards. The deck-specific cost audit compares all
+13 costed cards and finds no mismatch; the field audit checks all 17 cards
+with no hard mismatch. Prophets' `Champion` keyword is allowlisted because
+the mechanic is represented by `champion_merfolk`, not an engine keyword bit.
+The field audit also reports 17 pre-existing stale allowlist entries for
+unrelated decks, which are outside this source assignment.
+
+The seed-1 viewer replay exposed a Seahunter liveness discrepancy: the plan
+enumerator checked the canonical card definition, while activation liveness
+checked the compact library Card's subtype and silently declined the plan.
+The gate now checks the same canonical definition. In the exact turn-11 replay,
+choosing Rishadan Dockhand puts card 33 onto the battlefield, taps Seahunter,
+and removes its activation from the next menu. A compact-card unit test guards
+this case. The incremental Release rebuild passed; final focused tests pass
+(Seahunter 3 cases/18 assertions; City/Mihail/Prophets combined 10 cases/175
+assertions), coverage remains zero missing, and the viewer line-build check
+remains 4,713 lines/zero failures. `check_references_safe.py` scanned 89
+checkouts and passed. No full regression, GT, push, play server or full play
+sweep ran in this worktree.

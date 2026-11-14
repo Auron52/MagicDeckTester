@@ -48,5 +48,8 @@
  },
  "Emrakul, the Aeons Torn": {
   "keywords": "'Protection from spells that are one or more colors' is a real keyword but INERT here (PROVISIONAL, ledger Q12): nothing in a goldfish game targets, damages, enchants or blocks Emrakul with a colored spell in the Unpredictable Cyclone list (Remand targets the spell on the stack, where a permanent's protection does not function; the Ulamog triggers are colorless abilities). Annihilator is modelled via the annihilator param and stripped in-code (MODELED_ELSEWHERE_KEYWORDS). Mirrors the Progenitus protection precedent. Reviewed 2026-10-27 (Unpredictable Cyclone phase 2)."
+ },
+ "Wanderwine Prophets": {
+  "keywords": "Champion is modeled by champion_merfolk with linked exile, return, sacrifice if no champion, and searched human choice. The engine has no generic champion keyword tag. Reviewed 2026-11-14 (Merfolk Turns)."
  }
 }

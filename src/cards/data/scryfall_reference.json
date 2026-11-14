@@ -1956,6 +1956,15 @@
     "toughness": "4",
     "type_line": "Legendary Creature — Unicorn"
   },
+  "Emperor Mihail II": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "You may look at the top card of your library any time.\nYou may cast Merfolk spells from the top of your library.\nWhenever you cast a Merfolk spell, you may pay {1}. If you do, create a 1/1 blue Merfolk creature token.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Legendary Creature — Merfolk Noble"
+  },
   "Emrakul, the Aeons Torn": {
     "cmc": 15.0,
     "keywords": [
@@ -4269,6 +4278,15 @@
     "toughness": "2",
     "type_line": "Creature — Merfolk Shaman"
   },
+  "Merfolk Sovereign": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "Other Merfolk creatures you control get +1/+1.\n{T}: Target Merfolk creature can't be blocked this turn.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Merfolk Noble"
+  },
   "Metallic Mimic": {
     "cmc": 2.0,
     "keywords": [],
@@ -4299,8 +4317,8 @@
   "Millicent, Restless Revenant": {
     "cmc": 7.0,
     "keywords": [
-      "Flying",
-      "Affinity"
+      "Affinity",
+      "Flying"
     ],
     "mana_cost": "{5}{W}{U}",
     "oracle_text": "Affinity for Spirits (This spell costs {1} less to cast for each Spirit you control.)\nFlying\nWhenever Millicent or another nontoken Spirit you control dies or deals combat damage to a player, create a 1/1 white Spirit creature token with flying.",
@@ -5486,6 +5504,18 @@
     "toughness": "1",
     "type_line": "Creature — Elemental"
   },
+  "Rishadan Dockhand": {
+    "cmc": 1.0,
+    "keywords": [
+      "Islandwalk",
+      "Landwalk"
+    ],
+    "mana_cost": "{U}",
+    "oracle_text": "Islandwalk (This creature can't be blocked as long as defending player controls an Island.)\n{1}, {T}: Tap target land.",
+    "power": "1",
+    "toughness": "2",
+    "type_line": "Creature — Merfolk"
+  },
   "Rite of Flame": {
     "cmc": 1.0,
     "keywords": [],
@@ -5494,6 +5524,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Rogue's Passage": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{4}, {T}: Target creature can't be blocked this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Rolling Earthquake": {
     "cmc": 1.0,
@@ -5694,6 +5733,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Cat"
+  },
+  "Seahunter": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "{3}, {T}: Search your library for a Merfolk permanent card, put it onto the battlefield, then shuffle.",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Human Mercenary"
   },
   "Search for Tomorrow": {
     "cmc": 3.0,
@@ -5958,6 +6006,15 @@
     "mana_cost": "{1}{U}",
     "oracle_text": "As an additional cost to cast this spell, reveal a Merfolk card from your hand or pay {3}.\nWhen this creature enters, draw a card.",
     "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
+  },
+  "Silvergill Douser": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "{T}: Target creature gets -X/-0 until end of turn, where X is the number of Merfolk and/or Faeries you control.",
+    "power": "1",
     "toughness": "1",
     "type_line": "Creature — Merfolk Wizard"
   },
@@ -6481,6 +6538,18 @@
     "toughness": "2",
     "type_line": "Creature — Kor Artificer"
   },
+  "Stonybrook Banneret": {
+    "cmc": 2.0,
+    "keywords": [
+      "Islandwalk",
+      "Landwalk"
+    ],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Islandwalk (This creature can't be blocked as long as defending player controls an Island.)\nMerfolk spells and Wizard spells you cast cost {1} less to cast.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Wizard"
+  },
   "Street Wraith": {
     "cmc": 5.0,
     "keywords": [
@@ -6598,6 +6667,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Phyrexian Cleric"
+  },
+  "Svyelun of Sea and Sky": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}{U}",
+    "oracle_text": "Svyelun has indestructible as long as you control at least two other Merfolk.\nWhenever Svyelun attacks, draw a card.\nOther Merfolk you control have ward {1}. (Whenever another Merfolk you control becomes the target of a spell or ability an opponent controls, counter it unless that player pays {1}.)",
+    "power": "3",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Merfolk God"
   },
   "Svyelunite Temple": {
     "cmc": 0.0,
@@ -7003,6 +7081,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Island Mountain"
+  },
+  "Tidal Warrior": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{U}",
+    "oracle_text": "{T}: Target land becomes an Island until end of turn.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Merfolk Warrior"
   },
   "Tide Shaper": {
     "cmc": 1.0,
@@ -7556,6 +7643,17 @@
     "toughness": "0",
     "type_line": "Artifact Creature — Construct"
   },
+  "Wanderwine Prophets": {
+    "cmc": 6.0,
+    "keywords": [
+      "Champion"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Champion a Merfolk (When this enters, sacrifice it unless you exile another Merfolk you control. When this leaves the battlefield, that card returns to the battlefield.)\nWhenever this creature deals combat damage to a player, you may sacrifice a Merfolk. If you do, take an extra turn after this one.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Creature — Merfolk Wizard"
+  },
   "Waterlogged Grove": {
     "cmc": 0.0,
     "keywords": [],
@@ -7597,8 +7695,8 @@
   "White Orchid Phantom": {
     "cmc": 2.0,
     "keywords": [
-      "Flying",
-      "First strike"
+      "First strike",
+      "Flying"
     ],
     "mana_cost": "{W}{W}",
     "oracle_text": "Flying, first strike\nWhen this creature enters, destroy up to one target nonbasic land. Its controller may search their library for a basic land card, put it onto the battlefield tapped, then shuffle.",

@@ -34580,7 +34580,11 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             {
                 bool found = false;
                 for (const Card& c : state.players[controller].library)
-                { if (c.m_name.str() == *target && SeahunterLibraryCandidate(c)) { found = true; break; } }
+                {
+                    const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+                    if (c.m_name.str() == *target && SeahunterLibraryCandidate(cd ? cd->card : c))
+                    { found = true; break; }
+                }
                 if (!found) { return false; }
             }
         }

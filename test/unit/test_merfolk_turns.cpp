@@ -134,6 +134,20 @@ TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefi
     CHECK(state.players[0].library.size() == 1);
 }
 
+TEST_CASE("Seahunter pinned activation remains live with a compact library card")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Seahunter", 210);
+    Card compact;
+    compact.m_name = "Rishadan Dockhand";
+    compact.m_number = 211;
+    state.players[0].library.push_back(compact);
+    SacNamedPinScope pin(0, &state.players[0].library[0].m_name.str());
+    CHECK(PermAbilitySourceLive(state, 0, 210, PermAbilityMode::TapTutorPut));
+}
+
 TEST_CASE("Emperor Mihail II sees the private top only under its controller's permission")
 {
     LoadMerfolkCards();
