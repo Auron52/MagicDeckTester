@@ -943,6 +943,12 @@ INERT_PARAMS = {
     "etb_damage_each_player_per_nonbasic_land": "Sunspine Lynx's ETB: damage to EACH player from that player's live nonbasic-land count (Price of Progress's resolver); untargeted, no chosen amount",
     "static_players_cant_gain_life": "Sunspine Lynx's static rule effect while on the battlefield; no player choice",
     "static_damage_cant_be_prevented": "Sunspine Lynx's static rule effect while on the battlefield; no player choice",
+    # ---- Red Elementals, Thunderkin Awakener (2026-11-14). Payload of the attack_trigger_reanimate
+    #      `gy_return_one` decision; classified inert by the integrator, PENDING USER OK per the self-guard
+    #      (recorded in "docs/design/analysis-Red Elementals.md" -- surfaced, not blocking).
+    "attack_trigger_reanimate_subtype": "Thunderkin Awakener's target filter (Elemental creature cards) -- narrows WHICH graveyard cards the gy_return_one pick offers, adds no choice",
+    "attack_trigger_reanimate_toughness_lt_self": "Thunderkin Awakener's target filter (printed toughness < its live toughness) -- narrows the gy_return_one candidates, adds no choice",
+    "attack_trigger_reanimate_sac_end_step": "Thunderkin Awakener's mandatory delayed sacrifice of the returned object at the next end step -- untargeted, no 'may', no choice",
     "tap_is_life_payment": "Fiery Islet's printed life payment is a mandatory mana-ability cost, not preventable damage; the mana activation is the existing tap action",
     # ---- Unpredictable Cyclone phase 2 (2026-10-27) -- PROVISIONAL, pending the user's OK ----
     "cast_trigger_extra_turns": "Emrakul's 'take an extra turn after this one' -- MANDATORY cast trigger, no choice (display only: the turn bar's 'Turn N (extra k)', an event line, extra_turn/turn_seq in the decision JSON)",
