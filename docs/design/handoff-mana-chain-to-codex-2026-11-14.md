@@ -93,7 +93,7 @@ correct the checkpoint doc's KNOWN GAPS claim; append RESOLVED/PARKED to the Spi
 - **N** Fungus cast order: all USER answers in `docs/design/fungus-cast-order-proposal-2026-11-13.md`; first re-check
   site-9 Burst pops on v3 (Q9), diagnose the count menu (Q16).
 - **Item 10 PD leftovers**: ActLineHoldMask (s30027719), then PGO re-gate on 32000-36999 (`logs/mana-clean-chain/10-handoff.md`).
-- **Dragonstorm re-measure** once the other session's Dragons processes end (needs no USER question).
+- **Dragonstorm re-measure** -- UNBLOCKED: the other session's Dragons processes (347826/347828/356311/356792) ended ~11:30 UTC 2026-11-14 (needs no USER question).
 - **Shadowborn residual** (9 issues on 60000-64999; next block 65000-69999): parked floatseq class (Sire dropped
   after Diabolic Intent; needs a searched Lotus early-crack colour pin), ENUM-GAP s30061713 / s30062801.
 
