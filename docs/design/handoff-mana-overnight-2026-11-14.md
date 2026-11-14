@@ -100,6 +100,11 @@ re-assignment of the same units (e.g. a bundle's G moved onto generic). Please r
 - **Item 4: residual open from the earlier literal fix.** Niv gi1138 and EDF gi549 still win a turn later at
   d8 b0, with or without the new defer lever. They need their own legal-line attribution.
 - The round-2 "permissive, never lossy" claim was corrected in `mana-clean-pass-checkpoint.md`.
+- Validation in the Codex worktree: units 3093/3093, PGO built; smoke searched slower 0 and regression
+  searched slower 0, with four same-score regression line changes inspected. Strict reference replay had
+  no play drift or enum gap. The held-out main-deck A/B (46,400 paired games) has per-deck net <= 0:
+  Dragons -2 turns, Niv 0 (one faster, one slower), all other decks 0. Niv's slower d5 gi2565 is
+  undergoing the required d8 b0 recovery check; 2HG A/B and GT promotion remain pending.
 
 ## Not yours (kept by the Spirits session)
 - Spirits 8 games: all restored by `MTG_SPIRITS_NO_FETCH_HOLD=0` (the USER's fetch-hold drop) -- a Spirits provider

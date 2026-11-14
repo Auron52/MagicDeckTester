@@ -1297,9 +1297,16 @@ fungus 1,880, gods 4,300 (first run).
   {3}{R}{R}{R}{R} = 7, not the stale 11. Niv gi380/522/244, gi1138, EDF gi549 and Bruna gi432 match the current
   shipped outcomes; the Niv gi1138 and EDF gi549 losses therefore remain from the older literal fix, not item W.
   Bruna gi432 is T4 with `MTG_PAY_HAND_GENERIC=0` and T5 with it on, even at d8 b0; the wished Bruna is absent
-  from the hand-demand model at Sol Ring's payment. Units 3093/3093, including 5 new W cases. **NEXT:** PGO,
-  smoke/regression, check_gt_logs, held-out A/B with every deck net <= 0 and slower-game recovery, then disposition
-  item W and the residual hand-generic issue. No fresh mana-clean 5000-game block has run for this item yet.
+  from the hand-demand model at Sol Ring's payment. Units 3093/3093, including 5 new W cases; PGO trained on
+  7,056 games. Smoke: 199 passed, 4 digest-only failures, scenario gate 542/542; searched slower 0, same-score
+  play-changed 3. Regression: 317 passed, 5 digest-only failures, strict references 343 ok / 493 repaired /
+  1 beaten, no play drift or enum gap; searched slower 0, same-score play-changed 4 (Dragons x2, Goblins x2,
+  each line inspected), depth-zero Bruna gi708 T7->T8 after different T3 play and divergent draws. Fresh paired
+  A/B (seed 89900000, 46,400 pairs across 52 main decks, 5,000/arm at d5 plus 3,000/arm at d3 for each of
+  Dragons/Niv/EDF/Bruna): every deck net <= 0; Dragons net -2 turns (2 faster, 0 slower), Niv net 0
+  (1 faster, 1 slower at d5), every other deck net 0. **PENDING:** Niv d5 gi2565's depth-8 unlimited recovery
+  is running; 2HG held-out A/B, GT acceptance/check_gt_logs, then disposition item W and the residual hand-generic
+  issue. No fresh mana-clean 5000-game block has run for this item yet.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",
