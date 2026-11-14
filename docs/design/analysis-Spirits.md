@@ -867,3 +867,23 @@ src at launch = this commit's src) -> logs/spirits/smoke_castdisc.log, logs/spir
 5. Stage 6 report with 6a disclosure.
 **Open USER questions:** extraturns_regression_d5_s2002 one-game pooled churn (GT kept); whether to re-run the
 claude-play sweep (recorded at 35b021047, before the fetch/cast-order/lord changes; 0 flags; agent recommends no).
+
+### Tiers + final verify on cd993f137 (2026-11-14 ~01:30 UTC) -- ACCEPTED (eb1f54bab)
+- **Smoke** 199 pass / 4 FAIL, all spirits keys (d0 5.1240->5.0070, d3 4.56->4.58, d5 digest-only, 2hg d3
+  5.16->5.14); every other deck byte-identical, so the draw-count (dredge-is-not-a-draw) fix moved nothing
+  elsewhere. Searched slower 1: d3 gi1 5->6 = budget churn (classify: 4x=5, 16x=5).
+- **Regression** 316 pass / 6 FAIL, all spirits keys (d0 s2002 5.077->4.950; d5 s2002 4.6733->4.6667; d5 s3003
+  4.6933->4.7000; the rest digest-only). Searched slower 2: d5_s3003 gi56 4->5, gi129 5->6, both PERSIST at
+  4x/16x and both have draws diverging (T4 / T2) after a Strand is cracked on play instead of held = fetch-shuffle
+  variance from the USER's hold drop (held-out A/B: d5 exactly 0). Searched faster 2.
+- **Extra Turns run-to-run question (USER 2026-11-14: "For extra turns, we may need to look into things if there is
+  run-to-run variation.")**: the 11-13 gi66 drift ran on a0acbea6b, which predates the etchain per-game reset
+  (5b17805d2, docs/design/pooled-vs-solo-play-drift.md: chain-trial thread_locals reset only on a seed change, so a
+  same-seed game of another ET job on the worker leaked `failed_round`). cd993f137 has it, and this pooled
+  regression gives `extraturns_regression_d5_s2002` = GT 254115e71dd5ea00 (units 1,886,448). Closed: the known,
+  fixed carrier, not a new source.
+- `check_gt_logs.py` 1170 consistent. **verify_deck** (logs/spirits/verify_final.log): GATE PASS, rc 0;
+  play_invariants 8 games / 130 decisions hold (the earlier "8 violations" did not recur).
+- Flooded Strand's card note said "SpiritsProvider keeps the hold" -- updated to the USER's drop (text edit).
+- **Next:** shared-branch push not before ~03:55 UTC 2026-11-14 (check_references_safe, rebase, rebuild + smoke +
+  check_gt_logs if src/GT replays, CI watch --interval 60); Stage 6 report.
