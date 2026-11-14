@@ -1511,7 +1511,19 @@ fungus 1,880, gods 4,300 (first run).
   (b5630192a). **Open for the next round** (logs/mana-clean-chain/C2-handoff.md): the hand-demand keep holds a
   creature-only land for a hand creature the line does not cast this turn (Stormtamer x2 / Corsair Captain) over the
   line's Bolt (s30080205, s30079131, s30079307; 6 flags); s30083181 (6) unanalysed; s30070533's undeclared
-  dig-continuation residual. Next pirates block 84000-88999.
+  dig-continuation residual. **Round 4, `MTG_CCO_NC_PRIORITY` (3bc682c97, default ON; =0 restores
+  hand-creature keep):** for a current creature payment, a castable hand noncreature's coloured pip
+  takes priority over keeping a creature-only land for another hand creature when that pip plus this
+  payment needs all unrestricted supply of its colour. Ordering only. Repros s30079131 and s30079307
+  1 -> 0 each, s30080205 4 -> 0; =0 restores all six. s30070533 stays at 3 and s30083181 at 6,
+  both separate continuation shapes. Units 3094/3094. Combined smoke 203/203 and regression
+  322/322 byte-identical to GT, searched slower 0, strict references 343 ok / 493 repaired /
+  1 beaten, no play drift or enum gap. Fresh held-out A/B seed 90100000: 18,000 pairs across
+  Pirates, Pirates 2HG, and ten other creature-only-land decks; zero changed win turns or slower
+  games, every deck net 0. PGO 8ca354890d39; gate pirates-C2r4-20261114 (84000-88999,
+  oracle-off byte-identical): **4** issues, three APPLY-DROPs from one Crewmate dig seed
+  s30088544 (need-later Captain) and one DOMINATED-ONESHOT s30086950. The 5,000-game block
+  is recorded in `test/mana_clean.json`; the gate exits nonzero because these four issues remain.
 * **Queue item E (2026-11-14): gods ENUM-GAP, Loam after a dredging draw (USER decision 12) -- BUILT, A/B net +3 ->
   PARKED, USER DECISION.** USER: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
   breakpoint. Same thing for the land drops that you pull from life."* `wip/gods-gy-option-demoted` 847943ebf (pushed;
