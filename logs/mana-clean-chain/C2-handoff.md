@@ -1,5 +1,69 @@
 # Queue item C2 handoff (2026-11-14) -- pirates residual Bolt APPLY-DROPs
 
+## Codex round 4 (after W landed at 68980ea97)
+- Isolated branch `wip/c2-line-owed`, worktree `.claude/worktrees/mc-c2-codex`, code commit
+  `3bc682c97`: `MTG_CCO_NC_PRIORITY` default ON, =0 historical. A castable hand noncreature's
+  coloured pip outranks keeping a creature-only land for an uncast hand creature when the current
+  creature payment plus that pip uses all remaining unrestricted supply of the colour. Ordering
+  only. s30079131 / s30079307 1 -> 0 each; s30080205 4 -> 0, =0 restores all six.
+- Units 3094/3094; PGO source 8ca354890d39. Combined smoke 203/203 and regression 322/322
+  byte-identical to GT; searched slower 0, strict references 343 ok / 493 repaired / 1 beaten,
+  no play drift or enum gap. Held-out seed 90100000, 18,000 paired games across Pirates,
+  Pirates 2HG and ten other creature-only-land decks: every deck net 0, zero changed wins;
+  report `logs/mana-clean-chain/itemC2/ab4_report.txt`.
+- Gate pirates-C2r4-20261114, block 84000-88999, oracle-off byte-identical: 4 issues
+  (3 APPLY-DROP all seed 30088544 Crewmate dig -> undeclared Captain, need-later; 1
+  DOMINATED-ONESHOT seed 30086950). Gate exit 1 is the expected nonzero-issues verdict.
+  Prior residuals s30070533 (3) and s30083181 (6) unchanged. `test/mana_clean.json` and
+  checkpoint doc are modified in the C2 worktree pending a validation-doc commit.
+- Next: inspect s30083181 and s30070533 as separate continuation cases, then s30088544.
+  Do not push another shared-branch update before the 4-hour session rhythm after the W push.
+
+## Codex round 5 (generic ability extension)
+- `f35023d4a` on `wip/c2-line-owed` extends `MTG_CCO_NC_PRIORITY` to generic ability payments
+  inside an applying line or unseen continuation. It compares the current payment plus one
+  castable noncreature pip against total live unrestricted supply as well as pip-colour supply.
+  Direct payments outside a line preserve the prior hand-creature keep. s30083181 6 -> 0;
+  =0 restores all six. s30070533 remains 3.
+- Units 3095/3095, PGO source a5119a635cf1. Combined smoke 203/203, regression 322/322
+  byte-identical to GT, searched slower 0. Strict references 343 ok / 493 repaired / 1 beaten,
+  no play drift or enum gap. Held-out seed 90200000, 18,000 pairs across the same twelve cells:
+  zero changed wins, every deck net 0 (`logs/mana-clean-chain/itemC2/ab5_report.txt`).
+- Gate pirates-C2r5-20261114, block 89000-93999: **0 issues**, oracle-off byte-identical.
+  This clean independent block does not remove the exact s30070533 residual; inspect that
+  continuation next. Earlier gate r4's four issues also remain known separate shapes.
+
+## Codex round 6 (joint prepay ahead of Vial dig)
+- `6911ec69d` on `wip/c2-line-owed`: `MTG_PREPAY_CCO_VIAL_DIG` default ON, =0 historical.
+  A Vial-put ETB dig has an undeclared continuation; when a coloured noncreature already in hand
+  is castable after the named bill and that bill plus it exceeds unrestricted mana while a
+  creature-only source is up, decline the joint prepay. Per-cast payment preserves the sole
+  unrestricted source. s30070533 3 -> 0 APPLY-DROPs, =0 restores all three.
+- Units 3096/3096, PGO source b8d5fa00f80b. Combined smoke 203/203, regression 322/322
+  byte-identical to GT; searched slower 0. Strict references 343 ok / 493 repaired / 1 beaten,
+  no play drift or enum gap. Held-out seed 90300000, 18,000 pairs across twelve affected
+  cells: zero changed wins, every deck net 0 (`logs/mana-clean-chain/itemC2/ab6_report.txt`).
+- Gate pirates-C2r6-20261114, block 94000-98999: **0 issues**, oracle-off byte-identical.
+  Exact earlier residuals: s30088544 still has three need-later Captain APPLY-DROPs (no CCO
+  source on board); s30086950 still has one DOMINATED-ONESHOT Treasure payment. Inspect the
+  Captain case next. This work remains local pending the shared-branch push interval.
+
+## Codex residual audit (same day, after round 6)
+- Traced s30088544 T3: after Vial puts Staunch Crewmate, its dig finds Daring Buccaneer
+  {R}; the payer taps Blackcleave Cliffs for that red pip and cannot later cast Dire Fleet
+  Captain {B}{R}. `MTG_NEEDS_TAP_ORDER=1` and `MTG_SCARCE_COLOR_MASK=1` each make the
+  exact oracle repro clean, but neither global lever was adopted.
+- Trial `MTG_LINE_CREATURE_NEEDS` (needs order limited to a creature payment with later casts,
+  excluding CCO and pay-sac boards) fixed all 3 flags, but pooled tiers changed 13 rows,
+  including Melira regression d0 gi378 5->6. Trial `MTG_LINE_CREATURE_SCARCE` (scarce hold
+  limited to one-mana creature, same exclusions) also fixed the flags, but pooled tiers
+  changed 15 rows with 3 d0 slowers. Both trials were **reverted**; branch remains at
+  `6e9d79607`, source hash b8d5fa00f80b, the round-6 tested version. Do not accept
+  the trial GT outputs. Their scratch logs are `build/scratch/c2/regression_line_needs.log`
+  and `regression_line_scarce.log` in the C2 worktree.
+- Next residual work: a payment-specific scarce-colour choice for Captain that does not
+  perturb unrelated multi-cast lines; then separately s30086950's Treasure-use domination.
+
 ## Round 2 agent (2026-11-14, ~06:00-08:30Z) -- READ THIS FIRST
 Done (LOCAL commits, not pushed; the owner pushes):
 - Round-2 regression 322/322 unchanged + A/B 89500000 all nets 0 (coordinator commit 39762088d).

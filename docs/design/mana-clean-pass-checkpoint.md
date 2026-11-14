@@ -1546,7 +1546,11 @@ fungus 1,880, gods 4,300 (first run).
   Held-out A/B seed 90300000, 18,000 pairs, every deck net 0, zero changed wins. Gate
   pirates-C2r6-20261114 (94000-98999) **0** issues, oracle-off byte-identical. Exact
   earlier residuals remain: s30088544 three need-later Captain APPLY-DROPs without a CCO
-  source on board, and s30086950 one DOMINATED-ONESHOT Treasure payment.
+  source on board, and s30086950 one DOMINATED-ONESHOT Treasure payment. A follow-up
+  trace found that s30088544 taps Blackcleave Cliffs for the dug Buccaneer's {R},
+  leaving no {B} for Captain. Two scoped attempts to reuse needs-based tap order and
+  scarce-colour hold fixed the exact repro but slowed d0 games in the pooled regression;
+  both were reverted. The three C2 fixes above are the validated landing set.
 * **Queue item E (2026-11-14): gods ENUM-GAP, Loam after a dredging draw (USER decision 12) -- BUILT, A/B net +3 ->
   PARKED, USER DECISION.** USER: *"We do need to fix this somehow ... It is added to your hand, so it should trigger a
   breakpoint. Same thing for the land drops that you pull from life."* `wip/gods-gy-option-demoted` 847943ebf (pushed;
