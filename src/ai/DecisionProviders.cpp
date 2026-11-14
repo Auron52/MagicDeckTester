@@ -62,7 +62,8 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState&, const Permanen
     // The passive opponent never blocks, so Passage's unblockable rider is inert.
     // Its source is a land: tapping it cannot trigger Deeproot Pilgrimage.
     // Spending {4} and tapping that land cannot improve this deck's goldfish state.
-    if (source.card.m_name == "Rogue's Passage") { targets.clear(); }
+    if (!DecisionUnpruned(UnprunedGate::XSpell)
+        && source.card.m_name == "Rogue's Passage") { targets.clear(); }
 }
 
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
