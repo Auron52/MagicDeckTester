@@ -226,7 +226,7 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
 // only the restricted land can still supply, which is what holding it is for.
 static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost, bool for_creature,
                               bool& nc_live, int& keep_mask, int* cco_def, int* cco_sup,
-                              int* nc_need, int* unres_sup)
+                              int* nc_need, int* unres_sup, int& unres_total)
 {
     nc_live = false;
     keep_mask = 0;
@@ -235,6 +235,7 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
     const ManaPool& fl = state.floating_mana;
     int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
     int total = fl.white + fl.blue + fl.black + fl.red + fl.green + fl.colorless + static_cast<int>(fl.wild);
+    unres_total = total;
     for (const Permanent& q : state.battlefield)
     {
         if (q.controller_index != active || q.tapped || q.def_absent) { continue; }
@@ -263,6 +264,7 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
             continue;
         }
         if (qd->params.creature_mana_only || BigSpellOnlySource(qd->params)) { continue; }
+        unres_total += amt;
         int seen = 0;
         for (Color c : EffectiveProduces(state, active, *qd))
         {
@@ -2059,6 +2061,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     int  cch_csup[5] = { 0, 0, 0, 0, 0 };
     int  cch_nc_need[5] = { 0, 0, 0, 0, 0 };
     int  cch_unres_sup[5] = { 0, 0, 0, 0, 0 };
+    int  cch_unres_total = 0;
     int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2998,7 +3001,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     {
                         cch_ready = true;
                         CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep,
-                                          cch_def, cch_csup, cch_nc_need, cch_unres_sup);
+                                          cch_def, cch_csup, cch_nc_need, cch_unres_sup, cch_unres_total);
                     }
                     if (cch_nc_live)
                     {
@@ -3020,20 +3023,24 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                 if (cch_def[ci] > other) { keep |= 1 << ci; }
                             }
                         }
-                        // A castable hand noncreature has first claim on an unrestricted colour when this
-                        // payment plus its pip needs every remaining source of that colour. The hand's
-                        // creature demand is only a future possibility; the current creature can use
-                        // this restricted land and leave the unrestricted source for Bolt. Count one
+                        // A castable hand noncreature has first claim on unrestricted mana when this
+                        // payment plus its pip needs every source of that colour or more total mana than
+                        // unrestricted sources supply. The hand's
+                        // creature demand is only a future possibility; the current creature or generic
+                        // ability can use this land and leave the unrestricted source for Bolt. Count one
                         // noncreature per colour (the largest pip), not every spell in hand.
                         bool nc_tight = false;
-                        if (for_creature && CcoNcPriorityOn())
+                        if (CcoNcPriorityOn()
+                            && (g_line_unpaid_cost.ManaValue() > 0 || g_line_opens_unseen))
                         {
                             const int own[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
                             for (int ci = 0; ci < 5; ++ci)
                             {
-                                if (cch_nc_need[ci] > 0 && cch_unres_sup[ci] > 0
-                                    && own[ci] + cch_nc_need[ci] >= cch_unres_sup[ci]
-                                                                   + static_cast<int>(state.floating_mana.wild))
+                                if (cch_nc_need[ci] > 0 && cch_unres_total > 0
+                                    && ((cch_unres_sup[ci] > 0
+                                         && own[ci] + cch_nc_need[ci] >= cch_unres_sup[ci]
+                                                                        + static_cast<int>(state.floating_mana.wild))
+                                        || cost.ManaValue() + cch_nc_need[ci] > cch_unres_total))
                                 { nc_tight = true; break; }
                             }
                         }

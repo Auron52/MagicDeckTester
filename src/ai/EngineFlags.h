@@ -814,11 +814,13 @@ inline bool CcoHandScanOn()
 }
 
 // MTG_CCO_NC_PRIORITY -- DEFAULT ON; =0 keeps the hand-creature preference (item C2). A castable
-// noncreature's pip can use only unrestricted mana. When the current creature payment plus that
-// pip needs all unrestricted supply of its colour, spend the creature-only land first, even if a
-// different creature in hand would like that land. Pirates s30079131: Captain {B}{R} must take
-// Territory's {B} so Blackcleave Cliffs can pay the later Bolt {R}; the uncatalogued Siren {U}
-// must not keep Territory idle. The same comparison covers a dug Bolt after Crewmate.
+// noncreature's pip can use only unrestricted mana. When the current payment plus that pip needs
+// all supply of its colour, or more total mana than the unrestricted sources provide, spend the
+// creature-only land first even if a different creature in hand would like it. Applies only within
+// a line or its unseen continuation; independent payments keep their existing hand preference.
+// Pirates s30079131:
+// Captain {B}{R} takes Territory's {B} so Blackcleave Cliffs pays Bolt {R}. A Crewmate dig's
+// generic {2} uses Territory's {C}, leaving Mountain for its dug Bolt (s30083181).
 inline bool CcoNcPriorityOn()
 {
     static const bool env_on = EnvOn("MTG_CCO_NC_PRIORITY", true);

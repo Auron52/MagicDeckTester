@@ -344,6 +344,8 @@ TEST_CASE("CCO hand demand: a second creature-only land covers the hand creature
 TEST_CASE("CCO hand demand: a tight noncreature pip outranks the hand creature keep")
 {
     const ManaCost captain = DefHD("Dire Fleet Captain").card.m_mana_cost;
+    ManaCost line = captain;
+    ++line.red;   // the applying line also casts Bolt
     auto board = []
     {
         GameState s;
@@ -361,6 +363,7 @@ TEST_CASE("CCO hand demand: a tight noncreature pip outranks the hand creature k
     {
         ArmHD on(heurarm::CCO_NC_PRIORITY, 1);
         GameState s = board();
+        LineUnpaidCostScope hold(line);
         REQUIRE(TapForCostDirect(s, captain, /*for_creature=*/true));
         CHECK(TappedHD(s, "Unclaimed Territory"));
         CHECK_FALSE(TappedHD(s, "Blackcleave Cliffs"));
@@ -368,9 +371,46 @@ TEST_CASE("CCO hand demand: a tight noncreature pip outranks the hand creature k
     {
         ArmHD off(heurarm::CCO_NC_PRIORITY, 0);
         GameState s = board();
+        LineUnpaidCostScope hold(line);
         REQUIRE(TapForCostDirect(s, captain, /*for_creature=*/true));
         CHECK_FALSE(TappedHD(s, "Unclaimed Territory"));
         CHECK(TappedHD(s, "Blackcleave Cliffs"));
+    }
+}
+
+// Pirates s30083181: Crewmate's dig asks for {2}, then finds Bolt {R}. Aether Vial put
+// Crewmate onto the board, so the dig payment is an ability, not a creature spell. Territory
+// may pay its generic pip as {C}; the two Mountains must not both be spent before Bolt.
+TEST_CASE("CCO hand demand: a generic ability leaves Mountain for a castable Bolt")
+{
+    ManaCost dig;
+    dig.generic = 2;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 3;
+        PutHD(s, "Unclaimed Territory", 58);
+        PutHD(s, "Mountain", 40);
+        PutHD(s, "Mountain", 41);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Siren Stormtamer", 48);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    {
+        ArmHD on(heurarm::CCO_NC_PRIORITY, 1);
+        GameState s = board();
+        LineOpensUnseenScope unseen(true);   // the dig's follow-up cast is not named in the plan
+        REQUIRE(TapForCostDirect(s, dig, /*for_creature=*/false));
+        CHECK(TappedHD(s, "Unclaimed Territory"));
+    }
+    {
+        ArmHD off(heurarm::CCO_NC_PRIORITY, 0);
+        GameState s = board();
+        LineOpensUnseenScope unseen(true);
+        REQUIRE(TapForCostDirect(s, dig, /*for_creature=*/false));
+        CHECK_FALSE(TappedHD(s, "Unclaimed Territory"));
     }
 }
 
