@@ -902,3 +902,11 @@ provider heuristic in this case."*
   (DecisionProvider.h:208; SpellEffects.h enter cascade, TurnSolver.cpp x3); the default (dominant subtype) is the base
   provider's, overridable per deck (Kithkin does). Spirits inherits it -> Spirit. Card note reworded to say so.
 - **Play settings d5 / b20 stay** until a measurement says otherwise (USER: "can be changed after measurements").
+
+### Shared push 2026-11-14 04:34 UTC (f8475e34d) -- CI GREEN
+Rebased onto origin e95bd03a9 (items B/C+I/D payer levers, martyr keep table); HeuristicArm slot conflict resolved
+(both sides kept). Rebased binary: units 3071/3072 (only the environmental deck-folder count), smoke + regression
+0 per-game changes anywhere, spirits keys reproduce. GT aggregates lost to the conflict resolution restored from
+origin + the 10 spirits keys (check_gt_logs 1170 consistent). CI run 43557336252: ubuntu, windows, Linux/Windows
+determinism parity all success. **Open:** sweep re-run (agent: no); optional d5 budget screen (b10/b20/b40); keep
+table -> value leaf when the USER restarts the artifact queue. Overnight spirits GT left to the next periodic run.
