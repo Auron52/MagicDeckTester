@@ -6218,10 +6218,10 @@ if (!log_dir.empty())
     // A new recording uses held fetchlands and their separate activation. Earlier references
     // carry no stamp and replay through the old immediate-fetch path.
     if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
-    // ...and since USER 2026-11-14 a human-play fetch resolves ON PLAY unless the hold is opted in
-    // (HumanFetchHoldOn). A `fetch_activation` reference without `fetch_on_play` was played under the
-    // hold and replays under --legacy-human-fetch-hold.
-    if (!LegacyFetchImmediateOn() && !HumanFetchHoldOn()) { out << ", \"fetch_on_play\": 1"; }
+    // ...and since USER 2026-11-14 a human-play fetch's land drop offers each target (resolve ON PLAY) and a
+    // hold (kFetchHoldTarget). A `fetch_activation` reference without `fetch_on_play` was played under the
+    // earlier forced hold and replays under --legacy-human-fetch-hold.
+    if (!LegacyFetchImmediateOn() && !LegacyHumanFetchHoldOn()) { out << ", \"fetch_on_play\": 1"; }
     // Same contract for the CR 510.4 two-step combat damage (CombatDamageStepsOn, GameLogger.h): a
     // reference without `combat_damage_steps` predates it and replays under --legacy-single-damage-step.
     if (CombatDamageStepsOn()) { out << ", \"combat_damage_steps\": 1"; }
@@ -11180,7 +11180,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-combat-swap-defer") { g_play_legacy_combat_swap_defer = true; continue; }   // replay a reference recorded UNDER the 2026-10-06..22 human combat-swap deferral (stamp combat_swap_timing; value-less)
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-fetch-immediate") { g_play_legacy_fetch_immediate = true; continue; } // replay references recorded before fetchlands could be held and activated
-        if (flag == "--legacy-human-fetch-hold") { g_play_legacy_human_fetch_hold = true; continue; } // replay references recorded under the human-play fetch hold (no fetch_on_play stamp; see HumanFetchHoldOn)
+        if (flag == "--legacy-human-fetch-hold") { g_play_legacy_human_fetch_hold = true; continue; } // replay references recorded under the human-play fetch hold (no fetch_on_play stamp; see LegacyHumanFetchHoldOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-spell-copy")   { g_play_legacy_spell_copy = true; continue; }  // replay a reference recorded before the resolved-spell copy id (value-less; see GameLogger.h, Cyclone Q53)

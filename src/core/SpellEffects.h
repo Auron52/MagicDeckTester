@@ -1351,6 +1351,14 @@ inline constexpr int kTutorDeclineChoice = 1000000;
 // ("Forerunner of the Coalition -> (decline search)") -- and parenthesised so it can never be a
 // card name.
 inline constexpr const char* kTutorDeclineTarget = "(decline search)";
+// HUMAN-PLAY FETCH HOLD sentinel (USER 2026-11-14: "allow deferring the fetch in the choice dialog", "on all of
+// the time"). A Plan::fetch_target of this value is the land drop's HOLD variant: PlayLandCore (LandPlay.cpp)
+// plays the fetchland onto the battlefield uncracked instead of resolving it on play, so its normal
+// activation (`landsearch=` / `act=`) stays available later. Emitted only by the human-play land-drop fan
+// (HumanFetchHoldVariant), beside one variant per legal target; executor and rollout share PlayLandCore, so
+// they stay in lockstep. Readable on purpose (the choose dialog's text) and parenthesised so it can never be
+// a card name.
+inline constexpr const char* kFetchHoldTarget = "(hold: crack later)";
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,

@@ -672,16 +672,22 @@ Plan-variant sub-decisions ride the `main_phase` plan list rather than their own
 `soulfire_own_targets` (count), `enchant_target` (which creature an Aura enchants — Bogles),
 `land_face` (which face of a modal double-faced Pathway land to play — Branchloft {G} vs
 Boulderloft {W}).
-**`fetch_target` is the human-play fetchland route again since 2026-11-14** (USER: *"Human play doesn't need to
-keep the hold, at least by default"*): `FetchResolvesOnPlay` no longer forces the battlefield hold under human play,
-so `land=Arid Mesa` is one plan per legal target -- CheckLine's `fetch` sub ("Arid Mesa fetches Sacred Foundry"),
-the choose dialog's grid. The list is the FULL legal set: `WidenHumanFetchTargets` (DecisionProviders.cpp) appends every
-subtype-legal library land the provider's `FetchCandidates` narrowed away (Modern RW Burn / Anti-Lifegain / Five Colour
-return one pick), so the target is the human's, never the provider's. `MTG_HUMAN_FETCH_HOLD=1` keeps the hold (land
-drop, then `landsearch=` with its `tutor_etb` prompt); a `fetch_activation` reference without the `fetch_on_play` stamp
-replays with `--legacy-human-fetch-hold`. Where a fetch IS held (3 life or less, the lever, one already on the
-battlefield) the crack-first roots run in human play too, so `act=<fetch>;cast=X` / `landsearch=<fetch>;cast=X` paid
-by the fetched land is one plan (pre-cast crack); its `tutor_etb` default is the pick the plan was priced with.
+**`fetch_target` is the human-play fetchland route again since 2026-11-14, with a HOLD option** (USER: *"Human
+play doesn't need to keep the hold, at least by default"*, *"maybe the right way to do this is to allow deferring
+the fetch in the choice dialog?"*, *"I would be okay with it being on all of the time"*). A zero-mana one-life
+fetchland's land drop is one plan per legal target -- CheckLine's `fetch` sub ("Arid Mesa fetches Sacred
+Foundry"), the choose dialog's grid -- resolved on play, PLUS one plan whose `fetch_target` is the sentinel
+`kFetchHoldTarget` = `(hold: crack later)` (SpellEffects.h; tile = the fetchland's own art): `PlayLandCore`
+(LandPlay.cpp, shared by executor and rollout) then plays it uncracked, and its activation (`landsearch=` /
+`act=`, with the `tutor_etb` prompt at resolution) is offered in later frames. Always offered (`HumanFetchHoldVariant`,
+DecisionProviders.cpp): at every life total (the <=3-life hold is an autonomous safety) and with a single legal target.
+The target list is the FULL legal set: `WidenHumanFetchTargets` appends every subtype-legal library land the provider's
+`FetchCandidates` narrowed away (Modern RW Burn / Anti-Lifegain / Five Colour return one pick), so the target is the
+human's, never the provider's. No lever. A `fetch_activation` reference without the `fetch_on_play` stamp was played
+under the earlier forced hold and replays with `--legacy-human-fetch-hold` (no on-play drop, no hold plan). With a
+fetch on the battlefield the crack-first roots run in human play too, so `act=<fetch>;cast=X` /
+`landsearch=<fetch>;cast=X` paid by the fetched land is one plan (pre-cast crack); its `tutor_etb` default is the
+pick the plan was priced with. Autonomous play never emits the hold variant (byte-identical).
 For these the only per-deck work is confirming **every** legal option appears as a distinct plan
 variant (human-play runs unpruned). `enchant_target` is emitted directly by `CollectActions`
 (one variant per `LegalEnchantTargets`, no provider narrowing) and labeled in `SummarizePlan`

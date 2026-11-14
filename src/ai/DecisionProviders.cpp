@@ -22337,7 +22337,9 @@ bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinit
 {
     // The only distinct Burn line found needs two Searing Blazes, two opposing
     // creatures, and no intervening need for the fetched mana. Keep it in the
-    // unpruned audit and the viewer; the ordinary search spends no timing fan.
+    // unpruned audit; the ordinary search spends no timing fan. (Human play is not
+    // read here: its land drop always offers each target AND a hold plan,
+    // HumanFetchHoldVariant, USER 2026-11-14.)
     static const bool auto_crack = EnvOn("MTG_RW_BURN_FETCH_AUTOCRACK", true); // DEFAULT ON; =0 restores full hold search
     return !auto_crack;
 }
@@ -22373,23 +22375,44 @@ void WidenHumanFetchTargets(const GameState& state, int controller, const CardPa
     { if (std::find(cands.begin(), cands.end(), nm) == cands.end()) { cands.push_back(std::move(nm)); } }
 }
 
+// The modern zero-mana, one-life, sacrifice-self, single-land fetch template: the only activated search
+// safe to collapse through PerformFetch (other activated searches keep their full cost path).
+static bool OnePayLifeFetch(const CardParams& p)
+{
+    return p.land_search_activation_cost->ManaValue() == 0 && p.land_search_activation_life_cost == 1
+        && p.land_search_activation_sacrifice_self && p.land_search_count == 1;
+}
+
+// HUMAN PLAY offers both on the land drop (USER 2026-11-14: "Human play doesn't need to keep the hold, at
+// least by default", "allow deferring the fetch in the choice dialog", "I would be okay with it being on all
+// of the time"): one variant per legal target resolves the fetch on play, and one kFetchHoldTarget variant
+// keeps it on the battlefield. Not on a replay of a reference recorded under an older rule.
+static bool HumanFetchChoiceOn()
+{
+    return HumanPlayActive() && !LegacyFetchImmediateOn() && !LegacyHumanFetchHoldOn();
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
     if (p.fetch_land_types.empty()) { return false; }
     if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
-    // Only the modern zero-mana, one-life fetch template is safe to collapse
-    // through PerformFetch; other activated searches keep their full cost path.
-    if (p.land_search_activation_cost->ManaValue() != 0 || p.land_search_activation_life_cost != 1
-        || !p.land_search_activation_sacrifice_self || p.land_search_count != 1
-        || state.players[state.active_player_index].life <= 3) { return false; }
+    if (!OnePayLifeFetch(p)) { return false; }
+    // Human play: on play unless the land drop's plan names kFetchHoldTarget (PlayLandCore). The <=3-life
+    // safety is an AUTONOMOUS policy: the human sees the same targets + hold dialog at every life total.
+    if (HumanFetchChoiceOn()) { return true; }
+    if (state.players[state.active_player_index].life <= 3) { return false; }
     if (DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
-    // HUMAN PLAY follows the same on-play default (USER 2026-11-14: "Human play doesn't need to keep the
-    // hold, at least by default"): the land drop is one plan per legal target (the enumeration's human
-    // bypass keeps the FULL FetchCandidates list), so the target stays the human's. MTG_HUMAN_FETCH_HOLD=1
-    // / --legacy-human-fetch-hold (a reference recorded under the hold) keeps the battlefield hold.
-    if (HumanPlayActive() && HumanFetchHoldOn()) { return false; }
+    // A replay under --legacy-human-fetch-hold: the pre-2026-11-14 human rule, always held.
+    if (HumanPlayActive()) { return false; }
     return !ResolveProvider(state).ConsiderFetchHold(state, land);
+}
+
+bool HumanFetchHoldVariant(const GameState& state, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    return HumanFetchChoiceOn() && !p.fetch_land_types.empty() && p.land_search_activation_cost.has_value()
+        && OnePayLifeFetch(p) && FetchResolvesOnPlay(state, land);
 }
 
 int ModernRwBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const

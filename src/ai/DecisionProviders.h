@@ -30,6 +30,9 @@ bool DecisionUnpruned();
 
 // Shared land-drop policy, read by both plan enumeration and its executor.
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
+// HUMAN PLAY: this fetchland's land drop also gets a kFetchHoldTarget (play it uncracked) variant beside
+// its per-target on-play variants. False outside human play and on a legacy-rule replay.
+bool HumanFetchHoldVariant(const GameState& state, const CardDefinition& land);
 // HUMAN PLAY's on-play fetch fan: `cands` (the provider's FetchCandidates, in its order) widened with every
 // other legal target (distinct library land names of a fetched subtype, library order), so the human --
 // not the provider -- picks what the land drop fetches. A no-op outside human play and on a legacy

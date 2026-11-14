@@ -466,8 +466,8 @@ def recording_rule_args(ref):
     those recordings with --legacy-fetch-immediate; new recordings carry the stamp.
 
     `fetch_on_play` (2026-11-14, USER: "Human play doesn't need to keep the hold, at least by default"):
-    from then on a human-play zero-mana one-life fetch resolves ON PLAY (the land drop names its target)
-    unless the hold is opted in (MTG_HUMAN_FETCH_HOLD=1). A `fetch_activation` recording without the
+    from then on a human-play zero-mana one-life fetch's land drop offers each target (resolved ON PLAY)
+    and a hold plan (`(hold: crack later)`, the fetch enters uncracked). A `fetch_activation` recording without the
     stamp was played under the hold (land drop, then a separate crack and its `tutor_etb` pick), so it
     replays with --legacy-human-fetch-hold.
 

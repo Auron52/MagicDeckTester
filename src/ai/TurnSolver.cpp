@@ -96032,6 +96032,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 ResolveProvider(state).FetchCandidates(state, state.active_player_index, ld->params);
             // Human play: the human picks among EVERY legal target, not the provider's (narrowed) list.
             WidenHumanFetchTargets(state, state.active_player_index, ld->params, cands);
+            // ...and may HOLD the fetch instead (kFetchHoldTarget, USER 2026-11-14 "allow deferring the fetch
+            // in the choice dialog"), always: every target is named, even a single one, so the choose dialog
+            // shows targets + hold. Human play only (HumanFetchHoldVariant), never the autonomous fan.
+            if (HumanFetchHoldVariant(state, *ld))
+            {
+                if (cands.empty()) { add_for_land(ln, ""); }   // nothing to find: the on-play whiff
+                for (const std::string& c : cands) { add_for_land(ln, c); }
+                add_for_land(ln, kFetchHoldTarget);
+                continue;
+            }
             if (cands.size() > 1)
             {
                 if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
@@ -96089,7 +96099,13 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 std::vector<std::string> cands =
                     ResolveProvider(state).FetchCandidates(state, state.active_player_index, tl->params);
                 WidenHumanFetchTargets(state, state.active_player_index, tl->params, cands);
-                if (cands.size() > 1)
+                if (HumanFetchHoldVariant(state, *tl))   // the hand fetchland's targets + hold, above
+                {
+                    if (cands.empty()) { add_for_land(tn, "", "", true); }
+                    for (const std::string& c : cands) { add_for_land(tn, c, "", true); }
+                    add_for_land(tn, kFetchHoldTarget, "", true);
+                }
+                else if (cands.size() > 1)
                 {
                     if (!DecisionUnpruned(UnprunedGate::Fetch) && !HumanPlayActive())
                     {
@@ -125191,7 +125207,12 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
         // order pins it via --cast-order, the search uses the deck's cast order. USER 2026-10-06: "I
         // should not be asked for an order. The order is apparent.")
         // Fetchland target is a plan-level sub-decision (cracking a fetch chooses what to get).
-        if (!p.fetch_target.empty()) { addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target, p.fetch_target, "fetch"); }
+        // The human-play HOLD variant (kFetchHoldTarget) shows the fetchland's own art: it stays on the battlefield.
+        if (!p.fetch_target.empty())
+        {
+            addSub(p.land_to_play + " fetches " + p.fetch_target, p.land_to_play + " fetches", p.fetch_target,
+                   p.fetch_target == kFetchHoldTarget ? p.land_to_play : p.fetch_target, "fetch");
+        }
         // MDFC (Pathway) face is a plan-level sub-decision: both faces carry land_to_play == the hand
         // (front) name, so they survive the land-name match above and surface here as a "which face?"
         // choose grid. `card` = the face's real name so the GUI shows the front vs back Scryfall art.

@@ -718,6 +718,48 @@ untapped-put fetch and an in-plan land-search cast whose castability depends on 
    was changed.
 2. Human play: `CheckLine` under `MTG_HUMAN_PLAY` rejects the one-shot line `act=Arid Mesa;cast=Lava Spike` ("can't pay
    for 'Lava Spike'") on both binaries (pre-existing). Stepwise viewer play (crack, then a fresh decision) is not
-   affected by this check; unverified in the GUI.
+   affected by this check; unverified in the GUI. **RESOLVED** 2026-11-14: "Viewer fetch-line fix" below.
 3. GT: smoke / regression / overnight rows of Creature Giving (incl. 2HG) and Boars move; every other deck is
    byte-identical in this sample. Not accepted here (the parent runs the tiers).
+
+## Viewer fetch-line fix (2026-11-14) -- the one-shot crack-then-cast line, and the human fetch dialog
+
+**Symptom (USER: *"Let's fix that viewer line. I have seen something similar when the hold was added, but it should be
+fixed either way."*).** Modern RW Burn, claude-play seed 4: with an uncracked Arid Mesa on the battlefield the line
+`act=Arid Mesa;cast=Lava Spike` (also `landsearch=Arid Mesa;cast=Lava Spike`) was rejected, "can't pay for 'Lava
+Spike': no untapped source produces red mana". Step by step (crack, then a fresh decision) worked.
+
+**Mechanism.** `CrackFirstSources` (TurnSolver.cpp, CRACK-FIRST ROOTS, from the Fetch-crack fix above) returned
+early under `HumanPlayActive()`, so the human menu had no "crack, then cast off the fetched land" plan: CheckLine
+stage 1 matched nothing and stage 2's colour gate priced the Spike on the pre-crack board. **Fix:** the roots run in
+human play too; a human `tutor_etb` prompt at the crack defaults to the pick the plan was priced with
+(`LandSearch.h`, human chooser only).
+
+**Human fetch policy (USER: *"Human play doesn't need to keep the hold, at least by default."*, *"The only issue I
+have is with needing to do the manual crack in lines where it isn't needed ... maybe the right way to do this is to
+allow deferring the fetch in the choice dialog?"*, *"I would be okay with it being on all of the time."*).** A
+zero-mana one-life fetchland's human land drop is one plan per legal target (resolved on play; the list widened past
+the provider's narrowed one by `WidenHumanFetchTargets`) PLUS one HOLD plan, `Plan::fetch_target =
+kFetchHoldTarget` (`(hold: crack later)`, SpellEffects.h). `PlayLandCore` (LandPlay.cpp, shared by executor and
+rollout) plays the hold variant uncracked; the fetchland's activation is offered in later frames, and
+`act=<fetch>;cast=X` is one line. It is the plan-variant route `fetch_target` already used (CheckLine's `fetch` sub
+-> the GUI's dimension dialog; the hold tile shows the fetchland's own art), not a new chooser type, so the viewer,
+the claude-play protocol (a plan index) and the reference format needed no new wiring. Always offered
+(`HumanFetchHoldVariant`): at every life total (the <=3-life hold stays an autonomous safety) and with a single legal
+target. No lever (the WIP's `MTG_HUMAN_FETCH_HOLD` was deleted). New references stamp `fetch_on_play`; a
+`fetch_activation` reference without it replays with `--legacy-human-fetch-hold` (the earlier forced human hold).
+
+**Verified.** Repro: at seed 4 choices `1` the menu offers Mesa -> Mountain / Sacred Foundry / hold;
+`land=Arid Mesa` = choose over 3; `land=Arid Mesa;cast=Lava Spike` = choose over the 2 targets;
+`land=Arid Mesa;landsearch=Arid Mesa;cast=Lava Spike` accept; after the hold (`1,14`) `act=Arid Mesa;cast=Lava
+Spike` accept; under `--legacy-human-fetch-hold` (the old rule) the one-shot line is accepted too (was `illegal`).
+Scenarios 513/513 (9 `modern_rw_burn_human_*`; `modern_rw_burn_fetch_suspend_path` now expects `accept`: the drop
+resolves on play). mtg-test 3024/3024. Viewer decisions audit: Modern RW Burn 5h PASS.
+`test/viewer_protocol_check.py --strict` (all 836 references): 319 ok, 516 repaired, 1 beaten, 0 play-drift / shuffle-dead / board-diverged / enum-gap / mull-drift / contract-fail -- every reference replays; the 12 hold-era Modern RW Burn / Morph fetch references replay through `--legacy-human-fetch-hold` (baseline `mtg.preview` + the pre-change checker: 327 ok, 508 repaired, 1 beaten; the only change is 8 refs ok -> repaired -- Modern RW Burn s2, s4, s5, s6, s10 and Morph s2, s6, s7 -- stale-index repairs because the crack-first roots add plans to their legacy menus, matched by content, same result). Boars audit: one HARD_MISS (Raggadragga `target`), identical on the pre-change binary (pre-existing, not this change). Autonomous identity: one pooled `--batch` per binary
+(`mtg.preview` = 124950596 vs this commit; RW Burn, Boars, Creature Giving, Anti-Lifegain, Five Colour, Morph; 20
+games each, d3 b10, seed 9101): all 120 per-game `[win]` lines and the batch stdout byte-identical.
+
+**Open (surfaced, not decided).** (1) Hold-era references replay through the legacy marker flag rather than intent
+remapping (USER: "Either way is fine"; kept). (2) The human menu (claude-play plan list) now also lists
+"hold, then crack in the same plan" lines beside the on-play target lines; they are outcome-identical to them and are
+kept so the viewer's split forms (`land=;landsearch=;cast=`) still match a plan.

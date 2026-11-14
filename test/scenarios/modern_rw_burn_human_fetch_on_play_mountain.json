@@ -31,7 +31,7 @@
   "expect_opponent_life": 17,
   "expect_no_win": true,
   "_comment": [
-    "HUMAN-PLAY FETCH RESOLVES ON PLAY (USER 2026-11-14: \"Human play doesn't need to keep the hold, at least by default\"). FetchResolvesOnPlay no longer forces the battlefield hold under human play (MTG_HUMAN_FETCH_HOLD=1 opts back in); the land drop is one plan per legal target, widened past the provider's narrowed list (WidenHumanFetchTargets: Modern RW Burn's FetchCandidates returns ONE pick), so the target is the human's.",
+    "HUMAN-PLAY FETCH: TARGETS + HOLD (USER 2026-11-14: \"Human play doesn't need to keep the hold, at least by default\", \"maybe the right way to do this is to allow deferring the fetch in the choice dialog?\", \"I would be okay with it being on all of the time\"). In human play a zero-mana one-life fetchland's land drop is one plan per legal target (resolved on play; widened past the provider's narrowed list by WidenHumanFetchTargets) PLUS one hold plan (kFetchHoldTarget): the fetchland enters uncracked, its activation available later.",
     "Executed with the human picking the Mountain: the fetch resolves at the drop (1 life), the Spike deals 3."
   ]
 }

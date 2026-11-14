@@ -1571,20 +1571,18 @@ inline bool g_play_legacy_karoo_float = false;
 inline bool g_play_legacy_fetch_immediate = false;
 inline bool LegacyFetchImmediateOn() { return g_play_legacy_fetch_immediate; }
 
-// HUMAN FETCH HOLD (USER 2026-11-14: "Human play doesn't need to keep the hold, at least by default").
-// Off by default: in human play a zero-mana one-life fetchland resolves ON PLAY, exactly as autonomous
-// play does (FetchResolvesOnPlay), with its target the human's -- one plan per legal target, CheckLine's
-// `fetch` sub. MTG_HUMAN_FETCH_HOLD=1 opts back in to the battlefield hold (play it, crack it later);
-// `--legacy-human-fetch-hold` is its REPLAY twin: a reference recorded under the hold (stamped
-// `fetch_activation` but not `fetch_on_play`) replays with it (test/viewer_protocol_check.py,
-// recording_rule_args), so an old recording is never invalidated by the new default. Read ONLY under
-// HumanPlayActive() (FetchResolvesOnPlay), so autonomous play never consults it.
+// HUMAN-PLAY FETCH: RESOLVE ON PLAY, OR HOLD -- the human's pick (USER 2026-11-14: "Human play doesn't need to
+// keep the hold, at least by default", then "maybe the right way to do this is to allow deferring the fetch in
+// the choice dialog?" and "I would be okay with it being on all of the time"). In human play a zero-mana
+// one-life fetchland's land drop is one plan per legal target PLUS one hold plan (kFetchHoldTarget,
+// SpellEffects.h): a target resolves the fetch at the drop, the hold keeps the fetchland on the battlefield
+// with its normal activation. No lever. `--legacy-human-fetch-hold` is the REPLAY flag for a reference
+// recorded under the earlier forced hold (stamped `fetch_activation` but not `fetch_on_play`;
+// test/viewer_protocol_check.py recording_rule_args): it restores that rule -- no on-play drop, no hold
+// plan -- so an old recording is never invalidated. Read ONLY under HumanPlayActive() (FetchResolvesOnPlay,
+// HumanFetchHoldVariant), so autonomous play never consults it.
 inline bool g_play_legacy_human_fetch_hold = false;
-inline bool HumanFetchHoldOn()
-{
-    static const bool s_env = EnvOn("MTG_HUMAN_FETCH_HOLD", false);   // DEFAULT OFF; =1 keeps the hold in human play
-    return s_env || g_play_legacy_human_fetch_hold;
-}
+inline bool LegacyHumanFetchHoldOn() { return g_play_legacy_human_fetch_hold; }
 
 inline bool HumanKarooFloatRuleOn()   // the rule the run plays under (the recording stamp reads this)
 {

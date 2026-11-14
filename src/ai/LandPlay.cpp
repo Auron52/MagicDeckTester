@@ -29,7 +29,9 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
 
     // Fetchland: the land drop sacrifices the fetchland to search out a real land. fetch_target
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
-    if (FetchResolvesOnPlay(state, def))
+    // kFetchHoldTarget (human play's HOLD variant, SpellEffects.h) skips the on-play resolution: the
+    // fetchland enters the battlefield below like any held fetch, its activation available later.
+    if (FetchResolvesOnPlay(state, def) && opts.fetch_target != kFetchHoldTarget)
     {
         Card fetchland = card;
         leave_zone();

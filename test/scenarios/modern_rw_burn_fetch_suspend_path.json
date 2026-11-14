@@ -6,13 +6,22 @@
   "opponent_life": 20,
   "resume_at": "main1",
   "battlefield": [],
-  "hand": ["Wooded Foothills", "Rift Bolt", "Sunbaked Canyon"],
+  "hand": [
+    "Wooded Foothills",
+    "Rift Bolt",
+    "Sunbaked Canyon"
+  ],
   "library_filler": "Mountain",
   "library_size": 40,
   "depth": 0,
   "budget_ms": 20,
   "max_turns": 3,
-  "env": { "MTG_HUMAN_PLAY": "1" },
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
   "validate_line": "land=Wooded Foothills;suspend=Rift Bolt;seq=land=Wooded Foothills|suspend=Rift Bolt",
-  "expect_verdict": "legal_not_enumerated"
+  "expect_verdict": "accept",
+  "_comment": [
+    "Was legal_not_enumerated under the human-play forced fetch hold (the viewer split the line: land, crack, suspend -- linebuild.js fetchSuspendRoute). Since USER 2026-11-14 (\"Human play doesn't need to keep the hold, at least by default\"; hold offered in the choice dialog) the land drop resolves the fetch on play per target, so play Foothills -> Mountain, suspend Rift Bolt is one enumerated line (the hold variant cannot pay the suspend)."
+  ]
 }

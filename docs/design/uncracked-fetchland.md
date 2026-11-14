@@ -6,27 +6,29 @@ second main. Fetchlands are the most flexible lands, so deferring the crack is
 rarely a bad play, unless you already know what you want to do with it (or need the
 mana now)."
 
-## Current policy and review (2026-11-05)
+## Current policy (2026-11-14) and review (2026-11-05)
 
-Arid Mesa and Wooded Foothills now have a battlefield activation model
-(Windswept Heath joined them on 2026-11-13, Boars I1; it moves play for Anti-Lifegain, Creature
-Giving and Five Colour, which run it; a held fetch's land pays the same main's casts since the 2026-11-14
-crack-first roots, `analysis-Boars.md` "Fetch-crack fix"). Most
-other fetchlands in current decklists still use the older immediate-on-play
-card data; the deck analyzer reports both cases in `fetch_hold_review` so a
-new deck review must decide whether to add hold and when its provider should
-consider it. Human play resolves a zero-mana one-life fetch ON PLAY by default too (USER 2026-11-14: "Human play
-doesn't need to keep the hold, at least by default"): the land drop is one plan per legal target, widened past the
-provider's list (`WidenHumanFetchTargets`), so the human still picks the land. `MTG_HUMAN_FETCH_HOLD=1` restores the
-battlefield hold in human play; a reference recorded under the hold (`fetch_activation` without `fetch_on_play`)
-replays with `--legacy-human-fetch-hold`. Where the hold remains (3 life or less, the lever, a fetch already on the
-battlefield) the crack-first roots run in human play as well, so `act=Arid Mesa;cast=Lava Spike` is one line.
+**Both worlds resolve a zero-mana one-life fetch ON PLAY by default since USER 2026-11-14; the hold is opt-in.**
 
-The Modern RW Burn provider skips battlefield hold in autonomous play except
-at three life or less, where cracking or shocking in a fetched land could be
-unsafe. The unpruned audit reopens the hold. This is a provider heuristic,
-not a change to fetchland rules. Burn's two-Searing-Blaze landfall sequence is
-the rare excluded line identified during review.
+* **Autonomous play** (USER: *"We shouldn't fetch hold for the decks. Only very specific decks care about the
+  hold."*): `DecisionProvider::ConsiderFetchHold` defaults to false, so the land drop sacrifices the fetch and the
+  searched fan picks the target. A deck whose line genuinely needs the deferred crack overrides it to true (none
+  does today). Two safeties still hold the fetch: three life or less, and the unpruned audit (`UnprunedGate::Fetch`).
+* **Human play** (USER: *"Human play doesn't need to keep the hold, at least by default"*, then *"maybe the right
+  way to do this is to allow deferring the fetch in the choice dialog?"* and *"I would be okay with it being on all
+  of the time"*): the land drop is one plan per legal target (resolved on play; the list widened past the
+  provider's to every legal target, `WidenHumanFetchTargets`) **plus one hold plan** (`kFetchHoldTarget`,
+  `(hold: crack later)`), always -- at every life total and with a single target. Holding plays the fetchland
+  uncracked; its activation is offered later, and the crack-first roots (`analysis-Boars.md` "Fetch-crack fix" and
+  "Viewer fetch-line fix") make `act=Arid Mesa;cast=Lava Spike` one line. No lever. A reference recorded under the
+  earlier forced human hold (`fetch_activation` without `fetch_on_play`) replays with `--legacy-human-fetch-hold`.
+
+Arid Mesa and Wooded Foothills have a battlefield activation model (Windswept Heath joined them on 2026-11-13,
+Boars I1, used by Anti-Lifegain, Creature Giving and Five Colour). Most other fetchlands in current decklists still
+use the older immediate-on-play card data; the deck analyzer reports both cases in `fetch_hold_review`, so a new
+deck review decides whether its provider should opt in to the hold. The Modern RW Burn provider resolves on play
+(`MTG_RW_BURN_FETCH_AUTOCRACK`, default on, predates the 2026-11-14 default); Burn's two-Searing-Blaze landfall
+sequence is the rare excluded line identified during its review.
 
 FiveColour has Wooded Foothills and a distinct reason to consider hold: it can
 make a land drop now and choose the fetched colour after a later draw. A small
