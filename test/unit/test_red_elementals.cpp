@@ -946,3 +946,389 @@ TEST_CASE("Nova Chaser: HARDCAST only after combat (USER main-2 rule); the Souls
     s.m_provider = &generic;
     CHECK_FALSE(NovaCastVariants(s, /*pre_combat=*/true).empty());
 }
+
+// ---- INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP (agent F, 2026-11-14) --------------------------------
+// "{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield. That creature gains
+// haste until end of turn. Sacrifice it at the beginning of the next end step." Activated in morph's opponent-end-
+// step window (SpellEffects.h EotFaceUpMenu / EotPutOptions), searched on the BoundaryFan's face-up axis.
+#include "ai/AIEngine.h"
+#include "core/GameEngine.h"
+namespace
+{
+GameState EotRe()
+{
+    GameState s = BoardRe();
+    s.deck_has_eot_tap_put = true;
+    for (int i = 0; i < 20; ++i) { Card c = DRe("Mountain").card; c.m_number = g_nre++; s.players[0].library.push_back(c); }
+    return s;
+}
+int ByNameNum(const GameState& s, const std::string& name)
+{
+    const int i = BfIdx(s, name);
+    return i < 0 ? -1 : s.battlefield[static_cast<std::size_t>(i)].card.m_number;
+}
+}   // namespace
+
+TEST_CASE("Soulstoke eot: legal only untapped, not summoning sick, {1}{R} untapped, an Elemental creature in hand")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Ball Lightning");
+    HandRe(s, "Lightning Bolt");
+    const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(s);
+    REQUIRE(menu.size() == 2u);                      // put Ball Lightning (the front), put nothing
+    REQUIRE(menu[0].puts.size() == 1u);
+    CHECK(menu[0].puts[0].name == "Ball Lightning");
+    CHECK(menu[1].puts.empty());
+    {   // cast this turn: not ours since our most recent turn began (CR 302.6)
+        GameState t = s;
+        t.battlefield[static_cast<std::size_t>(BfIdx(t, "Incandescent Soulstoke"))].entered_this_turn = true;
+        CHECK_FALSE(AnyEotPutCandidate(t));
+        CHECK(EotFaceUpMenu(t).empty());
+    }
+    {   // tapped (it attacked or activated this turn)
+        GameState t = s;
+        t.battlefield[static_cast<std::size_t>(BfIdx(t, "Incandescent Soulstoke"))].tapped = true;
+        CHECK(EotFaceUpMenu(t).empty());
+    }
+    {   // no Elemental CREATURE card in hand (Lightning Bolt is not one)
+        GameState t = s;
+        t.players[0].hand.erase(t.players[0].hand.begin());
+        CHECK(EotFaceUpMenu(t).empty());
+    }
+    {   // one untapped Mountain: {1}{R} not payable -> the lone "nothing" entry (no fan)
+        GameState t = s;
+        t.battlefield[static_cast<std::size_t>(BfIdx(t, "Mountain"))].tapped = true;
+        const auto m = EotFaceUpMenu(t);
+        REQUIRE(m.size() == 1u);
+        CHECK(m[0].puts.empty());
+    }
+    {   // the deck stamp gates it all
+        GameState t = s;
+        t.deck_has_eot_tap_put = false;
+        CHECK(EotFaceUpMenu(t).empty());
+    }
+}
+
+TEST_CASE("Soulstoke eot: the put survives into our turn, attacks without haste, dies at OUR next end step")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Ball Lightning");
+    HandRe(s, "Spark Elemental");
+    s.scripted_eot_face_up = 0;   // the front: put Ball Lightning (power 6 before Spark's 1)
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    const int bi = BfIdx(s, "Ball Lightning");
+    REQUIRE(bi >= 0);
+    const Permanent& bl = s.battlefield[static_cast<std::size_t>(bi)];
+    CHECK(bl.sac_at_end_step);
+    CHECK_FALSE(bl.temp_haste);          // its haste ended at the opponent's cleanup
+    CHECK_FALSE(bl.entered_this_turn);   // ours since this turn began: it attacks without haste
+    CHECK(bl.CanTap());
+    // Soulstoke untapped at our untap step: the main-phase put is available again (a second hasty creature).
+    const int so = ByNameNum(s, "Incandescent Soulstoke");
+    CHECK_FALSE(s.battlefield[static_cast<std::size_t>(BfIdx(s, "Incandescent Soulstoke"))].tapped);
+    CHECK(PutFromHandLegalIndex(s, 0, so, "Spark Elemental") >= 0);
+    bool main_put = false;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+    { if (a.kind == Action::Kind::PutFromHandAbility && a.card_name.str() == "Spark Elemental") { main_put = true; } }
+    CHECK(main_put);
+    // Our end step: the delayed sacrifice (and Ball Lightning's own trigger) -- once, to the graveyard.
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    CHECK(BfIdx(s, "Ball Lightning") < 0);
+    CHECK(CountRe(s.players[0].graveyard, "Ball Lightning") == 1);
+}
+
+TEST_CASE("Soulstoke eot: one cast on turn N cannot activate at the end of N, but can at the end of N+1")
+{
+    GameState s = EotRe();
+    const int so = PutRe(s, "Incandescent Soulstoke");
+    s.battlefield.back().entered_this_turn = true;   // cast this turn
+    for (int k = 0; k < 4; ++k) { PutRe(s, "Mountain"); }
+    HandRe(s, "Ball Lightning");
+    HandRe(s, "Spark Elemental");
+    s.scripted_eot_face_up = 0;
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));   // the end of turn N: nothing can be put
+    CHECK(BfIdx(s, "Ball Lightning") < 0);
+    CHECK(s.players[0].hand.size() == 3u);   // + the draw
+    CHECK(AnyEotPutCandidate(s));             // turn N+1: ours since the turn began
+    s.scripted_eot_face_up = 0;
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));   // the end of turn N+1
+    CHECK(BfIdx(s, "Ball Lightning") >= 0);
+    CHECK(ByNameNum(s, "Incandescent Soulstoke") == so);
+}
+
+// Q5 (agent F2): "the next end step" is a BOOL (Permanent::sac_at_end_step), not a turn stamp. Proven for both put
+// times with a creature that has NO self-sacrifice of its own (Flamekin Bladewhirl), so only the delayed trigger acts.
+TEST_CASE("Soulstoke eot: the delayed sacrifice bool -- a main-phase put dies at OUR end step that turn")
+{
+    GameState s = EotRe();
+    const int so = PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Flamekin Bladewhirl");
+    REQUIRE(ApplyPutFromHand(s, 0, so, "Flamekin Bladewhirl"));   // the main-phase put (mana paid by the caller)
+    const int bw = BfIdx(s, "Flamekin Bladewhirl");
+    REQUIRE(bw >= 0);
+    CHECK(static_cast<bool>(s.battlefield[static_cast<std::size_t>(bw)].sac_at_end_step));
+    CHECK(static_cast<bool>(s.battlefield[static_cast<std::size_t>(BfIdx(s, "Incandescent Soulstoke"))].tapped));
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));   // OUR end step, then the opponent's turn
+    CHECK(BfIdx(s, "Flamekin Bladewhirl") < 0);                    // sacrificed at the very next end step: ours
+    CHECK(CountRe(s.players[0].graveyard, "Flamekin Bladewhirl") == 1);
+}
+
+TEST_CASE("Soulstoke eot: the delayed sacrifice bool -- an opponent-end-step put survives our turn, dies at OUR end step")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Flamekin Bladewhirl");
+    const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(s);
+    REQUIRE(menu.size() == 2u);
+    REQUIRE(menu[0].puts.size() == 1u);
+    CHECK(menu[0].puts[0].name == "Flamekin Bladewhirl");
+    s.scripted_eot_face_up = 0;                                    // put it at the opponent's end step
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));   // our end step, opponent's turn + window, our untap
+    const int bw = BfIdx(s, "Flamekin Bladewhirl");
+    REQUIRE(bw >= 0);                                             // NOT sacrificed at the opponent's end step
+    CHECK(static_cast<bool>(s.battlefield[static_cast<std::size_t>(bw)].sac_at_end_step));
+    CHECK_FALSE(static_cast<bool>(s.battlefield[static_cast<std::size_t>(bw)].entered_this_turn));   // attacks this turn, no haste needed
+    CHECK(CountRe(s.players[0].graveyard, "Flamekin Bladewhirl") == 0);
+    // Through our turn to OUR end step: pin the window to "put nothing" so the second crossing puts no other card.
+    const std::vector<EotFaceUpOption> m2 = EotFaceUpMenu(s);
+    int nothing = -1;
+    for (std::size_t i = 0; i < m2.size(); ++i) { if (m2[i].puts.empty() && m2[i].ids.empty()) { nothing = static_cast<int>(i); } }
+    if (nothing >= 0) { s.scripted_eot_face_up = nothing; }
+    REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(s));
+    CHECK(BfIdx(s, "Flamekin Bladewhirl") < 0);                    // sacrificed at OUR next end step
+    CHECK(CountRe(s.players[0].graveyard, "Flamekin Bladewhirl") == 1);
+}
+
+TEST_CASE("Soulstoke eot: the real turn loop and the rollout take the same steps (parity)")
+{
+    for (int pin : { 0, 1 })
+    {
+        GameState before = EotRe();
+        PutRe(before, "Incandescent Soulstoke");
+        PutRe(before, "Mountain");
+        PutRe(before, "Mountain");
+        PutRe(before, "Mountain", 0, /*tapped=*/true);
+        HandRe(before, "Ball Lightning");
+        HandRe(before, "Hellspark Elemental");
+        before.scripted_eot_face_up = static_cast<std::int16_t>(pin);
+        GameState rollout = before;
+        REQUIRE(TurnSolver::SimulateEndAndStartNextTurnForTest(rollout));
+        GameState executor = before;
+        AIEngine ai(MulliganProfile::DefaultProfile(), 0, 0);
+        GameEngine engine(ai);
+        REQUIRE(engine.AdvanceToFirstMainForTest(executor));
+        CHECK(executor.turn_number == rollout.turn_number);
+        REQUIRE(executor.battlefield.size() == rollout.battlefield.size());
+        for (std::size_t i = 0; i < rollout.battlefield.size(); ++i)
+        {
+            CHECK(executor.battlefield[i].card.m_number == rollout.battlefield[i].card.m_number);
+            CHECK(static_cast<bool>(executor.battlefield[i].tapped) == static_cast<bool>(rollout.battlefield[i].tapped));
+            CHECK(static_cast<bool>(executor.battlefield[i].sac_at_end_step) == static_cast<bool>(rollout.battlefield[i].sac_at_end_step));
+            CHECK(static_cast<bool>(executor.battlefield[i].temp_haste) == static_cast<bool>(rollout.battlefield[i].temp_haste));
+        }
+        CHECK(executor.players[0].hand.size() == rollout.players[0].hand.size());
+        CHECK((BfIdx(rollout, "Ball Lightning") >= 0) == (pin == 0));
+    }
+}
+
+TEST_CASE("Soulstoke eot: the BoundaryFan crosses once per menu rank and records it; two sources put two")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Ball Lightning");
+    const auto crossings = TurnSolver::FaceUpBoundaryForTest(s);
+    REQUIRE(crossings.size() == 2u);
+    CHECK(crossings[0].first == 0);
+    CHECK(crossings[1].first == 1);
+    // Two Soulstokes, four Mountains, two names: the multisets of up to two puts (the sources are interchangeable),
+    // the front puts both names, "nothing" is last.
+    GameState t = EotRe();
+    PutRe(t, "Incandescent Soulstoke");
+    PutRe(t, "Incandescent Soulstoke");
+    for (int k = 0; k < 4; ++k) { PutRe(t, "Mountain"); }
+    HandRe(t, "Ball Lightning");
+    HandRe(t, "Spark Elemental");
+    const auto m = EotFaceUpMenu(t);
+    REQUIRE(m.size() == 4u);   // {BL, Spark}, {BL}, {Spark}, {}
+    CHECK(m[0].puts.size() == 2u);
+    CHECK(m[0].puts[0].src != m[0].puts[1].src);
+    CHECK(m.back().puts.empty());
+    GameState u = t;
+    u.scripted_eot_face_up = 0;
+    PerformOpponentEndStepFaceUp(u);
+    CHECK(BfIdx(u, "Ball Lightning") >= 0);
+    CHECK(BfIdx(u, "Spark Elemental") >= 0);
+    // No live source: the axis is not live, the single crossing records nothing.
+    GameState n = EotRe();
+    PutRe(n, "Mountain");
+    const auto none = TurnSolver::FaceUpBoundaryForTest(n);
+    REQUIRE(none.size() == 1u);
+    CHECK(none[0].first == -2);
+}
+
+TEST_CASE("Soulstoke eot: a put Nova Chaser's champion pick is a searched variant, never unpinned")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Nova Chaser");
+    const auto m = EotFaceUpMenu(s);
+    REQUIRE(m.size() >= 2u);
+    bool decline = false;
+    for (const EotFaceUpOption& o : m)
+    {
+        for (const EotPutStep& st : o.puts)
+        {
+            CHECK(st.name == "Nova Chaser");
+            CHECK(st.champion != 0);   // a pinned exile pick or the decline -- no unpinned resolution
+            decline = decline || st.champion == -1;
+        }
+    }
+    CHECK(decline);
+    CHECK(m.back().puts.empty());
+}
+
+TEST_CASE("Soulstoke eot: the searched HOLD -- an attacker the window could use is contested (kind 4)")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Ball Lightning");
+    CHECK(DorkAtkContestedKind(s) == 4);
+    {
+        GameState t = s;
+        t.players[0].hand.clear();
+        CHECK(DorkAtkContestedKind(t) == 0);   // nothing to put: the attack is not contested
+    }
+    {
+        GameState t = s;
+        t.deck_has_eot_tap_put = false;
+        CHECK(DorkAtkContestedKind(t) == 0);
+    }
+    {
+        GameState t = s;
+        t.battlefield[static_cast<std::size_t>(BfIdx(t, "Incandescent Soulstoke"))].entered_this_turn = true;
+        CHECK(DorkAtkContestedKind(t) == 0);   // summoning sick: it can neither attack nor use the window
+    }
+}
+
+TEST_CASE("Landfall Elementals: a Soulstoke-put Risen Reef's enter trigger fires in the window")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Risen Reef");
+    const std::size_t lib_before = s.players[0].library.size();
+    s.scripted_eot_face_up = 0;
+    PerformOpponentEndStepFaceUp(s);
+    REQUIRE(BfIdx(s, "Risen Reef") >= 0);
+    // The look took the top card (a Mountain): onto the battlefield tapped or into the hand.
+    CHECK(s.players[0].library.size() == lib_before - 1);
+}
+
+// B (agent F2, the no-greedy rule): a window-put creature's OWN enter choices are menu variants, exactly as the
+// main-phase put's are (the tutor axis and the look-top fan) -- never the provider's default inside the window.
+TEST_CASE("Landfall Elementals: a window-put Flamekin Harbinger's tutor target is a searched menu variant")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Flamekin Harbinger");
+    for (const char* nm : { "Ball Lightning", "Spark Elemental", "Hellspark Elemental" })
+    { Card c = DRe(nm).card; c.m_number = g_nre++; s.players[0].library.push_back(c); }
+    const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(s);
+    REQUIRE_FALSE(menu.empty());
+    REQUIRE(menu[0].puts.size() == 1u);
+    CHECK(menu[0].puts[0].name == "Flamekin Harbinger");
+    CHECK(menu[0].puts[0].tutor == -1);          // the front: the provider's pick at resolution
+    std::vector<int> tutors;
+    for (const EotFaceUpOption& o : menu)
+    { if (o.puts.size() == 1u && o.puts[0].name == "Flamekin Harbinger") { tutors.push_back(o.puts[0].tutor); } }
+    CHECK(tutors.size() >= 3u);                  // front, >= 1 other rank, the optional decline
+    CHECK(std::find(tutors.begin(), tutors.end(), 1) != tutors.end());
+    CHECK(std::find(tutors.begin(), tutors.end(), kTutorDeclineChoice) != tutors.end());
+    CHECK(menu.back().puts.empty());             // put nothing stays last
+    // The pins steer the real resolution: rank -1 and rank 1 put DIFFERENT Elementals on top; declining keeps the top.
+    auto top_after = [&](int tutor) -> std::string
+    {
+        GameState t = s;
+        for (std::size_t i = 0; i < menu.size(); ++i)
+        {
+            if (menu[i].puts.size() == 1u && menu[i].puts[0].tutor == tutor) { t.scripted_eot_face_up = static_cast<int>(i); break; }
+        }
+        PerformOpponentEndStepFaceUp(t);
+        REQUIRE(BfIdx(t, "Flamekin Harbinger") >= 0);
+        return t.players[0].library.front().m_name.str();
+    };
+    const std::string a = top_after(-1), b = top_after(1), d = top_after(kTutorDeclineChoice);
+    CHECK(a != b);
+    CHECK(a != "Mountain");
+    CHECK(b != "Mountain");
+    CHECK(d == "Mountain");
+}
+
+TEST_CASE("Landfall Elementals: a window put under a Risen Reef fans the look-top land / order pins")
+{
+    GameState s = EotRe();
+    s.deck_has_look_top_watcher = true;
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Risen Reef");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Flamekin Harbinger");
+    const std::vector<EotFaceUpOption> menu = EotFaceUpMenu(s);
+    bool flip = false, order = false;
+    for (const EotFaceUpOption& o : menu)
+    {
+        for (const EotPutStep& st : o.puts)
+        {
+            for (int v : st.look_top)
+            {
+                if (v == kLookTopLandFlip) { flip = true; }
+                if (v >= kLookTopOrderBase) { order = true; }
+            }
+        }
+    }
+    CHECK(flip);
+    CHECK(order);
+    REQUIRE_FALSE(menu.empty());
+    CHECK(menu[0].puts[0].look_top.empty());     // the front: every look at the provider's default
+}
+
+// A (agent F2, the completeness rule): the kind-4 hold's gate / contested tests the non-FSLineWin hosts' twins use.
+TEST_CASE("Soulstoke eot: the hold twin's gate and contested test")
+{
+    GameState s = EotRe();
+    PutRe(s, "Incandescent Soulstoke");
+    PutRe(s, "Mountain");
+    PutRe(s, "Mountain");
+    HandRe(s, "Ball Lightning");
+    CHECK(EotHoldTwinGate(s));
+    CHECK(EotHoldContested(s));
+    GameState t = s;
+    t.players[0].hand.clear();
+    CHECK_FALSE(EotHoldTwinGate(t));
+    CHECK_FALSE(EotHoldContested(t));
+    t = s;
+    t.battlefield[static_cast<std::size_t>(BfIdx(t, "Incandescent Soulstoke"))].tapped = true;   // a main-phase put
+    CHECK_FALSE(EotHoldContested(t));
+    t = s;
+    t.deck_has_eot_tap_put = false;
+    CHECK_FALSE(EotHoldTwinGate(t));
+}
