@@ -67,7 +67,7 @@ generic).
 | Foundation Breaker | lfe-etb | 2 | DONE `etb_destroy_artifact_enchantment_optional` + evoke_cost; decline own Vial/Mimic dominates; viewer `dig` (may destroy) |
 | Fulminator Mage | lfe-etb | 2 | DONE hybrid; `sac_outlet_destroy_nonbasic_land` (search offers it only when a death pays); viewer `target` |
 | Smokebraider | lfe-fury | 2/3 | DONE `produces_any_combination` + `mana_only_subtype_abilities` (+ mana_only_subtype Elemental, creature_mana_only); payer/backtracker/flow oracle; `PayingAbilitySource` scope |
-| Incandescent Soulstoke | lfe-fury | 2/3 | DONE lord + `tap_put_from_hand_*` riders (haste, `sac_at_end_step`); viewer `sfput` variant; opp-end-step timing PROVISIONAL (design doc) |
+| Incandescent Soulstoke | lfe-fury | 2/3 | DONE lord + `tap_put_from_hand_*` riders (haste, `sac_at_end_step`); viewer `sfput` variant; opp-end-step timing BUILT 2026-11-14 (Q3 update; viewer `eot_put`) |
 | Fury | lfe-fury | 3 | DONE double strike, `etb_damage_divided_creatures` (default no targets, fold), PITCH evoke `evoke_exile_color` searched per distinct red card; viewer `divide` (+allow_none) |
 
 ### lfe-land report (2026-10-19, commits d200ac87a d23951908 39eac6b4b)
@@ -420,7 +420,7 @@ narrowing still waiting for the user's sign-off (ledger Q4). Numbers quoted are 
 | Flamekin Harbinger | "WHICH Elemental is the searched tutor axis ... 'you MAY search' is the tutor_optional decline variant" | searched (no simplification) | width now 32 (see section 3) |
 | Smokebraider | "[PARTIAL: an Elemental spell of a NONCREATURE type (a Kindred spell) is refused -- WHY inert: cards.json holds no such card. The viewer's manual pre-tap does not offer this source (creature-only sources are paid automatically ...)" | deferral, inert (no such card) + viewer gap | the payer chooses Smokebraider's colours (mana-payment exemption, see section 3) |
 | Fury | "(a) PLANESWALKERS are not in the target set -- WHY inert: the goldfish opponent has none ... (b) The ETB-vs-evoke-sacrifice trigger ORDER ... the engine always resolves the ETB first -- WHY inert: ... no sacrifice outlet or Fling in this list" | PROVISIONAL, inert | none here |
-| Incandescent Soulstoke | "INSTANT-SPEED TIMING -- the ability is activated only in our own main phase ... 'activate at the end of the OPPONENT's turn' ... is not modelled ... Effect: the deck is UNDER-rated wherever that line is better." | **real deferral, NOT inert** (Q3) | it loses up to 2 puts per turn cycle and a turn-early Reef / landfall trigger. Design: docs/design/opponent-end-step-window.md (~2-3 days) |
+| Incandescent Soulstoke | "INSTANT-SPEED TIMING -- the ability is activated only in our own main phase ... 'activate at the end of the OPPONENT's turn' ... is not modelled ... Effect: the deck is UNDER-rated wherever that line is better." | **real deferral, NOT inert** (Q3; BUILT 2026-11-14, see the Q3 update) | it loses up to 2 puts per turn cycle and a turn-early Reef / landfall trigger. Design: docs/design/opponent-end-step-window.md (~2-3 days) |
 | Fulminator Mage | "offered to the search only while a death payoff is live (SelfSacHasDeathPayoff -- none in this list, so it never branches here ...). WHICH land autonomously = DecisionProvider::EtbDestroyTargetPick ... a PROVISIONAL reviewed ranking, not searched" | dominated-action removal + PROVISIONAL ranking | Against the goldfish the activation only kills our own land |
 | Foundation Breaker | "[PROVISIONAL known narrowing: an OWN artifact-creature target whose death would pay (a death watcher) is never chosen autonomously -- unreachable in any deck that runs this card.]" | dominance fold + PROVISIONAL narrowing | it always declines autonomously (only own Vial / Mimic are legal). A Breaker evoke that nothing reads is also cut (`PlanHasDeadOptionalEvoke`, TurnSolver.cpp:32660) |
 | Metallic Mimic | "Deck-constant, so not surfaced to the human: the deck's own tribe weakly dominates every alternative ... PROVISIONAL inert-gap disclosure." Simultaneous-enter ruling "is inert" | correctness shortcut (type = `DominantCreatureSubtypeId` -> Elemental) + viewer gap | it makes Mimic an Elemental for the lord, Reef, Smokebraider abilities and Soulstoke. It is NOT one in hand or library (no Harbinger or Soulstoke-put target) |
@@ -463,7 +463,7 @@ The 5h mechanical audit (`scripts/audit_viewer_decisions.py`, 40 games from seed
 1. **There is no LandfallElementals cast order, and in-turn order is not searched.** Ties among creatures fall to hand order. So whether Risen Reef / Soulstoke resolve before the Elementals cast with them is luck of the hand. The permutation oracle that could measure this explodes on this deck.
 2. **The provider overrides exactly one hook** (`TutorSearchWidth` 6 -> 32). Before it, Harbinger could not find 4 of 10 Elementals at any budget, depending on the shuffle.
 3. **The generic dig gate makes Grove / Islet dig lines unfindable even at 20x budget.** That breaks the completeness rule, and opening it measured neutral (Q7).
-4. **Soulstoke's end-of-opponent's-turn put is not modelled.** The deck is under-rated there, and that line is the card's main use in real play (Q3).
+4. **Soulstoke's end-of-opponent's-turn put is not modelled.** The deck is under-rated there, and that line is the card's main use in real play (Q3). *(Superseded 2026-11-14: built; see the Q3 update.)*
 5. **Aether Vial's charge is a heuristic**, not searched (`MTG_VIAL_AXIS` off by USER ruling).
 6. **The Karoo rule treats Courtyard / Territory as making no colour.** In an all-creature deck that is conservative, but it makes a tapped Courtyard a no-search return.
 7. **No unbudgeted backstop rows for `elementals`, and no keep table yet.** Mulligan bottoming is a clairvoyant play-out of every candidate.
@@ -527,6 +527,17 @@ Would be `LandfallElementalsProvider::CleanupDiscardCandidates` behind `MTG_LFE_
   generated.
 - Q3. Soulstoke's opponent-end-step timing: build the window (`docs/design/opponent-end-step-window.md`,
   ~2-3 days, three rulings needed) or ship main-phase-only? Default: main-phase only, PROVISIONAL.
+  **UPDATE 2026-11-14: BUILT by the Red Elementals analysis (agents F / F2 / F3, local commits on branch
+  `redelem-analysis`, not yet pushed).** The window put is a searched menu (morph's opponent-end-step window).
+  The source HOLD is searched in every host. A put Risen Reef's look-top land / order and a put Flamekin
+  Harbinger's tutor target are searched menu variants. Design and open items: `opponent-end-step-window.md` §0.
+  Measurements: `analysis-Red Elementals.md`, section "Soulstoke opponent end step". Effect on this deck at d3
+  b100 (`--ignore-play-profile`; the profile's d6 value-play was NOT measured): 0 faster / 0 slower in 720 paired games (s300 x120 avg 4.3667, s5000 x600 avg 4.3283, unchanged; 2
+  digest diffs at the same turn), search units -0.2% / -0.4%. What remains for
+  you: (a) the three rulings this item named are now open questions S1-S3 in that section (Smokebraider's
+  dork kind can shadow the hold inside FSLineWin; no mana reservation axis, so a three-colour payer could strand
+  the {R}; the put menu's front is the base largest-power order); (b) this deck's smoke / regression GT must be
+  re-accepted once that branch lands, because Soulstoke's play moves (Red Elementals checkpoint, plan step 2).
 - Q4. Sign off the PROVISIONAL deferrals listed in the three cluster reports above (Brushfire evasion,
   Hydra trample, Reef fixed orders / defaults, Breaker own-target narrowing, Fulminator ranking,
   Smokebraider Kindred refusal, Fury planeswalkers / trigger order) and the INERT_PARAMS rows.
