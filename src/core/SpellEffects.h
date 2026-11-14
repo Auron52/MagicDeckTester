@@ -29904,8 +29904,7 @@ inline bool FeedsLiveScaledDork(const GameState& state, const CardDefinition& de
 // "{2}, {T}: Choose a color. Add an amount of mana of that color equal to the number of creatures
 // you control of the chosen type." Modelled as an activated mana ability that pays a generic feeder
 // ({2}) + taps the land, then adds N mana of a SEARCH-CHOSEN single colour where N = creatures you
-// control. The chosen creature TYPE is simplified to "any creature you control" (Cavern of Souls
-// precedent for single-tribe decks). The basic "{T}: Add {C}" mode lives in `produces` (handled by
+// control of the type chosen as this copy entered. The basic "{T}: Add {C}" mode lives in `produces` (handled by
 // the normal source path). A card is a scaled-mana land iff it declares a subtype AND a positive
 // feeder cost; empty subtype -> not a scaled land, so every non-Three-Tree deck stays byte-identical.
 inline bool IsScaledManaLand(const CardDefinition& def)
@@ -29914,8 +29913,8 @@ inline bool IsScaledManaLand(const CardDefinition& def)
         && def.params.mana_per_creature_feeder_generic > 0;
 }
 
-// N = creatures the active player controls (simplified any-creature count -- the chosen TYPE is
-// collapsed to "any creature" per the analysis-goblins spec). This is the raw yield of one scaled tap.
+// N = creatures the active player controls of this source's chosen type. This is the raw yield of
+// one scaled tap; a source pointer is required when multiple copies chose different types.
 inline int ScaledManaCreatureCount(const GameState& state, const Permanent* source = nullptr)
 {
     const int active = state.active_player_index;
@@ -29986,11 +29985,12 @@ inline int ScaledManaFeederMana(const GameState& state)
 // creatures" for the {2} feeder), and the extra colourless->colour upgrade makes net-1 strictly
 // better even at the tie. Returns the net WILD mana (>= 1, colour is search-chosen) when beneficial
 // AND a {feeder}-capable feeder exists, else 0 (the source falls back to its basic {C} tap).
-inline int ScaledManaNetYield(const GameState& state, const CardDefinition& def)
+inline int ScaledManaNetYield(const GameState& state, const CardDefinition& def,
+                             const Permanent* source = nullptr)
 {
     if (!IsScaledManaLand(def)) { return 0; }
     const int feeder = def.params.mana_per_creature_feeder_generic;
-    const int net    = ScaledManaCreatureCount(state) - feeder;
+    const int net    = ScaledManaCreatureCount(state, source) - feeder;
     if (net < 1) { return 0; }                              // net <= 0 -> basic {C} is no worse
     if (ScaledManaFeederMana(state) < feeder) { return 0; } // cannot pay the {feeder} generic
     return net;
@@ -43774,13 +43774,13 @@ inline void AddSourceToPool(ManaPool& pool, const GameState& state, const CardDe
         return;
     }
     // Three Tree City scaled ability: "{2},{T}: add N of a chosen colour", N = creatures you control
-    // (any-creature simplification). Modelled like a ramp filter but with a {feeder}-generic feed and
+    // of the type chosen by this copy. Modelled like a ramp filter but with a {feeder}-generic feed and
     // a board-count yield: when a feeder can pay the {feeder} and the net (N - feeder) beats the basic
     // {C} tap, this source contributes that net as WILD (the colour is search-chosen). Otherwise it
     // falls through to its basic "{T}: Add {C}" produces below. Empty subtype -> never taken here.
     if (IsScaledManaLand(def))
     {
-        if (int net = ScaledManaNetYield(state, def)) { pool.wild += net; return; }
+        if (int net = ScaledManaNetYield(state, def, perm)) { pool.wild += net; return; }
     }
     // Untap-land burst (Wirewood Lodge): one tap is worth (best scaled-Elf yield - 1) of the feed
     // colour when a live 2+ target exists (see UntapBurstBestYield's net-cancellation model). That

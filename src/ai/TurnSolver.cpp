@@ -8043,7 +8043,7 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
         // Three Tree City scaled ability yields a SEARCH-CHOSEN colour (any of W/U/B/R/G), so when it
         // can fire (a feeder pays the {2} and its net beats the basic {C}) every colour is producible.
         // Empty subtype on every board without the land -> byte-identical.
-        if (ScaledManaNetYield(state, *def) > 0)
+        if (ScaledManaNetYield(state, *def, &p) > 0)
         { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
         if (def->params.domain_mana && CanTapNow(p, state.battlefield)) { scaling_source = true; }
     }
@@ -47219,7 +47219,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (SeahunterLibraryCandidate(card) && seen.insert(lc.m_name.str()).second)
                         { emit(lc.m_name.str()); }
                     }
-                    if (HumanPlayActive()) { emit(kTutorDeclineTarget); }
+                    emit(kTutorDeclineTarget);  // hidden-zone search may fail even with a match
                 }
             }
 
@@ -123481,8 +123481,10 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
         else if (a.kind == Action::Kind::ActivatePermAbility
                  && a.ability_mode == Action::AbilityMode::TapTutorPut)
         {
-            cast_names.push_back(a.card_name + ": put " + a.tutor_target.str()
-                                 + " from library onto battlefield");
+            cast_names.push_back(a.tutor_target.str() == kTutorDeclineTarget
+                ? a.card_name + ": search library, fail to find, shuffle"
+                : a.card_name + ": put " + a.tutor_target.str()
+                    + " from library onto battlefield");
         }
         else if (a.kind == Action::Kind::ActivatePermAbility
                  && a.ability_mode == Action::AbilityMode::TapTargetPump)

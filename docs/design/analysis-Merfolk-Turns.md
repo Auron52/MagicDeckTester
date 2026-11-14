@@ -225,3 +225,80 @@ manifest/cross-check mapping needs review after the actual protocol sweep.
    zero, `provider_audit.py --check`, then ONE `./build.sh` after all source
    changes, fix compile/test failures, run focused unit tests and the viewer
    decision audit. Parent owns regression, GT, push, play server and play sweep.
+
+### 2026-11-14 continuation checkpoint after b882f8340
+
+Source edits in this checkpoint: `ScaledManaNetYield` now accepts its specific
+Three Tree City permanent, and the actual mana projection and same-turn colour
+bound pass it. Every direct `ScaledManaCreatureCount` payment/bound call now has
+the source pointer. `GenericProvider::ManaSourceRank` still calls the source-free
+net helper because its interface receives only a card definition; that call is
+an ordering heuristic, not a mana amount or payment, and can read the first City
+if two copies with different types are put on a synthetic board. Review it with
+the type chooser. Seahunter's action enumeration now includes the legal
+fail-to-find target in searched play as well as human play, and labels that
+branch as a search and shuffle. Its liveness check validates a pinned real
+target before cost payment; the shared tutor resolver filters Merfolk plus all
+six permanent types and shuffles on a pinned decline. Focused tests were added
+in `test/unit/test_merfolk_turns.cpp` for separate City counts, the permanent
+filter, a pinned Seahunter put, and fail-to-find. They are **UNBUILT/UNRUN**;
+the single `./build.sh` is still owed after all source work.
+
+Live Scryfall was fetched again for Mihail, Prophets, Seahunter, Svyelun and
+Three Tree City. Mihail's cost is `{1}{U}{U}`; Prophets' is `{4}{U}{U}`.
+No definitions exist yet for Mihail or Prophets. Coverage cannot be zero until
+they and their rules paths are implemented. The static viewer audit was run
+and fails on unclassified `choose_type_on_enter`; its Douser/Passage/Seahunter
+Oracle advisory is for choices represented by `main_phase` plan variants.
+No full build, regression, GT, push, play server, or play sweep ran here.
+
+**Precise implementation map for the remaining work:**
+
+1. Mihail: add its card definition and a true top-of-library cast source to
+   `Action`/plan enumeration (`TurnSolver.cpp` hand loop near 39319), rollout
+   `ApplyPlanDirect` cast near 70280, executor `AIEngine.cpp` cast dispatch near
+   5424/5702 and `CastSpellFromHand` near 10118, replay/line grammar and viewer
+   (`main.cpp` top context near 1695). Preserve the exact top card number and
+   remove it with `Library::DrawTop`; a hand placeholder is invalid. Private
+   top knowledge must not set public `library_top_revealed`; `RawAt(0)` is for
+   display, `front()` for a real top read. `FireOnCastTriggers` near
+   `SpellEffects.h:6320` is shared; add per-copy optional `{1}` paid token
+   trigger before resolution, with search pins/fanout (Militia Pride's
+   `scripted_militia_pride_pay` + `FireMilitiaPrideTokens` is a precedent),
+   human choice per trigger, and no trigger for Vial/Seahunter puts. Top changes
+   must reopen a same-turn continuation. Check timing, normal cost, summoning
+   sickness, multiple Mihails and top card private visibility.
+2. Prophets: add definition; champion at shared enter cascade (all casts,
+   Vial and Seahunter), one plan branch for each other controlled Merfolk and
+   deliberate decline, including tokens that cease to exist on exile. Store
+   exact linked exile object and owner; existing `ReturnOrphanedLinkedExiles`
+   assumes opponent ownership, so cannot be reused unchanged. Return via
+   `FireLeavesBattlefieldTriggers` near 13443 using the universal put/ETB path;
+   death/sacrifice uses `SacrificePermanentAt` near 17171. Add combat-damage
+   trigger in shared `src/ai/Combat.cpp` for each damage step, branch over any
+   controlled Merfolk sacrifice (including Prophets) or decline, then call
+   `GameState::QueueExtraTurn` only after a successful sacrifice. Account for
+   double strike and source disappearance. Human gets champion exile and
+   combat sacrifice choices. Test no fodder, token exile, return ownership/ETB,
+   self-sacrifice and multiple queued extra turns.
+3. Three Tree City: wire a real human as-enters creature-type chooser at
+   `FireEtbWatchers` near 10649. Follow `g_play_etb_color_chooser` across
+   `GameLogger.h`, `main.cpp` protocol writer/choice stream, `tools/play/index.html`
+   modal dispatch and `tools/play/DECISIONS.md`. Classify
+   `choose_type_on_enter` in `audit_viewer_decisions.py` as a real decision.
+   Preserve the autonomous Merfolk provider default. Audit the source-free
+   `GenericProvider::ManaSourceRank` call described above, both payers and
+   keys; run the new focused count test.
+4. Seahunter: run the new focused tests after build; verify actual activation
+   payment/liveness, exact target plan subchoice, deterministic shuffle and
+   ETB cascade through the protocol. Svyelun: its `attack_draw_cards=1` path
+   is implemented. The source 60 has no own destroy or damage effect, and a
+   passive opponent never targets, attacks or blocks, so conditional
+   indestructible and ward have no reachable interaction in this deck's
+   goldfish. Record any provisional inert-clause disclosure for user signoff;
+   if wider fidelity is required, add a state-aware indestructible predicate
+   across destroy/SBA readers (plain `Permanent::HasKeyword` lacks GameState).
+5. Finish viewer registry/manifest and actual protocol checks; update Scryfall
+   snapshot and run coverage/cost/field/provider audits; only then run ONE
+   `./build.sh`, fix compile errors, and run focused unit tests. The parent
+   retains regression, GT, push, play server and the full play sweep.
