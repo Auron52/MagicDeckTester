@@ -411,7 +411,11 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         // single-step loop used to count as `ds ? 2 : 1` -- and a first step's draws (and the pings
         // they start) resolve before the regular step.
         FireCombatDamageDrawGrants(state, step_idx, step_num, step_events);
-        ResolveProphetsCombatDamage(state, active, prophets);
+        // State-based actions end a lethal combat before its damage triggers resolve. In
+        // human play, asking for Prophets' sacrifice after the opponent is dead also
+        // exposes a decision that cannot affect the game.
+        if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
+        { ResolveProphetsCombatDamage(state, active, prophets); }
     };
     deal_step(/*first_step=*/true);
     if (stable) { RefindCombatSources(state, active, atk, atk_id); }   // the first step's hooks can remove
@@ -661,7 +665,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // single-step path every connector dealt ONE combat-damage event: a double striker takes the
     // two-step path, which fires the grants once per step.
     FireCombatDamageDrawGrants(state, damaging_idx, damaging_num, damaging_events);
-    ResolveProphetsCombatDamage(state, active, prophets);
+    if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
+    { ResolveProphetsCombatDamage(state, active, prophets); }
     return out;
 }
 

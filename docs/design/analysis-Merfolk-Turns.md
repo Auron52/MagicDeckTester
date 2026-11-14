@@ -645,3 +645,55 @@ unbudgeted d5 passes and wins T6. Pass exists in the candidate set, so this is
 a search-quality/budget finding rather than an enumerator legality bug. The
 static keep policy is baseline only; exhaustive keep/bottom optimization awaits
 the user's later artifact stage.
+
+Held-out seed 987458 found a presentation error in the shared `dig` prompt for
+Emperor Mihail II's optional cast trigger: the generic note said the examined
+Merfolk spell would go to hand, while choosing 0 actually pays `{1}` and
+creates a token. `WriteDigDecisionJson` now gives that source marker an explicit
+reply note (0 pay, -1 decline). This is presentation only; the observed game
+state and turn-5 win matched the search. Recheck the exact prompt after the
+`mtg` rebuild.
+
+Unbudgeted backstop screening (three games per block, d3 and d5, 2,000,000
+units/game cap) found two clean, disjoint blocks. Regression seed 30131 took
+7.2 core-s at d3 and 9.7 core-s at d5; overnight seed 30161 took 19.7 and
+4.3 core-s. All twelve games completed, with no abandonment. Earlier five-game
+blocks 30101/30106/30121 each abandoned a d5 game, so they were rejected.
+The backstop rows are now provisionally present in both tiers; their GT remains
+unaccepted until the corrected profile and official cost gate pass.
+
+Held-out seed 987459 exposed a third correctness bug. Tidal Warrior had turned
+Three Tree City into an Island, and the viewer showed its `{U}` tap, yet
+`--validate-line 'cast=Tidal Warrior'` at decision 11 said no blue source and
+omitted the spell from the menu. A payable line using two Rogue's Passages and
+that City for Deeproot Pilgrimage was likewise `legal_not_enumerated`. The
+actual payer already recognizes the type change; `ComputeAvailableColors`
+and `BuildColorFeasibility` still read the City’s printed mana colors. Both
+pre-filters now credit one unrestricted blue from an islandized land (and the
+latter retains any Aura bonus). A focused unit case checks that both blue
+spells are enumerated on the reproduced board. The profile, cost and viewer
+runs were stopped and must restart after the incremental build.
+
+The Deeproot line was a second gate failure after Tidal Warrior's type change
+expired. Two Rogue's Passages supply the City's `{2}` activation; two Merfolk
+make its fed mode add `{U}{U}`, even though that mode has zero net mana gain.
+`ScaledManaNetYield` correctly keeps the flat pool's basic `{C}` credit, but
+the colour-presence check used that net value and rejected blue before the
+exact payer could try the fed mode. It now tests whether the colour conversion
+is live, including a feeder, independently of the flat-pool credit. A focused
+unit case checks the zero-net board. Both exact viewer lines and the full test
+suite still need replay after the header rebuild.
+
+Seed 987461 yielded a same-opening search-quality lead: Codex-play won on
+turn 5 by putting Prophets with Seahunter, equipping Greaves and taking extra
+turns; d5/b20 won on turn 6. No rules transition discrepancy was reported.
+Budget escalation to d5/b200 and unbudgeted d5 still returned turn 6, so this
+is a strategy/search-horizon finding rather than a budget truncation by itself.
+
+Held-out seed 987463 found a terminal-order bug: combat damage put the passive
+opponent below zero, yet the viewer asked which Merfolk to sacrifice for a
+Prophets trigger. Both combat damage paths now skip that trigger resolution
+once either player has lost at the damage step. A focused combat test checks
+that no sacrifice, extra turn, or scripted choice is consumed after lethal.
+The final-source profile and viewer audit were stopped again for this fix and
+must restart from its linked binary.

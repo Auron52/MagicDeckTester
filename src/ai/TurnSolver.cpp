@@ -8025,16 +8025,22 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
                    || PaySacSpendableNow(state, p, *def);
         if (!is_src) { continue; }
         if (!GraveyardFuelLive(state, active, *def)) { continue; }   // Deathrite: no gy land
-        for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands
+        // A land turned into an Island produces {U} in place of its printed mana ability.
+        // Keep this presence gate in step with the actual payer and BuildColorFeasibility.
+        if (LandTypeChangedToIsland(state, p)) { have[1] = true; }
+        else
         {
-            switch (c)
+            for (Color c : EffectiveProduces(state, active, *def))   // RP -> union of other lands
             {
-                case Color::White: have[0] = true; break;
-                case Color::Blue:  have[1] = true; break;
-                case Color::Black: have[2] = true; break;
-                case Color::Red:   have[3] = true; break;
-                case Color::Green: have[4] = true; break;
-                default: break;
+                switch (c)
+                {
+                    case Color::White: have[0] = true; break;
+                    case Color::Blue:  have[1] = true; break;
+                    case Color::Black: have[2] = true; break;
+                    case Color::Red:   have[3] = true; break;
+                    case Color::Green: have[4] = true; break;
+                    default: break;
+                }
             }
         }
         // Land AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}"): the mana
@@ -8063,9 +8069,11 @@ static void ComputeAvailableColors(const GameState& state, bool have[5], bool pe
             }
         }
         // Three Tree City scaled ability yields a SEARCH-CHOSEN colour (any of W/U/B/R/G), so when it
-        // can fire (a feeder pays the {2} and its net beats the basic {C}) every colour is producible.
+        // can fire (a feeder pays the {2}, even when its net yield is zero) every colour is producible.
         // Empty subtype on every board without the land -> byte-identical.
-        if (ScaledManaNetYield(state, *def, &p) > 0)
+        if (IsScaledManaLand(*def)
+            && ScaledManaCreatureCount(state, &p) >= def->params.mana_per_creature_feeder_generic
+            && ScaledManaFeederMana(state) >= def->params.mana_per_creature_feeder_generic)
         { have[0] = have[1] = have[2] = have[3] = have[4] = true; }
         if (def->params.domain_mana && CanTapNow(p, state.battlefield)) { scaling_source = true; }
     }

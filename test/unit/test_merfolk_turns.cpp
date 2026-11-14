@@ -2,6 +2,7 @@
 
 #include "ai/LandPlay.h"
 #include "ai/AIEngine.h"
+#include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -753,6 +754,75 @@ TEST_CASE("Merfolk land target abilities can identify every passive opponent lan
     CHECK(ids[0] != ids[2]);
 }
 
+TEST_CASE("islandized Three Tree City pays blue pips and exposes blue casts")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 3;
+    state.deck_has_islandize = true;
+    state.players[0].lands_played_this_turn = 1;
+    AddPermanent(state, "Three Tree City", 720);
+    state.battlefield.back().islandize_target = 720;
+    AddPermanent(state, "Rogue's Passage", 721);
+    AddPermanent(state, "Rogue's Passage", 722);
+    AddPermanent(state, "Tidal Warrior", 723);
+    state.battlefield.back().tapped = true;
+    int hand_id = 724;
+    for (const char* name : {"Tidal Warrior", "Deeproot Pilgrimage"})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card c = def->card;
+        c.m_number = hand_id++;
+        state.players[0].hand.push_back(c);
+    }
+    CHECK(LandTypeChangedToIsland(state, state.battlefield[0]));
+    bool tidal = false, pilgrimage = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        for (const Action& a : plan.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            tidal |= a.card_name == "Tidal Warrior";
+            pilgrimage |= a.card_name == "Deeproot Pilgrimage";
+        }
+    }
+    CHECK(tidal);
+    CHECK(pilgrimage);
+}
+
+TEST_CASE("Three Tree City converts two colorless feeders into blue at zero net mana")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 4;
+    state.players[0].lands_played_this_turn = 1;
+    AddPermanent(state, "Rogue's Passage", 740);
+    AddPermanent(state, "Rogue's Passage", 741);
+    AddPermanent(state, "Three Tree City", 742, SubtypeRegistry::Instance().Id("Merfolk"));
+    AddPermanent(state, "Tidal Warrior", 743);
+    AddPermanent(state, "Rishadan Dockhand", 744);
+    const CardDefinition* city = CardDatabase::Instance().Lookup("Three Tree City");
+    const CardDefinition* pilgrimage = CardDatabase::Instance().Lookup("Deeproot Pilgrimage");
+    REQUIRE(city != nullptr);
+    REQUIRE(pilgrimage != nullptr);
+    CHECK(ScaledManaNetYield(state, *city, &state.battlefield[2]) == 0);
+    CHECK(ScaledManaCreatureCount(state, &state.battlefield[2]) == 2);
+    CHECK(ScaledManaFeederMana(state) >= 2);
+    Card card = pilgrimage->card;
+    card.m_number = 745;
+    state.players[0].hand.push_back(card);
+    bool offered = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        for (const Action& a : plan.actions)
+        { offered |= a.kind == Action::Kind::CastFromHand && a.card_name == "Deeproot Pilgrimage"; }
+    }
+    CHECK(offered);
+}
+
 TEST_CASE("Wanderwine Prophets token sacrifice ceases to exist after its trigger")
 {
     LoadMerfolkCards();
@@ -767,6 +837,22 @@ TEST_CASE("Wanderwine Prophets token sacrifice ceases to exist after its trigger
     REQUIRE(state.battlefield.size() == 1);
     CHECK(state.battlefield[0].card.m_number == 610);
     CHECK(state.players[0].graveyard.empty());
+}
+
+TEST_CASE("Wanderwine Prophets asks no sacrifice after lethal combat damage")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    state.players[1].life = 4;
+    AddPermanent(state, "Wanderwine Prophets", 750);
+    AddPermanent(state, "Rishadan Dockhand", 751);
+    state.scripted_prophets_sac = {1};
+    ResolveCombatDamage(state, {0}, 0, false);
+    CHECK(state.players[1].life <= 0);
+    CHECK(state.pending_extra_turns == 0);
+    CHECK(state.scripted_prophets_sac_cursor == 0);
+    CHECK(HasPermanent(state, 751));
 }
 
 TEST_CASE("Wanderwine Prophets combat trigger sacrifices each chosen Merfolk and queues extra turns")

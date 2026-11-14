@@ -4402,6 +4402,14 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
     }
+    else if (source.find("(Merfolk cast pay {1})") != std::string::npos)
+    {
+        // Emperor Mihail II reuses the dig menu for a yes/no trigger payment.
+        // The examined card is the Merfolk spell that caused the trigger; it never moves zones.
+        d.Note("reply 0 to pay {1} and create a 1/1 blue Merfolk token, or -1 to decline. "
+               "The examined card is the spell you cast, not a card moving to your hand. "
+               "Default = the search's pay choice.");
+    }
     else if (source.find("aura swap") != std::string::npos)
     {
         // Arcanum Wings' in-combat swap reuses this modal (Bruna sweep H): the pick goes ONTO THE

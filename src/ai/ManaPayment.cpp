@@ -7296,7 +7296,7 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && IsScaledManaLand(*d)) { return f; }
+        if (d && IsScaledManaLand(*d) && !LandTypeChangedToIsland(state, p)) { return f; }
         // Scaled mana DORK (Priest of Titania / Elvish Archdruid): its yield grows as elves cast
         // EARLIER IN THE SAME PLAN resolve, so the build-time credit can under-count supply -- the
         // one error that turns into a false reject. Same stand-down as the scaled land -- unless
@@ -7369,6 +7369,16 @@ ColorFeasibility BuildColorFeasibility(const GameState& state, bool noncreature,
             if (gy_fuel < 0) { gy_fuel = GraveyardLandFuel(state, active); }
             if (gy_fuel <= 0) { continue; }
             --gy_fuel;
+        }
+        // Type-changing effects replace the land's printed mana ability with {T}: Add {U}.
+        // This must precede the printed conversion/scaled/creature-only gates: an islandized
+        // Three Tree City is a plain blue source, and an islandized Cavern is unrestricted.
+        if (LandTypeChangedToIsland(state, p))
+        {
+            add(1 << static_cast<int>(Color::Blue), 1);
+            const int aura_units = LandAuraBonus(state, p);
+            if (aura_units > 0) { add(LandAuraColorMask(state, p), aura_units); }
+            continue;
         }
         // A partially-creature-only source (Cavern of Souls) may pay a coloured pip only for a
         // creature spell; its unrestricted mode is "{T}: Add {C}". Mask 0 -> no coloured coverage.
