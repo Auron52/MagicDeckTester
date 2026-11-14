@@ -9754,9 +9754,20 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 }
 } // namespace
 
+static thread_local int t_pilgrimage_pay_depth = 0;
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
+    // Record the committed mana-ability taps only after the full payment has
+    // succeeded. The payer tries and rolls back alternate allocations; creating
+    // tokens inside TapSourceIntoFloat or the backtracker would turn trial taps
+    // into real triggers and invalidate their battlefield references.
+    const bool outer_pilgrimage_pay = t_pilgrimage_pay_depth++ == 0;
+    const int pilgrimage_controller = state.active_player_index;
+    const std::vector<int> pilgrimage_before = outer_pilgrimage_pay
+        ? PilgrimageUntappedBeforePayment(state, pilgrimage_controller) : std::vector<int>{};
+    const bool paid = [&]() -> bool {
     // Outermost payments only: a nested payment, a refine probe, the oracle's float-only pass and its own
     // scripted copy each pay as they always have (they never see a crack the outer payment did not make).
     if (!state.deck_has_ondemand_sac || t_pay_nest != 0 || t_pay_refining || manaoracle::t_float_only
@@ -9947,6 +9958,11 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         return TapForCostSharedCore(state, cost_in, for_creature, available, honor_legacy_cco);
     }
     return false;
+    }();
+    --t_pilgrimage_pay_depth;
+    if (paid && outer_pilgrimage_pay)
+    { ResolvePilgrimagePaymentTaps(state, pilgrimage_controller, pilgrimage_before); }
+    return paid;
 }
 
 // MANA ORACLE -- one scripted payment on the oracle's own copy (ManaOracle.h). The script entry's taps
@@ -11600,6 +11616,7 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
     const std::vector<int>* aura_pick = t.aura_colors.empty() ? nullptr : &t.aura_colors;
     // Captured now: a sacrifice erases the permanent, and `found` with it.
     const int found_num = found->card.m_number;
+    const bool pilgrimage_source = PilgrimageTapSource(*found, active);
     using Route = HumanPreTapOffer::Route;
     if (fed_face)
     {
@@ -11671,6 +11688,10 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
         TapSourceIntoFloat(state, active, *found, *def, static_cast<Color>(t.color),
                            state.floating_mana, /*available=*/nullptr, /*for_creature=*/false, aura_pick);
     }
+    // A manual mana activation is a complete, separate tap event. Its trigger
+    // resolves now, after the selected ability has finished making its mana.
+    if (pilgrimage_source && t_pilgrimage_pay_depth == 0)
+    { ResolveDeeprootPilgrimageTap(state, active); }
     if (tracing)
     {
         const ManaPool& f = state.floating_mana;

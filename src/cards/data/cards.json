@@ -1,6 +1,16 @@
 {
  "cards": [
   {
+   "name": "Deeproot Pilgrimage",
+   "mana_cost": "{1}{U}",
+   "types": ["Enchantment"],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Whenever one or more nontoken Merfolk you control become tapped, create a 1/1 blue Merfolk creature token with hexproof. [Simultaneous attackers are one tap event; separate mana and activated abilities are separate events. Multiple Pilgrimages each trigger once per event. Tokens enter through the shared ETB cascade.]",
+   "template": "custom",
+   "parameters": {}
+  },
+  {
    "name": "Arid Mesa",
    "mana_cost": "",
    "types": ["Land"],

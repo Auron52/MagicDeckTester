@@ -629,7 +629,9 @@ static_assert(sizeof(Player) == 216,
 // DETERMINING within the turn (which doublers are combat-paid, what the combat pool holds), FOLDED in Build() through
 // GameState::DoublerDeferKey (value-gated: ndef only when nonzero, the ledger only when it has records).
 // Integrated (morph-integ, 2026-11-13): origin's item A rounds (1464) + MTG_DOUBLER_COMBAT_PAY's +32 = 1496 (measured).
-static_assert(sizeof(GameState) == 1496,   // verify combined current fields in the integrated build
+// Deeproot Pilgrimage's deck-constant tap-watcher gate adds eight aligned bytes.
+// It is identical across states of one game, so dominance does not fold it.
+static_assert(sizeof(GameState) == 1504,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

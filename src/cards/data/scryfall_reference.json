@@ -1596,6 +1596,15 @@
     "toughness": null,
     "type_line": "Artifact — Equipment"
   },
+  "Deeproot Pilgrimage": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{U}",
+    "oracle_text": "Whenever one or more nontoken Merfolk you control become tapped, create a 1/1 blue Merfolk creature token with hexproof.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Defense of the Heart": {
     "cmc": 4.0,
     "keywords": [],

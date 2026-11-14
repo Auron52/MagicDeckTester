@@ -1294,6 +1294,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         }
         return false;
     }();
+    state.deck_has_deeproot_pilgrimage = [&deck]{
+        for (const auto* zone : {&deck.mainboard, &deck.sideboard})
+        {
+            for (const Card& c : *zone)
+            { if (c.m_name == "Deeproot Pilgrimage") { return true; } }
+        }
+        return false;
+    }();
     // Spirit of the Labyrinth's per-turn draw cap (core/DrawCap.h). Mainboard AND sideboard: a wished-in
     // cap card caps draws just the same.
     state.deck_has_draw_cap = [&deck]{

@@ -260,11 +260,17 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
     // the Blessed reaching four counters off a first striker's lifelink). The single-step loop taps as
     // it goes, which is equivalent there: nothing between its iterations can grant vigilance, and no
     // power read looks at `tapped`.
+    bool merfolk_tapped = false;
     for (std::size_t k = 0; k < n; ++k)
     {
         Permanent& p = state.battlefield[atk_idx[k]];
-        if (!CreatureHasVigilance(p, state, &bs_in.vigilance)) { p.tapped = true; }
+        if (!CreatureHasVigilance(p, state, &bs_in.vigilance))
+        {
+            merfolk_tapped |= PilgrimageTapSource(p, active);
+            p.tapped = true;
+        }
     }
+    if (merfolk_tapped) { ResolveDeeprootPilgrimageTap(state, active); }
 
     // The board-source lists are battlefield INDICES gathered before the first step. A first-step
     // combat-damage hook can APPEND a permanent (a Lackey put, a Shroofus token) -- which may itself be
@@ -489,6 +495,23 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     }
     if (any_first_step && CombatDamageStepsOn())   // =false only when replaying a pre-rule reference
     { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, bs, fs_of, ds_of); }
+
+    // The ordinary one-step path historically tapped each attacker inside the
+    // damage loop. For a Pilgrimage board, resolve the simultaneous declare-
+    // attackers tap event before damage so its token is present for the combat
+    // damage trigger (notably Prophets' sacrifice). Other decks retain that path.
+    if (DeeprootPilgrimageCount(state, active) > 0)
+    {
+        bool merfolk_tapped = false;
+        for (int idx : atk_idx)
+        {
+            Permanent& p = state.battlefield[idx];
+            if (CreatureHasVigilance(p, state, &bs.vigilance)) { continue; }
+            merfolk_tapped |= PilgrimageTapSource(p, active);
+            p.tapped = true;
+        }
+        if (merfolk_tapped) { ResolveDeeprootPilgrimageTap(state, active); }
+    }
 
     std::size_t atk_k = 0;
     for (int idx : atk_idx)

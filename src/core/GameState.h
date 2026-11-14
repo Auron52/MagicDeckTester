@@ -1039,6 +1039,9 @@ struct GameState
     // walk finds nothing (dead-code elimination, no lever). DEFAULT TRUE == walk, so an unstamped
     // GameState (the scenario harness, a unit test) can never silently lose a Courser. Only ever err true.
     bool                     deck_has_top_land_play          = true;  // Courser of Kruphix
+    // Deeproot Pilgrimage's tap-event watcher. Default true keeps hand-built scenario
+    // states faithful; StampDeckTraits clears it only when the deck cannot contain one.
+    bool                     deck_has_deeproot_pilgrimage   = true;
     // ...and the LAND-SEARCH cluster (core/LandSearch.h; Rampant Growth, Cultivate, Search for
     // Tomorrow, Evolving Wilds, Myriad Landscape, Khalni Heart Expedition, Primeval Titan): stamped
     // from `land_search_count > 0`, the master gate every land-search param hangs off, so a clear bit

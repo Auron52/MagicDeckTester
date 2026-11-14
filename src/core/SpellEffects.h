@@ -9107,6 +9107,7 @@ inline TokenProto BuildTokenProto(int                              power,
         // first token spec in cards.json to carry it, so every existing token is byte-identical.
         else if (kw == "Lifelink")  { token.card.AddKeyword(Keyword::Lifelink); }
         else if (kw == "Deathtouch") { token.card.AddKeyword(Keyword::Deathtouch); }
+        else if (kw == "Hexproof") { token.card.AddKeyword(Keyword::Hexproof); }
     }
     token.card.m_power     = power;
     token.card.m_toughness = toughness;
@@ -9193,6 +9194,62 @@ inline void CreateToken(
     // The card is identical for all 2^N replicas -- build it once (see TokenProto).
     const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
     for (int i = 0; i < reps; ++i) { CreateTokenFromProto(state, controller_index, proto); }
+}
+
+// Deeproot Pilgrimage watches a TAP EVENT, not each Merfolk in that event. Call
+// once after the participating permanents have become tapped; attacks are one
+// event while each mana ability and each {T} activation is its own event. The
+// caller determines whether at least one *untapped*, nontoken Merfolk changed
+// state, so the token itself can never recursively trigger this watcher.
+inline bool PilgrimageTapSource(const Permanent& p, int controller)
+{
+    return p.controller_index == controller && !p.tapped && !p.is_token
+        && (p.card.IsCreature() || p.is_animated)
+        && (p.AnimatedAllTypes() || CardHasSubtype(p.card, "Merfolk"));
+}
+
+inline int DeeprootPilgrimageCount(const GameState& state, int controller)
+{
+    if (!state.deck_has_deeproot_pilgrimage) { return 0; }
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == controller && p.card.m_name == "Deeproot Pilgrimage") { ++n; } }
+    return n;
+}
+
+inline void ResolveDeeprootPilgrimageTap(GameState& state, int controller)
+{
+    const int n = DeeprootPilgrimageCount(state, controller);
+    for (int i = 0; i < n; ++i)
+    { CreateToken(state, controller, 1, 1, {"Merfolk"}, "U", {"Hexproof"}); }
+}
+
+// A spell payment can try and roll back several tap allocations before it
+// commits one. Compare the final board with the pre-payment untapped Merfolk
+// set, then resolve one trigger per mana ability only after the full payment.
+inline std::vector<int> PilgrimageUntappedBeforePayment(const GameState& state, int controller)
+{
+    std::vector<int> ids;
+    if (DeeprootPilgrimageCount(state, controller) == 0) { return ids; }
+    for (const Permanent& p : state.battlefield)
+    { if (PilgrimageTapSource(p, controller)) { ids.push_back(p.card.m_number); } }
+    return ids;
+}
+
+inline void ResolvePilgrimagePaymentTaps(GameState& state, int controller,
+                                         const std::vector<int>& before)
+{
+    if (before.empty()) { return; }
+    for (int id : before)
+    {
+        bool tapped = false;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.card.m_number == id && p.controller_index == controller && p.tapped)
+            { tapped = true; break; }
+        }
+        if (tapped) { ResolveDeeprootPilgrimageTap(state, controller); }
+    }
 }
 
 // Pharika targets a physical creature card in either graveyard. The token belongs
