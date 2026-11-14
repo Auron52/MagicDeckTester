@@ -93419,10 +93419,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     }
 
     // Emperor Mihail II: each cast trigger is an independent optional {1}
-    // payment. A bit is read when that trigger resolves, so two copies and
+    // payment. An ordered choice is read when that trigger resolves, so two copies and
     // two casts retain all four pay/decline decisions and their timing.
     if (!HumanPlayActive() && !cont_axes_only)
     {
+        auto puts_mihail = [](const Action& a)
+        {
+            return (a.kind == Action::Kind::ActivateVial
+                    && a.card_name == "Emperor Mihail II")
+                || (a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::TapTutorPut
+                    && a.tutor_target == "Emperor Mihail II");
+        };
         std::size_t mihails = 0;
         for (const Permanent& q : state.battlefield)
         {
@@ -93430,10 +93438,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
             if (d && d->params.cast_subtype_pay_token_cost) { ++mihails; }
         }
-        if (mihails > 0 || std::any_of(all.begin(), all.end(), [](const TurnSolver::Plan& p)
-            { return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
-                { return a.card_name == "Emperor Mihail II"
-                    && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard); }); }))
+        if (mihails > 0 || std::any_of(all.begin(), all.end(), [&](const TurnSolver::Plan& p)
+            { return std::any_of(p.actions.begin(), p.actions.end(), [&](const Action& a)
+                { return puts_mihail(a) || (a.card_name == "Emperor Mihail II"
+                    && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)); }); }))
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
@@ -93442,6 +93450,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 std::size_t sources = mihails, bound = 0;
                 for (const Action& a : p.actions)
                 {
+                    if (puts_mihail(a)) { ++sources; continue; }
                     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
                     { continue; }
                     const CardDefinition* d = ActionCastDef(a);

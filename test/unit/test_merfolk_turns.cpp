@@ -204,6 +204,70 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     CHECK(tokens == 1);
 }
 
+TEST_CASE("Mihail put by Vial or Seahunter can be paid for on a later cast")
+{
+    LoadMerfolkCards();
+    const CardDefinition* mihail = CardDatabase::Instance().Lookup("Emperor Mihail II");
+    const CardDefinition* dockhand = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    const CardDefinition* island = CardDatabase::Instance().Lookup("Island");
+    REQUIRE(mihail != nullptr);
+    REQUIRE(dockhand != nullptr);
+    REQUIRE(island != nullptr);
+    for (bool vial : {true, false})
+    {
+        CAPTURE(vial);
+        GameState state;
+        state.active_player_index = 0;
+        state.turn_number = 4;
+        state.players[0].lands_played_this_turn = 1;
+        AddPermanent(state, vial ? "Aether Vial" : "Seahunter", 450);
+        if (vial) { state.battlefield.back().charge_counters = 3; }
+        for (int i = 0; i < (vial ? 2 : 5); ++i)
+        { AddPermanent(state, "Island", 451 + i); }
+        Card hand_merfolk = dockhand->card;
+        hand_merfolk.m_number = 470;
+        state.players[0].hand.push_back(hand_merfolk);
+        Card source_mihail = mihail->card;
+        source_mihail.m_number = 471;
+        if (vial) { state.players[0].hand.push_back(source_mihail); }
+        else { state.players[0].library.push_back(source_mihail); }
+        for (int i = 0; i < 12; ++i)
+        {
+            Card filler = island->card;
+            filler.m_number = 480 + i;
+            state.players[0].library.push_back(filler);
+        }
+        bool offered_paid_line = false;
+        int put_lines = 0, cast_lines = 0, both_lines = 0, paid_lines = 0;
+        std::string both_order;
+        for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+        {
+            int put_at = -1, cast_at = -1;
+            for (std::size_t i = 0; i < plan.actions.size(); ++i)
+            {
+                const Action& a = plan.actions[i];
+                if (vial && a.kind == Action::Kind::ActivateVial
+                    && a.card_name == "Emperor Mihail II") { put_at = static_cast<int>(i); }
+                if (!vial && a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::TapTutorPut
+                    && a.tutor_target == "Emperor Mihail II") { put_at = static_cast<int>(i); }
+                if (a.kind == Action::Kind::CastFromHand
+                    && a.card_name == "Rishadan Dockhand") { cast_at = static_cast<int>(i); }
+            }
+            put_lines += put_at >= 0;
+            cast_lines += cast_at >= 0;
+            both_lines += put_at >= 0 && cast_at >= 0;
+            paid_lines += plan.mihail_pay_choice.Paid(0);
+            if (put_at >= 0 && cast_at >= 0)
+            { both_order = std::to_string(put_at) + "," + std::to_string(cast_at); }
+            if (put_at >= 0 && cast_at > put_at && plan.mihail_pay_choice.Paid(0))
+            { offered_paid_line = true; break; }
+        }
+        INFO(put_lines, " ", cast_lines, " ", both_lines, " ", paid_lines, " ", both_order);
+        CHECK(offered_paid_line);
+    }
+}
+
 TEST_CASE("Mihail ordered choices retain high ordinals and distinct plan keys")
 {
     MihailPayChoices first, second;
