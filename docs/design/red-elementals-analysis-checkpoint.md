@@ -3,13 +3,16 @@
 Shared state for whichever agent (Claude or Codex) continues the Red Elementals analysis. Read this first,
 then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify files/processes before acting.
 
-Last updated: 2026-11-14 15:30 UTC (agent F3: Soulstoke window committed and validated).
+Last updated: 2026-11-14 (agent G: suite addition 4-bis/5j done, all three tiers with accepted GT).
 
 ## Where the work lives
 
 * Worktree: `/workspaces/MagicDeckTester/.claude/worktrees/redelem`, branch `redelem-analysis`, forked from
   `origin/phase-1-2-deck-analyzer` at `e944eeea4`. **Nothing is pushed yet.** All commits are local.
-* Deck: `decks/Red Elementals/Red Elementals.cod` (committed `ad8d83ae7`). No profile yet (Stage 4 pending).
+* Deck: `decks/Red Elementals/Red Elementals.cod` (committed `ad8d83ae7`). Stage 4 baseline profile
+  `decks/Red Elementals/Red Elementals.profile.json` (`0f16b98a2`, analyzer seed 20261114; no `value_play` block, so
+  play = d5 b20). No keep table, no value leaf.
+* Suite key: `redelem` (+ `redelem2hg` smoke canary) in `test/regression_cases.sh`, GT accepted in all three tiers.
 * Ledger: `docs/design/analysis-Red Elementals.md` (Stage 1-4a recorded; 6a disclosures accumulate there).
 * Scratch (regenerable, build volume): `build/scratch/redelem/` -- baselines `F_base/` (mtg + cards.json at
   `854902a73`), `D_base/`; A/B harness `F/run_ab.sh` + `F/man_ab.json`; identity script `b3/ident_b3.sh`;
@@ -25,7 +28,9 @@ Last updated: 2026-11-14 15:30 UTC (agent F3: Soulstoke window committed and val
 | 2 | Champion (Nova Chaser), linked exile | `0f82612c3`, `b53c6f21c` (every in-window pick searched; provider prune `MTG_CHAMPION_DOOMED_PRUNE`), `112febf7c` (validation) |
 | 2 | Thunderkin Awakener: searched attack-trigger reanimation | `f409f2e07`, `05b603a2e`, `44154dd93` |
 | 4a | `RedElementalsProvider` (routed above Morph); champion order/prune and Thunderkin order moved in; USER Nova main-2 rule (`MTG_REDELEM_NOVA_MAIN2`); `OrderOpaqueCastsByRank` (`MTG_REDELEM_OPAQUE_ORDER`) | `f0bf6f249`, `854902a73` |
-| 3-gap | Incandescent Soulstoke put at the OPPONENT's end step (searched; reuses the morph face-up window / `Plan::eot_face_up_choice`; source hold searched in every host) | `06f2e9c98` (code), `6db011c8b` (tests), plus the docs commit after them |
+| 3-gap | Incandescent Soulstoke put at the OPPONENT's end step (searched; reuses the morph face-up window / `Plan::eot_face_up_choice`; source hold searched in every host) | `06f2e9c98` (code), `6db011c8b` (tests), `1e6c24632` (ledger) |
+| 4 | Baseline profile | `0f16b98a2` |
+| 4-bis/5j | Suite addition: cost gate 0.16x Hinata PASS; smoke/regression/overnight ENTRY rows + backstop + 2HG smoke canary; GT accepted per tier; LFE regression GT re-accepted (2 keys, Soulstoke window, attributed) | see the commits after `0f16b98a2` (rows + GT, then docs) |
 
 Stage 4a A/B: 0 slower / 0 faster vs the Morph-routed base on 840 games; the main-2 rule gives 1 faster,
 0 slower; ~50% more search units than the base (Morph's work-cutting hooks do not apply; Stage 5f candidate).
@@ -54,17 +59,18 @@ Design: `docs/design/opponent-end-step-window.md` §0. Measurements, disclosures
 
 ## Plan after Soulstoke (serial; box = 12 threads / 10 GB: <=2 batches, never compile beside 2)
 
-1. **Stage 4 profile:** `python3 scripts/analyze_deck.py "decks/Red Elementals/Red Elementals.cod" --no-rebuild`,
-   then commit the profile.
-2. **Suite addition (4-bis / 5j).** This is required before any mulligan profile or value leaf.
-   * `python3 scripts/suite_gate.py --cost "decks/Red Elementals"` must come in at or below 3x Hinata.
-   * Add `DECK_FILE`/`DECK_PROF` to `test/regression_cases.sh`, plus smoke, regression and overnight
-     ENTRY rows and the unbudgeted backstop rows.
-   * Run smoke and regression with `--deck=`, attribute the results, then accept with the same filter.
-   * Re-accept LFE smoke and regression GT, because Soulstoke moves its play. Attribute first.
-   * Run `python3 test/check_gt_logs.py`, plus a smoke identity check for the other decks.
-   * Run the Red Elementals overnight rows once at onboarding. LFE overnight GT waits for the periodic
-     overnight run.
+1. ~~Stage 4 profile~~ DONE (`0f16b98a2`).
+2. ~~Suite addition (4-bis / 5j)~~ DONE (agent G). Details: ledger section "Regression suite (4-bis/5j)".
+   * Cost gate: redelem 3,562.9 ms/game against Hinata 21,704.9, which is **0.16x** (limit 3x).
+   * Rows: martyr/Hinata shape and the overnight ENTRY set. Backstop blocks are 30201 (regression) and
+     30241 (overnight). There is a 25-game `redelem2hg` smoke canary; the deck reads no heads or opponents.
+   * LFE regression GT re-accepted: 2 keys, s2002 gi22 at d3 and d5. It is a real Soulstoke window put at the
+     same win turn, attributed against `F_base`.
+   * LFE smoke is byte-identical. LFE overnight GT is LEFT for the periodic overnight run.
+   * Identity: the full smoke tier gives 203/203 existing keys byte-identical, and Hinata regression is
+     byte-identical. `check_gt_logs.py` is clean.
+   * Owed at the keep-table adoption: resize the overnight rows to the FULL set and accept that on its own
+     before adopting.
 3. **Stage 5.**
    * `verify_deck.py`, nonconv/fd-diverge, depth sweep 0/3/5, `leaf_tiebreak_check.py`.
    * 5d claude-play sweep: about 20 games. A Claude session uses Claude agents (Opus for flag
@@ -107,4 +113,10 @@ Design: `docs/design/opponent-end-step-window.md` §0. Measurements, disclosures
 10. **Soulstoke window (S1-S6 in the RE ledger section).** The FSLineWin dork-kind shadow, the put-menu front
     order, the logging gap, and whether to keep the window ON given 0 games changed (default: on). Window mana
     follows the morph precedent, with no mana-reservation axis, so LFE's multicolour payer could strand {R}.
-11. **LFE GT re-accept.** It is needed because Soulstoke moves LFE play. It is scheduled in plan step 2.
+11. ~~LFE GT re-accept~~ DONE for smoke (no move) and regression (2 keys at the same score). The window
+    really puts in LFE play: s2002 gi22 puts Flamekin Harbinger at the opponent's end step. That updates S6,
+    which saw no put in RE traces. LFE overnight waits for the periodic run.
+12. **Unbudgeted cost per unit.** Red Elementals spends ~130 us of wall per search unit at budget 0, about 3x
+    martyr's ratio. Its budget-0 tail reached 60 s on one game (s30121 d5 gi2, 0.97M units) without
+    abandoning. That suggests work the unit meter does not count. It is a Stage 5f candidate, alongside the
+    +50% units.
