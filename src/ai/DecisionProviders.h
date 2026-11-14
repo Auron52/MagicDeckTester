@@ -4325,12 +4325,9 @@ public:
     // should drop the fetch hold. It isn't helpful here." Measured quality-neutral on 600 paired games (d3/d5,
     // 1 faster / 1 slower each) and ~10% fewer units. MTG_SPIRITS_NO_FETCH_HOLD=0 restores the root's hold
     // (A/B only; per-job via HeuristicArm).
-    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override
-    {
-        static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD", true);
-        if (heurarm::Flag(heurarm::SPIRITS_NO_FETCH_HOLD, env)) { return false; }
-        return DeckProvider::ConsiderFetchHold(s, fetch);
-    }
+    // MTG_SPIRITS_FETCH_HOLD_HORIZON (default OFF, A/B pending the USER): decline the hold only BEYOND the search
+    // horizon (horizon playout, d0 runner); inside the window the hold stays searched, crack-on-play beside it.
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
 };
 
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.

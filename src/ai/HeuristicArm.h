@@ -927,6 +927,7 @@ enum Slot : int
     MARTYR_SAC_FIRST,         // MTG_MARTYR_SAC_FIRST  item I (1), USER 2026-11-13 ("If Martyr is already out we should for sure."): a Martyr of Sands on the battlefield since the turn began is sacrificed before the plan's casts when the plan casts a white card and that order pays (else trailing); replaces the searched position fan for those plans. Martyr Lifegain only. Default ON; =0 -> the fan
     PAY_HAND_SURPLUS_FIRST,   // MTG_PAY_HAND_SURPLUS_FIRST  item D, mana-clean: under PAY_HAND_GENERIC each float colour pays generic out of its SURPLUS over the hand's pips first (in hand-surplus order), then the demanded remainder. Shadowborn s30053678 T4 (Sire {4}{B}{R} ate four {B}, Demonic Tutor's {B} stranded on {R}{R}). Default ON; =0 -> the single drain
     SPIRITS_CAST_ORDER,       // MTG_SPIRITS_CAST_ORDER  the USER's full Spirits cast order (2026-11-14; SpiritsProvider::CastOrderRank). Default ON; =0 -> the generic tiers
+    SPIRITS_FETCH_HOLD_HORIZON, // MTG_SPIRITS_FETCH_HOLD_HORIZON  with SPIRITS_NO_FETCH_HOLD on, decline the hold only beyond the search horizon (TurnSolver::InRolloutPlayout / InD0Runner), so a held-Strand line stays findable at unlimited budget (overnight 2026-11-14: 8 Spirits games unrecoverable at d8 b0 under the full drop). Default OFF (A/B; USER's call)
     SPIRITS_BUCKET_DISCARD,   // MTG_SPIRITS_BUCKET_DISCARD  the USER's Spirits cleanup-discard buckets (2026-11-14; SpiritsShed): 3-4 threats of varying costs, at most 3 lands (4-5 while 4 threats are kept), one Vial. Default ON; =0 -> the generic ranking
     ONDEMAND_KEEP_COLOUR,     // MTG_ONDEMAND_KEEP_COLOUR  item D round 3, mana-clean: the on-demand payer's step 1 (ordinary payment, crackable lands held) is not taken when it leaves a coloured pip of the rest of the applying line with NO source on the board (the held Lake's only Swamp victim is the line's only {R}); the plain tap / crack ladder is tried first under the same no-strand test, and the held payment stays the fallback. Shadowborn s30055067 T8 (Ritual's {B} tapped Blood Crypt, Sire's {R} stranded). Default ON; =0 -> step 1 always
     CCO_HAND_SCAN,            // MTG_CCO_HAND_SCAN  item C2, mana-clean: two repairs of CcoHandDemandScan's input -- the card being paid is skipped (cost identity) only among hand cards of its own kind (a {R} Daring Buccaneer no longer hides a {R} Lightning Bolt, pirates s30064129 T3), a spendable one-shot (Treasure) counts as supply (pirates s30066580 T4), and the creature-colour keep counts the OTHER untapped creature-only lands (pirates s30069061 T3). Ordering only. Default ON; =0 -> the historical scan
@@ -1802,6 +1803,7 @@ inline const char* Name(int slot)
         "MTG_MARTYR_SAC_FIRST",
         "MTG_PAY_HAND_SURPLUS_FIRST",
         "MTG_SPIRITS_CAST_ORDER",
+        "MTG_SPIRITS_FETCH_HOLD_HORIZON",
         "MTG_SPIRITS_BUCKET_DISCARD",
         "MTG_ONDEMAND_KEEP_COLOUR",
         "MTG_CCO_HAND_SCAN",

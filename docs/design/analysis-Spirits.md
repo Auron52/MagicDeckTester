@@ -917,3 +917,24 @@ table -> value leaf when the USER restarts the artifact queue. Overnight spirits
   screen; it happens when the Spirits value leaf runs (after the keep table, when the USER restarts the queue).
 - **Running:** overnight tier rebaseline on 75ebee43a (logs/spirits/overnight_rebase.log, .DONE marker), session
   status timer 970b95c1 (2-hourly, session-only). Then accept, check_gt_logs, push after 08:34 UTC, CI watch.
+
+### Overnight rebaseline 2026-11-14 + the fetch-hold completeness finding (~08:45 UTC)
+USER 2026-11-14: *"Draws Diverge is not an acceptable explanation, since at d8 b0 we should still be able to find the
+line."* All 8 Spirits slower games that persist (overnight d3/d5 s5005 gi23/gi119, s6006 gi188; regression d5 s3003
+gi56/gi129, which I had accepted as "fetch-shuffle variance") are UNRECOVERABLE at --depth 8 --budget-ms 0, and every
+one is restored by `MTG_SPIRITS_NO_FETCH_HOLD=0`: the USER's fetch-hold drop makes the held-Strand line unfindable at
+any budget (a prune, against the completeness invariant). Built `MTG_SPIRITS_FETCH_HOLD_HORIZON` (default OFF; with the
+drop on, decline the hold only beyond the window: `TurnSolver::InRolloutPlayout()` or the new `InD0Game()`, the whole
+extent of a real depth-0 executor turn, plan AND execution -- InD0Runner alone covered only the plan, so the first
+measurement read +0.134 at d0). Held-out seed 680000, 2000 paired games per row, cur = shipped drop:
+
+| arm | d0 | d3 | d5 | units d3 / d5 | 8 games at d8 b0 |
+|---|---|---|---|---|---|
+| cur (drop everywhere) | 5.0175 | 4.6450 | 4.6410 | 54.4M / 83.1M | all lost |
+| **hor** (drop beyond the window) | 5.0175 (=) | -0.0005 (4/3) | **-0.0020 (4/0, t -2.0)** | 63.0M / 102.4M (+16% / +23%) | **all recover** |
+| hold (no drop) | +0.1340 (6/274) | +0.0020 (3/7) | -0.0005 (4/3) | 62.6M / 103.6M | all recover |
+
+Default-off: units 3081/3082 (env deck-folder count), smoke 203/203 byte-identical. **USER decision owed:** adopt
+`hor` (agent recommends: lossless, keeps the d0 gain, slightly better searched; costs ~20% more units). Until then
+the USER's drop stands and the accepted overnight GT (0c823e7a3) reflects it. Mana items found in the same pass are
+in docs/design/handoff-mana-overnight-2026-11-14.md.
