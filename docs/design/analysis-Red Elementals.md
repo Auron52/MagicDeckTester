@@ -428,6 +428,120 @@ PROVISIONAL partial in its `cards.json` note). The full design and code map are 
   default taken: on. It is a card-rules model, not a heuristic, and the coordinator's completeness ruling
   applies.
 
+## Regression suite (4-bis/5j) (agent G, 2026-11-14)
+
+Binary: `build/Release/mtg` at HEAD `0f16b98a2` (`HEAD:src` `b9f463c4`, rebuilt by `./build.sh`, a no-op).
+Every tier used Release (`MTG_PGO=0` on the overnight run, so it did not wait on a PGO build). Results are
+byte-identical across builds, so ground truth does not depend on the build.
+
+**Cost gate.** `python3 scripts/suite_gate.py --cost "decks/Red Elementals"` ran one pooled regression run
+(`--deck=redelem,hinata,hinata2hg`):
+- redelem **3,562.9 ms/game**, with the worst searched shape at `redelem_regression_d5_b20`.
+- hinata **21,704.9 ms/game**.
+- Ratio **0.16x** against the 3x limit: **PASS**.
+- redelem's regression tier costs 1,225 core-s over 6 jobs.
+- In search units, redelem uses ~18.2-18.9k units per d5 b20 game, against Hinata's 62-79k (~0.27x).
+- The box was 12 threads and fully loaded, so the ms are thread-wall.
+- Hinata's 13 regression keys in that run were byte-identical to GT.
+
+**Rows** (`test/regression_cases.sh`, key `redelem`). They use martyr's shape, which is also Hinata's:
+- **Play rows.** There is no `value_play` block, so the play setting is d5 b20, and the play rows are d5 b20.
+  Each tier also has one d3 b10 sanity row.
+- **SMOKE:**
+  - `d0 1001 x1000`
+  - `d3 1001 x50 b10`
+  - `d5 1001 x100 b20`
+  - `redelem2hg d5 1001 x25 b20`
+- **REGRESSION:**
+  - `d0 2002 x1000`
+  - `d3 2002 x50 b10`
+  - `d5 2002 x150 b20`
+  - `d5 3003 x150 b20`
+- **OVERNIGHT (the pre-keep-table ENTRY set):**
+  - `d0 4004/6006/8008/10010 x2000`
+  - `d3 4004 x125 b10`
+  - `d5 4004/5005/6006/7007 x300 b20`
+  - It grows to the FULL set just before the keep-table adoption (regression-testing skill, "Sizing a
+    deck's overnight rows").
+- **2HG: one smoke canary only.** No card reads heads or opponents:
+  - no "each opponent" effect;
+  - no `attack_tokens_per_opponent`;
+  - no life-total gate;
+  - Sunspine Lynx's ETB hits "each player" per NONBASIC land, which is inert against the land-less goldfish;
+  - Lightning Bolt is "any target".
+
+  Only the 30-life clock moves, so the deck gets the standard 25-game searched canary, as `elementals2hg`
+  does.
+- **Unbudgeted backstop.**
+  - The screen: 16 five-game blocks, `30001..30301` step 20, at d3 and d5, budget 0, `abandon_units`
+    2,000,000, `MTG_SLOW_GAME_MS=5000`. Scratch is in `build/scratch/redelem/G/bs/`.
+  - **No game was abandoned in any block, but the tail is heavy:**
+    - `s30121` d5, gi2: 0.97M units / 60 s. The same game at d3: 0.29M units / 26 s.
+    - `s30041` gi3: 18-22 s at both depths.
+    - `s30301` d5 gi3: 21 s.
+  - **About 130 us of wall per unit, unbudgeted.** That is roughly 3x martyr's ratio, which points to work
+    the unit meter does not count. It is worth a look in Stage 5f.
+  - **Blocks kept:** `30201` (REGRESSION) and `30241` (OVERNIGHT). In both, no game took over 5 s at
+    either depth, and each block used ~11-29k units. They are 5-game blocks, the heavy-deck size.
+- **Tier shares.** Smoke share (`test/tier_cost.py smoke`): redelem 0.8% and redelem2hg 0.4%. The
+  redelem-only overnight run's makespan was 5m19s (11 jobs).
+
+**GT accepted.** Each tier was run, inspected, then accepted with the same `--deck=` filter. Before each
+accept, `regression_gt.txt` and `gt_logs/` were backed up, and the diff afterwards showed only the new
+`redelem*` keys plus the header line.
+
+| key | GT (avg win turn / digest) |
+|---|---|
+| redelem_smoke_d0_s1001 | 4.8780/d04cc672b6a6e173 |
+| redelem_smoke_d3_s1001 | 4.4000/07d5ee5aefad646a |
+| redelem_smoke_d5_s1001 | 4.3300/e9296f6c95548caf |
+| redelem2hg_smoke_d5_s1001 | 5.0400/88328de670a060fb |
+| redelem_regression_d0_s2002 | 4.8800/bafe02dc046e9500 |
+| redelem_regression_d3_s2002 | 4.4800/7a6b1d131cba7893 |
+| redelem_regression_d5_s2002 | 4.4000/c014564161dea3bc |
+| redelem_regression_d5_s3003 | 4.3733/82d7ce52f943d32b |
+| redelem_regression_d3/d5_s30201 (backstop) | 4.0000/787bde01e16f33b1 (both) |
+| redelem_overnight_d0_s4004/6006/8008/10010 | 4.8635 / 4.8890 / 4.8760 / 4.8865 |
+| redelem_overnight_d3_s4004 | 4.3680/58fff9404f3bf554 |
+| redelem_overnight_d5_s4004/5005/6006/7007 | 4.3700 / 4.3833 / 4.3567 / 4.3733 |
+| redelem_overnight_d3/d5_s30241 (backstop) | 4.2000/bea2b901952c81ef (both) |
+
+The d3 and d5 backstop blocks give the same digest, in every block of the screen too. This is normal for
+unbudgeted play: 61 of the suite's 94 backstop d3/d5 pairs coincide in GT. Unbudgeted d3 also spends ~2x the
+units of d5 on this deck.
+
+**Landfall Elementals (`elementals`), Soulstoke window attribution.**
+- **Smoke** (`elementals` + `elementals2hg`, inside the full smoke run): **byte-identical**.
+- **Regression.** 4 keys are byte-identical. 2 keys moved play at the same score:
+  `elementals_regression_d3_s2002` and `..._d5_s2002`. Both are the same game, gi22 (seed 2024).
+  - **Attribution.** `F_base` (`854902a73`, pre-Soulstoke) and `D_base` (`44154dd93`) both reproduce the GT
+    per-game digests. Only `06f2e9c98` (the Soulstoke window) touches `src` since `F_base`.
+  - **Old line.** T4: cast the second Flamekin Harbinger for {R} in main 1, attack with Soulstoke (opponent
+    to 11). T5: win.
+  - **New line.** T4: hold Harbinger, keep Soulstoke untapped with {1}{R} open, attack without it
+    (opponent to 13). At the opponent's end step, the **window puts Harbinger**. It is on T5's board
+    without a cast; the put itself is not logged (S5). Harbinger's ETB tutor still sets up Brushfire, and
+    T5 wins.
+  - **Verdict.** It is a clean like-for-like line change: kept hand and draws are identical, the win turn
+    is unchanged at both depths, and the loss-penalized net is 0. Accepted with
+    `--regression --accept --deck=elementals`. The diff showed exactly those 2 keys and their 2 `.wins`
+    files.
+  - **This is a REAL window put in shipped LFE play.** That updates S6, which found none in the 240 traced
+    d3 b100 games.
+- **Overnight.** LFE overnight GT was not run. It waits for the periodic overnight run.
+
+**Identity.**
+- The FULL smoke tier: **203 passed, 0 failed**, plus 4 new redelem keys. Every other deck is
+  byte-identical to GT, including Morph, Goblins, Spirits, LFE and every 2HG canary. Makespan was 106m31s
+  on the 12-thread box. The first ~6 min overlapped the LFE regression run.
+- Hinata and hinata2hg regression: byte-identical, from the cost-gate run.
+- `python3 test/check_gt_logs.py`: consistent 1191, STALE 0, missing 0.
+- `python3 scripts/verify_deck.py "decks/Red Elementals/Red Elementals.cod" --no-sweep`: **GATE PASS**.
+  - **`regression_tiers` PASS** ("in all 3 suite tiers with GT (redelem)").
+  - Also PASS: coverage, card_costs, card_fields, viewer (static), viewer_wiring and suite.
+  - The runtime gates (mismatch, play_invariants, viewer sweep) and claude_sweep are SKIPPED; they belong to
+    Stage 5.
+
 ## Stage 5 — verification
 (not yet run)
 
