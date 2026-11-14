@@ -3880,10 +3880,12 @@ public:
                                                   const std::vector<int>& legal) const override;
     // MTG_HYDRAS_CAST_ORDER -- the USER's cast order (2026-11-10: "Doublers and Gargos should be before the
     // Hydras"): Vernal Bloom, Gauntlet / Nissa, the land fetches, Gargos, Greaves, Garruk, Kalonian, the X
-    // Hydras last. DEFAULT ON; =0 => DeckProvider::CastOrderRank byte-for-byte. Ties go to the NAME.
+    // Hydras last. ArrangeCastOrder moves one fetch before the last doubler only when the ranked line
+    // cannot pay and the moved line can. DEFAULT ON; =0 => generic ranking. Ties go to the NAME.
     int         CastOrderRank(const GameState&, const CardDefinition&) const override;
     const char* CastOrderTierName(int rank) const override;
     bool        CastOrderTotalByName() const override;
+    void        ArrangeCastOrder(const GameState&, const std::vector<Action>&, std::vector<int>&) const override;
     // MTG_HYDRAS_BUCKET_DISCARD -- the authored cleanup-discard BUCKET policy (analyze-deck 5i, 2026-11-11):
     // LANDS / RAMP / DOUBLERS / Gargos / Greaves / THREATS, quota-first and net of board, every hand card named
     // (an ORDER, not a narrowing: the executor's searched cleanup still trials the whole hand). DEFAULT ON since

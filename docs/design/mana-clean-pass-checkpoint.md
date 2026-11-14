@@ -1602,3 +1602,14 @@ fungus 1,880, gods 4,300 (first run).
   (seed 7100001, profile depth, b20) had 0 changed win turns, net 0. Tier batch 23s vs H-equivalent 22s;
   search units 9,095,976 vs 9,171,439 (-0.8%). Four Jumbo play digests were accepted locally with their `.wins`
   files; no other deck ground truth changed. K is ready for a later integration after H.
+* **Queue item L (Codex, 2026-11-14): Hydras fetch-before-doubler -- validated in isolated `wip/l-hydras`,
+  based on K.** The authored ranking remains doublers before untapped-Forest fetches. For a line whose ranked order
+  fails the exact sequential payment walk, `HydrasProvider::ArrangeCastOrder` tries the first fetch before the last
+  doubler and keeps that order only if the exact walk pays every cast. This removes the one
+  APPLY-DROP-ORDER on s30000004 T4 ({Bloom, Bloom, Search}); the current baseline and candidate both have no flag on
+  historical s30000111 T6. Full units 3,099/3,099; combined Hydras smoke/regression 2,535 games, 544/544 scenarios,
+  strict viewer refs 343 ok/493 repaired/1 beaten with zero drift/divergence/gap. No tier score changes; two searched
+  and one d0 same-score play traces moved, each inspected against the K binary and each adding a fetch earlier.
+  Fresh held-out 3,000 paired Hydras games (seed 7600001, profile depth, b20) had 0 changed win turns, average
+  5.4000 on both arms. Three Hydras play digests and their `.wins` files were accepted locally. L is ready for
+  rebase onto the shared head and landing checks.

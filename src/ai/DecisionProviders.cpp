@@ -50660,7 +50660,8 @@ std::vector<int> HydrasProvider::CounterDestroyArtEnchTargets(const GameState& s
 //                       tap (every land here is a basic Forest) and neither reads the other, so either
 //                       order pays the same total. Nissa's +1 / -8 are activations that trail the casts.
 //   3 Nature's Lore, Search for Tomorrow, Three Visits   land_search_on_resolve: an UNTAPPED Forest, after the
-//                       doublers (it taps for more) and before every creature (it helps pay). Same effect,
+//                       doublers (it taps for more) and before every creature (it helps pay). ArrangeCastOrder
+//                       moves one before the last doubler only when that rescues an otherwise unpayable line. Same effect,
 //                       so the same total in any order. Search's suspend is a special action, not a cast.
 //   4 Gargos            reduces_spell_subtype Hydra {4}: before every Hydra, Kalonian included. A 6-drop,
 //                       so after the fetches.
@@ -50701,6 +50702,40 @@ int HydrasProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 }
 
 bool HydrasProvider::CastOrderTotalByName() const { return HydrasCastOrderOn(); }
+
+// USER 2026-11-14: get the doublers out first unless the fetch must fund the
+// last one. This is one fixed reorder, and both sequences are checked against
+// the exact sequential payment walk before changing the user's ranked order.
+void HydrasProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                      std::vector<int>& order) const
+{
+    if (!HydrasCastOrderOn()) { return; }
+    const auto is_doubler = [](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        const auto& n = a.card_name.str();
+        return n == "Vernal Bloom" || n == "Gauntlet of Power" || n == "Nissa, Who Shakes the World";
+    };
+    const auto is_fetch = [](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        const auto& n = a.card_name.str();
+        return n == "Nature's Lore" || n == "Search for Tomorrow" || n == "Three Visits";
+    };
+    int last_doubler = -1, first_fetch = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        if (is_fetch(a) && last_doubler >= 0) { first_fetch = p; break; }
+        if (is_doubler(a)) { last_doubler = p; }
+    }
+    if (first_fetch < 0 || TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+    std::vector<int> trial = order;
+    const int moved = trial[static_cast<std::size_t>(first_fetch)];
+    trial.erase(trial.begin() + first_fetch);
+    trial.insert(trial.begin() + last_doubler, moved);
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
+}
 
 const char* HydrasProvider::CastOrderTierName(int rank) const
 {
