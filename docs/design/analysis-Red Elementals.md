@@ -151,7 +151,7 @@ Code: `b53c6f21c`. It SUPERSEDES the "unpinned ordinary cast ... kept only when
   Census `MTG_CHAMPION_AXIS_STATS` (TurnSolver.cpp `championcensus`). Provider hooks:
   `OrderChampionCandidates` (orders) and `PruneChampionCandidates` (`MTG_CHAMPION_DOOMED_PRUNE`, default
   ON; a doomed and spent candidate is admitted alone, with no decline and no same-line entrants;
-  `MTG_UNPRUNE=champion` and human play get the full set). Both should move to the deck provider at Stage 4a.
+  `MTG_UNPRUNE=champion` and human play get the full set). Both moved to `RedElementalsProvider` at Stage 4a.
 - **Repro, new vs pre (B3)**, frozen `b53c6f21c` binary vs `mtg.pre`, seed 300 x120 d3 b100: avg **4.6500 ->
   4.6500**, 0 win turns differ (0 faster, 0 slower). Game logs: 118/120 byte-identical (except `runId`). The
   two that changed are gi83 and gi108, the defect-(2) games where the old T4 main-1 Nova was cast onto a
@@ -215,6 +215,96 @@ user OK). Validation by agent C2 on the Release build of `f409f2e07`.
   `audit_card_fields.py` rc 0; `--coverage-only` 0 missing, all 14 cards `full`; `audit_viewer_decisions.py
   --no-sweep` rc 0 after `05b603a2e`.
 
+## Stage 4a — provider routing (2026-11-14, agents D / D2)
+Code: `f0bf6f249` (amended from WIP `9c46fbcdd`).
+- **Routing BEFORE: `MorphProvider`, by accident.** Spark / Ball Lightning / Hellspark / Firecat's
+  `endstep_sacrifice_self`, Firecat's `morph_cost` and Legion Leadership's `trick_double_power` are all terms
+  of the `morph` signature, which routes first. Morph's hooks encode the USER's rules for the Morph list and
+  premises stated "for THIS list" (e.g. `EndStepSacFaceUpDeadAfterCombat` assumes nothing reads a creature
+  dying or sitting in the graveyard, which Thunderkin's attack return and Nova's champion both do here), so
+  the deck does NOT derive from it.
+- **Routing AFTER: `RedElementalsProvider : DeckProvider`** (`src/ai/DecisionProviders.h`, after
+  `LandfallElementalsProvider`; impls in `DecisionProviders.cpp` ~870-1005). Signature `redelem` (in
+  `DetectDecisionProvider`) = Nova Chaser's `champion_subtype` || Thunderkin Awakener's
+  `attack_trigger_reanimate` || Hellspark's `unearth_cost` on an ELEMENTAL card: three cards, params no other
+  card in `cards.json` carries. It deliberately excludes Soulstoke's `tap_put_from_hand_*` and Metallic Mimic
+  (Landfall Elementals runs both), the end-step-sacrifice bodies / Firecat / Legion Leadership (Morph),
+  Bladewhirl's `reveal_or_pay_subtype` (Kithkin / Pirates carry it) and Sunspine Lynx (a red staple). Routed
+  ABOVE `morph`. Unit: the every-deck-resolves table in `test/unit/test_pirates_provider.cpp` pins
+  `Red Elementals -> RedElementals` (this also fixes the 54-vs-53 failure agent C recorded), and
+  `test_red_elementals.cpp` checks that the deck routes there and still routes there with any one signature
+  card cut. `provider_audit.py --check` rc 0 (Red Elementals is "NOT AUDITED": no profile.json yet).
+- **Certificate: `NotAssessed`.** What would have to be checked: a winless-this-turn bound must price every
+  hasty body still castable or Soulstoke-puttable this turn (Spark / Ball Lightning / Hellspark / Firecat, and
+  unearth from the graveyard), each Thunderkin attack trigger's tapped-and-attacking return of an Elemental with
+  toughness below the Awakener's, the Soulstoke +1/+1 lord, Metallic Mimic counters, Legion Leadership's power
+  doubling on the largest attacker, trample, Lightning Bolt (3) and Sunspine Lynx's ETB.
+- **Hooks moved.** The root `DecisionProvider` `OrderChampionCandidates` / `PruneChampionCandidates` /
+  `AttackReanimateTargets` are now NEUTRAL (no-op); the deck rules moved verbatim into
+  `RedElementalsProvider` (`MTG_CHAMPION_DOOMED_PRUNE` kept). No other deck carries champion or the
+  Thunderkin trigger, so the root change is inert elsewhere (identity check below).
+- **Nova Chaser main-2 rule (USER, verbatim: *"Note that Nova Chaser should be cast main 2 if it is hardcast,
+  but it might also be dropped in main 1 via Incandescent Soulstoke."*).**
+  `RedElementalsProvider::RestrictsCollectedActions` / `CollectedActionAllowed`: a `champion_subtype` creature
+  with no haste access (`TrickHandRecipientCanAttackThisTurn`: printed haste, or a haste grant on our
+  battlefield / in hand) is not offered as a PRE-combat `CastFromHand`. The Soulstoke put
+  (`PutFromHandAbility`) is untouched in both mains. Lever `MTG_REDELEM_NOVA_MAIN2` (heurarm slot
+  `REDELEM_NOVA_MAIN2`, per-job overridable, default ON); `MTG_UNPRUNE=championmain2` (new `UnprunedGate::
+  ChampionMain2`) and human play keep the main-1 hardcast. A provider RESTRICTION, not a pick: everything
+  admitted is still searched.
+  **The line it gives up (disclosed):** a main-1 hardcast Nova that DECLINES to champion goes to the
+  graveyard, and a Thunderkin Awakener pumped to toughness >= 3 (the Soulstoke lord or a Mimic counter) could
+  return it tapped and attacking as a 10/2 trampler that same turn. The rule removes that line. In the A/B
+  below no game is slower for it (it measured 1 game FASTER, s300 gi83 6 -> 5, against the arm with the rule
+  off).
+- **`OrderOpaqueCastsByRank` = true** (lever `MTG_REDELEM_OPAQUE_ORDER`, heurarm `REDELEM_OPAQUE_ORDER`,
+  default ON). This is a **CAST-ORDER heuristic and USER-OWNED; the decision is PENDING the user.** It is ON
+  by default only because it restores what the deck had on Morph. Root cause: the first A/B of the bare
+  `DeckProvider` derivation was 8 games slower and 0 faster than the Morph baseline, all Legion Leadership
+  lines, where the bare provider leaves the order-opaque cast set to the search (s5000 gi308 T4: Leadership
+  then Spark = 8 damage, Spark then Leadership = 9; s300 gi49: the Spark + Leadership T4 kill was not found
+  even at `--budget-ms 0`). A temporary diagnostic provider that forwarded each Morph hook by bit showed
+  `OrderOpaqueCastsByRank` ALONE restores all 8; the other Morph hooks had no effect on outcome (the
+  diagnostic code was reverted, never committed). It rank-sorts by the GENERIC `CastOrderRank`, so the doubler
+  follows the bodies it doubles; Morph's own tiered `CastOrderRank` is NOT taken.
+
+### Stage 4a A/B (d3 b100, `MTG_DUMP_WINS` per-game paired)
+Base = `build/scratch/redelem/D_base` (HEAD `44154dd93`, routes to Morph). Final = `D_new2` (the Stage 4a
+commit). `new` = the first derivation WITHOUT the opaque order (`D_new`). Final, `m2off2`
+(`MTG_REDELEM_NOVA_MAIN2=false` as a per-job flag) pooled in ONE batch; `unp2`
+(`MTG_UNPRUNE=champion,championmain2`, env-only, so a second batch run concurrently). Budgets are
+deterministic units, so the wall `ms` of concurrent arms is not compared.
+
+| arm | s300 x120 | s100 x120 | s5000 x600 | units s300 / s100 / s5000 |
+|---|---|---|---|---|
+| base (Morph) | 4.3500 | 4.2917 | 4.3817 | 1,645,169 / 1,036,797 / 7,004,235 |
+| new (no opaque order) | 4.3667 | 4.3083 | 4.3883 | 2,514,946 / 1,594,804 / 10,947,090 |
+| **final** | **4.3500** | **4.2917** | **4.3817** | **2,435,831 / 1,587,726 / 10,674,553** |
+| m2off2 (final, main-2 rule off) | 4.3583 | 4.2917 | 4.3817 | 2,484,473 / 1,598,389 / 10,703,969 |
+| unp2 (final, both prunes open) | 4.3583 | 4.2917 | 4.3817 | 2,484,488 / 1,598,389 / 10,703,969 |
+
+Per game (840 games):
+- **base -> final: 0 faster, 0 slower** on every seed (digests differ in 7 / 7 / 36 games: same win turn,
+  different line). There is no slower game to explain.
+- new -> final: 8 faster, 0 slower (the 8 Legion Leadership games above, all recovered).
+- m2off2 -> final and unp2 -> final: **1 faster, 0 slower** (s300 gi83 6 -> 5); s100 and s5000 0 / 0.
+  The Nova main-2 rule saves 2.0% / 0.7% / 0.3% of units. The doomed-champion prune is inert again
+  (unp2 == m2off2 in every game, units differ by 15 on s300).
+- Census `MTG_CHAMPION_AXIS_STATS`: `searched-frame=0` on both arms (playout 4 / 2: beyond-horizon picks,
+  permitted).
+- **Units: the final binary spends +48% / +53% / +52% more search units than the Morph baseline at equal
+  turns.** Morph's other hooks were outcome-neutral here but cut work: candidates are
+  `TrickTargetsAttackersOnly` (Legion Leadership's target), `EndStepSacFaceUpDeadAfterCombat` (whose premise
+  is FALSE for this deck, see above) and the attack/trick folds. None was taken over, since each encodes the
+  Morph list's rules. A deck-specific, measured narrowing in their place is Stage 5f work (runtime-reducing
+  heuristics); not done here.
+
+**Byte-identity** (`build/scratch/redelem/b3/ident_b3.sh`, `D_base` vs `D_new2`, 8 games seed 4242 d3 b40
+`--ignore-play-profile`): Landfall Elementals, Morph, Goblins, Spirits **32/32 logs identical** apart from
+`runId`, stderr search counters identical (`build/scratch/redelem/D/id_base`, `id_new2`).
+
+**Unit suite** (`build/Release/mtg-test`, full): **3082/3082 test cases pass** (3,596,253 assertions), rc 0.
+
 ## Stage 5 — verification
 (not yet run)
 
@@ -235,8 +325,8 @@ user OK). Validation by agent C2 on the Release build of `f409f2e07`.
   first (sac_at_end_step / unearthed / exile_at_end / endstep_sacrifice_self), then attacked or tapped,
   then smallest power, then lowest card number. It only ORDERS: it sets the emission order of the cast and
   put variants (same-line entrants follow, the decline is last), the rank order of a returning champion's
-  pick, the beyond-horizon playout pick, and the human's highlighted default. Lives in the root provider
-  today and should move to the deck provider at Stage 4a.
+  pick, the beyond-horizon playout pick, and the human's highlighted default. Lives in `RedElementalsProvider` since
+  Stage 4a (the root hook is neutral).
 - 6a DISCLOSURE + USER DECISION, provider PRUNING heuristic (Nova Chaser):
   `DecisionProvider::PruneChampionCandidates`, `MTG_CHAMPION_DOOMED_PRUNE`, **default ON** (USER: *"No, the
   provider can prune other options."*). When a candidate is doomed AND spent (it attacked or is tapped), it is
@@ -246,7 +336,7 @@ user OK). Validation by agent C2 on the Release build of `f409f2e07`.
   x120, 100 x120, 5000 x600 (840 games): avgs 4.6500 / 4.6333 / 4.7267 on BOTH arms, 840/840 per-game
   digests identical (0 faster, 0 slower), search units identical except s300 (1,630,112 vs 1,630,115: the
   prune saves 3).** So it is inert at this setting, because the shape is rare. The default is unchanged
-  pending the user's decision. It should move to the deck provider at Stage 4a.
+  pending the user's decision. It lives in `RedElementalsProvider` since Stage 4a (root neutral).
 - PROVISIONAL (Nova Chaser): `DeckUsesSecondMain` now returns true for any champion deck, opening a full
   searched post-combat main on every turn for Red Elementals (needed for the doomed-attacker line). Its
   cost is unmeasured; a restricted main-2 (admit only champion casts/puts, the OMNITOOL_M2 shape) is the
@@ -278,4 +368,22 @@ user OK). Validation by agent C2 on the Release build of `f409f2e07`.
 - 6a DISCLOSURE, provider ORDERING heuristic (Thunderkin Awakener): `DecisionProvider::AttackReanimateTargets`
   orders the target ranks (printed power descending, then a card without a graveyard ability before an
   unearthable one). It sets rank order, the beyond-horizon playout pick and the human's default; it prunes
-  nothing. Lives in the root provider; should move to the deck provider at Stage 4a.
+  nothing. Lives in `RedElementalsProvider` since Stage 4a (root neutral).
+- 6a DISCLOSURE + USER DECISION, provider RESTRICTION (Nova Chaser main 2, Stage 4a):
+  `RedElementalsProvider::CollectedActionAllowed`, `MTG_REDELEM_NOVA_MAIN2`, **default ON**, implementing the
+  USER's *"Note that Nova Chaser should be cast main 2 if it is hardcast, but it might also be dropped in main 1
+  via Incandescent Soulstoke."* A champion creature with no haste access is not hardcast pre-combat; the
+  Soulstoke put stays in both mains. Line given up: a main-1 Nova that declines champion, then is returned
+  attacking by a Thunderkin pumped to toughness >= 3. A/B (840 games): 1 faster (s300 gi83 6 -> 5), 0 slower vs
+  the rule off and vs `MTG_UNPRUNE=champion,championmain2`; saves 2.0% / 0.7% / 0.3% units. Confirm it as built.
+- 6a DISCLOSURE + USER DECISION (CAST ORDER, USER-OWNED, PENDING): `RedElementalsProvider::OrderOpaqueCastsByRank`
+  = true, `MTG_REDELEM_OPAQUE_ORDER`, **default ON**, because it restores the order the deck had while it rode
+  MorphProvider. It rank-sorts the order-opaque cast set (Legion Leadership and the casts around it) by the
+  generic `CastOrderRank`, so the doubler follows the bodies it doubles. Without it, 8 games were slower than
+  the Morph baseline (all Legion Leadership lines); with it, 0 slower and 0 faster vs Morph in 840 games. The
+  user may want a deck cast order instead (Stage 5e); until they answer, this stands as the restored default,
+  not as an adopted order.
+- Stage 4a COST, for the user: leaving MorphProvider costs **+48% / +53% / +52% search units** (s300 / s100 /
+  s5000) at equal turns. Morph's work-cutting hooks (e.g. `TrickTargetsAttackersOnly`,
+  `EndStepSacFaceUpDeadAfterCombat`, whose premise is false for this deck) were not taken over. A measured
+  deck-specific narrowing belongs to Stage 5f.
