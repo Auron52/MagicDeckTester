@@ -1,0 +1,457 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 5, "won": true,
+  "mulligan": { "count": 2, "bottom": [45, 28] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 54, "name": "Wooded Foothills" }, { "num": 55, "name": "Wooded Foothills" }, { "num": 38, "name": "Mountain" }, { "num": 33, "name": "Ilharg, the Raze-Boar" }, { "num": 24, "name": "Herald of Ilharg" }, { "num": 47, "name": "Stomping Ground" }, { "num": 17, "name": "Forest" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 27, "name": "Herald of Ilharg" }, { "num": 20, "name": "Forest" }, { "num": 5, "name": "Decimator of the Provinces" }, { "num": 10, "name": "End-Raze Forerunners" }, { "num": 12, "name": "End-Raze Forerunners" }, { "num": 19, "name": "Forest" }, { "num": 21, "name": "Gruul Turf" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": false,
+  "to_bottom": 2,
+  "hand": [{ "num": 46, "name": "Somberwald Sage" }, { "num": 13, "name": "Flinthoof Boar" }, { "num": 28, "name": "Herald's Horn" }, { "num": 45, "name": "Somberwald Sage" }, { "num": 34, "name": "Ilharg, the Raze-Boar" }, { "num": 55, "name": "Wooded Foothills" }, { "num": 2, "name": "Birds of Paradise" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 3, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 46, "name": "Somberwald Sage", "win_optimal": true }, { "num": 13, "name": "Flinthoof Boar", "win_optimal": true }, { "num": 28, "name": "Herald's Horn", "win_optimal": true }, { "num": 45, "name": "Somberwald Sage", "win_optimal": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "win_optimal": true }, { "num": 55, "name": "Wooded Foothills", "win_optimal": true }, { "num": 2, "name": "Birds of Paradise", "win_optimal": true }],
+  "ai_choice": { "index": 4, "num": 34, "name": "Ilharg, the Raze-Boar" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 46, "name": "Somberwald Sage", "win_optimal": true }, { "num": 13, "name": "Flinthoof Boar", "win_optimal": true }, { "num": 28, "name": "Herald's Horn", "win_optimal": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "win_optimal": true }, { "num": 55, "name": "Wooded Foothills", "win_optimal": true }, { "num": 2, "name": "Birds of Paradise", "win_optimal": true }],
+  "ai_choice": { "index": 3, "num": 34, "name": "Ilharg, the Raze-Boar" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Wooded Foothills", "cast=Birds of Paradise"], "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Birds of Paradise" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Birds of Paradise"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 1,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 2, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 9,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "End-Raze Forerunners" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 1, "summary": "land=none; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 15, "cast_order": ["**", "land=Wooded Foothills", "cast=Somberwald Sage"], "decision": {
+  "decision_index": 12,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Wooded Foothills" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 56, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Flinthoof Boar, Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar", "Wooded Foothills"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Flinthoof Boar"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Flinthoof Boar" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 6, "summary": "land=Wooded Foothills; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 8, "summary": "land=none; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: Somberwald Sage, Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Somberwald Sage", "Wooded Foothills"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Somberwald Sage"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Somberwald Sage" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 16, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 17, "summary": "land=none; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 18, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 56, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 58,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 13,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 16, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 46, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 13, "cast_order": ["**", "land=Windswept Heath", "cast=Ilharg, the Raze-Boar", "cast=Flinthoof Boar"], "decision": {
+  "decision_index": 16,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Windswept Heath" }],
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 48, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, End-Raze Forerunners", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "End-Raze Forerunners"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "End-Raze Forerunners" }] },
+    { "index": 2, "summary": "land=Windswept Heath; cast: End-Raze Forerunners", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["End-Raze Forerunners"], "actions": [{ "card": "End-Raze Forerunners" }] },
+    { "index": 3, "summary": "land=Windswept Heath; cast: End-Raze Forerunners", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["End-Raze Forerunners"], "actions": [{ "card": "End-Raze Forerunners" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Flinthoof Boar, Ilharg, the Raze-Boar, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar", "Ilharg, the Raze-Boar", "Windswept Heath"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar, Flinthoof Boar, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Ilharg, the Raze-Boar", "Flinthoof Boar", "Windswept Heath"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Flinthoof Boar, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Flinthoof Boar", "Ilharg, the Raze-Boar"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Ilharg, the Raze-Boar, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Ilharg, the Raze-Boar", "Flinthoof Boar"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: Flinthoof Boar, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }] },
+    { "index": 12, "summary": "land=Windswept Heath; cast: Flinthoof Boar, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 13, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }] },
+    { "index": 14, "summary": "land=Windswept Heath; cast: Flinthoof Boar, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 15, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }] },
+    { "index": 16, "summary": "land=none; cast: Flinthoof Boar, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "cast_order_canonical": ["Flinthoof Boar", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 17, "summary": "land=none; cast: Ilharg, the Raze-Boar, Flinthoof Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "cast_order_canonical": ["Ilharg, the Raze-Boar", "Flinthoof Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Flinthoof Boar" }] },
+    { "index": 18, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Ilharg, the Raze-Boar", "Windswept Heath"], "actions": [{ "card": "Ilharg, the Raze-Boar" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 19, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Ilharg, the Raze-Boar"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 21, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Ilharg, the Raze-Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 22, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Ilharg, the Raze-Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 23, "summary": "land=Windswept Heath; cast: Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Ilharg, the Raze-Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 24, "summary": "land=none; cast: Ilharg, the Raze-Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Ilharg, the Raze-Boar"], "actions": [{ "card": "Ilharg, the Raze-Boar" }] },
+    { "index": 25, "summary": "land=Windswept Heath; cast: Flinthoof Boar, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar", "Windswept Heath"], "actions": [{ "card": "Flinthoof Boar" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 26, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Flinthoof Boar"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Flinthoof Boar" }] },
+    { "index": 27, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Flinthoof Boar"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Flinthoof Boar" }] },
+    { "index": 28, "summary": "land=Windswept Heath; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 29, "summary": "land=Windswept Heath; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 30, "summary": "land=Windswept Heath; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 31, "summary": "land=none; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 32, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 33, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 34, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 35, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 36, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 100,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 17,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 48, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 13, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 34, "name": "Ilharg, the Raze-Boar", "cost": "{3}{R}{R}", "mv": 5, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 11, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 12, "num": 13, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ilharg, the Raze-Boar", "idx": 11, "num": 34, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 10, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Flinthoof Boar #13: gains haste until end of turn", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar", "src_num": 13, "activate": true, "cost_pips": "R", "activation_cost": "{R}", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "ability", "text": "Flinthoof Boar: gains haste until end of turn" }],
+  "mdfc_backs": [],
+  "me": { "life": 11, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 12, "num": 13, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ilharg, the Raze-Boar", "idx": 11, "num": 34, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 10, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Flinthoof Boar (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": [],
+  "me": { "life": 11, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 12, "num": 13, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ilharg, the Raze-Boar", "idx": 11, "num": 34, "sick": true, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 10, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Gruul Turf" }],
+  "mdfc_backs": [],
+  "me": { "life": 11, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 12, "num": 13, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ilharg, the Raze-Boar", "idx": 11, "num": 34, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 48, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 10, "num": 47, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: End-Raze Forerunners", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["End-Raze Forerunners"], "actions": [{ "card": "End-Raze Forerunners" }] },
+    { "index": 1, "summary": "land=Gruul Turf (before End-Raze Forerunners); cast: End-Raze Forerunners", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["End-Raze Forerunners"], "actions": [{ "card": "End-Raze Forerunners" }] },
+    { "index": 2, "summary": "land=none; cast: End-Raze Forerunners", "declared_order_payability": "not_verified", "land": null, "casts": ["End-Raze Forerunners"], "actions": [{ "card": "End-Raze Forerunners" }] },
+    { "index": 3, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "lackey_put",
+  "source": "Ilharg, the Raze-Boar (attack)",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 11, "battlefield": [{ "name": "Birds of Paradise", "idx": 4, "num": 2, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 12, "num": 13, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ilharg, the Raze-Boar", "idx": 11, "num": 34, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Somberwald Sage", "idx": 9, "num": 46, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 3, "num": 50, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 48, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 10, "num": 47, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 10, "name": "End-Raze Forerunners", "cost": "{5}{G}{G}{G}", "mv": 8, "kind": "permanent", "is_creature": true }, { "num": 23, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath", "Wooded Foothills", "Wooded Foothills"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "1/1 Creature", "idx": 7, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "candidates": [{ "index": 0, "name": "End-Raze Forerunners" }],
+  "trigger": "attack",
+  "note": "reply a candidate index to put that creature card from hand onto the battlefield tapped and attacking (it returns to hand at the beginning of the next end step), or -1 to decline. Default = the AI's pick."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 5, "kind": "trigger", "text": "Ilharg, the Raze-Boar attacked -- put End-Raze Forerunners onto the battlefield tapped and attacking" },
+    { "turn": 5, "kind": "etb", "text": "End-Raze Forerunners: 5 other creature(s) get +2/+2 and vigilance until end of turn" },
+    { "turn": 5, "kind": "combat", "text": "⚔ attacked: Ilharg, the Raze-Boar (8), Flinthoof Boar (5), End-Raze Forerunners (7) — 20 to opponent (17→-3)" }
+  ]
+}
