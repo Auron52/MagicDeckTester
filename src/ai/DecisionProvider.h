@@ -211,8 +211,14 @@ public:
     // Upper bound on freshly entered Wanderwine Prophets that can deal combat
     // damage this turn. The generic search keeps every entrant; a deck provider
     // may prove a lower bound from its available haste sources.
-    virtual int ProphetsFreshCombatEventCap(const GameState&) const
+    virtual int ProphetsFreshCombatEventCap(const GameState&, const std::vector<Action>&,
+                                             const std::vector<int>&) const
     { return std::numeric_limits<int>::max(); }
+    // Upper bound on controlled Merfolk that can be legal champion or combat
+    // sacrifice victims anywhere in this plan. Generic search retains its
+    // broad action allowance; a provider may prove a tighter deck bound.
+    virtual int ProphetsMerfolkVictimWidth(const GameState&, const std::vector<Action>& actions,
+                                           int board_merfolk, int added_merfolk) const;
     // Historical burn target policy: Any targets opponent face; Multi chooses the
     // opponent creature or the existing surviving-own-creature prowess fallback.
     // Decks may opt into the complete target axis; human/unpruned always see it.

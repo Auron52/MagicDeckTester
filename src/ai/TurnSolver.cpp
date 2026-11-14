@@ -94791,7 +94791,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             // The upper bound includes potential same-plan token makers. A rank
             // beyond the actual list clamps at resolution and post-apply dedup
             // removes it; under-sizing would make a choice unreachable.
-            const int width = board_merfolk + added + static_cast<int>(p.actions.size()) * 4;
+            const int width = ResolveProvider(state).ProphetsMerfolkVictimWidth(
+                state, p.actions, board_merfolk, added);
             if (width <= 0) { continue; }
             std::vector<int> code(static_cast<std::size_t>(entries), 0);
             for (;;)
@@ -94808,6 +94809,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
     }
+    AxisTrace("post-prophets-champion", state, all);
     if (state.deck_has_prophets && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive())
     {
         int ready_prophets = 0, merfolk = 0;
@@ -94828,6 +94830,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             {
                 if (!p.prophets_sac_choice.empty()) { continue; }
                 int added = 0, new_prophets = 0;
+                std::vector<int> fresh_prophets_ids;
                 for (const Action& a : p.actions)
                 {
                     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
@@ -94836,19 +94839,31 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         && CardHasSubtype(d->card, "Merfolk"))
                     {
                         ++added;
-                        if (d->params.combat_damage_sac_merfolk_extra_turn) { ++new_prophets; }
+                        if (d->params.combat_damage_sac_merfolk_extra_turn)
+                        {
+                            ++new_prophets;
+                            int card_number = 0;
+                            if (a.cast_from_top && !state.ActivePlayer().library.empty())
+                            { card_number = state.ActivePlayer().library.front().m_number; }
+                            else if (a.hand_index >= 0
+                                && a.hand_index < static_cast<int>(state.ActivePlayer().hand.size()))
+                            { card_number = state.ActivePlayer().hand[static_cast<std::size_t>(a.hand_index)].m_number; }
+                            fresh_prophets_ids.push_back(card_number);
+                        }
                     }
                     if (a.kind == Action::Kind::ActivatePermAbility
                         && a.ability_mode == Action::AbilityMode::TapTutorPut
                         && a.tutor_target.str() == "Wanderwine Prophets")
-                    { ++added; ++new_prophets; }
+                    { ++added; ++new_prophets; fresh_prophets_ids.push_back(0); }
                 }
                 // A freshly entered Prophets can attack if the line equips Lightning Greaves.
                 // An already-ready double striker has one trigger in each combat-damage step.
                 const int events = ready_prophets + std::min(
-                    new_prophets, ResolveProvider(state).ProphetsFreshCombatEventCap(state));
+                    new_prophets, ResolveProvider(state).ProphetsFreshCombatEventCap(
+                        state, p.actions, fresh_prophets_ids));
                 if (events == 0) { continue; }
-                const int width = merfolk + added + static_cast<int>(p.actions.size()) * 4;
+                const int width = ResolveProvider(state).ProphetsMerfolkVictimWidth(
+                    state, p.actions, merfolk, added);
                 if (width <= 0) { continue; }
                 std::vector<int> code(static_cast<std::size_t>(events), 0);
                 for (;;)
@@ -94866,6 +94881,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
         }
     }
+    AxisTrace("post-prophets-combat", state, all);
     // ---- A CLONE DID NOT INHERIT WAVE 0's FAN-OUT (MTG_BP_AXIS_W0_CLEAR) ----------------------
     // `bp_wave0` is a record of a FACT ABOUT ONE PLAN: "wave 0 emitted ranks 0..W-1 for this plan,
     // so its continuations below W are already scored". Every axis above builds its variants with

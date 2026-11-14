@@ -4362,9 +4362,11 @@ public:
     { return { CertState::NotAssessed, "NOT ASSESSED. Check champion, top-library casts and extra-turn loops before proving a winless turn." }; }
     const char* Name() const override { return "MerfolkTurns"; }
     // The 60-card list has one Lightning Greaves and no other haste source.
-    // An Equipment can haste only one fresh Prophets at combat, even if the
-    // plan casts multiple Prophets or moves Greaves several times beforehand.
-    int ProphetsFreshCombatEventCap(const GameState&) const override { return 1; }
+    // A fresh Prophets needs a plan action attaching it to that Prophets.
+    int ProphetsFreshCombatEventCap(const GameState&, const std::vector<Action>&,
+                                    const std::vector<int>&) const override;
+    int ProphetsMerfolkVictimWidth(const GameState&, const std::vector<Action>&,
+                                   int board_merfolk, int added_merfolk) const override;
     void TapTargetPumpTargets(const GameState& state, const Permanent& source,
                               bool is_pre_combat, std::vector<int>& targets) const override;
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,

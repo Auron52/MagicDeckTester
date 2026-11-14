@@ -449,3 +449,43 @@ autonomous targets; human play still offers every legal target. The mana
 ability remains available. Both performance edits are rebuilding and must
 pass the seeded repro, focused tests, cost gate and outcome checks before
 being treated as verified.
+
+### 2026-11-14 Prophets choice-expansion memory fix
+
+The first capped seed-10 retry still reached 20.05 GiB RSS. A trace inside
+`AppendSubdecisionAxes` then showed the champion fan alone exceeding 5.4
+million materialized plans before combat pins started. The previous width
+added four hypothetical Merfolk per action, including casts and equips that
+create none. Those surplus ranks were clamped to the last legal choice at
+resolution, so the fan copied large numbers of equivalent plans before it
+could score or deduplicate them.
+
+`MerfolkTurnsProvider::ProphetsMerfolkVictimWidth` now provides a proved upper
+bound for this 60-card pool: existing Merfolk, at most one new Merfolk for each
+cast/Vial/Seahunter put, one token per Merfolk spell cast for each possible
+Emperor Mihail II, and one token per tap event for each possible Deeproot
+Pilgrimage. The tap count includes every permanent-ability action plus the
+attack declaration; none of this pool's creatures taps for mana. It counts
+Mihails in champion exile and Mihails put by Vial or Seahunter, and assumes
+every optional Mihail payment succeeds. Death, champion exile and sacrifices
+can only reduce the list. Thus every reachable victim rank remains inside the
+bound. The generic provider retains the original broad width.
+
+The fresh-Prophets combat cap also checks the physical target of a Greaves
+attachment, including a Prophets cast from Mihail's library top. A fresh
+Prophets with no Greaves attachment action cannot have haste in this pool;
+other decks keep their generic full event bound. The first version of this
+check left library-top IDs unknown and still exceeded 18 GiB. Reading the
+already-visible top card's physical ID removed that unnecessary uncertainty.
+
+Validation: `MTG_BUILD_JOBS=6 ./build.sh release -- --target mtg mtg-test
+mtg-analyze` built all three targets; the focused Prophets/provider tests
+passed 6 cases and 57 assertions. The exact seed 3000011/game-index 10 d3/b20
+command with `MTG_AXIS_TRACE=1 MTG_RSS_CAP_GB=18` exited 0 in 16.25 s and
+reported average 5.0000 turns. Peak process RSS was 11,566,316 KiB (about
+11.0 GiB) on the first successful run and 11,611,256 KiB on the final
+build; the largest traced turn-6 lists held 1,364,470 plans after
+champion and 2,486,046 after combat. The earlier capped retry had exited
+137 near 20 GiB before scoring. The width is still an eager Cartesian fan;
+other boards or an expanded card pool may need a lazy representation. No
+full analyzer, regression ground truth, push or play server was run here.

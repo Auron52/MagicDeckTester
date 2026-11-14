@@ -1,6 +1,8 @@
 #include <doctest/doctest.h>
 
 #include "ai/LandPlay.h"
+#include "ai/DecisionProviders.h"
+#include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameLogger.h"
 #include "core/GameState.h"
@@ -370,4 +372,49 @@ TEST_CASE("Wanderwine Prophets without fodder sacrifices itself and may sacrific
     ResolveProphetsCombatDamage(combat, 0, {542});
     CHECK(combat.pending_extra_turns == 1);
     CHECK(combat.battlefield.empty());
+}
+
+TEST_CASE("Merfolk Turns counts a fresh Prophets combat event only with Greaves on that card")
+{
+    MerfolkTurnsProvider provider;
+    GameState state;
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = InternedName("Lightning Greaves");
+    equip.sac_victim_id = 700;
+    const std::vector<int> fresh{701, 702};
+    CHECK(provider.ProphetsFreshCombatEventCap(state, {}, fresh) == 0);
+    CHECK(provider.ProphetsFreshCombatEventCap(state, {equip}, fresh) == 0);
+    equip.sac_victim_id = 701;
+    CHECK(provider.ProphetsFreshCombatEventCap(state, {equip}, fresh) == 1);
+    CHECK(provider.ProphetsFreshCombatEventCap(state, {equip}, {0}) == 1);
+    equip.card_name = InternedName("Skullclamp");
+    CHECK(provider.ProphetsFreshCombatEventCap(state, {equip}, fresh) == 0);
+}
+
+TEST_CASE("Merfolk Turns bounds Prophets victims by its actual token sources")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Deeproot Pilgrimage", 710);
+    AddPermanent(state, "Emperor Mihail II", 711);
+    AddPermanent(state, "Rishadan Dockhand", 712);
+    Action cast;
+    cast.kind = Action::Kind::CastFromHand;
+    cast.card_name = InternedName("Wanderwine Prophets");
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = InternedName("Lightning Greaves");
+    CHECK(provider.ProphetsMerfolkVictimWidth(state, {cast, cast, equip}, 2, 2) == 7);
+    Action tap;
+    tap.kind = Action::Kind::ActivatePermAbility;
+    tap.card_name = InternedName("Rishadan Dockhand");
+    CHECK(provider.ProphetsMerfolkVictimWidth(state, {cast, cast, equip, tap}, 2, 2) == 8);
+    Action put;
+    put.kind = Action::Kind::ActivatePermAbility;
+    put.ability_mode = Action::AbilityMode::TapTutorPut;
+    put.tutor_target = InternedName("Emperor Mihail II");
+    CHECK(provider.ProphetsMerfolkVictimWidth(state, {put, cast}, 2, 0) == 8);
 }
