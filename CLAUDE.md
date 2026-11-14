@@ -201,6 +201,13 @@ launch unless the user requests a restart.
   * **As the parent:** put this rule in every brief you write, check the `subagent_tokens` figure in
     each completion/interim notification, and when an agent passes ~250K ask it to hand off, then launch
     a NEW agent from the handoff file. Do not keep resuming the old one.
+  * **250K is the TRIGGER, not a ceiling -- no earlier margin (USER 2026-11-14).** The user's words:
+    *"we shouldn't handoff at 150K or the context will run out too quickly. It's even okay if we end up a
+    bit above 250K, but the idea is to ensure we generally end somewhere in the 250-350 range and never go
+    above 400K. That is why I chose 250K."* So do not ask an agent to hand off below ~250K, and do not
+    brief agents to a smaller self-chosen budget "for safety" (a parent once used 150K that way: every
+    early handoff costs a fresh agent re-reading its context). Past 250K, finishing the current step is
+    fine; an agent should normally stop between 250K and 350K, and **400K is the never-exceed limit**.
   * **Keep agents small in the first place:** one narrow, focused change set per agent; **batch** USER
     rulings into one message instead of many small `SendMessage`s (each resumes the agent and grows its
     context); wait on long runs with a `run_in_background` waiter on the PID or a DONE marker, never
