@@ -85216,7 +85216,21 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // Lurrus of the Dream-Den (2026-11-10): a cast Lurrus's graveyard-cast permission is live the moment
     // it lands -- CollectActivationKeys' kActGyCast -- so a plan that casts it must be fanned.
     if (pp.gy_cast_permanent_max_mv > 0) { return true; }
+    // Flinthoof Boar (Boars, 2026-11-14): "{R}: This creature gains haste until end of turn" has no {T}, and a copy
+    // CAST this plan lands summoning-sick, so its key (CollectActivationKeys' kActSelfHaste) is new -- the apply-time
+    // gate accepted it, but no fan-out ever gave a Flinthoof-casting plan a bp_choice, and site 9 is SEARCHED-ONLY:
+    // "cast Flinthoof, then haste it and attack" was inexpressible from any frame where it was still in hand, at any
+    // depth or budget (the Pyrohemia shape again). Claude-play sweep seed 97009: T2 Rootbound Crag + Flinthoof +
+    // {R} haste off Ignoble Hierarch, attack alone with exalted, is a T4 kill; the search played Gruul Turf and won
+    // T5 at d5 b20, d5 b0 and d8 b0, yet hasted at once when handed the board after the cast. Fixture:
+    // test/scenarios/boars_flinthoof_cast_then_haste.json. Only Flinthoof holds self_haste_cost.
+    if (pp.self_haste_cost.has_value()) { return true; }
     return false;
+}
+
+int TurnSolver::PlanOpensBreakpointForTest(const GameState& state, const Plan& p)
+{
+    return PlanOpensBreakpoint(state, p);
 }
 
 // THE LIFEGAIN ROUTE's action predicate (site 9, chunk C2a): can this plan action GAIN LIFE for the

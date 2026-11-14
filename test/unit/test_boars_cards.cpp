@@ -347,3 +347,39 @@ TEST_CASE("Boars routes to BoarsProvider (above the fetchlands' anti signature)"
         ResolveHeuristicDefaultsPath("decks/Boars/Boars.cod")));
     CHECK(std::string(p.Name()) == "Boars");
 }
+
+// Boars sweep seed 97009 (2026-11-14): a plan that CASTS Flinthoof must open breakpoint site 9, or the {R} haste the
+// cast makes live is unreachable from any frame where Flinthoof is still in hand (site 9 is searched-only: a base
+// plan applies no continuation there, and only a plan PlanOpensBreakpoint marks gets the bp_choice variants).
+TEST_CASE("A plan casting Flinthoof Boar opens breakpoint site 9 (its same-main {R} haste is searchable)")
+{
+    GameState s = BBase();
+    BPut(s, "Stomping Ground", 10);
+    BPut(s, "Forest", 11);
+    BPut(s, "Ignoble Hierarch", 12);
+    s.players[0].hand.push_back(BCard("Flinthoof Boar", 1));
+
+    TurnSolver::Plan p;
+    Action a;
+    a.kind       = Action::Kind::CastFromHand;
+    a.card_name  = BDef("Flinthoof Boar").card.m_name;
+    a.def        = &BDef("Flinthoof Boar");
+    a.hand_index = 0;
+    p.actions.push_back(a);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, p) & (1 << 9)) != 0);
+
+    // ...and the apply-time gate agrees: once the cast lands, the haste key is NEW against the plan-start snapshot.
+    const std::vector<std::uint64_t> pre = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState t = s;
+    t.players[0].hand.clear();
+    BPut(t, "Flinthoof Boar", 1, /*sick=*/true);
+    CHECK(TurnSolver::PostEntryActivationPending(t, pre));
+
+    // A plan casting nothing with a post-entry activation opens no site 9 (the clause is the card's, not the board's).
+    TurnSolver::Plan q;
+    Action b = a;
+    b.card_name = BDef("Decimator of the Provinces").card.m_name;
+    b.def       = &BDef("Decimator of the Provinces");
+    q.actions.push_back(b);
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, q) & (1 << 9)) == 0);
+}

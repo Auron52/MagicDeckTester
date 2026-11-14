@@ -3065,6 +3065,9 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // Test hook: PlanOpensBreakpoint's site mask for one plan (bit k = breakpoint site k), the predicate wave 0
+    // and the wave walker select base plans with. Lets a unit test pin that a class's plans are fanned at all.
+    static int PlanOpensBreakpointForTest(const GameState& state, const Plan& p);
     // Test hook (Boars I5a): AppendSubdecisionAxes over `plans` (the base plans of one enumeration node), exactly
     // as the search fans them; returns the list with every axis variant appended.
     static std::vector<Plan> SubdecisionAxesForTest(const GameState& state, bool is_pre_combat, std::vector<Plan> plans);
