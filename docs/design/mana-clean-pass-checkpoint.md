@@ -1280,10 +1280,26 @@ fungus 1,880, gods 4,300 (first run).
   CORRECTNESS COST, not a regression. Real-game violations 108 units (old arm) -> refusals 113 (new arm). Smoke: 7
   play-changed at same score, accepted. Regression: 12 play-changed + 2 slower (niv d5 s3003 gi128/gi143, 4.4867 ->
   4.5000), both illegal-before (old arm audit: an {R}-only unit paid {U} on T3) and T5 at d8 b0 too -> accepted;
-  check_gt_logs clean. KNOWN GAPS (permissive, never lossy): overflow 15.5M of 146M booked units (more than 8 restricted
-  units in one pool -- released as any-colour), inconsistent loads 91K, the stage_pool corner (duals booked fixed).
+  check_gt_logs clean. KNOWN GAPS (some lossy, as item W later proved): a generic pip's chosen colour could not be
+  reassigned to a later coloured pip even when a legal reassignment existed (Dragons gi363); overflow 15.5M of 146M
+  booked units (more than 8 restricted units in one pool -- released as any-colour), inconsistent loads 91K, the
+  stage_pool corner (duals booked fixed).
   NEXT (USER 2026-11-13, "That shouldn't show up in anything"): literal route (a) -- no single-colour unit ever booked
   as `wild`; design notes in logs/mana-clean-chain/A-wild-handoff.md.
+
+* **Queue item W (Codex continuation, 2026-11-14): generic prepay reassignment -- validation IN PROGRESS on
+  `wip/item-W-defer`.** A literal-colour generic payment now retains a credit for the colour it spent, so a later
+  pip can take that unit back and move the generic to another unit that was already floating. The per-cast payer
+  creates the same credit for a one-of-each Karoo paying exactly one generic pip and floating its other colour.
+  The payer first tries its ordinary allocation and uses the credit only after payment failure: eager exchange
+  consumed the blue needed by a later Bruna after Glittering Wish. The whole-turn prepay now credits same-line
+  reducers when pricing its combined bill. Dragons gi363 is T5 at both shipped and d8 b0 (was T6); the new bill is
+  {3}{R}{R}{R}{R} = 7, not the stale 11. Niv gi380/522/244, gi1138, EDF gi549 and Bruna gi432 match the current
+  shipped outcomes; the Niv gi1138 and EDF gi549 losses therefore remain from the older literal fix, not item W.
+  Bruna gi432 is T4 with `MTG_PAY_HAND_GENERIC=0` and T5 with it on, even at d8 b0; the wished Bruna is absent
+  from the hand-demand model at Sol Ring's payment. Units 3093/3093, including 5 new W cases. **NEXT:** PGO,
+  smoke/regression, check_gt_logs, held-out A/B with every deck net <= 0 and slower-game recovery, then disposition
+  item W and the residual hand-generic issue. No fresh mana-clean 5000-game block has run for this item yet.
 
 ## Pass verdicts (this segment; earlier ones are in test/mana_clean.json and status.log)
 - galadriel: 71,000 games, 372,073 issues (MISS 453 = 425 APPLY-DROP + 28 ENUM-GAP "cast both Galadriels",

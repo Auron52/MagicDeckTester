@@ -89,6 +89,18 @@ completeness hole: when the true-colour booking refuses an ILLEGAL assignment it
 re-assignment of the same units (e.g. a bundle's G moved onto generic). Please re-check the round-2 claim "KNOWN GAPS
 (permissive, never lossy)" against items 1 and 4.
 
+## Mana-chain follow-up (Codex, 2026-11-14; WIP until gates finish)
+- **Item 1: repaired in `wip/item-W-defer`.** The prepay now prices the second Incubator's same-line discount;
+  the literal generic credit permits reassignment. Dragons gi363 wins T5 at shipped settings and d8 b0.
+- **Item 2: correctness cost retained.** Niv gi380/522/244 remain T6/T7/T4; their old faster payments used
+  wrong-colour mana (CR 106.1b). No false claim of a legal recovery is made for them.
+- **Item 3: residual open.** The Karoo generic credit is implemented, with an ordinary-payment-first retry to
+  avoid consuming Bruna's blue on Glittering Wish. Bruna gi432 is again T4 when `MTG_PAY_HAND_GENERIC=0`, but
+  remains T5 with that shipped lever on, including at d8 b0. Wish targets are not in its hand-demand count.
+- **Item 4: residual open from the earlier literal fix.** Niv gi1138 and EDF gi549 still win a turn later at
+  d8 b0, with or without the new defer lever. They need their own legal-line attribution.
+- The round-2 "permissive, never lossy" claim was corrected in `mana-clean-pass-checkpoint.md`.
+
 ## Not yours (kept by the Spirits session)
 - Spirits 8 games: all restored by `MTG_SPIRITS_NO_FETCH_HOLD=0` (the USER's fetch-hold drop) -- a Spirits provider
   prune; being handled there (horizon-only variant under A/B).
