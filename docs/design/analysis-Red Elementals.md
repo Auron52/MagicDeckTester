@@ -135,6 +135,44 @@ No fetchlands; no sideboard.
   sacrificed) while still winning T5 -- the unpinned cast (kept because an Elemental is in hand) carries
   the 10/2's eval; every line tied on win turn.
 
+### Agent B2/B3 notes (2026-11-14) — champion in-window picks, validation
+Code: `b53c6f21c`. It SUPERSEDES the "unpinned ordinary cast ... kept only when
+`ChampionSamePlanEntrantPossible`" sentence above: that variant and that function no longer exist.
+- **Searched shapes (B2).** Cast menu = one variant per board identity class (provider order) + one per
+  SAME-LINE entrant NAME (`ChampionSameLineEntrants`: an Elemental creature card / a Mimic in hand;
+  `enchant_target` = that card's number, `trick_hand_target` = its name) + the decline.
+  `SubsetHasMissingTrickTarget` requires the entrant's cast and `ApplyAttachSpellDependencyOrder` orders the
+  champion after it. Soulstoke put menu = board classes + hand names + graveyard unearth names + decline
+  (`DeferSameLineSacs` / `HasSameLineTrailingSac` / `TrailingRunsBefore` run a pinned put after the
+  others). Resolution `ChampionResolvePin`: the exact number, else the newest legal permanent of that name (a
+  by-name cast swapped the copy), else the decline. A PUT Nova championing a Nova gets one variant per
+  return rank (`ChampionReturnRankBound`, packed `enchant_target = pick | ret<<21`; `ret` is kept in the exile
+  marker and `linked_exile_number`, which is the state-key fold); `ReturnChampionedCard` installs the rank pin.
+  Census `MTG_CHAMPION_AXIS_STATS` (TurnSolver.cpp `championcensus`). Provider hooks:
+  `OrderChampionCandidates` (orders) and `PruneChampionCandidates` (`MTG_CHAMPION_DOOMED_PRUNE`, default
+  ON; a doomed and spent candidate is admitted alone, with no decline and no same-line entrants;
+  `MTG_UNPRUNE=champion` and human play get the full set). Both should move to the deck provider at Stage 4a.
+- **Repro, new vs pre (B3)**, frozen `b53c6f21c` binary vs `mtg.pre`, seed 300 x120 d3 b100: avg **4.6500 ->
+  4.6500**, 0 win turns differ (0 faster, 0 slower). Game logs: 118/120 byte-identical (except `runId`). The
+  two that changed are gi83 and gi108, the defect-(2) games where the old T4 main-1 Nova was cast onto a
+  board with no Elemental and sacrificed through the unpinned variant. gi108 now casts Spark + Bladewhirl,
+  unearths Hellspark and attacks for 6 on T4. gi83 still casts Nova onto an Elemental-less board, but now
+  in T4 MAIN 2, as the searched DECLINE variant, and Nova goes to the graveyard. That is a tie the search breaks toward a pointless cast (every line wins T5),
+  not an unpinned pick. Both still win T5. Census: `searched-frame=0 playout=0 outside-window=0 real=0`.
+- **Prune A/B (B3)**, default vs `MTG_UNPRUNE=champion`, d3 b100, frozen binary, one `--batch` per arm
+  (both levers are process-wide env, not per-job `flags`). Seeds 300 x120, 100 x120, plus held-out 5000 x600:
+  avgs 4.6500 / 4.6333 / 4.7267 on **both** arms. Per-game digests are identical in 840/840 games, so 0
+  faster and 0 slower. Search units: s300 1,630,112 vs 1,630,115 (the prune saves 3), s100 1,142,943 on
+  both, s5000 7,146,303 on both. The scenario `redelem_nova_postcombat_champion` gives identical counters
+  under both arms too. So at this setting the prune is **inert in outcome and in work**. The doomed-and-spent
+  shape (a post-combat Nova over an attacked Spark / Ball Lightning / unearthed Hellspark) is rare: 5 Nova
+  casts (2 in main 2) and 9 Soulstoke Nova puts (main 1, championing the tapped Soulstoke, which is not
+  doomed) in 120 games. The census reads 0 unpinned picks on every arm.
+- **Byte-identity (B3)**, `mtg.pre` + `cards.base.json` vs frozen + its `cards.json`, 8 games seed 4242 d3 b40
+  with `--ignore-play-profile` (Landfall Elementals and Goblins otherwise refuse `--depth` because their
+  value_play depth is enabled). Landfall Elementals, Morph, Goblins, Spirits: **32/32 logs identical** apart
+  from `runId`, and the stderr search counters are identical too.
+
 ## Stage 5 — verification
 (not yet run)
 
@@ -142,19 +180,38 @@ No fetchlands; no sideboard.
 (none yet)
 
 ## Open questions for the user
-- PROVISIONAL (Nova Chaser, champion): an UNPINNED pick takes the provider's `OrderChampionCandidates`
-  front (doomed attacker first, then tapped/attacked, then smallest power). It is reached (1) beyond the
-  horizon (permitted playout greedy), (2) for a SAME-PLAN entrant -- a Nova cast in the same main as the
-  Elemental it would champion, which the cast's variants cannot name at enumeration (an in-window
-  narrowing; a post-combat main sees the attacker on board and IS fully searched), and (3) when a
-  championed Nova Chaser itself returns (end step / inside another champion). Sign-off owed.
+- PROVISIONAL (Nova Chaser, champion): every in-window pick is now SEARCHED (`b53c6f21c`; shapes in "Agent
+  B2/B3 notes"). The census `MTG_CHAMPION_AXIS_STATS` read 0 unpinned picks in every bucket over 1,800
+  game runs (840 games x 2 prune arms + the repro).
+  Two gaps remain. (1) A same-line Elemental TOKEN maker is not offered as an entrant by
+  `ChampionSameLineEntrants`. No such card is in any list. (2) A CAST Nova championing a Nova carries no
+  return rank: in a goldfish a cast Nova never leaves, and if one did, its returning Nova's pick would be the
+  unpinned front and the census would count it. Only a PUT Nova (Soulstoke, sacrificed at end step) has
+  return ranks. Sign-off owed.
+- 6a DISCLOSURE, provider ORDERING heuristic (Nova Chaser): `DecisionProvider::OrderChampionCandidates`
+  (USER: *"I think we could have a heuristic that orders targets for champion most likely."*). Order: doomed
+  first (sac_at_end_step / unearthed / exile_at_end / endstep_sacrifice_self), then attacked or tapped,
+  then smallest power, then lowest card number. It only ORDERS: it sets the emission order of the cast and
+  put variants (same-line entrants follow, the decline is last), the rank order of a returning champion's
+  pick, the beyond-horizon playout pick, and the human's highlighted default. Lives in the root provider
+  today and should move to the deck provider at Stage 4a.
+- 6a DISCLOSURE + USER DECISION, provider PRUNING heuristic (Nova Chaser):
+  `DecisionProvider::PruneChampionCandidates`, `MTG_CHAMPION_DOOMED_PRUNE`, **default ON** (USER: *"No, the
+  provider can prune other options."*). When a candidate is doomed AND spent (it attacked or is tapped), it is
+  admitted alone, with no decline and no same-line entrants. Disclosed cost: the doomed card goes to exile
+  rather than the graveyard, so Thunderkin / unearth cannot reach it while Nova lives. The full set is
+  available via `MTG_UNPRUNE=champion` and in human play. **A/B at d3 b100, default vs unpruned: seeds 300
+  x120, 100 x120, 5000 x600 (840 games): avgs 4.6500 / 4.6333 / 4.7267 on BOTH arms, 840/840 per-game
+  digests identical (0 faster, 0 slower), search units identical except s300 (1,630,112 vs 1,630,115: the
+  prune saves 3).** So it is inert at this setting, because the shape is rare. The default is unchanged
+  pending the user's decision. It should move to the deck provider at Stage 4a.
 - PROVISIONAL (Nova Chaser): `DeckUsesSecondMain` now returns true for any champion deck, opening a full
   searched post-combat main on every turn for Red Elementals (needed for the doomed-attacker line). Its
   cost is unmeasured; a restricted main-2 (admit only champion casts/puts, the OMNITOOL_M2 shape) is the
   alternative if it is expensive. The user's call.
 - PROVISIONAL (Nova Chaser): not modelled (unreachable in a goldfish) -- the champion leaving before its
-  enter trigger resolves; a same-plan Elemental TOKEN maker is not counted by
-  `ChampionSamePlanEntrantPossible` (none exists in any list).
+  enter trigger resolves; a same-plan Elemental TOKEN maker is not offered by
+  `ChampionSameLineEntrants` (none exists in any list).
 - PROVISIONAL (Hellspark Elemental, unearth): the "exile it if it would leave" replacement is routed
   only through the shared sacrifice chokepoint (and the end-step exile sweep); destroy effects, the
   lethal-damage / toughness-0 SBA, the legend rule, creature sweeps and bounce are NOT routed. None can
