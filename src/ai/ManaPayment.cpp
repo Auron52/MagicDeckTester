@@ -225,10 +225,11 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
 // unrestricted untapped sources (lands, rocks, ready dorks; per tap) plus the float can make -- the colours
 // only the restricted land can still supply, which is what holding it is for.
 static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost, bool for_creature,
-                              bool& nc_live, int& keep_mask)
+                              bool& nc_live, int& keep_mask, int* cco_def, int* cco_sup)
 {
     nc_live = false;
     keep_mask = 0;
+    for (int ci = 0; ci < 5; ++ci) { cco_def[ci] = 0; cco_sup[ci] = 0; }
     const ManaPool& fl = state.floating_mana;
     int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
     int total = fl.white + fl.blue + fl.black + fl.red + fl.green + fl.colorless + static_cast<int>(fl.wild);
@@ -245,8 +246,21 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
         if (!dork && !one_shot && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
         const int amt = std::max(1, ManaProducedPerTap(*qd));
         total += amt;
-        if (qd->params.colored_creature_only || qd->params.creature_mana_only || BigSpellOnlySource(qd->params))
-        { continue; }
+        if (qd->params.colored_creature_only && !qd->params.creature_mana_only && !BigSpellOnlySource(qd->params))
+        {
+            // The restricted lands' own colours, per tap (cco_sup): the use site subtracts the candidate's share, so
+            // what is left is what the OTHER creature-only lands can still give a hand creature (MTG_CCO_HAND_SCAN).
+            int seen = 0;
+            for (Color c : EffectiveProduces(state, active, *qd))
+            {
+                const int ci = static_cast<int>(c);
+                if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+                seen |= 1 << ci;
+                cco_sup[ci] += amt;
+            }
+            continue;
+        }
+        if (qd->params.creature_mana_only || BigSpellOnlySource(qd->params)) { continue; }
         int seen = 0;
         for (Color c : EffectiveProduces(state, active, *qd))
         {
@@ -281,7 +295,8 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
         }
         for (int ci = 0; ci < 5; ++ci) { cre[ci] += pips[ci]; }
     }
-    for (int ci = 0; ci < 5; ++ci) { if (cre[ci] > sup[ci]) { keep_mask |= 1 << ci; } }
+    for (int ci = 0; ci < 5; ++ci)
+    { if (cre[ci] > sup[ci]) { keep_mask |= 1 << ci; cco_def[ci] = cre[ci] - sup[ci]; } }
 }
 
 // MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
@@ -2027,6 +2042,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     bool cch_ready = false;
     bool cch_nc_live = false;
     int  cch_keep = 0;
+    int  cch_def[5] = { 0, 0, 0, 0, 0 };
+    int  cch_csup[5] = { 0, 0, 0, 0, 0 };
     int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2930,13 +2947,28 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (kind == 1 && def->params.colored_creature_only && cco_hold == 0
                     && rank > 9 && rank < 60 && CcoHandDemandOn())
                 {
-                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep); }
+                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep, cch_def, cch_csup); }
                     if (cch_nc_live)
                     {
                         int mine = 0;
                         for (Color c : def->params.produces)
                         { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
-                        if ((mine & cch_keep & state.deck_creature_pip_colors) == 0) { rank = 9; }
+                        // MTG_CCO_HAND_SCAN: a colour the hand's creatures need beyond the unrestricted supply is not
+                        // a reason to hold THIS land when the OTHER untapped creature-only lands still cover it
+                        // (pirates s30069061 T3: Unclaimed Territory x2, Vial's {1} -- either Territory leaves the
+                        // other for Crewmate's {U} / Captain's {B}, and the Mountain stays up for the Bolt).
+                        int keep = cch_keep;
+                        if (CcoHandScanOn())
+                        {
+                            const int amt = std::max(1, ManaProducedPerTap(*def));
+                            keep = 0;
+                            for (int ci = 0; ci < 5; ++ci)
+                            {
+                                const int other = cch_csup[ci] - ((mine & (1 << ci)) ? amt : 0);
+                                if (cch_def[ci] > other) { keep |= 1 << ci; }
+                            }
+                        }
+                        if ((mine & keep & state.deck_creature_pip_colors) == 0) { rank = 9; }
                     }
                 }
                 // PAY-SAC LINE RESERVE (MTG_PAY_SAC_LINE_RESERVE, default ON). The CCO line reserve's twin for a

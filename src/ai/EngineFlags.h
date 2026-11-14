@@ -756,6 +756,10 @@ inline bool CcoHandDemandOn()
 //  (2) a spendable one-shot (Treasure, PaySacSpendableNow) counts as supply. Pirates s30066580 T4: Forerunner {2}{B}
 //      off Canal + Courtyard + Mountain + Treasure read "castable 0" for the rest of the hand, the Bolt was not live,
 //      the Treasure paid {B}, Mountain + Canal the generic, and the Bolt stranded behind the Courtyard.
+//  (3) the creature-colour keep counts the OTHER untapped creature-only lands: a colour a hand creature needs beyond
+//      the unrestricted supply holds this land only when the other restricted lands cannot make it either. Pirates
+//      s30069061 T3: Territory x2 + Mountain, Vial's {1} took the Mountain (both Territories held for Crewmate {U} /
+//      Captain {B}) and the Bolt stranded.
 inline bool CcoHandScanOn()
 {
     static const bool env_on = EnvOn("MTG_CCO_HAND_SCAN", true);
