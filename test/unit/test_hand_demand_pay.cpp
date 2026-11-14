@@ -12,6 +12,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -334,5 +335,84 @@ TEST_CASE("CCO hand demand: a second creature-only land covers the hand creature
         GameState s = board();
         REQUIRE(TapForCostDirect(s, vial, /*for_creature=*/false));
         CHECK(TappedHD(s, "Mountain"));   // the historical keep: both Territories held for the creatures
+    }
+}
+
+// Item C2 round 2 (MTG_CCO_RESERVE_OTHER): the CCO LINE RESERVE must not hold a creature-only land for a colour the
+// OTHER untapped creature-only lands still make. Pirates s30070533 T3/T4: the line owes one creature {U} beyond a
+// Mountain-only unrestricted supply plus the Bolt's {R}; with both Territories held, the creature's {1} took the
+// Mountain and the Bolt stranded. A Territory pays (the other still covers the {U}), the Mountain stays for the Bolt.
+TEST_CASE("CCO line reserve: a second creature-only land covers the line's shortfall")
+{
+    ManaCost one;
+    one.generic = 1;
+    ManaCost line = one;
+    line.blue = 1;
+    line.red  = 1;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 4;
+        PutHD(s, "Unclaimed Territory", 57);
+        PutHD(s, "Unclaimed Territory", 58);
+        PutHD(s, "Mountain", 38);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Staunch Crewmate", 53);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    ArmHD scan(heurarm::CCO_HAND_SCAN, 1);
+    {
+        ArmHD on(heurarm::CCO_RESERVE_OTHER, 1);
+        GameState s = board();
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostDirect(s, one, /*for_creature=*/true));
+        CHECK_FALSE(TappedHD(s, "Mountain"));
+    }
+    {
+        ArmHD off(heurarm::CCO_RESERVE_OTHER, 0);
+        GameState s = board();
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostDirect(s, one, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Mountain"));   // the historical reserve: both Territories held for the {U}
+    }
+}
+
+// Item C2 round 2 (MTG_CCO_RESERVE_OTHER, part 2): the CCO LINE RESERVE's unrestricted supply counts a spendable
+// Treasure. Pirates s30074443 T4: Siren Stormtamer {U} with Secluded Courtyard + the Corsair Treasure up and the line
+// still owing the Bolt's {R}; uncounted, the Treasure read as no supply, the Courtyard was held for the {R}, the Treasure
+// paid the {U} and the Bolt stranded. The Courtyard pays the creature, the Treasure stays for the Bolt.
+TEST_CASE("CCO line reserve: a spendable Treasure is unrestricted supply")
+{
+    ManaCost blue;
+    blue.blue = 1;
+    ManaCost line = blue;
+    line.red = 1;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 4;
+        PutHD(s, "Secluded Courtyard", 43);
+        PutHD(s, "Treasure Token", 1000);
+        HandHD(s, "Lightning Bolt", 32);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    ArmHD scan(heurarm::CCO_HAND_SCAN, 1);
+    {
+        ArmHD on(heurarm::CCO_RESERVE_OTHER, 1);
+        GameState s = board();
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostDirect(s, blue, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Secluded Courtyard"));
+    }
+    {
+        ArmHD off(heurarm::CCO_RESERVE_OTHER, 0);
+        GameState s = board();
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostDirect(s, blue, /*for_creature=*/true));
+        CHECK_FALSE(TappedHD(s, "Secluded Courtyard"));   // the historical reserve: Courtyard held, Treasure spent
     }
 }

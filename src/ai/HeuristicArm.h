@@ -927,6 +927,7 @@ enum Slot : int
     PAY_HAND_SURPLUS_FIRST,   // MTG_PAY_HAND_SURPLUS_FIRST  item D, mana-clean: under PAY_HAND_GENERIC each float colour pays generic out of its SURPLUS over the hand's pips first (in hand-surplus order), then the demanded remainder. Shadowborn s30053678 T4 (Sire {4}{B}{R} ate four {B}, Demonic Tutor's {B} stranded on {R}{R}). Default ON; =0 -> the single drain
     ONDEMAND_KEEP_COLOUR,     // MTG_ONDEMAND_KEEP_COLOUR  item D round 3, mana-clean: the on-demand payer's step 1 (ordinary payment, crackable lands held) is not taken when it leaves a coloured pip of the rest of the applying line with NO source on the board (the held Lake's only Swamp victim is the line's only {R}); the plain tap / crack ladder is tried first under the same no-strand test, and the held payment stays the fallback. Shadowborn s30055067 T8 (Ritual's {B} tapped Blood Crypt, Sire's {R} stranded). Default ON; =0 -> step 1 always
     CCO_HAND_SCAN,            // MTG_CCO_HAND_SCAN  item C2, mana-clean: two repairs of CcoHandDemandScan's input -- the card being paid is skipped (cost identity) only among hand cards of its own kind (a {R} Daring Buccaneer no longer hides a {R} Lightning Bolt, pirates s30064129 T3), a spendable one-shot (Treasure) counts as supply (pirates s30066580 T4), and the creature-colour keep counts the OTHER untapped creature-only lands (pirates s30069061 T3). Ordering only. Default ON; =0 -> the historical scan
+    CCO_RESERVE_OTHER,        // MTG_CCO_RESERVE_OTHER  item C2 round 2, mana-clean: the CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE) holds a creature-only land for a colour the line owes beyond the unrestricted supply only when the OTHER untapped creature-only lands (counted live) cannot cover that shortfall; a released land then reaches the CCO hand-demand rung. Pirates s30070533 T3/T4 (every Territory/Courtyard held for one {U}, the generic took the Mountain the Bolt needed); its supply also counts a spendable one-shot (Treasure, pirates s30074443 T4). Ordering only. Default ON; =0 -> hold every such land
     COUNT
 };
 
@@ -1798,6 +1799,7 @@ inline const char* Name(int slot)
         "MTG_PAY_HAND_SURPLUS_FIRST",
         "MTG_ONDEMAND_KEEP_COLOUR",
         "MTG_CCO_HAND_SCAN",
+        "MTG_CCO_RESERVE_OTHER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

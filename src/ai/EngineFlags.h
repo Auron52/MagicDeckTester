@@ -756,6 +756,22 @@ inline bool CcoHandScanOn()
     return heurarm::Flag(heurarm::CCO_HAND_SCAN, env_on);
 }
 
+// MTG_CCO_RESERVE_OTHER -- DEFAULT ON; =0 restores the historical reserve (item C2 round 2, mana-clean). The CCO LINE
+// RESERVE holds a colored_creature_only land (tapped after every other land) while the rest of the line owes a colour
+// beyond the unrestricted supply -- and it held EVERY such land for that colour, however many there were. Pirates
+// s30070533 T3/T4: Courtyard + Territory x2, the line owing one {U} beyond a Mountain-only unrestricted supply; all
+// three held, so the generic of the payment took the Mountain and the line's Lightning Bolt {R} stranded. With the lever a
+// land is held only for a colour whose shortfall exceeds what the OTHER untapped creature-only lands make (counted live
+// at each candidate, so a land this payment already tapped no longer covers it); a land not held reaches the CCO hand-
+// demand rung. Also (2) a spendable one-shot (Treasure, PaySacSpendableNow) counts as unrestricted supply, as in the hand
+// scan: pirates s30074443 T4, the Corsair Treasure was not counted, the Courtyard was held for the Bolt's {R}, the
+// Treasure paid Siren Stormtamer's {U} and the Bolt stranded. Ordering only: the backtracker still runs on any greedy failure.
+inline bool CcoReserveOtherOn()
+{
+    static const bool env_on = EnvOn("MTG_CCO_RESERVE_OTHER", true);
+    return heurarm::Flag(heurarm::CCO_RESERVE_OTHER, env_on);
+}
+
 // MTG_PAY_HAND_GENERIC -- DEFAULT ON; =0 restores WUBRG (item I (2), mana-clean). When the line owes no colour, a
 // generic pip paid from a float of two or more colours spends the colour the HAND needs least (PayHandPips,
 // SpellEffects.h): Martyr Lifegain s30001947 T3, Martyr of Sands' {1} took Orzhov Basilica's {W} and stranded the
