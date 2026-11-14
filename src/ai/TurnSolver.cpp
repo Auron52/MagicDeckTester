@@ -94797,6 +94797,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (entering && d && d->card.IsCreature()) { ++added; }
             }
             if (entries == 0) { continue; }
+            const bool multiple_entries = entries > 1;
             // A championed Prophets can return during one of these entries and
             // resolve another champion ability before the plan resumes. Count
             // each linked battlefield copy and each copy linked in exile as a
@@ -94805,7 +94806,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             for (const Permanent& q : state.battlefield)
             {
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
-                if (d && d->params.champion_merfolk && q.linked_exile_number != 0)
+                // Two explicit entries can exile and then return an initially
+                // unlinked Prophets (D champions A; E champions D; A returns).
+                if (d && d->params.champion_merfolk
+                    && (q.linked_exile_number != 0 || multiple_entries))
                 { ++entries; }
             }
             for (const Card& c : state.exile)

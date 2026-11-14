@@ -518,6 +518,39 @@ TEST_CASE("Autonomous Vial plans expose the returned Prophets' second champion c
     CHECK(replayed);
 }
 
+TEST_CASE("Two new Prophets preserve the choice of an initially unlinked return")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    state.deck_has_prophets = true;
+    state.m_provider = &provider;
+    AddPermanent(state, "Wanderwine Prophets", 630); // A, no champion link yet
+    AddPermanent(state, "Aether Vial", 631);
+    AddPermanent(state, "Aether Vial", 632);
+    state.battlefield[1].charge_counters = 6;
+    state.battlefield[2].charge_counters = 6;
+    const CardDefinition* prophets = CardDatabase::Instance().Lookup("Wanderwine Prophets");
+    REQUIRE(prophets != nullptr);
+    for (int number : {633, 634})
+    {
+        Card card = prophets->card;
+        card.m_number = number;
+        state.players[0].hand.push_back(card);
+    }
+    bool has_third_pin = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        int puts = 0;
+        for (const Action& a : plan.actions)
+        { puts += a.kind == Action::Kind::ActivateVial && a.card_name == "Wanderwine Prophets"; }
+        if (puts == 2 && plan.champion_pins.size() >= 3)
+        { has_third_pin = true; break; }
+    }
+    CHECK(has_third_pin);
+}
+
 TEST_CASE("Wanderwine Prophets token champion ceases to exist; decline sacrifices Prophets")
 {
     LoadMerfolkCards();
