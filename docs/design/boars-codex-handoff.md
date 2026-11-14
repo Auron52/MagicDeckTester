@@ -201,3 +201,14 @@ If a file is missing, that agent stopped before writing it; redo its step from i
   One slower 2HG d3 game (gi399) hinges on the top-1 fetch width (reported, prune unchanged). Files:
   `.claude/worktrees/boars-d0haste/logs/boars-research/d0haste-handoff.md`,
   `.claude/worktrees/boars-d0haste/docs/design/boars-greedy-self-haste.md`.
+* rc-boars agent STOPPED, all 12 games DONE (`build/scratch/boars/rootcause/rc-boars.md`; handoff
+  `logs/boars-research/rootcause-rc-boars-handoff.md`). Searched: REAL-ranking-tie 4 (2HG reg gi66, 2HG ovn s7007 gi13,
+  ovn s4004 gi270, s5005 gi277 -- all recover with boars-rank MTG_FETCH_RANK_PIPS=1; extra reasons the ranking misses:
+  Stomping Ground is a Mountain = Flinthoof +1/+1 [gi270 exact lethal], a mana creature in hand counted as colour cover,
+  Ilharg's RR unseen); REAL-castorder 1 (2HG reg gi36: Greaves + hasted Birds over Birds + Horn on T3; Horn line found at
+  64x/unlimited, so a budget re-pricing, not unfindable; order-off finds it at 1x); VARIANCE-clairvoyant 5 (reg s3003
+  gi117, 2HG ovn s4004 gi10, ovn s6006 gi4/gi41, ovn s7007 gi13). d0 gi257/gi290 = REAL-other: the crack fix frees mana,
+  and the d0 runner taps creatures that should attack (pumped Birds, exalted Hierarch). Minor misplay: ovn s6006 gi4
+  casts a second Ilharg into the legend rule. MTG_UNPRUNE=fetch also restores the hold (not a clean revert of the width).
+  => every searched slower game now has a verdict: the accept (next step 2) is unblocked. Report gi36 (cast order) and the
+  ranking-tie games to the USER with it.
