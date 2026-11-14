@@ -233,3 +233,71 @@ TEST_CASE("Martyr sac first: the pre-cast pass skips an order that does not pay,
         CHECK_FALSE(TurnSolver::RevealOutletPrecastSkip(s, a, a[1]));
     }
 }
+
+// Item C2 (MTG_CCO_HAND_SCAN): the scan's self-skip by cost identity must not take a {R} Lightning Bolt for the
+// {R} Daring Buccaneer being paid. Pirates s30064129 T3: Spirebluff Canal + Secluded Courtyard up, hand {Bolt,
+// Buccaneer}; the kind-blind match skipped the Bolt, the Canal paid the Buccaneer and the Bolt had no source.
+TEST_CASE("CCO hand demand: a same-cost Bolt ahead of the creature in hand is not the creature itself")
+{
+    const ManaCost r = DefHD("Lightning Bolt").card.m_mana_cost;   // {R}: the Buccaneer's cost with the reveal paid
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 3;
+        PutHD(s, "Spirebluff Canal", 49);
+        PutHD(s, "Secluded Courtyard", 44);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Daring Buccaneer", 14);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    {
+        ArmHD on(heurarm::CCO_HAND_SCAN, 1);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, r, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Secluded Courtyard"));
+        CHECK_FALSE(TappedHD(s, "Spirebluff Canal"));
+    }
+    {
+        ArmHD off(heurarm::CCO_HAND_SCAN, 0);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, r, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Spirebluff Canal"));            // the kind-blind match: the Bolt read as "itself"
+        CHECK_FALSE(TappedHD(s, "Secluded Courtyard"));
+    }
+}
+
+// Item C2 (MTG_CCO_HAND_SCAN, part 2): a spendable Treasure is supply for the hand's castability cap. Pirates
+// s30066580 T4: Forerunner {2}{B} off Canal + Courtyard + Mountain + Treasure; without the Treasure the cap read 0,
+// the Bolt in hand was not live, and the Courtyard stayed up as the only source left for the Bolt.
+TEST_CASE("CCO hand demand: a Treasure counts toward the hand's castability")
+{
+    const ManaCost fore = DefHD("Forerunner of the Coalition").card.m_mana_cost;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number         = 4;
+        PutHD(s, "Spirebluff Canal", 49);
+        PutHD(s, "Secluded Courtyard", 43);
+        PutHD(s, "Mountain", 38);
+        PutHD(s, "Treasure Token", 1000);
+        HandHD(s, "Forerunner of the Coalition", 25);
+        HandHD(s, "Lightning Bolt", 32);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    {
+        ArmHD on(heurarm::CCO_HAND_SCAN, 1);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, fore, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Secluded Courtyard"));
+    }
+    {
+        ArmHD off(heurarm::CCO_HAND_SCAN, 0);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, fore, /*for_creature=*/true));
+        CHECK_FALSE(TappedHD(s, "Secluded Courtyard"));   // the historical cap: the Courtyard is held
+    }
+}

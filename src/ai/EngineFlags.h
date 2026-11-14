@@ -737,6 +737,21 @@ inline bool CcoHandDemandOn()
     return heurarm::Flag(heurarm::CCO_HAND_DEMAND, env_on);
 }
 
+// MTG_CCO_HAND_SCAN -- DEFAULT ON; =0 restores the historical scan (item C2, mana-clean). Two repairs of the CCO HAND
+// DEMAND scan's INPUT (the rung it feeds is ordering only):
+//  (1) the card being paid is excluded from the hand by cost identity only among cards of the payment's own kind.
+//      Pirates s30064129 T3: Daring Buccaneer {R} (reveal paid) was paid while a Lightning Bolt {R} sat before it in
+//      hand; the kind-blind match skipped the BOLT as "itself", saw no noncreature demand, and Spirebluff Canal paid
+//      the Buccaneer -- the Bolt then had only Secluded Courtyard (creature-only) left.
+//  (2) a spendable one-shot (Treasure, PaySacSpendableNow) counts as supply. Pirates s30066580 T4: Forerunner {2}{B}
+//      off Canal + Courtyard + Mountain + Treasure read "castable 0" for the rest of the hand, the Bolt was not live,
+//      the Treasure paid {B}, Mountain + Canal the generic, and the Bolt stranded behind the Courtyard.
+inline bool CcoHandScanOn()
+{
+    static const bool env_on = EnvOn("MTG_CCO_HAND_SCAN", true);
+    return heurarm::Flag(heurarm::CCO_HAND_SCAN, env_on);
+}
+
 // MTG_PAY_HAND_GENERIC -- DEFAULT ON; =0 restores WUBRG (item I (2), mana-clean). When the line owes no colour, a
 // generic pip paid from a float of two or more colours spends the colour the HAND needs least (PayHandPips,
 // SpellEffects.h): Martyr Lifegain s30001947 T3, Martyr of Sands' {1} took Orzhov Basilica's {W} and stranded the
