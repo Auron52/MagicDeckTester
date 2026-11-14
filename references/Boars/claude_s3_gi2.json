@@ -1,0 +1,478 @@
+{
+  "seed": 3, "game_index": 2, "win_turn": 6, "won": true,
+  "mulligan": { "count": 1, "bottom": [28] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 17, "name": "Forest" }, { "num": 1, "name": "Birds of Paradise" }, { "num": 21, "name": "Gruul Turf" }, { "num": 43, "name": "Somberwald Sage" }, { "num": 9, "name": "End-Raze Forerunners" }, { "num": 10, "name": "End-Raze Forerunners" }, { "num": 5, "name": "Decimator of the Provinces" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": false,
+  "to_bottom": 1,
+  "hand": [{ "num": 51, "name": "Windswept Heath" }, { "num": 16, "name": "Flinthoof Boar" }, { "num": 4, "name": "Birds of Paradise" }, { "num": 32, "name": "Ignoble Hierarch" }, { "num": 44, "name": "Somberwald Sage" }, { "num": 28, "name": "Herald's Horn" }, { "num": 24, "name": "Herald of Ilharg" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 5, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 51, "name": "Windswept Heath", "win_optimal": true }, { "num": 16, "name": "Flinthoof Boar", "win_optimal": true }, { "num": 4, "name": "Birds of Paradise", "win_optimal": true }, { "num": 32, "name": "Ignoble Hierarch", "win_optimal": true }, { "num": 44, "name": "Somberwald Sage", "win_optimal": true }, { "num": 28, "name": "Herald's Horn", "win_optimal": true }, { "num": 24, "name": "Herald of Ilharg", "win_optimal": true }],
+  "ai_choice": { "index": 6, "num": 24, "name": "Herald of Ilharg" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "land=Windswept Heath", "cast=Ignoble Hierarch"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Herald's Horn" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 51, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Birds of Paradise", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Birds of Paradise"], "actions": [{ "card": "Windswept Heath", "src_num": 51, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Birds of Paradise" }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Ignoble Hierarch", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Ignoble Hierarch"], "actions": [{ "card": "Windswept Heath", "src_num": 51, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 8, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 51, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 2,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 19, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 32, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 6, "num": 32, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 6, "num": 32, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Herald of Ilharg" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 16, "name": "Flinthoof Boar", "cost": "{1}{G}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Flinthoof Boar", "declared_order_payability": "not_verified", "land": null, "casts": ["Flinthoof Boar"], "actions": [{ "card": "Flinthoof Boar" }] },
+    { "index": 1, "summary": "land=none; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Flinthoof Boar", "idx": 9, "num": 16, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Flinthoof Boar", "idx": 9, "num": 16, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "cast=Ignoble Hierarch", "cast=Birds of Paradise"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Ignoble Hierarch" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 30, "name": "Ignoble Hierarch", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Birds of Paradise, Ignoble Hierarch", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise", "Ignoble Hierarch"], "cast_order_canonical": ["Birds of Paradise", "Ignoble Hierarch"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Ignoble Hierarch" }] },
+    { "index": 1, "summary": "land=none; cast: Ignoble Hierarch, Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Ignoble Hierarch", "Birds of Paradise"], "cast_order_canonical": ["Ignoble Hierarch", "Birds of Paradise"], "actions": [{ "card": "Ignoble Hierarch" }, { "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=none; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=none; cast: Ignoble Hierarch", "declared_order_payability": "not_verified", "land": null, "casts": ["Ignoble Hierarch"], "actions": [{ "card": "Ignoble Hierarch" }] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Flinthoof Boar (5) — 5 to opponent (20→15)" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Stomping Ground", "cast=Herald of Ilharg"], "decision": {
+  "decision_index": 13,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Stomping Ground" }],
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Stomping Ground; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 1, "summary": "land=none; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 2, "summary": "land=Stomping Ground; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=none; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 4, "summary": "land=Stomping Ground; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 5, "summary": "land=none; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 6, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 14,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 24, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 15,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 15, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Flinthoof Boar (5) — 5 to opponent (15→10)" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 7, "cast_order": ["**", "land=Windswept Heath", "cast=Herald's Horn", "cast=Herald of Ilharg"], "decision": {
+  "decision_index": 17,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Windswept Heath" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 14, "num": 48, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Windswept Heath", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Herald of Ilharg, Herald's Horn", "declared_order_payability": "known_drops", "land": "Windswept Heath", "drops": ["Herald's Horn"], "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Herald of Ilharg", "Herald's Horn"], "cast_order_canonical": ["Herald of Ilharg", "Herald's Horn"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Herald of Ilharg" }, { "card": "Herald's Horn" }] },
+    { "index": 1, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Herald's Horn, Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Herald's Horn", "Herald of Ilharg"], "cast_order_canonical": ["Herald's Horn", "Herald of Ilharg"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Herald's Horn" }, { "card": "Herald of Ilharg" }] },
+    { "index": 4, "summary": "land=Windswept Heath; cast: Herald of Ilharg, Herald's Horn", "declared_order_payability": "known_drops", "land": "Windswept Heath", "drops": ["Herald's Horn"], "fetch_target": "Forest", "casts": ["Herald of Ilharg", "Herald's Horn"], "cast_order_canonical": ["Herald of Ilharg", "Herald's Horn"], "actions": [{ "card": "Herald of Ilharg" }, { "card": "Herald's Horn" }] },
+    { "index": 5, "summary": "land=Windswept Heath; cast: Herald's Horn, Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Herald's Horn", "Herald of Ilharg"], "cast_order_canonical": ["Herald's Horn", "Herald of Ilharg"], "actions": [{ "card": "Herald's Horn" }, { "card": "Herald of Ilharg" }] },
+    { "index": 6, "summary": "land=Windswept Heath; cast: Herald of Ilharg, Herald's Horn", "declared_order_payability": "known_drops", "land": "Windswept Heath", "drops": ["Herald's Horn"], "fetch_target": "Stomping Ground", "casts": ["Herald of Ilharg", "Herald's Horn"], "cast_order_canonical": ["Herald of Ilharg", "Herald's Horn"], "actions": [{ "card": "Herald of Ilharg" }, { "card": "Herald's Horn" }] },
+    { "index": 7, "summary": "land=Windswept Heath; cast: Herald's Horn, Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Herald's Horn", "Herald of Ilharg"], "cast_order_canonical": ["Herald's Horn", "Herald of Ilharg"], "actions": [{ "card": "Herald's Horn" }, { "card": "Herald of Ilharg" }] },
+    { "index": 8, "summary": "land=Windswept Heath; cast: Herald of Ilharg, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Herald of Ilharg", "Windswept Heath"], "actions": [{ "card": "Herald of Ilharg" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 9, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Herald's Horn, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Herald's Horn", "Somberwald Sage"], "cast_order_canonical": ["Herald's Horn", "Somberwald Sage"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Herald's Horn" }, { "card": "Somberwald Sage" }] },
+    { "index": 10, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Somberwald Sage, Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Somberwald Sage", "Herald's Horn"], "cast_order_canonical": ["Somberwald Sage", "Herald's Horn"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Somberwald Sage" }, { "card": "Herald's Horn" }] },
+    { "index": 11, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Herald of Ilharg"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Herald of Ilharg" }] },
+    { "index": 15, "summary": "land=Windswept Heath; cast: Herald's Horn, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Herald's Horn", "Somberwald Sage"], "cast_order_canonical": ["Herald's Horn", "Somberwald Sage"], "actions": [{ "card": "Herald's Horn" }, { "card": "Somberwald Sage" }] },
+    { "index": 16, "summary": "land=Windswept Heath; cast: Somberwald Sage, Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Somberwald Sage", "Herald's Horn"], "cast_order_canonical": ["Somberwald Sage", "Herald's Horn"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Herald's Horn" }] },
+    { "index": 17, "summary": "land=Windswept Heath; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 18, "summary": "land=Windswept Heath; cast: Herald's Horn, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Herald's Horn", "Somberwald Sage"], "cast_order_canonical": ["Herald's Horn", "Somberwald Sage"], "actions": [{ "card": "Herald's Horn" }, { "card": "Somberwald Sage" }] },
+    { "index": 19, "summary": "land=Windswept Heath; cast: Somberwald Sage, Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Somberwald Sage", "Herald's Horn"], "cast_order_canonical": ["Somberwald Sage", "Herald's Horn"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Herald's Horn" }] },
+    { "index": 20, "summary": "land=Windswept Heath; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 21, "summary": "land=Windswept Heath; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 22, "summary": "land=none; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 23, "summary": "land=Windswept Heath; cast: Somberwald Sage, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Somberwald Sage", "Windswept Heath"], "actions": [{ "card": "Somberwald Sage" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 24, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Somberwald Sage"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Somberwald Sage" }] },
+    { "index": 26, "summary": "land=Windswept Heath; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 27, "summary": "land=Windswept Heath; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 28, "summary": "land=Windswept Heath; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 29, "summary": "land=none; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 30, "summary": "land=Windswept Heath; cast: Herald's Horn, Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Herald's Horn", "Windswept Heath"], "actions": [{ "card": "Herald's Horn" }, { "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 31, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath", "Herald's Horn"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Herald's Horn" }] },
+    { "index": 33, "summary": "land=Windswept Heath; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 34, "summary": "land=Windswept Heath; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 35, "summary": "land=Windswept Heath; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 36, "summary": "land=none; cast: Herald's Horn", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald's Horn"], "actions": [{ "card": "Herald's Horn" }] },
+    { "index": 37, "summary": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": ["Windswept Heath"], "actions": [{ "card": "Windswept Heath", "src_num": 52, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 38, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 39, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 40, "summary": "land=Windswept Heath; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Windswept Heath", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 41, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 7,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 18,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 14, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 14, "num": 48, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Herald's Horn", "cost": "{3}", "mv": 3, "kind": "permanent" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "creature_type",
+  "source": "Herald's Horn",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald's Horn", "idx": 17, "num": 29, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 16, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 25, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "types": [{ "index": 0, "name": "Boar" }, { "index": 1, "name": "Human" }, { "index": 2, "name": "Druid" }, { "index": 3, "name": "Bird" }, { "index": 4, "name": "Beast" }, { "index": 5, "name": "Eldrazi" }, { "index": 6, "name": "God" }, { "index": 7, "name": "Goblin" }, { "index": 8, "name": "Shaman" }],
+  "note": "reply a types INDEX to choose that creature type for this permanent for the rest of the game. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "ability", "text": "Herald of Ilharg (Herald of Ilharg): 2 +1/+1 counters" }],
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 18, "num": 25, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald's Horn", "idx": 17, "num": 29, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 16, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 10, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "combat", "text": "⚔ attacked: Flinthoof Boar (3), Herald of Ilharg (5) — 8 to opponent (10→2)" }],
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "tapped": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "tapped": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 18, "num": 25, "sick": true, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald's Horn", "idx": 17, "num": 29, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 16, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 22,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Gruul Turf" }],
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald of Ilharg", "idx": 18, "num": 25, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald's Horn", "idx": 17, "num": 29, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 14, "num": 48, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 16, "num": 47, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }, { "num": 44, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=Gruul Turf (before Somberwald Sage); cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Gruul Turf", "karoo_before": 1, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=none; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": null, "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "ability", "text": "Herald of Ilharg (Somberwald Sage): 2 +1/+1 counters" }, { "turn": 6, "kind": "ability", "text": "Herald of Ilharg (Somberwald Sage): 2 +1/+1 counters" }],
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 13, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Flinthoof Boar", "idx": 9, "num": 16, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Herald of Ilharg", "idx": 15, "num": 24, "is_land": false, "power": 7, "toughness": 7, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Herald of Ilharg", "idx": 18, "num": 25, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Herald's Horn", "idx": 17, "num": 29, "is_land": false }, { "name": "Ignoble Hierarch", "idx": 6, "num": 32, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Ignoble Hierarch", "idx": 12, "num": 30, "is_land": false, "taps": "BRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 19, "num": 44, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 14, "num": 48, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 16, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 22, "name": "Gruul Turf", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Windswept Heath", "Windswept Heath"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 2, "battlefield": [{ "name": "1/1 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 4, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 7, "num": 500002, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 8, "num": 500003, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 10, "num": 500004, "is_land": false, "power": 1, "toughness": 1 }, { "name": "1/1 Creature", "idx": 11, "num": 500005, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Gruul Turf; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Gruul Turf", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "text": "⚔ attacked: Flinthoof Boar (3), Herald of Ilharg (7), Herald of Ilharg (5) — 15 to opponent (2→-13)" }
+  ]
+}

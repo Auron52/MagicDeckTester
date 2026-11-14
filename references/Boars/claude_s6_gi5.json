@@ -1,0 +1,388 @@
+{
+  "seed": 6, "game_index": 5, "win_turn": 4, "won": true,
+  "mulligan": { "count": 1, "bottom": [53] }, "karoo_float": 1, "fetch_activation": 1, "fetch_on_play": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 5, "name": "Decimator of the Provinces" }, { "num": 54, "name": "Wooded Foothills" }, { "num": 17, "name": "Forest" }, { "num": 51, "name": "Windswept Heath" }, { "num": 58, "name": "Zhur-Taa Druid" }, { "num": 43, "name": "Somberwald Sage" }, { "num": 6, "name": "Decimator of the Provinces" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 47, "name": "Stomping Ground" }, { "num": 50, "name": "Stomping Ground" }, { "num": 45, "name": "Somberwald Sage" }, { "num": 54, "name": "Wooded Foothills" }, { "num": 4, "name": "Birds of Paradise" }, { "num": 27, "name": "Herald of Ilharg" }, { "num": 53, "name": "Windswept Heath" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 6, "decision": {
+  "decision_index": 2,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 1,
+  "hand": [{ "num": 47, "name": "Stomping Ground", "win_optimal": true }, { "num": 50, "name": "Stomping Ground", "win_optimal": true }, { "num": 45, "name": "Somberwald Sage", "win_optimal": true }, { "num": 54, "name": "Wooded Foothills", "win_optimal": true }, { "num": 4, "name": "Birds of Paradise", "win_optimal": true }, { "num": 27, "name": "Herald of Ilharg", "win_optimal": true }, { "num": 53, "name": "Windswept Heath", "win_optimal": true }],
+  "ai_choice": { "index": 6, "num": 53, "name": "Windswept Heath" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 1)"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Stomping Ground", "cast=Birds of Paradise"], "decision": {
+  "decision_index": 3,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Birds of Paradise"], "actions": [{ "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Stomping Ground; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 6, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 11, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 1,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 4,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 4, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 13, "cast_order": ["**", "land=Wooded Foothills", "cast=Somberwald Sage"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Birds of Paradise" }],
+  "mdfc_backs": [],
+  "me": { "life": 18, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }, { "num": 54, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Birds of Paradise, Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Birds of Paradise", "Wooded Foothills"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Somberwald Sage"], "actions": [{ "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Somberwald Sage" }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Birds of Paradise"], "actions": [{ "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Birds of Paradise" }] },
+    { "index": 7, "summary": "land=Stomping Ground; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 8, "summary": "land=Stomping Ground; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 9, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 10, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 11, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Somberwald Sage", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Somberwald Sage"], "actions": [{ "card": "Somberwald Sage" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 16, "summary": "land=none; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 17, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 54, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 18, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 4,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 8,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 2,
+  "mdfc_backs": [],
+  "me": { "life": 17, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 45, "name": "Somberwald Sage", "cost": "{2}{G}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 6, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 6, "num": 49, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 5, "cast_order": ["**", "land=Stomping Ground", "cast=Herald of Ilharg", "cast=Birds of Paradise"], "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Decimator of the Provinces" }],
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Stomping Ground; cast: Birds of Paradise, Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Birds of Paradise", "Decimator of the Provinces"], "cast_order_canonical": ["Birds of Paradise", "Decimator of the Provinces"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 1, "summary": "land=Stomping Ground; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage), Birds of Paradise", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Decimator of the Provinces", "Birds of Paradise"], "cast_order_canonical": ["Decimator of the Provinces", "Birds of Paradise"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }, { "card": "Birds of Paradise" }] },
+    { "index": 2, "summary": "land=Stomping Ground; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 3, "summary": "land=none; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 4, "summary": "land=Stomping Ground; cast: Birds of Paradise, Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Birds of Paradise", "Herald of Ilharg"], "cast_order_canonical": ["Birds of Paradise", "Herald of Ilharg"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Herald of Ilharg" }] },
+    { "index": 5, "summary": "land=Stomping Ground; cast: Herald of Ilharg, Birds of Paradise", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Herald of Ilharg", "Birds of Paradise"], "cast_order_canonical": ["Herald of Ilharg", "Birds of Paradise"], "actions": [{ "card": "Herald of Ilharg" }, { "card": "Birds of Paradise" }] },
+    { "index": 6, "summary": "land=none; cast: Birds of Paradise, Herald of Ilharg", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise", "Herald of Ilharg"], "cast_order_canonical": ["Birds of Paradise", "Herald of Ilharg"], "actions": [{ "card": "Birds of Paradise" }, { "card": "Herald of Ilharg" }] },
+    { "index": 7, "summary": "land=none; cast: Herald of Ilharg, Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald of Ilharg", "Birds of Paradise"], "cast_order_canonical": ["Herald of Ilharg", "Birds of Paradise"], "actions": [{ "card": "Herald of Ilharg" }, { "card": "Birds of Paradise" }] },
+    { "index": 8, "summary": "land=Stomping Ground; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 9, "summary": "land=none; cast: Herald of Ilharg", "declared_order_payability": "not_verified", "land": null, "casts": ["Herald of Ilharg"], "actions": [{ "card": "Herald of Ilharg" }] },
+    { "index": 10, "summary": "land=Stomping Ground; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 11, "summary": "land=none; cast: Birds of Paradise", "declared_order_payability": "not_verified", "land": null, "casts": ["Birds of Paradise"], "actions": [{ "card": "Birds of Paradise" }] },
+    { "index": 12, "summary": "land=Stomping Ground; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 12,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 3,
+  "mdfc_backs": [],
+  "me": { "life": 15, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 3, "name": "Birds of Paradise", "cost": "{G}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }, { "num": 27, "name": "Herald of Ilharg", "cost": "{2}{R}{G}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Stomping Ground", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "ability", "text": "Herald of Ilharg (Birds of Paradise): 2 +1/+1 counters" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 10, "num": 3, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Herald of Ilharg", "idx": 9, "num": 27, "sick": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 10, "num": 3, "sick": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Herald of Ilharg", "idx": 9, "num": 27, "sick": true, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "tapped": true, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 8, "num": 50, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 18, "cast_order": ["**", "land=Wooded Foothills", "cast=Decimator of the Provinces"], "decision": {
+  "decision_index": 15,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Wooded Foothills" }],
+  "mdfc_backs": [],
+  "me": { "life": 13, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 10, "num": 3, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Herald of Ilharg", "idx": 9, "num": 27, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 50, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }, { "num": 55, "name": "Wooded Foothills", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Wooded Foothills"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise), Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces", "Wooded Foothills"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }, { "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 1, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage), Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces", "Wooded Foothills"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }, { "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 2, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg), Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces", "Wooded Foothills"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }, { "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 3, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Decimator of the Provinces"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 4, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Decimator of the Provinces"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 5, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield, Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills", "Decimator of the Provinces"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }, { "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 12, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 13, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 14, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 15, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 16, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 17, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 18, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 19, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 20, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 21, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 22, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 23, "summary": "land=Wooded Foothills; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 24, "summary": "land=none; cast: Decimator of the Provinces (emerge, sacrificing Birds of Paradise)", "declared_order_payability": "not_verified", "land": null, "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 4, "sac_victim_name": "Birds of Paradise" }] },
+    { "index": 25, "summary": "land=none; cast: Decimator of the Provinces (emerge, sacrificing Somberwald Sage)", "declared_order_payability": "not_verified", "land": null, "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 45, "sac_victim_name": "Somberwald Sage" }] },
+    { "index": 26, "summary": "land=none; cast: Decimator of the Provinces (emerge, sacrificing Herald of Ilharg)", "declared_order_payability": "not_verified", "land": null, "casts": ["Decimator of the Provinces"], "actions": [{ "card": "Decimator of the Provinces", "emerge": true, "sac_victim": 27, "sac_victim_name": "Herald of Ilharg" }] },
+    { "index": 27, "summary": "land=Wooded Foothills; cast: Wooded Foothills: sacrifice it: search for land(s), put them onto the battlefield", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": ["Wooded Foothills"], "actions": [{ "card": "Wooded Foothills", "src_num": 55, "activate": true, "act_label": "sacrifice it: search for land(s), put them onto the battlefield", "verb": "landsearch", "fetch_mana": true, "x": 1 }] },
+    { "index": 28, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Forest", "casts": [], "actions": [] },
+    { "index": 29, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Mountain", "casts": [], "actions": [] },
+    { "index": 30, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "Stomping Ground", "casts": [], "actions": [] },
+    { "index": 31, "summary": "land=Wooded Foothills; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Wooded Foothills", "fetch_target": "(hold: crack later)", "casts": [], "actions": [] },
+    { "index": 32, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 16,
+  "type": "land_entry",
+  "source": "Stomping Ground",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 12, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 10, "num": 3, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Herald of Ilharg", "idx": 9, "num": 27, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 50, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "pay_life": 2,
+  "reveal_types": [],
+  "heuristic_default": 1,
+  "note": "reply 1 to enter UNTAPPED (pay 2 life), or 0 to enter tapped. Default = the AI's pick."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "sacrifice",
+  "source": "Decimator of the Provinces",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 10, "battlefield": [{ "name": "Birds of Paradise", "idx": 5, "num": 4, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Birds of Paradise", "idx": 10, "num": 3, "is_land": false, "taps": "WUBRG", "power": 0, "toughness": 1 }, { "name": "Herald of Ilharg", "idx": 9, "num": 27, "is_land": false, "power": 5, "toughness": 5, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 2 }] }, { "name": "Somberwald Sage", "idx": 7, "num": 45, "is_land": false, "power": 0, "toughness": 1 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 6, "num": 49, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 8, "num": 50, "is_land": true, "taps": "RG" }, { "name": "Stomping Ground", "idx": 11, "num": 48, "is_land": true, "taps": "RG" }], "vial_counters": [], "hand": [{ "num": 5, "name": "Decimator of the Provinces", "cost": "{10}", "mv": 10, "kind": "permanent", "is_creature": true }], "graveyard": ["Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 0,
+  "allow_decline": false,
+  "options": [{ "index": 0, "perm_index": 5, "tapped": false, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 1, "perm_index": 7, "tapped": false, "name": "Somberwald Sage", "label": "Somberwald Sage" }, { "index": 2, "perm_index": 10, "tapped": false, "name": "Birds of Paradise", "label": "Birds of Paradise" }, { "index": 3, "perm_index": 9, "tapped": false, "name": "Herald of Ilharg", "label": "Herald of Ilharg" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 18,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "sacrifice", "text": "🔪 Decimator of the Provinces -- sacrificed Birds of Paradise" }, { "turn": 4, "kind": "damage", "text": "Herald of Ilharg (Decimator of the Provinces, MV 10): 2 +1/+1 counters, then 4 damage to each opponent (20→16)" }, { "turn": 4, "kind": "trigger", "text": "Decimator of the Provinces: 3 creature(s) get +2/+2 and trample until end of turn" }],
+  "mdfc_backs": [],
+  "me": { "life": 10, "battlefield": [{ "name": "Birds of Paradise", "idx": 9, "num": 3, "is_land": false, "taps": "WUBRG", "power": 2, "toughness": 3 }, { "name": "Decimator of the Provinces", "idx": 11, "num": 5, "is_land": false, "power": 7, "toughness": 7 }, { "name": "Herald of Ilharg", "idx": 8, "num": 27, "is_land": false, "power": 9, "toughness": 9, "counters": [{ "kind": "p1p1", "label": "+1/+1", "count": 4 }] }, { "name": "Somberwald Sage", "idx": 6, "num": 45, "tapped": true, "is_land": false, "power": 2, "toughness": 3 }, { "name": "Stomping Ground", "idx": 4, "num": 47, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 5, "num": 49, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 7, "num": 50, "tapped": true, "is_land": true }, { "name": "Stomping Ground", "idx": 10, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [], "graveyard": ["Birds of Paradise", "Wooded Foothills", "Wooded Foothills"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 16, "battlefield": [{ "name": "2/2 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with one plan index (0-based), or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Herald of Ilharg (9), Birds of Paradise (2), Decimator of the Provinces (7) — 18 to opponent (16→-2)" }
+  ]
+}
