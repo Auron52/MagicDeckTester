@@ -631,7 +631,7 @@ static_assert(sizeof(Player) == 216,
 // Integrated (morph-integ, 2026-11-13): origin's item A rounds (1464) + MTG_DOUBLER_COMBAT_PAY's +32 = 1496 (measured).
 // Deeproot Pilgrimage's deck-constant tap-watcher gate adds eight aligned bytes.
 // It is identical across states of one game, so dominance does not fold it.
-static_assert(sizeof(GameState) == 1552,   // Prophets' per-combat script vector and cursor
+static_assert(sizeof(GameState) == 1592,   // Dynamic Mihail payment sequence and wide trigger ordinal
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -1041,9 +1041,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0x1A61000000ull + static_cast<std::uint64_t>(s.scripted_combat_transform)); }
     if (s.scripted_militia_pride_pay >= 0)
     { fold(0x1A62000000ull + static_cast<std::uint64_t>(s.scripted_militia_pride_pay)); }
-    if (s.scripted_mihail_pay_mask >= 0)
+    if (s.scripted_mihail_pay_choice.IsPinned())
     {
-        fold(0x1A63000000ull + static_cast<std::uint64_t>(s.scripted_mihail_pay_mask));
+        fold(0x1A63000000ull);
+        s.scripted_mihail_pay_choice.FoldValues(fold);
         fold(0x1A64000000ull + static_cast<std::uint64_t>(s.scripted_mihail_trigger_ordinal));
     }
     // Prophets' combat choices remain live until their corresponding damage triggers resolve.

@@ -6355,9 +6355,8 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                     // Mihail says "you cast": an opponent's spell never earns this trigger.
                     if (p.controller_index != active) { continue; }
                     const ManaCost& cost = *def->params.cast_subtype_pay_token_cost;
-                    const int ordinal = state.scripted_mihail_trigger_ordinal++;
-                    bool pay = state.scripted_mihail_pay_mask >= 0 && ordinal < 30
-                        && ((state.scripted_mihail_pay_mask >> ordinal) & 1) != 0;
+                    const std::size_t ordinal = state.scripted_mihail_trigger_ordinal++;
+                    bool pay = state.scripted_mihail_pay_choice.Paid(ordinal);
                     if (g_play_dig_chooser != nullptr && !g_tap_speculating)
                     {
                         GameState probe = state;

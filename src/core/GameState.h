@@ -2,6 +2,7 @@
 #include "Player.h"
 #include "Permanent.h"
 #include "ManaPool.h"
+#include "MihailPayChoices.h"
 #include "DiscardPolicy.h"
 #include <array>
 #include <map>
@@ -1262,8 +1263,8 @@ struct GameState
     std::int8_t              scripted_combat_transform = -1;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
-    std::int32_t             scripted_mihail_pay_mask = -1; // one bit per Merfolk-cast trigger in resolution order
-    std::int16_t             scripted_mihail_trigger_ordinal = 0;
+    MihailPayChoices        scripted_mihail_pay_choice; // one entry per trigger in resolution order
+    std::size_t             scripted_mihail_trigger_ordinal = 0;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.

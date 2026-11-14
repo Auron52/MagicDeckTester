@@ -1746,7 +1746,7 @@ public:
         // Militia's Pride: number of declared nontoken attacker triggers for which to pay {W}.
         // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
         std::int16_t militia_pride_pay_choice = -1;
-        std::int32_t mihail_pay_mask = -1; // optional {1} pay/decline, one bit per trigger
+        MihailPayChoices mihail_pay_choice; // optional {1} in trigger order
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's

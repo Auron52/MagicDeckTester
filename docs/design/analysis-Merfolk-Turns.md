@@ -398,3 +398,23 @@ assertions), coverage remains zero missing, and the viewer line-build check
 remains 4,713 lines/zero failures. `check_references_safe.py` scanned 89
 checkouts and passed. No full regression, GT, push, play server or full play
 sweep ran in this worktree.
+
+### 2026-11-14 Mihail lossless pay-choice implementation
+
+Replaced the signed mask in plans and game state with `MihailPayChoices`, an
+ordered dynamic sequence with an explicit unpinned state. Trigger consumption
+uses a `size_t` ordinal and reads every position. Plan and state hashes,
+dominance, replay comparison, diagnostics, resets, labels, memory accounting,
+and executor/rollout installation now use the same sequence. The enumerator
+walks binary successors without shifts or an integer mask limit. It no longer
+drops `bound >= 20` or plans that carry another decision axis. A source cast
+from the graveyard also enters the eligibility check.
+
+The exhaustive fan still materializes all plans, so a synthetic high bound
+can be expensive. No provider pruning or performance claim is adopted here;
+the parent will measure actual Merfolk deck cost and decide separately.
+`./build.sh` passed in Release, followed by a clean incremental `./build.sh`.
+The focused `mtg-test --test-case='*Mihail*'` run passed 4 cases and 42
+assertions, including high ordinals, ordered choices across copies, key
+material distinction, and human prompt independence. GT/regression and deck
+cost measurement were intentionally not run in this focused implementation.

@@ -1607,7 +1607,7 @@ inline void Record(const GameState& s, const TurnSolver::Plan& first, const Turn
     pl("fbhold", first.fb_hold_choice != dup.fb_hold_choice);
     pl("ctransform", first.combat_transform_choice != dup.combat_transform_choice);
     pl("pridepay", first.militia_pride_pay_choice != dup.militia_pride_pay_choice);
-    pl("mihailpay", first.mihail_pay_mask != dup.mihail_pay_mask);
+    pl("mihailpay", first.mihail_pay_choice != dup.mihail_pay_choice);
     pl("earlycrack", first.early_ondemand_crack != dup.early_ondemand_crack);
     pl("lsearch", first.land_search_pins != dup.land_search_pins
                   || first.attack_land_search_choice != dup.attack_land_search_choice
@@ -28776,8 +28776,8 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     { fold(0x1A610000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.combat_transform_choice + 2))); }
     if (p.militia_pride_pay_choice != -1)
     { fold(0x1A620000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.militia_pride_pay_choice + 2))); }
-    if (p.mihail_pay_mask != -1)
-    { fold(0x1A630000ull + static_cast<uint64_t>(static_cast<uint32_t>(p.mihail_pay_mask + 2))); }
+    if (p.mihail_pay_choice.IsPinned())
+    { fold(0x1A630000ull); p.mihail_pay_choice.FoldValues(fold); }
     // ...and the activations' POSITION (Plan::land_search_act_slot; -1, the trailing pass, is the
     // default and folds nothing): 0 keeps the value the old pre-cast twin folded, k >= 1 folds k.
     if (p.land_search_act_slot == 0) { fold(0x1A60AC75ull); }
@@ -29084,7 +29084,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.champion_pins.empty() && p.prophets_sac_choice.empty()
         && p.land_search_pins.empty() && p.attack_land_search_choice == -1
         && p.upkeep_land_search_choice == -1 && p.combat_crack_choice == -1
-        && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1 && p.mihail_pay_mask == -1
+        && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1 && !p.mihail_pay_choice.IsPinned()
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
@@ -29140,7 +29140,7 @@ static bool PlanIsAxisVariantExceptOrder(const TurnSolver::Plan& p)
         || p.upkeep_land_search_choice >= 0 || p.combat_crack_choice >= 0
         || p.combat_transform_choice >= 0   // Bloodline Keeper's in-combat transform (Vampires B)
         || p.militia_pride_pay_choice >= 0
-        || p.mihail_pay_mask >= 0
+        || p.mihail_pay_choice.IsPinned()
         || p.early_ondemand_crack >= 0
         // Abiding Grace's end-step ranks / Emeria's next-upkeep ranks: clones of their base differing only
         // in a pending STATE pin. NOTE what this does NOT buy: BuildDedupKey folds the RAW pin, so two
@@ -30081,12 +30081,14 @@ inline std::uint64_t PlanH(const TurnSolver::Plan& p, int ax)
     }
     const int extra[] = { p.discard_choice, p.dig_choice, p.scry_choice, p.tutor_choice, p.fb_hold_choice,
                           p.landfall_target_choice, p.combat_transform_choice, p.militia_pride_pay_choice,
-                          p.mihail_pay_mask, p.tapmode_choice,
+                          p.tapmode_choice,
                           p.freshmode_choice, p.vial_charge_choice, p.atk_dork_release, p.bounce_choice,
                           p.etbdig_choice, p.etbcounter_choice, p.ponder_choice, p.putback_choice,
                           p.combat_landfall_target_choice, p.combat_crack_choice, p.lackey_choice,
                           p.saga_target_choice, p.saga_ch1_choice, p.sweep_choice, p.le_fire_choice };
     for (int x : extra) { h = Mix(h, static_cast<std::uint64_t>(x + 7)); }
+    if (p.mihail_pay_choice.IsPinned())
+    { h = Mix(h, 0x1A630000ull); p.mihail_pay_choice.FoldValues([&](std::uint64_t v) { h = Mix(h, v); }); }
     if (p.early_ondemand_crack >= 0)
     { h = Mix(h, 0xEA4CCA11ull + static_cast<std::uint64_t>(p.early_ondemand_crack)); }
     if (p.grace_choice >= 0) { h = Mix(h, 0x4752ull + static_cast<std::uint64_t>(p.grace_choice)); }   // value-gated
@@ -56662,7 +56664,7 @@ namespace solvememo
             || a.combat_crack_choice != b.combat_crack_choice
             || a.combat_transform_choice != b.combat_transform_choice
             || a.militia_pride_pay_choice != b.militia_pride_pay_choice
-            || a.mihail_pay_mask != b.mihail_pay_mask
+            || a.mihail_pay_choice != b.mihail_pay_choice
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
@@ -65993,6 +65995,7 @@ inline std::size_t ApproxStateKb(const GameState& st)
         b += (p.hand.capacity() + p.library.size() + p.graveyard.capacity() + p.sideboard.capacity()) * sizeof(Card);
     }
     b += st.battlefield.capacity() * sizeof(Permanent) + st.exile.capacity() * sizeof(Card);
+    b += st.scripted_mihail_pay_choice.bits.capacity();
     return (b >> 10) + 1;
 }
 // Entry cap of ONE node's prefix-resume cache: min(256, MTG_BP_PREFIX_CACHE_KB / snapshot KB), default 32 MB per
@@ -76913,7 +76916,7 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
     state.scripted_combat_landfall_target = -1;    // ...and the combat landfall-target rank (same lockstep)
     state.scripted_combat_transform = -1;          // ...and Bloodline Keeper's combat transform (same lockstep)
     state.scripted_militia_pride_pay = -1;
-    state.scripted_mihail_pay_mask = -1;
+    state.scripted_mihail_pay_choice.Clear();
     state.scripted_mihail_trigger_ordinal = 0;
     state.scripted_attack_attach  = -1;            // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold        = -1;            // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
@@ -93420,7 +93423,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     // two casts retain all four pay/decline decisions and their timing.
     if (!HumanPlayActive() && !cont_axes_only)
     {
-        int mihails = 0;
+        std::size_t mihails = 0;
         for (const Permanent& q : state.battlefield)
         {
             if (q.controller_index != state.active_player_index) { continue; }
@@ -93429,13 +93432,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         if (mihails > 0 || std::any_of(all.begin(), all.end(), [](const TurnSolver::Plan& p)
             { return std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
-                { return a.card_name == "Emperor Mihail II" && a.kind == Action::Kind::CastFromHand; }); }))
+                { return a.card_name == "Emperor Mihail II"
+                    && (a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard); }); }))
         {
             std::vector<TurnSolver::Plan> extra;
             for (const TurnSolver::Plan& p : all)
             {
-                if (p.mihail_pay_mask >= 0 || PlanIsAxisVariantExceptOrder(p)) { continue; }
-                int sources = mihails, bound = 0;
+                if (p.mihail_pay_choice.IsPinned()) { continue; }
+                std::size_t sources = mihails, bound = 0;
                 for (const Action& a : p.actions)
                 {
                     if (a.kind != Action::Kind::CastFromHand && a.kind != Action::Kind::CastFromGraveyard)
@@ -93446,13 +93450,13 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     { if (sub == "Merfolk") { bound += sources; break; } }
                     if (d->params.cast_subtype_pay_token_cost) { ++sources; }
                 }
-                // A phase can hold at most the available Merfolk cards; the mask is
-                // deliberately wide enough for every trigger this deck can produce.
-                if (bound <= 0 || bound >= 20) { continue; }
-                for (int mask = 1; mask < (1 << bound); ++mask)
+                if (bound == 0) { continue; }
+                MihailPayChoices choice;
+                choice.Pin(bound);
+                while (choice.Next())
                 {
                     TurnSolver::Plan v = p;
-                    v.mihail_pay_mask = mask;
+                    v.mihail_pay_choice = choice;
                     extra.push_back(std::move(v));
                 }
             }
@@ -93763,7 +93767,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 && !p.soulbond_decline && p.land_search_pins.empty()
                 && p.attack_land_search_choice == -1 && p.upkeep_land_search_choice == -1
                 && p.combat_crack_choice == -1 && p.combat_transform_choice == -1
-                && p.militia_pride_pay_choice == -1 && p.mihail_pay_mask == -1;
+                && p.militia_pride_pay_choice == -1 && !p.mihail_pay_choice.IsPinned();
         };
         std::map<const CardDefinition*, std::size_t> width_cache;
         auto width_of = [&](const CardDefinition* d) -> std::size_t
@@ -95626,7 +95630,7 @@ static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state
     return plans;
 }
 
-static constexpr std::size_t kPlanDomAssertedSize = 712;   // Two Prophets pin vectors; checked below.
+static constexpr std::size_t kPlanDomAssertedSize = 736;   // Dynamic Mihail payment sequence; checked below.
 // ---- PLAN-LEVEL SUBSET DOMINANCE CENSUS (MTG_PLANDOM_CENSUS, default OFF) ----------------------
 //
 // USER 2026-09-25: *"We could also potentially skip candidates that play strictly less than an
@@ -95833,7 +95837,8 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
             add(pl.combat_transform_choice);
             add(pl.militia_pride_pay_choice);
-            add(pl.mihail_pay_mask);
+            x += "|mihail";
+            pl.mihail_pay_choice.FoldValues([&](std::uint64_t v) { add(v); });
             add(pl.early_ondemand_crack);
             x += "|lt";
             for (int s : pl.look_top_pins)        { add(s); }
@@ -96033,7 +96038,7 @@ static std::string PbVerifyFieldDiff(const TurnSolver::Plan& a, const TurnSolver
     if (!(a.combat_crack_choice == b.combat_crack_choice)) { d += " combat_crack_choice"; }
     if (!(a.combat_transform_choice == b.combat_transform_choice)) { d += " combat_transform_choice"; }
     if (!(a.militia_pride_pay_choice == b.militia_pride_pay_choice)) { d += " militia_pride_pay_choice"; }
-    if (a.mihail_pay_mask != b.mihail_pay_mask) { d += " mihail_pay_mask"; }
+    if (a.mihail_pay_choice != b.mihail_pay_choice) { d += " mihail_pay_choice"; }
     if (!(a.early_ondemand_crack == b.early_ondemand_crack)) { d += " early_ondemand_crack"; }
     if (!(a.land_search_act_slot == b.land_search_act_slot)) { d += " land_search_act_slot"; }
     if (!(a.combat_landfall_target_choice == b.combat_landfall_target_choice)) { d += " combat_landfall_target_choice"; }
@@ -96277,7 +96282,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (p.bp_choice >= 0) { s += " | bp" + std::to_string(p.bp_choice) + "@" + std::to_string(p.bp_at); }
             if (p.combat_transform_choice >= 0) { s += " | ctx" + std::to_string((int)p.combat_transform_choice); }
             if (p.militia_pride_pay_choice >= 0) { s += " | pride" + std::to_string((int)p.militia_pride_pay_choice); }
-            if (p.mihail_pay_mask >= 0) { s += " | mihail" + std::to_string(p.mihail_pay_mask); }
+            if (p.mihail_pay_choice.IsPinned()) { s += " | mihail" + p.mihail_pay_choice.Label(); }
             std::fprintf(stderr, "    %s\n", s.empty() ? "(pass)" : s.c_str());
         }
     }
@@ -97679,6 +97684,7 @@ inline std::size_t ApproxPlanBytes(const TurnSolver::Plan& p)
     b += p.land_search_pins.capacity() * sizeof(int);
     b += p.champion_pins.capacity() * sizeof(int);
     b += p.prophets_sac_choice.capacity() * sizeof(int);
+    b += p.mihail_pay_choice.bits.capacity();
     b += p.look_top_pins.capacity() * sizeof(int);
     b += p.dredge_pins.capacity() * sizeof(int);
     b += p.keranos_targets.capacity() * sizeof(int);
@@ -97705,7 +97711,8 @@ inline long long PortablePlanBytes(const TurnSolver::Plan& p)
 {
     long long n = static_cast<long long>(p.actions.size() + p.breakpoint_actions.size());
     for (const Action& a : p.actions) { n += static_cast<long long>(a.breakpoint_casts.size()); }
-    return tier1::kPlanB + n * tier1::kActionB;
+    return tier1::kPlanB + n * tier1::kActionB
+        + static_cast<long long>(p.mihail_pay_choice.bits.size());
 }
 namespace plancache
 {
@@ -98312,10 +98319,10 @@ static void FoldPhysicalCards(TranspositionTable::Key& k, const GameState& state
             mix(static_cast<std::uint64_t>(state.scripted_prophets_sac_cursor));
             for (int v : state.scripted_prophets_sac) { mix(static_cast<std::uint64_t>(v + 3)); }
         }
-        if (state.scripted_mihail_pay_mask >= 0 || state.scripted_mihail_trigger_ordinal > 0)
+        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_trigger_ordinal > 0)
         {
             mix(0x1A63000000ull);
-            mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(state.scripted_mihail_pay_mask)));
+            state.scripted_mihail_pay_choice.FoldValues(mix);
             mix(static_cast<std::uint64_t>(state.scripted_mihail_trigger_ordinal));
         }
         // The prepay's kept {C} (EDF only): value-gated, so every other deck's key is unchanged.
@@ -102728,10 +102735,10 @@ static TranspositionTable::Key BuildDedupKeyBeforeLandSearchPins(const GameState
             { Fold(k, 0x9e3779b97f4a7c15ULL ^ (static_cast<std::uint64_t>(i + 32) << 40)
                          ^ static_cast<std::uint64_t>(static_cast<std::uint32_t>(cpins[i]))); }
         }
-        if (state.scripted_mihail_pay_mask >= 0 || state.scripted_mihail_trigger_ordinal > 0)
+        if (state.scripted_mihail_pay_choice.IsPinned() || state.scripted_mihail_trigger_ordinal > 0)
         {
-            Fold(k, 0x1A63000000ull ^ static_cast<std::uint64_t>(
-                static_cast<std::uint32_t>(state.scripted_mihail_pay_mask)));
+            Fold(k, 0x1A63000000ull);
+            state.scripted_mihail_pay_choice.FoldValues([&](std::uint64_t v) { Fold(k, v); });
             Fold(k, 0x1A64000000ull ^ static_cast<std::uint64_t>(state.scripted_mihail_trigger_ordinal));
         }
     }
@@ -128615,7 +128622,7 @@ void TurnSolver::WritePostApplyStatePins(GameState& s, const Plan& p)
     // Bloodline Keeper's in-combat transform mask (Vampires B), read at THIS turn's declare-attackers.
     if (p.combat_transform_choice >= 0)   { s.scripted_combat_transform = p.combat_transform_choice; }
     if (p.militia_pride_pay_choice >= 0)   { s.scripted_militia_pride_pay = p.militia_pride_pay_choice; }
-    s.scripted_mihail_pay_mask = p.mihail_pay_mask;
+    s.scripted_mihail_pay_choice = p.mihail_pay_choice;
     s.scripted_mihail_trigger_ordinal = 0;
     // The COMBAT landfall-target rank: Phylath's target for the lands this turn's combat puts (Titan's
     // attack fetch, the in-combat crack), read by the combat land entries (CombatLandfallTargetScope).

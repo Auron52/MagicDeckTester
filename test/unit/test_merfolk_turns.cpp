@@ -176,7 +176,8 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     const CardDefinition* merfolk = CardDatabase::Instance().Lookup("Rishadan Dockhand");
     REQUIRE(merfolk != nullptr);
     state.floating_mana.colorless = 2;
-    state.scripted_mihail_pay_mask = 1; // pay first, decline second
+    state.scripted_mihail_pay_choice.Pin(2);
+    state.scripted_mihail_pay_choice.bits[0] = 1; // pay first, decline second
     FireOnCastTriggers(state, *merfolk);
     FireOnCastTriggers(state, *merfolk);
     CHECK(state.scripted_mihail_trigger_ordinal == 2);
@@ -191,13 +192,85 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     AddPermanent(two, "Emperor Mihail II", 411);
     AddPermanent(two, "Emperor Mihail II", 412);
     two.floating_mana.colorless = 2;
-    two.scripted_mihail_pay_mask = 2; // decline first copy, pay second
+    two.scripted_mihail_pay_choice.Pin(2);
+    two.scripted_mihail_pay_choice.bits[1] = 1; // decline first copy, pay second
     FireOnCastTriggers(two, *merfolk);
     CHECK(two.scripted_mihail_trigger_ordinal == 2);
     tokens = 0;
     for (const Permanent& p : two.battlefield)
     { if (p.is_token && CardHasSubtype(p.card, "Merfolk")) { ++tokens; } }
     CHECK(tokens == 1);
+}
+
+TEST_CASE("Mihail ordered choices retain high ordinals and distinct plan keys")
+{
+    MihailPayChoices first, second;
+    first.Pin(65);
+    second.Pin(65);
+    first.bits[30] = 1;
+    second.bits[64] = 1;
+    CHECK(first.Paid(30));
+    CHECK_FALSE(first.Paid(64));
+    CHECK(second.Paid(64));
+    CHECK(first != second);
+    auto key = [](const MihailPayChoices& choice) {
+        std::string result;
+        choice.FoldValues([&](std::uint64_t v) { result += std::to_string(v) + ","; });
+        return result;
+    };
+    CHECK(key(first) != key(second));
+    MihailPayChoices unpinned;
+    CHECK(key(unpinned) != key(first));
+    CHECK(unpinned != first);
+    MihailPayChoices decline_all;
+    decline_all.Pin(65);
+    CHECK(key(unpinned) != key(decline_all));
+    CHECK(key(first) != key(decline_all));
+    MihailPayChoices carry;
+    carry.Pin(31);
+    std::fill(carry.bits.begin(), carry.bits.begin() + 30, 1);
+    CHECK(carry.Next());
+    CHECK(carry.Paid(30));
+    CHECK_FALSE(carry.Paid(0));
+
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Emperor Mihail II", 420);
+    const CardDefinition* merfolk = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    REQUIRE(merfolk != nullptr);
+    state.floating_mana.colorless = 1;
+    state.scripted_mihail_pay_choice = first;
+    state.scripted_mihail_trigger_ordinal = 30;
+    FireOnCastTriggers(state, *merfolk);
+    CHECK(state.scripted_mihail_trigger_ordinal == 31);
+    CHECK(state.floating_mana.colorless == 0);
+}
+
+TEST_CASE("Mihail human choice overrides the scripted choice for each trigger")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Emperor Mihail II", 430);
+    const CardDefinition* merfolk = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    REQUIRE(merfolk != nullptr);
+    state.floating_mana.colorless = 2;
+    state.scripted_mihail_pay_choice.Pin(2);
+    state.scripted_mihail_pay_choice.bits[1] = 1;
+    int prompts = 0;
+    DigChooser chooser = [&](const GameState&, int, const std::string& source,
+                             const std::vector<Card>&, const std::vector<int>&, int) {
+        CHECK(source.find("Merfolk cast pay") != std::string::npos);
+        return prompts++ == 0 ? 0 : -1;
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &chooser;
+    FireOnCastTriggers(state, *merfolk);
+    FireOnCastTriggers(state, *merfolk);
+    g_play_dig_chooser = saved;
+    CHECK(prompts == 2);
+    CHECK(state.floating_mana.colorless == 1);
 }
 
 TEST_CASE("Wanderwine Prophets champions a selected copy and returns it under its owner")
