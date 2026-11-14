@@ -418,3 +418,34 @@ The focused `mtg-test --test-case='*Mihail*'` run passed 4 cases and 42
 assertions, including high ordinals, ordered choices across copies, key
 material distinction, and human prompt independence. GT/regression and deck
 cost measurement were intentionally not run in this focused implementation.
+
+### 2026-11-14 first profile and cost diagnosis (in progress)
+
+The default d5 card-score pass was host-OOM-killed after about 140 games with
+24 workers. A six-worker retry reached roughly 31 GiB RSS; an eight-worker run
+with result-neutral caches capped at 8 GiB hit its 18 GiB RSS watchdog at game
+106. The documented `MTG_ANALYZE_DEPTH=3` fallback also hit the same cap at
+games 7/10, even on two workers. The cap reports show empty FSL/plan pools:
+this is transient search branching, not cache retention. No baseline profile
+was produced by these attempts.
+
+Seed 3000011, game index 10 at d3/b20 reproduces the memory spike.
+`MTG_AXIS_TRACE` shows 480 plans before the Prophets axes on turn 6; 128
+plans cast two Wanderwine Prophets. The previous fan assumes both fresh
+Prophets can deal combat damage and multiplies champion choices by two
+sacrifice-choice ranges, exceeding 11 GiB RSS before scoring. The 60-card
+list has exactly one Lightning Greaves and no other haste grant, so at most
+one freshly entered Prophets can deal combat damage in that turn.
+`MerfolkTurnsProvider::ProphetsFreshCombatEventCap` encodes that proven
+upper bound while the generic provider retains the full bound.
+
+A separate d3 seed 3000008 completed in 325 seconds/763,748 work units.
+`MTG_BRANCH_STATS` attributes 6.1 million odometer candidates to Rogue's
+Passage activations and 3.3 million final plans to Rishadan Dockhand casts.
+Rogue's Passage's unblockable activation has no effect against the passive
+opponent, and tapping its land source does not trigger Pilgrimage. The
+Merfolk Turns provider therefore removes that dominated activation from
+autonomous targets; human play still offers every legal target. The mana
+ability remains available. Both performance edits are rebuilding and must
+pass the seeded repro, focused tests, cost gate and outcome checks before
+being treated as verified.

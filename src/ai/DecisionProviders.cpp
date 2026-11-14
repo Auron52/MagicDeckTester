@@ -56,6 +56,15 @@ uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, i
     return DeckProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
+void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState&, const Permanent& source,
+                                                bool, std::vector<int>& targets) const
+{
+    // The passive opponent never blocks, so Passage's unblockable rider is inert.
+    // Its source is a land: tapping it cannot trigger Deeproot Pilgrimage.
+    // Spending {4} and tapping that land cannot improve this deck's goldfish state.
+    if (source.card.m_name == "Rogue's Passage") { targets.clear(); }
+}
+
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
                                          int dmg_unit, int& out) const
 {

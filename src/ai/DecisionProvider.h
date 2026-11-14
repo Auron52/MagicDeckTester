@@ -68,6 +68,7 @@
 #include "../core/MadnessTypes.h"   // MadnessOption / MadnessWindow (MadnessCastDefault)
 #include <algorithm>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -207,6 +208,11 @@ public:
     // cascade applies the choice; deck-specific preferences belong in provider overrides.
     virtual uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                               const CardDefinition& entering) const;
+    // Upper bound on freshly entered Wanderwine Prophets that can deal combat
+    // damage this turn. The generic search keeps every entrant; a deck provider
+    // may prove a lower bound from its available haste sources.
+    virtual int ProphetsFreshCombatEventCap(const GameState&) const
+    { return std::numeric_limits<int>::max(); }
     // Historical burn target policy: Any targets opponent face; Multi chooses the
     // opponent creature or the existing surviving-own-creature prowess fallback.
     // Decks may opt into the complete target axis; human/unpruned always see it.

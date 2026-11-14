@@ -94845,7 +94845,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
                 // A freshly entered Prophets can attack if the line equips Lightning Greaves.
                 // An already-ready double striker has one trigger in each combat-damage step.
-                const int events = ready_prophets + new_prophets;
+                const int events = ready_prophets + std::min(
+                    new_prophets, ResolveProvider(state).ProphetsFreshCombatEventCap(state));
                 if (events == 0) { continue; }
                 const int width = merfolk + added + static_cast<int>(p.actions.size()) * 4;
                 if (width <= 0) { continue; }
