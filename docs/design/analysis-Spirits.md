@@ -790,3 +790,20 @@ code change from this work (kept GT; flag if it recurs -- cf. the thread-depende
 - `verify_deck.py decks/Spirits/Spirits.cod`: **GATE PASS** -- coverage, card_costs, card_fields, regression_tiers
   ("in all 3 suite tiers with GT"), viewer, viewer_wiring, mismatch, play_invariants, claude_sweep, suite all PASS;
   clause_ledger SKIP (standing). Note: it says the claude_sweep was recorded at 35b021047 (re-run only if play changed).
+
+## RESUME HERE (checkpoint 2026-11-14 ~00:00 UTC; supersedes earlier blocks)
+**Done:** suite admission (integrator G: cost 0.31x Hinata; rows in all 3 tiers); REBASED onto origin (181 commits;
+backup branch `backup/spirits-pre-rebase`), rebuilt, units 3055/3056 (the 1 failure = test_pirates_provider's
+deck-folder count: 12 UNTRACKED leftover folders in decks/ on this box, not code), scenarios 530/530, full smoke =
+only the explained gods/martyr keys; re-accepted gods/martyr/spirits smoke+regression and spirits overnight
+(Spirits byte-identical to pre-rebase in all tiers) -> a819bc2d6; check_gt_logs 1170/0/0; **shared branch PUSHED
+a819bc2d6 at 2026-11-13 23:53 UTC** (next shared push not before ~03:55 UTC). CI run 43530446190 was in progress --
+check `gh run view 43530446190` (report Windows result).
+**In progress:** final verify_deck. The first try was run with the FOLDER (`decks/Spirits`) instead of the .cod ->
+viewer (IsADirectoryError) and regression_tiers FAILs are that mistake; re-run as
+`python3 scripts/verify_deck.py decks/Spirits/Spirits.cod` (log logs/spirits/verify_final.log). It also reported
+`play_invariants 8 invariant violation(s)` -- INVESTIGATE (possibly also the wrong path; else new since the rebase).
+**Then:** Stage 6 report with 6a disclosure.
+**Open USER questions:** cast-order proposal; discard-bucket proposal; Q4 fetch hold; fetch-rule readings
+(creature-only lands count W/U not B; basics: Plains while lib Plains > lib Islands, else Island); Labyrinth ruling
+(a capped draw cannot be replaced by dredge/Cyclone); extraturns_regression_d5_s2002 one-game pooled churn (kept GT).
