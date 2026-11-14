@@ -124,3 +124,19 @@ Reading:
 - Selesnya v2 and EDF keep their cast-only producer `DEFECT` lines (the mana agent's area).
 - No slower game, so no `--depth 8 --budget-ms 0` repros were needed. Outputs: `build/scratch/snowcp/ab/`,
   `build/scratch/snowcp/ab2/` (report.txt in each).
+
+### 4.3 `MTG_RESCUE_TAP_SOURCE` adoption A/B -- BUILT, NOT RUN (deferred 2026-11-14)
+
+USER asked to test the flag ("Let's test it out?"), with the searched depths as the bar ("searched depths are more
+important than depth 0"). The apparatus is ready in `build/scratch/snowcp/rts/`:
+- `rts.manifest.json` is the byte-identity screen. It covers the 14 suite decks that can reach the filter rescue (a filter
+  source, a filter rock in hand, a mana land aura, or Three Tree City: Alchemist, Breaching Dragonstorm, Bruna, EDF,
+  Fluctuator, Fungus, Galadriel, Goblins, Hinata, Jumbo Cactuar, Morph, Niv, Treasure Hunt, Unpredictable Cyclone).
+  Each plays 100 games at play settings and 100 at d0, seed 95000, flag off vs on, fix (b) on in both arms.
+- `mkmain.py` builds the ONE pooled main batch from the decks and axes the screen moved. Snow d5 b20 and d3 b10 get
+  1500 games per arm (seeds 102000+ / 100000+), Snow d0 2 x 1000 (91000 / 92000). Each moving deck gets 600 games
+  at play settings (104000+) and 500 at d0 (105000). All seeds are held out from every tier, 9001-9004, 61000 and 81000.
+- Report: `build/scratch/snowcp/tools/rts_report.py <dir> main`.
+
+The parent stopped the chain before the screen played a game, because fix (b) failed regression (Snow d5 gi78 /
+gi101). This A/B waits until fix (b) is amended, and must then run on the amended binary, not `mtg.ab`.
