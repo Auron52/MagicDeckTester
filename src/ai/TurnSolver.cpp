@@ -68434,6 +68434,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // Forward-declared so apply_one's draw breakpoints can re-apply a freshly solved
     // sub-plan (newly drawn castables) through the same canonical-order dispatch.
     std::function<void(const std::vector<Action>&, bool)> apply_plan_actions;
+    std::vector<int> mihail_precast_sources;
     // Forward-declared for the same reason: apply_continuation_plan (below) finishes a positioned
     // continuation land through it, and its body needs bp_play_and_record_land (defined further down).
     std::function<void()> play_cont_land;
@@ -73397,6 +73398,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     fire_unlock();
                     slot_hook(a, tb);
                 }
+                else if (a.kind == Action::Kind::ActivatePermAbility
+                         && a.ability_mode == Action::AbilityMode::TapTutorPut
+                         && a.tutor_target == "Emperor Mihail II"
+                         && std::any_of(&a + 1, acts.data() + acts.size(), [](const Action& later)
+                            { return later.kind == Action::Kind::CastFromHand; }))
+                {
+                    apply_trailing_activations(std::vector<Action>{a});
+                    if (&acts == &plan.actions) { mihail_precast_sources.push_back(a.sac_source_id); }
+                }
                 else if (a.kind == Action::Kind::CastFromHand && !a.sacrifice_land)
                 {
                     if (inline_taps) { flush_pre_taps(pre_tap_slot++); }
@@ -75327,7 +75337,22 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                     && a.gy_exile_mode == 3 && a.sac_source_id == spectacle_hoisted_source; }),
                 spectacle_filtered.end());
         }
-        const std::vector<Action>& own_final = spectacle_hoisted_source >= 0 ? spectacle_filtered : own_acts;
+        const std::vector<Action>& own_unfiltered = spectacle_hoisted_source >= 0 ? spectacle_filtered : own_acts;
+        std::vector<Action> mihail_filtered;
+        if (!mihail_precast_sources.empty())
+        {
+            mihail_filtered = own_unfiltered;
+            mihail_filtered.erase(std::remove_if(mihail_filtered.begin(), mihail_filtered.end(),
+                [&](const Action& a)
+                {
+                    return a.kind == Action::Kind::ActivatePermAbility
+                        && a.ability_mode == Action::AbilityMode::TapTutorPut
+                        && a.tutor_target == "Emperor Mihail II"
+                        && std::find(mihail_precast_sources.begin(), mihail_precast_sources.end(), a.sac_source_id)
+                            != mihail_precast_sources.end();
+                }), mihail_filtered.end());
+        }
+        const std::vector<Action>& own_final = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
         if (pending_cont_acts.empty()) { apply_trailing_activations(own_final); }
         else
         {
@@ -93416,6 +93441,57 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()),
                               std::make_move_iterator(extra.end()));
+    }
+
+    // A Vial or Seahunter put of Mihail may happen between casts. Keep the original
+    // timing and offer every cast boundary for the put; the explicit-order apply
+    // dispatches a Seahunter put at that position through the activation body.
+    if (!HumanPlayActive() && !cont_axes_only)
+    {
+        std::vector<TurnSolver::Plan> timed;
+        for (const TurnSolver::Plan& p : all)
+        {
+            for (std::size_t source = 0; source < p.actions.size(); ++source)
+            {
+                const Action& a = p.actions[source];
+                const bool mihail_put = (a.kind == Action::Kind::ActivateVial
+                                         && a.card_name == "Emperor Mihail II")
+                    || (a.kind == Action::Kind::ActivatePermAbility
+                        && a.ability_mode == Action::AbilityMode::TapTutorPut
+                        && a.tutor_target == "Emperor Mihail II");
+                if (!mihail_put) { continue; }
+                for (std::size_t cast = 0; cast < p.actions.size(); ++cast)
+                {
+                    if (p.actions[cast].kind != Action::Kind::CastFromHand) { continue; }
+                    TurnSolver::Plan v = p;
+                    Action put = v.actions[source];
+                    v.actions.erase(v.actions.begin() + static_cast<std::ptrdiff_t>(source));
+                    const std::size_t at = cast - (source < cast ? 1 : 0);
+                    if (p.searched_order && source == at) { continue; }
+                    v.actions.insert(v.actions.begin() + static_cast<std::ptrdiff_t>(at), put);
+                    v.searched_order = true;
+                    timed.push_back(std::move(v));
+                }
+                if (a.kind == Action::Kind::ActivateVial)
+                {
+                    TurnSolver::Plan v = p;
+                    Action put = v.actions[source];
+                    v.actions.erase(v.actions.begin() + static_cast<std::ptrdiff_t>(source));
+                    const auto last = std::find_if(v.actions.rbegin(), v.actions.rend(), [](const Action& later)
+                        { return later.kind == Action::Kind::CastFromHand; });
+                    if (last != v.actions.rend())
+                    {
+                        if (p.searched_order && source == static_cast<std::size_t>(last.base() - v.actions.begin()))
+                        { continue; }
+                        v.actions.insert(last.base(), put);
+                        v.searched_order = true;
+                        timed.push_back(std::move(v));
+                    }
+                }
+            }
+        }
+        all.insert(all.end(), std::make_move_iterator(timed.begin()),
+                              std::make_move_iterator(timed.end()));
     }
 
     // Emperor Mihail II: each cast trigger is an independent optional {1}

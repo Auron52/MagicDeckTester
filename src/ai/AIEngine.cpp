@@ -8531,6 +8531,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // replay the non-sacrifice hand casts in plan.actions VECTOR ORDER so the executor
     // realises the same line ApplyPlanDirect's explicit-order path produced. Without this
     // the executor would re-bucket enabler-first and diverge from the committed ordering.
+    std::vector<int> mihail_precast_sources;
     if (plan.searched_order)
     {
         if (UserOrderTraceOn() && !m_in_rollout)   // MTG_USER_ORDER_TRACE (diagnostic)
@@ -8546,6 +8547,16 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         for (const Action& a : plan.actions)
         {
             if (is_put(a)) { exec_karoo_pre_hook(a); deploy_via_vial(a.card_name, a.tutor_target.str()); resolve_now(); fire_unlock(); exec_slot_hook(a); continue; }
+            if (a.kind == Action::Kind::ActivatePermAbility
+                && a.ability_mode == Action::AbilityMode::TapTutorPut
+                && a.tutor_target == "Emperor Mihail II"
+                && std::any_of(&a + 1, static_cast<const Action*>(plan.actions.data()) + plan.actions.size(), [](const Action& later)
+                   { return later.kind == Action::Kind::CastFromHand; }))
+            {
+                exec_trailing_activations(std::vector<Action>{a});
+                mihail_precast_sources.push_back(a.sac_source_id);
+                continue;
+            }
             if (a.kind != Action::Kind::CastFromHand || a.sacrifice_land) { continue; }
             if (a.alt_cost) { exec_karoo_pre_hook(a); m_cast_riders = CastRiders::Of(a); cast_alt(a.card_name, a.alt_lifegain); resolve_now(); exec_slot_hook(a); continue; }
             exec_karoo_pre_hook(a);
@@ -9060,7 +9071,22 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && a.gy_exile_mode == 3 && a.sac_source_id == spectacle_hoisted_source; }),
             spectacle_filtered.end());
     }
-    const std::vector<Action>& own_final = spectacle_hoisted_source >= 0 ? spectacle_filtered : exec_own_acts;
+    const std::vector<Action>& own_unfiltered = spectacle_hoisted_source >= 0 ? spectacle_filtered : exec_own_acts;
+    std::vector<Action> mihail_filtered;
+    if (!mihail_precast_sources.empty())
+    {
+        mihail_filtered = own_unfiltered;
+        mihail_filtered.erase(std::remove_if(mihail_filtered.begin(), mihail_filtered.end(),
+            [&](const Action& a)
+            {
+                return a.kind == Action::Kind::ActivatePermAbility
+                    && a.ability_mode == Action::AbilityMode::TapTutorPut
+                    && a.tutor_target == "Emperor Mihail II"
+                    && std::find(mihail_precast_sources.begin(), mihail_precast_sources.end(), a.sac_source_id)
+                        != mihail_precast_sources.end();
+            }), mihail_filtered.end());
+    }
+    const std::vector<Action>& own_final = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
     // The section window forgets every card that has left the hand by now (TurnSolver::SectionForgetHandExits;
     // rollout twin before ApplyPlanDirect's trailing pass), so a cast card the trailing pass returns is new.
     if (BpHandEntryEnabled()) { TurnSolver::SectionForgetHandExits(exec_hand_at_section, state); }

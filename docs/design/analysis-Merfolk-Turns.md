@@ -522,3 +522,33 @@ champion and 2,486,046 after combat. The earlier capped retry had exited
 137 near 20 GiB before scoring. The width is still an eager Cartesian fan;
 other boards or an expanded card pool may need a lazy representation. No
 full analyzer, regression ground truth, push or play server was run here.
+
+### 2026-11-14 Mihail source timing (static finding 2)
+
+The static review found that the optional {1} token payment could not be
+searched when Aether Vial or Seahunter put Emperor Mihail II onto the battlefield
+before a later Merfolk cast. The payment axis had learned to count either put,
+but the combined plan still put Mihail after the cast. Moving a Seahunter action
+earlier in `plan.actions` alone did not fix that: ordinary permanent abilities
+run in the trailing activation pass.
+
+The plan fan now retains the existing timing and adds explicit orders placing a
+Mihail put at each cast boundary. In an explicit order, a Seahunter put with a
+later cast runs at that position through the same activation dispatcher that
+handles its trailing form; the trailing pass skips the already dispatched
+action. `ApplyPlanDirect` and `AIEngine::TakeTurn` follow the same rule. The
+existing Mihail payment pin then supplies the independent pay and decline
+choices when the later Merfolk is cast. A Vial put after the final cast is also
+an explicit variant, so the post-cast outcome remains available.
+
+Focused evidence: the unit case `Mihail put by Vial or Seahunter can be paid for
+on a later cast` checks both sources for source-first pay, source-first decline,
+and cast-first timing. A second case checks before, between, and after with two
+casts. Both apply searched plans in the rollout and commit them through
+`AIEngine::TakeTurn`, checking token counts, trigger ordinals, and state keys.
+The Release `mtg-test` target built with
+`MTG_BUILD_JOBS=8 ./build.sh release -- --target mtg-test`; the first focused
+case passed 73/73 assertions, all six Mihail cases passed 148/148, and the
+final related-card run passed 359/359 across 20 cases. The final source changes
+were rebuilt and rerun after this result was recorded. No full analyzer,
+regression, external-play server, or profile generation was run for this fix.

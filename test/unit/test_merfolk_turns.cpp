@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/LandPlay.h"
+#include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -8,6 +9,8 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "core/EffectHandler.h"
+#include "mtg_test_seam.h"
 
 #include <algorithm>
 #include <vector>
@@ -275,6 +278,10 @@ TEST_CASE("Mihail put by Vial or Seahunter can be paid for on a later cast")
             state.players[0].library.push_back(filler);
         }
         bool offered_paid_line = false;
+        bool offered_declined_line = false;
+        bool offered_late_line = false;
+        TurnSolver::Plan paid_plan, declined_plan;
+        TurnSolver::Plan late_plan;
         int put_lines = 0, cast_lines = 0, both_lines = 0, paid_lines = 0;
         std::string both_order;
         for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
@@ -298,10 +305,149 @@ TEST_CASE("Mihail put by Vial or Seahunter can be paid for on a later cast")
             if (put_at >= 0 && cast_at >= 0)
             { both_order = std::to_string(put_at) + "," + std::to_string(cast_at); }
             if (put_at >= 0 && cast_at > put_at && plan.mihail_pay_choice.Paid(0))
-            { offered_paid_line = true; break; }
+            { offered_paid_line = true; paid_plan = plan; }
+            if (put_at >= 0 && cast_at > put_at && !plan.mihail_pay_choice.Paid(0))
+            { offered_declined_line = true; declined_plan = plan; }
+            if (put_at > cast_at && cast_at >= 0 && (!vial || plan.searched_order)
+                && !plan.mihail_pay_choice.Paid(0))
+            { offered_late_line = true; late_plan = plan; }
+            if (offered_paid_line && offered_declined_line && offered_late_line) { break; }
         }
         INFO(put_lines, " ", cast_lines, " ", both_lines, " ", paid_lines, " ", both_order);
         CHECK(offered_paid_line);
+        CHECK(offered_declined_line);
+        CHECK(offered_late_line);
+        if (!offered_paid_line || !offered_declined_line || !offered_late_line) { continue; }
+        auto tokens = [](const GameState& s)
+        {
+            return std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+                { return p.is_token && CardHasSubtype(p.card, "Merfolk"); });
+        };
+        auto mihails = [](const GameState& s)
+        {
+            return std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+                { return p.card.m_name == "Emperor Mihail II"; });
+        };
+        auto dockhands = [](const GameState& s)
+        {
+            return std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+                { return p.card.m_name == "Rishadan Dockhand" && !p.is_token; });
+        };
+        for (const TurnSolver::Plan* plan : {&paid_plan, &declined_plan, &late_plan})
+        {
+            GameState rollout = state;
+            TurnSolver::ApplyPlan(rollout, *plan, true);
+            AIEngine engine(MulliganProfile::DefaultProfile(), 3, 20);
+            MtgTestSeam::CommitPhasePlan(engine, *plan, true);
+            GameState executed = state;
+            engine.TakeTurn(executed, true, [](GameState& s)
+            {
+                while (!s.stack.empty())
+                {
+                    const StackEntry entry = s.stack.back();
+                    s.stack.pop_back();
+                    const CardDefinition* def = CardDatabase::Instance().LookupCached(entry.source);
+                    if (def) { EffectHandler::Resolve(s, entry, *def); }
+                }
+            });
+            const int expected = plan == &paid_plan ? 1 : 0;
+            CHECK(tokens(rollout) == expected);
+            CHECK(tokens(executed) == expected);
+            CHECK(mihails(rollout) == 1);
+            CHECK(mihails(executed) == 1);
+            CHECK(dockhands(rollout) == 1);
+            CHECK(dockhands(executed) == 1);
+            CHECK(rollout.scripted_mihail_trigger_ordinal == executed.scripted_mihail_trigger_ordinal);
+            CHECK(rollout.scripted_mihail_trigger_ordinal == (plan == &late_plan ? 0 : 1));
+            CHECK(TurnSolver::DedupKeyOf(rollout) == TurnSolver::DedupKeyOf(executed));
+        }
+    }
+}
+
+TEST_CASE("Mihail Vial and Seahunter puts retain a between-casts timing")
+{
+    LoadMerfolkCards();
+    const CardDefinition* mihail = CardDatabase::Instance().Lookup("Emperor Mihail II");
+    const CardDefinition* dockhand = CardDatabase::Instance().Lookup("Rishadan Dockhand");
+    const CardDefinition* warrior = CardDatabase::Instance().Lookup("Tidal Warrior");
+    REQUIRE(mihail != nullptr);
+    REQUIRE(dockhand != nullptr);
+    REQUIRE(warrior != nullptr);
+    for (bool vial : {true, false})
+    {
+        CAPTURE(vial);
+        GameState state;
+        state.active_player_index = 0;
+        state.turn_number = 4;
+        state.players[0].lands_played_this_turn = 1;
+        AddPermanent(state, vial ? "Aether Vial" : "Seahunter", 550);
+        if (vial) { state.battlefield.back().charge_counters = 3; }
+        for (int i = 0; i < (vial ? 4 : 7); ++i)
+        { AddPermanent(state, "Island", 551 + i); }
+        Card first = dockhand->card;
+        first.m_number = 570;
+        state.players[0].hand.push_back(first);
+        Card second = warrior->card;
+        second.m_number = 571;
+        state.players[0].hand.push_back(second);
+        Card source = mihail->card;
+        source.m_number = 572;
+        if (vial) { state.players[0].hand.push_back(source); }
+        else { state.players[0].library.push_back(source); }
+        bool before = false, between = false, after = false;
+        TurnSolver::Plan middle;
+        for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+        {
+            int put_at = -1, cast_count = 0, earlier = 0;
+            for (int i = 0; i < static_cast<int>(plan.actions.size()); ++i)
+            {
+                const Action& a = plan.actions[static_cast<std::size_t>(i)];
+                if ((vial && a.kind == Action::Kind::ActivateVial && a.card_name == "Emperor Mihail II")
+                    || (!vial && a.kind == Action::Kind::ActivatePermAbility
+                        && a.ability_mode == Action::AbilityMode::TapTutorPut
+                        && a.tutor_target == "Emperor Mihail II")) { put_at = i; }
+                if (a.kind == Action::Kind::CastFromHand
+                    && (a.card_name == "Rishadan Dockhand" || a.card_name == "Tidal Warrior"))
+                { ++cast_count; }
+            }
+            if (put_at < 0 || cast_count != 2 || (vial && !plan.searched_order)) { continue; }
+            for (int i = 0; i < put_at; ++i)
+            {
+                const Action& a = plan.actions[static_cast<std::size_t>(i)];
+                earlier += a.kind == Action::Kind::CastFromHand
+                    && (a.card_name == "Rishadan Dockhand" || a.card_name == "Tidal Warrior");
+            }
+            if (earlier == 0) { before = true; }
+            if (earlier == 2) { after = true; }
+            if (earlier == 1 && plan.mihail_pay_choice.Paid(0))
+            { between = true; middle = plan; }
+        }
+        CHECK(before);
+        CHECK(between);
+        CHECK(after);
+        if (!between) { continue; }
+        GameState rollout = state;
+        TurnSolver::ApplyPlan(rollout, middle, true);
+        AIEngine engine(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(engine, middle, true);
+        GameState executed = state;
+        engine.TakeTurn(executed, true, [](GameState& s)
+        {
+            while (!s.stack.empty())
+            {
+                const StackEntry entry = s.stack.back();
+                s.stack.pop_back();
+                const CardDefinition* def = CardDatabase::Instance().LookupCached(entry.source);
+                if (def) { EffectHandler::Resolve(s, entry, *def); }
+            }
+        });
+        for (const GameState* result : {&rollout, &executed})
+        {
+            CHECK(result->scripted_mihail_trigger_ordinal == 1);
+            CHECK(std::count_if(result->battlefield.begin(), result->battlefield.end(), [](const Permanent& p)
+                { return p.is_token && CardHasSubtype(p.card, "Merfolk"); }) == 1);
+        }
+        CHECK(TurnSolver::DedupKeyOf(rollout) == TurnSolver::DedupKeyOf(executed));
     }
 }
 
