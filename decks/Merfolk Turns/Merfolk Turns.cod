@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="4" name="Deeproot Pilgrimage"/>
+        <card number="2" name="Emperor Mihail II"/>
+        <card number="4" name="Stonybrook Banneret"/>
+        <card number="3" name="Silvergill Douser"/>
+        <card number="4" name="Wanderwine Prophets"/>
+        <card number="1" name="Svyelun of Sea and Sky"/>
+        <card number="4" name="Merfolk Sovereign"/>
+        <card number="1" name="Cavern of Souls"/>
+        <card number="16" name="Island"/>
+        <card number="2" name="Aether Vial"/>
+        <card number="4" name="Rishadan Dockhand"/>
+        <card number="3" name="Rogue's Passage"/>
+        <card number="1" name="Lightning Greaves"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="4" name="Seahunter"/>
+        <card number="2" name="Three Tree City"/>
+        <card number="4" name="Tidal Warrior"/>
+    </zone>
+</cockatrice_deck>

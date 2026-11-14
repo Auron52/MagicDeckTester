@@ -17,7 +17,7 @@ All twelve Oracle entries were fetched from the live Scryfall API on 2026-11-14.
 | Card | Critical rule and viewer choice |
 |---|---|
 | Deeproot Pilgrimage | One token per event in which one or more nontoken Merfolk become tapped; attacks, activated abilities, and mana taps all matter. Token is blue 1/1 Merfolk with hexproof. |
-| Emperor Mihail II | Cast Merfolk spells from the visible library top under normal timing and mana rules; each Merfolk cast offers optional `{1}` for a token. |
+| Emperor Mihail II | Controller may privately look at the library top any time and cast Merfolk spells from it under normal timing and mana rules; each Merfolk cast offers optional `{1}` for a token. |
 | Stonybrook Banneret | Reduces generic cost of Merfolk **or** Wizard spells once per Banneret; islandwalk. |
 | Silvergill Douser | `{T}` targets a creature for `-X/-0` (Merfolk and/or Faeries controlled). Even when power reduction is inert against the passive opponent, tapping it feeds Pilgrimage. Human target choice. |
 | Wanderwine Prophets | Champion another Merfolk on entry, linked return on leaving; combat damage offers a Merfolk sacrifice for an extra turn. Human champion and sacrifice choices. |
@@ -66,7 +66,6 @@ server, so those are excluded from this worktree's verification.
 ## Verification owed
 
 After coverage becomes clean: full build/unit tests, analyzer baseline profile,
-provider routing audit, cost gate, smoke/regression/overnight tier rows and GT,
-Stage 5 correctness/viewer checks including the Codex-play sweep, and the
-Stage 6 assumptions disclosure. Keep the overnight run and all dependent
-stages within this agent turn; a detached shell job alone does not complete it.
+provider routing audit, cost gate, and Stage 5 correctness/viewer checks.
+The parent agent owns smoke/full regression, overnight tier rows, GT, and the
+Codex-play sweep per the explicit worktree assignment.
