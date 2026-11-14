@@ -12082,6 +12082,7 @@ inline std::vector<int> VoraciousFightTargets(const GameState& state, int contro
 
 // The entrant's own ETB triggers -- see FireOwnEtbTriggers below, which wraps this body so the
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
+inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index);
 inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered_index,
                                    const std::string& chosen_tutor, int etb_kx)
 {
@@ -12094,6 +12095,18 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
     if (!def) { return; }
     const CardParams& p = def->params;
+
+    if (p.champion_merfolk)
+    {
+        const int self_number = state.battlefield[entered_index].card.m_number;
+        ResolveMerfolkChampion(state, controller, entered_index);
+        // Exiling an earlier permanent shifts the saved slot. Re-find the
+        // entrant by its copy ID before the other ETBs read it.
+        entered_index = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == self_number) { entered_index = i; break; } }
+        if (entered_index < 0) { return; }
+    }
 
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." Derived at
     // ENTRY (here, the shared own-ETB site every enter route reaches -- cast, Vial put, a graveyard
@@ -13503,9 +13516,36 @@ inline void PerformReturnFromGraveyardToBattlefield(GameState& state, int contro
 // watcher family in BOTH directions: it fires on ANY leave (death, sacrifice-as-cost, the exile
 // half of a Felidar flicker), and it is the LEFT card's own ability, not another permanent's
 // watch. Called from OnCreatureDies (every death site funnels there) and from ApplyBlink.
+// Champion links use a separate exile marker from Brutal Cathar's opponent-only
+// return. The low bit records the exiled card's owner; the remaining bits carry
+// the champion's copy ID. Tokens never receive this marker because they cease
+// to exist after exile.
+constexpr int kMerfolkChampionExileBase = -0x20000000;
+inline bool IsMerfolkChampionExile(const Card& c)
+{ return !c.m_is_staged && c.m_staged_expiry <= kMerfolkChampionExileBase
+         && c.m_staged_expiry > kMerfolkChampionExileBase - 0x08000000; }
+inline int MerfolkChampionSource(const Card& c)
+{ return (kMerfolkChampionExileBase - c.m_staged_expiry) / 2; }
+inline int MerfolkChampionOwner(const Card& c)
+{ return (kMerfolkChampionExileBase - c.m_staged_expiry) & 1; }
+inline void ReturnMerfolkChampion(GameState& state, int source_number)
+{
+    for (std::size_t i = 0; i < state.exile.size(); )
+    {
+        if (!IsMerfolkChampionExile(state.exile[i])
+            || MerfolkChampionSource(state.exile[i]) != source_number) { ++i; continue; }
+        const int owner = MerfolkChampionOwner(state.exile[i]);
+        Card back = state.exile[i];
+        back.m_staged_expiry = 0;
+        state.exile.erase(state.exile.begin() + static_cast<long>(i));
+        PutCardOntoBattlefield(state, owner, back, "Wanderwine Prophets");
+    }
+}
+
 inline void FireLeavesBattlefieldTriggers(GameState& state, int controller, const Card& left)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(left);
+    if (d && d->params.champion_merfolk) { ReturnMerfolkChampion(state, left.m_number); }
     // Brutal Cathar // Moonrage Brute (either face): "until this creature leaves the battlefield"
     // ends NOW (CR 610.3) -- the linked card returns at the leave, not at the next day/night turn
     // boundary (which stays as the backstop sweep for leave paths that bypass this hook). And a
@@ -17261,6 +17301,51 @@ inline void SacrificePermanentAt(GameState& state, int controller, int idx)
     OnCreatureDies(state, controller, dead, was_tok, dead_m1, nullptr, dead_total);
     // A sacrificed LORD drops what it held above 0 toughness (item B (a); see SweepZeroToughnessSba).
     if (LordLeaveSbaOn() && CardIsLord(dead)) { SweepZeroToughnessSba(state); }
+}
+
+inline void ResolveMerfolkChampion(GameState& state, int controller, int entered_index)
+{
+    if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
+    const int self = state.battlefield[entered_index].card.m_number;
+    std::vector<int> legal;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[i];
+        if (q.controller_index == controller && q.card.m_number != self
+            && q.card.IsCreature()
+            && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk")))
+        { legal.push_back(i); }
+    }
+    // A player may decline champion even with a legal Merfolk. The searched
+    // pin and human chooser override this front option at resolution.
+    int choice = legal.empty() ? -1 : 0;
+    if (g_play_flicker_chooser != nullptr && !legal.empty())
+    { choice = (*g_play_flicker_chooser)(state, controller, "Wanderwine Prophets champion", legal, choice); }
+    if (choice < 0 || choice >= static_cast<int>(legal.size()))
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[i].card.m_number == self) { SacrificePermanentAt(state, controller, i); break; } }
+        return;
+    }
+    const int victim_index = legal[static_cast<std::size_t>(choice)];
+    const Permanent victim = state.battlefield[victim_index];
+    const int victim_number = victim.card.m_number;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.equipped_to == victim_number) { q.equipped_to = 0; }
+        if (q.aura_attached_to == victim_number) { q.aura_attached_to = 0; }
+    }
+    state.battlefield.erase(state.battlefield.begin() + victim_index);
+    FireLeavesBattlefieldTriggers(state, victim.controller_index, victim.card);
+    if (!victim.is_token)
+    {
+        Card exiled = victim.card;
+        exiled.m_staged_expiry = kMerfolkChampionExileBase
+            - (2 * self + victim.owner_index);
+        state.exile.push_back(exiled);
+        for (Permanent& q : state.battlefield)
+        { if (q.card.m_number == self) { q.linked_exile_number = victim_number; break; } }
+    }
 }
 
 // ---- PITCH EVOKE (CardParams::evoke_exile_color -- Fury "Evoke--Exile a red card from your hand") ----

@@ -2146,6 +2146,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
     p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
     p.extra_turns_on_resolve                 = params.value("extra_turns_on_resolve", 0);
+    p.champion_merfolk = params.value("champion_merfolk", false);
+    p.combat_damage_sac_merfolk_extra_turn =
+        params.value("combat_damage_sac_merfolk_extra_turn", false);
     if (params.contains("awaken_cost"))
     { p.awaken_cost = ManaCostFromString(params["awaken_cost"].get<std::string>()); }
     p.awaken_counters                        = params.value("awaken_counters", 0);

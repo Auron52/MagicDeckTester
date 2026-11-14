@@ -4502,6 +4502,10 @@ struct CardParams
     // Extra turns granted when an instant or sorcery RESOLVES, rather than by a cast trigger.
     // The target-player variant also needs a player target carried through the stack.
     int extra_turns_on_resolve = 0;
+    // Wanderwine Prophets: champion another Merfolk on entry; a combat-damage
+    // trigger may sacrifice a Merfolk to grant an extra turn.
+    bool champion_merfolk = false;
+    bool combat_damage_sac_merfolk_extra_turn = false;
     std::optional<ManaCost> awaken_cost;
     int awaken_counters = 0;
     bool expropriate_vote = false;

@@ -199,6 +199,11 @@ Seahunter although their target/pick rides `main_phase` plan variants; the
 manifest/cross-check mapping needs review after the actual protocol sweep.
 
 **Exact remaining tasks for the next continuation if context expires:**
+Prophets source checkpoint in progress after `7861faf1d`: card data/params and
+shared champion exile/owner-aware return code have been added. This is **not**
+complete or built. The champion resolver still needs searched pins and full
+human-choice verification; combat damage, search axis, viewer protocol, state
+hash/reset and focused tests remain. Do not build until all source is wired.
 1. Implement Emperor Mihail II from live Scryfall Oracle ({1}{U}{U}; private top
    look, legal Merfolk spell cast from library top, per-copy optional {1} on
    Merfolk cast, blue 1/1 Merfolk token). Add a true library-top cast source to

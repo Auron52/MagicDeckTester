@@ -60,6 +60,21 @@
    "toughness": 4
   },
   {
+   "name": "Wanderwine Prophets",
+   "mana_cost": "{4}{U}{U}",
+   "types": ["Creature"],
+   "subtypes": ["Merfolk", "Wizard"],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Champion a Merfolk (When this creature enters, sacrifice it unless you exile another Merfolk you control. When this creature leaves the battlefield, that card returns to the battlefield.) Whenever Wanderwine Prophets deals combat damage to a player, you may sacrifice a Merfolk. If you do, take an extra turn after this one.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "champion_merfolk": true,
+    "combat_damage_sac_merfolk_extra_turn": true
+   }
+  },
+  {
    "name": "Stonybrook Banneret",
    "mana_cost": "{1}{U}",
    "types": [
