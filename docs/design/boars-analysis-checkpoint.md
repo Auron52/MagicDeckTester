@@ -101,6 +101,17 @@ run stands and what to do next.
     (`chain1/order_ab.json`, 400 g x 5 shapes x off/on, seeds 91001-95001; result `chain1/ab_cmp.txt`).
     NEXT: audit/classify each tier's movers, accept smoke + regression + the Boars overnight rows, check_gt_logs,
     commit GT; report the A/B to the USER (adoption is theirs).
+  * **2026-11-14 ~09:10 UTC:** chain1's tiers ABORTED at the scenario gate (RW Burn hold-then-crack fixture broke at
+    43afd29fd: the crack now takes Burn's ranked Sacred Foundry; fixture pinned to Mountain, `99932ef9a`). Its cast-order
+    A/B finished (better/neutral in all 5 cells, results in docs/design/boars-cast-order-2026-11-14.md). USER approved the
+    full cast order ("That order seems reasonable to me.") -> ADOPTED default ON `963b0858f`.
+    **RUNNING chain2** (`build/scratch/boars/chain2/{run.pid,status.txt,DONE}`): smoke -> regression -> overnight
+    --deck=boars,boars2hg on 963b0858f. NEXT: audit/classify movers, accept, check_gt_logs, commit GT.
+    Stage 5d sweep DONE (16 games, ledger "## Claude-play sweep", 6 unresolved). Investigators (Opus, local only):
+    `.claude/worktrees/boars-haste` (97009 Flinthoof self-haste unfindable at any budget, 97002 hidden by a gate,
+    97005 no T4 land, + d0 gi92 cast-order repro) and `.claude/worktrees/boars-pay` (97013 emerge overpay, 97003
+    creature-only leftover, human-menu dupes/unpayable emerge victims/dead equip, display fields). Briefs + handoffs in
+    each worktree's `logs/boars-research/`. Their fixes land on boars-analysis by rebase, then another smoke/regression.
   * **Hinata perf question (USER surprised by ~10 s/game):** TIMINGS.md says d3 b10 0.59 s/game, d5 b20 1.25 s/game
     (1 thread, post 9229b25ca); now d3 6.4 / d5 9-11.5 s/game (32-thread full load, d5 b30), 8 tail games = 41% of the
     d5 s3003 row; Hinata ~145 ms/kunit vs Boars ~50 and the 2e6-units~45s calibration (~23). NEXT (not started):
