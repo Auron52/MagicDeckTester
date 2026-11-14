@@ -1237,6 +1237,59 @@ these 7 mirrorwing/extraturns keys, and the notes. The OVERNIGHT tier was not ru
     longer differs on origin's base). (The first regression run's one ENUM-GAP, Eldrazi_Displacer_Flicker s8 gi7, was
     an artifact of the 9p mount failing mid-stage; the re-run has 0.)
 
+### INT-17 (2026-11-13) -- split human lines: the doubler a later line needs
+- USER (verbatim, 2026-11-13): "Okay, let's add in the doubler fix for separated lines just to be safe." (Earlier, on
+  this mechanism: "If we are approximating and this might fail on us we might want to address it."; on morph: "The big
+  morph advantage is splitting it up so you can hit lethal in the one attack.") Worktree `morph-dblsplit`, branch
+  `morph-dblsplit` (local, on `morph-integ` 07804f142).
+- **The defect (INT-16's open item).** A human line that casts a doubler after exalted pays it combat-style
+  (`GameState::dbl_cp`), tapping the sources the declare-attackers step would tap. The next line's menu was enumerated
+  on that board, so a spell whose only source was one of those was never OFFERED. The commit probe's LIFO undo, which
+  moves the earlier doubler back to main, only ran for a plan that was offered.
+  `morph_doubler_combat_pay_split_decisions`: Might (Turf tapped by hand), Leadership, Berserk. Leadership's combat
+  payment takes Mountain + Forest, so Berserk ({G}) was not offered: 14 damage, against 26 for the best real schedule.
+  The probe also had a second, smaller myopia: the undo could only re-pay the earlier doubler in MAIN, never in
+  combat off another source.
+- **Fix (no flag; it sits under `MTG_DOUBLER_COMBAT_PAY`, both parts):**
+  1. `TurnSolver.cpp AppendDoublerUndoPlans`, called at the end of `EnumerateMainPlans` (**human play only**,
+     pre-combat, live ledger with revisable combat payments). The menu also enumerates on the board with the last r
+     (1..3) combat payments undone: their taps are released and nothing is re-paid, a superset board. It appends each
+     plan not already offered, but only if a trial commit on a copy of the REAL board (the commit's own `ApplyPlan`,
+     quiet, choosers nulled, as `PrepareHumanCommit`'s trial) pays it in full. The commit probe then chooses the undo
+     and the re-payment, so nothing is offered that the commit would not pay. The plans go after every other plan in a
+     fixed order, so no saved reference's index moves, and the viewer's processes stay in lockstep (the result is a
+     pure function of the board). Every viewer path goes through `EnumerateMainPlans` (the segment loop, CheckLine,
+     the validate path).
+  2. `NoteDoublerDeferPayableExact`: each undone, credited doubler may be **re-paid combat-style** (a subset `mask`)
+     instead of in main. Under P1 the re-pays run before the plan's own P2 payments; under P2 they run after, so
+     either side can take a contested source first. The latest decision therefore assigns the sources of every
+     revisable doubler of the turn jointly: after the last line, the turn's combat schedule has been chosen over all
+     of them by the same rule (most steps paid, then most doublers deferred). That is the USER's "decide at the end of
+     main 1, when every line is known", with every earlier decision kept revisable. A mask option replaces only a
+     STRICTLY better option, so a board where no re-pay pays more keeps its INT-16 choice.
+  - Never a phantom: the credit still counts only payments that really were combat-style (`DoublerCastPay` /
+    `NoteDoublerResolved` are unchanged).
+- **Scenarios** (each FAILS on 07804f142, except the guard):
+  * `morph_doubler_combat_pay_split_decisions`: now expects **26** (opponent 2); 14 before.
+  * `morph_doubler_combat_pay_split_repay` (new): Mountain + Forest. Line 1 Leadership, line 2 a second Mountain +
+    Berserk. Expects **12** (both doublers after exalted: Berserk off the Forest, Leadership re-paid in combat off the
+    Mountains). Base: 6 (line 2 not offered). The undo alone would give 10.
+  * `morph_doubler_combat_pay_split_earlier_stays` (new guard): the decisions board with Berserk before Leadership.
+    The earlier Berserk stays deferred; Leadership is paid in main. 26 on both binaries.
+  * Unit test `doubler combat pay (INT-17)` (the re-pay at the probe level).
+- **AI path:** part 1 is human-play only (`HumanPlayActive()` is false in every rollout and every autonomous game), so it
+  is byte-identical by construction. Part 2 runs wherever the probe does, but it can change a choice only when a
+  re-pay is strictly better, which needs an earlier combat-paid doubler in the same main phase. That is valid in AI
+  play too (a later breakpoint plan in the same main). **Measured byte-identical:** Morph 1000 g seed 97000 + Morph 2HG
+  300 g seed 98000 (starting_life 30, 2 heads), d5 b20, run with the 07804f142 binary and with `aeb9fada4`. Both
+  `.wins` files (per-game win turn + decision digest) match byte for byte, as do the job digests (`28a27c0c39f25ee1`
+  / `15c7b94d5c420fae`) and the units (4888550 / 4729329); avg 4.0290 / 4.7233. On these seeds no AI turn reached a
+  strictly better re-pay. (The new arm's wall overlapped the start of another agent's Snow batch, so wall is not
+  comparable; units are.) Scratch: `build/scratch/dblsplit/`.
+- Unit 2977/2977, scenarios 521/521 (3 new or changed). Viewer protocol `--strict` (837 refs): 343 ok, 493 repaired, 1 beaten (Burn
+  `suboptimal/claude_s18_gi17`, not a Morph ref), 0 play-drift, 0 board-diverged, 0 enum-gap, rc 0. Tiers not run (the parent
+  combines branches). Commits: `aeb9fada4` (code + tests), this ledger.
+
 ## Claude-play sweep
 - commit: `f2df0a83f`
 - seeds: 50000 games: 18
