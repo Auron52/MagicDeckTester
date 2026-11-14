@@ -378,6 +378,7 @@ MANIFEST = {
     # is exactly why the human is asked rather than handed the provider's heuristic silently.
     # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
     "etb_choose_color":      ("choose_color",         truthy),
+    "choose_type_on_enter":  ("choose_creature_type", truthy),
     # Rick, Steadfast Leader (Soldiers, 2026-10-04): "As this enters, choose two abilities from among
     # first strike, vigilance, and lifelink." The Coldsteel Heart shape exactly -- an as-enters
     # REPLACEMENT decided at resolution (g_play_etb_keywords_chooser in FireOwnEtbTriggers), its own

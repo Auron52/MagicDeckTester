@@ -1,4 +1,5 @@
 #include "CardDatabase.h"
+#include "../core/CreatureTypeCatalog.h"
 #include "../core/EnvFlags.h"
 #include <fstream>
 #include <stdexcept>
@@ -541,6 +542,8 @@ void CardDatabase::RebuildInternedIndex()
     // is idempotent -- a second LoadFromJson re-interns the same names and re-freezes.
     for (const std::string& lit : SubtypeRegistry::RuntimeLiterals())
     { SubtypeRegistry::Instance().Intern(lit); }
+    for (std::string_view type : kCreatureTypeCatalog)
+    { SubtypeRegistry::Instance().Intern(std::string(type)); }
     SubtypeRegistry::Instance().Freeze();
 
     // RESOLVE EVERY PROTOTYPE'S m_def NOW, so no worker thread ever writes one (2026-08-30).

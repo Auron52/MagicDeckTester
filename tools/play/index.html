@@ -2445,7 +2445,7 @@ function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -4609,7 +4609,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='dredge' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_abilities'
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_creature_type' || dec==='choose_abilities'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
@@ -4653,6 +4653,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='jitte' ? jittePanelHtml(d)
                   : dec==='storage_hold' ? storageHoldPanelHtml(d)
                   : dec==='choose_color' ? chooseColorPanelHtml(d)
+                  : dec==='choose_creature_type' ? chooseCreatureTypePanelHtml(d)
                   : dec==='choose_abilities' ? chooseAbilitiesPanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
@@ -5785,6 +5786,16 @@ function wireDecisionPanel(d, dec){
     panel.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>commitStorageHold(d, +b.dataset.opt));
   else if (dec==='choose_color')
     panel.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>commitChooseColor(d, +b.dataset.col));
+  else if (dec==='choose_creature_type'){
+    panel.querySelectorAll('[data-type]').forEach(b=>b.onclick=()=>commitChooseCreatureType(d, +b.dataset.type));
+    const filter=panel.querySelector('#creaturetypefilter');
+    if (filter) filter.oninput=()=>{
+      const q=filter.value.trim().toLowerCase();
+      panel.querySelectorAll('[data-type]').forEach(b=>{
+        b.style.display=b.textContent.toLowerCase().includes(q)?'':'none';
+      });
+    };
+  }
   else if (dec==='choose_abilities')
     panel.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>commitChooseAbilities(d, +b.dataset.kw));
   else if (dec==='land_entry')
@@ -6327,6 +6338,23 @@ function chooseColorPanelHtml(d){
   }
   return h+`</div>`;
 }
+function chooseCreatureTypePanelHtml(d){
+  const src=d.source||'this permanent', ai=(d.heuristic_default===undefined?-1:d.heuristic_default);
+  let h=`<h3>${esc(src)} — choose a creature type</h3>`;
+  h+=`<div class="sub">This choice is locked to this permanent. Its scaled mana ability counts your creatures of the chosen type.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(src)+`</div>`;
+  h+=`<input id="creaturetypefilter" type="search" placeholder="Find a creature type" style="width:100%;margin:10px 0"/>`;
+  h+=`<div class="pbtns" style="max-height:42vh;overflow:auto;justify-content:flex-start">`;
+  for (const o of (d.options||[])){
+    const isAi=o.index===ai;
+    h+=`<button class="${isAi?'primary':'ghost'}" data-type="${o.index}">${esc(o.name)}${isAi?'  ·  AI':''}</button>`;
+  }
+  return h+`</div>`;
+}
+function commitChooseCreatureType(d, idx){
+  const nm=((d.options||[]).find(o=>o.index===idx)||{}).name||idx;
+  pushChoice(d, idx, `${d.source||'permanent'}: chose ${nm}`);
+}
 // Rick, Steadfast Leader: "As this enters, choose two abilities from among first strike, vigilance,
 // and lifelink" -- the engine enumerates the legal pairs; reply = an option index.
 function chooseAbilitiesPanelHtml(d){
@@ -6572,6 +6600,7 @@ const AUTO_RESOLVABLE = {
   storage_hold:    'Storage lands — hold to charge vs. tap/burst',
   jitte:           "Umezawa's Jitte — how many charge counters to spend",
   choose_color:    'As it enters — choose a color (locked for the game)',
+  choose_creature_type: 'As it enters — choose a creature type',
   choose_abilities:'As it enters — choose two abilities (locked for the game)',
   // Not a dec.type: the `dig` modal's "(galadriel reveal)" source, special-cased in autoResolveDecision.
   galadriel_reveal:'Galadriel of Lothlórien — reveal a land and put it onto the battlefield',

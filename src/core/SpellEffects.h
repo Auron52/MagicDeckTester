@@ -12,6 +12,7 @@
 #include "EnvFlags.h"
 #include "GameSetup.h"                 // OpponentHeads(): 2HG second-face targeting + "each opponent"
 #include "GameState.h"
+#include "CreatureTypeCatalog.h"
 #include "HandEntry.h"                 // EnterHand: THE choke point every hand entry routes through
 #include "ManaPool.h"
 #include "GameLogger.h"                // g_reveal_logger: capture scry/dig reveals (real play only)
@@ -10650,8 +10651,24 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
         const CardDefinition* ed = CardDatabase::Instance().LookupCached(e.card);
         if (ed && ChoosesCreatureTypeOnEnter(ed->params))
         {
-            const uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
+            uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
                 state, e.controller_index, *ed);
+            if (g_play_etb_type_chooser && !g_tap_speculating)
+            {
+                std::vector<std::string> menu;
+                menu.reserve(kCreatureTypeCatalog.size());
+                int default_index = 0;
+                for (std::string_view type : kCreatureTypeCatalog)
+                {
+                    if (SubtypeRegistry::Instance().Id(type) == chosen)
+                    { default_index = static_cast<int>(menu.size()); }
+                    menu.emplace_back(type);
+                }
+                const int picked = (*g_play_etb_type_chooser)(
+                    state, e.controller_index, ed->card.m_name.str(), menu, default_index);
+                if (picked >= 0 && picked < static_cast<int>(menu.size()))
+                { chosen = SubtypeRegistry::Instance().Id(menu[static_cast<std::size_t>(picked)]); }
+            }
             state.battlefield[entered_index].chosen_subtype_id = chosen;
             // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
             // its other types." Written onto the BATTLEFIELD permanent's own Card copy (layer 4),

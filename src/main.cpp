@@ -4565,6 +4565,23 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
              "for the rest of the game. Default = the AI's pick."); }
 }
 
+static void WriteEtbTypeDecisionJson(std::ostream& os, const GameState& s,
+                                     const std::string& source,
+                                     const std::vector<std::string>& menu,
+                                     int heuristic_default, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("choose_creature_type").Source(source).Turn(s).Board(s)
+     .HeuristicDefault(heuristic_default);
+    d.Array("options", menu.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": ";
+        JsonStr(os, menu[i]);
+        os << " }";
+    });
+    d.Note("Reply with the index of any creature type. The chosen type is locked to this permanent.");
+}
+
 // "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
 // Stalwart; CardParams::etb_choose_keyword_count). The pair is LOCKED for that permanent's lifetime
 // and granted to every Human you control. Emits the enumerated legal pairs; reply = an option INDEX,
@@ -6097,6 +6114,7 @@ g_play_bounce_chooser = nullptr;
 g_play_sacrifice_chooser = nullptr;
 g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
+g_play_etb_type_chooser = nullptr;
 g_play_etb_keywords_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_dredge_chooser = nullptr;
@@ -6448,6 +6466,7 @@ struct ClaudePlayHarness
     BounceChooser         sacrifice_chooser;
     DigChooser            dig_chooser;
     EtbColorChooser       etb_color_chooser;
+    EtbTypeChooser        etb_type_chooser;
     EtbKeywordsChooser    etb_keywords_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
@@ -7719,6 +7738,36 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_etb_color_chooser = &etb_color_chooser;
+
+    etb_type_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<std::string>& menu, int heuristic_index) -> int
+        {
+            (void)controller;
+            const int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(menu.size()))
+                { chosen = heuristic_index; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEtbTypeDecisionJson(ss, s, source, menu, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEtbTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_etb_type_chooser = &etb_type_chooser;
 
     // "As this enters, choose two abilities" (Rick, Steadfast Leader). Shares the --choices stream;
     // the reply is an OPTION INDEX into the enumerated pairs, anything out of range keeps the

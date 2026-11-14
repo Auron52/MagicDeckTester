@@ -302,3 +302,19 @@ No full build, regression, GT, push, play server, or play sweep ran here.
    snapshot and run coverage/cost/field/provider audits; only then run ONE
    `./build.sh`, fix compile errors, and run focused unit tests. The parent
    retains regression, GT, push, play server and the full play sweep.
+
+### Three Tree City viewer source checkpoint in progress
+
+A `choose_creature_type` human as-enters chooser is now wired through the
+shared enter cascade, `GameLogger` pause scopes, the Codex-play choice stream,
+the viewer's searchable modal, `DECISIONS.md`, and the static audit manifest.
+The menu is the complete Scryfall creature-type catalog fetched 2026-11-14
+(377 names), interned before the subtype registry freezes. Autonomous play
+still takes the Merfolk provider's default. `audit_viewer_decisions.py
+"decks/Merfolk Turns/Merfolk Turns.cod" --no-sweep` now passes its static
+self-guard with expected `choose_creature_type` and `vial_charge`; its three
+Oracle advisories are plan-variant choices. Python syntax check and
+`git diff --check` passed. This checkpoint is **UNBUILT and not protocol
+verified**. Mihail and Prophets remain unimplemented, so the single full build
+is still owed after their source work. Add an actual as-enters prompt test
+and verify a selected non-default type changes only that copy's mana yield.
