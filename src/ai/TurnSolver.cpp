@@ -57804,7 +57804,53 @@ static int GreedyTrickStackCredit(const GameState& state, const std::vector<Acti
     return credit;
 }
 
-TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat,
+static void CrackFirstSources(const GameState& s, int floor_num, std::vector<int>& out);
+static bool CrackFirstApply(const GameState& state, const Action& a, int num, int r, GameState& out);
+static bool CrackFirstCompose(TurnSolver::Plan& q, const Action& crack, int r);
+// THE GREEDY HALF OF THE CRACK-FIRST ROOTS (see "CRACK-FIRST ROOTS" above EnumeratePlans): the d0 runner and
+// the playout beyond the horizon -- the only places a greedy pick is permitted -- walk the cracked board too,
+// with the provider's FRONT pick (the documented default for every path without a searched pin), and take the
+// crack-first plan only when it scores STRICTLY better than the plain walk (or wins where it does not), so a
+// turn whose casts never needed the fetched land plays exactly as before.
+TurnSolver::Plan TurnSolver::SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit)
+{ return SolveCrackFirst(state, is_pre_combat, permit, 0); }
+
+TurnSolver::Plan TurnSolver::SolveCrackFirst(const GameState& state, bool is_pre_combat, const GreedyPermit& permit,
+                                             int floor_num)
+{
+    Plan best = SolveUncachedBody(state, is_pre_combat, permit);
+    if (best.wins_this_turn) { return best; }
+    std::vector<int> srcs;
+    CrackFirstSources(state, floor_num, srcs);
+    if (srcs.empty()) { return best; }
+    const std::vector<Action> cands = CollectActions(state, is_pre_combat);
+    for (const int num : srcs)
+    {
+        const Permanent* src = nullptr;
+        for (const Permanent& q : state.battlefield) { if (q.card.m_number == num) { src = &q; break; } }
+        if (src == nullptr) { continue; }
+        const Action* found = nullptr;
+        for (const Action& a : cands)
+        {
+            if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacLandSearch
+                && a.card_name == src->card.m_name) { found = &a; break; }
+        }
+        if (found == nullptr) { continue; }
+        Action crack = *found;
+        crack.sac_source_id = num;
+        GameState cp;
+        if (!CrackFirstApply(state, crack, num, -1, cp)) { continue; }
+        Plan q = SolveCrackFirst(cp, is_pre_combat, permit, num);
+        if (q.actions.empty()) { continue; }
+        const bool better = (q.wins_this_turn && !best.wins_this_turn) || q.value + crack.eval > best.value;
+        if (!better || !CrackFirstCompose(q, crack, -1)) { continue; }
+        best = std::move(q);
+        if (best.wins_this_turn) { break; }
+    }
+    return best;
+}
+
+TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_pre_combat,
                                             const GreedyPermit& permit)
 {
     (void)permit;   // the permit's constructor already enforced the claim
@@ -78441,7 +78487,7 @@ void TurnSolver::SoundFoldCounters(long long out[5])
     out[4] = seedwalk::g_folded.load();
 }
 
-static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
+static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, bool is_pre_combat)
 {
     routetape::Suspend _rts;       // an enumeration's trial applies are not a route link's own resolutions
     EnumChargeScope enum_charge;   // MTG_ENUM_CHARGE (default off): bills this walk at exit
@@ -84598,6 +84644,155 @@ static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool
     drop_partial_vamp(ordered);
     return ordered;
 }
+
+// ---- CRACK-FIRST ROOTS: a battlefield fetchland's land is mana for the SAME main (2026-11-14) ------------
+// THE DEFECT (Boars fetch-crack fix; Creature Giving regression d3 b0 s30015 gi14 T1). A battlefield
+// land-search activation (CardParams::land_search_activation_*: Arid Mesa, Wooded Foothills, Windswept
+// Heath -- and Evolving Wilds / Myriad Landscape, which put TAPPED lands) runs in a plan's TRAILING pass,
+// after every cast, unless the act-slot axis moves it (Plan::land_search_act_slot) -- and that axis only
+// TWINS a plan the subset walk already built. The walk prices every cast against the board BEFORE the
+// crack, where the uncracked fetch produces nothing (`produces: []`, uncracked-fetchland.md THE TRAP). So
+// "crack Heath for an untapped Breeding Pool, THEN cast Birds of Paradise with it" was not a plan at any
+// budget: the turn's plan cracked last and cast nothing the fetched land paid for, and a deck without a
+// searched second main (DeckUsesSecondMain) has no later main to recover it. It surfaced when Boars I1
+// moved Windswept Heath onto the battlefield model for providers that keep the hold
+// (DecisionProvider::ConsiderFetchHold, default true: Creature Giving, Boars); FetchResolvesOnPlay's
+// immediate collapse (Anti-Lifegain, Five Colour, Modern RW Burn) does the crack at the land drop, before
+// the walk, so it never had the gap -- except at 3 life or less, where every fetch keeps the hold.
+//
+// THE FIX: the crack is a ROOT of the walk, the way the land drop already is (add_for_land plays the land
+// on a copy and enumerates the casts there). For each live source whose activation puts an UNTAPPED land
+// (a tapped put adds no mana; the act-slot axis keeps its positions), crack it on a copy with each
+// searched pick (LandSearchPicksMemo, already provider-ordered and provider-WIDTH-narrowed -- the same
+// list the in-plan pin axis fans) and enumerate the casts THERE; each such plan is emitted with the
+// activation prepended and run in the PRE-CAST pass (the existing mask form of land_search_act_slot, bit 0
+// = this crack; the inner plan's own activations keep their bits, shifted) and its pick pinned as the
+// plan's FIRST land-search ordinal (the pre-cast pass resolves before every cast). Both worlds already
+// realise that encoding through ONE body (TurnSolver::ApplyLandSearchActs from ApplyPlanDirect's and
+// AIEngine::TakeTurn's pre-cast passes), so the executor plays exactly the line the rollout scored. The
+// front pick's root carries NO pin, so it stays a base plan for the pin axis (which then also fans the
+// casts' own land-search ordinals); every other pick's root is a pinned variant. Several sources compose
+// recursively, one canonical order per set (each nested call cracks only sources numbered above the
+// outer one: pre-cast cracks back to back commute up to the shuffle key, which reads only the count).
+// IDENTITY FOLDS only: copies of one fetch on the battlefield are one root (the lowest number); a root
+// whose inner plan casts and activates nothing is the base plan's own crack-only line. Human play is
+// untouched (the human orders the crack itself; human_v2 lines ignore the slot).
+static void CrackFirstSources(const GameState& s, int floor_num, std::vector<int>& out)
+{
+    out.clear();
+    if (!s.deck_has_land_search || HumanPlayActive()) { return; }
+    const int me = s.active_player_index;
+    const Player& ap = s.players[static_cast<std::size_t>(me)];
+    std::vector<std::pair<std::string, int>> best;   // name -> lowest live number above the floor
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || q.def_absent || q.tapped || q.card.m_number <= floor_num) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->card.IsLand() || !d->params.land_search_activation_taps
+            || !d->params.land_search_activation_cost.has_value()) { continue; }
+        const CardParams& p = d->params;
+        if (p.land_search_tapped || p.land_search_count - p.land_search_to_hand < 1) { continue; }
+        if (ap.life < p.land_search_activation_life_cost) { continue; }
+        if (!CanTapNow(q, s.battlefield)) { continue; }
+        if (!PermAbilitySourceLive(s, me, q.card.m_number, PermAbilityMode::SacLandSearch)) { continue; }
+        const std::string nm = q.card.m_name.str();
+        bool seen = false;
+        for (auto& b : best)
+        {
+            if (b.first != nm) { continue; }
+            seen = true;
+            b.second = std::min(b.second, q.card.m_number);
+        }
+        if (!seen) { best.emplace_back(nm, q.card.m_number); }
+    }
+    for (const auto& b : best) { out.push_back(b.second); }
+}
+
+// The crack `a` (an enumerated SacLandSearch action, re-pointed at source `num`) applied to a copy of
+// `state` with pick pin `r` (-1 = the provider's front). False when the activation did not happen.
+static bool CrackFirstApply(const GameState& state, const Action& a, int num, int r, GameState& out)
+{
+    out = state;
+    RevealLogPause quiet;
+    const std::vector<int> pin{ r };
+    {
+        ScriptedLandSearch _sls(pin);
+        TurnSolver::ApplyLandSearchActs(out, std::vector<Action>{ a });
+    }
+    for (const Permanent& q : out.battlefield) { if (q.card.m_number == num) { return false; } }
+    return true;
+}
+
+// `q` (a plan built on the post-crack board) re-expressed on the pre-crack board: the crack first, in the
+// pre-cast subset, its pick pinned. False if the composed encoding does not fit (int8 mask, six cracks)
+// or the inner plan carries a position the composition cannot express (0 / k >= 1 are axis twins, never
+// produced by the walk itself).
+static bool CrackFirstCompose(TurnSolver::Plan& q, const Action& crack, int r)
+{
+    if (q.land_search_act_slot >= 0) { return false; }
+    const int inner_mask = TurnSolver::LandSearchActFirstMask(q.land_search_act_slot);
+    int n_act = 0;
+    for (const Action& a : q.actions) { if (TurnSolver::IsLandSearchActivation(a)) { ++n_act; } }
+    if (n_act + 1 > 6) { return false; }
+    const int mask = 1 | (inner_mask << 1);
+    q.actions.insert(q.actions.begin(), crack);
+    q.land_search_act_slot = TurnSolver::LandSearchActSlotForMask(mask);
+    if (r >= 0 || !q.land_search_pins.empty()) { q.land_search_pins.insert(q.land_search_pins.begin(), r); }
+    q.value += crack.eval;
+    return true;
+}
+
+static std::vector<TurnSolver::Plan> EnumeratePlansCrackFirst(const GameState& state, bool is_pre_combat,
+                                                              int floor_num)
+{
+    std::vector<TurnSolver::Plan> plans = EnumeratePlansCore(state, is_pre_combat);
+    std::vector<int> srcs;
+    CrackFirstSources(state, floor_num, srcs);
+    if (srcs.empty()) { return plans; }
+    const int me = state.active_player_index;
+    std::vector<TurnSolver::Plan> extra;
+    for (const int num : srcs)
+    {
+        const Permanent* src = nullptr;
+        for (const Permanent& q : state.battlefield) { if (q.card.m_number == num) { src = &q; break; } }
+        if (src == nullptr) { continue; }
+        // The walk's own action for this source (an interchangeable-copy fold may name a twin's number):
+        // the crack is offered only where the walk offered it.
+        const Action* found = nullptr;
+        for (const TurnSolver::Plan& p : plans)
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind == Action::Kind::ActivatePermAbility && a.ability_mode == Action::AbilityMode::SacLandSearch
+                    && a.card_name == src->card.m_name) { found = &a; break; }
+            }
+            if (found != nullptr) { break; }
+        }
+        if (found == nullptr) { continue; }
+        Action crack = *found;
+        crack.sac_source_id = num;
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(src->card);
+        if (d == nullptr) { continue; }
+        const int w = LandSearchExtendedWidth(LandSearchMemoSlot(state, me, LandSearchSpecOf(d->params)));
+        for (int r = 0; r < w; ++r)
+        {
+            GameState cp;
+            if (!CrackFirstApply(state, crack, num, r == 0 ? -1 : r, cp)) { continue; }
+            std::vector<TurnSolver::Plan> inner = EnumeratePlansCrackFirst(cp, is_pre_combat, num);
+            for (TurnSolver::Plan& q : inner)
+            {
+                if (q.actions.empty()) { continue; }   // == the base plan's crack-only line
+                if (!CrackFirstCompose(q, crack, r == 0 ? -1 : r)) { continue; }
+                extra.push_back(std::move(q));
+            }
+        }
+    }
+    plans.insert(plans.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+    return plans;
+}
+
+static std::vector<TurnSolver::Plan> EnumeratePlans(const GameState& state, bool is_pre_combat)
+{ return EnumeratePlansCrackFirst(state, is_pre_combat, 0); }
 
 // Land-folded candidate enumeration: the land drop is searched alongside the spells.
 //

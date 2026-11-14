@@ -10,7 +10,8 @@ mana now)."
 
 Arid Mesa and Wooded Foothills now have a battlefield activation model
 (Windswept Heath joined them on 2026-11-13, Boars I1; it moves play for Anti-Lifegain, Creature
-Giving and Five Colour, which run it). Most
+Giving and Five Colour, which run it; a held fetch's land pays the same main's casts since the 2026-11-14
+crack-first roots, `analysis-Boars.md` "Fetch-crack fix"). Most
 other fetchlands in current decklists still use the older immediate-on-play
 card data; the deck analyzer reports both cases in `fetch_hold_review` so a
 new deck review must decide whether to add hold and when its provider should

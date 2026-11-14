@@ -2258,6 +2258,12 @@ public:
     // The uncached greedy solve behind Solve() (which memoizes it per decision under MTG_SOLVE_MEMO
     // -- see namespace solvememo in TurnSolver.cpp). Same permit.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    // ...whose greedy walk is SolveUncachedBody; SolveUncached adds the crack-first comparison (a battlefield
+    // fetch whose untapped land pays this main's casts -- see "CRACK-FIRST ROOTS" in TurnSolver.cpp).
+    // `floor_num`: only sources numbered above it (one canonical order per set of cracks).
+    static Plan SolveUncachedBody(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    static Plan SolveCrackFirst(const GameState& state, bool is_pre_combat, const GreedyPermit& permit,
+                                int floor_num);
     // The rollout / d0 Arcanum Wings combat-swap pin (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): applied
     // ONLY to a whole main-phase greedy plan (the horizon leaf, the d0 runner's plan).
     static void PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, Plan& plan);

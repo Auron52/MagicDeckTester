@@ -640,3 +640,84 @@ Commits: `204cedbe6` (LK WIP), `b48089aa9`, `c58f8b75a`, `aa1450512` (LK2), `c8b
 * **USER QUESTIONS (unchanged):** the beyond-horizon keep default (`LegendKeepIndex`, keep-oldest plus the
   CritterLifegain / Mirrorwing / MidrangeBurn overrides) is agent-chosen; a sound dominance fold to cut twin width is
   not applied without approval.
+
+## Fetch-crack fix (2026-11-14) -- a battlefield fetch's land pays the same main's casts
+
+**Symptom.** After a BATTLEFIELD fetchland was cracked, nothing more was cast that turn, at any budget: Creature Giving
+regression backstop d3 b0 seed 30015 gi14 T1 (Heath -> untapped Breeding Pool, Birds + Essence Warden stranded; win
+T5 vs T4 before I1), smoke d0 gi8 T3 (Defense of the Heart not cast with 4 mana; T6 vs T4), smoke 2HG d5 gi9 T2
+(Suture Priest; T6 at b30 and at b480).
+
+**Mechanism (a, c).** Not the mana cache, not a land-drop/cast slot, not an executor/rollout split. A battlefield
+land-search activation runs in the plan's TRAILING pass (after every cast) unless `Plan::land_search_act_slot` moves
+it, and that axis only TWINS plans the subset walk already built (and only for land-counting ETBs / library-top
+readers). The walk prices every cast on the PRE-crack board, where the uncracked fetch produces nothing (`produces:
+[]`). So "crack, then cast with the fetched land" was not a plan at any budget in either main, and the d0 runner's
+greedy `Solve` walk had the same blind spot (the playout beyond the horizon too). Both worlds agreed -- they were
+equally unable to express it. Decks with a searched second main (or a lethal the main-2 stranded-kill rescue finds)
+recovered the mana in main 2; Creature Giving and Boars have no second main, so the land sat unused all turn.
+
+**Pre-existing vs introduced (b).** The engine gap is PRE-EXISTING (it dates from the battlefield fetch model), but it
+was LATENT: Anti-Lifegain, Five Colour, Modern RW Burn (autocrack) and Morph (INT-9) all return
+`ConsiderFetchHold = false`, so `FetchResolvesOnPlay` collapses the crack into the land drop, before the walk. The gap
+was reachable before I1 only at 3 life or less (every fetch keeps the hold there), under human play / `MTG_UNPRUNE`,
+or with `MTG_RW_BURN_FETCH_AUTOCRACK=0`. Baseline binary (d81e83fae) on a battlefield Arid Mesa + Lava Spike board:
+every one of those four decks cracked in main 1 and cast in main 2 (the trailing crack). I1 EXPOSED it broadly by
+moving Windswept Heath to the battlefield model for the two providers that keep the default hold (Creature Giving,
+Boars).
+
+**Fix** (`src/ai/TurnSolver.cpp`, "CRACK-FIRST ROOTS"; one commit). The crack becomes a ROOT of the walk, as the land
+drop already is: for each live source whose activation puts an UNTAPPED land, crack it on a copy once per searched pick
+(`LandSearchPicksMemo`, already provider-ordered and width-narrowed -- the in-plan pin axis's own list) and enumerate
+the casts there; each plan is emitted with the activation prepended, run in the PRE-CAST pass (the existing mask form
+of `land_search_act_slot`), its pick pinned as the plan's first land-search ordinal (the front pick's root is unpinned,
+so the pin axis still fans it as a base). Both worlds already realise that encoding through `ApplyLandSearchActs` from
+ApplyPlanDirect's and `AIEngine::TakeTurn`'s pre-cast passes, so no apply code changed. The greedy half
+(`TurnSolver::SolveCrackFirst`, the d0 runner and horizon playout only) walks the cracked board with the provider's
+front pick and takes it only when it scores STRICTLY better (or wins). Identity folds only: copies of one fetch are one
+root; an empty inner plan is the base crack-only line; several sources compose in one canonical order. Human play is
+untouched. No env flag (delete-don't-lever; the old behaviour is a defect).
+
+**Tests.** `test/unit/test_fetch_crack_first.cpp` (5 cases): enumeration offers crack-then-Lava-Spike in main 1 AND main
+2 and the rollout apply kills; the searched executor (`AIEngine::TakeTurn` d2) does it in both mains; the greedy
+`Solve` and the d0 executor do it in both mains; a Spike the board already pays keeps the plain greedy line; the gi14
+Heath -> Birds shape. mtg-test 3023/3023.
+
+**Identity / quality** (one pooled `--batch` per binary: `build/scratch/boars/mtg.prefetchfix` = HEAD bca43941d vs the
+fix; seed 9101; per-game `[win]` lines):
+
+| job | games | before | after | faster / slower |
+|---|---|---|---|---|
+| Anti-Lifegain d3 b10 | 30 | 4.167 | 4.167 | byte-identical (digest + units) |
+| Five Colour d3 b10 | 30 | 4.867 | 4.867 | byte-identical |
+| Modern RW Burn d3 b10 | 30 | 3.967 | 3.967 | byte-identical |
+| Morph d3 b10 | 30 | 4.133 | 4.133 | byte-identical |
+| Midrange Burn / Stompy Surprise / Landfall (controls) d3 b10 | 20 each | 4.300 / 4.100 / 5.850 | same | byte-identical |
+| Creature Giving d3 b10 | 30 | 4.767 | 4.700 | 3 / 1 (gi25 6->7) |
+| Boars d3 b10 | 40 | 5.225 | 4.950 | 12 / 1 (gi3 4->5) |
+| Creature Giving play (d5 b30) | 30 | 4.833 | 4.767 | 4 / 1 (gi29 5->7) |
+| Creature Giving 2HG play (d5 b30) | 20 | 5.000 | 4.850 | 4 / 1 (gi17 5->6) |
+| Boars play setting | 30 | 5.233 | 4.933 | 9 / 0 |
+| repros gi14 d3 b0 / d0 gi8 / 2HG gi9 b30 / b480 | 1 each | 5 / 6 / 6 / 6 | 4 / 4 / 5 / 5 | all fixed (= the pre-I1 baseline) |
+
+**Every slower game is budget-bound and recovers:** Boars gi3 (fix cracks Foothills T1 for Hierarch instead of
+shocking Stomping Ground; the early shuffle re-rolls the draws) 4/4 at b40 and b0; CG gi25 (T1 Heath -> Crop Rotation)
+6/6 at b40 and b0; CG gi29 (T1 Heath -> Birds, the newly findable line) 5 vs 4 -- the fix WINS a turn earlier -- at
+b120 and b480; CG 2HG gi17 5/5 at b120 and b480. Cost (search units): Boars d3 b10 -2%, Boars play +9%, CG d3 +1.6%,
+CG d5 b30 +17%, CG 2HG +1% -- the price of searching the hold-path decks' newly reachable lines.
+
+**Disclosed limitation.** A NON-front pick's root carries a pin, so the pin axis does not re-fan the casts' own
+in-plan land-search ordinals under it (they take the provider front); every pick x inner-ordinal combination remains
+reachable through the front root's pin fan, but only with the front pick's cast set. No current pool deck has both an
+untapped-put fetch and an in-plan land-search cast whose castability depends on the fetched colour.
+
+**Open questions (surfaced, not decided).**
+1. USER: the fetch HOLD timing policy for Creature Giving and Boars. Both keep the default `ConsiderFetchHold = true`
+   (full timing search: hold, crack trailing, crack-first per pick), which is what costs the +17% units on CG d5. The
+   Morph INT-9 / Burn autocrack precedent (resolve on play) is a provider prune the USER would have to rule on; nothing
+   was changed.
+2. Human play: `CheckLine` under `MTG_HUMAN_PLAY` rejects the one-shot line `act=Arid Mesa;cast=Lava Spike` ("can't pay
+   for 'Lava Spike'") on both binaries (pre-existing). Stepwise viewer play (crack, then a fresh decision) is not
+   affected by this check; unverified in the GUI.
+3. GT: smoke / regression / overnight rows of Creature Giving (incl. 2HG) and Boars move; every other deck is
+   byte-identical in this sample. Not accepted here (the parent runs the tiers).
