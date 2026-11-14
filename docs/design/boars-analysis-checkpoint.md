@@ -178,3 +178,10 @@ target branching cost unmeasured.
 * Snapshots of each stage's binary for identity checks live in `build/scratch/boars/mtg.*` (latest `mtg.i5b4`); identity
   scripts `build/scratch/boars/i5b4_run.sh` etc. (SORTED win lines or full game logs).
 * Nothing pushed. The shared-branch push (4 h rhythm) happens from the parent after smoke + check_gt_logs.
+
+* 2026-11-14 USER RULING on the land-drop fetch width (verbatim): "Okay, I get it. For a colour complex deck like
+  creature giving you might have a point that we need to allow 2-3 options in some cases. Though it might still be
+  preferable to figure out a rule that indeed narrows it sufficiently. I would try that first and only fall back on the
+  other if all else fails and even then try to make it only 2 options."
+  -> keep OnPlayFetchWidth = 1; fix the ORDER first (boars-rank: castable-pip bipartite match, MTG_FETCH_RANK_PIPS).
+  A width-2 fallback only for top-1 misses no deliberate rule can resolve, never 3+. Relayed in rank-handoff.md.
