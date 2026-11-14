@@ -2038,6 +2038,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // candidate (cco_ready), see the key block in the scarcity loop.
     bool cco_ready = false;
     int  cco_short_mask = 0;
+    int  cco_short_def[5] = { 0, 0, 0, 0, 0 };   // per-colour shortfall behind cco_short_mask (MTG_CCO_RESERVE_OTHER)
     // CCO HAND DEMAND (MTG_CCO_HAND_DEMAND): computed lazily at the first wide cco candidate of a creature payment.
     bool cch_ready = false;
     bool cch_nc_live = false;
@@ -2909,7 +2910,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                 if (qd == nullptr || qd->params.colored_creature_only || qd->params.creature_mana_only)
                                 { continue; }
                                 const bool dork = qd->tmpl == CardTemplate::ManaDork && CanTapNow(q, state.battlefield);
-                                if (!dork && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
+                                // MTG_CCO_RESERVE_OTHER: a spendable one-shot (Treasure) is unrestricted supply too, as
+                                // in the hand scan (pirates s30074443 T4: the Corsair Treasure was not counted, so the
+                                // Courtyard was held for the Bolt's {R}, the Treasure paid Siren Stormtamer's {U}, and
+                                // the Bolt was left with the Courtyard alone).
+                                const bool one_shot = CcoReserveOtherOn() && PaySacSpendableNow(state, q, *qd);
+                                if (!dork && !one_shot && !q.card.IsLand() && !qd->params.mana_rock) { continue; }
                                 const int amt = std::max(1, ManaProducedPerTap(*qd));
                                 int seen = 0;
                                 for (Color c : EffectiveProduces(state, active, *qd))
@@ -2922,7 +2928,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                             }
                             int deficit = 0;
                             for (int ci = 0; ci < 5; ++ci)
-                            { if (later[ci] > sup[ci]) { cco_short_mask |= 1 << ci; deficit += later[ci] - sup[ci]; } }
+                            { if (later[ci] > sup[ci]) { cco_short_mask |= 1 << ci; cco_short_def[ci] = later[ci] - sup[ci]; deficit += later[ci] - sup[ci]; } }
                             if (deficit <= static_cast<int>(fl.wild)) { cco_short_mask = 0; }
                         }
                     }
@@ -2931,7 +2937,34 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                         int mine = 0;
                         for (Color c : def->params.produces)
                         { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { mine |= 1 << ci; } }
-                        if (mine & cco_short_mask & state.deck_creature_pip_colors) { cco_hold = 1; }
+                        int held = mine & cco_short_mask & state.deck_creature_pip_colors;
+                        // MTG_CCO_RESERVE_OTHER: a shortfall the OTHER untapped creature-only lands still cover is not
+                        // a reason to hold THIS one (pirates s30070533: Courtyard + Territory x2 all held for one {U},
+                        // the generic took the Mountain the Bolt needed). Counted live, so a land this payment has
+                        // already tapped no longer covers it.
+                        if (held != 0 && CcoReserveOtherOn())
+                        {
+                            int other[5] = { 0, 0, 0, 0, 0 };
+                            for (const Permanent& q : state.battlefield)
+                            {
+                                if (&q == &p || q.controller_index != active || q.tapped) { continue; }
+                                const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                                if (qd == nullptr || !qd->params.colored_creature_only || qd->params.creature_mana_only
+                                    || BigSpellOnlySource(qd->params)) { continue; }
+                                const int amt = std::max(1, ManaProducedPerTap(*qd));
+                                int seen = 0;
+                                for (Color c : EffectiveProduces(state, active, *qd))
+                                {
+                                    const int ci = static_cast<int>(c);
+                                    if (ci < 0 || ci > 4 || (seen & (1 << ci))) { continue; }
+                                    seen |= 1 << ci;
+                                    other[ci] += amt;
+                                }
+                            }
+                            for (int ci = 0; ci < 5; ++ci)
+                            { if ((held & (1 << ci)) && cco_short_def[ci] <= other[ci]) { held &= ~(1 << ci); } }
+                        }
+                        if (held != 0) { cco_hold = 1; }
                     }
                 }
                 // CCO HAND DEMAND (MTG_CCO_HAND_DEMAND, default ON; item C, USER 2026-11-13: "the inflexible spell needs
