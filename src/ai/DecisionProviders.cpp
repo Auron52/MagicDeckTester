@@ -106,6 +106,7 @@ static bool UnpruneHumanSuppressed()
 // Canonical gate name <-> enum table, shared by the MTG_UNPRUNE parser and the gate-probe report.
 static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"fixedburntarget", UnprunedGate::FixedBurnTarget},
+    {"champion", UnprunedGate::Champion},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},

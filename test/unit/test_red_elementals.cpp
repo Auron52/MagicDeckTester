@@ -16,6 +16,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/DecisionProviders.h"
+#include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameState.h"
@@ -429,10 +430,13 @@ TEST_CASE("Nova Chaser: post-combat champion of a doomed attacker survives the e
         if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Nova Chaser")
         { picks.push_back(a.enchant_target); }
     }
-    CHECK(std::find(picks.begin(), picks.end(), spark) != picks.end());
-    CHECK(std::find(picks.begin(), picks.end(), put) != picks.end());
-    CHECK(std::find(picks.begin(), picks.end(), -1) != picks.end());
-    CHECK(std::find(picks.begin(), picks.end(), 0) == picks.end());   // no same-plan entrant: no dup
+    // Under the provider's doomed-attacker prune the attacked Spark is the only admitted pick; unpruned
+    // (the oracle, ChampionVariantTargets prune=false) the put Firecat and the decline are offered too.
+    CHECK(picks == std::vector<int>{spark});
+    const std::vector<int> all = ChampionVariantTargets(s, 0, "Elemental", nullptr, /*prune=*/false);
+    CHECK(std::find(all.begin(), all.end(), spark) != all.end());
+    CHECK(std::find(all.begin(), all.end(), put) != all.end());
+    CHECK(std::find(picks.begin(), picks.end(), 0) == picks.end());   // never unpinned
     s.players[0].hand.clear();
     const int nova = EnterNova(s, spark);
     // The end step (both worlds' order): the delayed sacrifice, then the self-sacrifices.
@@ -476,5 +480,213 @@ TEST_CASE("Nova Chaser: identical doomed attackers fold to one variant; distinct
     GameState s = BoardRe();
     for (int k = 0; k < 2; ++k) { PutRe(s, "Spark Elemental"); s.battlefield.back().NoteAttackDeclared(); s.battlefield.back().tapped = true; }
     PutRe(s, "Spark Elemental");            // untapped, did not attack: a different choice
-    CHECK(ChampionVariantTargets(s, 0, "Elemental").size() == 2);
+    CHECK(ChampionVariantTargets(s, 0, "Elemental", nullptr, /*prune=*/false).size() == 2);
+    // The provider's doomed-attacker PRUNE admits the first doomed, spent candidate alone (no decline).
+    bool others = true;
+    CHECK(ChampionVariantTargets(s, 0, "Elemental", &others).size() == 1);
+    CHECK_FALSE(others);
+}
+
+// ---- Agent B2: the SAME-LINE entrant pin and the RETURNING champion's pick (no unpinned pick in the window) ----
+namespace
+{
+std::vector<Action> NovaCastVariants(const GameState& s, bool pre_combat)
+{
+    std::vector<Action> out;
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, pre_combat))
+    { if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Nova Chaser") { out.push_back(a); } }
+    return out;
+}
+int HandNum(const GameState& s, const std::string& name, int nth = 0)
+{
+    for (const Card& c : s.players[0].hand) { if (c.m_name.str() == name && nth-- == 0) { return c.m_number; } }
+    return 0;
+}
+// "Cast" the hand card with number `num` the way both worlds land a creature: the card keeps its number.
+int LandFromHand(GameState& s, int num)
+{
+    auto& h = s.players[0].hand;
+    for (std::size_t i = 0; i < h.size(); ++i)
+    {
+        if (h[i].m_number != num) { continue; }
+        Permanent p;
+        p.card = DRe(h[i].m_name.str()).card; p.card.m_number = num;
+        p.controller_index = 0; p.owner_index = 0; p.entered_this_turn = true;
+        h.erase(h.begin() + static_cast<std::ptrdiff_t>(i));
+        s.battlefield.push_back(p);
+        return num;
+    }
+    return 0;
+}
+}   // namespace
+
+TEST_CASE("Nova Chaser: a SAME-LINE entrant is a searched variant (named by its card), never an unpinned pick")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 6; ++k) { PutRe(s, "Mountain"); }
+    HandRe(s, "Nova Chaser");
+    HandRe(s, "Spark Elemental");
+    HandRe(s, "Spark Elemental");     // a second copy: still ONE variant per name
+    HandRe(s, "Metallic Mimic");
+    HandRe(s, "Lightning Bolt");
+    const std::vector<Action> v = NovaCastVariants(s, /*pre_combat=*/true);
+    // No Elemental on the board: the menu is the decline + one same-line variant per entrant name.
+    std::vector<std::string> names;
+    bool decline = false;
+    for (const Action& a : v)
+    {
+        CHECK(a.enchant_target != 0);                       // never unpinned
+        if (a.enchant_target == -1) { decline = true; CHECK(a.trick_hand_target.empty()); continue; }
+        names.push_back(a.trick_hand_target);
+        CHECK(a.enchant_target == HandNum(s, a.trick_hand_target));
+    }
+    CHECK(decline);
+    std::sort(names.begin(), names.end());
+    CHECK(names == std::vector<std::string>{"Metallic Mimic", "Spark Elemental"});
+    // The champion follows the entrant it names, whatever order the plan was ranked in.
+    Action spark_cast;
+    spark_cast.kind = Action::Kind::CastFromHand;
+    spark_cast.card_name = "Spark Elemental";
+    Action nova_pinned;
+    for (const Action& a : v) { if (a.trick_hand_target == "Spark Elemental") { nova_pinned = a; } }
+    std::vector<Action> acts{nova_pinned, spark_cast};
+    std::vector<int> order{0, 1};
+    ApplyAttachSpellDependencyOrder(acts, order);
+    CHECK(order == std::vector<int>{1, 0});
+    CHECK(OrderingPlacesAttachSpellBeforeTarget(acts));
+    // Nova championing ANOTHER copy of itself: it never satisfies its own dependency.
+    Action nova_plain = nova_pinned;
+    nova_plain.enchant_target = -1; nova_plain.trick_hand_target.clear();
+    Action nova_on_nova = nova_pinned;
+    nova_on_nova.trick_hand_target = "Nova Chaser";
+    std::vector<Action> acts2{nova_on_nova, nova_plain};
+    std::vector<int> order2{0, 1};
+    ApplyAttachSpellDependencyOrder(acts2, order2);
+    CHECK(order2 == std::vector<int>{1, 0});
+}
+
+TEST_CASE("Nova Chaser: a same-line pin resolves to the line's entrant (copy swap included); a gone pin declines")
+{
+    GameState s = BoardRe();
+    const int old_spark = PutRe(s, "Spark Elemental");     // on the board before the line, attacked
+    s.battlefield.back().NoteAttackDeclared();
+    s.battlefield.back().tapped = true;
+    HandRe(s, "Spark Elemental");
+    HandRe(s, "Spark Elemental");
+    const int a = HandNum(s, "Spark Elemental", 0);
+    const int b = HandNum(s, "Spark Elemental", 1);
+    // Exact: the pinned copy is the one the line cast.
+    LandFromHand(s, a);
+    const int nova = EnterNova(s, a);
+    CHECK(BfNum(s, nova) >= 0);
+    CHECK(BfNum(s, a) < 0);
+    CHECK(BfNum(s, old_spark) >= 0);                        // not the provider's front (the doomed attacker)
+    // Copy swap: the pin names copy `c` still in hand, copy `b` is the one that landed -> the newest Spark.
+    HandRe(s, "Spark Elemental");
+    const int c = HandNum(s, "Spark Elemental", 1);
+    REQUIRE(c != b);
+    LandFromHand(s, b);
+    const int nova2 = EnterNova(s, c);
+    CHECK(BfNum(s, nova2) >= 0);
+    CHECK(BfNum(s, b) < 0);
+    CHECK(BfNum(s, old_spark) >= 0);
+    // A pin whose permanent left earlier in the line (now in exile) is the decline, not a pick.
+    const int nova3 = EnterNova(s, a);
+    CHECK(BfNum(s, nova3) < 0);
+    CHECK(BfNum(s, old_spark) >= 0);
+    // Two Nova Chasers swapped by a by-name cast: the pin names the champion ITSELF -> the other Nova.
+    GameState t = BoardRe();
+    const int n1 = EnterNova(t, -1);                        // (sacrificed: nothing to champion)
+    (void)n1;
+    const int spark = PutRe(t, "Spark Elemental");
+    const int nova_a = EnterNova(t, spark);
+    const int self_num = g_nre;                             // the number EnterNova assigns next
+    const int nova_b = EnterNova(t, self_num);
+    REQUIRE(nova_b == self_num);
+    CHECK(BfNum(t, nova_b) >= 0);
+    CHECK(BfNum(t, nova_a) < 0);                            // championed the other copy
+    CHECK(CountRe(t.exile, "Nova Chaser") == 1);
+}
+
+TEST_CASE("Nova Chaser: a put champion's same-line pins, and the RETURNING champion's searched pick")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 6; ++k) { PutRe(s, "Mountain"); }
+    const int stoke = PutRe(s, "Incandescent Soulstoke");
+    const int nova1 = EnterNova(s, stoke);                  // Nova #1 champions a Soulstoke
+    const int stoke2 = PutRe(s, "Incandescent Soulstoke");  // the put source
+    (void)stoke2;
+    HandRe(s, "Nova Chaser");
+    HandRe(s, "Spark Elemental");
+    GyRe(s, "Hellspark Elemental");
+    // The put variants: Nova #1 (with a return rank per ret 1..bound+1), Soulstoke #2, the hand Spark,
+    // the graveyard (unearthable) Hellspark, and the decline. Never an unpinned put.
+    int on_nova = 0, decline = 0;
+    bool spark_pin = false, hellspark_pin = false, stoke_pin = false;
+    const int bound = ChampionReturnRankBound(s, 0, "Elemental");
+    for (const Action& a : TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true))
+    {
+        if (a.kind != Action::Kind::PutFromHandAbility || a.card_name.str() != "Nova Chaser") { continue; }
+        CHECK(a.enchant_target != 0);
+        if (a.enchant_target == -1) { ++decline; continue; }
+        const int pick = a.enchant_target & kChampionPickMask;
+        const int ret  = a.enchant_target >> kChampionRetShift;
+        if (pick == nova1) { ++on_nova; CHECK(ret >= 1); CHECK(ret <= bound + 1); continue; }
+        CHECK(ret == 0);
+        if (a.trick_hand_target == "Spark Elemental")     { spark_pin = true; }
+        if (a.trick_hand_target == "Hellspark Elemental") { hellspark_pin = true; }
+        if (pick == stoke2)                               { stoke_pin = true; }
+    }
+    CHECK(decline == 1);
+    CHECK(on_nova == bound + 1);
+    CHECK(spark_pin);
+    CHECK(hellspark_pin);
+    CHECK(stoke_pin);
+
+    // Resolution: a Soulstoke-put Nova #2 champions Nova #1 carrying return rank r; at the end step Nova #2
+    // is sacrificed, Nova #1 returns (a new object) and its own trigger takes candidate r -- not the front.
+    greedywindow::Frame in_window(2);   // a searched frame: an unpinned pick here must be counted
+    TurnSolver::ArmChampionCensusForTest();
+    const long long before = TurnSolver::ChampionSearchedFrameUnpinnedForTest();
+    for (int r = 0; r < 2; ++r)
+    {
+        GameState t = s;
+        const int nova2 = EnterNova(t, ChampionPackPick(nova1, r + 1), /*sac_at_end=*/true);
+        REQUIRE(BfNum(t, nova1) < 0);
+        REQUIRE(CountRe(t.exile, "Nova Chaser") == 1);
+        CHECK(ChampionExileSource(t.exile.back()) == nova2);
+        CHECK(ChampionExileRet(t.exile.back()) == r + 1);
+        // Nova #1's own Soulstoke came back when it left: the return-time candidates are both Soulstokes.
+        // (Computed with Nova #2 gone, as it is when Nova #1 returns.)
+        GameState u = t;
+        u.battlefield.erase(u.battlefield.begin() + BfNum(u, nova2));
+        const std::vector<int> legal = ChampionCandidateIndices(u, 0, nova1, "Elemental");
+        REQUIRE(legal.size() == 2);
+        const int expect = u.battlefield[static_cast<std::size_t>(legal[static_cast<std::size_t>(r)])].card.m_number;
+        PerformEndStepUnearthExiles(t);
+        PerformEndStepDelayedSacrifices(t);
+        CHECK(BfNum(t, nova2) < 0);
+        CHECK(BfNum(t, nova1) >= 0);                        // returned and championed
+        CHECK(BfNum(t, expect) < 0);                        // ...exactly rank r
+    }
+    // A rank past the width declines: the returning Nova is sacrificed.
+    {
+        GameState t = s;
+        EnterNova(t, ChampionPackPick(nova1, bound + 1), /*sac_at_end=*/true);
+        PerformEndStepUnearthExiles(t);
+        PerformEndStepDelayedSacrifices(t);
+        CHECK(BfNum(t, nova1) < 0);
+        CHECK(CountRe(t.players[0].graveyard, "Nova Chaser") == 2);
+    }
+    CHECK(TurnSolver::ChampionSearchedFrameUnpinnedForTest() == before);   // every pick above was pinned
+    // An UNPINNED return (ret 0 -- no searched variant set it up; outside the search the census books it
+    // as a real resolution, not a searched frame) takes the provider's front and the champion stays.
+    {
+        GameState t = s;
+        EnterNova(t, nova1, /*sac_at_end=*/true);           // ret 0: no return pick carried
+        PerformEndStepUnearthExiles(t);
+        PerformEndStepDelayedSacrifices(t);
+        CHECK(BfNum(t, nova1) >= 0);
+    }
+    g_champion_unpinned_hook = nullptr;
 }

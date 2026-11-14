@@ -157,6 +157,8 @@ enum class UnprunedGate
                      // prunes every one: a fight can only damage our Hydra vs the passive opponent)
     CounterDestroy,  // Hydras: Steelbane Hydra's destroy targets restored to every legal artifact/enchantment
                      // (DecisionProvider::CounterDestroyArtEnchTargets' dominance prune drops our own)
+    Champion,        // Red Elementals: CHAMPION's exile pick restored to every candidate + the decline
+                     // (DecisionProvider::PruneChampionCandidates' doomed-attacker prune)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");

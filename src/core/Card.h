@@ -203,6 +203,10 @@ enum class Keyword
     // Scryfall's keywords array can be pasted VERBATIM (KeywordFromString throws on an unmapped
     // keyword -- see Jump's note).
     Unearth,
+    // Champion (Nova Chaser): an INERT keyword-ability tag -- the mechanic is modelled structurally via
+    // CardParams::champion_subtype (ResolveChampionEtb / ReturnChampionedCard). No engine code reads this
+    // enumerator; it exists so Scryfall's keywords array can be pasted VERBATIM (see Jump's note).
+    Champion,
     // Sentinel: MUST stay last. Keyword ordinals are bit indices into Card::m_keyword_mask (uint64_t).
     KeywordCount_
 };

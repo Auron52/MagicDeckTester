@@ -6409,9 +6409,11 @@ static bool IsDependentAttachSpell(const Action& a)
     // is on the battlefield (CR 601.2h), so the spell is moved to just after the creature's cast under
     // ANY cast-order rank. Byte-identical for every deck without such a card (trick_hand_target is
     // otherwise set only on attach spells, handled above).
+    // ...and a CHAMPION cast (Nova Chaser) whose exile pick is a SAME-LINE hand entrant (CollectActions'
+    // champion variants): the trigger reads the board it resolves on, so the champion follows that cast.
     if (a.trick_hand_target.empty() || a.attach_equip_id != 0) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-    return d != nullptr && SacCreatureCostFoldsByReadiness(d->params);
+    return d != nullptr && (SacCreatureCostFoldsByReadiness(d->params) || !d->params.champion_subtype.empty());
 }
 
 void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)
@@ -6438,6 +6440,8 @@ void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vecto
                 int seen = 0;
                 for (std::size_t q = 0; q < order.size(); ++q)
                 {
+                    // Never itself: a champion naming another copy of its own name (Nova championing Nova).
+                    if (q == p) { continue; }
                     if (CastSatisfiesAttachTarget(acts[static_cast<std::size_t>(order[q])], nm, equipment))
                     {
                         if (!need_set || q > need) { need = q; need_set = true; }

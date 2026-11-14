@@ -1260,16 +1260,35 @@ inline void ResolveEtbExileUpToOne(GameState& state, int controller, int source_
 inline void FireExiledOwnerIllusion(GameState& state, const Card& left);
 // CHAMPION (CR 702.72; CardParams::champion_subtype -- Nova Chaser), defined beside
 // PermCountsAsSubtype below. The searched pick rides g_champion_pin: `entrant` = the champion's
-// card.m_number, `pick` = the m_number to exile (> 0), -1 = decline (the champion is sacrificed), 0 =
-// unpinned (the provider's OrderChampionCandidates front; the human's chooser asks). Installed by the
-// cast / put sites of BOTH worlds around the enter cascade (ChampionPinScope) and read only by
-// ResolveChampionEtb for the matching entrant, so a nested entry can never consume it.
-struct ChampionPin { int entrant = 0; int pick = 0; };
+// card.m_number; `pick` = the IDENTITY to exile (> 0: a card.m_number -- a battlefield permanent at
+// enumeration, or a same-line entrant's card in hand / graveyard, see ChampionResolvePin), -1 = decline
+// (the champion is sacrificed), <= -2 = RANK r = -(pick + 2) into the resolution-time candidate list
+// (a returning champion's pick, ReturnChampionedCard), 0 = unpinned (the provider's
+// OrderChampionCandidates front: ONLY beyond the search horizon / outside any search -- census
+// MTG_CHAMPION_AXIS_STATS; the human's chooser asks). `ret` = 0, or 1 + the rank the EXILED card takes
+// for its own champion trigger when it returns (a put Nova championing a Nova: the returning Nova's pick
+// is decided by the same searched variant, see ChampionReturnRankBound). Installed by the cast / put
+// sites of BOTH worlds around the enter cascade (ChampionPinScope) and read only by ResolveChampionEtb
+// for the matching entrant, so a nested entry can never consume it.
+//
+// The Action / StackEntry carrier is ONE int (enchant_target): > 0 packs pick | (ret << kChampionRetShift)
+// (every card / token number is far below 2^21), -1 = decline, 0 = unpinned.
+constexpr int kChampionRetShift = 21;
+constexpr int kChampionPickMask = (1 << kChampionRetShift) - 1;
+constexpr int kChampionRetMax   = 63;   // ret codes fit 6 bits (kChampionExileBase's range note)
+inline int ChampionPackPick(int pick, int ret) { return pick > 0 ? (pick | (ret << kChampionRetShift)) : pick; }
+struct ChampionPin { int entrant = 0; int pick = 0; int ret = 0; };
 inline thread_local ChampionPin g_champion_pin;
 struct ChampionPinScope
 {
     ChampionPin prev;
-    ChampionPinScope(int entrant, int pick) : prev(g_champion_pin) { g_champion_pin = ChampionPin{entrant, pick}; }
+    // `packed` = the Action::enchant_target carrier above.
+    ChampionPinScope(int entrant, int packed) : prev(g_champion_pin)
+    {
+        g_champion_pin = packed > 0 ? ChampionPin{entrant, packed & kChampionPickMask, packed >> kChampionRetShift}
+                                    : ChampionPin{entrant, packed, 0};
+    }
+    explicit ChampionPinScope(const ChampionPin& pin) : prev(g_champion_pin) { g_champion_pin = pin; }
     ~ChampionPinScope() { g_champion_pin = prev; }
     ChampionPinScope(const ChampionPinScope&) = delete;
     ChampionPinScope& operator=(const ChampionPinScope&) = delete;
@@ -32597,8 +32616,16 @@ inline bool CardIsChampionExile(const Card& c)
     return !c.m_is_staged && c.m_staged_expiry <= kChampionExileBase
         && c.m_staged_expiry > kChampionExileBase - 0x08000000;
 }
-inline int ChampionExileSource(const Card& c) { return (kChampionExileBase - c.m_staged_expiry) >> 1; }
+// Marker code = (2 * champion + owner) | (ret << kChampionRetShift): the champion's number is below 2^20, and
+// ret (<= kChampionRetMax, 6 bits) keeps the whole code below 2^27 = the 0x08000000 range above.
+inline int ChampionExileSource(const Card& c) { return ((kChampionExileBase - c.m_staged_expiry) & kChampionPickMask) >> 1; }
 inline int ChampionExileOwner(const Card& c)  { return (kChampionExileBase - c.m_staged_expiry) & 1; }
+inline int ChampionExileRet(const Card& c)    { return (kChampionExileBase - c.m_staged_expiry) >> kChampionRetShift; }
+
+// MTG_CHAMPION_AXIS_STATS (TurnSolver.cpp installs it): called for every UNPINNED champion pick with a real
+// choice (>= 1 candidate, so >= 2 outcomes with the decline) -- the no-greedy census classifies it as
+// searched-frame (must read 0), playout beyond the horizon (permitted), or outside any search.
+inline void (*g_champion_unpinned_hook)(const GameState&, int width) = nullptr;
 
 // Battlefield indices of the permanents `controller` could exile for the champion `champion_number`
 // (0 = the champion is not on the battlefield yet -- the enumeration side), in the provider's order.
@@ -32621,9 +32648,23 @@ inline std::vector<int> ChampionCandidateIndices(const GameState& state, int con
 // rather than refused -- see its mix_doom note): exiling either of two candidates whose keys are equal
 // yields boards that differ only in which per-copy number the survivor carries. A candidate the key
 // does not recognise as plain stays a singleton (costs branching, never a line).
-inline std::vector<int> ChampionVariantTargets(const GameState& state, int controller, const std::string& sub)
+// The provider's PRUNE (DecisionProvider::PruneChampionCandidates) over ordered candidates `idx`; `others` =
+// whether the decline and the same-line entrant variants stay admitted. Human play and MTG_UNPRUNED /
+// MTG_UNPRUNE=champion keep the full set (the oracle the prune is measured against).
+inline void ChampionAdmitted(const GameState& state, int controller, std::vector<int>& idx, bool& others)
 {
-    const std::vector<int> idx = ChampionCandidateIndices(state, controller, 0, sub);
+    others = true;
+    if (idx.empty() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::Champion)) { return; }
+    ResolveProvider(state).PruneChampionCandidates(state, controller, idx, others);
+}
+
+inline std::vector<int> ChampionVariantTargets(const GameState& state, int controller, const std::string& sub,
+                                               bool* others_out = nullptr, bool prune = true)
+{
+    std::vector<int> idx = ChampionCandidateIndices(state, controller, 0, sub);
+    bool others = true;
+    if (prune) { ChampionAdmitted(state, controller, idx, others); }
+    if (others_out != nullptr) { *others_out = others; }
     std::vector<int> out;
     if (idx.empty()) { return out; }
     std::vector<int> links;
@@ -32643,25 +32684,111 @@ inline std::vector<int> ChampionVariantTargets(const GameState& state, int contr
     return out;
 }
 
-// Could a permanent this same plan puts onto the battlefield BEFORE the champion become a candidate --
-// i.e. is the unpinned variant (enchant_target 0, the provider's front AT RESOLUTION) anything but a
-// duplicate of the front explicit variant? True when the hand holds, besides the champion copy at
-// `skip_number`, a creature card of the printed subtype or a card that adds a chosen
-// type to itself (Metallic Mimic). NOT counted (disclosed): a same-plan spell that creates a <subtype>
-// TOKEN -- none exists in any list that runs a champion today.
-inline bool ChampionSamePlanEntrantPossible(const GameState& state, int controller, int skip_number,
-                                            const std::string& sub)
+// SAME-LINE ENTRANTS (the enumeration side's second half): a permanent the SAME plan puts onto the
+// battlefield before the champion's trigger resolves cannot be named by battlefield number at enumeration,
+// so it is named by the identity of the CARD that will enter -- one representative card.m_number per NAME
+// (copies are cast / put / unearthed by name, so which copy lands is not a decision: ChampionResolvePin
+// takes the newest legal permanent of that name). Offered: every card in hand (other than the champion's
+// own copy `skip_number`) that is a creature of the printed subtype or adds a chosen type to itself
+// (Metallic Mimic), and -- `graveyard_unearth`, the trailing-pass put route only -- every graveyard card
+// of the subtype with an unearth cost. The plan legality filter (SubsetHasMissingTrickTarget /
+// SubsetHasStrandedChampionPin) requires the line to land that name before the champion, and
+// TurnSolver::DeferSameLineSacs runs a pinned put after the trailing entrants. NOT offered (disclosed):
+// a same-line spell that creates a <subtype> TOKEN -- none exists in any list that runs a champion today.
+struct ChampionEntrant { int number; InternedName name; };
+inline std::vector<ChampionEntrant> ChampionSameLineEntrants(const GameState& state, int controller, int skip_number,
+                                                             const std::string& sub, bool graveyard_unearth)
 {
-    for (const Card& c : state.players[static_cast<std::size_t>(controller)].hand)
+    std::vector<ChampionEntrant> out;
+    auto add = [&](const Card& c)
+    {
+        for (const ChampionEntrant& e : out) { if (e.name == c.m_name) { return; } }
+        out.push_back({c.m_number, c.m_name});
+    };
+    const Player& ps = state.players[static_cast<std::size_t>(controller)];
+    for (const Card& c : ps.hand)
     {
         if (c.m_number == skip_number || c.m_is_staged) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         const Card& hc = d ? d->card : c;
         if (hc.IsLand()) { continue; }
-        if (d != nullptr && d->params.chosen_type_added_to_self) { return true; }
-        if (hc.IsCreature() && (CardHasSubtype(hc, sub))) { return true; }
+        if ((d != nullptr && d->params.chosen_type_added_to_self && hc.IsCreature())
+            || (hc.IsCreature() && CardHasSubtype(hc, sub)))
+        { add(c); }
     }
-    return false;
+    if (graveyard_unearth)
+    {
+        for (const Card& c : ps.graveyard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || !d->params.unearth_cost.has_value()) { continue; }
+            if (d->card.IsCreature() && CardHasSubtype(d->card, sub)) { add(c); }
+        }
+    }
+    return out;
+}
+
+// A put champion whose pick is ITSELF a champion (a Soulstoke-put Nova Chaser exiling a Nova Chaser): the put
+// body is sacrificed at this end step, the exiled champion RETURNS as a new object and its own enter trigger
+// picks again -- a decision the main-phase variant must carry, because no searched node exists inside the
+// end-step sweep. It is carried as a RANK into the return-time candidate list (ChampionPin::ret), which is
+// complete whatever the board holds by then, as long as the variants cover every rank up to the width. The
+// width is bounded by every object that can be an own <subtype> permanent at that moment: own <subtype>
+// permanents now (less the exiled champion), <subtype> creature / Mimic cards in hand (casts and puts),
+// <subtype> creature cards in the graveyard (unearth, a graveyard return) and champion-exiled cards (they
+// return when their champion leaves). Ranks at or past the real width decline (duplicates, never a loss).
+// Capped at kChampionRetMax - 1 (a board no goldfish reaches).
+inline int ChampionReturnRankBound(const GameState& state, int controller, const std::string& sub)
+{
+    int n = 0;
+    for (const Permanent& q : state.battlefield)
+    { if (q.controller_index == controller && PermCountsAsSubtype(q, sub)) { ++n; } }
+    const Player& ps = state.players[static_cast<std::size_t>(controller)];
+    auto counts = [&](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const Card& hc = d ? d->card : c;
+        return hc.IsCreature() && (CardHasSubtype(hc, sub) || (d != nullptr && d->params.chosen_type_added_to_self));
+    };
+    for (const Card& c : ps.hand)      { if (counts(c)) { ++n; } }
+    for (const Card& c : ps.graveyard) { if (counts(c)) { ++n; } }
+    for (const Card& c : state.exile)  { if (CardIsChampionExile(c) && counts(c)) { ++n; } }
+    return std::min(n, kChampionRetMax - 1);
+}
+
+// The RESOLUTION side of a pin (see ChampionPin): the index into `legal`, or -1 = decline.
+//   rank (<= -2)  -> legal[r], past the end = decline;
+//   identity > 0  -> the battlefield permanent with that number; else, when the number is a CARD that a
+//                    same-line entry did not land exactly (still in hand / the graveyard because another
+//                    copy of the name was cast, put or unearthed -- or the champion itself, when two copies
+//                    of the champion swapped), the NEWEST legal permanent of that name (battlefield order is
+//                    entry order: the line's entrant); else decline (the pinned permanent left earlier in
+//                    the line -- a deterministic outcome of the variant, never a pick).
+inline int ChampionResolvePin(const GameState& state, int controller, int champion_number,
+                              const std::vector<int>& legal, int pick)
+{
+    if (pick == -1) { return -1; }
+    if (pick <= -2)
+    {
+        const int r = -(pick + 2);
+        return r < static_cast<int>(legal.size()) ? r : -1;
+    }
+    for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+    { if (state.battlefield[static_cast<std::size_t>(legal[li])].card.m_number == pick) { return li; } }
+    const InternedName* name = nullptr;
+    for (const Permanent& q : state.battlefield)
+    { if (q.card.m_number == champion_number && q.card.m_number == pick) { name = &q.card.m_name; break; } }
+    const Player& ps = state.players[static_cast<std::size_t>(controller)];
+    if (name == nullptr) { for (const Card& c : ps.hand)      { if (c.m_number == pick) { name = &c.m_name; break; } } }
+    if (name == nullptr) { for (const Card& c : ps.graveyard) { if (c.m_number == pick) { name = &c.m_name; break; } } }
+    if (name == nullptr) { return -1; }
+    int best = -1;
+    for (int li = 0; li < static_cast<int>(legal.size()); ++li)
+    {
+        if (state.battlefield[static_cast<std::size_t>(legal[li])].card.m_name != *name) { continue; }
+        if (best < 0 || legal[li] > legal[static_cast<std::size_t>(best)]) { best = li; }
+    }
+    return best;
 }
 
 inline void ResolveChampionEtb(GameState& state, int controller, int champion_number, const CardDefinition& def)
@@ -32676,19 +32803,36 @@ inline void ResolveChampionEtb(GameState& state, int controller, int champion_nu
     const std::string src_name = def.card.m_name.str();
     const std::vector<int> legal = ChampionCandidateIndices(state, controller, champion_number,
                                                             def.params.champion_subtype);
-    // The pick: the searched pin when this entrant carries one, else the provider's front.
-    int k = legal.empty() ? -1 : 0;
-    if (g_champion_pin.entrant == champion_number && g_champion_pin.pick != 0)
+    // The pick: the searched pin when this entrant carries one (ChampionResolvePin), else -- beyond the
+    // search horizon / outside any search only (the census below must read 0 in a searched frame) -- the
+    // provider's front.
+    // An IDENTITY pin resolves against the full list (its variant was admitted at enumeration); a RANK pin
+    // (a returning champion) and the unpinned front index the provider's ADMITTED list (ChampionAdmitted).
+    const bool pinned = g_champion_pin.entrant == champion_number && g_champion_pin.pick != 0;
+    std::vector<int> admitted = legal;
+    bool admit_others = true;
+    if (!pinned || g_champion_pin.pick <= -2) { ChampionAdmitted(state, controller, admitted, admit_others); }
+    int k = legal.empty() ? -1 : 0;   // admitted.front() is legal.front() unless pruned (mapped below)
+    if (!admitted.empty() && !legal.empty() && admitted.front() != legal.front())
+    { k = static_cast<int>(std::find(legal.begin(), legal.end(), admitted.front()) - legal.begin()); }
+    int ret = 0;
+    if (pinned)
     {
-        if (g_champion_pin.pick < 0) { k = -1; }
-        else
+        if (g_champion_pin.pick <= -2)
         {
-            for (int li = 0; li < static_cast<int>(legal.size()); ++li)
-            {
-                if (state.battlefield[static_cast<std::size_t>(legal[li])].card.m_number == g_champion_pin.pick)
-                { k = li; break; }
-            }
+            int ak = ChampionResolvePin(state, controller, champion_number, admitted, g_champion_pin.pick);
+            // A rank past the width is the decline -- unless the prune did not admit it (then the front).
+            if (ak < 0 && !admit_others && !admitted.empty()) { ak = 0; }
+            k = ak < 0 ? -1 : static_cast<int>(std::find(legal.begin(), legal.end(),
+                                                         admitted[static_cast<std::size_t>(ak)]) - legal.begin());
         }
+        else { k = ChampionResolvePin(state, controller, champion_number, legal, g_champion_pin.pick); }
+        ret = std::clamp(g_champion_pin.ret, 0, kChampionRetMax);
+    }
+    else if (!legal.empty() && g_champion_unpinned_hook != nullptr && g_play_dig_chooser == nullptr
+             && admitted.size() + (admit_others ? 1 : 0) > 1)
+    {
+        g_champion_unpinned_hook(state, static_cast<int>(admitted.size()) + (admit_others ? 1 : 0));
     }
     // The human / claude-play chooser: every candidate, -1 = exile nothing (the champion is sacrificed).
     if (g_play_dig_chooser != nullptr && !g_tap_speculating && !legal.empty())
@@ -32732,11 +32876,20 @@ inline void ResolveChampionEtb(GameState& state, int controller, int champion_nu
         Card c = RevealedCard(gone.card);
         if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(c))
         { const int n = c.m_number; c = gd->card; c.m_number = n; }
+        // A champion exiling a CHAMPION carries the returning card's own searched pick (ChampionPin::ret) in
+        // the marker (consumed by ReturnChampionedCard) and in linked_exile_number (the state-key fold: two
+        // lines that differ only in it are two states). 0 for every other exile.
+        const CardDefinition* xd = CardDatabase::Instance().LookupCached(c);
+        if (xd == nullptr || xd->params.champion_subtype.empty()) { ret = 0; }
         c.m_is_staged     = false;
-        c.m_staged_expiry = kChampionExileBase - (2 * champion_number + (gone.owner_index & 1));
+        c.m_staged_expiry = kChampionExileBase - ((2 * champion_number + (gone.owner_index & 1))
+                                                  | (ret << kChampionRetShift));
         state.exile.push_back(c);
         for (Permanent& sp : state.battlefield)
-        { if (sp.card.m_number == champion_number) { sp.linked_exile_number = gnum; break; } }
+        {
+            if (sp.card.m_number == champion_number)
+            { sp.linked_exile_number = gnum | (ret << kChampionRetShift); break; }
+        }
     }
     if (g_play_event_sink && !g_tap_speculating)
     {
@@ -32758,9 +32911,13 @@ inline void ReturnChampionedCard(GameState& state, const Card& left)
         if (!CardIsChampionExile(c) || ChampionExileSource(c) != left.m_number) { continue; }
         Card back = c;
         const int owner = ChampionExileOwner(c);
+        const int ret   = ChampionExileRet(c);
         state.exile.erase(state.exile.begin() + static_cast<std::ptrdiff_t>(i));
         back.m_staged_expiry = 0;
         if (g_end_step_window) { g_end_step_late_entrants.push_back(back.m_number); }
+        // A returning CHAMPION's own pick: the rank its exiling variant searched (ret - 1), else unpinned
+        // (beyond the horizon, or a line no searched variant set up -- the census counts it).
+        const ChampionPinScope _champ(ret > 0 ? ChampionPin{back.m_number, -((ret - 1) + 2), 0} : g_champion_pin);
         PutCardOntoBattlefield(state, owner, back, left.m_name.str() + " left the battlefield (champion)",
                                0, false, owner);
         return;

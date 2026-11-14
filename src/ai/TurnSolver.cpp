@@ -21855,6 +21855,25 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
     // subset to also cast that creature. A pure name compare -- no zone scans (profiled at 3.7%).
     for (int j : sel)
     {
+        // CHAMPION (a Soulstoke-put Nova Chaser): a put whose exile pick is a SAME-LINE entrant
+        // (trick_hand_target = its name, ChampionSameLineEntrants) needs this subset to land that name --
+        // a creature cast of it, another put of it, or an unearth of it. The put is a trailing activation,
+        // so a cast always precedes it, and TurnSolver::DeferSameLineSacs runs it after the trailing ones.
+        if (cands[j].kind == Action::Kind::PutFromHandAbility && !cands[j].trick_hand_target.empty())
+        {
+            bool landed = false;
+            for (int k : sel)
+            {
+                if (k == j) { continue; }
+                const Action& c = cands[k];
+                if (c.card_name != cands[j].trick_hand_target) { continue; }
+                if (c.kind == Action::Kind::PutFromHandAbility || c.kind == Action::Kind::Unearth) { landed = true; break; }
+                if (c.kind == Action::Kind::CastFromHand && c.def != nullptr && c.def->card.IsCreature())
+                { landed = true; break; }
+            }
+            if (!landed) { return true; }
+            continue;
+        }
         if (cands[j].kind != Action::Kind::CastFromHand) { continue; }
         // RIPPLE (Shadowborn INT-3): a chain pin that only means something with a granter cast by this plan
         // (EmitRipplePins, the Stone in hand) -- without one it is a duplicate of its "no ripple" sibling.
@@ -23713,6 +23732,10 @@ static SubsetFilterPre BuildSubsetFilterPre(const GameState& state, const std::v
             case Action::Kind::GarthActivate:
             case Action::Kind::ActivatePermAbility:
                 p.dup_source = true;                      // one activation per source per plan
+                break;
+            case Action::Kind::PutFromHandAbility:
+                // A put champion's same-line entrant pin (SubsetHasMissingTrickTarget's put clause).
+                if (!a.trick_hand_target.empty()) { p.trick_target = true; }
                 break;
             case Action::Kind::CastFromHand:
                 if (d != nullptr && d->params.targeting == Targeting::Multi
@@ -41566,50 +41589,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
         }
 
         // CHAMPION (CardParams::champion_subtype; Nova Chaser, CR 702.72): WHICH <subtype> permanent its
-        // enter trigger exiles -- or none, which sacrifices it -- is a SEARCH decision: one CastFromHand
-        // variant per identity class of battlefield candidate (ChampionVariantTargets -- a SOUND fold),
-        // its m_number riding enchant_target (the Protege precedent; both worlds install it as
-        // g_champion_pin), plus an explicit DECLINE (-1, ordered last: eval 0). The ordinary cast below is
-        // the UNPINNED variant (0 -> the provider's front AT RESOLUTION): with no candidate on the board it
-        // is the only one, and otherwise it is kept only when a SAME-PLAN entrant could be championed
-        // (ChampionSamePlanEntrantPossible) -- else it would duplicate the front explicit variant exactly,
-        // so it is skipped (`continue`: a champion card has no other cast variant). Human play gets no
+        // enter trigger exiles -- or none, which sacrifices it -- is a SEARCH decision, and the menu is
+        // COMPLETE (every outcome the trigger can have, at every budget): one CastFromHand variant per
+        // identity class of battlefield candidate (ChampionVariantTargets -- a SOUND fold), its m_number
+        // riding enchant_target (the Protege precedent; both worlds install it as g_champion_pin); one per
+        // SAME-LINE entrant NAME (ChampionSameLineEntrants: an Elemental / a Mimic in hand that this plan
+        // casts first -- trick_hand_target makes SubsetHasMissingTrickTarget require that cast, and
+        // ApplyAttachSpellDependencyOrder puts the champion after it); and an explicit DECLINE (-1, eval 0).
+        // There is no unpinned variant: the provider only ORDERS the board classes. Human play gets no
         // variants: the ordinary cast's resolution asks the "(champion)" chooser.
         if (!def.params.champion_subtype.empty() && !HumanPlayActive())
         {
+            bool others = true;   // the provider's prune (PruneChampionCandidates) may admit one target only
             const std::vector<int> champ = ChampionVariantTargets(state, state.active_player_index,
-                                                                  def.params.champion_subtype);
-            for (int tn : champ)
+                                                                  def.params.champion_subtype, &others);
+            auto variant = [&](int tn, int eval, const std::string& hand_name)
             {
                 Action a;
-                a.kind           = Action::Kind::CastFromHand;
-                a.card_name      = ap.hand[i].m_name;
-                a.hand_index     = i;
-                a.cost           = EffectiveCost(def, state);
-                a.eval           = EvalCard(def, state);
-                a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.enchant_target = tn;
+                a.kind              = Action::Kind::CastFromHand;
+                a.card_name         = ap.hand[i].m_name;
+                a.hand_index        = i;
+                a.cost              = EffectiveCost(def, state);
+                a.eval              = eval;
+                a.card_mv           = def.card.m_mana_cost.ManaValue();
+                a.enchant_target    = tn;
+                a.trick_hand_target = hand_name;
                 actions.push_back(std::move(a));
-            }
-            // The DECLINE: always emitted when no same-plan entrant is possible (then it is the only
-            // non-candidate outcome -- with no candidate at all it is the whole menu, a cast that only
-            // sacrifices the champion), priced as what it is: eval 0, not the 10/2's body.
-            const bool same_plan = ChampionSamePlanEntrantPossible(state, state.active_player_index,
-                                                                   ap.hand[i].m_number,
-                                                                   def.params.champion_subtype);
-            if (!champ.empty() || !same_plan)
+            };
+            for (int tn : champ) { variant(tn, EvalCard(def, state), std::string()); }
+            if (others)
             {
-                Action a;
-                a.kind           = Action::Kind::CastFromHand;
-                a.card_name      = ap.hand[i].m_name;
-                a.hand_index     = i;
-                a.cost           = EffectiveCost(def, state);
-                a.eval           = 0;
-                a.card_mv        = def.card.m_mana_cost.ManaValue();
-                a.enchant_target = -1;   // decline: the champion is sacrificed
-                actions.push_back(std::move(a));
+                for (const ChampionEntrant& e : ChampionSameLineEntrants(state, state.active_player_index,
+                                                                         ap.hand[i].m_number,
+                                                                         def.params.champion_subtype,
+                                                                         /*graveyard_unearth=*/false))
+                { variant(e.number, EvalCard(def, state), e.name.str()); }
+                variant(-1, 0, std::string());   // decline: the champion is sacrificed
             }
-            if (!same_plan) { continue; }
+            continue;   // a champion card has no other cast variant
         }
 
         // Magnetic Theft ("Attach target Equipment to target creature"): WHICH (Equipment, creature)
@@ -45928,30 +45945,60 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     a.vial_attack_power = 0;
                     a.eval              = -2;
                 }
-                // CHAMPION (a put Nova Chaser): the same searched exile pick as the cast's variants
-                // (enchant_target -> ApplyPutFromHand's g_champion_pin) -- one per identity class, a
-                // decline, and the unpinned put only when a same-plan entrant is possible.
+                // CHAMPION (a put Nova Chaser): the same searched, complete exile pick as the cast's variants
+                // (enchant_target -> ApplyPutFromHand's g_champion_pin) -- one per identity class, one per
+                // same-line entrant NAME (the put is a TRAILING activation, so the entrant may be a cast, a
+                // second put or an unearth of this plan: SubsetHasStrandedChampionPin requires it and
+                // TurnSolver::DeferSameLineSacs runs the pinned put after the trailing entrants), and a
+                // decline. The put body is sacrificed at this end step, so a pick that is ITSELF a champion
+                // returns then and picks again: that pick is crossed into the variant as a rank
+                // (ChampionReturnRankBound; ChampionPin::ret) -- no searched node exists in the end step.
                 if (hd != nullptr && !hd->params.champion_subtype.empty() && !HumanPlayActive())
                 {
-                    const std::vector<int> champ = ChampionVariantTargets(state, state.active_player_index,
-                                                                          hd->params.champion_subtype);
-                    if (!champ.empty())
+                    const std::string& sub = hd->params.champion_subtype;
+                    const int bound = ChampionReturnRankBound(state, state.active_player_index, sub);
+                    auto champ_of = [](const Card& cc)
                     {
-                        for (int tn : champ)
+                        const CardDefinition* d = CardDatabase::Instance().LookupCached(cc);
+                        return d != nullptr && !d->params.champion_subtype.empty();
+                    };
+                    auto emit = [&](int tn, const std::string& entrant_name, bool champ_pick)
+                    {
+                        // ret 1..bound+1 = ranks 0..bound (the last always past the width: the decline).
+                        for (int ret = champ_pick ? 1 : 0; ret <= (champ_pick ? bound + 1 : 0); ++ret)
                         {
                             Action v = a;
-                            v.enchant_target = tn;
+                            v.enchant_target    = ChampionPackPick(tn, ret);
+                            v.trick_hand_target = entrant_name;
                             actions.push_back(std::move(v));
                         }
+                    };
+                    bool others = true;   // the provider's prune (PruneChampionCandidates)
+                    for (int tn : ChampionVariantTargets(state, state.active_player_index, sub, &others))
+                    {
+                        bool cp = false;
+                        for (const Permanent& q : state.battlefield)
+                        { if (q.card.m_number == tn) { cp = champ_of(q.card); break; } }
+                        emit(tn, std::string(), cp);
+                    }
+                    if (others)
+                    for (const ChampionEntrant& e : ChampionSameLineEntrants(state, state.active_player_index,
+                                                                             c.m_number, sub,
+                                                                             /*graveyard_unearth=*/true))
+                    {
+                        bool cp = false;
+                        for (const Card& hc2 : ap.hand) { if (hc2.m_number == e.number) { cp = champ_of(hc2); break; } }
+                        emit(e.number, e.name.str(), cp);
+                    }
+                    if (others)
+                    {
                         Action v = a;
-                        v.enchant_target = -1;
-                        v.eval           = std::min(a.eval, 0);
+                        v.enchant_target    = -1;   // decline: the put champion is sacrificed
+                        v.eval              = std::min(a.eval, 0);
                         v.vial_attack_power = 0;
                         actions.push_back(std::move(v));
-                        if (!ChampionSamePlanEntrantPossible(state, state.active_player_index, c.m_number,
-                                                             hd->params.champion_subtype))
-                        { continue; }
                     }
+                    continue;
                 }
                 actions.push_back(std::move(a));
             }
@@ -65742,12 +65789,21 @@ struct LpSite
 // note. Mirrors that else-if chain one-for-one; keep them in step when a kind is added there.
 // Consumed by AIEngine::ReorderPlanCasts (which of a plan's actions the human may sequence) and by
 // the human-order inline dispatch inside apply_plan_actions.
+// ...and a put CHAMPION whose exile pick is a same-line entrant (Action::trick_hand_target on a
+// PutFromHandAbility, see CollectActions' champion put variants): the entrant may itself be a trailing
+// activation (a second Soulstoke put, an unearth), so the pinned put runs after every other trailing
+// activation -- structural, the line the plan names (CR 603.3: the trigger reads the board it resolves on).
+static bool IsSameLineChampionPut(const Action& a)
+{
+    return a.kind == Action::Kind::PutFromHandAbility && !a.trick_hand_target.empty();
+}
 bool TurnSolver::HasSameLineTrailingSac(const std::vector<Action>& acts)
 {
     for (const Action& a : acts)
     {
         if (a.kind == Action::Kind::SacCreatureOutlet && a.sac_victim_id == kSameLineSacVictim)
         { return true; }
+        if (IsSameLineChampionPut(a)) { return true; }
     }
     return false;
 }
@@ -65756,7 +65812,10 @@ bool TurnSolver::DeferSameLineSacs(std::vector<Action>& acts)
 {
     if (!HasSameLineTrailingSac(acts)) { return false; }
     std::stable_partition(acts.begin(), acts.end(), [](const Action& a)
-    { return !(a.kind == Action::Kind::SacCreatureOutlet && a.sac_victim_id == kSameLineSacVictim); });
+    { return !(a.kind == Action::Kind::SacCreatureOutlet && a.sac_victim_id == kSameLineSacVictim)
+             && !IsSameLineChampionPut(a); });
+    // The champion puts go last of all (after the deferred sacs too: a sac never makes an entrant).
+    std::stable_partition(acts.begin(), acts.end(), [](const Action& a) { return !IsSameLineChampionPut(a); });
     return true;
 }
 
@@ -66499,10 +66558,13 @@ static int TrailingBandOf(const Action& a)
 
 // See the header. The composition both passes apply: OrderTrailingActivations' STABLE sort on (band when
 // `bands`, rank) -- equal keys keep plan-vector order, which is also what its no-opinion early-out
-// keeps -- then DeferSameLineSacs' STABLE move of every same-line sacrifice to the end.
+// keeps -- then DeferSameLineSacs' STABLE move of every same-line sacrifice to the end, and of every
+// same-line champion put after those.
 bool TurnSolver::TrailingRunsBefore(const GameState& state, const Action& x, std::size_t px,
                                     const Action& y, std::size_t py, bool bands)
 {
+    const bool cx = IsSameLineChampionPut(x), cy = IsSameLineChampionPut(y);
+    if (cx != cy) { return cy; }
     const bool sx = x.kind == Action::Kind::SacCreatureOutlet && x.sac_victim_id == kSameLineSacVictim;
     const bool sy = y.kind == Action::Kind::SacCreatureOutlet && y.sac_victim_id == kSameLineSacVictim;
     if (sx != sy) { return sy; }
@@ -104629,6 +104691,44 @@ struct Installer
 static Installer s_installer;
 }
 long long TurnSolver::FaceUpSearchedFrameUnpinnedForTest() { return faceupcensus::g_searched.load(); }
+
+// MTG_CHAMPION_AXIS_STATS: the no-greedy census for CHAMPION's exile pick (Nova Chaser; ResolveChampionEtb's
+// unpinned branch, the provider's front). Every in-window pick is a searched variant (the cast / put menus, and
+// ChampionPin::ret for a champion that returns at the end step), so an UNPINNED pick with a real choice must be
+// a playout beyond the horizon (permitted), outside any search, or the executor's own real resolution of a pick
+// no variant reached; the searched-frame bucket must read 0. =2 prints each searched-frame hit.
+namespace championcensus
+{
+inline std::atomic<long long> g_searched{0}, g_narrow{0}, g_outside{0}, g_real{0};
+static void Note(const GameState& s, int width)
+{
+    (void)width;
+    if (g_real_resolution) { g_real.fetch_add(1, std::memory_order_relaxed); return; }
+    if (HumanPlayActive() || !greedywindow::InWindow(0)) { g_outside.fetch_add(1, std::memory_order_relaxed); return; }
+    if (t_rollout_narrow || (g_rollout_nest > 0 && t_echo_rollout_turn_depth <= 0))
+    { g_narrow.fetch_add(1, std::memory_order_relaxed); return; }
+    g_searched.fetch_add(1, std::memory_order_relaxed);
+    if (EnvInt("MTG_CHAMPION_AXIS_STATS", 0) >= 2)
+    {
+        std::fprintf(stderr, "[champion-axis] SEARCHED-FRAME unpinned pick: seed=%llu T%d width=%d\n",
+                     static_cast<unsigned long long>(s.game_seed), s.turn_number, width);
+    }
+}
+struct Installer
+{
+    Installer() { if (EnvOn("MTG_CHAMPION_AXIS_STATS")) { g_champion_unpinned_hook = &Note; } }
+    ~Installer()
+    {
+        if (g_champion_unpinned_hook == nullptr) { return; }
+        std::fprintf(stderr, "[champion-axis] unpinned champion picks: searched-frame=%lld (must be 0) playout=%lld "
+                             "outside-window=%lld real=%lld\n",
+                     g_searched.load(), g_narrow.load(), g_outside.load(), g_real.load());
+    }
+};
+static Installer s_installer;
+}
+long long TurnSolver::ChampionSearchedFrameUnpinnedForTest() { return championcensus::g_searched.load(); }
+void TurnSolver::ArmChampionCensusForTest() { g_champion_unpinned_hook = &championcensus::Note; }
 
 // THE BOUNDARY FAN, generalised (searched echo + searched Defense of the Heart). Every in-window crossing site
 // iterates it:

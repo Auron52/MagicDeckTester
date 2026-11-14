@@ -4336,10 +4336,13 @@ public:
 
     // OrderChampionCandidates -- CHAMPION (CardParams::champion_subtype; Nova Chaser). ORDERS the
     // battlefield indices `idx` of the permanents the champion may exile (never restricts: every one
-    // stays a searched cast variant). The FRONT is the UNPINNED resolution only -- the playout beyond
-    // the horizon, an entry route that carries no pin (a card returning from a champion exile at the end
-    // step), and a same-plan entrant the cast's variants could not name at enumeration -- and the
-    // human's highlighted default. Default order: the doomed first (it leaves at this end step anyway:
+    // stays a searched variant). A PROVIDER ORDERING HEURISTIC (USER 2026-11-14: "I think we could have a
+    // heuristic that orders targets for champion most likely"): it is the order the cast / put variants
+    // are emitted in (so a binding budget tries the likely-best target first; same-line entrants follow,
+    // the decline is last), the rank order of a RETURNING champion's searched pick (rank 0 = the front),
+    // the UNPINNED resolution's pick -- reached only beyond the search horizon / outside any search
+    // (census MTG_CHAMPION_AXIS_STATS) -- and the human's highlighted default. A deck provider may
+    // override it (Stage 4a). Default order: the doomed first (it leaves at this end step anyway:
     // sac_at_end_step, unearthed, endstep_sacrifice_self), then a creature that already attacked / is
     // tapped, then the smallest effective power, then the lowest card number (deterministic).
     virtual void OrderChampionCandidates(const GameState& s, int controller, std::vector<int>& idx) const
@@ -4355,6 +4358,35 @@ public:
             return std::make_tuple(doomed ? 0 : 1, spent ? 0 : 1, q.EffectivePower(), q.card.m_number);
         };
         std::stable_sort(idx.begin(), idx.end(), [&rank](int a, int b) { return rank(a) < rank(b); });
+    }
+
+    // PruneChampionCandidates -- CHAMPION (Nova Chaser): a provider PRUNING heuristic (USER 2026-11-14: "No, the
+    // provider can prune other options."). `idx` = the candidates in OrderChampionCandidates' order (battlefield
+    // indices -- at enumeration the board, at a returning champion's resolution the live list); it may ERASE
+    // entries and clear `others` (= the decline and every same-line entrant variant). The root default keeps
+    // everything: the full set is the oracle. Never consulted in human play or under MTG_UNPRUNED /
+    // MTG_UNPRUNE=champion (ChampionAdmitted). DEFAULT RULE, MTG_CHAMPION_DOOMED_PRUNE (default ON, A/B in the
+    // Red Elementals ledger; belongs in the deck provider once Stage 4a creates one): when a candidate is DOOMED
+    // (it leaves at this end step anyway: sac_at_end_step / unearthed / exile_at_end / a face-up
+    // endstep_sacrifice_self) AND SPENT (it attacked or is tapped -- championing it costs nothing this turn),
+    // the champion takes the first such candidate and nothing else is offered: every other option exiles a live
+    // body or sacrifices the champion, while this one exiles a card that was leaving and brings it back when the
+    // champion leaves. Disclosed cost: the doomed card goes to exile, not the graveyard (unearth / a graveyard
+    // return can no longer reach it while the champion lives).
+    virtual void PruneChampionCandidates(const GameState& s, int controller, std::vector<int>& idx, bool& others) const
+    {
+        (void)controller;
+        static const bool on = EnvOn("MTG_CHAMPION_DOOMED_PRUNE", true);
+        if (!on) { return; }
+        for (int bi : idx)
+        {
+            const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+            const bool doomed = q.sac_at_end_step || q.unearthed || q.exile_at_end
+                             || (!q.def_absent && d != nullptr && d->params.endstep_sacrifice_self);
+            const bool spent  = q.AttacksThisTurn() > 0 || q.tapped;
+            if (doomed && spent) { idx.assign(1, bi); others = false; return; }
+        }
     }
 
     // EtbOptionalNonbasicLandDestroyPick -- White Orchid Phantom's UNPINNED resolution ("destroy up to
