@@ -193,3 +193,11 @@ target branching cost unmeasured.
 * boars-rank: 1st agent handed off at 220K -- `34483bf24` (castable-pip bipartite tie-break, MTG_FETCH_RANK_PIPS default
   OFF; units 3038/3038, scenarios 516/516; 97005 T6->T5, CG gi113 T5->T4 with it on). A FRESH agent now implements the
   USER shock-over-basic / two-colour rules on top, then the pooled A/B (rank2/run_ab.sh, after chain3/DONE).
+* 2026-11-14 12:24Z chain3 DONE (HEAD 151d9b9b6). Regression 27 configs changed: searched slower 10 / faster 263; Boars
+  d3 5.08->4.82, d5 5.04->4.77 / 5.03->4.80, 2HG 5.37->5.08, d0 5.79->5.50; CG, Minotaur, Five Colour all better.
+  Overnight --deck=boars,boars2hg: 15 changed, searched slower 8 / faster 473 (d5 ~5.10->~4.82, 2HG ~5.35->~5.07).
+  Classified (chain3/classify_{regression,overnight}.txt): churn = CG reg gi330, Boars ovn gi79; 16 PERSIST at 16x.
+  Old/new binaries + wins frozen in build/scratch/boars/rootcause/ (accept will overwrite the snapshots).
+  Two read-only Opus agents root-causing the 16 (rc-boars: 9 Boars, rc-cg: 6 CG + 1 5C; brief
+  logs/boars-research/rootcause-brief.md; output rootcause/rc-*.md). NEXT: their verdicts -> accept smoke + regression +
+  overnight --deck=boars,boars2hg, check_gt_logs, commit GT.
