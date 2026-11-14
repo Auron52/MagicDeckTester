@@ -12084,6 +12084,7 @@ inline std::vector<int> VoraciousFightTargets(const GameState& state, int contro
 // LOOK-TOP queue drains once at the outermost exit (every early `return` in here included).
 inline thread_local const std::vector<int>* g_prophets_champion_pins = nullptr;
 inline thread_local int g_prophets_champion_cursor = 0;
+inline thread_local std::vector<int> g_prophets_active_champion_entries;
 struct ScriptedProphetsChampion
 {
     const std::vector<int>* saved;
@@ -17335,6 +17336,16 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
     const int self = state.battlefield[entered_index].card.m_number;
+    const bool repeated_unpinned_entry = g_prophets_champion_pins == nullptr
+        && g_play_flicker_chooser == nullptr
+        && std::find(g_prophets_active_champion_entries.begin(),
+                     g_prophets_active_champion_entries.end(), self)
+            != g_prophets_active_champion_entries.end();
+    g_prophets_active_champion_entries.push_back(self);
+    struct PopChampionEntry
+    {
+        ~PopChampionEntry() { g_prophets_active_champion_entries.pop_back(); }
+    } pop_entry;
     std::vector<int> legal;
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
@@ -17347,7 +17358,10 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
     // A player may decline champion even with a legal Merfolk. The searched
     // pin and human chooser override this front option at resolution.
     const int pin = ConsumeProphetsChampionPin();
-    int choice = legal.empty() ? -1 : (pin == -2 ? -1 : pin >= 0
+    // A speculative unpinned first-victim walk can cycle through returned
+    // Prophets forever. Decline when that same physical source re-enters its
+    // own unresolved chain; searched pins and human choices remain available.
+    int choice = legal.empty() || repeated_unpinned_entry ? -1 : (pin == -2 ? -1 : pin >= 0
         ? std::min(pin, static_cast<int>(legal.size()) - 1) : 0);
     if (g_play_flicker_chooser != nullptr && !legal.empty())
     { choice = (*g_play_flicker_chooser)(state, controller, "Wanderwine Prophets champion", legal, choice); }

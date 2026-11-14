@@ -33,6 +33,20 @@ and replay of the selected Vial plan. No full analyzer, regression, or play
 server was run. This worktree covers finding 1 only; the separate Mihail
 payment-axis finding is owned by another worktree.
 
+The next review found an unlinked-return edge: with A on the battlefield and
+two new Prophets D and E, D can champion A, E can champion D, and A returns
+with a third champion choice. The linked-only fan missed that third pin. Plans
+with multiple explicit Prophets entries now reserve a pin for each existing
+Prophets, including unlinked ones. A focused two-Vial case checks that pin.
+This synthetic case also exposed an unpinned speculative first-victim loop:
+the same physical Prophets returned repeatedly until the stack overflowed
+(`g_prophets_champion_cursor` reached 2270 in GDB). The unpinned default now
+declines when a source reenters its own unresolved champion chain; explicit
+searched pins and human choices retain their own decisions. The combined
+Release build passed. The two-entry test passed (6 assertions); the focused
+City, Seahunter, Mihail and Prophets set passed 22 cases/384 assertions. The
+combined d5 seed 3000011/game 10 passed under the 18 GiB process RSS cap.
+
 Started 2026-11-14. Source deck: `decks/Merfolk Turns/Merfolk Turns.cod`
 (copied unchanged from the user's untracked file in the primary checkout).
 
