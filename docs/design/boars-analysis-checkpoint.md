@@ -122,7 +122,7 @@ run stands and what to do next.
       Smoke movers (16 cases): Boars d3 4.86->4.78, d5 4.92->4.87, 2HG 5.20->5.12, d0 5.495->5.501 (d0 lighter bar;
       greedy cast-with-haste follow-up pending); CG d0 better, d5 4.6467->4.6533 (top-1 width; USER width question),
       d3/2hg play-only; Five Colour better; Minotaur better everywhere; Bruna d0 5.938->5.935 (payment fix). Searched
-      slower = 2, both CG d5 (gi105 = draws diverge after a fetch shuffle = clairvoyance, not a regression; gi113 TBD);
+      slower = 2, both CG d5 (gi105 = draws diverge after a fetch shuffle = clairvoyance, not a regression; gi113 = a REAL same-draws slowdown from the top-1 land-drop width + the ranking tie: T2 board Tomb+Birds makes every colour, library order picks Breeding Pool, no W left for Enlightened Tutor (Temple Garden / Stomping Ground cast both); persists at 16x; handed to the boars-rank agent as a second 97005-class case -- Birds is one source that cannot pay W and R at once);
       `classify_turn_later.sh smoke` running -> `chain3/classify_smoke.txt`.
     * NEXT when chain3 DONE: read regression + overnight logs, classify slower games, then
       `bash test/regression.sh --smoke --accept` (and --regression, --overnight --deck=boars,boars2hg), check_gt_logs,
