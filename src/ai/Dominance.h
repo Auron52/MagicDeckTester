@@ -629,7 +629,10 @@ static_assert(sizeof(Player) == 216,
 // DETERMINING within the turn (which doublers are combat-paid, what the combat pool holds), FOLDED in Build() through
 // GameState::DoublerDeferKey (value-gated: ndef only when nonzero, the ledger only when it has records).
 // Integrated (morph-integ, 2026-11-13): origin's item A rounds (1464) + MTG_DOUBLER_COMBAT_PAY's +32 = 1496 (measured).
-static_assert(sizeof(GameState) == 1496,   // verify combined current fields in the integrated build
+// +8 bytes (2026-11-14, mana-clean item W; 1496 -> 1504): `prepay_wild_true` grows to 33 bytes (gheld[5] + gtot: the
+// generic pips' re-assignable credits, MTG_PREPAY_WILD_DEFER). Same classification and the same value-gated fold
+// (PrepayWildTrueKey mixes the loaded credits, which are 0 whenever gtot no longer matches the float).
+static_assert(sizeof(GameState) == 1504,   // verify combined current fields in the integrated build
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

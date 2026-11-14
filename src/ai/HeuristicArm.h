@@ -935,7 +935,7 @@ enum Slot : int
     REPEAT_EXTRAS_RESERVE,    // MTG_REPEAT_EXTRAS_RESERVE  Snow fix (b), 2026-11-13: a K-repeat {T}-less sink's K-1 extras (Rimefeather Owl) are capped so the trailing pass's LATER owed activations (Frost Augur / Scrying Sheets) stay payable (TurnSolver::RepeatExtrasBesideOwed, both worlds). Default ON; =0 -> the extras pay first out of everything left
     EXEC_SITE8_CONT_INLINE,   // MTG_EXEC_SITE8_CONT_INLINE  Snow fix (b) amendment, 2026-11-14: the executor applies a site-8 (Sheets/Augur look) searched continuation's board activations INLINE inside the trailing pass, lockstep with ApplyPlanDirect's site-8 branch (they were queued and then cleared unrun). Default ON; =0 -> the old queue
     D0_SNOW_PUMP_CREDIT,      // MTG_D0_SNOW_PUMP_CREDIT  Snow fix (b) d0 follow-up, 2026-11-14: the greedy's lethal projection credits Rimefeather Owl's ice counters (+1 power per useful activation the selection's slack really pays for, to each attack-eligible snow-count P/T creature). Default ON (pooled A/B 2026-11-14); =0 -> no credit
-    PREPAY_WILD_MERGE,        // MTG_PREPAY_WILD_MERGE  item W (overnight 2026-11-14, Dragons gi363): a generic pip paid from the prepay's restricted funding (two fund colours, or two restricted `wild` masks) does not commit to ONE unit -- it MERGES two units of different colours into one restricted unit of their union mask (exact: the remainder is one of the two), so a later pip finds the legal re-assignment (the {G} paid the Incubator's {3}, the {R} pays Lathliss). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the generic consumes one unit (most funding left first)
+    PREPAY_WILD_DEFER,        // MTG_PREPAY_WILD_DEFER  item W (overnight 2026-11-14, Dragons gi363 / Niv held-out gi1138 / EDF gi549): a generic pip paid out of the recorded float by a colour unit does not settle its SOURCE -- the record keeps a credit per colour (GameState::PrepayWildTrue::gheld), and a later pip of that colour the float cannot pay takes the unit back while the generic moves to any other unit of the float (the {G} paid the Incubator's {3}, both {R} pay Lathliss). Exact for generic pips (any unit pays one); never admits an illegal pip (the moved generic takes a unit that existed when it was paid: a changed float drops the credits). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the generic's colour is final
     COUNT
 };
 
@@ -1815,7 +1815,7 @@ inline const char* Name(int slot)
         "MTG_REPEAT_EXTRAS_RESERVE",
         "MTG_EXEC_SITE8_CONT_INLINE",
         "MTG_D0_SNOW_PUMP_CREDIT",
-        "MTG_PREPAY_WILD_MERGE",
+        "MTG_PREPAY_WILD_DEFER",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
