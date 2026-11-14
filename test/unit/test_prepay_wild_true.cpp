@@ -431,3 +431,49 @@ TEST_CASE("prepay wild-literal: the line-float rung's replay spends the funding,
     CHECK(s.floating_mana.green == 1);
     CHECK(s.floating_mana.blue == 1);
 }
+
+// ITEM W (MTG_PREPAY_WILD_MERGE): Dragons gi363 T5. Bill {Urza's Incubator, Lathliss} priced {5}{R}{R} at plan start
+// (the second Incubator's discount is not in it), funded by Sol Ring {C}{C} + two Mountains' {R} + Gruul Turf's {G};
+// the pins are {R}{R}. The Incubator's {3} pays {C}{C} + ONE funding unit; Lathliss then costs {R}{R} (pins), and the
+// SECOND Lathliss ({R}{R}) needs the funding unit the {3} did NOT take to be {R}. Committing the {3} to the colour with
+// the most funding left ({R}) refused it; the merge keeps "the {R} or the {G}" open, so {G}-on-the-{3} is found.
+TEST_CASE("prepay wild-merge: a generic pip keeps the funding's colour open (the {G} paid the {3}, the {R} pays Lathliss)")
+{
+    ManaPool r; r.red = 4; r.green = 1; r.colorless = 2;
+    WildTrueRec wt; wt.lim = WildTrueRec::kCap; wt.fund[3] = 2; wt.fund[4] = 1;
+    WildTrueScope _s(&wt, /*enforce=*/true);
+    ManaCost inc; inc.generic = 3;
+    { GenericCFirstScope _gcf(2); SpendFloatingTowardCost(r, inc); }   // the payer's {C}-first cap (the kept {C})
+    CHECK(inc.generic == 0);
+    ManaCost l1; l1.red = 2;
+    SpendFloatingTowardCost(r, l1);
+    CHECK(l1.red == 0);
+    ManaCost l2; l2.red = 2;
+    SpendFloatingTowardCost(r, l2);
+    CHECK(l2.red == 0);                       // lever off: one {R} refused (the {G} cannot pay it)
+    CHECK(r.Total() == 0);
+}
+
+// The merge never admits an illegal pip: after the {3} took one of {R} / {G}, a later {R}{G} pays (one each), but a
+// {G}{G} does not (there was only one {G} ever).
+TEST_CASE("prepay wild-merge: the merged unit pays one of its colours, never both")
+{
+    ManaPool r; r.red = 1; r.green = 1; r.white = 1;
+    WildTrueRec wt; wt.lim = WildTrueRec::kCap; wt.fund[3] = 1; wt.fund[4] = 1;
+    WildTrueScope _s(&wt, /*enforce=*/true);
+    ManaCost g; g.generic = 1;
+    SpendFloatingTowardCost(r, g);
+    CHECK(g.generic == 0);
+    CHECK(r.Total() == 2);
+    ManaPool r2 = r; WildTrueRec wt2 = wt;
+    {
+        WildTrueScope _s2(&wt2, true);
+        ManaCost gg; gg.green = 2;
+        SpendFloatingTowardCost(r2, gg);
+        CHECK(gg.green == 1);                 // only ONE {G} ever existed
+    }
+    ManaCost rw; rw.red = 1; rw.white = 1;
+    SpendFloatingTowardCost(r, rw);
+    CHECK(rw.red == 0);
+    CHECK(rw.white == 0);
+}
