@@ -32983,6 +32983,14 @@ inline bool TapTargetPumpTargetLegalFor(const GameState& s, const Permanent& q, 
             || CardHasSubtype(q.card, source.params.tap_target_pump_requires_subtype));
 }
 
+inline bool SeahunterLibraryCandidate(const Card& card)
+{
+    if (!CardHasSubtype(card, "Merfolk")) { return false; }
+    return card.IsCreature() || card.IsLand() || card.HasType(CardType::Artifact)
+        || card.HasType(CardType::Enchantment) || card.HasType(CardType::Planeswalker)
+        || card.HasType(CardType::Battle);
+}
+
 inline bool UntapLandTargetLegal(const GameState& s, const Permanent& q, int controller)
 {
     return q.card.IsLand() && !LandHasShroud(q, s)
@@ -34359,6 +34367,19 @@ inline bool PermAbilitySourceLive(const GameState& state, int controller, int so
             }
             else if (CountSacNamed(state, controller, p.card.m_name) < n) { return false; }
         }
+        if (mode == PermAbilityMode::TapTutorPut)
+        {
+            const CardDefinition* ad = CardDatabase::Instance().LookupCached(p.card);
+            if (ad == nullptr || !ad->params.tap_tutor_put_cost.has_value()) { return false; }
+            const std::string* target = g_sac_named_pin.target;
+            if (target != nullptr && *target != kTutorDeclineTarget)
+            {
+                bool found = false;
+                for (const Card& c : state.players[controller].library)
+                { if (c.m_name.str() == *target && SeahunterLibraryCandidate(c)) { found = true; break; } }
+                if (!found) { return false; }
+            }
+        }
         // Kessig Wolf Run: "target creature" is chosen as the ability is activated (CR 601.2c via
         // 602.2b), so the activation is impossible without a legal target -- checked here, before the
         // {T} or the mana is paid. Pinned (the searched variant): THAT creature must still be a legal
@@ -34523,6 +34544,7 @@ inline const char* PermAbilityLabel(PermAbilityMode mode)
         case PermAbilityMode::TapTargetPump:
         case PermAbilityMode::TargetPump:     return "target creature gets a pump until end of turn";
         case PermAbilityMode::UntapLand:      return "untap target land";
+        case PermAbilityMode::TapTutorPut:     return "search for a Merfolk permanent and put it onto the battlefield";
         case PermAbilityMode::PayCounterSelf: return "put a +1/+1 counter on this creature";
         case PermAbilityMode::FigureTwo:   return "become a 2/2 Kithkin Spirit";
         case PermAbilityMode::FigureFour:  return "become a 4/4 Kithkin Spirit Warrior";
@@ -35616,6 +35638,14 @@ inline void ApplyPermAbility(GameState& state, int controller, int source_id, Pe
                 else { pref.push_back(*pin.target); }
             }
             PerformTutorToBattlefield(state, controller, d->params, /*max_puts=*/1, pref, src_name);
+            break;
+        }
+        case PermAbilityMode::TapTutorPut:
+        {
+            std::vector<std::string> preferred;
+            if (g_sac_named_pin.target != nullptr && !g_sac_named_pin.target->empty())
+            { preferred.push_back(*g_sac_named_pin.target); }
+            PerformTutorToBattlefield(state, controller, d->params, 1, preferred, src_name);
             break;
         }
         case PermAbilityMode::TransformSelf:

@@ -180,3 +180,48 @@ Banneret same-turn line validator, apply `audit_card_fields.py --update`, run
 run `provider_audit.py --check`; finally run one full `./build.sh`, fix failures,
 run focused tests and coverage to zero. No full regression, GT, push or play
 server in this worktree.
+
+### Source checkpoint a2312bf31 and follow-on Seahunter work
+
+`a2312bf31` committed the first source batch and ledger, with no build (per the
+requested single-build-after-batch rule). The current uncommitted follow-on
+adds Seahunter's definition and a `TapTutorPut` activation: one plan variant per
+Merfolk permanent card in the library, {3}+{T} payment in both apply worlds,
+a pinned library pick, shared put/ETB cascade, and the ordinary deterministic
+post-search shuffle. The human plan menu gets the target name and the legal
+fail-to-find option. A dedicated `MerfolkTurnsProvider` now routes from three
+independent deck-specific params and chooses Merfolk for Three Tree City's
+ordinary ETB; it still needs the mandatory `provider_audit.py --check` after
+building. The viewer static audit currently fails only on the unclassified
+`choose_type_on_enter` param, because the real ETB choice needs a new human
+chooser. The audit's Oracle advisory still mentions Douser, Rogue's Passage and
+Seahunter although their target/pick rides `main_phase` plan variants; the
+manifest/cross-check mapping needs review after the actual protocol sweep.
+
+**Exact remaining tasks for the next continuation if context expires:**
+1. Implement Emperor Mihail II from live Scryfall Oracle ({1}{U}{U}; private top
+   look, legal Merfolk spell cast from library top, per-copy optional {1} on
+   Merfolk cast, blue 1/1 Merfolk token). Add a true library-top cast source to
+   enumerator, rollout, executor, replay and viewer; do not fake a hand card.
+   Search must branch on paying each Mihail trigger; human gets an option per
+   trigger. The top card is visible only to its controller, not public reveal.
+2. Implement Wanderwine Prophets from live Oracle ({4}{U}{U}; champion another
+   Merfolk on ETB, sacrifice if none; exiled card returns when this leaves;
+   combat damage to a player may sacrifice a Merfolk for an extra turn).
+   Champion must accept tokens (which cease to exist on exile), preserve
+   ownership on return, fire return ETBs, and offer every legal champion and
+   sacrifice choice to the human. Search must branch on both choices.
+3. Finish Three Tree City: human ETB creature-type chooser, and ensure each
+   copy's chosen type is used at every scaled-mana path (some bounds still call
+   `ScaledManaCreatureCount(state)` without the source). Its chosen color is
+   already in the manual mana pre-tap menu; audit both payers and source keys.
+4. Review/fix the follow-on Seahunter code for payment, liveness, the target
+   plan subchoice, fail-to-find, shuffling and full permanent type filter; add
+   focused tests. Review Svyelun's conditional indestructible and ward; the
+   opponent is passive but any own destroy interaction must be ruled out.
+5. Complete viewer manifest and registry classifications, especially the new
+   type chooser; run actual `--claude-play` protocol checks for each target.
+6. Fetch/update Scryfall snapshot (`audit_card_fields.py --update`), coverage
+   zero, `provider_audit.py --check`, then ONE `./build.sh` after all source
+   changes, fix compile/test failures, run focused unit tests and the viewer
+   decision audit. Parent owns regression, GT, push, play server and play sweep.

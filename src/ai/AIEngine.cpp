@@ -7448,8 +7448,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             // Shadowborn Apostle's searched readiness-count code + Demon (SacNamedTutorPut); {0, null} for
             // every other mode (never read). Lockstep twin in the other world.
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
+            const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
-                                                  sac_named ? &a.tutor_target.str() : nullptr);
+                                                  (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
             // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
             const FaceUpRegrowPinScope _fu_pin(

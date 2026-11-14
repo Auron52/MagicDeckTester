@@ -370,6 +370,7 @@ enum class PermAbilityMode
     // Being two modes, every activation signature that keys ability_mode tells them apart. Appended LAST.
     TurnFaceUp,
     TurnFaceUpLate,
+    TapTutorPut,  // Seahunter: {3}, {T}: put a Merfolk permanent from library
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)

@@ -2283,6 +2283,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_target_pump_targets_land = params.value("tap_target_pump_targets_land", false);
     p.tap_target_pump_taps_target_land = params.value("tap_target_pump_taps_target_land", false);
     p.tap_target_pump_sets_island = params.value("tap_target_pump_sets_island", false);
+    if (params.contains("tap_tutor_put_cost"))
+        p.tap_tutor_put_cost = ManaCostFromString(params["tap_tutor_put_cost"].get<std::string>());
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 

@@ -166,6 +166,35 @@
    "toughness": 1
   },
   {
+   "name": "Seahunter",
+   "mana_cost": "{2}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Mercenary"
+   ],
+   "keywords": [],
+   "oracle_text": "{3}, {T}: Search your library for a Merfolk permanent card, put it onto the battlefield, then shuffle.",
+   "template": "vanilla_creature",
+   "parameters": {
+    "tap_tutor_put_cost": "{3}",
+    "tutor_types": [
+     "Creature",
+     "Artifact",
+     "Enchantment",
+     "Land",
+     "Planeswalker",
+     "Battle"
+    ],
+    "tutor_required_subtype": "Merfolk",
+    "tutor_shuffle_after": true
+   },
+   "power": 2,
+   "toughness": 2
+  },
+  {
    "name": "Arid Mesa",
    "mana_cost": "",
    "types": ["Land"],

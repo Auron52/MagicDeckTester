@@ -485,6 +485,7 @@ MANIFEST = {
     # TARGET and the X are main_phase plan VARIANTS (every legal X 0..max and every legal creature under
     # human play; the `pumptarget` / `x` sub-choices of a verbless `cast=Kessig Wolf Run` line).
     "tap_target_pump_cost":          ("main_phase",  present),
+    "tap_tutor_put_cost":             ("main_phase",  present),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
     # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
@@ -831,6 +832,7 @@ BOARD_ACTIVATIONS = {
     "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
     # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
     "tap_target_pump_cost":                      ("activate",       present,  "tap_target_pump_cost"),
+    "tap_tutor_put_cost":                         ("activate",       present,  "tap_tutor_put_cost"),
     "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
     "remove_counter_destroy_art_ench_cost":      ("activate",       truthy,   "remove_counter_destroy_art_ench_cost"),   # Steelbane Hydra
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every

@@ -4885,6 +4885,7 @@ struct CardParams
     bool                     tap_target_pump_targets_land = false;
     bool                     tap_target_pump_taps_target_land = false;
     bool                     tap_target_pump_sets_island = false;
+    std::optional<ManaCost>  tap_tutor_put_cost;
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
     // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
     // (RefreshOppLifeHaste). 0 = no such clause.

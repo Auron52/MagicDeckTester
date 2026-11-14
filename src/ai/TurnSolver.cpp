@@ -6538,6 +6538,7 @@ static std::uint64_t BpAvailablePermAbilityModes(const GameState& state, const P
         { PermAbilityMode::FigureFour,         &sd.params.figure_four_cost               },
         { PermAbilityMode::FigureEight,        &sd.params.figure_eight_cost              },
         { PermAbilityMode::ThresholdLoot,      &sd.params.threshold_loot_cost           },
+        { PermAbilityMode::TapTutorPut,         &sd.params.tap_tutor_put_cost            },
     };
     const int ctrl = state.active_player_index;
     for (const ModeSpec& m : modes)
@@ -31704,6 +31705,7 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         { PermAbilityMode::TargetPump,         &pp.target_pump_cost              },
         { PermAbilityMode::ThresholdLoot,      &pp.threshold_loot_cost          },
         { PermAbilityMode::CounterDestroyArtEnch, &pp.remove_counter_destroy_art_ench_cost },
+        { PermAbilityMode::TapTutorPut, &pp.tap_tutor_put_cost },
     };
     for (std::size_t i = 0; i < sizeof modes / sizeof modes[0]; ++i)
     {
@@ -47180,6 +47182,44 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             actions.push_back(std::move(a));
                         }
                     }
+                }
+            }
+
+            // Seahunter: each legal Merfolk permanent is a separate searched
+            // library choice. Human play also gets the legal fail-to-find option.
+            if (sd->params.tap_tutor_put_cost.has_value() && !src.tapped
+                && CanTapNow(src, state.battlefield))
+            {
+                ManaPool others = turn_pool();
+                others.AddPool(state.floating_mana);
+                SubtractPoolClamped(others, PermAbilityTapDebitOf(state, turn_pool(), src.card.m_number));
+                const ManaCost cost = EffectiveActivationCost(
+                    state, state.active_player_index, src.card, *sd->params.tap_tutor_put_cost);
+                if (others.CanPay(cost))
+                {
+                    std::unordered_set<std::string> seen;
+                    auto emit = [&](const std::string& target)
+                    {
+                        Action a;
+                        a.kind = Action::Kind::ActivatePermAbility;
+                        a.card_name = src.card.m_name;
+                        a.def = sd;
+                        a.hand_index = -1;
+                        a.sac_source_id = src.card.m_number;
+                        a.ability_mode = Action::AbilityMode::TapTutorPut;
+                        a.tutor_target = target;
+                        a.cost = cost;
+                        a.is_noncreature = true;
+                        actions.push_back(std::move(a));
+                    };
+                    for (const Card& lc : state.players[state.active_player_index].library)
+                    {
+                        const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
+                        const Card& card = ld ? ld->card : lc;
+                        if (SeahunterLibraryCandidate(card) && seen.insert(lc.m_name.str()).second)
+                        { emit(lc.m_name.str()); }
+                    }
+                    if (HumanPlayActive()) { emit(kTutorDeclineTarget); }
                 }
             }
 
@@ -74099,8 +74139,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             // Shadowborn Apostle's searched readiness-count code + Demon (SacNamedTutorPut); {0, null} for
             // every other mode (never read). Lockstep twin in the other world.
             const bool sac_named = a.ability_mode == Action::AbilityMode::SacNamedTutorPut;
+            const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
-                                                  sac_named ? &a.tutor_target.str() : nullptr);
+                                                  (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
             // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
             const FaceUpRegrowPinScope _fu_pin(
@@ -123438,9 +123479,23 @@ static std::string LineSummaryOfPlan(const TurnSolver::Plan& p, const GameState*
                 + "/+" + std::to_string(a.def ? a.def->params.tap_target_pump_tough * a.chosen_x : 0));
         }
         else if (a.kind == Action::Kind::ActivatePermAbility
+                 && a.ability_mode == Action::AbilityMode::TapTutorPut)
+        {
+            cast_names.push_back(a.card_name + ": put " + a.tutor_target.str()
+                                 + " from library onto battlefield");
+        }
+        else if (a.kind == Action::Kind::ActivatePermAbility
                  && a.ability_mode == Action::AbilityMode::TapTargetPump)
         {
             const std::string tn = st ? SubChoiceHostLabel(*st, a.sac_victim_id) : std::string();
+            if (a.def && (a.def->params.tap_target_pump_targets_land
+                          || a.def->params.tap_target_pump_grants_unblockable
+                          || !a.def->params.tap_target_pump_power_per_subtype.empty()))
+            {
+                cast_names.push_back(a.card_name + ": " + PermAbilityLabelFor(a.ability_mode, a.def)
+                                     + " â " + (tn.empty() ? "target" : tn));
+                continue;
+            }
             const bool all = a.chosen_x == kTapTargetPumpXAll;
             const std::string xs = all ? std::string("all remaining mana") : std::to_string(a.chosen_x);
             const std::string pt = (a.def == nullptr || all) ? std::string("+X/+0")
@@ -125458,6 +125513,13 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
             // Kessig Wolf Run's pump (TapTargetPump): BOTH decisions are subs -- WHICH creature (the
             // untapper's board-object shape, so two same-named Plants get distinct choices) and the X,
             // for EVERY X including 0 (a mixed sub/no-sub set would otherwise collapse the X = 0 entry).
+            else if (a.kind == Action::Kind::ActivatePermAbility
+                     && a.ability_mode == Action::AbilityMode::TapTutorPut)
+            {
+                addSub(a.card_name + " puts " + a.tutor_target.str(),
+                       a.card_name + " searches", a.tutor_target.str(),
+                       a.tutor_target.str(), "tutor");
+            }
             else if (a.kind == Action::Kind::ActivatePermAbility
                      && a.ability_mode == Action::AbilityMode::UntapLand)
             {
@@ -127934,7 +127996,8 @@ static const char* PlanDumpModeName(PermAbilityMode m)
         "LifeGatedPutCreatures", "SacLifePerCreature", "TapLifegain", "ActivatedDig",
         "SacLandSearch", "QuestSacLandSearch", "ReconfigureUnattach", "TapBlood", "BloodDraw",
         "TapSubtypeSteal", "TransformSelf", "TapTargetPump", "PayCounterSelf", "CounterPing", "PingLoop",
-        "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight"
+        "SacNamedTutorPut", "TargetPump", "UntapLand", "FigureTwo", "FigureFour", "FigureEight",
+        "ThresholdLoot", "CounterDestroyArtEnch", "TurnFaceUp", "TurnFaceUpLate", "TapTutorPut"
     };
     const int i = static_cast<int>(m);
     if (i >= 0 && i < static_cast<int>(sizeof(kNames) / sizeof(kNames[0]))) { return kNames[i]; }
