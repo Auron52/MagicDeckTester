@@ -15,12 +15,13 @@ This is the checkpoint for whichever agent (Claude or Codex) continues. Verify r
   - Built, Release. Unit tests pass (3088/3088).
 - **RUNNING:** `build/scratch/snowcp/run_tiers.sh` (PID 634677, detached), which runs the old harness's `--smoke` and then `--regression` in that worktree.
   - Smoke FINISHED at 10:53 UTC: rc=1 (7 cases changed, none slower; see "Smoke result" below). rc=1 is the expected GT drift, not a crash.
-  - Regression is still running; the ETA is about 12:00 UTC.
+  - Regression FINISHED at 11:57 UTC: rc=1, 9 rows changed with every score identical (see 1b).
   - Logs: `build/scratch/snowcp/tier_{smoke,regression}.log`.
   - DONE marker: `build/scratch/snowcp/tiers.DONE` (one `mode rc= wall=` line per tier; `tiers.DONE.tmp` holds the lines so far).
 - **Next steps:**
   1. Read both logs' per-game audit. A searched slower game must recover at `--depth 8 --budget-ms 0`. Smoke already moved non-Snow decks (below).
-  1b. Run ONE pooled held-out A/B over every deck either tier moved: package off (`MTG_REPEAT_EXTRAS_RESERVE=0 MTG_EXEC_SITE8_CONT_INLINE=0 MTG_D0_SNOW_PUMP_CREDIT=0`) vs default, at each moved row's depth and budget. Seeds are disjoint from the suite's; reuse the `build/scratch/snowcp/ab3/` manifest shape. Every deck must be net <= 0, or STOP and do not push.
+  1b. **RUNNING since 11:57 UTC:** the held-out A/B, PID 698885 (`build/scratch/snowcp/ab4/run.sh`, detached). DONE marker: `build/scratch/snowcp/ab4/DONE`. It is 23,200 games, package off (`base`) vs default (`new`), seeds from 131000, chunks paired by seed and game_index. Cells: `pdP` 600/arm, `jumboP` and `lhcP` 1500/arm (play depth, b20; PD plays d6), and `pd0`, `jumbo0`, `lhc0`, `edf0` at 2000/arm (d0). Report: `python3 build/scratch/snowcp/tools/ab4_report.py build/scratch/snowcp/ab4`. Do NOT start another. Regression tier (rc=1, 3820 s): 9 rows changed, every score identical, 0 slower; VPC 837 refs, 0 drift; scenarios 544/544.
+  1c. (What 1b runs.) Run ONE pooled held-out A/B over every deck either tier moved: package off (`MTG_REPEAT_EXTRAS_RESERVE=0 MTG_EXEC_SITE8_CONT_INLINE=0 MTG_D0_SNOW_PUMP_CREDIT=0`) vs default, at each moved row's depth and budget. Seeds are disjoint from the suite's; reuse the `build/scratch/snowcp/ab3/` manifest shape. Every deck must be net <= 0, or STOP and do not push.
   2. Accept from the inspected runs in the worktree: `bash test/regression.sh --smoke --accept`, then `bash test/regression.sh --accept`. These promote the existing runs; they do not re-run.
   3. Run `python3 test/check_gt_logs.py` and `python3 scripts/check_references_safe.py`.
   4. Commit the GT, fetch, and rebase if origin moved. If src or GT replays, rebuild and re-run the tiers.
