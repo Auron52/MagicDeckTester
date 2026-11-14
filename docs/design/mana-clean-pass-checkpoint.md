@@ -1414,3 +1414,27 @@ fungus 1,880, gods 4,300 (first run).
   Forerunner and Canal for Bolt, repro s30066580 T4 (27 flags, 1 game). Report logs/mana_clean/20261113-225845/report.md.
   Disclosed narrowing kept from agent #1: for a Martyr-out white-casting plan the after-watcher position twins are not
   emitted (position 0, else trailing).
+* **Queue item D (2026-11-13/14): Shadowborn Sire APPLY-DROPs -- shadowborn_apostle 214 (50000-54999) -> 44 (55000-59999)
+  (fe52d7745 lever; GT 3bdab247c; units 63e879687; local).** No Sire cast-order drop was left on the current tree (every
+  APPLY-DROP-ORDER was Culling/Intent), so the USER's pre-authorised Sire rank move was not needed. MTG_PAY_HAND_SURPLUS_FIRST
+  (heurarm, default ON; mana-payment exemption, reorder only): in SpendFloatingTowardCost's PAY_HAND_GENERIC branch the
+  castable cap subtracted the cost's pips a second time (Tutor/Intent read as uncastable -> no hand demand) and the order
+  drained the lead colour to zero; it now passes the live remainder and drains each colour's surplus over the hand pips
+  first (Lake {B}x5 + Lotus {R}x3 paying Sire {4}{B}{R} keeps {B} for Tutor). Unit fixes 63e879687 (test-only): two
+  tests pinned pre-C+I payments the C+I levers intentionally changed (oracle set-aside test: PAY_HAND_GENERIC makes the
+  payer's own leftover the {U}; dragonstorm Needle/Territory no-line block: bisected to MTG_CCO_HAND_DEMAND, Rite of
+  Flame stays castable); units 2979/2979. Held-out A/B (seed 89100000, lever off vs on, 131,000 games,
+  logs/mana-clean-chain/itemD/ab_report.txt): zero changed outcomes anywhere; digests differ only in alchemist, alchemist
+  d0, hinata (3000/arm each) -> every deck net 0, searched slower 0; shadowborn d5 b20 / d3 b10 / 2HG d3 b10 3000/arm
+  byte-equal outcomes. Smoke 1 row + regression 2 rows (all alchemist, same score), each reproduced by the lever =0;
+  check_gt_logs clean (1146). Gate sb-D2-20261114 (PGO 4d7d27fe2a01, oracle-off byte-identical): 44 issues in 14 games
+  (APPLY-DROP 31 / 13 sigs, ENUM-GAP 6, APPLY-DROP-ORDER 6, ORACLE-GAP 1), report logs/mana_clean/sb-D2-20261114/report.md;
+  top: x12 s30055052 T4 m2 {Intent + Ritual + Apostle} drops Sire (Lotus {R} + kept {B}); Sire+Ritual T8 rollback
+  (s30055067, PAY_ROLLBACK does not recover); ENUM-GAP Stone/Ritual/Apostle lines (s30055462, s30056437, s30058283).
+  **USER DECISION (Culling victim, from round 1, NOT implemented):** x84 s30053099 T5 m1 {Apostle + Culling (+Intent)}:
+  ShadowbornProvider::SacCostVictimVariant fixes Culling's victim to the HAND Apostle and ArrangeCastOrder casts it first,
+  unpayable on Lake's {B} alone; sacrificing the board Reaper first (BBBB) pays everything. Proposal: when the
+  hand-Apostle-first order does not pay (TurnSolver::OrderPaysSequentially) fall back to the battlefield pick -- the shape
+  of the USER's "after if mana allows, before if not" Ritual rule. Unrooted (listed, not diagnosed): s30050028 T7 Lotus
+  Bloom left untapped with an Intent dropped; "lost action not declared" drops (s30050302 x14, s30051054, s30052752,
+  s30050049); need-later colour commit (s30050825 / s30052035, parked behind floatseq). Next block 60000-64999.
