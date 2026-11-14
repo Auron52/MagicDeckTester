@@ -45,6 +45,10 @@ The 10-15 incident in detail, from the 15 s watchdog log (`~/.claude/mdt-watch/p
   buffer). These came from two different containers (two cpusets). Each costs one syscall an error
   and is transient. On this kernel `vm.compaction_proactiveness` is 0 (proactive compaction off), and
   `/proc/sys` is read-only inside the container.
+  2026-11-14: two more, both `cc1plus` during `./build.sh` at 32 jobs (the compiler reports it as
+  `<header>: Cannot allocate memory`), with ~20 GB free. It is NOT a RAM limit and needs no permanent job cap:
+  check `dmesg` for `order:4 ... p9_fcall_init`, then simply re-run the build (incremental; one retry at
+  `MTG_BUILD_JOBS=12` went through). Fragmentation after hours of large batches is the likely trigger.
 
 ## What protects a run now
 1. **`scripts/vol_stage.py`** stages an `mtg --batch` run onto the build volume:
