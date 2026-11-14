@@ -2889,11 +2889,6 @@ public:
     // True inside the depth-0 executor's greedy pick (a GreedyPermit(D0Runner) is live) -- the
     // doctrine's other permitted greedy site, so likewise not owed completeness.
     static bool              InD0Runner();
-    // True for the whole extent of a REAL depth-0 executor turn (AIEngine::TakeTurn at lookahead depth 0, not in a
-    // rollout): its plan AND its execution (the land drop is played after Solve returns, outside InD0Runner), so a
-    // provider policy keyed on "beyond the search window" reads the same answer when planning and when playing.
-    static bool              InD0Game();
-    static void              D0GameNest(int delta);
     // True while a decision root's DecisionBudgetScope is open on this thread -- i.e. inside the
     // search window of a real decision, whatever its budget. DecisionBudget() alone cannot tell an
     // unlimited root (nullptr) from no root at all (also nullptr).

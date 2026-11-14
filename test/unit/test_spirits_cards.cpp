@@ -10,7 +10,6 @@
 
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
-#include "ai/HeuristicArm.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -159,25 +158,6 @@ TEST_CASE("SpiritsProvider: Flooded Strand offers every distinct legal target, h
     CHECK_FALSE(prov.ConsiderFetchHold(s, strand));
     s.m_provider = &prov;
     CHECK(FetchResolvesOnPlay(s, strand));
-}
-
-TEST_CASE("SpiritsProvider: MTG_SPIRITS_FETCH_HOLD_HORIZON keeps the hold inside the search window only")
-{
-    // The overnight rebaseline of 2026-11-14: the full drop made 8 held-Strand lines unfindable at d8 b0. The
-    // horizon variant declines the hold only beyond the window (horizon playout, a real depth-0 game).
-    GameState s = SpFresh();
-    s.players[0].library.push_back(SpCard("Plains", 100));
-    const SpiritsProvider prov;
-    const CardDefinition& strand = SpDef("Flooded Strand");
-    heurarm::t_arm[heurarm::SPIRITS_FETCH_HOLD_HORIZON] = 1;
-    CHECK(prov.ConsiderFetchHold(s, strand));                 // inside the window: the hold is searched
-    TurnSolver::D0GameNest(+1);
-    CHECK_FALSE(prov.ConsiderFetchHold(s, strand));           // a real depth-0 game: declined
-    TurnSolver::D0GameNest(-1);
-    CHECK(prov.ConsiderFetchHold(s, strand));
-    heurarm::t_arm[heurarm::SPIRITS_FETCH_HOLD_HORIZON] = 0;
-    CHECK_FALSE(prov.ConsiderFetchHold(s, strand));           // the shipped full drop
-    heurarm::t_arm[heurarm::SPIRITS_FETCH_HOLD_HORIZON] = -1;
 }
 
 // ---- the lords ----------------------------------------------------------------------------------

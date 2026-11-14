@@ -3459,14 +3459,6 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // before anything moves -- on copies, under a RevealLogPause, so play itself is untouched.
     if (manaoracle::On() && g_real_resolution && !m_in_rollout && !HumanPlayActive())
     { manaoracle::AuditDecision(state, is_pre_combat_main); }
-    // TurnSolver::InD0Game for this turn's extent when this is a REAL depth-0 game (plan + execution). A context
-    // marker only: nothing branches on it except a provider policy that asks it (Spirits' horizon-only fetch hold).
-    struct D0GameScope
-    {
-        const bool on;
-        explicit D0GameScope(bool o) : on(o) { if (on) { TurnSolver::D0GameNest(+1); } }
-        ~D0GameScope() { if (on) { TurnSolver::D0GameNest(-1); } }
-    } d0_game(!m_in_rollout && m_lookahead_depth <= 0);
     // Which main this pass plays (m_exec_post_combat; the main-2 stager stamp reads it). Scoped, so a
     // nested TakeTurn (a rollout's own executor) cannot leave the outer pass reading its phase.
     struct ExecPhaseScope

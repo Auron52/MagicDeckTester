@@ -4324,10 +4324,15 @@ public:
     // The battlefield fetch hold is DECLINED: Flooded Strand cracks on play. USER 2026-11-14 (Q4): "Yes, we
     // should drop the fetch hold. It isn't helpful here." Measured quality-neutral on 600 paired games (d3/d5,
     // 1 faster / 1 slower each) and ~10% fewer units. MTG_SPIRITS_NO_FETCH_HOLD=0 restores the root's hold
-    // (A/B only; per-job via HeuristicArm).
-    // MTG_SPIRITS_FETCH_HOLD_HORIZON (default OFF, A/B pending the USER): decline the hold only BEYOND the search
-    // horizon (horizon playout, d0 runner); inside the window the hold stays searched, crack-on-play beside it.
-    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
+    // (A/B only; per-job via HeuristicArm). The 8 suite games this makes unrecoverable at d8 b0 (2026-11-14) are
+    // CLAIRVOYANCE (the USER's one exception): the held line has one less usable land that turn, and wins only by
+    // moving the post-fetch shuffle after a draw the search already knows (analysis-Spirits.md, 2026-11-14).
+    bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override
+    {
+        static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD", true);
+        if (heurarm::Flag(heurarm::SPIRITS_NO_FETCH_HOLD, env)) { return false; }
+        return DeckProvider::ConsiderFetchHold(s, fetch);
+    }
 };
 
 // Merfolk owns a provider so its copy-target policy and routing are reviewable.

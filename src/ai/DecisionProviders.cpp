@@ -22517,24 +22517,6 @@ bool SpiritsProvider::ComboCardValue(const GameState& s, const CardDefinition& d
     return true;
 }
 
-// The battlefield fetch hold. USER 2026-11-14 (Q4): "Yes, we should drop the fetch hold. It isn't helpful here."
-// Declined by default (MTG_SPIRITS_NO_FETCH_HOLD; =0 restores the root's hold). The full drop is a prune at every
-// budget: the overnight rebaseline of 2026-11-14 found 8 Spirits games whose held-Strand line is unfindable even at
-// --depth 8 --budget-ms 0. MTG_SPIRITS_FETCH_HOLD_HORIZON (default OFF, pending the USER) narrows the decline to
-// beyond the search horizon (the horizon playout and the d0 runner, where the drop's d0 gain came from), so inside
-// the window the hold is searched again, crack-on-play beside it (FetchCrackOnPlayOffered).
-bool SpiritsProvider::ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
-{
-    static const bool env = EnvOn("MTG_SPIRITS_NO_FETCH_HOLD", true);
-    static const bool hor = EnvOn("MTG_SPIRITS_FETCH_HOLD_HORIZON", false);
-    if (heurarm::Flag(heurarm::SPIRITS_NO_FETCH_HOLD, env))
-    {
-        const bool beyond = TurnSolver::InRolloutPlayout() || TurnSolver::InD0Game();
-        if (!heurarm::Flag(heurarm::SPIRITS_FETCH_HOLD_HORIZON, hor) || beyond) { return false; }
-    }
-    return DeckProvider::ConsiderFetchHold(s, fetch);
-}
-
 bool SpiritsProvider::OfferOwnNonbasicLandDestroy(const GameState& s, int controller) const
 {
     for (const Card& c : s.players[static_cast<std::size_t>(controller)].library)
