@@ -1456,3 +1456,20 @@ fungus 1,880, gods 4,300 (first run).
   payment spent; no payment rule can see it, needs a SEARCHED Lotus early-crack colour pin = floatseq class); ENUM-GAP
   s30059630 (Ritual paid before Intent's shuffle, truly hidden). Culling victim fallback stays a USER DECISION
   (round 1). Next block 65000-69999.
+* **Queue item C2 (2026-11-14): pirates residual Bolt APPLY-DROPs -- 93 (64000-68999) -> 39 (69000-73999) after round 1;
+  round 2 validation IN PROGRESS (4dfa91f10 + 54b16a9b8 lever; smoke GT aa77361ea; local).** No cast-order change was
+  needed (PiratesProvider::CastOrderRank untouched, no USER DECISION). Both reported shapes were INPUT bugs in item C's
+  CcoHandDemandScan, so the USER's "inflexible spell considered early" rung never fired. MTG_CCO_HAND_SCAN (heurarm,
+  default ON, =0 -> historical scan; ordering only): (1) the self-skip by cost identity only matches a hand card of
+  the payment's own kind (a {R} Daring Buccaneer had hidden the {R} Bolt as "itself": s30064129/67717/64439 T3);
+  (2) a spendable Treasure counts toward the castability cap (s30066580 T4, 27 flags); (3, round 2) the
+  creature-colour keep counts the OTHER untapped creature-only lands (s30069061 / s30073153 / s30069077, Territory x2
+  boards). Repros on -> clean, off -> flags. Units 3071/3071. Round 1: smoke 1 row (pirates d0 digest only, lever=0
+  reproduces), regression 322/322 unchanged, A/B seed 89400000 32,000 games (pirates + pirates2hg 3000/arm, every
+  creature-only-land deck 1000/arm) zero changed outcomes, nets 0, slower 0 (logs/mana-clean-chain/itemC2/ab_report.txt);
+  gate pirates-C2-20261114 (PGO 33405742710d, oracle-off byte-identical) 39 APPLY-DROP in 4 games. Round 2: smoke
+  203/203 unchanged; regression + A/B (seed 89500000) running at handoff. **PARKED:** s30070533 T3/T4 (8 gate flags):
+  the CCO LINE RESERVE (MTG_PAY_CCO_LINE_RESERVE, cco_hold) holds EVERY creature-only land when the line owes a colour
+  beyond the unrestricted supply (Mountain only), so a dug Corsair Captain's generic takes the Mountain the Bolt needs;
+  the same "other restricted lands cover it" count would apply to the reserve's cco_short_mask (needs its own A/B).
+  Next pirates block 74000-78999.
