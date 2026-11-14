@@ -191,3 +191,13 @@ Codex notes there cover waiters and timers.
 * rc-boars: `build/scratch/boars/rootcause/rc-boars.md` (done rows + TODO rows) and
   `.claude/worktrees/boars/logs/boars-research/rootcause-rc-boars-handoff.md`.
 If a file is missing, that agent stopped before writing it; redo its step from its brief.
+* 13:0xZ rank agent STOPPED: A/B already DONE 12:54Z (exit 0; nothing running). Lever stays OFF: CG +4 (+1 on the
+  matched-shuffle rows) fails "every deck <= 0"; Boars -18, Boars 2HG -6, CG 2HG 0, Minotaur -2, Mill 0; controls
+  byte-identical; 20 of 30 slower games persist at 4x, and CG gi138 + CG 2HG gi258 (the ones that decide the bar) are not
+  root-caused yet. Details: rank-handoff.md "HANDOFF #2".
+* d0haste agent STOPPED: `9d08b49b5` on boars-d0haste, MTG_GREEDY_SELF_HASTE default ON (d0 runner only). 400-game
+  held-out A/B: Boars d0 -24, Boars 2HG d0 -20, every searched cell <= 0, six other decks identical; 95093 gi92 T5 -> T4.
+  Units 3035 / scenarios 517 pass, but only BEFORE the final comment-only amend: rebuild + re-run before integrating.
+  One slower 2HG d3 game (gi399) hinges on the top-1 fetch width (reported, prune unchanged). Files:
+  `.claude/worktrees/boars-d0haste/logs/boars-research/d0haste-handoff.md`,
+  `.claude/worktrees/boars-d0haste/docs/design/boars-greedy-self-haste.md`.
