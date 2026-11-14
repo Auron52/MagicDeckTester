@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Red Elementals (agent F, 2026-11-14): INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP.",
+    "",
+    "Turn 3, the land drop made: Soulstoke (ours since an earlier turn, untapped) and two untapped Mountains;",
+    "Blistering Firecat and Legion Leadership in hand; dead draws. Opponent at 18.",
+    "",
+    "THE LINE: hold Soulstoke out of combat (the searched kind-4 hold), and at the end of the OPPONENT's turn pay",
+    "{1}{R} and put the Firecat. It has missed that end step's sacrifice trigger, has been ours since turn 4 began",
+    "(no haste needed) and attacks as an 8/1 under the lord; Legion Leadership ({1}{R}) doubles it to 16 and",
+    "Soulstoke swings for 2 -> 18 on turn 4.",
+    "",
+    "DISCRIMINATING: the main-phase put on turn 3 deals 8 and leaves turn 4 with Leadership on Soulstoke (4): 12.",
+    "Attacking with Soulstoke on turn 3 taps it (no end-step put): 2, then turn 4 puts the Firecat (8) with no",
+    "mana left for Leadership: 10. Two Mountains never hard-cast the Firecat. Only the opponent-end-step put",
+    "kills on turn 4."
+  ],
+  "deck": "decks/Red Elementals/Red Elementals.cod",
+  "turn": 3,
+  "on_the_play": true,
+  "active_life": 20,
+  "opponent_life": 18,
+  "resume_at": "main1",
+  "lands_played_this_turn": 1,
+  "battlefield": [
+    { "name": "Incandescent Soulstoke", "controller": 0, "tapped": false, "sick": false },
+    { "name": "Mountain", "controller": 0, "tapped": false },
+    { "name": "Mountain", "controller": 0, "tapped": false }
+  ],
+  "hand": [ "Blistering Firecat", "Legion Leadership" ],
+  "library_filler": "Swords to Plowshares",
+  "library_size": 30,
+  "depth": 3,
+  "budget_ms": 100,
+  "max_turns": 5,
+  "expect_win_turn": 4
+}
