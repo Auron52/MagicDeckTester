@@ -5155,7 +5155,8 @@ static bool PbLazyPonderOn()
     return v;
 }
 
-enum : char { kFanPutBack = 0, kFanLookTop = 1, kFanPonder = 2 };
+enum : char { kFanPutBack = 0, kFanLookTop = 1, kFanPonder = 2,
+              kFanProphetsChampion = 3, kFanProphetsSac = 4 };
 
 struct PbLazyLayout
 {
@@ -5201,6 +5202,8 @@ struct PbLazyLayout
         active = P > 0;
     }
     bool LookTopFan(std::size_t f) const { return fan_kind[f] == kFanLookTop; }
+    bool ProphetsFan(std::size_t f) const
+    { return fan_kind[f] == kFanProphetsChampion || fan_kind[f] == kFanProphetsSac; }
     // Entry k (1..fan_n[f]) of fan f, from its prototype already copied into `out`: the one field it varies.
     void Edit(TurnSolver::Plan& out, std::size_t f, int k) const
     {
@@ -5208,6 +5211,23 @@ struct PbLazyLayout
         {
         case kFanPutBack: out.putback_choice = k; return;
         case kFanPonder:  out.ponder_choice  = k; return;
+        case kFanProphetsChampion:
+        case kFanProphetsSac:
+        {
+            // The eager axis increments digit zero first. Decode the same mixed-radix
+            // ordinal only when the search actually visits this candidate.
+            std::vector<int>& pins = fan_kind[f] == kFanProphetsChampion
+                ? out.champion_pins : out.prophets_sac_choice;
+            pins.resize(static_cast<std::size_t>(fan_pin_w[f]));
+            const int radix = static_cast<int>(fan_pin_off[f]);
+            for (int& pin : pins)
+            {
+                pin = k % radix;
+                k /= radix;
+                if (pin == radix - 1) { pin = -2; }
+            }
+            return;
+        }
         default: break;
         }
         const std::size_t w = static_cast<std::size_t>(fan_pin_w[f]);
@@ -94852,13 +94872,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
     if (state.deck_has_prophets && !HumanPlayActive())
     {
         std::vector<TurnSolver::Plan> extra;
+        if (pb_lazy != nullptr) { pb_lazy->OpenBlock(all.size()); }
         const int me = state.active_player_index;
         int board_merfolk = 0;
         for (const Permanent& q : state.battlefield)
         { if (q.controller_index == me && q.card.IsCreature()
               && (q.AnimatedAllTypes() || CardHasSubtype(q.card, "Merfolk"))) { ++board_merfolk; } }
-        for (const TurnSolver::Plan& p : all)
+        for (std::size_t pi = 0, n = all.size(); pi < n; ++pi)
         {
+            const TurnSolver::Plan& p = all[pi];
             if (!p.champion_pins.empty()) { continue; }
             int entries = 0, added = 0;
             for (const Action& a : p.actions)
@@ -94900,6 +94922,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             const int width = ResolveProvider(state).ProphetsMerfolkVictimWidth(
                 state, p.actions, board_merfolk, added);
             if (width <= 0) { continue; }
+            int fan = 1;
+            for (int e = 0; e < entries; ++e)
+            {
+                if (fan > std::numeric_limits<int>::max() / (width + 1)) { fan = 0; break; }
+                fan *= width + 1;
+            }
+            if (pb_lazy != nullptr && fan > 1)
+            {
+                TurnSolver::Plan v = p;
+                pb_lazy->AddFan(std::move(v), fan - 1, kFanProphetsChampion, pi,
+                                static_cast<std::size_t>(width + 1), entries);
+                continue;
+            }
             std::vector<int> code(static_cast<std::size_t>(entries), 0);
             for (;;)
             {
@@ -94914,10 +94949,14 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             }
         }
         all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+        if (pb_lazy != nullptr) { pb_lazy->CloseBlock(); }
     }
     AxisTrace("post-prophets-champion", state, all);
     if (state.deck_has_prophets && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive())
     {
+        // The combat axis also visits champion variants. Restore those bases in
+        // their original order before building the later, much wider combat fan.
+        if (pb_lazy != nullptr && pb_lazy->active) { PbLazyMaterialize(all, *pb_lazy); }
         int ready_prophets = 0, merfolk = 0;
         for (const Permanent& q : state.battlefield)
         {
@@ -94932,8 +94971,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         if (!all.empty())
         {
             std::vector<TurnSolver::Plan> extra;
-            for (const TurnSolver::Plan& p : all)
+            if (pb_lazy != nullptr) { pb_lazy->OpenBlock(all.size()); }
+            for (std::size_t pi = 0, n = all.size(); pi < n; ++pi)
             {
+                const TurnSolver::Plan& p = all[pi];
                 if (!p.prophets_sac_choice.empty()) { continue; }
                 int added = 0, new_prophets = 0;
                 std::vector<int> fresh_prophets_ids;
@@ -94971,6 +95012,19 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const int width = ResolveProvider(state).ProphetsMerfolkVictimWidth(
                     state, p.actions, merfolk, added);
                 if (width <= 0) { continue; }
+                int fan = 1;
+                for (int e = 0; e < events; ++e)
+                {
+                    if (fan > std::numeric_limits<int>::max() / (width + 1)) { fan = 0; break; }
+                    fan *= width + 1;
+                }
+                if (pb_lazy != nullptr && fan > 1)
+                {
+                    TurnSolver::Plan v = p;
+                    pb_lazy->AddFan(std::move(v), fan - 1, kFanProphetsSac, pi,
+                                    static_cast<std::size_t>(width + 1), events);
+                    continue;
+                }
                 std::vector<int> code(static_cast<std::size_t>(events), 0);
                 for (;;)
                 {
@@ -94985,6 +95039,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 }
             }
             all.insert(all.end(), std::make_move_iterator(extra.begin()), std::make_move_iterator(extra.end()));
+            if (pb_lazy != nullptr) { pb_lazy->CloseBlock(); }
         }
     }
     AxisTrace("post-prophets-combat", state, all);
@@ -98293,7 +98348,8 @@ namespace
 std::size_t PbLazyLayout::EntryHeapBytes(std::size_t f) const
 {
     return ApproxPlanBytes(protos[f]) - sizeof(TurnSolver::Plan)
-         + (LookTopFan(f) ? static_cast<std::size_t>(fan_pin_w[f]) * sizeof(int) : 0);
+         + ((LookTopFan(f) || ProphetsFan(f))
+             ? static_cast<std::size_t>(fan_pin_w[f]) * sizeof(int) : 0);
 }
 // ---- THE PLAN CACHES KEY ON PHYSICAL CARDS TOO (MTG_PLAN_CACHE_EXACT_KEY, DEFAULT ON; 2026-10-29) ----------
 // ROOT CAUSE of the thread-count dependence measured on Unpredictable Cyclone (ledger, "Memory: M1/M3 ...":
@@ -122196,7 +122252,7 @@ static std::vector<TurnSolver::Plan> BpDeriveContinuationList(const GameState& s
                 if (any)
                 {
                     if (!opened) { nl.OpenBlock(real_out.size()); opened = true; }
-                    std::size_t pin_off = 0;
+                    std::size_t pin_off = lz.ProphetsFan(fi) ? lz.fan_pin_off[fi] : 0;
                     if (lz.LookTopFan(fi))
                     {
                         pin_off = nl.pin_flat.size();
