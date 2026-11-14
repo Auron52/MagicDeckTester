@@ -338,6 +338,42 @@ TEST_CASE("CCO hand demand: a second creature-only land covers the hand creature
     }
 }
 
+// Pirates s30079131: Captain {B}{R} followed by Bolt {R}. Siren {U} in hand asks to keep the
+// Territory, but neither Cliffs nor Mountain can pay the Bolt if both pay Captain. Territory's
+// {B} pays Captain while Cliffs remains available for Bolt.
+TEST_CASE("CCO hand demand: a tight noncreature pip outranks the hand creature keep")
+{
+    const ManaCost captain = DefHD("Dire Fleet Captain").card.m_mana_cost;
+    auto board = []
+    {
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 3;
+        PutHD(s, "Blackcleave Cliffs", 9);
+        PutHD(s, "Unclaimed Territory", 57);
+        PutHD(s, "Mountain", 38);
+        HandHD(s, "Dire Fleet Captain", 19);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Siren Stormtamer", 47);
+        return s;
+    };
+    ArmHD dem(heurarm::CCO_HAND_DEMAND, 1);
+    {
+        ArmHD on(heurarm::CCO_NC_PRIORITY, 1);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, captain, /*for_creature=*/true));
+        CHECK(TappedHD(s, "Unclaimed Territory"));
+        CHECK_FALSE(TappedHD(s, "Blackcleave Cliffs"));
+    }
+    {
+        ArmHD off(heurarm::CCO_NC_PRIORITY, 0);
+        GameState s = board();
+        REQUIRE(TapForCostDirect(s, captain, /*for_creature=*/true));
+        CHECK_FALSE(TappedHD(s, "Unclaimed Territory"));
+        CHECK(TappedHD(s, "Blackcleave Cliffs"));
+    }
+}
+
 // Item C2 round 2 (MTG_CCO_RESERVE_OTHER): the CCO LINE RESERVE must not hold a creature-only land for a colour the
 // OTHER untapped creature-only lands still make. Pirates s30070533 T3/T4: the line owes one creature {U} beyond a
 // Mountain-only unrestricted supply plus the Bolt's {R}; with both Territories held, the creature's {1} took the

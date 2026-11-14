@@ -225,11 +225,13 @@ static void ComputeNeedsDemandSupply(const GameState& state, int active, const M
 // unrestricted untapped sources (lands, rocks, ready dorks; per tap) plus the float can make -- the colours
 // only the restricted land can still supply, which is what holding it is for.
 static void CcoHandDemandScan(const GameState& state, int active, const ManaCost& cost, bool for_creature,
-                              bool& nc_live, int& keep_mask, int* cco_def, int* cco_sup)
+                              bool& nc_live, int& keep_mask, int* cco_def, int* cco_sup,
+                              int* nc_need, int* unres_sup)
 {
     nc_live = false;
     keep_mask = 0;
-    for (int ci = 0; ci < 5; ++ci) { cco_def[ci] = 0; cco_sup[ci] = 0; }
+    for (int ci = 0; ci < 5; ++ci)
+    { cco_def[ci] = 0; cco_sup[ci] = 0; nc_need[ci] = 0; unres_sup[ci] = 0; }
     const ManaPool& fl = state.floating_mana;
     int sup[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
     int total = fl.white + fl.blue + fl.black + fl.red + fl.green + fl.colorless + static_cast<int>(fl.wild);
@@ -290,13 +292,17 @@ static void CcoHandDemandScan(const GameState& state, int active, const ManaCost
         const int pips[5] = { m.white, m.blue, m.black, m.red, m.green };
         if (!hd->card.IsCreature())
         {
-            for (int ci = 0; ci < 5; ++ci) { if (pips[ci] > 0) { nc_live = true; } }
+            for (int ci = 0; ci < 5; ++ci)
+            { if (pips[ci] > 0) { nc_live = true; nc_need[ci] = std::max(nc_need[ci], pips[ci]); } }
             continue;
         }
         for (int ci = 0; ci < 5; ++ci) { cre[ci] += pips[ci]; }
     }
     for (int ci = 0; ci < 5; ++ci)
-    { if (cre[ci] > sup[ci]) { keep_mask |= 1 << ci; cco_def[ci] = cre[ci] - sup[ci]; } }
+    {
+        unres_sup[ci] = sup[ci];
+        if (cre[ci] > sup[ci]) { keep_mask |= 1 << ci; cco_def[ci] = cre[ci] - sup[ci]; }
+    }
 }
 
 // MTG_FLOAT_TRACE (see the two print sites below). Namespace scope, not a function-local static:
@@ -2051,6 +2057,8 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     int  cch_keep = 0;
     int  cch_def[5] = { 0, 0, 0, 0, 0 };
     int  cch_csup[5] = { 0, 0, 0, 0, 0 };
+    int  cch_nc_need[5] = { 0, 0, 0, 0, 0 };
+    int  cch_unres_sup[5] = { 0, 0, 0, 0, 0 };
     int  nd_left[7] = { 0, 0, 0, 0, 0, 0, 0 };   // W,U,B,R,G,C pips + generic still owed by THIS payment (needs lever)
     int  nd_D[6] = { 0, 0, 0, 0, 0, 0 };
     int  nd_S[6] = { 0, 0, 0, 0, 0, 0 };
@@ -2986,7 +2994,12 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 if (kind == 1 && def->params.colored_creature_only && cco_hold == 0
                     && rank > 9 && rank < 60 && CcoHandDemandOn())
                 {
-                    if (!cch_ready) { cch_ready = true; CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep, cch_def, cch_csup); }
+                    if (!cch_ready)
+                    {
+                        cch_ready = true;
+                        CcoHandDemandScan(state, active, cost_in, for_creature, cch_nc_live, cch_keep,
+                                          cch_def, cch_csup, cch_nc_need, cch_unres_sup);
+                    }
                     if (cch_nc_live)
                     {
                         int mine = 0;
@@ -3007,7 +3020,24 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                                 if (cch_def[ci] > other) { keep |= 1 << ci; }
                             }
                         }
-                        if ((mine & keep & state.deck_creature_pip_colors) == 0) { rank = 9; }
+                        // A castable hand noncreature has first claim on an unrestricted colour when this
+                        // payment plus its pip needs every remaining source of that colour. The hand's
+                        // creature demand is only a future possibility; the current creature can use
+                        // this restricted land and leave the unrestricted source for Bolt. Count one
+                        // noncreature per colour (the largest pip), not every spell in hand.
+                        bool nc_tight = false;
+                        if (for_creature && CcoNcPriorityOn())
+                        {
+                            const int own[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+                            for (int ci = 0; ci < 5; ++ci)
+                            {
+                                if (cch_nc_need[ci] > 0 && cch_unres_sup[ci] > 0
+                                    && own[ci] + cch_nc_need[ci] >= cch_unres_sup[ci]
+                                                                   + static_cast<int>(state.floating_mana.wild))
+                                { nc_tight = true; break; }
+                            }
+                        }
+                        if (nc_tight || (mine & keep & state.deck_creature_pip_colors) == 0) { rank = 9; }
                     }
                 }
                 // PAY-SAC LINE RESERVE (MTG_PAY_SAC_LINE_RESERVE, default ON). The CCO line reserve's twin for a

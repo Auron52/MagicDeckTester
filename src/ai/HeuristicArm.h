@@ -936,6 +936,7 @@ enum Slot : int
     EXEC_SITE8_CONT_INLINE,   // MTG_EXEC_SITE8_CONT_INLINE  Snow fix (b) amendment, 2026-11-14: the executor applies a site-8 (Sheets/Augur look) searched continuation's board activations INLINE inside the trailing pass, lockstep with ApplyPlanDirect's site-8 branch (they were queued and then cleared unrun). Default ON; =0 -> the old queue
     D0_SNOW_PUMP_CREDIT,      // MTG_D0_SNOW_PUMP_CREDIT  Snow fix (b) d0 follow-up, 2026-11-14: the greedy's lethal projection credits Rimefeather Owl's ice counters (+1 power per useful activation the selection's slack really pays for, to each attack-eligible snow-count P/T creature). Default ON (pooled A/B 2026-11-14); =0 -> no credit
     PREPAY_WILD_DEFER,        // MTG_PREPAY_WILD_DEFER  item W (overnight 2026-11-14, Dragons gi363 / Niv held-out gi1138 / EDF gi549): a generic pip paid out of the recorded float by a colour unit does not settle its SOURCE -- the record keeps a credit per colour (GameState::PrepayWildTrue::gheld), and a later pip of that colour the float cannot pay takes the unit back while the generic moves to any other unit of the float (the {G} paid the Incubator's {3}, both {R} pay Lathliss). Exact for generic pips (any unit pays one); never admits an illegal pip (the moved generic takes a unit that existed when it was paid: a changed float drops the credits). Rides on PREPAY_WILD_LITERAL. Default ON; =0 -> the generic's colour is final
+    CCO_NC_PRIORITY,         // MTG_CCO_NC_PRIORITY  item C2, Pirates: a castable hand noncreature has a pip only unrestricted mana can pay, and this payment plus that pip needs all remaining unrestricted supply of its colour. A creature-only land pays the current creature ahead of an unrestricted source even when another hand creature wants the land's colour. Ordering only. Default ON; =0 -> hand-creature keep wins
     COUNT
 };
 
@@ -1816,6 +1817,7 @@ inline const char* Name(int slot)
         "MTG_EXEC_SITE8_CONT_INLINE",
         "MTG_D0_SNOW_PUMP_CREDIT",
         "MTG_PREPAY_WILD_DEFER",
+        "MTG_CCO_NC_PRIORITY",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

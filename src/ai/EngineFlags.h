@@ -813,6 +813,18 @@ inline bool CcoHandScanOn()
     return heurarm::Flag(heurarm::CCO_HAND_SCAN, env_on);
 }
 
+// MTG_CCO_NC_PRIORITY -- DEFAULT ON; =0 keeps the hand-creature preference (item C2). A castable
+// noncreature's pip can use only unrestricted mana. When the current creature payment plus that
+// pip needs all unrestricted supply of its colour, spend the creature-only land first, even if a
+// different creature in hand would like that land. Pirates s30079131: Captain {B}{R} must take
+// Territory's {B} so Blackcleave Cliffs can pay the later Bolt {R}; the uncatalogued Siren {U}
+// must not keep Territory idle. The same comparison covers a dug Bolt after Crewmate.
+inline bool CcoNcPriorityOn()
+{
+    static const bool env_on = EnvOn("MTG_CCO_NC_PRIORITY", true);
+    return heurarm::Flag(heurarm::CCO_NC_PRIORITY, env_on);
+}
+
 // MTG_CCO_RESERVE_OTHER -- DEFAULT ON; =0 restores the historical reserve (item C2 round 2, mana-clean). The CCO LINE
 // RESERVE holds a colored_creature_only land (tapped after every other land) while the rest of the line owes a colour
 // beyond the unrestricted supply -- and it held EVERY such land for that colour, however many there were. Pirates
