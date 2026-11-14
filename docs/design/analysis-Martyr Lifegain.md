@@ -115,7 +115,7 @@ a provider-stage question for this deck (discard buckets are USER-owned, 5i).
   2. Even from the human's own T5 board the search does not find "Jitte: gain 2 life x2 -> Serra 6/6 -> 13
      exactly lethal" (budget 0 -> T6). Under investigation.
 
-## Checkpoint (2026-11-13 ~21:40 UTC) -- RESUME HERE
+## Checkpoint (2026-11-14 ~01:30 UTC) -- RESUME HERE
 
 FARM LANDING REBASED twice (now 0668b9388 code + 83cd80de3 GT, on origin 714f955bc). After the first rebase (onto
 4f3522ad4) martyr smoke 4/4 + regression 7/7 PASS byte-identical (logs/martyr-lifegain/farm-rebase-{smoke,reg}.log).
@@ -139,7 +139,11 @@ BOTTOM gate running at 20:17 UTC (first pair -0.047t; exh arm ~9x cheaper than l
 regression (martyr,martyr2hg), then it exits. Pushed 68bff0515 (this checkpoint, replayed) at 12:24 UTC.
 DONE 21:35 UTC: VALIDATION PASSED -- keep -0.3048t (4/4), confounded bottoming -0.0378t (se 0.0041, t -9.2, 4/4);
 visibility regression GT moved net faster (searched 166 faster / 52 slower, d0 276/120; logs/Martyr_Lifegain_mullgen/
-regression.log). Keep table committed LOCALLY as 5e52f0715 (gz artifacts + profile.json gen setting). CHAIN PAUSED here.
+regression.log). Keep table committed (gz artifacts + profile.json gen setting). 11-14: USER "You should finish the
+accept process, just not the leaf." -> rebased onto a819bc2d6 (Spirits), rebuilt, martyr smoke + regression re-run and
+ACCEPTED with the table live (all 11 cases faster; attribution 0 unexplained except 3 regression d5 games that reproduce
+the table-OFF digest with MTG_EXHAUSTIVE_BOTTOM=0 = lookahead bottoming residue). PUSHED. CHAIN PAUSED: only the value
+leaf remains (`bash scripts/valueleaf.sh run "decks/Martyr Lifegain"` ALONE), waiting for the USER.
 PAUSE AFTER THE MULLIGAN PROFILE (USER 2026-11-13: "Let's plan to pause after the mulligan profile. I might want to get
 this machine to start something else instead."). On exit: read the VERDICT lines; if VALIDATION PASSED commit the
 artifacts LOCALLY; then STOP. NOT started, waiting for the USER: rebase + rebuild, smoke/regression GT re-accept for
