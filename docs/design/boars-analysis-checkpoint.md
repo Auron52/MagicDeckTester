@@ -190,3 +190,6 @@ target branching cost unmeasured.
   USER rule for two-colour decks (verbatim): "If there are 2 colours you literally can just always get the shock and then
   basics after that. This makes fixing extremely easy." -> two-colour deck: the dual first while any is left, then the
   basic chosen by the castable-pip rule; relayed in rank-handoff.md for the fresh rank agent.
+* boars-rank: 1st agent handed off at 220K -- `34483bf24` (castable-pip bipartite tie-break, MTG_FETCH_RANK_PIPS default
+  OFF; units 3038/3038, scenarios 516/516; 97005 T6->T5, CG gi113 T5->T4 with it on). A FRESH agent now implements the
+  USER shock-over-basic / two-colour rules on top, then the pooled A/B (rank2/run_ab.sh, after chain3/DONE).
