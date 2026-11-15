@@ -129,3 +129,32 @@ No fix was attempted. Two levers look obvious but each needs a user ruling:
 
 Raw data was in a scratch directory and is not kept. The probe and overnight-cell manifests
 were copies of the tier manifest's Hinata jobs.
+
+## 2026-11-15 follow-up: did opponent land plays add another large d5 regression?
+
+The user asked for a fresh bisect because Hinata depth 5 felt slower. I compared
+`f3ed81c58` (immediately before opponent land plays were generalized to Hinata)
+with `8e1d089ff` (current source). The Hinata deck, keep profile and value sidecar
+are byte-identical at these commits. Both arms used optimized Release builds,
+one 32-worker batch, seed 2002, games 0-39, budget 30, and the same manifest.
+The current arm was repeated after the historical build finished so the wall
+comparison was not contaminated by that compile.
+
+| Setting | Before: units / summed game ms | Current: units / summed game ms | Change |
+|---|---:|---:|---:|
+| Shipped `value_play` depth 4 | 3,147,532 / 107,002 | 3,279,880 / 116,357 | +4.2% units / +8.7% ms |
+| Explicit depth 5 with `ignore_play_profile` | 8,816,721 / 291,730 | 8,911,427 / 307,314 | +1.1% units / +5.3% ms |
+
+The same three depth-5 tail games dominate both builds: game indexes 3, 21 and
+36 used approximately 1.14M, 1.07M and 1.74M units respectively in **each**
+arm. The new opponent land model is not the cause of a large recent d5 slowdown.
+The small unit increase is consistent with the additional opponent targets.
+
+The important setting change is `e55b07bd6` on 2026-11-11: Hinata's shipped
+`value_play.target_depth` changed from 5 to 4. The suite still names its
+historical rows `d5`, but those rows omit an explicit depth and therefore now
+run at the sidecar's depth 4. On these seeds, forcing a real depth 5 costs
+2.72 times as many search units as shipped depth 4 (8,911,427 vs 3,279,880).
+That distinction matters when comparing a manual `--depth 5 --ignore-play-profile`
+run with a suite `d5` row. The older, large regression remains the one bisected
+above to `d1832b52` on 2026-10-05.
