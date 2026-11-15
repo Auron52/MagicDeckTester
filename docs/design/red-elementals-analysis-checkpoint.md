@@ -26,8 +26,11 @@ Last updated: 2026-11-15 (Codex continuation; this section supersedes the older 
   adoption replay reproduced both sides: 4,001 mulligan-count changes, 925 bottom changes,
   29 bottom-order-only digests, **zero unexplained**. The table-on overnight GT is accepted;
   `check_gt_logs.py` again reports 1,252 consistent, zero stale/missing.
-- Next: commit the accepted overnight GT and notes, rebase onto the latest shared branch,
-  verify Red on that source, push, and restore the primary checkout/viewer. The Stage 5i
+- The accepted GT and notes were committed, then rebased onto shared upstream `6cb9a7c85`
+  (Gods decision and dredge changes). A pooled filtered smoke, regular and overnight run on
+  the rebased Release engine passed every Red row and the 2HG canary with **identical scores
+  and digests**; strict viewer replay again passed 864 references, with zero drift or enum
+  gaps. Next push and restore the primary checkout/viewer. The Stage 5i
   discard proposal remains unadopted and user-owned; the human viewer still automatically
   declares attackers, so deliberate Soulstoke holds need the forced-hold verifier path.
 

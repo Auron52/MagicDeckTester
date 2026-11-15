@@ -863,4 +863,8 @@ D0 improved on all four seeds. The overnight adoption audit reproduced both side
 classified 4,001 changed mulligan counts, 925 changed bottoms at the same count, 29
 bottom-order-only digests and **zero unexplained** changes. The table-on overnight GT was
 accepted, and `check_gt_logs.py` found 1,252 consistent logs, zero stale or missing.
-The last shared-branch rebase, push and primary viewer handoff remain.
+The accepted GT was rebased onto shared upstream `6cb9a7c85` (Gods decision and dredge
+changes). The pooled final-source Red smoke, regular and overnight run passed every row,
+including the 2HG canary, with identical scores and digests. Strict viewer replay again
+passed 864 references, with zero play drift or enum gaps. The shared push and primary
+viewer handoff remain.
