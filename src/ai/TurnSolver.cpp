@@ -99614,7 +99614,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             // enters the graveyard, where Deathrite fuel and the mana pool may have changed.
             if (!cands.empty())
             {
-                if (cands.size() > 1 && ResolveProvider(state).FetchLineRankEnabled(state)
+                if (cands.size() > 1 && !HumanPlayActive()
+                    && ResolveProvider(state).FetchLineRankEnabled(state)
                     && !DecisionUnpruned(UnprunedGate::Fetch))
                 {
                     add_ranked_fetch_lines(ln, cands);
@@ -99694,7 +99695,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
                 else if (!cands.empty())   // preserve a sole target through a Courser-style land drop too
                 {
-                    if (cands.size() > 1 && ResolveProvider(state).FetchLineRankEnabled(state)
+                    if (cands.size() > 1 && !HumanPlayActive()
+                        && ResolveProvider(state).FetchLineRankEnabled(state)
                         && !DecisionUnpruned(UnprunedGate::Fetch))
                     {
                         add_ranked_fetch_lines(tn, cands, true);
