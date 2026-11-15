@@ -138,3 +138,6 @@ deck (`docs/design/mana-clean-gate.md`, `scripts/mana_clean.py`, `test/mana_clea
     generic with Colourless is good EXCEPT for EDF. In that deck you need to be very careful with that." (EDF's {C}
     pays {C}-pip costs.) Built in the shared provider default with an explicit EDF opt-out; measured on Dragons
     first (the 23 Lathliss/Atsushi mid-line-draw drops), each further deck adopted on its own measurement.
+    USER 2026-11-15: test colourless-first generic payment on other decks and EDF too, provided EDF protects
+    colourless for Eldrazi Displacer during the combo and for the final opponent-killing step. Measure the
+    protected EDF rule and the other decks; the earlier blanket EDF opt-out is no longer the target policy.
