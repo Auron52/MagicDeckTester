@@ -9820,8 +9820,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // and overriding it here would throw that away, so this stands down when it fired.
     if (!state.opponent_library_dealt)
     {
-        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck), state.game_seed,
-                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck));
+        const bool play_opponent_lands = GoldFishRunner::DeckNeedsOpponentLandPlay(deck);
+        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck)
+                               || play_opponent_lands, state.game_seed,
+                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck)
+                               || play_opponent_lands);
     }
 
     try
@@ -11234,7 +11237,7 @@ int main(int argc, char* argv[])
     std::string choices_str;          // comma-separated plan indices for --claude-play
     bool        play_interactive = false;   // --interactive: viewer persistent-child mode
     bool        choices_then_auto = false;  // --choices-then-auto: search plays on after the prefix
-    bool        legacy_passive_opponent_lands = false; // replay Mill references recorded before opponent land play
+    bool        legacy_passive_opponent_lands = false; // replay references recorded before opponent land play
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel

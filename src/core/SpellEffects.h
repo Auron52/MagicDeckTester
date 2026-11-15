@@ -2765,7 +2765,7 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
-// Mill's passive opponent plays one land from hand during its main phase. A
+// The passive opponent plays one land from hand during its simplified main phase. A
 // fetch search opens a real opponent-turn instant window for each Archive Trap
 // already in our hand; the autonomous policy casts it for {0} immediately.
 inline void ResolvePassiveOpponentLandTurn(GameState& state)

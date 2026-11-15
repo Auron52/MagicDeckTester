@@ -639,6 +639,29 @@ bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)
     return false;
 }
 
+bool GoldFishRunner::DeckNeedsOpponentLandPlay(const Decklist& deck)
+{
+    bool has_hinata = false;
+    bool targets_permanents = false;
+    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
+    {
+        for (const Card& c : *zone)
+        {
+            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
+            if (!def) { continue; }
+            const CardParams& p = def->params;
+            // Fetch searches can turn Archive Trap into a free spell; Price of
+            // Progress reads the opponent's live nonbasic count; Tasha reads the
+            // real library from the same fifty-deck opponent pool.
+            if (p.archive_trap_free_if_opponent_searched || p.damage_per_nonbasic_land > 0
+                || p.spell_exile_opponent_until_mv > 0) { return true; }
+            has_hinata = has_hinata || p.hinata_cost_reducer;
+            targets_permanents = targets_permanents || p.discount_targets_permanents;
+        }
+    }
+    return has_hinata && targets_permanents;
+}
+
 // Card-dependency-map closure (docs/design/card-dependency-map.md, USER design 2026-08-15): a
 // card's main-phase class is a consequence of the deck's dependency graph, not an intrinsic
 // property. Derived mechanically from CardParams -- no per-deck hand code:
@@ -2140,10 +2163,12 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     }
 
     // The passive opponent's own library + opening hand, on a DERIVED seed so player 0's shuffle
-    // above is untouched (core/OpponentDeck.h). Gated on the deck being able to reach those zones,
-    // so this is a no-op for every deck that cannot mill.
-    opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed,
-                       DeckUsesDiverseOpponentPool(deck));
+    // above is untouched (core/OpponentDeck.h). Decks that read opponent lands use the same
+    // fifty-deck pool as Mill; other decks retain their historical three-land board.
+    const bool play_opponent_lands = !legacy_passive_opponent_lands
+        && DeckNeedsOpponentLandPlay(deck);
+    opponentdeck::Deal(state, DeckTouchesOpponentZones(deck) || play_opponent_lands, seed,
+                       DeckUsesDiverseOpponentPool(deck) || play_opponent_lands);
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
 
     DealWishPool(state, deck);

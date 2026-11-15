@@ -162,6 +162,8 @@ public:
     static bool DeckTouchesOpponentZones(const Decklist& deck);
     // Tasha's Hideous Laughter reads mana values from a real opposing deck.
     static bool DeckUsesDiverseOpponentPool(const Decklist& deck);
+    // Whether this deck's decisions observe the opponent developing lands.
+    static bool DeckNeedsOpponentLandPlay(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto
     // GameState::dep_enabler_main1 / dep_castpayoff_main1 by SetupGame.

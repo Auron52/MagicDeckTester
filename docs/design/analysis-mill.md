@@ -53,6 +53,27 @@ searched games at seed 2003 moved from turn 5 to turn 6 at the usual budget;
 both recovered turn 5 when given more search budget. All 843 saved reference games replayed
 without drift, including the six older Mill recordings under their old model.
 
+A fresh 50-seed sweep (`9001..9050`, one pass across the opponent pool) under
+the land policy scored 6.64 turns at depth 0 with nine unwon games, then 5.08
+at depth 3/b10 and depth 5/b20 with all 50 won. The two searched depths had
+identical win turns in every game of this sample. Logs are
+`logs/mill_land_sanity_d{0,3,5}_seed9001.{out,err}`. The smoke depth-5
+job cost is 39,013 units per game, about 0.45 times Hinata's 86,019 under
+the same opponent-land update.
+
+The land policy is shared with decks whose cards observe opponent lands. The
+deck-derived trait enables it for Price of Progress and for Hinata paired with
+permanent-targeting spells, using the same 50-deck pool and legacy-reference
+replay path. Other decks keep their previous opponent setup.
+
+The six saved Mill references still replay under their recorded opponent model.
+Their benchmark is search 5.333 versus human 6.000 turns, with one remaining
+shortfall: seed 1 wins on turn 4 in the reference and turn 5 in autonomous play.
+The reference holds Polluted Delta until turn 3; search cracks it on turn 2.
+Forcing the reference's five-card opening hand and raising the search budget
+from 20 to 80 and 320 ms still gives a turn-5 win. This is a decision difference
+in the legacy model, not evidence of drift in the current land model.
+
 Card effects implemented so far: literal mill into the appropriate graveyard;
 Tasha's ordered top-of-library exile until cumulative printed mana value reaches
 20; Visions' any-graveyard threshold; Fractured Sanity's cycling trigger;

@@ -10,8 +10,9 @@
 // whose intended kill was "deck the opponent" measured 2.5 turns slower than the user expected,
 // with nothing in any report pointing at why.
 //
-// Mill chooses a real 60-card mainboard by seed % 50 from the frozen primary decklist pool.
-// Other decks retain the established fixed opponent list. The opponent stays passive.
+// Decks that observe opponent land development choose a real 60-card mainboard
+// by seed % 50 from the frozen primary decklist pool. Other decks with opponent
+// zone effects retain the established fixed list. The opponent stays passive.
 // Every library card is a name-only placeholder; read its types from CardDatabase at use time.
 #include "GameState.h"
 #include "DrawCap.h"
@@ -40,8 +41,8 @@ inline const std::vector<std::pair<const char*, int>>& List(uint64_t seed,
                                                              bool use_diverse_pool = false)
 { return use_diverse_pool ? Selected(seed).cards : FixedList(); }
 
-// Cards drawn into the opponent's opening hand. Seven, like anybody else's -- they never mulligan
-// (they make no decisions at all), so this is a flat draw off the top of their shuffled library.
+// Cards drawn into the opponent's opening hand. Seven, like anybody else's; its
+// deterministic land policy does not include mulligans.
 inline constexpr int kOpeningHandSize = 7;
 
 // Numbers assigned to the opponent's cards, offset far above any deck's own numbering so an
@@ -49,8 +50,8 @@ inline constexpr int kOpeningHandSize = 7;
 // numbering is per-deck and dense from 1; nothing in the engine numbers past a few hundred.
 inline constexpr int kNumberBase = 100000;
 
-// Deal the library and opening hand. No-op -- and therefore byte-identical -- for every deck that
-// cannot touch those zones (GameState::opponent_library_dealt).
+// Deal the library and opening hand. No-op for decks that neither touch those
+// zones nor observe the opponent's land development.
 //
 // The shuffle takes a DERIVED seed through a dedicated salt, and that detail is what makes this a
 // non-event for existing decks: Library::Shuffle takes an EXPLICIT seed rather than drawing from a
@@ -79,8 +80,8 @@ inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_
     // salt, so the two shuffles are independent realisations of the same game seed.
     opp.library.Shuffle(SaltSeed(seed, 0xDEC7ull));
 
-    // A flat 7. They never mulligan, because they never make a decision of any kind; the hand
-    // exists so discard effects have something to bite on.
+    // A flat 7. Their deterministic policy does not mulligan; the hand exists
+    // for land plays and discard effects.
     for (int i = 0; i < kOpeningHandSize && !opp.library.empty(); ++i)
     {
         opp.hand.push_back(opp.library.front());
@@ -106,7 +107,7 @@ struct LandPlayResult
     std::string fetched_name;
 };
 
-// The Mill-only passive land policy: play the leftmost land in hand, then crack
+// The passive land policy: play the leftmost land in hand, then crack
 // an immediately usable fetch. Choose the first eligible library land; this is
 // an opponent policy, not a search branch for our solver. The caller performs
 // the shuffle and offers the Archive Trap instant window after resolution.
