@@ -1665,3 +1665,17 @@ fungus 1,880, gods 4,300 (first run).
   payoff); four order drops remain. Shadowborn stays beta; next block 70,000–74,999. Report:
   `logs/mana_clean/20261115-043725/report.md`. The Culling victim fallback remains a separate
   user decision and was not changed.
+
+* **Next fresh blocks on the rebased Codex source (2026-11-15):** PGO source
+  `acc8ea6729f9`, 15,000 games pooled in `rebased-queue-20261115`, with oracle-on/off play
+  byte-identical for all three decks. Prevent Damage 37,000–41,999 has **274 issues**:
+  APPLY-DROP 46, APPLY-DROP-ORDER 4, ORACLE-GAP 65, UNMODELED 6, CAPPED 153.
+  Its rollback census has 44 depth-1 drops and two capped. Dragonstorm 32,000–36,999
+  has **464 issues**: ENUM-GAP 2, APPLY-DROP 253, APPLY-DROP-ORDER 143, ORACLE-GAP 4,
+  UNMODELED 10, CAPPED 52; 93 drops need a later undeclared action. Shadowborn
+  70,000–74,999 has **25 issues**: ENUM-GAP 3, APPLY-DROP 20, ORACLE-GAP 2;
+  19 drops need a later undeclared action. These are fresh seed blocks, so totals are
+  not paired comparisons with earlier reports. All three remain beta. The next blocks
+  are 42,000–46,999, 37,000–41,999, and 75,000–79,999 respectively. Full report:
+  `logs/mana_clean/rebased-queue-20261115/report.md`. A later remote Merfolk solver
+  update arrived during this run; the recorded source stamp identifies this gate.
