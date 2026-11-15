@@ -343,7 +343,7 @@ TEST_CASE("A second Emperor Mihail II cast remains available for the first one's
     state.floating_mana.colorless = 1;
     state.scripted_mihail_pay_choice.Pin(1);
     state.scripted_mihail_pay_choice.bits[0] = 1;
-    FireOnCastTriggers(state, *emperor);
+    FireOnCastTriggers(state, *emperor, /*mana_spent=*/3);
     int tokens = 0;
     for (const Permanent& p : state.battlefield)
     { tokens += p.is_token && CardHasSubtype(p.card, "Merfolk"); }
