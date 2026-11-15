@@ -6669,10 +6669,11 @@ function logEvents(dec) { if (dec) logEventList(dec.events); }
 // ---- Persistent decision-surface options (localStorage) --------------------------------------
 // The engine ALWAYS emits every decision (it is never silently skipped at the engine level); this
 // menu only controls whether the VIEWER surfaces a modal or auto-replies the AI's heuristic default.
-// Default: surface everything except repetitive land-entry, Galadriel reveal, and creature-type
-// choices. The latter uses the provider's deck type (Merfolk for Merfolk Turns); the options menu
-// can restore the prompt when a different type is wanted.
+// Default: surface everything except repetitive land-entry, Galadriel reveal, and Three Tree City.
+// The City's provider default is the deck's type (Merfolk for Merfolk Turns); other cards that choose
+// a creature type still ask unless their own shared type-prompt setting is switched off.
 // Only single-int decisions whose answer is exactly `heuristic_default` are auto-resolvable here.
+// `three_tree_city_type` is a source-specific surface setting for `choose_creature_type`.
 const AUTO_RESOLVABLE = {
   land_entry:      'Shock / reveal lands — pay life (or reveal) vs. enter tapped',
   replicate:       'Replicate — how many token copies to make',
@@ -6682,14 +6683,15 @@ const AUTO_RESOLVABLE = {
   storage_hold:    'Storage lands — hold to charge vs. tap/burst',
   jitte:           "Umezawa's Jitte — how many charge counters to spend",
   choose_color:    'As it enters — choose a color (locked for the game)',
-  choose_creature_type: 'As it enters — choose a creature type',
+  choose_creature_type: 'Other as-enters creature-type choices',
+  three_tree_city_type: 'Three Tree City — choose a creature type',
   choose_abilities:'As it enters — choose two abilities (locked for the game)',
   // Not a dec.type: the `dig` modal's "(galadriel reveal)" source, special-cased in autoResolveDecision.
   galadriel_reveal:'Galadriel of Lothlórien — reveal a land and put it onto the battlefield',
 };
 // galadriel_reveal OFF by default (USER 2026-10-17: "the process is too click intensive for little
 // benefit. I would like to make the reveal decision off-by-default").
-const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry', 'galadriel_reveal', 'choose_creature_type']);
+const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry', 'galadriel_reveal', 'three_tree_city_type']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
 function surfaceStore(){ try { return JSON.parse(localStorage.getItem('mdt_surface')||'{}'); } catch(e){ return {}; } }
 function surfaceEnabled(type){ const s=surfaceStore(); return (type in s) ? !!s[type] : surfaceDefault(type); }
@@ -6796,8 +6798,10 @@ function autoResolveDecision(dec){
     pushChoice(dec, def, `Galadriel: ${def<0?"don't reveal":'reveal'}${ex&&ex.name?' → '+ex.name:''} · auto`);
     return true;
   }
-  if (!(dec.type in AUTO_RESOLVABLE)) return false;
-  if (surfaceEnabled(dec.type)) return false;
+  const surfaceType = dec.type==='choose_creature_type' && dec.source==='Three Tree City'
+                    ? 'three_tree_city_type' : dec.type;
+  if (!(surfaceType in AUTO_RESOLVABLE)) return false;
+  if (surfaceEnabled(surfaceType)) return false;
   const def = (dec.heuristic_default==null ? 0 : dec.heuristic_default);
   // Firebreathe rides the turn-keyed side-channel, not --choices, so it auto-resolves via its own
   // committer (a zero-int step) rather than pushChoice. "Let AI decide" => spend the greedy max.
