@@ -4398,6 +4398,26 @@ public:
     bool CleanupDiscardShedStable() const override;
 };
 
+// Merfolk Turns has its own routing and certificate. Its card-specific activated
+// abilities must not inherit the unrelated Merfolk list's narrowing hooks.
+class MerfolkTurnsProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. Check champion, top-library casts and extra-turn loops before proving a winless turn." }; }
+    const char* Name() const override { return "MerfolkTurns"; }
+    // The 60-card list has one Lightning Greaves and no other haste source.
+    // A fresh Prophets needs a plan action attaching it to that Prophets.
+    int ProphetsFreshCombatEventCap(const GameState&, const std::vector<Action>&,
+                                    const std::vector<int>&) const override;
+    int ProphetsMerfolkVictimWidth(const GameState&, const std::vector<Action>&,
+                                   int board_merfolk, int added_merfolk) const override;
+    void TapTargetPumpTargets(const GameState& state, const Permanent& source,
+                              bool is_pre_combat, std::vector<int>& targets) const override;
+    uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                     const CardDefinition& entering) const override;
+};
+
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
 // docs/design/analysis-Shadowborn Apostle.md). DERIVES FROM DeckProvider -- the archetype-neutral
 // default -- NOT from a provider the list would trip by accident: Demonic Tutor's / Diabolic

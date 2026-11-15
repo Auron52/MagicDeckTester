@@ -1300,7 +1300,16 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && (d->params.cast_trigger_extra_turns > 0
-                      || d->params.extra_turns_on_resolve > 0)) { return true; }
+                      || d->params.extra_turns_on_resolve > 0
+                      || d->params.combat_damage_sac_merfolk_extra_turn)) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_prophets = [&deck]{
+        for (const Card& c : deck.mainboard)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d && d->params.champion_merfolk) { return true; }
         }
         return false;
     }();
@@ -1309,6 +1318,14 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
         {
             const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
             if (d && d->params.miracle_cost.has_value()) { return true; }
+        }
+        return false;
+    }();
+    state.deck_has_deeproot_pilgrimage = [&deck]{
+        for (const auto* zone : {&deck.mainboard, &deck.sideboard})
+        {
+            for (const Card& c : *zone)
+            { if (c.m_name == "Deeproot Pilgrimage") { return true; } }
         }
         return false;
     }();
@@ -1706,7 +1723,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.soulbond)                    { soulbond = true; }
                 if (d->params.is_land_aura)                { land_aura = true; }
                 if (d->params.land_tap_bonus > 0)          { land_aura = true; land_tap_bonus = true; }
-                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island) { islandize = true; }
+                if (d->params.land_aura_sets_island || d->params.kicked_etb_target_land_island
+                    || d->params.tap_target_pump_sets_island) { islandize = true; }
                 if (d->params.chosen_color_pump_power != 0
                     || d->params.chosen_color_pump_tough != 0) { chosen_color_pump = true; }
                 // Horn watches the land PLAY, so casting it before the drop is
@@ -2153,14 +2171,15 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     const int nonbasics = kNonbasics[pattern_index];
     const bool numbered_land_targets = std::any_of(deck.mainboard.begin(), deck.mainboard.end(),
         [](const Card& c) { return c.m_name == "Tide Shaper" || c.m_name == "Spreading Seas"
-                                  || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"; });
+                                  || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"
+                                  || c.m_name == "Tidal Warrior" || c.m_name == "Rishadan Dockhand"; });
     for (int i = 0; i < 3; ++i)
     {
         Card land;
         land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";
         land.RehashName();
-        // Expropriate must distinguish the three physical opponent lands when
-        // choosing the permanent gained for a MONEY vote.
+        // Expropriate's MONEY vote and the Merfolk land-target abilities address
+        // physical opponent lands by number. Give each target a distinct ID.
         if (numbered_land_targets) { land.m_number = 600000 + i; }
         land.AddType(CardType::Land);
         if (i >= nonbasics) { land.AddSupertype(Supertype::Basic); }

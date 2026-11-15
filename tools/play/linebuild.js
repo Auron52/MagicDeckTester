@@ -127,6 +127,7 @@
   // the same reason `equip=` carries `@<host>` rather than trusting a by-name sub-decision.
   const NUM_VERBS = { equipallfree: true };
   function lineVerb(p) {
+    if (p.fromTop && p.kind !== 'land') return 'casttop';
     // A CHANNEL entry is the one non-'activate' kind with its own verb: its source is a card in HAND
     // (so it is not a board activation) but it is not a cast either -- "{1}{R}, Discard this card"
     // plays the same card a different way, and `cast=` cannot say which.
@@ -530,7 +531,7 @@
   // `landat=<k>` position counts. Mirrors encodeLine's cast filter exactly.
   function isSpecCast(p) {
     return p && p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace'
-        && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act');
+        && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'casttop' || lineVerb(p) === 'act');
   }
   // The queued land's POSITION, from where it sits in the queue: '' = first (before every cast),
   // 'all' = after every cast, or the number of casts before it (`landat=<k>`). Only a land queued
@@ -682,7 +683,7 @@
     else if (l) { parts.push('land=' + l.name); if (pos) parts.push('landat=' + pos); }
     // Taps first: they are what the rest of the line is paid from.
     for (const p of plan) if (isPreTap(p)) parts.push(preTapToken(p));
-    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
+    for (const p of plan) if (p.kind !== 'land' && p.kind !== 'le' && p.kind !== 'vial' && p.kind !== 'retrace' && !isPreTap(p) && (lineVerb(p) === 'cast' || lineVerb(p) === 'casttop' || lineVerb(p) === 'act')) parts.push(lineVerb(p) + '=' + p.name);
     for (const p of plan) if (p.kind === 'vial') parts.push('vial=' + p.name);
     for (const p of plan) if (p.kind === 'retrace') parts.push((p.gycast ? 'gycast=' : 'retrace=') + p.name);
     // ADVENTURE (CR 715) rides ALONGSIDE its own `cast=`, not instead of it -- the adventure half is
@@ -708,7 +709,7 @@
     for (const p of plan) {
       if (isPreTap(p)) continue;               // already emitted above, and it has no verb
       const v = lineVerb(p);
-      if (v === 'cast' || v === 'act') continue;   // emitted in clicked order with the casts
+      if (v === 'cast' || v === 'casttop' || v === 'act') continue;   // emitted in clicked order with the casts
       parts.push(v + '=' + (MODE_VERBS[v] ? String(p.mode)
                             : NUM_VERBS[v] ? String(p.hostNum || 0)
                             : p.name)
@@ -782,6 +783,14 @@
   // different hand), so the toggle below matches on (name, source), and the top's cap is the single
   // card itself (topLandOffered), never the hand count.
   function queueCard(decision, plan, name, kind, fromTop) {
+    if (fromTop && kind !== 'land') {
+      const t = decision && decision.me && decision.me.library_top;
+      if (!t || !t.playable_spell || t.name !== name) return plan;
+      const i = plan.findIndex(p => p.fromTop && p.kind !== 'land' && p.name === name);
+      if (i >= 0) { plan.splice(i, 1); return plan; }
+      plan.push({ name, kind, fromTop: true });
+      return plan;
+    }
     if (kind === 'land') {
       const lands = planLands(plan);
       const top = !!fromTop;
@@ -824,7 +833,8 @@
         if (n < castableCount(decision, name)) plan.push({ name, kind: 'suspend' });
         return plan;
       }
-      if (plannedCount(plan, name) < castableCount(decision, name)) plan.push({ name, kind });
+      if (plannedCount(plan, name) - plan.filter(p => p.fromTop && p.name === name).length
+          < castableCount(decision, name)) plan.push({ name, kind });
     }
     return plan;
   }

@@ -510,6 +510,14 @@ using EtbColorChooser = std::function<int(const GameState& state, int controller
                                           const std::vector<int>& menu, int heuristic_pick)>;
 extern thread_local EtbColorChooser* g_play_etb_color_chooser;
 
+// As-enters creature-type choices use catalog indices, so the reply is an
+// option index rather than a subtype id. The hook is paused during search.
+using EtbTypeChooser = std::function<int(const GameState& state, int controller,
+                                         const std::string& source,
+                                         const std::vector<std::string>& menu,
+                                         int heuristic_index)>;
+extern thread_local EtbTypeChooser* g_play_etb_type_chooser;
+
 // ---- Human-play "as this enters, choose two abilities" chooser (Rick, Steadfast Leader) --------
 // CardParams::etb_choose_keyword_count/_menu. The chooser receives the entering card's name, the
 // enumerated legal OPTIONS (each a kChosenKw* bitmask with exactly `count` bits -- C(3,2) = 3 for
@@ -1163,7 +1171,8 @@ inline bool AllPlayHooksNull()
         && g_play_attack_mode_chooser == nullptr
         && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr
-        && g_play_etb_color_chooser == nullptr && g_play_etb_keywords_chooser == nullptr
+        && g_play_etb_color_chooser == nullptr && g_play_etb_type_chooser == nullptr
+        && g_play_etb_keywords_chooser == nullptr
         && g_play_madness_chooser == nullptr
         && g_play_gy_return_one_chooser == nullptr;
 }
@@ -1231,6 +1240,7 @@ struct RevealLogPause
     // Rick tried by plan enumeration) asked the human -- 16 phantom Rick prompts on Soldiers seed 7 T5
     // (USER 2026-10-06: "I hadn't even cast him yet").
     EtbColorChooser*    saved_etbcolchooser = nullptr;
+    EtbTypeChooser*     saved_etbtypechooser = nullptr;
     EtbKeywordsChooser* saved_etbkwchooser = nullptr;
     MadnessChooser*     saved_madchooser = nullptr;   // Vampires A1 madness (fires from ResolvePendingMadness)
     std::vector<PlayReveal>* saved_revealsink;
@@ -1289,7 +1299,9 @@ struct RevealLogPause
         saved_atkchooser = g_play_attackers_chooser;
         saved_tpchooser = g_play_tap_pref_chooser;
         saved_loychooser = g_play_loyalty_chooser;
-        saved_etbcolchooser = g_play_etb_color_chooser; saved_etbkwchooser = g_play_etb_keywords_chooser;
+        saved_etbcolchooser = g_play_etb_color_chooser;
+        saved_etbtypechooser = g_play_etb_type_chooser;
+        saved_etbkwchooser = g_play_etb_keywords_chooser;
         saved_madchooser = g_play_madness_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
@@ -1316,7 +1328,8 @@ struct RevealLogPause
         g_play_attach_host_chooser = nullptr; g_play_jitte_chooser = nullptr;
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
         g_play_loyalty_chooser = nullptr;
-        g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_etb_color_chooser = nullptr; g_play_etb_type_chooser = nullptr;
+        g_play_etb_keywords_chooser = nullptr;
         g_play_madness_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
@@ -1356,6 +1369,7 @@ struct RevealLogPause
                         g_play_tap_pref_chooser = saved_tpchooser;
                         g_play_loyalty_chooser = saved_loychooser;
                         g_play_etb_color_chooser = saved_etbcolchooser;
+                        g_play_etb_type_chooser = saved_etbtypechooser;
                         g_play_etb_keywords_chooser = saved_etbkwchooser;
                         g_play_madness_chooser = saved_madchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
@@ -1398,6 +1412,7 @@ struct ComboOffApplyPause
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     LifegainCountersChooser* c31;
     EtbColorChooser* c32; EtbKeywordsChooser* c33;
+    EtbTypeChooser* c37;
     MadnessChooser* c34;
     XValueChooser* c35;
     GyReturnOneChooser* c36;
@@ -1422,6 +1437,7 @@ struct ComboOffApplyPause
         c30 = g_play_treasurify_chooser;
         c31 = g_play_lifegain_counters_chooser;
         c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
+        c37 = g_play_etb_type_chooser;
         c34 = g_play_madness_chooser;
         c35 = g_play_x_value_chooser;
         c36 = g_play_gy_return_one_chooser;
@@ -1443,7 +1459,8 @@ struct ComboOffApplyPause
         g_play_fling_chooser = nullptr;
         g_play_treasurify_chooser = nullptr;
         g_play_lifegain_counters_chooser = nullptr;
-        g_play_etb_color_chooser = nullptr; g_play_etb_keywords_chooser = nullptr;
+        g_play_etb_color_chooser = nullptr; g_play_etb_type_chooser = nullptr;
+        g_play_etb_keywords_chooser = nullptr;
         g_play_madness_chooser = nullptr;
         g_play_x_value_chooser = nullptr;
         g_play_gy_return_one_chooser = nullptr;
@@ -1469,6 +1486,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = c30;
         g_play_lifegain_counters_chooser = c31;
         g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
+        g_play_etb_type_chooser = c37;
         g_play_madness_chooser = c34;
         g_play_x_value_chooser = c35;
         g_play_gy_return_one_chooser = c36;

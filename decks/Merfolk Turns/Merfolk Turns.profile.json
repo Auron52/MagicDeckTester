@@ -1,0 +1,71 @@
+{
+  "card_scores": {
+    "Aether Vial": [
+      -0.19261812257175048
+    ],
+    "Cavern of Souls": [
+      -0.10488058151609536
+    ],
+    "Deeproot Pilgrimage": [
+      0.07868844283755116,
+      -0.18937062937062876
+    ],
+    "Emperor Mihail II": [
+      0.19383923782278956
+    ],
+    "Lightning Greaves": [
+      0.010617760617760652
+    ],
+    "Merfolk Sovereign": [
+      0.4271423024258647,
+      -0.039338961738818234
+    ],
+    "Rishadan Dockhand": [
+      0.06495978203163322,
+      -0.06465643919355735
+    ],
+    "Rogue's Passage": [
+      -0.11887870996729966
+    ],
+    "Seahunter": [
+      -0.10465350367789394,
+      -0.35276391373952354
+    ],
+    "Silvergill Douser": [
+      -0.0980330415433377
+    ],
+    "Sol Ring": [
+      0.4343293550541567
+    ],
+    "Stonybrook Banneret": [
+      0.10691701904798911,
+      0.006200735680503833
+    ],
+    "Svyelun of Sea and Sky": [
+      0.05216632742076133
+    ],
+    "Three Tree City": [
+      -0.04472673058508381
+    ],
+    "Tidal Warrior": [
+      0.08208855567637663,
+      -0.11355170199100773
+    ],
+    "Wanderwine Prophets": [
+      0.0483343020587963,
+      -0.4273932253313699
+    ]
+  },
+  "hand_score_threshold": -1e+18,
+  "mulligan": {
+    "bottom_order": "count_first",
+    "curve_check": "two_drop",
+    "max_lands": 5,
+    "min_color_sources": {},
+    "min_lands": 1,
+    "min_playable": 0,
+    "required_pieces": [],
+    "stop_at": 4
+  },
+  "version": 1
+}

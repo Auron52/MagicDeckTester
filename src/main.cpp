@@ -717,6 +717,7 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
             case Action::Kind::CastFromHand:
             {
                 tag = a.card_name;
+                if (a.cast_from_top) { tag += " (from library top)"; }
                 // An {X} spell's X is the whole difference between its variants (claude-play sweep
                 // gi5: every Rolling Earthquake X read "Rolling Earthquake"). X=0 is a real line
                 // (the Spellshock trigger), so it prints too. A tutor-put cast prints its X beside
@@ -1709,14 +1710,16 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     // played as the land drop right now as far as its source goes (PlayableTopLandNumber -- a land
     // under a play-from-top permanent); whether a drop is left is land_drops_left, as for a hand land.
     // RawAt, not front(): the viewer reading a revealed card is not a decision reading the library.
-    if (!me.library.empty() && LibraryTopVisible(s))
+    if (!me.library.empty() && (LibraryTopVisible(s) || MayCastTopMerfolk(s)))
     {
         const Card& top = me.library.RawAt(0);
         const CardDefinition* td = CardDatabase::Instance().LookupCached(top);
         os << ", \"library_top\": {\"name\": "; JsonStr(os, top.m_name.str());
         os << ", \"number\": " << top.m_number
            << ", \"kind\": \"" << (td && td->card.IsLand() ? "land" : "spell") << "\""
-           << ", \"playable_land\": " << (PlayableTopLandNumber(s) != 0 ? "true" : "false") << "}";
+           << ", \"playable_land\": " << (PlayableTopLandNumber(s) != 0 ? "true" : "false")
+           << ", \"playable_spell\": " << (PlayableTopMerfolkNumber(s) != 0 ? "true" : "false")
+           << ", \"private\": " << (LibraryTopVisible(s) ? "false" : "true") << "}";
     }
     // Land drops still available this turn (1 normally; more after a Scale the Heights / Explore
     // grants one). A committed segment carries at most ONE land -- Plan::land_to_play is a single
@@ -2780,6 +2783,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             const size_t a = disp_order[di];
             const Action& ac = p.actions[a];
             os << "{ \"card\": "; JsonStr(os, ac.card_name);
+            if (ac.cast_from_top) { os << ", \"cast_from_top\": true, \"verb\": \"casttop\""; }
             // PER-COPY IDENTITY of a board activation's source (Action::sac_source_id is the
             // permanent's stable card.m_number). Without it, two plans that activate DIFFERENT
             // COPIES of the same card serialise byte-identically -- same summary, same casts, same
@@ -4312,7 +4316,8 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
 {
     DecisionJson d(os, decision_index);
     const bool lens = source == "Extraplanar Lens";
-    d.Type("flicker").Source(source).Turn(s)
+    const bool champion = source == "Wanderwine Prophets champion";
+    d.Type(champion ? "champion" : "flicker").Source(source).Turn(s)
      .Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", legal.size(), [&](std::size_t i)
     {
@@ -4324,6 +4329,8 @@ static void WriteFlickerDecisionJson(std::ostream& os, const GameState& s, const
     if (lens)
     { d.Note("reply a land option index to exile and imprint on this Lens, or -1 to decline. "
              "The Lens adds mana only for lands with that exact name. Default = the searched pick."); }
+    else if (champion)
+    { d.Note("reply a Merfolk option index to exile under this Prophets until it leaves, or -1 to sacrifice Prophets instead. A token ceases to exist on exile."); }
     else
     { d.Note("reply an option index -- the permanent to exile and return (it re-enters untapped and "
              "fresh; its ETB/LTB triggers fire), or -1 to decline the flicker. Default = the AI's pick."); }
@@ -4414,6 +4421,14 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
     {
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
                "next decision), or -1 to take nothing. Default = the AI's pick.");
+    }
+    else if (source.find("(Merfolk cast pay {1})") != std::string::npos)
+    {
+        // Emperor Mihail II reuses the dig menu for a yes/no trigger payment.
+        // The examined card is the Merfolk spell that caused the trigger; it never moves zones.
+        d.Note("reply 0 to pay {1} and create a 1/1 blue Merfolk token, or -1 to decline. "
+               "The examined card is the spell you cast, not a card moving to your hand. "
+               "Default = the search's pay choice.");
     }
     else if (source.find("aura swap") != std::string::npos)
     {
@@ -4583,6 +4598,23 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
     else
     { d.Note("reply a color ORDINAL (0=W 1=U 2=B 3=R 4=G) to lock that color in for this permanent "
              "for the rest of the game. Default = the AI's pick."); }
+}
+
+static void WriteEtbTypeDecisionJson(std::ostream& os, const GameState& s,
+                                     const std::string& source,
+                                     const std::vector<std::string>& menu,
+                                     int heuristic_default, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("choose_creature_type").Source(source).Turn(s).Board(s)
+     .HeuristicDefault(heuristic_default);
+    d.Array("options", menu.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": ";
+        JsonStr(os, menu[i]);
+        os << " }";
+    });
+    d.Note("Reply with the index of any creature type. The chosen type is locked to this permanent.");
 }
 
 // "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
@@ -5639,6 +5671,7 @@ static TurnSolver::LineSpec ParseLineSpec(const std::string& spec)
             }
         }
         else if (key == "cast")      { ls.casts.push_back(val); }
+        else if (key == "casttop")   { ls.casts.push_back(val); ls.cast_tops.push_back(val); }
         else if (key == "act")       { ls.casts.push_back(val); ls.board_acts.push_back(val); }  // board activation
         else if (key == "landsedge") { ls.lands_edge = std::atoi(val.c_str()); }
         else if (key == "vial")      { ls.vial_deploys.push_back(val); }
@@ -6121,6 +6154,7 @@ g_play_bounce_chooser = nullptr;
 g_play_sacrifice_chooser = nullptr;
 g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
+g_play_etb_type_chooser = nullptr;
 g_play_etb_keywords_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_dredge_chooser = nullptr;
@@ -6472,6 +6506,7 @@ struct ClaudePlayHarness
     BounceChooser         sacrifice_chooser;
     DigChooser            dig_chooser;
     EtbColorChooser       etb_color_chooser;
+    EtbTypeChooser        etb_type_chooser;
     EtbKeywordsChooser    etb_keywords_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
@@ -7760,6 +7795,36 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_etb_color_chooser = &etb_color_chooser;
+
+    etb_type_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<std::string>& menu, int heuristic_index) -> int
+        {
+            (void)controller;
+            const int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (chosen < 0 || chosen >= static_cast<int>(menu.size()))
+                { chosen = heuristic_index; }
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteEtbTypeDecisionJson(ss, s, source, menu, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteEtbTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_etb_type_chooser = &etb_type_chooser;
 
     // "As this enters, choose two abilities" (Rick, Steadfast Leader). Shares the --choices stream;
     // the reply is an OPTION INDEX into the enumerated pairs, anything out of range keeps the

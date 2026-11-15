@@ -50,6 +50,7 @@ struct ContPins
     int bounce     = -1;   // Plan::bounce_choice (the continuation's own Karoo drop)
     std::vector<int> sac;  // Plan::sac_pins
     std::vector<int> land_search;   // Plan::land_search_pins (the continuation's own land searches)
+    std::vector<int> champion;      // Prophets ETB choices inside a continuation
     std::vector<int> incinerator_targets;
     std::vector<int> look_top;      // Plan::look_top_pins (the continuation's own Risen Reef looks / orders)
     std::vector<int> dredge;        // physical graveyard card number per optional draw; 0 = normal draw
@@ -60,7 +61,8 @@ struct ContPins
     {
         return etbdig >= 0 || saga_ch1 >= 0 || ponder >= 0 || etbcounter >= 0 || tutor >= 0
             || scry >= 0 || bounce >= 1 || !sac.empty() || !land_search.empty() || put_bounce >= 1
-            || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty();
+            || putback >= 0 || !look_top.empty() || !dredge.empty() || !incinerator_targets.empty()
+            || !champion.empty();
     }
 };
 
@@ -377,6 +379,7 @@ struct Action
     // than a hand copy. Same reason as the three above -- the record must carry the WHOLE land choice,
     // or the replay plays a hand copy the search never played.
     bool        land_from_top  = false;
+    bool        cast_from_top  = false; // Mihail: this cast uses the exact current library top, not a hand copy.
     bool        alt_cost       = false;// CastFromHand via an alternative cost (Invigorate /
     bool        awaken         = false; // Part the Waterveil: alternative mana cost and target land.
                                        // Skyshroud Cutter / Reverent Silence): pay no mana and
@@ -1108,6 +1111,7 @@ inline void AddSpellRedirectPip(ManaCost& c)
 
 struct CastRiders
 {
+    bool     cast_from_top   = false;
     bool     miracle         = false;   // exact first-drawn card, offered only in its trigger window
     bool     awaken          = false;
     int      loyalty_ability = -1;   // Action::loyalty_ability on a walker CAST (the rollout's activation;
@@ -1154,6 +1158,7 @@ struct CastRiders
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
+        r.cast_from_top = a.cast_from_top;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
@@ -1703,6 +1708,7 @@ public:
         // Folded into the plan hash, SamePlan, IsApplyEmptyPlan, PlanIsAxisVariant, the census key,
         // the dominance Xaxes key and (live) the breakpoint key.
         std::vector<int> look_top_pins;
+        std::vector<int> champion_pins; // one resolution-time choice per Prophets ETB this apply
         std::vector<int> dredge_pins; // one physical card number per in-plan optional draw, 0 = normal
         std::vector<int> keranos_targets; // one live target rank per in-plan nonland reveal
         std::int16_t next_draw_dredge_choice = -1; // draw step after this turn's boundary
@@ -1740,6 +1746,7 @@ public:
         // Militia's Pride: number of declared nontoken attacker triggers for which to pay {W}.
         // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
         std::int16_t militia_pride_pay_choice = -1;
+        MihailPayChoices mihail_pay_choice; // optional {1} in trigger order
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -1807,6 +1814,7 @@ public:
         // step consumes the low byte, the NEXT upkeep the rest. In the 2-byte hole after the field above
         // (gdb ptype /o, 2026-11-03: no size change); folded into the census Xaxes key by hand.
         std::int16_t demon_trigger_choice = -1;
+        std::vector<int> prophets_sac_choice; // one victim/decline per combat-damage trigger
 
         // HOLD-vs-TAP of this turn's mana creatures. 0 (default) == the shipped heuristic (reserve
         // every mana creature for the whole turn, and sort them last in the tap backtracker);
@@ -3657,6 +3665,7 @@ public:
         // unchanged.
         bool        land_from_top = false;
         std::vector<std::string> casts;      // hand spells to cast, in clicked order
+        std::vector<std::string> cast_tops;  // casttop= spells; included in casts order, but exact source matched
         // "seq=<step>|...": the "**" whole-sequence pin the commit will use (the viewer's
         // validationLine). Never a matching key; the validation previews the commit in this order.
         std::vector<std::string> sequence;

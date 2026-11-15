@@ -1,4 +1,5 @@
 #include "CardDatabase.h"
+#include "../core/CreatureTypeCatalog.h"
 #include "../core/EnvFlags.h"
 #include <fstream>
 #include <stdexcept>
@@ -541,6 +542,8 @@ void CardDatabase::RebuildInternedIndex()
     // is idempotent -- a second LoadFromJson re-interns the same names and re-freezes.
     for (const std::string& lit : SubtypeRegistry::RuntimeLiterals())
     { SubtypeRegistry::Instance().Intern(lit); }
+    for (std::string_view type : kCreatureTypeCatalog)
+    { SubtypeRegistry::Instance().Intern(std::string(type)); }
     SubtypeRegistry::Instance().Freeze();
 
     // RESOLVE EVERY PROTOTYPE'S m_def NOW, so no worker thread ever writes one (2026-08-30).
@@ -748,6 +751,7 @@ static Keyword KeywordFromString(const std::string& s)
     if (s == "Madness")       { return Keyword::Madness; }    // inert tag; param-modelled (madness_cost)
     if (s == "Landwalk")      { return Keyword::Landwalk; }   // inert evasion tag; nothing blocks
     if (s == "Swampwalk")     { return Keyword::Swampwalk; }  // inert evasion tag; nothing blocks
+    if (s == "Islandwalk")    { return Keyword::Islandwalk; } // inert evasion tag; nothing blocks
     if (s == "Morbid")        { return Keyword::Morbid; }     // inert ability-word tag; morbid params
     if (s == "Companion")     { return Keyword::Companion; }  // inert tag; main-deck card, no companion zone
     throw std::runtime_error("Unknown keyword: " + s);
@@ -1115,6 +1119,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     // Courser of Kruphix's two static clauses (CardParams' LIBRARY TOP block).
     p.library_top_revealed           = params.value("library_top_revealed", false);
     p.play_lands_from_library_top    = params.value("play_lands_from_library_top", false);
+    p.cast_merfolk_from_library_top  = params.value("cast_merfolk_from_library_top", false);
     p.stages_cards           = params.value("stages_cards", false);
     p.death_trigger_damage   = params.value("death_trigger_damage", 0);
     p.scales_per_matching    = params.value("scales_per_matching", false);
@@ -1319,6 +1324,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     p.cast_trigger_subtype         = params.value("cast_trigger_subtype", std::string{});
     p.cast_trigger_creates_tokens  = params.value("cast_trigger_creates_tokens", 0);
+    if (params.contains("cast_subtype_pay_token_cost"))
+    { p.cast_subtype_pay_token_cost = ManaCostFromString(params["cast_subtype_pay_token_cost"].get<std::string>()); }
     p.cast_token_power             = params.value("cast_token_power", 0);
     p.cast_token_toughness         = params.value("cast_token_toughness", 0);
     for (const std::string& s : params.value("cast_token_subtypes", json::array()))
@@ -1778,12 +1785,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     // --- Goblins tribal ---
     p.reduces_spell_subtype     = params.value("reduces_spell_subtype", std::string());
+    p.reduces_spell_subtype_also = params.value("reduces_spell_subtype_also", std::string());
     p.reduces_spell_subtype_amount = params.value("reduces_spell_subtype_amount", 1);
     p.reduces_spell_subtype_creature_only =
         params.value("reduces_spell_subtype_creature_only", false);
     p.reduces_graveyard_cast_generic =
         params.value("reduces_graveyard_cast_generic", 0);   // Patrician Geist
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
+    p.choose_type_on_enter      = params.value("choose_type_on_enter", false);
     p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
     p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
     p.own_creature_enters_opp_damage = params.value("own_creature_enters_opp_damage", 0);
@@ -2154,6 +2163,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cycle_draw_exile_shared_type_freecast = params.value("cycle_draw_exile_shared_type_freecast", false);
     p.cast_trigger_extra_turns              = params.value("cast_trigger_extra_turns", 0);
     p.extra_turns_on_resolve                 = params.value("extra_turns_on_resolve", 0);
+    p.champion_merfolk = params.value("champion_merfolk", false);
+    p.combat_damage_sac_merfolk_extra_turn =
+        params.value("combat_damage_sac_merfolk_extra_turn", false);
     if (params.contains("awaken_cost"))
     { p.awaken_cost = ManaCostFromString(params["awaken_cost"].get<std::string>()); }
     p.awaken_counters                        = params.value("awaken_counters", 0);
@@ -2291,6 +2303,14 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_target_pump_power          = params.value("tap_target_pump_power", 0);
     p.tap_target_pump_tough          = params.value("tap_target_pump_tough", 0);
     p.tap_target_pump_grants_trample = params.value("tap_target_pump_grants_trample", false);
+    p.tap_target_pump_requires_subtype = params.value("tap_target_pump_requires_subtype", std::string());
+    p.tap_target_pump_power_per_subtype = params.value("tap_target_pump_power_per_subtype", std::string());
+    p.tap_target_pump_grants_unblockable = params.value("tap_target_pump_grants_unblockable", false);
+    p.tap_target_pump_targets_land = params.value("tap_target_pump_targets_land", false);
+    p.tap_target_pump_taps_target_land = params.value("tap_target_pump_taps_target_land", false);
+    p.tap_target_pump_sets_island = params.value("tap_target_pump_sets_island", false);
+    if (params.contains("tap_tutor_put_cost"))
+        p.tap_tutor_put_cost = ManaCostFromString(params["tap_tutor_put_cost"].get<std::string>());
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 

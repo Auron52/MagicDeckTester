@@ -260,11 +260,17 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
     // the Blessed reaching four counters off a first striker's lifelink). The single-step loop taps as
     // it goes, which is equivalent there: nothing between its iterations can grant vigilance, and no
     // power read looks at `tapped`.
+    bool merfolk_tapped = false;
     for (std::size_t k = 0; k < n; ++k)
     {
         Permanent& p = state.battlefield[atk_idx[k]];
-        if (!CreatureHasVigilance(p, state, &bs_in.vigilance)) { p.tapped = true; }
+        if (!CreatureHasVigilance(p, state, &bs_in.vigilance))
+        {
+            merfolk_tapped |= PilgrimageTapSource(p, active);
+            p.tapped = true;
+        }
     }
+    if (merfolk_tapped) { ResolveDeeprootPilgrimageTap(state, active); }
 
     // The board-source lists are battlefield INDICES gathered before the first step. A first-step
     // combat-damage hook can APPEND a permanent (a Lackey put, a Shroofus token) -- which may itself be
@@ -300,6 +306,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         std::vector<int> step_events; // Curiosity / Tandem Lookout: ONE event per connector per step,
         std::vector<int> step_num;    // ... keyed by m_number (filled only under deck_has_draw_ping)
         std::vector<int> step_id;     // MTG_COMBAT_STABLE_SOURCES: each connector's card number (re-found after Lackey)
+        std::vector<int> prophets;
         for (std::size_t k = 0; k < n; ++k)
         {
             const bool in_step = first_step ? (fs_of[k] || ds_of[k]) : (!fs_of[k] || ds_of[k]);
@@ -366,6 +373,8 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
                 // Maelstrom Archangel: one free cast banked per connecting STEP (one trigger per
                 // combat-damage event).
                 if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
+                if (adef && adef->params.combat_damage_sac_merfolk_extra_turn)
+                { prophets.push_back(p.card.m_number); }
                 if (CreatureHasLifelink(p, state, &bs.lifelink)) { step_lifelink.push_back(power); }
             }
         }
@@ -402,6 +411,11 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         // single-step loop used to count as `ds ? 2 : 1` -- and a first step's draws (and the pings
         // they start) resolve before the regular step.
         FireCombatDamageDrawGrants(state, step_idx, step_num, step_events);
+        // State-based actions end a lethal combat before its damage triggers resolve. In
+        // human play, asking for Prophets' sacrifice after the opponent is dead also
+        // exposes a decision that cannot affect the game.
+        if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
+        { ResolveProphetsCombatDamage(state, active, prophets); }
     };
     deal_step(/*first_step=*/true);
     if (stable) { RefindCombatSources(state, active, atk, atk_id); }   // the first step's hooks can remove
@@ -449,6 +463,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // runs the Niv loop (GameState::deck_has_draw_ping), so every other deck allocates nothing.
     std::vector<int> damaging_events;
     std::vector<int> damaging_num;   // ...keyed by per-copy m_number, re-found at the hook (see there)
+    std::vector<int> prophets;
     // MTG_COMBAT_STABLE_SOURCES: each connector's card number, aligned with damaging_idx, so the hooks after the Lackey
     // put re-find their sources by identity (RefindCombatSources) -- a put's enter cascade can remove a permanent.
     const bool stable = CombatStableSourcesOn();
@@ -489,6 +504,23 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     }
     if (any_first_step && CombatDamageStepsOn())   // =false only when replaying a pre-rule reference
     { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, bs, fs_of, ds_of); }
+
+    // The ordinary one-step path historically tapped each attacker inside the
+    // damage loop. For a Pilgrimage board, resolve the simultaneous declare-
+    // attackers tap event before damage so its token is present for the combat
+    // damage trigger (notably Prophets' sacrifice). Other decks retain that path.
+    if (DeeprootPilgrimageCount(state, active) > 0)
+    {
+        bool merfolk_tapped = false;
+        for (int idx : atk_idx)
+        {
+            Permanent& p = state.battlefield[idx];
+            if (CreatureHasVigilance(p, state, &bs.vigilance)) { continue; }
+            merfolk_tapped |= PilgrimageTapSource(p, active);
+            p.tapped = true;
+        }
+        if (merfolk_tapped) { ResolveDeeprootPilgrimageTap(state, active); }
+    }
 
     std::size_t atk_k = 0;
     for (int idx : atk_idx)
@@ -562,6 +594,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
             // (user-approved banking model; see GameState::free_casts_available). Shared combat
             // core -> executor and rollout bank identically.
             if (adef && adef->params.combat_damage_free_cast) { ++state.free_casts_available; }
+            if (adef && adef->params.combat_damage_sac_merfolk_extra_turn)
+            { prophets.push_back(p.card.m_number); }
             // Lifelink (modeled): combat damage also gains the controller that much life. Inert vs
             // the passive opponent's clock, tracked for life-total decks.
             if (CreatureHasLifelink(p, state, &bs.lifelink)) { pending_lifelink.push_back(power); }
@@ -631,6 +665,8 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // single-step path every connector dealt ONE combat-damage event: a double striker takes the
     // two-step path, which fires the grants once per step.
     FireCombatDamageDrawGrants(state, damaging_idx, damaging_num, damaging_events);
+    if (state.players[opp_idx].life > 0 && state.players[active].life > 0)
+    { ResolveProphetsCombatDamage(state, active, prophets); }
     return out;
 }
 

@@ -371,6 +371,7 @@ enum class PermAbilityMode
     TurnFaceUp,
     TurnFaceUpLate,
     SelfBounce,       // Oboro, Palace in the Clouds: {1}: return itself to owner's hand
+    TapTutorPut,  // Seahunter: {3}, {T}: put a Merfolk permanent from library
 };
 // Is `m` one of the two morph turn-face-up modes?
 inline bool IsTurnFaceUpMode(PermAbilityMode m)

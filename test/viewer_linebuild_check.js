@@ -981,6 +981,29 @@ function checkLibraryTopLand() {
   return fails;
 }
 
+function checkLibraryTopMerfolk() {
+  const hand = [{ name: 'Silvergill Adept', num: 31 }];
+  const top = { name: 'Silvergill Adept', number: 7, kind: 'spell', playable_spell: true };
+  const dec = { me: { hand, library_top: top } };
+  const fails = [];
+  let p = [];
+  p = LB.queueCard(dec, p, 'Silvergill Adept', 'creature', true);
+  p = LB.queueCard(dec, p, 'Silvergill Adept', 'creature');
+  LB.stampPlanNums(dec, p);
+  if (LB.encodeLine(p) !== 'casttop=Silvergill Adept;cast=Silvergill Adept')
+    fails.push(`top and hand Merfolk encode ${LB.encodeLine(p)}`);
+  const fromTop = p.find(e => e.fromTop);
+  if (!fromTop || fromTop.num !== 7)
+    fails.push(`top Merfolk stamped ${fromTop && fromTop.num} instead of 7`);
+  p = LB.queueCard(dec, p, 'Silvergill Adept', 'creature', true);
+  if (LB.encodeLine(p) !== 'cast=Silvergill Adept')
+    fails.push(`top Merfolk toggle changed hand source: ${LB.encodeLine(p)}`);
+  const dead = { me: { hand, library_top: { ...top, playable_spell: false } } };
+  if (LB.queueCard(dead, [], 'Silvergill Adept', 'creature', true).length)
+    fails.push('top Merfolk queued without casting permission');
+  return fails;
+}
+
 // THE LAND'S POSITION IN THE CAST SEQUENCE (engine Plan::land_slot, 2026-10-15). On a decision that
 // offers positioned lines (a plan with land_after_casts or land_slot), a land queued AFTER a cast takes
 // its position from the queue: after every cast -> `landafter=` (hand) / `landat=all` (top); BETWEEN two
@@ -1314,6 +1337,10 @@ function main() {
   topFails.forEach(m => console.log(`  FAIL  library-top land: ${m}`));
   console.log(`Viewer library-top land: ${topFails.length ? 'WRONG' : 'the revealed top queues as landtop=, separate from a hand copy'} ` +
               `(${topFails.length} FAIL)`);
+  const topSpellFails = checkLibraryTopMerfolk();
+  topSpellFails.forEach(m => console.log(`  FAIL  library-top spell: ${m}`));
+  console.log(`Viewer library-top Merfolk: ${topSpellFails.length ? 'WRONG' : 'casttop= is a distinct source and toggles independently'} ` +
+              `(${topSpellFails.length} FAIL)`);
   const posFails = checkLandPosition();
   posFails.forEach(m => console.log(`  FAIL  land position: ${m}`));
   console.log(`Viewer land position: ${posFails.length ? 'WRONG' : 'a land between two casts encodes landat=<k>, after all landafter='} ` +
@@ -1352,7 +1379,7 @@ function main() {
               `(${fetchSuspendFails.length} FAIL)`);
   return (fail + dimFails.length + landFails.length + sacFails.length + borosFails.length + exproFails.length + verbFails.length
           + mixFails.length + hostFails.length + stackFails.length + macroFails.length
-          + tapFails.length + topFails.length + posFails.length + kickFails.length + morphFails.length
+          + tapFails.length + topFails.length + topSpellFails.length + posFails.length + kickFails.length + morphFails.length
           + suspendFails.length + fetchSuspendFails.length + karooFails.length + seqFails.length + shrinkFails.length + segFails.length) ? 1 : 0;
 }
 

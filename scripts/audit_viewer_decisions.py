@@ -76,6 +76,8 @@ MANIFEST = {
     "counters_target_spell_to_graveyard": ("main_phase", truthy),
     "self_bounce_cost": ("main_phase", present),
     "surgical_extraction": ("main_phase", truthy),
+    "champion_merfolk": ("champion", truthy),
+    "combat_damage_sac_merfolk_extra_turn": ("sacrifice", truthy),
     # Temporal Mastery: the first drawn card each turn can be revealed and
     # cast immediately for its miracle cost. The hand-zone paid-cast prompt
     # uses the shared optional-cast protocol at the draw event.
@@ -104,6 +106,7 @@ MANIFEST = {
     # as `dig` "(trigger order)" (ResolveLookTopGroup).
     "enters_look_top_land_or_hand": ("dig",           truthy),
     "attack_nontoken_pay_token_cost": ("dig",       truthy),   # Militia's Pride: pay or decline for each nontoken attacker
+    "cast_subtype_pay_token_cost": ("dig",          truthy),   # Emperor Mihail II: pay {1} or decline on each Merfolk cast trigger
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -386,6 +389,7 @@ MANIFEST = {
     # is exactly why the human is asked rather than handed the provider's heuristic silently.
     # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
     "etb_choose_color":      ("choose_color",         truthy),
+    "choose_type_on_enter":  ("choose_creature_type", truthy),
     # Rick, Steadfast Leader (Soldiers, 2026-10-04): "As this enters, choose two abilities from among
     # first strike, vigilance, and lifelink." The Coldsteel Heart shape exactly -- an as-enters
     # REPLACEMENT decided at resolution (g_play_etb_keywords_chooser in FireOwnEtbTriggers), its own
@@ -492,7 +496,8 @@ MANIFEST = {
     # Kessig Wolf Run "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample" (2026-10-22): the
     # TARGET and the X are main_phase plan VARIANTS (every legal X 0..max and every legal creature under
     # human play; the `pumptarget` / `x` sub-choices of a verbless `cast=Kessig Wolf Run` line).
-    "tap_target_pump_cost":          ("main_phase",  truthy),
+    "tap_target_pump_cost":          ("main_phase",  present),
+    "tap_tutor_put_cost":             ("main_phase",  present),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
     # Steelbane Hydra "{2}{G}, Remove a +1/+1 counter: Destroy target artifact or enchantment" (Hydras
@@ -838,7 +843,8 @@ BOARD_ACTIVATIONS = {
     "discard_team_pump_power":                   ("activate",       positive, None),
     "tap_blood_cost":                            ("activate",       truthy,   "tap_blood_cost"),
     # Kessig Wolf Run's pump: the verbless land convention (`cast=Kessig Wolf Run`), cost {X}{R}{G}.
-    "tap_target_pump_cost":                      ("activate",       truthy,   "tap_target_pump_cost"),
+    "tap_target_pump_cost":                      ("activate",       present,  "tap_target_pump_cost"),
+    "tap_tutor_put_cost":                         ("activate",       present,  "tap_tutor_put_cost"),
     "target_pump_cost":                          ("activate",       truthy,   "target_pump_cost"),
     "remove_counter_destroy_art_ench_cost":      ("activate",       truthy,   "remove_counter_destroy_art_ench_cost"),   # Steelbane Hydra
     # SelesnyaLifegain (2026-09-30). The Steppe keeps the verbless `cast=<land>` convention every
@@ -1559,6 +1565,13 @@ INERT_PARAMS = {
     "mana_per_creature_feeder_generic": "Three Tree scaled-mana activation feeder cost detail (rides mana_per_creature_subtype)",
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
+    "reduces_spell_subtype_also": "second OR-matched subtype on Banneret's mandatory cost reduction, no separate choice",
+    "tap_target_pump_grants_unblockable": "effect of a targeted tap activation; the target is the main_phase plan variant",
+    "tap_target_pump_power_per_subtype": "Douser's computed magnitude; the target is the main_phase plan variant",
+    "tap_target_pump_requires_subtype": "Sovereign target legality filter; the target is the main_phase plan variant",
+    "tap_target_pump_sets_island": "Tidal Warrior effect; the land is the main_phase plan variant",
+    "tap_target_pump_taps_target_land": "Dockhand effect; the land is the main_phase plan variant",
+    "tap_target_pump_targets_land": "land target legality filter; the land is the main_phase plan variant",
     "reduces_graveyard_cast_generic": "static graveyard-spell cost reducer (Patrician Geist, {1} less), no choice",
     # Millicent, Restless Revenant (integrator C1): the FLAT sibling of combat_damage_tokens_per_damage and
     # two token filters on her mandatory, untargeted triggers -- no target, mode, 'may' or division.
@@ -1858,6 +1871,7 @@ MAINPHASE_PARAMS = {
     # verb is `landtop=<name>` (`landtop=<name>;landat=all` for after the casts). The top land's own
     # sub-choices reuse the existing `face` / `fetch` subs and the `bounce` decision.
     "play_lands_from_library_top": "Courser of Kruphix's 'You may play lands from the top of your library' -- the land drop's SOURCE is a main_phase plan variant (Plan::land_from_top; line verb landtop=, board field library_top)",
+    "cast_merfolk_from_library_top": "Emperor Mihail II's permission is a distinct main_phase cast source (Action::cast_from_top; casttop= verb; private library_top field)",
     "cycling_cost":        "cycling = discard-to-draw activation from hand (main_phase play)",
     # Street Wraith (2026-10-26): "Cycling--Pay 2 life" -- the LIFE half of the cycling cost. It prices the
     # same cycling_cost main_phase play (offered only while life > N; the viewer's offer probe and every

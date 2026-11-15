@@ -34,6 +34,88 @@
 #include "GameWorkMeter.h"          // gamework::t_used (MTG_AA_ROUTE_STATS: the work a route walk runs)
 #include "TurnCensus.h"             // whole-game trial tag for Gods' bottoming-only Loam A/B
 
+int DecisionProvider::ProphetsMerfolkVictimWidth(
+    const GameState&, const std::vector<Action>& actions,
+    int board_merfolk, int added_merfolk) const
+{
+    return board_merfolk + added_merfolk + static_cast<int>(actions.size()) * 4;
+}
+
+int MerfolkTurnsProvider::ProphetsFreshCombatEventCap(
+    const GameState&, const std::vector<Action>& actions,
+    const std::vector<int>& fresh_card_numbers) const
+{
+    // The shipped 60 has exactly one haste source, Lightning Greaves. Its haste
+    // affects only its current host. A new Prophets cannot attack unless this
+    // plan attaches Greaves to that physical card. Treat an unknown physical
+    // number conservatively: an attachment might reach it.
+    for (const Action& a : actions)
+    {
+        if (a.kind != Action::Kind::Equip
+            && a.kind != Action::Kind::AttachAllFreeEquipment) { continue; }
+        if (a.kind == Action::Kind::Equip && a.card_name.str() != "Lightning Greaves")
+        { continue; }
+        for (int id : fresh_card_numbers)
+        { if (id == 0 || id == a.sac_victim_id) { return 1; } }
+    }
+    return 0;
+}
+
+int MerfolkTurnsProvider::ProphetsMerfolkVictimWidth(
+    const GameState& state, const std::vector<Action>& actions,
+    int board_merfolk, int added_merfolk) const
+{
+    // This deck's only Merfolk token makers are Mihail (one per Merfolk spell
+    // cast per copy, if {1} is paid) and Deeproot Pilgrimage (one per event
+    // tapping one or more nontoken Merfolk per copy). None of its creatures
+    // taps to pay mana, and attacks tap as one event. Only a permanent-ability
+    // action can add another such event before combat damage. Count all
+    // possible triggers, even ones the plan cannot pay or that happen after a
+    // champion choice. This is an upper bound, never a selected victim rank.
+    int mihail = 0, pilgrimage = 0, merfolk_casts = 0;
+    int entries = 0, tap_events = 1; // the attack declaration
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != state.active_player_index) { continue; }
+        mihail += q.card.m_name == "Emperor Mihail II";
+        pilgrimage += q.card.m_name == "Deeproot Pilgrimage";
+    }
+    // A championed Mihail can return during this plan and trigger later casts.
+    for (const Card& c : state.exile) { mihail += c.m_name == "Emperor Mihail II"; }
+    for (const Action& a : actions)
+    {
+        const bool cast = a.kind == Action::Kind::CastFromHand
+            || a.kind == Action::Kind::CastFromGraveyard;
+        const bool put = a.kind == Action::Kind::ActivateVial;
+        if (cast || put)
+        {
+            const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+            if (d == nullptr)
+            { return board_merfolk + added_merfolk + static_cast<int>(actions.size()) * 4; }
+            const bool is_merfolk = d->card.IsCreature() && CardHasSubtype(d->card, "Merfolk");
+            entries += is_merfolk;
+            merfolk_casts += cast && is_merfolk;
+            mihail += (cast || put) && a.card_name.str() == "Emperor Mihail II";
+            pilgrimage += cast && a.card_name.str() == "Deeproot Pilgrimage";
+        }
+        if (a.kind == Action::Kind::ActivatePermAbility)
+        {
+            ++tap_events; // may not actually tap a Merfolk; overcount is safe
+            if (a.ability_mode == Action::AbilityMode::TapTutorPut)
+            {
+                const CardDefinition* target = CardDatabase::Instance().LookupInterned(a.tutor_target);
+                if (target && target->card.IsCreature() && CardHasSubtype(target->card, "Merfolk"))
+                {
+                    ++entries;
+                    mihail += a.tutor_target.str() == "Emperor Mihail II";
+                }
+            }
+        }
+    }
+    return board_merfolk + std::max(added_merfolk, entries)
+        + mihail * merfolk_casts + pilgrimage * tap_events;
+}
+
 uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                     const CardDefinition&) const
 {
@@ -47,6 +129,24 @@ uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int co
         || entering.card.m_name == "Metallic Mimic")
     { return SubtypeRegistry::Instance().Id("Kithkin"); }
     return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
+uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                       const CardDefinition& entering) const
+{
+    if (entering.params.choose_type_on_enter)
+    { return SubtypeRegistry::Instance().Id("Merfolk"); }
+    return DeckProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
+void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState&, const Permanent& source,
+                                                bool, std::vector<int>& targets) const
+{
+    // The passive opponent never blocks, so Passage's unblockable rider is inert.
+    // Its source is a land: tapping it cannot trigger Deeproot Pilgrimage.
+    // Spending {4} and tapping that land cannot improve this deck's goldfish state.
+    if (!DecisionUnpruned(UnprunedGate::XSpell)
+        && source.card.m_name == "Rogue's Passage") { targets.clear(); }
 }
 
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,
@@ -23984,6 +24084,7 @@ namespace
     const MeliraPodProvider      g_melira_pod;
     const PiratesProvider        g_pirates;
     const MerfolkProvider        g_merfolk;
+    const MerfolkTurnsProvider   g_merfolk_turns;
     const SpiritsProvider        g_spirits;
     const ShadowbornProvider     g_shadowborn;
     const PreventDamageProvider  g_prevent_damage;
@@ -26448,6 +26549,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     bool extra_turn_resolve = false, extra_turn_signature = false;
     bool slivers = false;   // Hatchery Sliver / Thrumming Hivepool: SliversProvider, inside `vial`
     bool merfolk = false; // Image, Tide Shaper, and Spreading Seas carry independent gated signatures.
+    bool merfolk_turns = false;
     bool midrange_burn = false;
     bool modern_rw_burn = false;
     bool goblin = false, gift = false, fivec = false, mirrorwing = false, equipment = false;
@@ -26735,6 +26837,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // creature-type lands, or a generic lord: other tribal decks use those too.
         if (p.enter_as_copy_of_creature || p.kicked_etb_target_land_island
             || p.land_aura_sets_island) { merfolk = true; }
+        if (p.tap_target_pump_sets_island || !p.tap_target_pump_power_per_subtype.empty()
+            || p.tap_target_pump_taps_target_land) { merfolk_turns = true; }
         // Spirits -- see the flag's declaration for the terms and the exclusions.
         {
             const bool spirit_lord = std::find(p.subtypes_affected.begin(), p.subtypes_affected.end(),
@@ -27343,6 +27447,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // future Pirates card might trip can capture it first.
     if (pirates)     { return g_pirates; }
     // Above Vial: its cleanup discard is authored for Slivers, not for this deck.
+    if (merfolk_turns) { return g_merfolk_turns; }
     if (merfolk)     { return g_merfolk; }
     // ABOVE everything: this deck's own signature is unambiguous, and its tutor_to_hand would
     // otherwise be read as anti-lifegain (see the flag's comment).

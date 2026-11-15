@@ -44,6 +44,7 @@ thread_local AttackModeChooser* g_play_attack_mode_chooser = nullptr;
 thread_local LifegainCountersChooser* g_play_lifegain_counters_chooser = nullptr;
 thread_local BounceChooser*  g_play_fling_chooser  = nullptr;
 thread_local EtbColorChooser* g_play_etb_color_chooser = nullptr;
+thread_local EtbTypeChooser* g_play_etb_type_chooser = nullptr;
 thread_local EtbKeywordsChooser* g_play_etb_keywords_chooser = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;
