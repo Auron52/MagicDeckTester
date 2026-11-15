@@ -623,6 +623,15 @@ inline bool ScarceColorMaskOn()
     return heurarm::Flag(heurarm::SCARCE_COLOR_MASK, env_on);
 }
 
+// MTG_SCARCE_COUNTER_MASK (DEFAULT OFF): trial of the same held-first payment only when
+// the board includes a counter-gated land and fewer than two Reflecting Pools. This
+// isolates the Gods Mine/Tendo/Vivid cases without changing the broad EDF experiment.
+inline bool ScarceCounterMaskOn()
+{
+    static const bool on = EnvOn("MTG_SCARCE_COUNTER_MASK");
+    return on;
+}
+
 // MTG_RP_COLOR_ANCHOR (DEFAULT ON; =0 keeps the sole-land-only Pool/Mine order): a last-counter
 // land can be the Reflecting Pool's sole provider of one colour even when other lands exist.
 // Spend the Pool first for a pip they can both pay; the Mine then remains to preserve that colour.

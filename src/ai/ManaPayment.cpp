@@ -8876,11 +8876,32 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     // Growth onto Mariposa Military Base} off Mariposa, Yavimaya Coast and a fresh Brushland. Wild Growth's {G} took
     // the Coast -- the board's only {U}, battlefield order breaking a tie with Brushland's {G} -- and Cloud of
     // Faeries was dropped. Behind heurarm SCARCE_COLOR_MASK so the A/B runs both arms in one batch.
-    if (!ScarceColorMaskOn()) { return 0; }
+    const bool broad = ScarceColorMaskOn();
+    const bool counter_only = ScarceCounterMaskOn();
+    if (!broad && !counter_only) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
     if (!pt || pt->mana_casts < 2) { return 0; }
     const int n = static_cast<int>(state.battlefield.size());
     if (n > 64) { return 0; }                    // bitmask limit, matching ReservableSpecialMask
+    if (counter_only && !broad)
+    {
+        bool has_counter_land = false;
+        int reflecting_pools = 0;
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[i];
+            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            if (d->params.reflecting) { ++reflecting_pools; }
+            if (d->params.enters_with_mana_counters > 0) { has_counter_land = true; }
+        }
+        // Two Pools share the same underlying land colours. The independent-source
+        // count below overstates their resilience and changes an earlier Gods
+        // search line on seed 8900431 (T7 -> unwon); leave that dependency out
+        // of this narrow trial until the provider count models it exactly.
+        if (!has_counter_land || reflecting_pools >= 2) { return 0; }
+    }
     // Pips the REST of the line still owes, beyond this payment's own cost: the line hold (g_line_unpaid_cost, bound
     // by both plan-apply paths and decremented as each cast lands) when one is live, else the plan's pip totals
     // (which still count the casts already paid -- an over-hold, never a refusal).
