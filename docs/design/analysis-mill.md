@@ -100,6 +100,24 @@ Forcing the reference's five-card opening hand and raising the search budget
 from 20 to 80 and 320 ms still gives a turn-5 win. This is a decision difference
 in the legacy model, not evidence of drift in the current land model.
 
+### Completed Mill references (2026-11-15)
+
+The user completed ten Mill references. Seeds 2, 5, and 6 were replayed after
+the opponent-land and Archive Trap change, and seeds 8–10 were added. Eight
+references now record `opponent_land_model: 1`; seeds 3 and 4 retain the old
+opponent model. The benchmark honors each reference's recorded opponent model,
+so these remain valid same-model play comparisons. The strict viewer protocol
+replay passed all ten: ten `ok`, zero
+repairs, play drifts, board divergences, enumeration gaps, or failures. Across
+249 interactive steps there were zero stateless fallbacks. The shipped-policy
+reference benchmark matched or beat every saved win turn: human mean 5.3,
+search mean 4.5; the search was earlier on seeds 2, 3, 6, and 9, and tied the
+other six. This supersedes the older six-reference benchmark above. The scoped
+Mill/Mill2HG smoke and regression gate passed all nine search cases with no
+per-game slowdown or play change; its global strict reference sweep passed
+847 references with no drift, divergence, or gap, and the scenario gate passed
+all 545 scenarios.
+
 Card effects implemented so far: literal mill into the appropriate graveyard;
 Tasha's ordered top-of-library exile until cumulative printed mana value reaches
 20; Visions' any-graveyard threshold; Fractured Sanity's cycling trigger;
