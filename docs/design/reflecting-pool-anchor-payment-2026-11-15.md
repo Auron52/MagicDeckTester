@@ -50,3 +50,43 @@ Each was inspected with `test/explain_game.py`; neither tier has a slower
 game. Both targeted tiers were accepted, and `test/check_gt_logs.py` reports
 1,231 consistent entries. A fresh Gods mana-clean gate is
 still owed after the other known misses are fixed.
+
+## Colour-specific anchor beside other lands (2026-11-15)
+
+The sole-land test was too narrow for Gods seed 30035319. Its turn-five board
+has Forest, Cephalid Coliseum, one-counter Gemstone Mine, and Reflecting Pool;
+another Coliseum can be played. Magus of the Bazaar's `{1}{U}` spends Mine's
+last counter for `{U}`, so the Pool loses its only red-producing land. A later
+Faithless Looting flashback drops. The oracle instead pays Magus with Pool and
+Coliseum, leaving Mine's red for Looting. Five `APPLY-DROP` flags in that game
+vanish with a colour-specific anchor test. The three other focused drop games
+are unchanged, and all four per-game play logs are byte-identical.
+
+`MTG_RP_COLOR_ANCHOR` extends the Pool-first preference only when the
+last-counter land supplies at least one colour no OTHER non-Pool land offers.
+The land need not be the sole non-Pool land. This is still a tap-order rule:
+both sources must be able to pay the current pip. The shared payer applies it
+in both rollout and execution, default on with `=0` restoring the earlier
+sole-land-only order.
+
+On 1,000 fresh paired Gods games (seeds 9,000,001–9,001,000), the prior order
+averaged 5.550 turns and the colour-specific order 5.549. One game won a turn
+earlier, none won later, and three others changed play digest without changing
+win turn; both arms won 981 games by turn eight. Search units fell from
+45,728,719 to 45,714,519 (0.03%). Summed thread time rose from 7,132,044 to
+7,278,867 ms (2.1%) in sequential Release runs, which is not a paired wall
+measurement. The source for both arms was identical; only the default-off
+trial flag differed. Data are `build/scratch/gods_color_anchor_ab/`. After the
+colour-bitmask optimization, all eight targeted games reproduced their trial
+play digests exactly, including the four oracle repros and the four play-changed
+games. The full unit suite passes 3,350 cases and 3,614,032 assertions.
+
+The combined Gods/Gods2HG smoke and regression run passed all 561 scenarios
+and the strict reference replay (329 ok, 534 repaired, one beaten, zero drift
+or gaps). Seven of eight result cells matched committed ground truth. The
+eighth, Gods2HG regression play game 0, still wins on turn six: it now casts
+Careful Study and Life from the Loam on turn four, then Mystic Retrieval on
+turn five, instead of Looting twice on turn four and Study on turn five.
+Disabling `MTG_RP_COLOR_ANCHOR` in the same binary reproduces the prior per-game
+digest exactly. No game slowed, so the reviewed Gods2HG regression row was
+accepted. The new source has no other regression changes in these decks.

@@ -2402,6 +2402,10 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // use one first when both can pay this pip. This is an order bias;
             // the anchor remains available if a Pool cannot pay.
             static const bool s_rp_anchor_first = !EnvOn("MTG_LEGACY_RP_ANCHOR_ORDER"); // DEFAULT ON; =1 old order
+            // The Mine can also be the Pool's sole source of ONE colour
+            // while Forest/Coliseum are other non-Pool lands. Tapping its last counter for a
+            // different pip then deletes the Pool's red before a later Looting (Gods s30035319).
+            // Preserve the Mine only when at least one colour it offers has no other land anchor.
             int rp_anchor = -1;
             // Most payments have no last-counter land. Check that cheap fact
             // before looking up every land's definition in the full scan.
@@ -2433,7 +2437,34 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                     if (!q.tapped && qd->params.sacrifice_when_mana_counters_empty
                         && q.charge_counters == 1) { rp_anchor = ri; }
                 }
-                if (!live_pool || non_reflecting != 1) { rp_anchor = -1; }
+                if (!live_pool) { rp_anchor = -1; }
+                if (rp_anchor >= 0 && non_reflecting != 1)
+                {
+                    bool sole_colour = false;
+                    if (RpColorAnchorOn())
+                    {
+                        const Permanent& anchor = state.battlefield[rp_anchor];
+                        const CardDefinition* ad = CardDatabase::Instance().LookupCached(anchor.card);
+                        if (ad != nullptr)
+                        {
+                            unsigned anchor_colours = 0, other_colours = 0;
+                            for (Color c : EffectiveProducesFor(state, active, *ad, &anchor))
+                            { anchor_colours |= 1u << static_cast<unsigned>(c); }
+                            for (int ri = 0; ri < bn; ++ri)
+                            {
+                                if (ri == rp_anchor) { continue; }
+                                const Permanent& other = state.battlefield[ri];
+                                if (other.controller_index != active || !other.card.IsLand()) { continue; }
+                                const CardDefinition* od = CardDatabase::Instance().LookupCached(other.card);
+                                if (od == nullptr || od->params.reflecting) { continue; }
+                                for (Color c : EffectiveProducesFor(state, active, *od, &other))
+                                { other_colours |= 1u << static_cast<unsigned>(c); }
+                            }
+                            sole_colour = (anchor_colours & ~other_colours) != 0;
+                        }
+                    }
+                    if (!sole_colour) { rp_anchor = -1; }
+                }
             }
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)

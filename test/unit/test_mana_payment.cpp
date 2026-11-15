@@ -13,6 +13,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/DecisionProviders.h"  // ResolveProvider -- ManaSourceRank, the scarcity-first tap order
+#include "ai/EngineFlags.h"       // RpColorAnchorOn -- shared payer switch
 #include "ai/HeuristicArm.h"  // heurarm::t_arm -- per-test lever control (env reads are static)
 #include "ai/ManaPayment.h"   // AvailableManaPool: the unified accounting pool (C1 unit 4)
 #include "ai/TurnSolver.h"
@@ -1249,6 +1250,24 @@ TEST_CASE("Reflecting Pools spend before their sole last-counter mana anchor")
     CHECK(s.battlefield[0].charge_counters == (anchor_first ? 1 : 0));
     SacrificeDepletedLands(s);
     CHECK(TapForCostDirect(s, Cost(0, 0, 1), false) == anchor_first);
+}
+
+TEST_CASE("Reflecting Pool keeps a last-counter colour anchor beside other lands")
+{
+    EnsureCards();
+    GameState s = MakeBoard({"Forest", "Cephalid Coliseum", "Gemstone Mine",
+                             "Reflecting Pool", "Cephalid Coliseum"});
+    for (int i = 0; i < 5; ++i) { s.battlefield[i].card.m_number = 100 + i; }
+    s.battlefield[2].charge_counters = 1;
+
+    // Magus of the Bazaar ({1}{U}) can spend the Mine, but its last counter
+    // removes the Pool's only {R}. Pool/Coliseum can pay Magus while Mine stays
+    // for Faithless Looting's later {2}{R} flashback.
+    REQUIRE(TapForCostDirect(s, Cost(1, 0, 1), false));
+    const bool preserve = !EnvOn("MTG_LEGACY_RP_ANCHOR_ORDER") && RpColorAnchorOn();
+    CHECK(s.battlefield[2].charge_counters == (preserve ? 1 : 0));
+    SacrificeDepletedLands(s);
+    CHECK(TapForCostDirect(s, Cost(2, 0, 0, 0, 1), false) == preserve);
 }
 
 TEST_CASE("plan cache: a free warm entry cannot skip canon-wave enumeration billing")

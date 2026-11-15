@@ -623,6 +623,15 @@ inline bool ScarceColorMaskOn()
     return heurarm::Flag(heurarm::SCARCE_COLOR_MASK, env_on);
 }
 
+// MTG_RP_COLOR_ANCHOR (DEFAULT ON; =0 keeps the sole-land-only Pool/Mine order): a last-counter
+// land can be the Reflecting Pool's sole provider of one colour even when other lands exist.
+// Spend the Pool first for a pip they can both pay; the Mine then remains to preserve that colour.
+inline bool RpColorAnchorOn()
+{
+    static const bool on = EnvOn("MTG_RP_COLOR_ANCHOR", true);
+    return on;
+}
+
 // MTG_AUTO_LINE_GENERIC (2026-10-28; DEFAULT ON, =0 -> WUBRG outside human play): the three line-aware generic-pip
 // orders (SpendFloatingTowardCost's surplus-first drain, ConsumeFloatingAny, LineDemandAnyPipColor -- SpellEffects.h)
 // outside human play too, for lines that name everything they will cast. Read through LineGenericOrderLive
