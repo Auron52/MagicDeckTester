@@ -115,8 +115,12 @@ All first differ during a main phase. In 21 cases the arms choose different
 actions or plan order; in game 607 they execute the same Careful Study and
 Magus actions but end with different graveyards and hands, consistent with a
 different draw replacement inside the action. That one outcome is a real
-blind-play loss (turn six versus seven), but its trace does not show a visible
-condition that predicts drawing is better across games. Adding a draw choice
+blind-play loss (turn six versus seven): the strict arm mills Replenish during
+the turn-three Study, while the old arm draws it on turn four. Both arms had
+the same visible board and hand before Study, so this trace does not show a
+visible condition that predicts drawing is better across games. Other blind
+losses could still contain a genuine conditional draw case; the paired average
+does not rule one out. Adding a draw choice
 to the live search would expand the decision surface and allow coupled search
 to exploit the true unseen top card. The provider keeps the user's low-land
 draw exception and otherwise stays on the measured dredge policy.

@@ -4,6 +4,80 @@ The Claude owner session (24b9e9dc) is out of usage and hands the USER's standin
 Detailed per-item history is in `docs/design/mana-clean-pass-checkpoint.md` (newest bullets at the end of each
 round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-chain/<item>-handoff.md`.
 
+## Codex update (2026-11-15)
+
+The Gods Loam/dredge question below is resolved. The user clarified that Gods
+should dredge toward Mystic Retrieval for Replenish and use Life from the Loam
+to recover lands when it can, drawing naturally at zero or one land with none
+in hand. `MTG_GODS_RETRIEVAL_DREDGE` is integrated default on. The coupled
+search worsens, but paired play with blind search and blind mulligan bottoming
+favors strict dredging: 261 fewer total turns in 2,000 fresh
+solo games and 69 fewer in 1,000 fresh two-headed games. A narrow three-land
+Loam alternative was tested and dropped. The Gods-only ground truth was
+accepted with the coupled regressions disclosed. See
+`docs/design/gods-retrieval-dredge-codex-2026-11-15.md` for the measurements.
+The fresh PGO mana-clean diagnostic for Gods, Prevent Damage, Shadowborn, and
+Dragonstorm completed 311 of 312 oracle-on chunks (19,963 complete games).
+All four decks have confirmed misses, so none could be marked clean on this
+block. The remaining Gods chunk spent about 45 minutes inside one
+breakpoint-continuation audit without returning to the priced-cap check; the
+run was stopped to work on the identified misses. Its partial evidence is in
+`build/scratch/mana_clean/codex-20261115-gods-pd-shadow-ds/`. The first
+focused trial makes Reflecting Pools pay before their sole last-counter
+Gemstone Mine anchor; it removes the Gods drops at seeds 30031096 and
+30031276. A fresh 5,000-pair Gods check found three faster games, none
+slower, and 0.16% fewer search units. The optimized default-on implementation
+and targeted regression checks are complete; see
+`docs/design/reflecting-pool-anchor-payment-2026-11-15.md`. A full fresh 5,000-game
+gate is still owed after fixes. This update supersedes the older Gods decision
+and pending-gate notes below.
+
+The long audit is a cap polling gap: `manaoracle::AuditDecision` checks its
+priced limit between plan audits, while a plan's `ApplyPlanDirect` can derive
+breakpoint continuations for a long time. `EnumChargeScope` posts odometer
+visits only at scope exit. An oracle-only in-derivation poll and an elapsed
+wall backstop are implemented locally. The default-cap repro finished in
+304.6 elapsed seconds, recording `WALL-BP-CAP` and all 650 unaudited plans as
+`CAPPED-DECISION` (171.951 priced seconds, 301.254 audit wall seconds).
+Either interruption reports `CAPPED-DECISION`, never a truncated clean
+verdict. The outer on/off comparison was stopped; its completed oracle-on
+chunks remain diagnostic evidence, not a passed gate.
+
+The preliminary oracle-on misses by affected game are: Gods 4 `APPLY-DROP`,
+10 `ORACLE-GAP`, 2 `CAPPED`, 1 `CAPPED-DECISION`, 1 `UNMODELED`; Prevent
+Damage 1, 24, 15, 0, 1 in those classes; Dragonstorm 39 `APPLY-DROP`, 22
+`APPLY-DROP-ORDER`, 2 `ENUM-GAP`, 4 `ORACLE-GAP`, 3 `CAPPED`, 1
+`CAPPED-DECISION`, 1 `UNMODELED`; Shadowborn 3 `APPLY-DROP`, 1
+`APPLY-DROP-ORDER`, 5 `ENUM-GAP`. These are distinct games per class, not
+event counts; some classes overlap in one game. The incomplete Gods chunk
+may add misses.
+
+The handoff's item H (non-clairvoyant re-decision after an unknown draw) was
+already implemented and validated in the shared source; see the Item H entry
+in `docs/design/mana-clean-pass-checkpoint.md`. The user also chose to drop
+Linux CI because agents run Linux, keep the Windows check, and continue queue
+work while that check runs asynchronously.
+
+The Reflecting Pool/Mine anchor payer is committed as `05ee95805`: both
+targeted Gods tiers were accepted after a per-game audit (zero slower games,
+only three depth-zero play-digest changes, all still losses); all 1,231
+ground-truth logs are consistent. The earlier pushed Gods/Boars commit
+`6cb9a7c85` passed the Windows-only CI run 43726820576. The Shadowborn
+five-seed `ENUM-GAP` cluster is now identified as hidden Dark Ritual copies
+cast through Thrumming Stone, with physical ripple provenance retained across
+a later Diabolic Intent shuffle. Focused oracle reproductions report five
+`HIDDEN-INFO`, zero `ENUM-GAP`; the other Shadowborn drops remain. See
+`docs/design/shadowborn-ripple-hidden-mana-2026-11-15.md`.
+
+The ten Gods `ORACLE-GAP` games were a payment-table coverage hole: the engine
+prepaid ordinary lands across Study/Looting then Magus, while the oracle
+stopped after the first one-mana payment. An audit-only extension of up to two
+extra taps, bounded by the plan's later named bill, removed all 30 gap events
+on those games. The 100-game unrelated Gods cost probe showed +11.5% oracle
+applies and +3.4% oracle time, with identical play. See
+`docs/design/gods-oracle-line-surplus-2026-11-15.md`. The fresh gate remains
+owed after source validation; no issue class is declared clean from a probe.
+
 ## The program (USER, standing)
 Run every deck through `python3 scripts/mana_clean.py run --games 5000` (always pass `--games 5000`), fix every issue,
 mark each deck. A deck leaves beta only after a clean analysis of >= 5,000 games on a FRESH seed block run after its
