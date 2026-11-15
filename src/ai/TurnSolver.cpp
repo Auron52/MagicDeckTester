@@ -29413,6 +29413,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
         if (a.seed_pay_split != 0) { fold(0x5053ull + static_cast<uint64_t>(static_cast<std::uint64_t>(a.seed_pay_split)) * 193); }   // Q61
         fold(static_cast<uint64_t>(a.soulfire_own_targets + 3) * 13
              + static_cast<uint64_t>(a.enchant_target));
+        if (a.trick_put_target) { fold(0xB011u); }
         // Magnetic Theft's Equipment target: a must-fold like devour_count (two pairs are two plays).
         // Folded only when set, so every other plan's fingerprint is unchanged.
         if (a.attach_equip_id != 0)
@@ -43159,9 +43160,10 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (hc.m_number == 0 || hc.m_is_staged) { continue; }
                     const CardDefinition* hd = CardDatabase::Instance().LookupCached(hc);
                     if (!hd || !hd->card.IsCreature()) { continue; }
-                    if (attackers_only && !TrickHandRecipientCanAttackThisTurn(state, *hd)) { continue; }
                     if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
-                    emit(hc.m_number, 0, hc.m_name.str());
+                    const bool hand_can_attack = TrickHandRecipientCanAttackThisTurn(state, *hd);
+                    if (!attackers_only || hand_can_attack)
+                    { emit(hc.m_number, 0, hc.m_name.str()); }
                     // A battlefield put source can land this card before the trick. Keep this
                     // as a separate searched target: the ordinary hand variant requires a cast.
                     bool put_source = false;
@@ -43170,12 +43172,14 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (src.controller_index != state.active_player_index || src.tapped) { continue; }
                         const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
                         if (!sd || !sd->params.tap_put_from_hand_cost.has_value()) { continue; }
+                        if (attackers_only && !hand_can_attack && !sd->params.tap_put_grants_haste)
+                        { continue; }
                         if (sd->params.tap_put_from_hand_creature_only && !hd->card.IsCreature()) { continue; }
                         for (const std::string& type : sd->params.tap_put_from_hand_types)
                         { if (CardMatchesTypeName(hd->card, type)) { put_source = true; break; } }
                         if (put_source) { break; }
                     }
-                    if (put_source)
+                    if (put_source && !HumanPlayActive())
                     {
                         const std::size_t before = actions.size();
                         emit(hc.m_number, 0, hc.m_name.str());

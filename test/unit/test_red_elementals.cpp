@@ -947,6 +947,29 @@ TEST_CASE("Nova Chaser: HARDCAST only after combat (USER main-2 rule); the Souls
     CHECK_FALSE(NovaCastVariants(s, /*pre_combat=*/true).empty());
 }
 
+TEST_CASE("Soulstoke put can be the searched target of a later Legion Leadership")
+{
+    GameState s = BoardRe();
+    for (int k = 0; k < 4; ++k) { PutRe(s, "Mountain"); }
+    PutRe(s, "Incandescent Soulstoke");
+    HandRe(s, "Nova Chaser");       // no printed haste; Soulstoke supplies it
+    HandRe(s, "Legion Leadership");
+    const auto actions = TurnSolver::CollectActionsForTest(s, /*is_pre_combat=*/true);
+    const Action* put = nullptr;
+    const Action* trick = nullptr;
+    for (const Action& a : actions)
+    {
+        if (a.kind == Action::Kind::PutFromHandAbility && a.card_name.str() == "Nova Chaser")
+        { put = &a; }
+        if (a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Legion Leadership"
+            && a.trick_put_target && a.trick_hand_target == "Nova Chaser")
+        { trick = &a; }
+    }
+    REQUIRE(put != nullptr);
+    REQUIRE(trick != nullptr);
+    CHECK(TurnSolver::IsPreTrickPut({*put, *trick}, *put));
+}
+
 // ---- INCANDESCENT SOULSTOKE AT THE OPPONENT'S END STEP (agent F, 2026-11-14) --------------------------------
 // "{1}{R}, {T}: You may put an Elemental creature card from your hand onto the battlefield. That creature gains
 // haste until end of turn. Sacrifice it at the beginning of the next end step." Activated in morph's opponent-end-

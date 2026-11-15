@@ -2430,7 +2430,7 @@ def oracle_advisories(card):
     return out
 
 
-def step(deck, prof, seed, gi, choices, max_turns, jitte=None):
+def step(deck, prof, seed, gi, choices, max_turns, jitte=None, force_attackers=None):
     # Game seed = base + gi: the engine uses --seed VERBATIM as the game's shuffle seed
     # (--game-index only sets numbering/labels -- same convention as the single-game repro
     # recipe). Passing a constant base seed here made every "game" of the sweep the SAME
@@ -2446,6 +2446,8 @@ def step(deck, prof, seed, gi, choices, max_turns, jitte=None):
            "--game-index", str(gi), "--max-turns", str(max_turns),
            "--reveal", "6", "--choices", ",".join(map(str, choices)), "--jitte-prompt",
            "--firebreathe-prompt"]
+    if force_attackers is not None:
+        cmd += ["--force-attackers", force_attackers]
     # The `jitte` list carries BOTH turn-keyed side channels: "fb|<turn>:<count>" entries are the
     # firebreathe / team-pump answers (--firebreathe; --firebreathe-prompt surfaces the decision the
     # way the viewer does -- server.js always passes it; without it Ezuri's / Lathliss's combat pump
@@ -2633,6 +2635,12 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     put_types = set((card.get("parameters") or {}).get("tap_put_from_hand_types") or [])
     eot_put_names_lc = {c.get("name", "").lower() for c in load_deck_cards(deck)[0]
                         if "Creature" in c.get("types", []) and put_types & set(c.get("subtypes", []))}
+    # Pin each attack declaration empty in this targeted repro. The human combat path is
+    # automatic, so otherwise Soulstoke attacks even after the driver saves every land and
+    # passes the main phase. The existing reference-replay side channel makes the real
+    # opponent-end-step window reachable without changing search or normal viewer play.
+    hold_attackers = (";".join(f"{turn}:" for turn in range(1, max_turns + 1))
+                      if "eot_put" in want else None)
     covered, cover_src, first_hit = set(), set(), {}
     cast_seen_anywhere = False
     route_seen = set()
@@ -2646,7 +2654,7 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
         seen_states = set()         # repeat-state pass rule; see run_sweep
         while guard < 220:
             guard += 1
-            d = step(deck, prof, base_seed, gi, choices, max_turns, jitte)
+            d = step(deck, prof, base_seed, gi, choices, max_turns, jitte, hold_attackers)
             if d is None:
                 break
             t = d.get("type")

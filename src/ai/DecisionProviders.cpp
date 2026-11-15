@@ -1807,9 +1807,8 @@ bool RedElementalsProvider::OrderOpaqueCastsByRank() const
 // casting it DOMINATES. Two shapes:
 //   * pre-combat, TrickTargetsAttackersOnly: CollectActions' target loops skip a battlefield creature that is not
 //     attack-eligible now (TrickRecipientCanAttackThisTurn: summoning-sick without haste, tapped -- a Soulstoke that
-//     paid for a put) and a same-plan HAND creature without haste access. A Soulstoke-PUT creature is not currently
-//     a same-plan trick target: the search applies casts before trailing puts. The user reference s1 gi0 proves
-//     that put-then-trick ordering is a separate search-completeness gap; this fold neither causes nor fixes it;
+//     paid for a put) and a same-plan HAND cast without haste access. A same-plan Soulstoke PUT target remains
+//     available when Soulstoke grants it haste; its put resolves before the trick in both apply worlds;
 //   * once this turn's combat is over (StealCombatOver; the list has no extra combat), TrickTargetCandidates returns
 //     the "narrowed, no candidate" sentinel {0}: no creature can attack any more, so every target is dead.
 // Never under human play or MTG_UNPRUNED / MTG_UNPRUNE=tricktarget (the engine checks the first; the second checks
