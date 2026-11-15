@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 2163e85ab  date 2026-11-15
+# Regression ground truth -- commit 75f468f45  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -17,6 +17,8 @@
 # accepted-with-regressions (regression, 2026-11-15): USER 2026-11-15 depth>=5: restore Hinata d5/b30 after invalid Nov11 d4 artifact; 500 matched play games +17 turns vs former d4 GT; 36/41 searched slower games recover at 4x/16x, 5 persist; retain adopted model, overnight left to periodic run
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # accepted-with-regressions (smoke, 2026-11-15): Merfolk Turns d0 gi167/440/840 +1 turn from immediate Three Tree City legend SBA; former lines spent mana from both legendary Cities before priority. gi156 -1 turn after changed City line/shuffle. Searched and 2HG smoke unchanged.
+# accepted-with-regressions (smoke, 2026-11-15): Boars depth-0 Decimator order: gi194 T6->T7 with identical draws; both arms win T5 at depth8 unlimited; 49 games faster and 1 slower overall.
+# accepted-with-regressions (regression, 2026-11-15): Boars Decimator depth-0 rank: gi93 T6->T7 (Horn setup), gi406 T5->T6 (Greaves haste), gi936 T6->T7 (second Decimator); identical draws; 51 faster and 3 slower, net 49 turns saved; all searched cells unchanged.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -25,7 +27,7 @@ mill_smoke_d0_s1001=6.8200/e69959f5c0c3cf89
 mill_smoke_d3_s1001=5.0000/82d21bf5d396f1a6
 mill_smoke_d5_s1001=5.0000/82d21bf5d396f1a6
 mill2hg_smoke_d5_s1001=5.0000/82d21bf5d396f1a6
-boars_smoke_d0_s1001=5.4170/a543a91b6ed6cf59
+boars_smoke_d0_s1001=5.3650/9f42a2da7c81d09f
 boars_smoke_d3_s1001=4.7800/c913f8f8befc4df4
 boars_smoke_d5_s1001=4.8700/c957cc7fd41251b6
 boars2hg_smoke_d5_s1001=5.1200/6f768dcd846b6af2
@@ -243,7 +245,7 @@ mill_regression_d3_s2002=5.0000/4d094873cbc88073
 mill_regression_d5_s2002=5.0000/4d094873cbc88073
 mill_regression_d5_s3003=5.2000/3f17aec415de8a4d
 mill2hg_regression_d5_s2002=5.0000/4d094873cbc88073
-boars_regression_d0_s2002=5.4180/568204222039dfcf
+boars_regression_d0_s2002=5.3690/690ea20968b8b0b9
 boars_regression_d3_s2002=4.8000/6a04d003597af7ef
 boars_regression_d5_s2002=4.7467/8c62247f65b8b69a
 boars_regression_d5_s3003=4.7800/b66a5d8c0cd018c0

@@ -1,6 +1,6 @@
 # Decimator emerge ranking candidate (2026-11-15)
 
-Status: proposed, default **off** (`MTG_BOARS_DECIMATOR_EMERGE_RANK=1` enables it). Do not adopt before user review under `.claude/skills/heuristic-optimization.md`.
+Status: adopted, default **on** (`MTG_BOARS_DECIMATOR_EMERGE_RANK=0` restores the old order). The user authorized pushing promising Boars improvements on 2026-11-15.
 
 The Boars provider ranks Decimator of the Provinces emerge victims for the depth-0 runner and the viewer menu. Searched turns still enumerate every legal victim and the hard cast, so the candidate cannot remove a searched line. The payer already taps the named victim for mana before sacrificing it in both rollout and executor; the Decimator unit tests cover Sage's three mana and an exact-payment line that leaves Birds untapped.
 
@@ -20,4 +20,8 @@ Focused Decimator tests pass with the flag on and off after the provider refacto
 
 A 50-game Boars depth-3, 10 ms budget searched sample (seed 1001) is identical on/off: average 4.7800, digest `a0bb208b58a253e6`, and identical `.wins` files. This checks the intended scope on one searched cell; it is not a full searched regression sweep.
 
-Artifacts: `build/decimator_provider_{build,unit_on,unit_off,refs}.log`, `build/decimator_provider_ab_{off,on}.log`, `build/decimator_provider_ab_{off,on}_wins/`, `build/decimator_provider_d3_{off,on}.log`, `build/decimator_slow2_d8.log`, and the candidate patch in `build/scratch/boars/emerge_ab/candidate_rebased_provider.patch` within this worktree. The implementation can be committed while the flag remains off; adoption still awaits review.
+On the rebased shared branch, a paired 2,050-game smoke plus held-out run reproduced the depth-0 gain: 5.417 to 5.365 average turn over 1,000 smoke games (52 turns saved). Searched play was unchanged with the rank alone. The same run tested an emerge-victim prune; its results and the decision to leave that prune out are recorded in `docs/design/boars-fetch-emerge-prune-2026-11-15.md`.
+
+The official regression tier on the final code confirms the scope: all six searched Boars and Boars 2HG cells match ground truth exactly; the 1,000-game depth-0 cell improves 5.418 to 5.369 (51 faster, three slower, net 49 turns saved). The three slower lines have identical draws: gi93 misses a Horn-before-Decimator setup, gi406 misses Greaves haste on the following turn, and gi936 delays a second Decimator. Those are depth-0 setup choices beyond this victim rank's immediate combat projection. All 854 saved references pass strict replay, with no play drift or enumeration gap.
+
+Artifacts: `build/decimator_provider_{build,unit_on,unit_off,refs}.log`, `build/decimator_provider_ab_{off,on}.log`, `build/decimator_provider_ab_{off,on}_wins/`, `build/decimator_provider_d3_{off,on}.log`, `build/decimator_slow2_d8.log`, and the candidate patch in `build/scratch/boars/emerge_ab/candidate_rebased_provider.patch` within this worktree.

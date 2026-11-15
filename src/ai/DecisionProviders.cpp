@@ -124,6 +124,23 @@ uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int c
 
 // Boars D4 (PROVISIONAL provider one-option prune, surfaced to the USER): Herald's Horn names Boar whenever the
 // deck carries one. Every other chosen-type card (none in this list) keeps the generic deck-derived pick.
+bool BoarsProvider::FetchLineRankEnabled(const GameState& s) const
+{
+    (void)s;
+    static const bool on = EnvOn("MTG_BOARS_FETCH_PIPS", true);  // DEFAULT ON; =0 restores the plain basic order
+    return heurarm::Flag(heurarm::FETCH_RANK_PIPS, on);
+}
+
+std::vector<std::string> BoarsProvider::FetchSearchCandidates(const GameState& s, int controller,
+    const CardParams& fetch_pp, const std::vector<std::string>& ranked) const
+{
+    // The legacy immediate-fetch route has no land-search pick width. Keep its candidate set
+    // aligned with the battlefield fetch route under the Boars shock-first rule.
+    if (EnvOn("MTG_BOARS_FETCH_PRUNE", true) && fetch_pp.fetch_land_types.size() == 2)
+    { return FetchTopPickOnly(ranked); }   // DEFAULT ON; =0 restores the full candidate set
+    return DecisionProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked);
+}
+
 void BoarsProvider::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
                                              bool basic_only, bool share_land_type, std::uint16_t subtype,
                                              std::uint16_t subtype_alt,
@@ -134,15 +151,28 @@ void BoarsProvider::LandSearchFetchPickOrder(const GameState& s, int controller,
     // USER two-colour rule: take the shock while it remains in the library, then a basic.
     // Boars-only 300-game A/B improved every cell (play -2 turns, d3 -2, 2HG play -5);
     // all three original slower indices were neutral or better across 20 blind shuffle salts.
-    // DEFAULT ON; =0 restores the prior order. At low life, a held fetch still searches every target.
+    // DEFAULT ON; =0 restores the prior order.
     if (!EnvOn("MTG_BOARS_SHOCK_FIRST", true)) { return; }
     std::stable_partition(picks.begin(), picks.end(), [](const std::vector<std::string>& pick)
     { return pick.size() == 1 && pick.front() == "Stomping Ground"; });
 }
 
+int BoarsProvider::LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
+    bool basic_only, bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+    const std::vector<std::vector<std::string>>& picks) const
+{
+    // The on-play land drop already keeps one target. This closes the held-activation fan
+    // for the same one-land fetch template; other two-subtype searches retain their width.
+    if (EnvOn("MTG_BOARS_FETCH_PRUNE", true) && count == 1 && to_hand == 0 && !basic_only && !share_land_type)
+    { return 1; }   // DEFAULT ON; =0 restores the full candidate set
+    return DecisionProvider::LandSearchFetchPickWidth(s, controller, count, to_hand,
+        basic_only, share_land_type, subtype, subtype_alt, picks);
+}
+
 bool BoarsProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
 {
     const bool cacheable = DecisionProvider::LandSearchPickOrderKey(s, controller, key);
+    if (EnvOn("MTG_BOARS_FETCH_PRUNE", true)) { key |= std::uint64_t{ 1 } << 20; }
     if (EnvOn("MTG_BOARS_SHOCK_FIRST", true))
     {
         key |= std::uint64_t{ 1 } << 21;
@@ -203,7 +233,7 @@ int BoarsProvider::ManaSourceRank(const GameState& s, const CardDefinition& def)
 bool BoarsProvider::WantsEmergeVictimRank(const GameState& s, const CardDefinition& spell) const
 {
     (void)s;
-    static const bool on = EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK", false);   // measurement candidate; DEFAULT OFF
+    static const bool on = EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK", true);   // DEFAULT ON; =0 restores the prior order
     return on && spell.card.m_name == "Decimator of the Provinces"
         && (TurnSolver::InD0Runner() || HumanPlayActive());
 }

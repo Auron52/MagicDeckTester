@@ -49,6 +49,33 @@ struct ShockFirstEnvScope
     ~ShockFirstEnvScope() { SetShockFirstTestEnv(had ? prior.c_str() : nullptr); }
 };
 
+struct FetchPruneEnvScope
+{
+    bool had;
+    std::string prior;
+    explicit FetchPruneEnvScope(const char* value)
+    {
+        const char* old = std::getenv("MTG_BOARS_FETCH_PRUNE");
+        had = old != nullptr;
+        prior = old ? old : "";
+#ifdef _WIN32
+        _putenv_s("MTG_BOARS_FETCH_PRUNE", value ? value : "");
+#else
+        if (value) { setenv("MTG_BOARS_FETCH_PRUNE", value, 1); }
+        else { unsetenv("MTG_BOARS_FETCH_PRUNE"); }
+#endif
+    }
+    ~FetchPruneEnvScope()
+    {
+#ifdef _WIN32
+        _putenv_s("MTG_BOARS_FETCH_PRUNE", had ? prior.c_str() : "");
+#else
+        if (had) { setenv("MTG_BOARS_FETCH_PRUNE", prior.c_str(), 1); }
+        else { unsetenv("MTG_BOARS_FETCH_PRUNE"); }
+#endif
+    }
+};
+
 void EnsureCardsFr()
 {
     static const bool loaded = []
@@ -196,6 +223,7 @@ std::vector<std::string> ActivationNames(const GameState& s, const CardParams& p
 
 TEST_CASE("fetch targets: the gi153 T1 hand takes Stomping Ground on play, the same list as the activation")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     static const BoarsProvider bp;
     GameState s = BaseFr(bp, 1);
@@ -221,6 +249,7 @@ TEST_CASE("fetch targets: the gi153 T1 hand takes Stomping Ground on play, the s
 
 TEST_CASE("fetch targets: stable under library order")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     static const BoarsProvider bp;
     GameState s = BaseFr(bp, 1);
@@ -322,7 +351,7 @@ TEST_CASE("fetch search width: the base default searches every target; the revie
     // USER 2026-11-14: "why do we only try the first candidate by default? ... It's a different story if we have
     // an intentional prune."
     CHECK(gp.FetchSearchCandidates(s, 0, foothills, ranked) == ranked);
-    CHECK(bp.FetchSearchCandidates(s, 0, foothills, ranked) == ranked);
+    CHECK(bp.FetchSearchCandidates(s, 0, foothills, ranked) == std::vector<std::string>{ "Stomping Ground" });
     CHECK(cg.FetchSearchCandidates(s, 0, foothills, ranked) == ranked);
     // The existing provider prunes (pending USER review), byte-identical to the old default.
     const std::vector<std::string> top = { "Stomping Ground" };
@@ -364,8 +393,19 @@ GameState Boars97005T4(const DecisionProvider& prov)
 }
 }  // namespace
 
+TEST_CASE("Boars default fetch order covers Ilharg's second red pip after the shock is gone")
+{
+    EnsureCardsFr();
+    static const BoarsProvider bp;
+    GameState s = Boars97005T4(bp);
+    SetLib(s, { "Forest", "Mountain", "Forest" });
+    const CardDefinition& foothills = DefFr("Wooded Foothills");
+    CHECK(OnPlayFetchCandidates(s, 0, foothills).front() == "Mountain");
+}
+
 TEST_CASE("fetch ranking: the 97005 T4 board fetches the next Stomping Ground (a SECOND red source for Ilharg)")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     static const BoarsProvider bp;
     const CardDefinition& foothills = DefFr("Wooded Foothills");
@@ -406,6 +446,7 @@ TEST_CASE("fetch ranking: the 97005 T4 board fetches the next Stomping Ground (a
 
 TEST_CASE("Boars two-colour fetch rule: Stomping Ground precedes basics on both routes")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     static const BoarsProvider bp;
     const CardDefinition& foothills = DefFr("Wooded Foothills");
@@ -421,8 +462,38 @@ TEST_CASE("Boars two-colour fetch rule: Stomping Ground precedes basics on both 
     }
 }
 
+TEST_CASE("Boars fetch prune: a held crack takes only the shared top pick, including the basic fallback")
+{
+    EnsureCardsFr();
+    static const BoarsProvider bp;
+    GameState s = BaseFr(bp, 1);
+    Hand(s, { "Birds of Paradise", "Wooded Foothills" });
+    const CardDefinition& foothills = DefFr("Wooded Foothills");
+    ShockFirstEnvScope shock_on("1");
+    FetchPipsArm pips_off(false);
+    SetLib(s, { "Mountain", "Forest", "Stomping Ground" });
+    {
+        FetchPruneEnvScope off("0");
+        CHECK(ActivationNames(s, foothills.params)
+              == std::vector<std::string>{ "Stomping Ground", "Forest", "Mountain" });
+    }
+    {
+        FetchPruneEnvScope on("1");
+        CHECK(ActivationNames(s, foothills.params) == std::vector<std::string>{ "Stomping Ground" });
+        SetLib(s, { "Mountain", "Forest" });
+        CHECK(ActivationNames(s, foothills.params) == std::vector<std::string>{ "Forest" });
+        CHECK(bp.FetchSearchCandidates(s, 0, foothills.params, { "Forest", "Mountain" })
+              == std::vector<std::string>{ "Forest" });
+    }
+    {   // The memo must distinguish the two arms even when the library is unchanged.
+        FetchPruneEnvScope off("0");
+        CHECK(ActivationNames(s, foothills.params) == std::vector<std::string>{ "Forest", "Mountain" });
+    }
+}
+
 TEST_CASE("fetch ranking: the plain rule's decisions stand (gi153 Stomping Ground, Creature Giving)")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     FetchPipsArm on(true);
     {
@@ -452,6 +523,7 @@ TEST_CASE("fetch ranking: the plain rule's decisions stand (gi153 Stomping Groun
 
 TEST_CASE("fetch ranking: library order never decides (battlefield list and the legacy FetchCandidates list)")
 {
+    FetchPruneEnvScope full_candidates("0");
     EnsureCardsFr();
     FetchPipsArm on(true);
     {
@@ -564,6 +636,7 @@ TEST_CASE("fetch ranking: a two-mana Karoo brings a costly spell's required colo
 
 TEST_CASE("fetch ranking: a two-colour deck takes the shock even when the board already makes both colours")
 {
+    FetchPruneEnvScope full_candidates("0");
     // USER: "If there are 2 colours you literally can just always get the shock and then basics after that."
     // Forest + Mountain on the board, Birds of Paradise castable and already paid by the Forest: no land adds a pip
     // and nothing is lacked, so the shock (Stomping Ground) still comes first, then the basics -- Forest, the colour
@@ -593,6 +666,7 @@ TEST_CASE("fetch ranking: a two-colour deck takes the shock even when the board 
 
 TEST_CASE("fetch ranking: no shock makes the colour the line needs -> the basic beats the shock")
 {
+    FetchPruneEnvScope full_candidates("0");
     // Forest, Forest, Zhur-Taa Druid: Herald of Ilharg {2}{R}{G} is castable at four mana and its R has no source. The
     // Temple Garden in the library (a legal Forest) is a shock, but it does not make red: Mountain first ("The only
     // exception is if we have no shocks in the colour our line needs"), then the shock, then Forest.

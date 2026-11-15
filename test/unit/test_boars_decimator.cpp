@@ -203,7 +203,7 @@ TEST_CASE("Decimator: enumeration -- one emerge variant per victim class beside 
 
 TEST_CASE("Decimator candidate: emerge ranks the damage left attacking and the hard-cast option")
 {
-    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK")) { return; }   // measurement arm only
+    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK", true)) { return; }
     auto scores = [](const GameState& s) {
         TurnSolver::GreedyPermit permit(TurnSolver::GreedySite::D0Runner, 0);
         std::map<int, int> best;   // 0 = hard cast; otherwise the emerge victim's card number
@@ -250,7 +250,7 @@ TEST_CASE("Decimator candidate: emerge ranks the damage left attacking and the h
 
 TEST_CASE("Decimator candidate: a lethal Raggadragga emerge beats a setup cast")
 {
-    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK")) { return; }
+    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK", true)) { return; }
     GameState s = DBase();
     s.m_provider = &DBoarsProvider();
     s.turn_number = 4;
