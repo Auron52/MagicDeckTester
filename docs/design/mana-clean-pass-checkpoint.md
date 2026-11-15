@@ -1694,3 +1694,21 @@ fungus 1,880, gods 4,300 (first run).
   beta. Next blocks: Prevent Damage 47,000–51,999, Dragonstorm
   42,000–46,999, Shadowborn 80,000–84,999. Full report:
   `logs/mana_clean/postmerfolk-queue-20261115/report.md`.
+
+* **Prevent Damage floated-pain line repair (Codex, 2026-11-15):**
+  `MTG_PD_FLOAT_LINE_REPAIR` retries a stranded named line without the
+  aggregate damage cap when Tamanoa can resolve each mana-tap trigger before
+  the next; it accepts only a payment whose exact damage-event flush survives.
+  Seed 30044517 T6 has seven APPLY-DROPs with the lever off and zero with it
+  on. The focused fixture and 3,177-unit suite pass. A held-out 5,000-game
+  same-binary A/B has zero faster or slower games and two digest-only changes.
+  The rebased combined 544-job smoke/regression tier matches every Prevent
+  Damage row, with strict viewer references showing zero drift, divergence, or
+  enum gaps; unrelated White Knights/Goblins mismatches remain unaccepted.
+  Fresh PGO gate 47,000–51,999 reports **288 issues**: six APPLY-DROP, 33
+  ORACLE-GAP, 12 UNMODELED, 237 CAPPED. Oracle-on/off play is identical. All
+  six drops are depth-one `need_later` from seed 30050876 T5: Rolling
+  Earthquake is selected after the initial Dina plan. Prevent Damage remains
+  beta; next block 52,000–56,999. Details:
+  `docs/design/prevent-damage-floated-pain-line-codex-2026-11-15.md` and
+  `logs/mana_clean/pd-float-line-20261115/report.md`.
