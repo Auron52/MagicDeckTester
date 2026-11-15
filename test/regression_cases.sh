@@ -2158,17 +2158,17 @@ OVERNIGHT_CASES=(
   "martyr2hg  5  5005   75 20"
   "martyr2hg  5  6006   75 20"
   "martyr2hg  5  7007   75 20"
-  # redelem: see the SMOKE block. Pre-keep-table overnight ENTRY set: one d3 b10 sanity row + d5 play rows (USER 2026-10-27).
+  # redelem: keep-table FULL set; d5 play rows meet Hinata's 425-game floor at shipped b20.
   # No redelem2hg overnight rows: the deck reads no heads/opponents (see the smoke canary note).
   "redelem 0  4004 2000 0"
   "redelem 0  6006 2000 0"
   "redelem 0  8008 2000 0"
   "redelem 0 10010 2000 0"
   "redelem    3  4004  125 10"
-  "redelem    5  4004  300 20"
-  "redelem    5  5005  300 20"
-  "redelem    5  6006  300 20"
-  "redelem    5  7007  300 20"
+  "redelem    5  4004  425 20"
+  "redelem    5  5005  425 20"
+  "redelem    5  6006  425 20"
+  "redelem    5  7007  425 20"
   # Spirits: pre-keep-table overnight ENTRY set on the Merfolk template.
   "spirits 0  4004 2000 0"
   "spirits 0  6006 2000 0"

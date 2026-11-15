@@ -1,4 +1,4 @@
-# Regression ground truth -- commit c3a52c9bf  date 2026-11-15
+# Regression ground truth -- commit 7f3d291ec  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -21,6 +21,7 @@
 # accepted-with-regressions (regression, 2026-11-15): Boars Decimator depth-0 rank: gi93 T6->T7 (Horn setup), gi406 T5->T6 (Greaves haste), gi936 T6->T7 (second Decimator); identical draws; 51 faster and 3 slower, net 49 turns saved; all searched cells unchanged.
 # accepted-with-regressions (smoke, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
 # accepted-with-regressions (regression, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
+# accepted-with-regressions (smoke, 2026-11-15): Red Elementals R30 mulligan profile: smoke d5 4.28->4.32 (+0.04t over 100 games); changed games attributed to mulligan count/bottom, zero unexplained; held-out keep and confounded bottoming improve -0.10175t/-0.02925t; regular d5 improves.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -172,6 +173,7 @@ pirates2hg_smoke_d5_s1001=4.9000/65ec8d5bb485be8e
 soldiers2hg_smoke_d5_s1001=4.9800/5b7a2068cacdb969
 colossus2hg_smoke_d5_s1001=4.1200/b22ceb2fcfdac37e
 elementals2hg_smoke_d5_s1001=4.9600/04852f7bf379fa70
+redelem2hg_smoke_d5_s1001=5.0400/c7dad68636aa9105
 pd2hg_smoke_d5_s1001=5.5200/a7bbe49291597e8a
 fluctuator_smoke_d0_s1001=4.9820/33253c159449c8fd
 fluctuator_smoke_d3_s1001=3.4400/42b9a467b3fe28ab
@@ -232,6 +234,9 @@ martyr_smoke_d0_s1001=5.8430/313c984b7fa0e075
 martyr_smoke_d3_s1001=5.1000/bf8a29dbfd0a0b40
 martyr_smoke_d5_s1001=5.0600/492153bbcfb5879b
 martyr2hg_smoke_d5_s1001=5.1200/e6130d94ad5b9ae4
+redelem_smoke_d0_s1001=4.7620/2ff65103e667955a
+redelem_smoke_d3_s1001=4.2800/13005575b6974a27
+redelem_smoke_d5_s1001=4.3200/28ccd2e1228bb6ae
 spirits_smoke_d0_s1001=5.0070/62dc38df804bce43
 spirits_smoke_d3_s1001=4.5800/9bf700a5464ff80a
 spirits_smoke_d5_s1001=4.6500/b1de7e800cda6e9b
@@ -240,10 +245,6 @@ merfolkturns_smoke_d0_s1001=6.1020/a4175fa8554c25a2
 merfolkturns_smoke_d3_s1001=5.6000/35eabb416cb18b46
 merfolkturns_smoke_d5_s1001=5.6000/1cefeb8b4693a2b8
 merfolkturns2hg_smoke_d3_s1001=6.0000/03f13d2a2fafa76b
-
-redelem_smoke_d0_s1001=4.8770/831384b1508d005b
-redelem_smoke_d3_s1001=4.3200/ed835a5e47ce43f8
-redelem_smoke_d5_s1001=4.2800/f64922dd70c966dd
 
 # --- regression ---
 mill_regression_d0_s2002=6.4100/47b8b5e3bc2f438a
@@ -337,6 +338,8 @@ elementals_regression_d3_s30001=4.2000/adccc6917e55e488
 elementals_regression_d5_s30001=4.2000/adccc6917e55e488
 martyr_regression_d3_s30201=5.0000/8d50cb9aaad76d4e
 martyr_regression_d5_s30201=5.0000/8d50cb9aaad76d4e
+redelem_regression_d3_s30201=4.0000/d0ad4253b91faa99
+redelem_regression_d5_s30201=4.0000/d0ad4253b91faa99
 melira_regression_d3_s30001=4.5500/14a6ea695ade4937
 melira_regression_d5_s30001=4.5263/9ca9bdcb3e74d921
 minotaur_regression_d3_s30001=4.9000/f335d9b5734cc03b
@@ -578,6 +581,10 @@ martyr_regression_d3_s2002=5.2000/44ffd827f3296ef1
 martyr_regression_d5_s2002=5.1800/97eb71b0930aefa9
 martyr_regression_d5_s3003=5.0600/8718770d28de6c15
 martyr2hg_regression_d5_s2002=5.2933/473bef39ea151b28
+redelem_regression_d0_s2002=4.7530/e56dbe87174a445f
+redelem_regression_d3_s2002=4.2800/bb7005950dbef1ad
+redelem_regression_d5_s2002=4.3000/2b59d7fa19edb17a
+redelem_regression_d5_s3003=4.3267/13ce16c4f8e03322
 spirits_regression_d0_s2002=4.9500/361ba8f18a84bb90
 spirits_regression_d3_s2002=4.6533/9ff8b34de3f4c570
 spirits_regression_d5_s2002=4.6667/13ddea095a681ad4
@@ -586,13 +593,6 @@ merfolkturns_regression_d0_s2002=6.0120/88a39774b044c7a9
 merfolkturns_regression_d3_s2002=5.3600/511943ab5f5efcae
 merfolkturns_regression_d5_s2002=5.5667/8011a32354c3fb4a
 merfolkturns_regression_d5_s3003=5.6133/70b9eaa5b09ef91d
-
-redelem_regression_d0_s2002=4.8800/130b3fc41a7ce549
-redelem_regression_d3_s2002=4.4600/d2c49ddbed2e605d
-redelem_regression_d3_s30201=4.0000/787bde01e16f33b1
-redelem_regression_d5_s2002=4.3533/db2b5e550a5123ba
-redelem_regression_d5_s3003=4.3400/12e33284a041e3a6
-redelem_regression_d5_s30201=4.0000/787bde01e16f33b1
 
 # --- overnight ---
 mill_overnight_d0_s4004=6.8300/2dbd5b0890840fc1
@@ -711,6 +711,8 @@ elementals_overnight_d3_s30101=4.2000/9efd8b02df5adbb4
 elementals_overnight_d5_s30101=4.2000/2d3b4bbf3571aa1f
 martyr_overnight_d3_s30301=5.4000/b62f7150456cee25
 martyr_overnight_d5_s30301=5.4000/b62f7150456cee25
+redelem_overnight_d3_s30241=4.0000/908a379d8d13ab26
+redelem_overnight_d5_s30241=4.0000/908a379d8d13ab26
 melira_overnight_d3_s30101=4.4500/f6a7d246fc1e7abf
 melira_overnight_d5_s30101=4.4500/bad20eb59ab1635a
 minotaur_overnight_d3_s30101=4.8500/55054b2787721be4
@@ -1248,6 +1250,15 @@ martyr2hg_overnight_d5_s4004=5.2000/7fc866557e243d0a
 martyr2hg_overnight_d5_s5005=5.0000/0d522dff4f512b1f
 martyr2hg_overnight_d5_s6006=5.2000/2b95ec316c5443ad
 martyr2hg_overnight_d5_s7007=5.0533/acb5a045906c832c
+redelem_overnight_d0_s4004=4.7590/dd3eaf61476a7dbb
+redelem_overnight_d0_s6006=4.8095/e74c571dd965e0d1
+redelem_overnight_d0_s8008=4.7835/5bf356820f4a6ba9
+redelem_overnight_d0_s10010=4.7935/0cb5c3b2d1f0d6b3
+redelem_overnight_d3_s4004=4.2560/89cb3dd589919ce8
+redelem_overnight_d5_s4004=4.2918/f3fba5f2b8329668
+redelem_overnight_d5_s5005=4.3059/eb4c6f3d67245209
+redelem_overnight_d5_s6006=4.2894/19a97c00a37c5516
+redelem_overnight_d5_s7007=4.3435/8c25a654d6ae3503
 spirits_overnight_d0_s4004=4.9880/31b3d0dccde148d1
 spirits_overnight_d0_s6006=4.9950/ee1071b2711a5ed7
 spirits_overnight_d0_s8008=5.0000/174a7fbef9429ef7
@@ -1271,14 +1282,3 @@ merfolkturns_overnight_d5_s6006=5.5033/4479918fcf0749e3
 merfolkturns_overnight_d5_s7007=5.4733/56d70e02aed2da66
 merfolkturns_overnight_d3_s30161=5.3333/e88fa46dc65afd3f
 merfolkturns_overnight_d5_s30161=5.3333/e88fa46dc65afd3f
-redelem_overnight_d0_s10010=4.8840/2628c807c533975a
-redelem_overnight_d0_s4004=4.8650/4dbc10fdfaa06d19
-redelem_overnight_d0_s6006=4.8885/116f070b21acd1b3
-redelem_overnight_d0_s8008=4.8755/cb2c9d7a34a2f655
-redelem_overnight_d3_s30241=4.2000/bea2b901952c81ef
-redelem_overnight_d3_s4004=4.3200/ab69b28c6c0a4525
-redelem_overnight_d5_s30241=4.2000/bea2b901952c81ef
-redelem_overnight_d5_s4004=4.3333/58a26269182d5910
-redelem_overnight_d5_s5005=4.3667/32c1c0eaf6d2dd4a
-redelem_overnight_d5_s6006=4.3167/39b3ee8324a29d49
-redelem_overnight_d5_s7007=4.3167/3f6f42f8e56ed428

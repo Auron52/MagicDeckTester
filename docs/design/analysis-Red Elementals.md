@@ -845,5 +845,22 @@ The regular-tier visibility run moved six Red rows: searched games 44 faster, 28
 194 faster, 97 slower. The strict viewer protocol passed 864 references. The adoption audit
 replayed all 1,360 regular-tier games with the table off and on, reproducing both baselines:
 549 changed mulligan count, 130 changed bottom at the same count, two card-order-only digests,
-and **zero unexplained**. The profile is accepted by the A/B gates; final-engine rebase,
-GT acceptance, and shared-branch handoff remain to be completed.
+and **zero unexplained**. The profile is accepted by the A/B gates. After the first final-engine
+rebase onto `69c69f2ae`, all six Red regular scores and digests matched this table-on run
+byte for byte. All ten references passed at human 4.400 / search 4.300 with zero shortfalls;
+the integrated verifier passed 14/14 card coverage, viewer, mismatch, invariants and suite
+registration. Strict viewer replay passed 864 references, all 561 scenarios passed, and the
+reference safety scan passed. Smoke and regular GT were accepted after per-game attribution;
+`check_gt_logs.py` found 1,252 consistent logs and none stale or missing.
+
+The keep-table adoption raised Red's four overnight d5 play rows from 300 to 425 games
+per seed at shipped b20, matching Hinata's play-row game floor. On the freshly trained
+PGO+LTO engine, the resized table-off baseline was accepted first: the original 300-game
+prefix had no play changes, and the four new averages were 4.3506, 4.3718, 4.3271 and
+4.3388. The table-on averages were 4.2918, 4.3059, 4.2894 and 4.3435, respectively:
+4.3471 → 4.3077 turns across 1,700 paired searched games (239 faster, 173 slower).
+D0 improved on all four seeds. The overnight adoption audit reproduced both sides and
+classified 4,001 changed mulligan counts, 925 changed bottoms at the same count, 29
+bottom-order-only digests and **zero unexplained** changes. The table-on overnight GT was
+accepted, and `check_gt_logs.py` found 1,252 consistent logs, zero stale or missing.
+The last shared-branch rebase, push and primary viewer handoff remain.

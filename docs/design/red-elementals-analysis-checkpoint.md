@@ -3,7 +3,33 @@
 Shared state for whichever agent (Claude or Codex) continues the Red Elementals analysis. Read this first,
 then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify files/processes before acting.
 
-Last updated: 2026-11-15 (Codex continuation; the update below supersedes the older running-job notes).
+Last updated: 2026-11-15 (Codex continuation; this section supersedes the older running-job notes).
+
+## Final mulligan adoption progress (2026-11-15)
+
+- The definitive 13-bucket R30 keep and bottom table is generated, committed, and live. The
+  structural gate passed (39,945 seven-card entries, 47,068 subcells, minimum R2). The keep
+  A/B improved by 0.101750 turns and the confounded bottoming A/B by 0.029250 turns; both
+  passed their predeclared significance gates after four favorable seed pairs.
+- After rebasing onto upstream `69c69f2ae`, all ten references pass (human 4.400, search 4.300,
+  zero shortfalls), and Red's six regular-tier scores and digests match the pre-rebase table-on
+  run byte for byte. Smoke and regular GT have been accepted after attribution: regular has
+  549 mulligan-count changes, 130 bottom changes, two card-order-only digests, and zero
+  unexplained games. The integrated `verify_deck.py --no-network` gate passes. The strict
+  viewer protocol passes 864 references, the scenario suite passes all 561, and the reference
+  safety scan passes. `check_gt_logs.py` reports 1,252 consistent GT logs, zero stale/missing.
+- The overnight FULL-set adoption is complete on a freshly trained PGO+LTO engine. Red's four
+  d5 play rows grew from 300 to 425 games per seed, meeting Hinata's play-row floor. The
+  resized table-off baseline was accepted first; its original 300-game prefix had no play
+  changes. The table-on searched mean improved from 4.3471 to 4.3077 turns across 1,700
+  paired games (239 faster, 173 slower). D0 improved on all four seeds. The overnight
+  adoption replay reproduced both sides: 4,001 mulligan-count changes, 925 bottom changes,
+  29 bottom-order-only digests, **zero unexplained**. The table-on overnight GT is accepted;
+  `check_gt_logs.py` again reports 1,252 consistent, zero stale/missing.
+- Next: commit the accepted overnight GT and notes, rebase onto the latest shared branch,
+  verify Red on that source, push, and restore the primary checkout/viewer. The Stage 5i
+  discard proposal remains unadopted and user-owned; the human viewer still automatically
+  declares attackers, so deliberate Soulstoke holds need the forced-hold verifier path.
 
 ## Mulligan generation update (2026-11-15, current)
 
