@@ -592,6 +592,20 @@ function checkFetchSuspendRoute() {
       !== JSON.stringify(['landsearch=Wooded Foothills', 'cast=Lightning Bolt'])
       || manualRoute.filter(p=>p.verb==='landsearch').length !== 1)
     fails.push('manual fetch crack was duplicated instead of split before the cast');
+  const millLine = [
+    { name: 'Polluted Delta', src: 'Polluted Delta', kind: 'activate', verb: 'landsearch', srcNum: 37 },
+    { name: 'Drowned Catacomb', kind: 'land', num: 18 },
+    { name: "Tasha's Hideous Laughter", kind: 'nonpermanent', num: 51 }
+  ];
+  const millDecision = { me: { battlefield: [{ name: 'Polluted Delta' }] }, plans: [
+    { actions: [{ card: 'Polluted Delta', verb: 'landsearch', activate: true, fetch_mana: true }] }
+  ] };
+  const millRoute = LB.fetchAutoRoute(millDecision, millLine, 'illegal',
+    "can't pay {1}{U}{U} for 'Tasha's Hideous Laughter' with the mana available this phase");
+  if (!millRoute || JSON.stringify(LB.encodeSegments(millRoute))
+      !== JSON.stringify(['landsearch=Polluted Delta',
+        "land=Drowned Catacomb;cast=Tasha's Hideous Laughter"]))
+    fails.push('Mill seed 1 did not split fetch before Drowned Catacomb and Tasha');
   const playedManual = LB.fetchAutoRoute(decision, [land, manualCrack, bolt], 'illegal',
     "can't pay for 'Lightning Bolt': no untapped source produces red mana");
   if (!playedManual || JSON.stringify(LB.encodeSegments(playedManual))

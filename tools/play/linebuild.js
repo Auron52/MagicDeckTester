@@ -254,10 +254,12 @@
     if (!needsFetch) return null;
     const played = fetchManaRoute(decision, plan);
     if (played) return played;
-    // A fetch already on the battlefield can supply the queued spell without a land drop.
+    // A fetch already on the battlefield can supply the queued spell, including
+    // when another land is played after the fetch. The continuation is checked
+    // on the post-fetch board, so a checkland can then enter untapped.
     // Take this route only with one distinct offered source; with several, the player may
     // need a particular search range and should choose the source explicitly.
-    if (!plan || !plan.length || plan.some(p => p.kind === 'land')) return null;
+    if (!plan || !plan.length) return null;
     const onBoard = new Set(((decision && decision.me && decision.me.battlefield) || []).map(p => p.name));
     const sources = new Set();
     for (const p of ((decision && decision.plans) || [])) {
