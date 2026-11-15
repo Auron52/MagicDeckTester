@@ -189,6 +189,17 @@ elif ! command -v node >/dev/null 2>&1; then
   echo "SKIP: viewer line-build check (node not found)."
 fi
 
+# 1a) A closed interactive child must not take down the viewer on the next
+#     choice. Seed 12 reaches a City type prompt immediately before this edge.
+if [ "$MODE" != line ] && command -v node >/dev/null 2>&1 \
+    && [ -f "$HERE/viewer_server_epipe_check.js" ]; then
+  echo "--- viewer interactive child recovery ---"
+  if MTG_BIN="$BIN" node "$HERE/viewer_server_epipe_check.js"; then :; else
+    echo "FAIL: viewer interactive child recovery."
+    rc=1
+  fi
+fi
+
 # 1b) Headless CLIENT check (node + jsdom + binary): loads index.html's REAL script in a DOM and
 #     plays games through the GUI's own entry points, so it is the ONLY layer that executes the
 #     decision-PANEL renderers and the undo/history bookkeeping. Skipped in --line-only (it drives

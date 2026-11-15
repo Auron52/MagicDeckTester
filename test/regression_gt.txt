@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 61cad140c  date 2026-11-15
+# Regression ground truth -- commit 9032533f5  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -13,6 +13,7 @@
 # accepted-with-regressions (smoke, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
 # accepted-with-regressions (regression, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
+# accepted-with-regressions (overnight, 2026-11-15): Merfolk Turns City/Pilgrimage Main 2 split: held-out searched 5 faster and 1 slower (d5 s4004 gi180 T5 to T6 after a different bottom choice), net four turns faster; d0 unchanged. See docs/design/analysis-Merfolk-Turns.md.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -225,9 +226,9 @@ spirits_smoke_d3_s1001=4.5800/9bf700a5464ff80a
 spirits_smoke_d5_s1001=4.6500/b1de7e800cda6e9b
 spirits2hg_smoke_d3_s1001=5.1400/8e99f12bbe983564
 merfolkturns_smoke_d0_s1001=6.1000/c9a36151530fdf9d
-merfolkturns_smoke_d3_s1001=5.6000/4e8e854f1b47a21b
-merfolkturns_smoke_d5_s1001=5.6000/433805ebd2b38d3a
-merfolkturns2hg_smoke_d3_s1001=6.0000/291bd392566dd561
+merfolkturns_smoke_d3_s1001=5.6000/35eabb416cb18b46
+merfolkturns_smoke_d5_s1001=5.6000/1cefeb8b4693a2b8
+merfolkturns2hg_smoke_d3_s1001=6.0000/03f13d2a2fafa76b
 
 # --- regression ---
 mill_regression_d0_s2002=6.4100/47b8b5e3bc2f438a
@@ -334,8 +335,8 @@ soldiers_regression_d3_s30001=4.4500/fc15453f5a3e98cd
 soldiers_regression_d5_s30001=4.4500/fc15453f5a3e98cd
 spirits_regression_d3_s30181=4.5500/00d5c7731e090158
 spirits_regression_d5_s30181=4.5500/00d5c7731e090158
-merfolkturns_regression_d3_s30131=5.6667/bea06d4116f296e8
-merfolkturns_regression_d5_s30131=5.6667/bea06d4116f296e8
+merfolkturns_regression_d3_s30131=5.6667/a6d164a57cc0fb62
+merfolkturns_regression_d5_s30131=5.6667/a6d164a57cc0fb62
 stompy_regression_d3_s30001=4.0500/73b54c6b3f70803d
 stompy_regression_d5_s30001=4.0500/73b54c6b3f70803d
 th_regression_d3_s30001=3.9500/8da665438a106302
@@ -560,9 +561,9 @@ spirits_regression_d3_s2002=4.6533/9ff8b34de3f4c570
 spirits_regression_d5_s2002=4.6667/13ddea095a681ad4
 spirits_regression_d5_s3003=4.7000/f7a45568d3581698
 merfolkturns_regression_d0_s2002=6.0120/88a39774b044c7a9
-merfolkturns_regression_d3_s2002=5.3600/c5d087392ebc73d3
-merfolkturns_regression_d5_s2002=5.5667/6fd429b8ce37928b
-merfolkturns_regression_d5_s3003=5.6133/b9f016818df561b6
+merfolkturns_regression_d3_s2002=5.3600/511943ab5f5efcae
+merfolkturns_regression_d5_s2002=5.5667/8011a32354c3fb4a
+merfolkturns_regression_d5_s3003=5.6133/70b9eaa5b09ef91d
 
 # --- overnight ---
 mill_overnight_d0_s4004=6.8300/2dbd5b0890840fc1
@@ -1219,10 +1220,10 @@ merfolkturns_overnight_d0_s4004=6.0265/05cba892d5b02287
 merfolkturns_overnight_d0_s6006=6.0210/f941382f2173ddbf
 merfolkturns_overnight_d0_s8008=6.0445/b4e43bee98f7dda6
 merfolkturns_overnight_d0_s10010=6.0555/3dad36e6c288c46d
-merfolkturns_overnight_d3_s4004=5.5840/d4747a9d829eb019
-merfolkturns_overnight_d5_s4004=5.5667/5ec14358e1e2c3f6
-merfolkturns_overnight_d5_s5005=5.5767/1f7e595f3df2945d
-merfolkturns_overnight_d5_s6006=5.5067/b880609bab688348
-merfolkturns_overnight_d5_s7007=5.4767/7f9bcea94e0ae89b
-merfolkturns_overnight_d3_s30161=5.3333/2c72d62de962ccd0
-merfolkturns_overnight_d5_s30161=5.3333/2c72d62de962ccd0
+merfolkturns_overnight_d3_s4004=5.5760/ca5658437d16854a
+merfolkturns_overnight_d5_s4004=5.5633/3d0bcdf7c7c75e36
+merfolkturns_overnight_d5_s5005=5.5767/0e0f44facd235a7c
+merfolkturns_overnight_d5_s6006=5.5033/4479918fcf0749e3
+merfolkturns_overnight_d5_s7007=5.4733/56d70e02aed2da66
+merfolkturns_overnight_d3_s30161=5.3333/e88fa46dc65afd3f
+merfolkturns_overnight_d5_s30161=5.3333/e88fa46dc65afd3f

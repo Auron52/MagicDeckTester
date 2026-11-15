@@ -564,6 +564,10 @@ async function runStepCached(p, logDir) {
                buf: '', dead: false, busy: true, wake: null };
   child.stdout.on('data', (d) => { ns.buf += d; if (ns.wake) ns.wake(); });
   child.stderr.on('data', () => {});   // [play] chatter; the stateless fallback surfaces real errors
+  // A prompt may be emitted just before the interactive child exits. A follow-up
+  // write can then fail asynchronously with EPIPE; without this listener Node
+  // exits and the viewer appears to hang at the last auto-answered decision.
+  child.stdin.on('error', () => { ns.dead = true; if (ns.wake) ns.wake(); });
   child.on('error', () => { ns.dead = true; if (ns.wake) ns.wake(); });
   child.on('close', () => { ns.dead = true; if (ns.wake) ns.wake(); });
   isession = ns;

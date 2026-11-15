@@ -139,6 +139,53 @@ uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, i
     return DeckProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
+static bool MerfolkTurnsMain2SplitOn()
+{
+    static const bool on = EnvOn("MTG_MERFOLK_TURNS_M2_SPLIT", true); // DEFAULT ON; =0 restores both phases
+    return on;
+}
+
+bool MerfolkTurnsProvider::ClassifiesMainPhases() const
+{
+    return MerfolkTurnsMain2SplitOn();
+}
+
+std::optional<DecisionProvider::MainPhase>
+MerfolkTurnsProvider::MainPhaseOverride(const GameState& state,
+                                        const CardDefinition& def) const
+{
+    if (!MerfolkTurnsMain2SplitOn()) { return std::nullopt; }
+    bool city_available = false;
+    bool pilgrimage_out = false;
+    const Player& ap = state.ActivePlayer();
+    const bool land_drop_open = ap.lands_played_this_turn < ap.LandDropsAvailable();
+    // A Greaves in hand or on our board can make a newly cast Merfolk attack now.
+    // Keep both phases searchable even if this particular line cannot pay for it.
+    for (const Card& c : ap.hand)
+    {
+        if (c.m_name == "Lightning Greaves") { return MainPhase::Both; }
+        city_available |= land_drop_open && c.m_name == "Three Tree City";
+    }
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.card.m_name == "Lightning Greaves") { return MainPhase::Both; }
+        city_available |= p.card.m_name == "Three Tree City" && !p.tapped;
+        pilgrimage_out |= p.card.m_name == "Deeproot Pilgrimage";
+    }
+    // Combat only increases City's yield when Pilgrimage is already present.
+    // Outside that state, moving casts changes the opening without this payoff.
+    if (!city_available || !pilgrimage_out) { return MainPhase::Both; }
+    // Pilgrimage must see the attack's tap event; Sovereign pumps that attack.
+    // Ring and Banneret can fund those pre-combat plays. Other fresh Merfolk
+    // cannot attack without Greaves, and City's mana grows after combat taps.
+    const std::string& name = def.card.m_name.str();
+    if (name == "Deeproot Pilgrimage" || name == "Merfolk Sovereign"
+        || name == "Sol Ring" || name == "Stonybrook Banneret"
+        || name == "Lightning Greaves") { return MainPhase::Main1; }
+    return MainPhase::Main2;
+}
+
 bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
                                                std::vector<std::string>& names) const
 {

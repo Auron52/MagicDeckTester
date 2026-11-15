@@ -876,3 +876,37 @@ The final pooled suite cost gate passes at 2,247.393 core-ms/game for
 Merfolk Turns versus 5,169.627 for Hinata in the same run, or 0.43x the
 pinned yardstick against the 3x limit. The Merfolk total was 780.8 core-s
 over six regression jobs. This replaces the pre-pruning 2.35x measurement.
+
+### Main 2 City/Pilgrimage split and seed 12 viewer recovery (2026-11-15)
+
+Seed 12 showed the intended payoff: an attack while Deeproot Pilgrimage is
+out makes Merfolk tokens before Three Tree City's Main 2 mana activation.
+The first experiment deferred almost every fresh cast in every searched
+game. It cut smoke searched work by about a quarter but delayed seven
+regression games and was rejected. The adopted rule applies only while a
+Pilgrimage is on our board and an untapped City is on our board, or a City is
+in hand with a land drop still open. Lightning Greaves in hand or play keeps
+both phases available. Pilgrimage, Merfolk Sovereign, Sol Ring, and
+Stonybrook Banneret remain available before combat; Merfolk tap abilities
+remain available. Human play still offers every legal phase choice.
+
+The final rule matched every smoke and regression win turn. On held-out
+overnight seeds, five searched row games finished one turn sooner and one
+finished one turn later; four of five scored searched rows improved their
+average and the fifth held. The slower game changed its bottom decision
+and kept a different physical hand. The unbudgeted three-game sentinels
+held score. On the default-on smoke build, searched work fell from 322,308
+to 318,022 units at d3 and from 2,427,589 to 2,334,614 units at d5
+(1.3% and 3.8%). The
+switch `MTG_MERFOLK_TURNS_M2_SPLIT=0` restores the prior both-phase menu.
+Overnight d5 work fell from 102,485 to 96,128 units per game on seed 4004
+and from 78,645 to 73,835 on seed 7007 (both about 6%).
+The separate 2HG smoke row held its 6.0000 average with one same-score
+play-line change and no slower game.
+
+The seed 12 viewer also exposed an interactive-server `EPIPE`: a child could
+close after a prompt and the next write terminated Node. The server now
+handles that stream error and falls back to stateless replay, while the
+client offers a retry if the request fails. A focused seed 12 check reaches
+the City type prompt and the Prophets champion prompt; the full viewer
+client check passes.

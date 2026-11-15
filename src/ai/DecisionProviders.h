@@ -4405,6 +4405,9 @@ public:
 class MerfolkTurnsProvider : public DeckProvider
 {
 public:
+    bool ClassifiesMainPhases() const override;
+    std::optional<MainPhase> MainPhaseOverride(const GameState& state,
+                                               const CardDefinition& def) const override;
     bool ProphetsSacrificeHeuristicEnabled() const override;
     bool SeahunterCandidates(const GameState& state, std::vector<std::string>& names) const override;
     CertStance Certificate() const override
