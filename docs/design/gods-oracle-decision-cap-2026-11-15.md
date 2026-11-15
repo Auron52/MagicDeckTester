@@ -27,3 +27,14 @@ truncated decision as clean.
 
 Raw probes: `build/scratch/gods_counter_mask_ab/capped35417_900.*` and
 `build/scratch/gods_counter_mask_ab/capped_other_900.*`.
+
+The fresh Gods-trained PGO build stamped source tree
+`d3191eecc309faa9f426511b261f33dd1cfb7a22` and passed the 3,350-case
+Release unit suite. A three-job pooled replay at the new *default* 600-second
+cap finished all three seeds with the same play digests as the 900-second
+probes, zero `CAPPED`, zero `CAPPED-DECISION`, zero `ORACLE-GAP`, and zero
+`UNMODELED`. The expensive decisions used the same deterministic priced work;
+the pooled wall times were 305.350, 333.290, and 149.770 seconds. The four
+`DOMINATED-LIFE` observations are disclosed, not mana-clean issues. Raw output
+is `build/scratch/gods_counter_mask_ab/capped_default600.*`. A full fresh
+5,000-game Gods gate remains owed after the payment drops are repaired.
