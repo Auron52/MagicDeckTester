@@ -6814,6 +6814,7 @@ function autoResolveDecision(dec){
   const lab = dec.type==='land_entry' ? landEntryLabel(dec, def)+' · auto'
             : dec.type==='replicate'  ? `${dec.source}: replicate ×${def} · auto`
             : dec.type==='retrace_discard' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source} (retrace): discard ${c?c.name:'land'} · auto`; })()
+            : surfaceType==='three_tree_city_type' ? (()=>{ const c=(dec.options||[]).find(x=>x.index===def); return `${dec.source}: chose ${c?c.name:'creature type'} · auto`; })()
             : dec.type==='vial_charge' ? `Vial: ${def?'+counter':'hold'} · auto`
             : `${dec.source||dec.type}: auto`;
   dec._autoStep = true;        // committed WITHOUT a user rest -> undo rolls it back with the prior user step (#2)
