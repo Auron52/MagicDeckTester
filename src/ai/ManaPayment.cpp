@@ -4301,13 +4301,15 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         }
         commit_leftover(bt_leftover); CommitPaySacSacrifices(state, active); return true;
     }
-    // Floating-fed filter retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
+    // Floating-fed conversion retry: a filter / ramp-filter land (Ferrous Lake {1},{T}: Add {U}{R}) can be
     // FED by turn-scoped floating (a ritual's output, a depletion over-tap). SpendFloatingTowardCost
     // above spent that floating on the cost DIRECTLY, stranding the filter (no feeder left) -- so the
     // first backtracker, run on the REDUCED cost with an empty float pool, could not chain it. Retry
     // the backtracker with the ORIGINAL cost and the ORIGINAL reserve as feed, letting it choose
     // feed-vs-spend. Guarded by a non-empty reserve AND an untapped filter/ramp source, so it is only
-    // reached in exactly that stranded-feeder case: a non-floating or filter-less board never enters it
+    // reached in exactly that stranded-feeder case. Three Tree City also needs this retry when its
+    // {2} feeder was floated before a legend-rule replacement, then drained toward the spell first.
+    // A non-floating board with no conversion source never enters it
     // (byte-identical), and any cast the greedy/first backtracker already paid never reaches a fallback.
     if (reserve_pre.Total() > 0 && AnyUntappedFilterSource(state) && snow_backtrack_ok())
     {

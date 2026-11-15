@@ -9202,7 +9202,8 @@ inline thread_local std::vector<int> g_pending_zero_toughness;
 //   * UNPINNED (the playout beyond the horizon, the d0 runner, a plan no fan reached): the provider's
 //     LegendKeepIndex (the permitted playout policy).
 // THE SEARCHED LEGEND KEEP'S BYTE (GameState::scripted_legend_keep; Boars LK + LK3, 2026-11-13):
-//   bits 0-1  the keep IN FORCE now (0 none -> the provider, 1 keep the oldest copy, 2 keep the newest): the turn's
+//   bits 0-1  the keep IN FORCE now (0 none -> the provider, 1 keep the oldest copy, 2 keep the newest,
+//             3 keep the newest Three Tree City after floating the old one's free {C}): the turn's
 //             Plan::legend_keep_turn in the main phases, the NEXT-UPKEEP pin below while the upkeep runs.
 //   bits 2-3  the NEXT upkeep's keep (Plan::upkeep_legend_keep_choice, a BoundaryFan digit; Boars LK3): 0 uncovered,
 //             1 oldest, 2 newest, 3 COVERED-and-follow-the-provider (the fan's rank 0, so ties keep its pick). Written
@@ -9213,6 +9214,7 @@ inline thread_local std::vector<int> g_pending_zero_toughness;
 // GameEngine::UntapStep / SimulateEndAndStartNextTurn) moves the upkeep pin into the keep in force, and
 // LegendKeepCloseUpkeep (the end of GameEngine::UpkeepTail / just before the rollout's draw) drops it.
 constexpr int kLegendKeepNowMask       = 0x03;
+constexpr int kLegendKeepNewFloatCity  = 0x03;
 constexpr int kLegendKeepUpkeepShift   = 2;
 constexpr int kLegendKeepUpkeepMask    = 0x0C;
 constexpr int kLegendKeepUpkeepWindow  = 0x10;
@@ -31763,14 +31765,15 @@ inline int ScaledManaCreatureCount(const GameState& state, const Permanent* sour
     return n;
 }
 
-// Untapped generic mana available to FEED a scaled land's activation cost, summed over the active
-// player's OTHER untapped sources (the scaled land itself is tapped for the ability, so a scaled land
-// never feeds itself or another scaled land -- mirrors the ramp-filter no-chain rule). A ramp filter
-// has no free mode, so it is not a feeder. A crude per-source sum (enough to gate payability of {2}).
+// Generic mana available to FEED a scaled land's activation cost: already floated general mana plus
+// the active player's OTHER untapped sources. The scaled land cannot tap for its own activation cost;
+// a previously tapped City may legally float mana before being replaced by another City. A ramp
+// filter has no free mode, so it is not an untapped feeder. This is an optimistic payability gate.
 inline int ScaledManaFeederMana(const GameState& state)
 {
     const int active = state.active_player_index;
-    int total = 0;
+    int total = state.floating_mana.Total()
+              - std::min(state.floating_mana.wild_phantom, state.floating_mana.wild);
     int gy_fuel = -1;   // Deathrite fuel: lazily counted, decremented per credited source
     for (const Permanent& p : state.battlefield)
     {
@@ -45590,10 +45593,10 @@ inline bool AnyColorFilterHasFedSlot(const GameState& state, const CardDefinitio
     return false;
 }
 
-// True if the active player controls an untapped filter / ramp-filter mana source (Cascade Bluffs
-// is_filter, Ferrous Lake ramp_filter) whose colour conversion the flat pool cannot model. Used to
-// gate the payment's floating-fed-filter retry (see TapForCostSharedOnce, ManaPayment.cpp)
-// so that retry is reached ONLY when such a land exists -> every filter-less board stays byte-identical.
+// True if the active player controls an untapped mana source whose colour conversion can consume
+// floating mana (a filter, ramp-filter, or scaled land such as Three Tree City). Used to gate the
+// payment's floating-fed retry (see TapForCostSharedOnce, ManaPayment.cpp). A scaled land must be
+// included: the ordinary float drain can spend its feeder before the backtracker sees the land.
 inline bool AnyUntappedFilterSource(const GameState& state)
 {
     const int active = state.active_player_index;
@@ -45601,7 +45604,7 @@ inline bool AnyUntappedFilterSource(const GameState& state)
     {
         if (p.controller_index != active || p.tapped) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-        if (d && IsManaConversionSource(d->params)) { return true; }
+        if (d && (IsManaConversionSource(d->params) || IsScaledManaLand(*d))) { return true; }
     }
     return false;
 }

@@ -1809,6 +1809,7 @@ public:
         // GameState::scripted_legend_keep (WritePostApplyStatePins, both worlds). Folded VALUE-gated (!= 0) wherever
         // attack_put_choice is, and an axis variant (PlanIsAxisVariantExceptOrder): a twin whose turn met no group
         // lands on its base's state.
+        // 3 = keep the new Three Tree City after floating the old one's free {C} before the drop.
         std::int8_t legend_keep_turn = 0;
         // THE NEXT UPKEEP's legend-rule keep (Boars LK3): an upkeep-only route (Marit Lage's Slumber's token, an
         // Emeria / Defense of the Heart put, an upkeep arrival) fires before any plan of its turn, so it rides the

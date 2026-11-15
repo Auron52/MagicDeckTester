@@ -7,6 +7,7 @@
 #include "../core/SpellEffects.h"
 #include "EngineFlags.h"
 #include "DecisionProviders.h"
+#include "ManaPayment.h"
 #include <algorithm>
 
 // THE BODY OF THE LAND DROP, shared by both source zones (2026-10-15, Courser of Kruphix). `card` is
@@ -23,6 +24,24 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
                          const LandPlayOptions& opts, LeaveZone&& leave_zone)
 {
     Player& ap = state.ActivePlayer();
+
+    // A searched keep-new City line may use the old City's free {C} before the land drop. The
+    // legend rule then removes that old source before the new City can activate. Tap through the
+    // ordinary payment route so the float and tap state match the executor and the rollout.
+    if (card.m_name == "Three Tree City" && LegendKeepNow(state) == kLegendKeepNewFloatCity)
+    {
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || p.card.m_name != card.m_name || p.tapped)
+            { continue; }
+            TurnSolver::PreTap tap;
+            tap.name = p.card.m_name;
+            tap.num = p.card.m_number;
+            tap.color = static_cast<int>(Color::Colorless);
+            (void)ApplyEnginePreTap(state, tap);
+            break;
+        }
+    }
 
     if (opts.record_touch) { rollout_touch::Record(card.m_name.str()); }
     if (opts.logger)       { opts.logger->LogPlayLand(card.m_number, card.m_name, opts.from_library_top); }

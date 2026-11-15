@@ -99670,10 +99670,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // `from_top` (Courser of Kruphix): the land is the library TOP, not a hand copy -- its own land
     // option, stamped on every plan it yields (Plan::land_from_top). See the TOP group below.
     auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
-                            const std::string& land_face = "", bool from_top = false)
+                            const std::string& land_face = "", bool from_top = false,
+                            bool float_old_city = false)
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
+        if (float_old_city) { SetLegendKeepNow(copy, kLegendKeepNewFloatCity); }
         if (!land_name.empty()
             && !PlayLandByName(copy, land_name, fetch_target, true, land_face, -1, from_top)) { return; }
         // Karoo (etb_bounce_land) DEFERRAL, mirroring ApplyPlanDirect / the executor: the apply
@@ -99715,7 +99717,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
             }
         }
-        if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop)
+        if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop && !float_old_city)
         { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
@@ -99729,6 +99731,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             idle.fetch_target = fetch_target;
             idle.land_face    = land_face;
             idle.land_from_top = from_top;
+            if (float_old_city) { idle.legend_keep_turn = kLegendKeepNewFloatCity; }
             all.push_back(std::move(idle));
         }
 
@@ -99745,6 +99748,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             p.fetch_target = fetch_target;
             p.land_face    = land_face;
             p.land_from_top = from_top;
+            if (float_old_city) { p.legend_keep_turn = kLegendKeepNewFloatCity; }
             // The Karoo's earlier positions (see karoo_pos): one clone per counted action, r = 1..n.
             if (karoo_drop && karoo_pos_on && !p.actions.empty() && p.land_slot == 0)
             {
@@ -99920,6 +99924,17 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             for (const std::string& c : cands) { add_for_land(ln, c); }
         }
         add_for_land(ln, "");   // ordinary land, a fetch with nothing to find, or the held modern fetch
+        // Three Tree City can float its free {C} immediately before a second copy enters and the
+        // legend rule removes the old one. This is an extra searched payment route, not a delayed
+        // legend-rule window: the new City alone supplies mana after the drop.
+        if (ln == "Three Tree City" && !HumanPlayActive())
+        {
+            for (const Permanent& p : state.battlefield)
+            {
+                if (p.controller_index == state.active_player_index && p.card.m_name == ln && !p.tapped)
+                { add_for_land(ln, "", "", false, true); break; }
+            }
+        }
     }
 
     // ---- THE LIBRARY TOP AS ITS OWN LAND OPTION (Courser of Kruphix, 2026-10-15) ----------------

@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 
 #include "ai/LandPlay.h"
+#include "ai/ManaPayment.h"
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
 #include "ai/DecisionProviders.h"
@@ -959,6 +960,106 @@ TEST_CASE("Three Tree City funds a second Merfolk cast after the first grows it"
                 && plan.actions[1].card_name == "Silvergill Douser";
     }
     CHECK(offered);
+}
+
+TEST_CASE("A replaced Three Tree City can float mana before the legend rule")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 5;
+    state.m_provider = &provider;
+    const uint16_t merfolk = SubtypeRegistry::Instance().Id("Merfolk");
+    AddPermanent(state, "Three Tree City", 51, merfolk);
+    AddPermanent(state, "Rogue's Passage", 35);
+    AddPermanent(state, "Island", 10);
+    AddPermanent(state, "Rishadan Dockhand", 31);
+    AddPermanent(state, "Stonybrook Banneret", 46);
+    for (const auto& [name, number] : std::vector<std::pair<const char*, int>>{
+             {"Three Tree City", 52}, {"Silvergill Douser", 42},
+             {"Silvergill Douser", 43}, {"Rishadan Dockhand", 32}})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card card = def->card;
+        card.m_number = number;
+        state.players[0].hand.push_back(card);
+    }
+    GameState dropped = state;
+    SetLegendKeepNow(dropped, kLegendKeepNewFloatCity);
+    const CardDefinition* city = CardDatabase::Instance().Lookup("Three Tree City");
+    REQUIRE(city != nullptr);
+    REQUIRE(PlayLandFromHand(dropped, 0, *city, LandPlayOptions{}));
+    CHECK(dropped.floating_mana.colorless == 1);
+    CHECK(std::count_if(dropped.battlefield.begin(), dropped.battlefield.end(),
+                        [](const Permanent& p) { return p.card.m_name == "Three Tree City"; }) == 1);
+    for (const Permanent& p : dropped.battlefield)
+    {
+        if (p.card.m_name == "Three Tree City")
+        {
+            CHECK(p.chosen_subtype_id == merfolk);
+            CHECK(p.card.m_number == 52);
+            CHECK(!p.tapped);
+        }
+    }
+    GameState paid = dropped;
+    TurnSolver::PreTap island_tap;
+    island_tap.name = "Island";
+    island_tap.num = 10;
+    island_tap.color = static_cast<int>(Color::Blue);
+    CHECK(ApplyEnginePreTap(paid, island_tap).empty());
+    ManaCost blue;
+    blue.blue = 1;
+    CHECK(TapForCostShared(paid, blue, true, nullptr, true));
+    AddPermanent(paid, "Silvergill Douser", 42);
+    CHECK(ScaledManaFeederMana(paid) >= 2);
+    GameState manual = paid;
+    TurnSolver::PreTap passage_tap;
+    passage_tap.name = "Rogue's Passage";
+    passage_tap.num = 35;
+    passage_tap.color = static_cast<int>(Color::Colorless);
+    CHECK(ApplyEnginePreTap(manual, passage_tap).empty());
+    TurnSolver::PreTap city_tap;
+    city_tap.name = "Three Tree City";
+    city_tap.num = 52;
+    city_tap.color = static_cast<int>(Color::Blue);
+    CHECK(ApplyEnginePreTap(manual, city_tap).empty());
+    CHECK(manual.floating_mana.blue >= 3);
+    CHECK(TapForCostShared(paid, blue, true, nullptr, true));
+    AddPermanent(paid, "Silvergill Douser", 43);
+    CHECK(TapForCostShared(paid, blue, true, nullptr, true));
+    int max_post_drop_actions = 0;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(dropped, true))
+    { max_post_drop_actions = std::max(max_post_drop_actions, static_cast<int>(p.actions.size())); }
+    CHECK(max_post_drop_actions >= 3);
+    bool recovered = false;
+    int matching = 0;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        if (plan.land_to_play != "Three Tree City" || plan.actions.size() != 3) { continue; }
+        int dousers = 0, dockhands = 0;
+        for (const Action& action : plan.actions)
+        {
+            if (action.kind != Action::Kind::CastFromHand) { continue; }
+            dousers += action.card_name == "Silvergill Douser";
+            dockhands += action.card_name == "Rishadan Dockhand";
+        }
+        if (dousers != 2 || dockhands != 1) { continue; }
+        ++matching;
+        GameState applied = state;
+        TurnSolver::ApplyPlan(applied, plan, true);
+        int cities = 0, new_creatures = 0;
+        for (const Permanent& p : applied.battlefield)
+        {
+            cities += p.card.m_name == "Three Tree City";
+            new_creatures += p.card.m_number == 42 || p.card.m_number == 43 || p.card.m_number == 32;
+        }
+        recovered |= cities == 1 && new_creatures == 3;
+        if (recovered) { break; }
+    }
+    CHECK(matching > 0);
+    CHECK(recovered);
 }
 
 TEST_CASE("Tidal Warrior chooses a land played earlier in the same line from the live board")
