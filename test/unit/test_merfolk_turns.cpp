@@ -158,6 +158,14 @@ TEST_CASE("Merfolk Seahunter fetches a champion victim before Prophets")
     CHECK(provider.SeahunterCandidates(state, names));
     CHECK(names == std::vector<std::string>{"Svyelun of Sea and Sky"});
 
+    const CardDefinition* emperor = CardDatabase::Instance().Lookup("Emperor Mihail II");
+    REQUIRE(emperor != nullptr);
+    state.ActivePlayer().hand.push_back(emperor->card);
+    names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
+    CHECK_FALSE(provider.SeahunterCandidates(state, names));
+    CHECK(names.size() == 3);
+    state.ActivePlayer().hand.clear();
+
     AddPermanent(state, "Tidal Warrior", 200);
     names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
     CHECK(provider.SeahunterCandidates(state, names));

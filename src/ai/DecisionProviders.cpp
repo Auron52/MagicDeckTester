@@ -161,6 +161,19 @@ bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
         // search; a fixed small-body pick lost a held-out turn-four win.
         return false;
     }
+    if (!champion_fodder && has("Wanderwine Prophets"))
+    {
+        // The menu precedes the plan's casts. A Merfolk in hand can enter
+        // before Seahunter activates and champion Prophets this same turn.
+        // Keep that cast-then-tutor line searchable.
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr && d->card.IsCreature()
+                && d->card.m_name != "Wanderwine Prophets"
+                && CardHasSubtype(d->card, "Merfolk")) { return false; }
+        }
+    }
     if (!prophets_out && has("Merfolk Sovereign"))
     {
         // A lord fetched before combat can win immediately without starting
