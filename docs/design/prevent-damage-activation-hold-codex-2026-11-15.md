@@ -20,7 +20,8 @@ The regression tier passed all 327 rows with zero changed games or slowdowns. St
 
 The one pooled fresh-seed A/B (`build/scratch/pd_hold_demand_ab/manifest.json`, 20,000 total games) compared old and new flags in each job pair. All three cells were outcome-identical and had zero changed play digests: Prevent Damage shipped 3,000 pairs, Bruna depth zero 5,000 pairs, Bruna shipped 2,000 pairs. Every cell had net zero turns, zero faster, and zero slower games, so no depth-eight recovery was needed. This validates play quality on these held-out cells while the targeted seed proves the payment repair.
 
-## Remaining gate
+## Fresh mana-clean gate
 
-- Land the reviewed candidate on the shared branch.
-- Build PGO, run a fresh 5,000-game Prevent Damage mana-clean block (expected 32,000–36,999), and record the result. The deck leaves beta only when a fresh block reports zero issues.
+The candidate landed on the shared branch as `66f041d49`. The PGO build trained on the regression suite and stamped source tree `91c08095fe03`. The official 5,000-game gate on game indices 32,000–36,999 reports **303 issues** with byte-identical oracle-on/off play (`logs/mana_clean/20261115-042452/report.md`; `test/mana_clean.json`): APPLY-DROP 12, APPLY-DROP-ORDER 4, ORACLE-GAP 90, UNMODELED 8, CAPPED 189. This is a different seed block from the preceding 593-issue gate, so 593→303 is not a paired effect estimate. The original seed 30027719's 22 drops were removed in the same-seed repro above.
+
+Prevent Damage remains in beta. The next fresh block is 37,000–41,999. The remaining APPLY-DROP signatures are chiefly Dina plans whose unseen Rolling Earthquake continuation is dropped (seed 30036366 T5 and seed 30033491 T5); the report's rollback census classifies 10 of 12 drops as need-later. The other categories need separate diagnosis before a clean gate.

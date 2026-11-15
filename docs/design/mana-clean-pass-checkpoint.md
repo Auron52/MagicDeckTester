@@ -1627,3 +1627,20 @@ fungus 1,880, gods 4,300 (first run).
   post-entry `ReadFadeBoard` sees same-plan Season/Sporecrown, but the pre-cast menu cannot; Shroofus trigger
   value and the postcombat phase are absent from the menu projection. Details and remaining menu work:
   `docs/design/fungus-site9-q9-q16-codex-2026-11-14.md`.
+
+* **Queue item 10, Prevent Damage activation hold (Codex, 2026-11-15): landed `66f041d49`.**
+  `MTG_ACT_HOLD_CAST_DEMAND` prefers an activation-colour provider whose other colours the unpaid
+  casts do not need. On seed 30027719 T6, the same candidate binary reports 22 APPLY-DROP flags
+  with `=0` and zero with `=1`: Battlefield Forge can stay for Pyrohemia's red while Karplusan
+  Forest pays Dina's green, leaving three black sources for Beseech. Units 3,133/3,133; smoke
+  206/207 rows match and one Bruna d0 digest moves at equal win turn (two lines reviewed and
+  accepted); regression 327/327 rows match, strict references 343 OK/493 repaired/1 beaten with
+  zero drift/divergence/gap. Fresh paired A/B: Prevent Damage shipped 3,000, Bruna d0 5,000,
+  Bruna shipped 2,000 pairs, zero outcome or play-digest changes in all three cells.
+  PGO-trained fresh mana-clean game indices 32,000–36,999: **303 issues**, APPLY-DROP 12,
+  APPLY-DROP-ORDER 4, ORACLE-GAP 90, UNMODELED 8, CAPPED 189; oracle-on/off play identical.
+  Different seed block from the prior 593 issues, not a paired effect comparison. The remaining
+  drops include seed 30036366/30033491 T5 Dina plans with a Rolling Earthquake in the unseen
+  continuation (rollback census: 10/12 need-later). The deck stays beta; next block 37,000–41,999.
+  Details: `docs/design/prevent-damage-activation-hold-codex-2026-11-15.md` and
+  `logs/mana_clean/20261115-042452/report.md`.
