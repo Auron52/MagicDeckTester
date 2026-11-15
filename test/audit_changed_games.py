@@ -145,7 +145,9 @@ if not digest_baseline:
 # `regression.sh --accept` (logs/snapshots/<mode>-baseline); without it each block still prints the
 # NEW line + how to get a baseline. OLD_GIT re-checks a past accept from win-turn logs only, so skip
 # the binary diff there.
-_EXPLAIN_CAP = 20            # bound the inline re-runs so a pathological run cannot make the audit crawl
+# The classifier only needs the slower-game list, so it sets this to zero to
+# avoid replaying the same explanations a second time.
+_EXPLAIN_CAP = int(os.environ.get("MTG_EXPLAIN_CAP", "20"))
 _explained = [0]
 
 

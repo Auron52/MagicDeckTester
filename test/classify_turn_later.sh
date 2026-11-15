@@ -63,7 +63,7 @@ done
 #   "    <key> gi<N>: <old>-><new>"   where <old> is the (numeric) prior win turn and <new> is
 #   either a slower win turn or "loss" (a game becoming unwon = the maximal slowdown under loss=9).
 # Reset the grab flag at the next section header so the d0 block is never mis-read.
-audit=$(python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
+audit=$(MTG_EXPLAIN_CAP=0 python3 "$HERE/audit_changed_games.py" "$MODE" 2>&1)
 list=$(printf '%s\n' "$audit" | awk '
   /SEARCHED-depth SLOWER/{grab=1; next}
   /^d0 |^REVIEW|^\*\*\*/{grab=0}
