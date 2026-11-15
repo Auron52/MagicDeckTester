@@ -6418,14 +6418,16 @@ function chooseColorPanelHtml(d){
 }
 function chooseCreatureTypePanelHtml(d){
   const src=d.source||'this permanent', ai=(d.heuristic_default===undefined?-1:d.heuristic_default);
+  const recommended=(d.options||[]).find(o=>o.index===ai);
   let h=`<h3>${esc(src)} — choose a creature type</h3>`;
   h+=`<div class="sub">This choice is locked to this permanent. Its scaled mana ability counts your creatures of the chosen type.</div>`;
   h+=`<div class="tutgrid">`+cardMini(src)+`</div>`;
+  if (recommended) h+=`<div class="pbtns" style="margin-top:10px"><button class="primary" data-type="${recommended.index}">Recommended: ${esc(recommended.name)}</button></div>`;
   h+=`<input id="creaturetypefilter" type="search" placeholder="Find a creature type" style="width:100%;margin:10px 0"/>`;
   h+=`<div class="pbtns" style="max-height:42vh;overflow:auto;justify-content:flex-start">`;
   for (const o of (d.options||[])){
-    const isAi=o.index===ai;
-    h+=`<button class="${isAi?'primary':'ghost'}" data-type="${o.index}">${esc(o.name)}${isAi?'  ·  AI':''}</button>`;
+    if (o.index===ai) continue; // the recommended type is pinned above the long catalog
+    h+=`<button class="ghost" data-type="${o.index}">${esc(o.name)}</button>`;
   }
   return h+`</div>`;
 }
@@ -6667,8 +6669,9 @@ function logEvents(dec) { if (dec) logEventList(dec.events); }
 // ---- Persistent decision-surface options (localStorage) --------------------------------------
 // The engine ALWAYS emits every decision (it is never silently skipped at the engine level); this
 // menu only controls whether the VIEWER surfaces a modal or auto-replies the AI's heuristic default.
-// Default: surface everything except the repetitive land-entry choice (shock lands / Frostboil
-// Snarl), which starts on "let AI decide" (its heuristic = pay/reveal only when it benefits you).
+// Default: surface everything except repetitive land-entry, Galadriel reveal, and creature-type
+// choices. The latter uses the provider's deck type (Merfolk for Merfolk Turns); the options menu
+// can restore the prompt when a different type is wanted.
 // Only single-int decisions whose answer is exactly `heuristic_default` are auto-resolvable here.
 const AUTO_RESOLVABLE = {
   land_entry:      'Shock / reveal lands — pay life (or reveal) vs. enter tapped',
@@ -6686,7 +6689,7 @@ const AUTO_RESOLVABLE = {
 };
 // galadriel_reveal OFF by default (USER 2026-10-17: "the process is too click intensive for little
 // benefit. I would like to make the reveal decision off-by-default").
-const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry', 'galadriel_reveal']);
+const SURFACE_OFF_BY_DEFAULT = new Set(['land_entry', 'galadriel_reveal', 'choose_creature_type']);
 function surfaceDefault(type){ return !SURFACE_OFF_BY_DEFAULT.has(type); }
 function surfaceStore(){ try { return JSON.parse(localStorage.getItem('mdt_surface')||'{}'); } catch(e){ return {}; } }
 function surfaceEnabled(type){ const s=surfaceStore(); return (type in s) ? !!s[type] : surfaceDefault(type); }
