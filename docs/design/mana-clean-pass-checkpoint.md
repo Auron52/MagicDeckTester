@@ -1766,3 +1766,31 @@ fungus 1,880, gods 4,300 (first run).
   work units. Integrated as `ddae6910a`; combined regression and fresh
   PGO gate remain pending. Detail:
   `docs/design/shadowborn-culling-fallback-codex-2026-11-15.md`.
+
+## 2026-11-15: Gods blind dredge decision
+
+- User asked to evaluate the three-Gods natural-draw rule without clairvoyance
+  before deciding whether a visible draw exception is warranted. Both the
+  turn search and the mulligan bottomer were run blind (`MTG_NC_SEARCH=1`,
+  `MTG_NC_BLIND_BOTTOM=1`, K=4/depth=1 and bottom K=4). On the first 1,000 paired
+  seeds, strict dredging toward Mystic Retrieval was 107 turn-games faster
+  after correcting the separate zero/one-land draw ordering. On 2,000 fresh
+  held-out pairs, it was 261 turn-games faster, with 1,590 wins by turn eight
+  versus 1,481 for the old rule. The 95% paired interval was [-0.177, -0.084]
+  turns per game. The eight initially traced and 22 fully traced residual blind
+  slower games did not establish a visible predicate for further natural draws.
+  The rule and low-land correction are integrated as `3c85bf56c` and
+  `bdead407e`. Full 3,305-case unit suite passes. Gods-only smoke/regression,
+  fresh PGO mana-clean gate, and ground-truth update remain pending. Detail:
+  `docs/design/gods-retrieval-dredge-codex-2026-11-15.md`.
+- A narrower default-off trial chose Loam as the fourth-land route when
+  Replenish was already in hand at three lands. It was neutral/slightly worse
+  in 1,000 fully blind pairs (+4 turn-games, 80 faster/80 slower) and worsened
+  the directly traced residual seed 607 from turn seven to eight. The trial is
+  dropped. On the shared branch, Gods-only smoke and regression leave d0
+  identical but the coupled searched cases slower, as expected from the
+  clairvoyant-search tradeoff. The smoke 4×/16× classifier recovered four of
+  18 slower games; the other 14 persisted. Blind held-out improvement and
+  coupled-search slowdown are both recorded in the detail doc. Regression
+  classification, Gods 2HG blind check, ground-truth update, and fresh gate
+  remain pending.

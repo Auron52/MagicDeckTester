@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 75f468f45  date 2026-11-15
+# Regression ground truth -- commit c3a52c9bf  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -19,6 +19,8 @@
 # accepted-with-regressions (smoke, 2026-11-15): Merfolk Turns d0 gi167/440/840 +1 turn from immediate Three Tree City legend SBA; former lines spent mana from both legendary Cities before priority. gi156 -1 turn after changed City line/shuffle. Searched and 2HG smoke unchanged.
 # accepted-with-regressions (smoke, 2026-11-15): Boars depth-0 Decimator order: gi194 T6->T7 with identical draws; both arms win T5 at depth8 unlimited; 49 games faster and 1 slower overall.
 # accepted-with-regressions (regression, 2026-11-15): Boars Decimator depth-0 rank: gi93 T6->T7 (Horn setup), gi406 T5->T6 (Greaves haste), gi936 T6->T7 (second Decimator); identical draws; 51 faster and 3 slower, net 49 turns saved; all searched cells unchanged.
+# accepted-with-regressions (smoke, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
+# accepted-with-regressions (regression, 2026-11-15): Gods strict dredge toward Mystic Retrieval: blind paired 2000 one-headed -0.1305 turns and 1000 two-headed -0.069 turns; coupled searched cells slower and classified in docs/design/gods-retrieval-dredge-codex-2026-11-15.md
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -44,9 +46,9 @@ extraturns_smoke_d3_s1001=4.7200/76322f02352e42d8
 extraturns_smoke_d5_s1001=4.7300/4d9437f84cea6f3d
 extraturns2hg_smoke_d5_s1001=4.6000/cc399f1a95984da0
 gods_smoke_d0_s1001=8.7830/558cea0d96d28a94
-gods_smoke_d3_s1001=5.4000/ef690b70f2191dc1
-gods_smoke_d5_s1001=5.2000/c3c6b8710a0db927
-gods2hg_smoke_d5_s1001=5.3200/e6f8b68c6dfac4bf
+gods_smoke_d3_s1001=5.4800/75d735efe2cdac39
+gods_smoke_d5_s1001=5.4200/3c91038b871da8e3
+gods2hg_smoke_d5_s1001=5.5600/4b85dc60e86b5e7f
 merfolk_smoke_d0_s1001=4.4960/8ecc0b71dee90a10
 merfolk_smoke_d3_s1001=4.1800/e2d4ed3a62295b80
 merfolk_smoke_d5_s1001=4.1700/f2c8e9e392a196b1
@@ -398,9 +400,9 @@ hinata_regression_d3_s2002=5.6000/20c7dd8bcaa98a93
 hinata_regression_d5_s2002=5.4267/84de43f242a07a82
 hinata_regression_d5_s3003=5.7200/49618b73f57b488f
 gods_regression_d0_s2002=8.7510/e33c8d399b371c42
-gods_regression_d3_s2002=5.4200/6cf6bc0fc84f8f3f
-gods_regression_d5_s2002=5.1800/5934d79288118522
-gods2hg_regression_d5_s2002=5.2200/c87481457e93bdf1
+gods_regression_d3_s2002=5.7200/5f3b76b41469096f
+gods_regression_d5_s2002=5.7600/b7127727779bcbc2
+gods2hg_regression_d5_s2002=5.8000/d68e245f97580ee1
 cyclone_regression_d0_s2002=8.3410/ff285c765cd3e471
 cyclone_regression_d3_s2002=4.8400/335bbf2218963743
 cyclone_regression_d3_s3003=4.9333/b1548eac97d34a49

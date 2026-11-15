@@ -120,3 +120,72 @@ condition that predicts drawing is better across games. Adding a draw choice
 to the live search would expand the decision surface and allow coupled search
 to exploit the true unseen top card. The provider keeps the user's low-land
 draw exception and otherwise stays on the measured dredge policy.
+
+## Fresh blind held-out check after integration
+
+The integrated shared-branch binary passed all 3,305 unit cases and 3,612,583
+assertions. On 2,000 new paired seeds starting at 8,100,001, with the same
+fully blind K=4/depth=1 search and blind bottoming, the old rule averaged
+7.056 turns and won 1,481 games by turn eight. Strict dredging averaged 6.9255
+and won 1,590. The paired difference was **-0.1305 turns per game** (427 faster,
+275 slower, 1,298 equal), standard error 0.0237, approximate 95% interval
+[-0.177, -0.084]. The independent result confirms the blind advantage. Data is
+under `build/scratch/gods_retrieval_nc_heldout2000/` in the primary checkout.
+
+## Coupled-search audit and narrow Loam trial
+
+Gods-only smoke/regression on the integrated binary leaves both depth-zero
+cells identical and moves the searched cells slower: smoke d3 +4 turn-games,
+smoke d5 +11, regression d3 +15, regression d5 +29. The viewer protocol still
+has zero play drift, board divergence, or enumeration gaps across 854 saved
+references. The per-game audit reports 18 slower and six faster smoke games,
+32 slower and five faster regression games. All old/new trace replays succeeded
+using the baseline's historical card data. The smoke 4×/16× budget classifier
+found four of 18 slower games recover and 14 persist. These coupled results
+must be reported alongside the blind benefit; not every slower game is a small
+search-budget artifact. Logs are `build/scratch/gods_integrated_regression.log`
+and `build/scratch/gods_classify_smoke.log` in the primary checkout.
+
+A default-off worktree trial, `MTG_GODS_LOAM_FOURTH`, chose Loam at three lands
+only when Replenish was already in hand, no land was in hand, and Loam could
+recover a graveyard land. This is a narrower subset of the old rule-7 idea:
+it does not introduce a natural draw at three lands. The off arm reproduced
+the integrated binary exactly in the first 50 blind games. Across 1,000
+paired blind seeds, the trial was four turn-games slower (80 faster, 80
+slower, 840 equal; interval for turns/game [-0.037, 0.045]), although it won
+two additional games by turn eight. The directly traced game 607 got worse,
+turn seven to eight. The trial is dropped; it is not integrated on the shared
+branch. Data is under `build/scratch/gods_loam_fourth_blind1000/` in the Gods
+worktree.
+
+The regression 4×/16× classifier covered all 32 slower games: eight recover
+the old turn and 24 persist. Its final 16× game was stopped after the same
+game had already recovered at 4×; the 63 completed reruns and per-game verdicts
+are preserved in `test/logs/regression/classify/`, with a complete summary in
+`build/scratch/gods_classify_regression_complete.txt`. The persistent coupled
+slowdowns are part of the policy cost; the independent blind measurements
+favor strict dredging despite them.
+
+## Two-headed blind check
+
+The same fully blind K=4/depth=1 policy was paired on 1,000 fresh two-headed
+games starting at seed 8,400,001 (starting life 30, two opposing heads). Old
+natural draws averaged 7.077 turns and won 742 games by turn eight; strict
+dredging averaged 7.008 and won 769. Strict was 69 turn-games faster (185
+faster, 139 slower, 676 equal), with paired standard error 0.0325 and
+approximate 95% interval [-0.133, -0.005] turns per game. This smaller but
+positive result supports the same policy in the two-headed variant. Data is
+under `build/scratch/gods_retrieval_nc_2hg1000/` in the primary checkout.
+
+The saved two-headed smoke cell moved from 5.32 to 5.56 turns (+6 turn-games
+over 25), and regression from 5.22 to 5.80 (+29 over 50). Their per-game
+audits found four slower/two faster smoke games and 17 slower/zero faster
+regression games. The strict viewer protocol again reports no correctness
+gaps. These are the coupled-search costs that accompany the blind gain.
+
+All four two-headed smoke slowdowns persist at 4×/16× budget. Of the 17
+two-headed regression slowdowns, five recover and 12 persist. As in the
+one-headed classification, the final 16× rerun was stopped after that game's
+4× result had already recovered the old turn; the per-game verdicts are in
+`build/scratch/gods2hg_classify_regression_complete.txt`. The blind two-headed
+gain is modest but survives its paired confidence interval.
