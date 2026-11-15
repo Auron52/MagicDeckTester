@@ -367,6 +367,17 @@ public:
     virtual int  SacCostVictimLive(const GameState& /*s*/, int /*controller*/) const { return -1; }
     virtual void SacCostVictimVariant(const GameState& /*s*/, int /*controller*/, int& bf_number,
                                       std::string& hand_name) const { bf_number = 0; hand_name.clear(); }
+    // A fixed victim may have one deterministic fallback when its preferred
+    // same-plan hand creature cannot be paid before a sacrifice ritual. The
+    // candidate is generated, then SacCostFallbackPlanAdmitted removes it
+    // unless the exact cast-order walk proves the preferred route unpayable
+    // and the fallback payable. No victim choice reaches the play search.
+    virtual int SacCostFallbackVictim(const GameState& /*s*/, int /*controller*/,
+                                      const CardDefinition& /*spell*/) const { return 0; }
+    virtual bool SacCostFallbackPlans(const GameState& /*s*/) const { return false; }
+    virtual bool SacCostFallbackPlanAdmitted(const GameState& /*s*/,
+                                             const std::vector<Action>& /*actions*/,
+                                             const std::string& /*land_to_play*/) const { return true; }
     // A depth-0/viewer ordering of emerge victims. The searched action set is unchanged:
     // every victim and the hard cast remain enumerable. Default 0 is byte-identical.
     virtual bool WantsEmergeVictimRank(const GameState& /*s*/, const CardDefinition& /*spell*/) const

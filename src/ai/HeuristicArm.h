@@ -946,6 +946,7 @@ enum Slot : int
     GREEDY_SELF_HASTE,        // MTG_GREEDY_SELF_HASTE  the GREEDY policy (Solve: the d0 runner and the horizon playout, never a searched frame) offers "cast this self_haste_cost creature, keep its haste cost, activate it" (Flinthoof Boar): a pre-combat rider action per such creature in hand, valid only beside its cast, scored with the attack it enables (haste_attack_power + one attack of eval) and APPLIED by both worlds' trailing pass. Only Flinthoof holds the param (every other deck byte-identical). Held-out seed 99001, 400 g/cell paired: Boars d0 -24 turns (24 better / 0 worse), d3 b10 and d5 b20 0/0; Boars 2HG d0 -20 (22/2), d3 b10 0 (3/3), d5 b20 -1 (1/0) -- docs/design/boars-greedy-self-haste.md. DEFAULT ON; =0 -> no rider (the pre-2026-11-14 policy)
     FETCH_RANK_PIPS,          // MTG_FETCH_RANK_PIPS  the BASE fetch-shaped land-search order (DecisionProvider::LandSearchFetchPickOrder: a battlefield fetchland's activation AND its land drop, and GenericProvider's legacy FetchCandidates) is a deliberate RANKING instead of name / library order (USER 2026-11-14: a shock over a basic unless no shock makes the colour the line needs): (1) the land adds a pip to the SIMULTANEOUS matching of the castable hand spells' pips against our sources (one pip per source), (2) the plain needed-and-lacked cover, (3) a dual over a basic, (4) castable-demanded colours made, (5) name. Boars sweep seed 97005 T4 (Ilharg {R}{R}, one red source: top-1 fetched Forest; now Stomping Ground) and CG smoke gi113 (Birds is one mana, not W and R at once: Breeding Pool fetched). Overriding providers (Anti-Lifegain, Five Colour, Morph, Cyclone, Landfall, Landfall Elementals) are untouched
     PD_NAMED_LINE_PRIORITY,   // MTG_PD_NAMED_LINE_PRIORITY  the Earthquake-in-hand red hold stands down while the current plan has two or more named mana casts. Default ON; =0 is the broad hold from the first fresh PD gate.
+    SB_CULLING_FALLBACK,      // MTG_SB_CULLING_FALLBACK  fixed Shadowborn victim: when a same-plan hand Apostle cannot fund Culling before later casts, admit the battlefield Demon fallback only if the exact walk pays it. The plan search sees one payable victim route.
     COUNT
 };
 
@@ -1836,6 +1837,7 @@ inline const char* Name(int slot)
         "MTG_GREEDY_SELF_HASTE",
         "MTG_FETCH_RANK_PIPS",
         "MTG_PD_NAMED_LINE_PRIORITY",
+        "MTG_SB_CULLING_FALLBACK",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

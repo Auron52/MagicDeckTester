@@ -51648,6 +51648,16 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                             if (em_price(c)) { out.push_back(std::move(c)); }
                             break;
                         }
+                        // A provider may supply one battlefield fallback for a sacrifice
+                        // ritual. The plan-level exact walk below removes it whenever the
+                        // preferred hand-victim route pays; the search never chooses a victim.
+                        const int fallback = sv_prov.SacCostFallbackVictim(state, me, *d);
+                        if (fallback > 0)
+                        {
+                            Action c = a;
+                            c.soulfire_own_targets = fallback;
+                            if (em_price(c)) { out.push_back(std::move(c)); }
+                        }
                     }
                     ripplestats::NoteSite(ripplestats::kSiteSacVictim, static_cast<long long>(out.size() - sv_before));
                     continue;
@@ -99008,6 +99018,22 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
                                                                     PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> all = EnumeratePlansWithLandUncachedBody(state, is_pre_combat, pb_lazy);
+    // The fixed-victim provider's one payable fallback is a deterministic
+    // repair of an otherwise unpayable cast order. Filter before any plan is
+    // searched; the viewer and unpruned menus retain their ordinary variants.
+    const DecisionProvider& sac_prov = ResolveProvider(state);
+    if (!all.empty() && sac_prov.SacCostFallbackPlans(state))
+    {
+        if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
+        std::size_t w = 0;
+        for (std::size_t i = 0; i < all.size(); ++i)
+        {
+            if (!sac_prov.SacCostFallbackPlanAdmitted(state, all[i].actions, all[i].land_to_play)) { continue; }
+            if (w != i) { all[w] = std::move(all[i]); }
+            ++w;
+        }
+        all.resize(w);
+    }
     // A PROVIDER'S LAND-DEFERRAL RESTRICTION (DecisionProvider::OffersLandDeferral; Vampires' PROPOSED
     // MTG_VAMP_ALWAYS_LAND). Pre-combat, while the drop is open and a land is in hand, a provider that says no
     // drops every plan that plays no land; the land plans (land-first and land-after-the-activations alike)

@@ -287,6 +287,41 @@ TEST_CASE("INT-9 victims: the Demon tail -- Overlord, then Sire, then Reaper, Je
     }
 }
 
+TEST_CASE("Culling uses a battlefield Demon only when casting the hand Apostle first cannot pay")
+{
+    GameState s = Base9(1);
+    s.battlefield.push_back(Perm9(kReaper9, 43));
+    s.players[0].hand.push_back(Card9(kAp9, 60));
+    s.players[0].hand.push_back(Card9("Culling the Weak", 61));
+    Lib9(s, { kSw9, kSw9 });
+    const std::vector<Action> culls = Casts9(s, "Culling the Weak");
+    REQUIRE(culls.size() == 2);
+    const auto bf = std::find_if(culls.begin(), culls.end(), [](const Action& a)
+    { return a.soulfire_own_targets == 43; });
+    REQUIRE(bf != culls.end());
+    const std::vector<Action> apostles = Casts9(s, kAp9);
+    REQUIRE(!apostles.empty());
+    CHECK(Prov9().SacCostFallbackPlanAdmitted(s, { *bf }, ""));
+    CHECK(Prov9().SacCostFallbackPlanAdmitted(s, { apostles.front(), *bf }, ""));
+
+    // A second Swamp funds Apostle -> Culling, so the Reaper fallback is
+    // removed before search and the preferred sacrifice order remains fixed.
+    GameState paid = s;
+    paid.battlefield.push_back(Perm9(kSw9, 2));
+    const std::vector<Action> paid_culls = Casts9(paid, "Culling the Weak");
+    const auto paid_bf = std::find_if(paid_culls.begin(), paid_culls.end(), [](const Action& a)
+    { return a.soulfire_own_targets == 43; });
+    REQUIRE(paid_bf != paid_culls.end());
+    const std::vector<Action> paid_apostles = Casts9(paid, kAp9);
+    REQUIRE(!paid_apostles.empty());
+    CHECK_FALSE(Prov9().SacCostFallbackPlanAdmitted(paid, { paid_apostles.front(), *paid_bf }, ""));
+    CHECK_FALSE(Prov9().SacCostFallbackPlanAdmitted(paid, { *paid_bf }, ""));
+
+    Arm9 off;
+    off.Set(heurarm::SB_CULLING_FALLBACK, 0);
+    CHECK(Casts9(s, "Culling the Weak").size() == 1);
+}
+
 TEST_CASE("INT-9 victims: the weakest Apostle -- a summoning-sick copy before an attack-ready one")
 {
     GameState s = Base9();

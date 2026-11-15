@@ -4859,6 +4859,11 @@ public:
     bool SacCostVictimFixed(const GameState& s) const override;
     int  SacCostVictimLive(const GameState& s, int controller) const override;
     void SacCostVictimVariant(const GameState& s, int controller, int& bf_number, std::string& hand_name) const override;
+    int SacCostFallbackVictim(const GameState& s, int controller,
+                              const CardDefinition& spell) const override;
+    bool SacCostFallbackPlans(const GameState& s) const override;
+    bool SacCostFallbackPlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                     const std::string& land_to_play) const override;
     bool RippleFixed(const GameState& s) const override;
     int  RippleFreeCastAnswer(const GameState& s, int controller, const CardDefinition& hit) const override;
     // P1 (rc8 root cause; USER CONFIRMED 2026-11-03: "That makes sense. We don't have a good reason to hold lands."): the no-land pass

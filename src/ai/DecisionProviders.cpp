@@ -64713,6 +64713,113 @@ void ShadowbornProvider::SacCostVictimVariant(const GameState& s, int controller
     hand_name = hand_other;
 }
 
+static bool SbCullingFallbackOn()
+{
+    static const bool env_on = EnvOn("MTG_SB_CULLING_FALLBACK", true);
+    return heurarm::Flag(heurarm::SB_CULLING_FALLBACK, env_on) && ShadowbornPrunesOn();
+}
+
+int ShadowbornProvider::SacCostFallbackVictim(const GameState& s, int controller,
+                                               const CardDefinition& spell) const
+{
+    if (!SbCullingFallbackOn() || !spell.params.sac_additional_creature
+        || spell.params.ritual_floating_mana <= 0) { return 0; }
+    const int bi = SacCostVictimLive(s, controller);
+    if (bi < 0) { return 0; }
+    const Permanent& q = s.battlefield[static_cast<std::size_t>(bi)];
+    const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+    if (SbVictimRank(q, d) < 2 * 4) { return 0; }   // Harpy/Apostle already has priority
+    for (const Card& h : s.players[static_cast<std::size_t>(controller)].hand)
+    { if (SbIsSacNamedCreature(CardDatabase::Instance().LookupCached(h))) { return q.card.m_number; } }
+    return 0;
+}
+
+bool ShadowbornProvider::SacCostFallbackPlans(const GameState& s) const
+{
+    if (!SbCullingFallbackOn()) { return false; }
+    for (const Card& h : s.ActivePlayer().hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+        if (d != nullptr && SacCostFallbackVictim(s, s.active_player_index, *d) > 0) { return true; }
+    }
+    return false;
+}
+
+bool ShadowbornProvider::SacCostFallbackPlanAdmitted(const GameState& s,
+                                                       const std::vector<Action>& actions,
+                                                       const std::string& land_to_play) const
+{
+    int culling = -1;
+    for (int i = 0; i < static_cast<int>(actions.size()); ++i)
+    {
+        const Action& a = actions[static_cast<std::size_t>(i)];
+        const CardDefinition* d = SbCastDef(a);
+        if (d == nullptr || !d->params.sac_additional_creature
+            || d->params.ritual_floating_mana <= 0 || !a.trick_hand_target.empty()) { continue; }
+        if (a.soulfire_own_targets == SacCostFallbackVictim(s, s.active_player_index, *d))
+        { culling = i; break; }
+    }
+    if (culling < 0) { return true; }   // the preferred victim, or no Culling
+    // The exact walk below has no land-play or activation model. Admit only a
+    // no-land cast-only line whose payment it can prove in both variants.
+    if (!land_to_play.empty()) { return false; }
+    for (const Action& a : actions) { if (a.kind != Action::Kind::CastFromHand) { return false; } }
+
+    const Player& ap = s.ActivePlayer();
+    int apostle = -1;
+    int apostle_number = 0;
+    for (int i = 0; i < static_cast<int>(actions.size()); ++i)
+    {
+        const Action& a = actions[static_cast<std::size_t>(i)];
+        const CardDefinition* d = SbCastDef(a);
+        if (d == nullptr || !SbIsSacNamedCreature(d) || a.hand_index < 0
+            || a.hand_index >= static_cast<int>(ap.hand.size())) { continue; }
+        apostle = i;
+        apostle_number = ap.hand[static_cast<std::size_t>(a.hand_index)].m_number;
+        break;
+    }
+    auto pays = [&](const std::vector<Action>& acts)
+    {
+        std::vector<int> order;
+        order.reserve(acts.size());
+        for (int i = 0; i < static_cast<int>(acts.size()); ++i) { order.push_back(i); }
+        std::stable_sort(order.begin(), order.end(), [&](int x, int y)
+        { return CastOrderLess(s, acts[static_cast<std::size_t>(x)], acts[static_cast<std::size_t>(y)]); });
+        ArrangeCastOrder(s, acts, order);
+        return TurnSolver::OrderPaysSequentially(s, acts, order);
+    };
+    std::vector<Action> preferred = actions;
+    if (apostle < 0)
+    {
+        // A Culling-only plan must still respect the hand-Apostle priority
+        // when it could pay Apostle first. Compare the same plan with that
+        // one cast added, rather than treating omission as proof of failure.
+        for (int hi = 0; hi < static_cast<int>(ap.hand.size()); ++hi)
+        {
+            const Card& h = ap.hand[static_cast<std::size_t>(hi)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(h);
+            if (!SbIsSacNamedCreature(d)) { continue; }
+            Action a;
+            a.kind = Action::Kind::CastFromHand;
+            a.card_name = h.m_name;
+            a.hand_index = hi;
+            a.def = d;
+            a.cost = d->card.m_mana_cost;
+            a.card_mv = a.cost.ManaValue();
+            preferred.push_back(a);
+            apostle_number = h.m_number;
+            apostle = static_cast<int>(preferred.size()) - 1;
+            break;
+        }
+    }
+    if (apostle < 0) { return pays(actions); }
+    preferred[static_cast<std::size_t>(culling)].soulfire_own_targets = apostle_number;
+    preferred[static_cast<std::size_t>(culling)].trick_hand_target =
+        preferred[static_cast<std::size_t>(apostle)].card_name.str();
+    if (pays(preferred)) { return false; }   // hand Apostle first, the USER's victim order
+    return pays(actions);                    // one legal battlefield fallback, never a searched choice
+}
+
 // THE FREE CASTS (brief B; USER 2026-11-03). Every castable revealed match is TAKEN except a creature-sacrificing
 // spell (Diabolic Intent; Culling the Weak is a 1-of and never matches), which is DECLINED -- or, on the
 // MTG_SHADOWBORN_FREE_INTENT_TAKE arm, taken iff an EXPENDABLE victim exists (a vanilla token creature -- a
