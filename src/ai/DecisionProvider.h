@@ -67,6 +67,7 @@
 #include "PlanContext.h"  // PlanTraits for the reserve-override hooks (Action-free header)
 #include "../core/MadnessTypes.h"   // MadnessOption / MadnessWindow (MadnessCastDefault)
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -3308,6 +3309,15 @@ public:
     // 0 = no extra cap: a provider with its OWN reviewed width keeps it (Cyclone: the rule pick + Xander's Lounge).
     virtual int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
     { (void)s; (void)fetch; return 1; }
+    // The land-drop solver can only know a line's colour costs after enumerating that line
+    // under each legal target. Providers with the shared fetch ranking enable this hook;
+    // providers with their own fetch doctrine leave it disabled. The key is compared
+    // lexicographically, highest first, within plans identical except for fetch target.
+    virtual bool FetchLineRankEnabled(const GameState& s) const { (void)s; return false; }
+    virtual std::array<int, 6> FetchLineRankKey(const GameState& s, int controller,
+                                               const std::vector<Action>& actions,
+                                               const std::string& target) const
+    { (void)s; (void)controller; (void)actions; (void)target; return {}; }
 
     // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
     // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old
@@ -4016,7 +4026,9 @@ public:
     // CONTRACT: a provider that overrides LandSearchPickOrder MUST override this too, folding in every
     // state input its order reads -- or return false, which disables the memo for that provider. The
     // memo key also carries the provider's dynamic type, so two providers never share an entry.
-    // Base rule: the order reads only the colours we NEED and LACK (see LandSearchPickOrder).
+    // Base rule: the order reads only the colours we NEED and LACK (see LandSearchPickOrder); under
+    // MTG_FETCH_RANK_PIPS also the fetch ranking's matching gains and demand (bits 22..27, 33..63, set only
+    // while the lever is on, so an overriding provider's own bits 5..21 never collide).
     virtual bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const;
     // LandSearchPickWidth -- the land-search NARROWING the contract above reserves for its own named
     // hook: how many LEADING entries of the ordered pick list the AUTONOMOUS world keeps (the search's
@@ -4052,12 +4064,20 @@ public:
     // reviewed doctrine overrides both (and keys or declines the memo, LandSearchPickOrderKey's CONTRACT).
     // Same contexts as above: the width is autonomous play only (human play / MTG_UNPRUNE=landpick never
     // narrow). Subtype ids are SubtypeRegistry ids (0 = none).
+    // MTG_FETCH_RANK_PIPS (heurarm FETCH_RANK_PIPS; out-of-line in DecisionProviders.cpp): the base then RANKS the
+    // picks deliberately (USER 2026-11-14: "getting a shock over a basic is usually what we want to do anyway. The
+    // only exception is if we have no shocks in the colour our line needs."): (1) the land adds a pip to a
+    // SIMULTANEOUS matching of this turn's castable hand spells' pips against our sources (one pip per source),
+    // (2) the plain rule's needed-and-lacked cover, (3) a dual (two or more colours) over a basic, (4) the
+    // castable-demanded colours it makes, (5) name -- never library order (GenericProvider's legacy list arrives
+    // in library order). Providers with their own land-search doctrine (Cyclone, Landfall, Landfall Elementals)
+    // override this to their plain LandSearchPickOrder; the provider-ranked fetches (Anti-Lifegain, Five Colour,
+    // Morph) override it with their FetchCandidates ranking.
+    // Its state inputs are in the base LandSearchPickOrderKey.
     virtual void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
                                           bool basic_only, bool share_land_type, std::uint16_t subtype,
                                           std::uint16_t subtype_alt,
-                                          std::vector<std::vector<std::string>>& picks) const
-    { (void)subtype; (void)subtype_alt;
-      LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks); }
+                                          std::vector<std::vector<std::string>>& picks) const;
     virtual int LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
                                          std::uint16_t subtype_alt,

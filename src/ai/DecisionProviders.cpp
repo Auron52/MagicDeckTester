@@ -1022,7 +1022,7 @@ GenericProvider::FetchCandidates(const GameState& s, int controller, const CardP
     // (Previously returned {} -> a generic fetch paid 1 life and fetched nothing.)
     // ORDER (2026-11-14): the same fetch-shaped land-search order a battlefield fetchland's activation reads
     // (LandSearchFetchPickOrder; base = the colours the hand NEEDS and the board LACKS first), stable on library
-    // order -- one heuristic for a legacy immediate-model fetchland and a battlefield one (USER: "We should
+    // order (under MTG_FETCH_RANK_PIPS a deliberate ranking: the line's colour, a shock over a basic, then NAME) -- one heuristic for a legacy immediate-model fetchland and a battlefield one (USER: "We should
     // obviously use the same heuristic that just grabs Stomping Ground"). Providers with their own ranking start
     // from AllLegalFetchTargets (library order), never from here.
     std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);
@@ -1095,6 +1095,19 @@ MTG_FETCH_PICKS_BY_PROVIDER(AntiLifegainProvider)
 MTG_FETCH_PICKS_BY_PROVIDER(FiveColourProvider)
 MTG_FETCH_PICKS_BY_PROVIDER(MorphProvider)
 #undef MTG_FETCH_PICKS_BY_PROVIDER
+// Providers whose LAND-SEARCH order is their own doctrine (Cyclone's Myriad rule, Landfall's colour sequence, Landfall
+// Elementals' fetch order): a fetch-shaped spec reads their LandSearchPickOrder exactly as before the base fetch ranking
+// (MTG_FETCH_RANK_PIPS) existed, so that ranking can never reorder their lists. Their LandSearchPickOrderKey (base bits +
+// their own) still covers everything this reads.
+#define MTG_FETCH_PICKS_PLAIN(Cls)                                                                                \
+    void Cls::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only, \
+                                       bool share_land_type, std::uint16_t, std::uint16_t,                         \
+                                       std::vector<std::vector<std::string>>& picks) const                         \
+    { LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks); }
+MTG_FETCH_PICKS_PLAIN(CycloneProvider)
+MTG_FETCH_PICKS_PLAIN(LandfallProvider)
+MTG_FETCH_PICKS_PLAIN(LandfallElementalsProvider)
+#undef MTG_FETCH_PICKS_PLAIN
 
 // Every legal target of a fetchland: the distinct library land names carrying one of its subtypes, in
 // library order. GenericProvider's list, and the full set human play widens a narrowed provider list to.
@@ -2786,10 +2799,238 @@ static unsigned LandSearchLackMask(const GameState& s, int controller)
     return lack;
 }
 
+// ---- MTG_FETCH_RANK_PIPS: the fetch order's deliberate RANKING (Boars sweep seed 97005, USER rulings 2026-11-14) ------
+// The plain rule above ranks a pick only by the NEEDED-and-LACKED colours it covers; once the board makes every colour the
+// hand needs, every target ties and the list falls back to the generator's order (name order for the battlefield
+// fetchland's pick list, LIBRARY order for GenericProvider's legacy FetchCandidates) -- arbitrary (USER: a heuristic's
+// order must be a deliberate ranking, never library order). 97005 T4: Forest, Forest, Stomping Ground, Zhur-Taa Druid,
+// Herald's Horn on the board, Ilharg ({3}{R}{R}) in hand with ONE red source -- the top-1 land drop (OnPlayFetchWidth)
+// fetched Forest by name and never saw the second red source (T6; MTG_UNPRUNE=fetch d5 b0 T5). Creature Giving smoke
+// gi113 (seed 1114): T2 Overgrown Tomb + Birds of Paradise, hand Enlightened Tutor {W} + Varchild's War-Riders {1}{R};
+// Birds "makes" W and R but is ONE mana, so the test must be SIMULTANEOUS, not per colour.
+// The USER's rule (verbatim): "getting a shock over a basic is usually what we want to do anyway. The only exception is
+// if we have no shocks in the colour our line needs." and, for two-colour decks, "If there are 2 colours you literally
+// can just always get the shock and then basics after that." (no life term: "Even if you pay every fetch + shock cost
+// you will still have remaining life", assuming no own-life-total cards). So the picks rank, highest first, by:
+//   (1) THE LINE'S COLOUR: whether the land adds a pip to the matching of this turn's castable spells -- CASTABLE = the
+//       nonland hand cards whose mana value fits the mana we will have (each producer's stated mana output plus the
+//       fetched land); their coloured pips together are matched against our sources, ONE pip per source (a maximum
+//       bipartite matching);
+//   (2) the plain rule's score (the NEEDED-and-LACKED colours it covers, for the hand's later spells);
+//   (3) a DUAL (a land making two or more colours: the shock) over a basic -- so a basic wins only when no remaining
+//       dual makes the colour (1) / (2) ask for; on a two-colour deck the shock comes first whenever one is left, even
+//       when the board already makes both colours (its colours contain every basic's);
+//   (4) the castable-demanded colours it makes;
+//   (5) its names -- never library order.
+// 97005 T4: Mountain and Stomping Ground both add the second red pip; the shock beats the basic -> Stomping Ground (and
+// Mountain once no Stomping Ground is left). gi113: Temple Garden pays the W while Birds pays the R (or Stomping Ground
+// the R while Birds pays the W); Breeding Pool pays neither.
+// The memo key holds the inputs EXACTLY: the lack mask, the matching gain for every one of the 31 colour masks a land can
+// make, and the castable demand mask (LandSearchPickOrderKey); (3) and (5) read only the picks themselves.
+// Providers whose fetch or land-search order is their own doctrine (Anti-Lifegain / Modern RW Burn, Five Colour, Morph
+// through MTG_FETCH_PICKS_BY_PROVIDER; Cyclone, Landfall, Landfall Elementals through MTG_FETCH_PICKS_PLAIN) never read it.
+static bool FetchRankPipsOn()
+{
+    static const bool on = EnvOn("MTG_FETCH_RANK_PIPS", false);
+    return heurarm::Flag(heurarm::FETCH_RANK_PIPS, on);
+}
+
+namespace
+{
+// The tie-break's whole state input: gain[m] = does a source making colour mask m (1..31, WUBRG bits) add a pip to the
+// matching of the castable spells' pips; demanded = the colours those pips ask for.
+struct FetchPipState
+{
+    std::uint32_t gain     = 0;   // bit m set = mask m adds a matched pip
+    unsigned      demanded = 0;
+};
+
+unsigned ProducesMask(const CardDefinition* d)
+{
+    unsigned m = 0;
+    if (d == nullptr) { return 0; }
+    for (Color c : d->params.produces) { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { m |= 1u << ci; } }
+    return m;
+}
+
+FetchPipState ReadFetchPipState(const GameState& s, int controller,
+                               const std::vector<Action>* line = nullptr)
+{
+    FetchPipState st;
+    std::vector<unsigned> src;
+    int mana = 1;   // the fetched land; a Karoo or burst source can make more than one mana
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        const unsigned m = ProducesMask(d);
+        if (m != 0)
+        {
+            src.push_back(m);
+            mana += std::max(1, d->params.produces_amount);
+        }
+    }
+    std::vector<int> pips;   // one entry per coloured pip (its colour index)
+    auto add_pips = [&](const ManaCost& mc)
+    {
+        const int n[5] = { mc.white, mc.blue, mc.black, mc.red, mc.green };
+        for (int i = 0; i < 5; ++i)
+        { for (int k = 0; k < std::min(n[i], 7); ++k) { pips.push_back(i); st.demanded |= 1u << i; } }
+    };
+    if (line != nullptr)
+    {
+        // These are the costs of the actions the solver actually selected under this
+        // fetched land. A creature still in hand is not a mana source for this line.
+        for (const Action& a : *line) { add_pips(a.cost); }
+    }
+    else
+    {
+        const Player& pl = s.players[static_cast<std::size_t>(controller)];
+        for (const Card& c : pl.hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || d->card.IsLand()) { continue; }
+            const ManaCost& mc = d->card.m_mana_cost;
+            if (mc.ManaValue() <= mana) { add_pips(mc); }
+        }
+    }
+    if (pips.empty()) { return st; }
+    // Kuhn's augmenting-path matching, sources -> pips.
+    std::vector<int> owner(pips.size(), -1);   // pip -> source index
+    std::vector<unsigned> all = src;
+    all.push_back(0);                          // slot for the candidate land
+    std::vector<char> seen;
+    std::function<bool(int)> augment = [&](int u) -> bool
+    {
+        for (std::size_t p = 0; p < pips.size(); ++p)
+        {
+            if (!((all[static_cast<std::size_t>(u)] >> pips[p]) & 1u) || seen[p]) { continue; }
+            seen[p] = 1;
+            if (owner[p] < 0 || augment(owner[p])) { owner[p] = u; return true; }
+        }
+        return false;
+    };
+    for (std::size_t u = 0; u < src.size(); ++u) { seen.assign(pips.size(), 0); augment(static_cast<int>(u)); }
+    const std::vector<int> base = owner;
+    const int cand = static_cast<int>(src.size());
+    for (unsigned m = 1; m < 32; ++m)
+    {
+        if ((m & st.demanded) == 0) { continue; }
+        owner = base;
+        all[static_cast<std::size_t>(cand)] = m;
+        seen.assign(pips.size(), 0);
+        if (augment(cand)) { st.gain |= 1u << m; }
+    }
+    return st;
+}
+
+// The plain rule's score of one pick (LandSearchPickOrder): lacked colours covered, then lands in the pick.
+int LandSearchPlainScore(unsigned lack, const std::vector<std::string>& pick)
+{
+    bool got[5] = { false, false, false, false, false };
+    for (const std::string& nm : pick)
+    {
+        const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
+        if (d == nullptr) { continue; }
+        for (Color c : d->params.produces)
+        { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { got[ci] = true; } }
+    }
+    int cover = 0;
+    for (int i = 0; i < 5; ++i) { if (((lack >> i) & 1u) && got[i]) { ++cover; } }
+    return cover * 16 + static_cast<int>(pick.size());
+}
+
+// The ranking key of one pick past the plain score (each field higher first): (1) adds a matched pip, (3) is a dual,
+// (4) castable-demanded colours it makes. A multi-land pick is scored by the union of its lands' colours (fetch picks are
+// one land).
+struct FetchRankKey
+{
+    int gain = 0, dual = 0, demanded = 0;
+};
+FetchRankKey FetchPipKey(const FetchPipState& st, const std::vector<std::string>& pick)
+{
+    unsigned m = 0;
+    for (const std::string& nm : pick) { m |= ProducesMask(CardDatabase::Instance().Lookup(nm)); }
+    FetchRankKey k;
+    k.gain = ((st.gain >> m) & 1u) ? 1 : 0;
+    int colours = 0;
+    for (int i = 0; i < 5; ++i)
+    {
+        if ((m >> i) & 1u) { ++colours; }
+        if (((m & st.demanded) >> i) & 1u) { ++k.demanded; }
+    }
+    k.dual = colours >= 2 ? 1 : 0;
+    return k;
+}
+}   // namespace
+
+bool GenericProvider::FetchLineRankEnabled(const GameState& s) const
+{
+    (void)s;
+    return FetchRankPipsOn();
+}
+
+std::array<int, 6> GenericProvider::FetchLineRankKey(const GameState& s, int controller,
+                                                     const std::vector<Action>& actions,
+                                                     const std::string& target) const
+{
+    const FetchPipState pips = ReadFetchPipState(s, controller, &actions);
+    const FetchPipState hand_pips = ReadFetchPipState(s, controller);
+    const std::vector<std::string> pick{target};
+    const FetchRankKey k = FetchPipKey(pips, pick);
+    const FetchRankKey hand = FetchPipKey(hand_pips, pick);
+    // The actual line decides first; the existing hand-aware order breaks ties so
+    // a line such as two Birds can still take red for a later War-Riders cast.
+    return {k.gain, k.demanded, hand.gain,
+            LandSearchPlainScore(LandSearchLackMask(s, controller), pick), hand.dual, hand.demanded};
+}
+
 bool DecisionProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
 {
     key = LandSearchLackMask(s, controller);
+    // The fetch tie-break's inputs (LandSearchFetchPickOrder), only while it is on: bit 22 marks the arm (a pooled
+    // batch flips it per job on one thread's memo), bits 23..27 the demanded mask, bits 32..63 the gain per mask.
+    if (FetchRankPipsOn())
+    {
+        const FetchPipState st = ReadFetchPipState(s, controller);
+        key |= std::uint64_t{ 1 } << 22;
+        key |= static_cast<std::uint64_t>(st.demanded) << 23;
+        key |= static_cast<std::uint64_t>(st.gain) << 32;
+    }
     return true;
+}
+
+void DecisionProvider::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                                bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                                std::uint16_t subtype_alt,
+                                                std::vector<std::vector<std::string>>& picks) const
+{
+    (void)subtype; (void)subtype_alt;
+    // Exactly what this spec read before the fetch hooks existed: the land-search order with no subtype.
+    LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks);
+    if (picks.size() < 2 || !FetchRankPipsOn()) { return; }
+    // The deliberate ranking (see FetchRankPipsOn): (1) adds a matched pip, (2) plain score, (3) dual, (4) demanded
+    // colours made, (5) names. The picks are distinct, so (5) makes it a total order: the input order never shows.
+    const unsigned lack = LandSearchLackMask(s, controller);
+    const FetchPipState st = ReadFetchPipState(s, controller);
+    std::vector<int> plain(picks.size());
+    std::vector<FetchRankKey> key(picks.size());
+    for (std::size_t i = 0; i < picks.size(); ++i)
+    { plain[i] = LandSearchPlainScore(lack, picks[i]); key[i] = FetchPipKey(st, picks[i]); }
+    std::vector<std::size_t> order(picks.size());
+    for (std::size_t i = 0; i < order.size(); ++i) { order[i] = i; }
+    std::stable_sort(order.begin(), order.end(), [&](std::size_t x, std::size_t y)
+    {
+        if (key[x].gain != key[y].gain)         { return key[x].gain > key[y].gain; }
+        if (plain[x] != plain[y])               { return plain[x] > plain[y]; }
+        if (key[x].dual != key[y].dual)         { return key[x].dual > key[y].dual; }
+        if (key[x].demanded != key[y].demanded) { return key[x].demanded > key[y].demanded; }
+        return picks[x] < picks[y];
+    });
+    std::vector<std::vector<std::string>> out;
+    out.reserve(picks.size());
+    for (std::size_t i : order) { out.push_back(std::move(picks[i])); }
+    picks = std::move(out);
 }
 
 void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
@@ -2801,22 +3042,8 @@ void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, i
     // Colours we NEED (a coloured pip on a nonland card in hand) and LACK (no permanent we control
     // produces it) -- LandSearchLackMask, shared with the memo key above.
     const unsigned lack = LandSearchLackMask(s, controller);
-    auto score = [&](const std::vector<std::string>& pick)
-    {
-        bool got[5] = { false, false, false, false, false };
-        for (const std::string& nm : pick)
-        {
-            const CardDefinition* d = CardDatabase::Instance().Lookup(nm);
-            if (d == nullptr) { continue; }
-            for (Color c : d->params.produces)
-            { const int ci = static_cast<int>(c); if (ci >= 0 && ci < 5) { got[ci] = true; } }
-        }
-        int cover = 0;
-        for (int i = 0; i < 5; ++i) { if (((lack >> i) & 1u) && got[i]) { ++cover; } }
-        return cover * 16 + static_cast<int>(pick.size());
-    };
     std::vector<int> keys(picks.size());
-    for (std::size_t i = 0; i < picks.size(); ++i) { keys[i] = score(picks[i]); }
+    for (std::size_t i = 0; i < picks.size(); ++i) { keys[i] = LandSearchPlainScore(lack, picks[i]); }
     std::vector<std::size_t> order(picks.size());
     for (std::size_t i = 0; i < order.size(); ++i) { order[i] = i; }
     std::stable_sort(order.begin(), order.end(),

@@ -283,6 +283,10 @@ double CastFactorFor(const Census& c, const CardDefinition& d, const std::vector
 class GenericProvider : public DecisionProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState& s) const override;
+    std::array<int, 6> FetchLineRankKey(const GameState& s, int controller,
+                                       const std::vector<Action>& actions,
+                                       const std::string& target) const override;
     bool TakeFreeCast(const GameState&, int, const CardDefinition&) const override;
 
     const char* Name() const override { return "Generic"; }
@@ -454,6 +458,7 @@ public:
 class MorphProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
     int  CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     bool OrderOpaqueCastsByRank() const override { return true; }
@@ -1043,6 +1048,7 @@ public:
 class AntiLifegainProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. This deck kills by damage flows through opponent LIFEGAIN flipped to loss, so the bound is over lifegain sources" }; }
     const char* Name() const override { return "AntiLifegain"; }
@@ -2168,6 +2174,7 @@ public:
 class FiveColourProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Test: is combat the ONLY route to the opponent's life, and does nothing in the pool grant haste or untap? See SnowProvider/FungusProvider for the worked shape." }; }
     const char* Name() const override { return "FiveColour"; }
@@ -3877,6 +3884,7 @@ public:
 class LandfallElementalsProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only: Akoum Hellhound and "
                "Brushfire Elemental (haste) get +2/+2 per land entering this turn, Mossborn Hydra "
@@ -3904,6 +3912,11 @@ public:
     // ORDER plus a PRUNE to that one pick, so the search no longer branches over which basic to fetch.
     // Human play and MTG_UNPRUNE=landpick keep the full fan (LandSearchPickPruned).
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    // The fetch-shaped spec reads this provider's own LandSearchPickOrder, never the base fetch ranking
+    // (MTG_FETCH_RANK_PIPS); DecisionProviders.cpp, MTG_FETCH_PICKS_PLAIN.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
     void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
                              bool share_land_type, std::uint16_t subtype,
                              std::vector<std::vector<std::string>>& picks) const override;
@@ -4023,6 +4036,7 @@ public:
 class CycloneProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Damage is combat only (Emrakul 15 flying + "
                "annihilator 6, the Ulamogs 10, Curator of Mysteries 4 flying, Street Wraith 3), but the "
@@ -4105,6 +4119,11 @@ public:
                              bool basic_only, bool share_land_type, std::uint16_t subtype,
                              std::vector<std::vector<std::string>>& picks) const override;
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    // The fetch-shaped spec reads this provider's own LandSearchPickOrder, never the base fetch ranking
+    // (MTG_FETCH_RANK_PIPS); DecisionProviders.cpp, MTG_FETCH_PICKS_PLAIN.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
     int  LandSearchPickWidth(const GameState& s, int controller, int count, int to_hand,
                              bool basic_only, bool share_land_type, std::uint16_t subtype,
                              const std::vector<std::vector<std::string>>& picks) const override;
@@ -4238,6 +4257,7 @@ int CycloneCycleOrderMode();
 class LandfallProvider : public DeckProvider
 {
 public:
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Damage reaches the opponent through combat AND "
                "off the battlefield: Omnath, Locus of Rage deals 3 when an Elemental we control dies "
@@ -4266,6 +4286,11 @@ public:
                              bool basic_only, bool share_land_type, std::uint16_t subtype,
                              const std::vector<std::vector<std::string>>& picks) const override;
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
+    // The fetch-shaped spec reads this provider's own LandSearchPickOrder, never the base fetch ranking
+    // (MTG_FETCH_RANK_PIPS); DecisionProviders.cpp, MTG_FETCH_PICKS_PLAIN.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
     // "Primeval Titan must never search for a basic" (USER 2026-10-16): an any-land search admits no
     // basic, so Titan takes one nonbasic, or none, when fewer than two are left.
     bool LandSearchAdmitsLand(const GameState& s, int controller, int count, int to_hand, bool basic_only,

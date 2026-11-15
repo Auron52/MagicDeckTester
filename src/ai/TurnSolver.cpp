@@ -99508,6 +99508,67 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         }
     };
 
+    // Rank the land for each actual cast line. A target may enable a line that no
+    // other target can pay for; that line stays in the search. When two targets
+    // produce the same plan, only their land choice is a heuristic decision.
+    auto add_ranked_fetch_lines = [&](const std::string& land_name,
+                                      const std::vector<std::string>& targets, bool from_top = false)
+    {
+        const std::size_t first = all.size();
+        for (const std::string& target : targets)
+        { add_for_land(land_name, target, "", from_top); }
+
+        std::vector<TurnSolver::Plan> options;
+        options.reserve(all.size() - first);
+        for (std::size_t i = first; i < all.size(); ++i)
+        { options.push_back(std::move(all[i])); }
+        all.resize(first);
+
+        const DecisionProvider& provider = ResolveProvider(state);
+        std::unordered_map<std::string, std::vector<std::size_t>> buckets;
+        std::vector<TurnSolver::Plan> chosen;
+        std::vector<TurnSolver::Plan> normalized;
+        std::vector<std::optional<std::array<int, 6>>> keys;
+        chosen.reserve(options.size());
+        for (TurnSolver::Plan& p : options)
+        {
+            const std::string signature = PlanSignatureFast(p, false, true, true, true);
+            TurnSolver::Plan comparable = p;
+            comparable.fetch_target.clear();
+            comparable.value = 0;
+            comparable.land_tie_key = -1;
+            auto& bucket = buckets[signature];
+            std::size_t match = chosen.size();
+            for (std::size_t i : bucket)
+            { if (normalized[i] == comparable) { match = i; break; } }
+            if (match == chosen.size())
+            {
+                bucket.push_back(chosen.size());
+                normalized.push_back(std::move(comparable));
+                keys.push_back(std::nullopt);
+                chosen.push_back(std::move(p));
+            }
+            else
+            {
+                if (!keys[match].has_value())
+                {
+                    keys[match] = provider.FetchLineRankKey(state, state.active_player_index,
+                                                             chosen[match].actions, chosen[match].fetch_target);
+                }
+                const auto key = provider.FetchLineRankKey(state, state.active_player_index,
+                                                           p.actions, p.fetch_target);
+                if (key > *keys[match]
+                    || (key == *keys[match] && p.fetch_target < chosen[match].fetch_target))
+                {
+                    normalized[match] = std::move(comparable);
+                    keys[match] = key;
+                    chosen[match] = std::move(p);
+                }
+            }
+        }
+        for (TurnSolver::Plan& p : chosen) { all.push_back(std::move(p)); }
+    };
+
     // Pass 2 of the real-fetch model: a fetchland with more than one legal target is an inline
     // sub-decision. The SEARCHED set is provider-owned and provider-SIZED
     // (DecisionProvider::FetchSearchCandidates -- "the return IS the candidate set"; the default
@@ -99553,6 +99614,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             // enters the graveyard, where Deathrite fuel and the mana pool may have changed.
             if (!cands.empty())
             {
+                if (cands.size() > 1 && ResolveProvider(state).FetchLineRankEnabled(state)
+                    && !DecisionUnpruned(UnprunedGate::Fetch))
+                {
+                    add_ranked_fetch_lines(ln, cands);
+                    continue;
+                }
                 NarrowOnPlayFetch(state, state.active_player_index, *ld, cands);
                 // MTG_FETCH_FAN_CAP=<n> (default 0 = off, byte-identical): measurement hatch
                 // capping the fan below whatever the provider returned (this arc's attribution
@@ -99627,11 +99694,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                 }
                 else if (!cands.empty())   // preserve a sole target through a Courser-style land drop too
                 {
-                    NarrowOnPlayFetch(state, state.active_player_index, *tl, cands);
-                    static const int s_fetch_fan_cap_top = EnvInt("MTG_FETCH_FAN_CAP", 0);
-                    if (s_fetch_fan_cap_top > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_top)
-                    { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_top)); }
-                    for (const std::string& c : cands) { add_for_land(tn, c, "", true); }
+                    if (cands.size() > 1 && ResolveProvider(state).FetchLineRankEnabled(state)
+                        && !DecisionUnpruned(UnprunedGate::Fetch))
+                    {
+                        add_ranked_fetch_lines(tn, cands, true);
+                    }
+                    else
+                    {
+                        NarrowOnPlayFetch(state, state.active_player_index, *tl, cands);
+                        static const int s_fetch_fan_cap_top = EnvInt("MTG_FETCH_FAN_CAP", 0);
+                        if (s_fetch_fan_cap_top > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_top)
+                        { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_top)); }
+                        for (const std::string& c : cands) { add_for_land(tn, c, "", true); }
+                    }
                 }
                 else { add_for_land(tn, "", "", true); }
             }

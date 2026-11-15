@@ -942,6 +942,7 @@ enum Slot : int
     ATTACK_HERALD_TRIGGER,    // MTG_ATTACK_HERALD_TRIGGER  the this-turn damage projection (both consider() sites) adds Herald of Ilharg's cast trigger (Boars I2b): each creature cast of the plan puts the counters on every Herald out, an MV>=5 cast deals each Herald's running count x heads, and a pre-combat ATTACKING Herald's growth is attack damage; a Herald cast earlier in the plan joins for later casts. Default ON; =0 -> not projected
     BOARS_CAST_ORDER,         // MTG_BOARS_CAST_ORDER  Boars' TOTAL cast order (AI-drafted, USER-approved 2026-11-14: "That order seems reasonable to me."; docs/design/boars-cast-order-2026-11-14.md): Herald's Horn > Lightning Greaves > Herald of Ilharg > creatures of mana value <= 4 cheapest first > other 5+ creatures (Ilharg) > End-Raze Forerunners (ETB pumps the others) > Decimator (cast pump, emerge victim on board); ties by name. DEFAULT ON; =0 -> the generic tiers (BoarsProvider::CastOrderRank)
     GREEDY_SELF_HASTE,        // MTG_GREEDY_SELF_HASTE  the GREEDY policy (Solve: the d0 runner and the horizon playout, never a searched frame) offers "cast this self_haste_cost creature, keep its haste cost, activate it" (Flinthoof Boar): a pre-combat rider action per such creature in hand, valid only beside its cast, scored with the attack it enables (haste_attack_power + one attack of eval) and APPLIED by both worlds' trailing pass. Only Flinthoof holds the param (every other deck byte-identical). Held-out seed 99001, 400 g/cell paired: Boars d0 -24 turns (24 better / 0 worse), d3 b10 and d5 b20 0/0; Boars 2HG d0 -20 (22/2), d3 b10 0 (3/3), d5 b20 -1 (1/0) -- docs/design/boars-greedy-self-haste.md. DEFAULT ON; =0 -> no rider (the pre-2026-11-14 policy)
+    FETCH_RANK_PIPS,          // MTG_FETCH_RANK_PIPS  the BASE fetch-shaped land-search order (DecisionProvider::LandSearchFetchPickOrder: a battlefield fetchland's activation AND its land drop, and GenericProvider's legacy FetchCandidates) is a deliberate RANKING instead of name / library order (USER 2026-11-14: a shock over a basic unless no shock makes the colour the line needs): (1) the land adds a pip to the SIMULTANEOUS matching of the castable hand spells' pips against our sources (one pip per source), (2) the plain needed-and-lacked cover, (3) a dual over a basic, (4) castable-demanded colours made, (5) name. Boars sweep seed 97005 T4 (Ilharg {R}{R}, one red source: top-1 fetched Forest; now Stomping Ground) and CG smoke gi113 (Birds is one mana, not W and R at once: Breeding Pool fetched). Overriding providers (Anti-Lifegain, Five Colour, Morph, Cyclone, Landfall, Landfall Elementals) are untouched
     COUNT
 };
 
@@ -1828,6 +1829,7 @@ inline const char* Name(int slot)
         "MTG_ATTACK_HERALD_TRIGGER",
         "MTG_BOARS_CAST_ORDER",
         "MTG_GREEDY_SELF_HASTE",
+        "MTG_FETCH_RANK_PIPS",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).
