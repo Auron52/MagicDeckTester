@@ -1654,3 +1654,14 @@ fungus 1,880, gods 4,300 (first run).
   The two enum gaps share seed 30028849 T4, whose payable order starts Desperate Ritual before
   Apex of Power. Dragonstorm remains beta; next fresh block 32,000–36,999. Detailed report:
   `logs/mana_clean/20261115-043506/report.md`.
+
+* **Shadowborn fresh residual gate (Codex, 2026-11-15):** PGO game indices 65,000–69,999 report
+  **42 issues**, ENUM-GAP 2, APPLY-DROP 36, APPLY-DROP-ORDER 4, ORACLE-GAP 0, with byte-identical
+  oracle-on/off play. This is a different seed block from the preceding nine-issue gate, not a
+  paired increase. All 36 payment drops are `need_later` in the rollback census. Seed 30069645
+  T4 accounts for 24 of them: Diabolic Intent/Culling pays before the unseen Sire continuation,
+  and the oracle reserves a red Lotus Bloom crack. This is the parked floatseq/early-crack colour
+  pin class. The two ENUM-GAPs are both seed 30069962 T4 m2 (Apostle, Ritual, Intent, then a
+  payoff); four order drops remain. Shadowborn stays beta; next block 70,000–74,999. Report:
+  `logs/mana_clean/20261115-043725/report.md`. The Culling victim fallback remains a separate
+  user decision and was not changed.
