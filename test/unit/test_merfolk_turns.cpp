@@ -199,6 +199,14 @@ TEST_CASE("Tidal Warrior keeps nonbasic blue conversion after planned blue spend
     const CardDefinition* banneret = CardDatabase::Instance().Lookup("Stonybrook Banneret");
     REQUIRE(banneret != nullptr);
     state.ActivePlayer().hand.push_back(banneret->card);
+    AddPermanent(state, "Rogue's Passage", 225);
+    state.battlefield.back().controller_index = 1;
+    state.battlefield.back().owner_index = 1;
+    // Developing opponent lands are legal targets, but they cannot supply
+    // blue mana for our planned cast.
+    std::vector<int> opponent_first{4, 2};
+    provider.TapTargetPumpTargets(state, state.battlefield[3], true, opponent_first);
+    CHECK(opponent_first == std::vector<int>{2});
     std::vector<int> targets{2};
     provider.TapTargetPumpTargets(state, state.battlefield[3], true, targets);
     CHECK(targets == std::vector<int>{2});

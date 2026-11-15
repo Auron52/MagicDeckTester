@@ -276,7 +276,8 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
             {
                 const Permanent& land = state.battlefield[static_cast<std::size_t>(i)];
                 const CardDefinition* d = CardDatabase::Instance().LookupCached(land.card);
-                if (land.tapped || LandTypeChangedToIsland(state, land)
+                if (land.controller_index != state.active_player_index
+                    || land.tapped || LandTypeChangedToIsland(state, land)
                     || d == nullptr || IsBasicLandCard(*d)
                     || std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue)
                        != d->params.produces.end()) { continue; }
