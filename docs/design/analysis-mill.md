@@ -61,9 +61,9 @@ identical win turns in every game of this sample. Logs are
 job cost is 39,013 units per game, about 0.45 times Hinata's 86,019 under
 the same opponent-land update.
 
-After rebasing the land model, the full smoke and regression gate passed all
-534 jobs, 545 scenarios, and 843 strict reference replays with zero play
-drift. The full unit suite passed 3,138 cases and 3,600,555 assertions; the
+After rebasing the land model with Merfolk Turns, the full smoke and regression
+gate passed all 544 jobs, 545 scenarios, and 843 strict reference replays with
+zero play drift. The full unit suite passed 3,169 cases and 3,601,112 assertions; the
 Mill and opponent-land subset passed 44 cases and 3,830 assertions. A new
 12-game viewer audit surfaced every expected decision type.
 
