@@ -111,6 +111,22 @@ logs byte-identical. The 100,000 cap is now the local default; it still needs
 build/unit validation and a fresh 5,000-game gate. The four
 `CAPPED-DECISION` games and two `APPLY-DROP` games remain.
 
+After the 3,308-test unit pass and the fresh PGO build, a new Gods block
+(`codex-gods-retry100k-20261115`, seeds 35000–39999) started on source tree
+`4b4e9a66674758f4c06ea1c6c5a248ba27404699`. It was stopped after 16,435
+decision audits because the shared branch advanced to a Red Elementals source
+with broad engine changes, and the partial block had already found issues:
+six `APPLY-DROP` events in seeds 30035319 and 30035713, two `CAPPED` events
+in seed 30035423 (the 100,000 retry still caps), and 2,553
+`CAPPED-DECISION` events in seeds 30035211, 30035417, and 30035829.
+Raw partial evidence is in
+`build/scratch/mana_clean/codex-gods-retry100k-20261115/on.0.err`.
+This is a diagnostic, not a 5,000-game gate. The seven local commits were
+rebased onto `c6fd809f5`; the integrated source tree is
+`5c89219595fc9e589c127661d37ee5da95ee6968`. A full integrated-source
+Release build, tests, and then a fresh PGO gate are owed. The older
+`test/mana_clean.json` record remains the last completed official gate.
+
 ## The program (USER, standing)
 Run every deck through `python3 scripts/mana_clean.py run --games 5000` (always pass `--games 5000`), fix every issue,
 mark each deck. A deck leaves beta only after a clean analysis of >= 5,000 games on a FRESH seed block run after its
