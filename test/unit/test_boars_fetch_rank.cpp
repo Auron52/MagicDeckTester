@@ -19,11 +19,35 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
 namespace
 {
+
+void SetShockFirstTestEnv(const char* value)
+{
+#ifdef _WIN32
+    _putenv_s("MTG_BOARS_SHOCK_FIRST", value ? value : "");
+#else
+    if (value) { setenv("MTG_BOARS_SHOCK_FIRST", value, 1); }
+    else { unsetenv("MTG_BOARS_SHOCK_FIRST"); }
+#endif
+}
+struct ShockFirstEnvScope
+{
+    bool had;
+    std::string prior;
+    explicit ShockFirstEnvScope(const char* value)
+    {
+        const char* old = std::getenv("MTG_BOARS_SHOCK_FIRST");
+        had = old != nullptr;
+        prior = old ? old : "";
+        SetShockFirstTestEnv(value);
+    }
+    ~ShockFirstEnvScope() { SetShockFirstTestEnv(had ? prior.c_str() : nullptr); }
+};
 
 void EnsureCardsFr()
 {
@@ -347,12 +371,14 @@ TEST_CASE("fetch ranking: the 97005 T4 board fetches the next Stomping Ground (a
     const CardDefinition& foothills = DefFr("Wooded Foothills");
     GameState s = Boars97005T4(bp);
     {
+        ShockFirstEnvScope shock_off("0");
         FetchPipsArm off(false);
         const std::vector<std::string> c = OnPlayFetchCandidates(s, 0, foothills);
         REQUIRE(c.size() == 3);
         CHECK(c[0] == "Forest");   // the defect: every target ties, name order
     }
     {
+        ShockFirstEnvScope shock_on("1");
         FetchPipsArm on(true);
         std::vector<std::string> c = OnPlayFetchCandidates(s, 0, foothills);
         REQUIRE(c.size() == 3);
@@ -375,6 +401,23 @@ TEST_CASE("fetch ranking: the 97005 T4 board fetches the next Stomping Ground (a
         t.players[0].hand.erase(t.players[0].hand.begin() + 2);
         c = OnPlayFetchCandidates(t, 0, foothills);
         CHECK(c == std::vector<std::string>{ "Stomping Ground", "Forest", "Mountain" });
+    }
+}
+
+TEST_CASE("Boars two-colour fetch rule: Stomping Ground precedes basics on both routes")
+{
+    EnsureCardsFr();
+    static const BoarsProvider bp;
+    const CardDefinition& foothills = DefFr("Wooded Foothills");
+    GameState s = Boars97005T4(bp);
+    ShockFirstEnvScope shock_on("1");
+    {
+        FetchPipsArm off(false);
+        std::vector<std::string> picks = OnPlayFetchCandidates(s, 0, foothills);
+        CHECK(picks == std::vector<std::string>{ "Stomping Ground", "Forest", "Mountain" });
+        CHECK(picks == ActivationNames(s, foothills.params));
+        NarrowOnPlayFetch(s, 0, foothills, picks);
+        CHECK(picks == std::vector<std::string>{ "Stomping Ground" });
     }
 }
 

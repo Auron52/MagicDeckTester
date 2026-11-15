@@ -556,6 +556,11 @@ public:
 class BoarsProvider : public DeckProvider
 {
 public:
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                  bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                  std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     bool WantsEmergeVictimRank(const GameState& s, const CardDefinition& spell) const override;

@@ -124,6 +124,32 @@ uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int c
 
 // Boars D4 (PROVISIONAL provider one-option prune, surfaced to the USER): Herald's Horn names Boar whenever the
 // deck carries one. Every other chosen-type card (none in this list) keeps the generic deck-derived pick.
+void BoarsProvider::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                             bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                             std::uint16_t subtype_alt,
+                                             std::vector<std::vector<std::string>>& picks) const
+{
+    DecisionProvider::LandSearchFetchPickOrder(s, controller, count, to_hand, basic_only,
+                                               share_land_type, subtype, subtype_alt, picks);
+    // USER two-colour rule: take the shock while it remains in the library, then a basic.
+    // Boars-only 300-game A/B improved every cell (play -2 turns, d3 -2, 2HG play -5);
+    // all three original slower indices were neutral or better across 20 blind shuffle salts.
+    // DEFAULT ON; =0 restores the prior order. At low life, a held fetch still searches every target.
+    if (!EnvOn("MTG_BOARS_SHOCK_FIRST", true)) { return; }
+    std::stable_partition(picks.begin(), picks.end(), [](const std::vector<std::string>& pick)
+    { return pick.size() == 1 && pick.front() == "Stomping Ground"; });
+}
+
+bool BoarsProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    const bool cacheable = DecisionProvider::LandSearchPickOrderKey(s, controller, key);
+    if (EnvOn("MTG_BOARS_SHOCK_FIRST", true))
+    {
+        key |= std::uint64_t{ 1 } << 21;
+    }
+    return cacheable;
+}
+
 uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                 const CardDefinition& entering) const
 {
