@@ -123,7 +123,15 @@ def run_game(binary, r, gi):
         cmd = [binary, "--batch", manifest, "--threads", "1",
                "--game-log-dir", os.path.join(tmp, "wins"), "--game-trace-dir", traces]
         env = os.environ.copy()
-        result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, env=env)
+        # This replay is explanatory, after the batch has already recorded the
+        # score. A pathological single game must not hold the entire tier's
+        # audit indefinitely (Merfolk overnight s4028/gi24 did so in 2026-11).
+        timeout = int(os.environ.get("MTG_EXPLAIN_TIMEOUT_SECONDS", "90"))
+        try:
+            result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                                    env=env, timeout=timeout)
+        except subprocess.TimeoutExpired as ex:
+            raise RuntimeError(f"single-game trace exceeded {timeout}s: {ex.cmd[0]}") from ex
         if result.returncode != 0:
             raise RuntimeError(f"replay exited {result.returncode}: {result.stderr.strip()}")
         logs = glob.glob(os.path.join(traces, "*.json"))

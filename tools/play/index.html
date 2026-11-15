@@ -6949,7 +6949,18 @@ function showResult(r) {
 
 async function step() {
   if (S.busy) return; S.busy=true;
-  const res=await post('/api/step', cfg());
+  let res;
+  try { res=await post('/api/step', cfg()); }
+  catch (e) {
+    S.busy=false;
+    showError(`Viewer request failed: ${e.message || e}`);
+    const retry=document.createElement('button');
+    retry.textContent='Retry this step';
+    retry.className='primary';
+    retry.onclick=step;
+    $('board').appendChild(retry);
+    return;
+  }
   S.busy=false; $('undo').disabled = S.choices.length===0;
   if (res.kind==='decision') {
     // SERVER-TRUTH RESOLUTION: the engine reports which committed casts it could not pay (dropped, left
