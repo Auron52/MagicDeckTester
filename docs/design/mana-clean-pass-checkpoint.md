@@ -594,6 +594,20 @@ oracle off byte-identical; record 43e700b5c):
   The in-continuation DOMINATED-CREATURE (tap the attacker before a same-turn Treasure) belongs with the open
   Mirrorwing DOMINATED-CREATURE class, not here.
 
+* **Item H (Codex 2026-11-14): NC re-decision after an unknown draw -- VALIDATED (instrument only).**
+  `MTG_NC_SEARCH=1` now runs a fresh `ReshuffleAvgChoosePlan` after the real executor draws a card it did not
+  previously know. `MTG_NC_REDRAW=0` restores the old one-decision-per-main instrument. The shared
+  `AttemptDrawIntoHand` draw path signals the main-phase loop; search-copy draws, known top cards (including
+  a continuously visible top), dredge replacements, and library removals for milling/exile do not signal it.
+  Every re-entry requires a consumed
+  library card, giving the loop a finite library-size bound. Shipped play remains outside the flag.
+  Mirrorwing seed 73000662 gi662 at K=32, b20: NC-redraw wins T4, versus T6 with `MTG_NC_REDRAW=0`;
+  T4 executes the Anger draw, plays the newly drawn Forest, and casts the newly drawn Restoration chain.
+  Final source: units 3,097/3,097 (3,596,725 assertions), smoke 203/203 byte-identical and per-game audit clean;
+  exact on/off replay T4/T6. The prior hook revision (same default-off shipped path) passed the full pooled
+  smoke/regression gate 203/322, 544/544 scenarios, strict references and per-game audit. The final visibility
+  refinement is active only under `MTG_NC_SEARCH=1` and was rebuilt, unit-tested and smoke-tested afterward.
+
 ## 2026-11-12: item 6, remaining DUE decks (smallest issue count first)
 Pooled gate `due6-20261112` (PGO src fb2903808, 5,000 games each on the next fresh block, play identity with the
 oracle off byte-identical; record af059782a). Fresh counts: vampires 0, martyr_lifegain 10 (first run), slivers_vial 32,
@@ -1574,3 +1588,42 @@ fungus 1,880, gods 4,300 (first run).
   Recommendation: adopt -- the residual is budget displacement on 2 games in 5000, against the ENUM-GAP family the
   USER asked to fix. Not run (adoption-only): smoke/regression accept, PGO gate 30000-34999. Scratch:
   build/scratch/claudeE/{ab,ab2,d8,g2082}; handoff logs/mana-clean-chain/E-handoff.md.
+
+* **Queue item K (Codex, 2026-11-14): Jumbo cast order -- validated in isolated `wip/k-jumbo`, based on H.**
+  `JumboOvergrowthAtBreakpoint` now tests `outside == 3 || stacked == 3`, never their mixed sum, and accepts a
+  one-mana Aura on any land. The GSZ-to-Arbor-Elf move places Overgrowth after the tutor only when the ranked
+  sequence fails and the moved sequence pays, with a planned haste equip onto that library Elf included in both
+  payment probes (the cast-order vector itself omits equips). Two focused unit cases cover the other-land board and
+  the fetched-Elf-plus-equip board; 3,099/3,099 full unit cases passed. Oracle repro s30040847 T3:
+  APPLY-DROP-ORDER 5 -> 0. Jumbo combined smoke/regression: 3,365 games, 544/544 scenarios, strict viewer refs
+  343 ok/493 repaired/1 beaten and zero drift/divergence/gap. Score unchanged in every tier row; 15 searched and one
+  d0 same-score play traces moved. All 15 searched traces inspected against the H binary: most cast GSZ and
+  Overgrowth in the same earlier turn, and no win turn regressed. Fresh held-out 3,000 paired Jumbo games
+  (seed 7100001, profile depth, b20) had 0 changed win turns, net 0. Tier batch 23s vs H-equivalent 22s;
+  search units 9,095,976 vs 9,171,439 (-0.8%). Four Jumbo play digests were accepted locally with their `.wins`
+  files; no other deck ground truth changed. K is ready for a later integration after H.
+* **Queue item L (Codex, 2026-11-14): Hydras fetch-before-doubler -- validated in isolated `wip/l-hydras`,
+  based on K.** The authored ranking remains doublers before untapped-Forest fetches. For a line whose ranked order
+  fails the exact sequential payment walk, `HydrasProvider::ArrangeCastOrder` tries the first fetch before the last
+  doubler and keeps that order only if the exact walk pays every cast. This removes the one
+  APPLY-DROP-ORDER on s30000004 T4 ({Bloom, Bloom, Search}); the current baseline and candidate both have no flag on
+  historical s30000111 T6. Full units 3,099/3,099; combined Hydras smoke/regression 2,535 games, 544/544 scenarios,
+  strict viewer refs 343 ok/493 repaired/1 beaten with zero drift/divergence/gap. No tier score changes; two searched
+  and one d0 same-score play traces moved, each inspected against the K binary and each adding a fetch earlier.
+  Fresh held-out 3,000 paired Hydras games (seed 7600001, profile depth, b20) had 0 changed win turns, average
+  5.4000 on both arms. Three Hydras play digests and their `.wins` files were accepted locally. L is ready for
+  rebase onto the shared head and landing checks.
+
+* **Queue item N, Q9/Q16 (Codex, 2026-11-14): Fungus v3 landing Burst site 9 -- validated in isolated
+  `wip/n-fungus`, based on H/K/L.** A freshly cast Saproling Burst did not open the post-entry activation
+  breakpoint: its fade ability was absent from the activation-key delta and from the card fanout. The v3 fixture
+  with Crossroads on board, Season + Burst in hand, and ten Forests went from no T4 damage (pops in main 2) to a
+  T4 win (two pops in main 1). `MTG_BP_FADE_POST_ENTRY=0` restores the old result. Units 3132/3132. Full combined
+  fleet gate: 534 jobs, 157,088 games, 545/545 scenarios, strict references 343 ok/493 repaired/1 beaten with
+  zero drift/divergence/gap. Only eight Fungus tier digests changed; 28 searched games faster, zero slower, d0
+  unchanged. Fresh paired A/B in one 44,000-game batch: v3 shipped -104/4000 turn-games, v3 d3 -87/4000,
+  v3 d0 0/10000, 2HG shipped -61/2000, 2HG d3 -70/2000. All 21 slower held-out games recovered their old
+  win turn at depth 8 with no budget. Fungus tier digests and `.wins` accepted locally. Q16 diagnosis:
+  post-entry `ReadFadeBoard` sees same-plan Season/Sporecrown, but the pre-cast menu cannot; Shroofus trigger
+  value and the postcombat phase are absent from the menu projection. Details and remaining menu work:
+  `docs/design/fungus-site9-q9-q16-codex-2026-11-14.md`.

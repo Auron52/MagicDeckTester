@@ -1,0 +1,29 @@
+{
+  "deck": "decks/Fungus/Fungus.cod",
+  "turn": 4,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "library_top": ["Forest"],
+  "library_filler": "Forest",
+  "library_size": 30,
+  "depth": 5,
+  "budget_ms": 20,
+  "max_turns": 4,
+  "show_log": true,
+  "battlefield": [
+    { "name": "Concordant Crossroads" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" },
+    { "name": "Forest" }
+  ],
+  "hand": ["Doubling Season", "Saproling Burst"],
+  "expect_win_turn": 4
+}

@@ -129,6 +129,33 @@ TEST_CASE("known library: the primitives keep the known-position mask and the pl
     CHECK(sizeof(Library) == 32);
 }
 
+TEST_CASE("known library: the NC draw probe counts only unknown draws from the real library")
+{
+    Library lib = LibKl(5);
+    int unknown = 0;
+    {
+        Library::UnknownDrawScope watch(lib, unknown);
+        Library sample = lib;
+        sample.NoteActualDraw();
+        (void)sample.DrawTop();   // a reshuffled search sample is a distinct library
+        CHECK(unknown == 0);
+        lib.insert(lib.begin(), CardKl("Island", 1));   // placed, hence known
+        lib.NoteActualDraw();
+        (void)lib.DrawTop();
+        CHECK(unknown == 0);
+        (void)lib.DrawTop();      // removal for mill or exile does not count
+        CHECK(unknown == 0);
+        lib.NoteActualDraw();
+        (void)lib.DrawTop();
+        CHECK(unknown == 1);
+        lib.NoteActualDraw(/*top_visible=*/true);
+        (void)lib.DrawTop();
+        CHECK(unknown == 1);      // a continuous reveal also made this card known
+    }
+    (void)lib.DrawTop();
+    CHECK(unknown == 1);   // the real execution scope has ended
+}
+
 TEST_CASE("known library: Brainstorm's put-back, Ponder's keep / shuffle and a scry go through the real resolvers")
 {
     // Brainstorm: the two cards put back are known, top first.

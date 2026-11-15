@@ -752,6 +752,73 @@ TEST_CASE("Jumbo Cactuar casts Overgrowth before a same-land Wild Growth only at
     }
 }
 
+TEST_CASE("Jumbo Cactuar can cast Overgrowth before a one-mana Aura on another land")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Wild Growth", 57);
+    s.battlefield.back().aura_attached_to = 10;
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Forest", 11);
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+
+    Action tutor = JumboCast(s, "Green Sun's Zenith", 90, 0, "Arbor Elf");
+    tutor.chosen_x = 1;
+    tutor.hand_index = 0;
+    Action overgrowth = JumboCast(s, "Overgrowth", 39, 11);
+    overgrowth.hand_index = 1;
+    Action aura = JumboCast(s, "Wild Growth", 58, 10);
+    aura.hand_index = 2;
+    const std::vector<Action> acts{tutor, overgrowth, aura};
+    CHECK(ArrangedNames(s, acts)
+          == std::vector<std::string>{"Overgrowth", "Wild Growth", "Green Sun's Zenith->Arbor Elf"});
+}
+
+TEST_CASE("Jumbo Cactuar moves a fetched Arbor Elf before Overgrowth when its haste equip pays")
+{
+    LoadJumboCards();
+    JumboCactuarProvider provider;
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.deck_has_land_aura = true;
+    s.m_provider = &provider;
+    PutOnBoard(s, "Forest", 10);
+    PutOnBoard(s, "Utopia Sprawl", 49);
+    s.battlefield.back().aura_attached_to = 10;
+    s.battlefield.back().chosen_color = static_cast<int8_t>(Color::Green);
+    PutOnBoard(s, "Forest", 11);
+    PutOnBoard(s, "Forest", 12);
+    PutOnBoard(s, "Chariot of Victory", 5);
+    s.players[0].library.push_back(CopyOf("Arbor Elf", 1));
+
+    Action tutor = JumboCast(s, "Green Sun's Zenith", 90, 0, "Arbor Elf");
+    tutor.chosen_x = 1;
+    tutor.hand_index = 0;
+    Action overgrowth = JumboCast(s, "Overgrowth", 39, 10);
+    overgrowth.hand_index = 1;
+    Action equip;
+    equip.kind = Action::Kind::Equip;
+    equip.card_name = "Chariot of Victory";
+    equip.def = CardDatabase::Instance().Lookup("Chariot of Victory");
+    REQUIRE(equip.def != nullptr);
+    equip.sac_source_id = 5;
+    equip.sac_victim_id = 1;
+    equip.cost.generic = 1;
+    const std::vector<Action> acts{tutor, overgrowth, equip};
+    std::vector<int> order{1, 0};
+    provider.ArrangeCastOrder(s, acts, order);
+    CHECK(order == std::vector<int>{0, 1});
+}
+
 // ---- USER 2026-11-11 item 5m: equips onto each entering untapper are OFFERED, the tutored one included ---------
 // "Equip activations for Greaves and Chariot should always be allowed right after either chariot or the mana
 // creatures enter." Gate jumbo-userorder-20261111 s30036180 T3: {GSZ->Arbor Elf, Chariot, Voyaging Satyr} costs 8;

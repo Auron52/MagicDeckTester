@@ -31891,7 +31891,8 @@ enum : uint64_t {
     kActLoyaltyUntapContinuation = 215, kActLoyaltyTokenContinuation = 216,
     // Speaker of the Heavens (2026-11-11, MTG_BP_SPEAKER_GATE): a life-gated {T} token source that is
     // LIVE now -- see CollectActivationKeys.
-    kActTapTokenLive = 217
+    kActTapTokenLive = 217,
+    kActFadeSaproling = 218
 };
 inline uint64_t ActKey(int m_number, uint64_t ability)
 { return (static_cast<uint64_t>(static_cast<uint32_t>(m_number)) << 8) | ability; }
@@ -32087,6 +32088,14 @@ void CollectActivationKeys(const GameState& state, int ctrl, const Permanent& p,
         if (ActAffordable(state, ctrl, p.card, *modes[i].cost, total_cache))
         { out.push_back(ActKey(num, kActModeBase + static_cast<uint64_t>(i))); }
     }
+
+    // A Saproling Burst cast this main can be popped before combat. Its fade
+    // activations have no mana cost or tap cost, and CollectActions offers
+    // their k menu as soon as the counters are on the permanent.
+    static const bool s_fade_post_entry = EnvOn("MTG_BP_FADE_POST_ENTRY", true);
+    if (heurarm::Flag(heurarm::BP_FADE_POST_ENTRY, s_fade_post_entry)
+        && pp.fade_saproling_cost > 0 && p.fade_counters >= pp.fade_saproling_cost)
+    { out.push_back(ActKey(num, kActFadeSaproling)); }
 
     // Lavamancer may gain fuel when the plan's earlier spells resolve. The graveyard signature
     // makes newly available fuel pairs visible even when an older pair was already available.
@@ -86935,6 +86944,9 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // Lurrus of the Dream-Den (2026-11-10): a cast Lurrus's graveyard-cast permission is live the moment
     // it lands -- CollectActivationKeys' kActGyCast -- so a plan that casts it must be fanned.
     if (pp.gy_cast_permanent_max_mv > 0) { return true; }
+    static const bool s_fade_post_entry = EnvOn("MTG_BP_FADE_POST_ENTRY", true);
+    if (heurarm::Flag(heurarm::BP_FADE_POST_ENTRY, s_fade_post_entry)
+        && pp.fade_saproling_cost > 0) { return true; }
     return false;
 }
 

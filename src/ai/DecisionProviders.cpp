@@ -26497,22 +26497,70 @@ void JumboSurrakEarlyIfPaid(const GameState& s, const std::vector<Action>& acts,
     if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
 }
 
+// A fetched untapper can fund Overgrowth after a haste equip. Keep the equip
+// ahead of the tutor by moving Overgrowth after it, and accept the move only
+// when the ranked sequence fails but the trial sequence pays every cast.
+void JumboFetchedUntapperBeforeOvergrowthIfPaid(const GameState& s,
+                                                 const std::vector<Action>& acts,
+                                                 std::vector<int>& order)
+{
+    int og = -1, tutor = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        if (og < 0 && a.kind == Action::Kind::CastFromHand && a.card_name.str() == "Overgrowth")
+        { og = p; }
+        else if (og >= 0 && a.kind == Action::Kind::CastFromHand
+                 && a.card_name.str() == "Green Sun's Zenith"
+                 && (a.tutor_target.str().find("Arbor Elf") != std::string::npos
+                     || (a.tutor_target.empty() && a.chosen_x == 1)))
+        { tutor = p; break; }
+    }
+    if (og < 0 || tutor < 0) { return; }
+    // The cast-order vector omits Equip actions, but the payment walk can fire
+    // a planned haste equip as soon as the tutored Elf enters. Include only
+    // equips onto an Elf still in the library in the feasibility probes.
+    std::vector<int> unlocks;
+    for (int i = 0; i < static_cast<int>(acts.size()); ++i)
+    {
+        const Action& a = acts[static_cast<std::size_t>(i)];
+        if (a.kind != Action::Kind::Equip) { continue; }
+        const CardDefinition* eq = a.def ? a.def : CardDatabase::Instance().LookupInterned(a.card_name);
+        if (eq == nullptr || !eq->params.equip_grants_haste) { continue; }
+        const auto& lib = s.players[static_cast<std::size_t>(s.active_player_index)].library;
+        if (std::any_of(lib.begin(), lib.end(), [&](const Card& c)
+            { return c.m_number == a.sac_victim_id && c.m_name.str() == "Arbor Elf"; }))
+        { unlocks.push_back(i); }
+    }
+    if (unlocks.empty()) { return; }
+    std::vector<int> ranked_proof = order;
+    ranked_proof.insert(ranked_proof.end(), unlocks.begin(), unlocks.end());
+    if (TurnSolver::OrderPaysSequentially(s, acts, ranked_proof)) { return; }
+    std::vector<int> trial = order;
+    const int moved = trial[static_cast<std::size_t>(og)];
+    trial.erase(trial.begin() + og);
+    trial.insert(trial.begin() + tutor, moved);
+    std::vector<int> trial_proof = trial;
+    trial_proof.insert(trial_proof.end(), unlocks.begin(), unlocks.end());
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial_proof)) { order.swap(trial); }
+}
+
 // USER 2026-11-11 (item 5n), verbatim: "For the overgrowth case I see it now. The problem is almost certainly
 // something that happens with specific mana breakpoints. So, for example, if you have exactly 3 mana that you can
 // spend outside of the land we are stacking or from the land we are stacking then it will need to do Overgrowth
 // first. With anything else, it likely works fine. ... I think we could make a rule for this that allows this very
 // narrowly." ONE deterministic arrangement per line (no new plan, no branch): the first Overgrowth moves to just
-// before the same-host Wild Growth / Utopia Sprawl ranked ahead of it only when ALL of
+// before the first Wild Growth / Utopia Sprawl ranked ahead of it only when ALL of
 //   (1) the BREAKPOINT holds: the mana spendable before the stacked land's next untap-and-retap -- every source
-//       but the Arbor Elf / Voyaging Satyr re-taps, counted either without the stacked land (O) or with its one
-//       tap (O + S) -- is exactly Overgrowth's cost, so Wild Growth + Overgrowth cannot both enter before that
+//       but the Arbor Elf / Voyaging Satyr re-taps, counted either without the stacked land (O) or as the
+//       stacked land's own tap (S) -- is exactly Overgrowth's cost, so Wild Growth + Overgrowth cannot both enter before that
 //       re-tap while Overgrowth alone can;
 //   (2) the ranked (USER) order does NOT pay every cast (TurnSolver::OrderPaysSequentially);
 //   (3) the moved order DOES.
 // Utopia Sprawl counts as Wild Growth (USER 2026-11-11, item 5p, verbatim: "Utopia Sprawl is essentially identical
 // in this deck, so you can treat anything I say about wild growth here as applying to utopia sprawl."): the move goes
-// to just before the FIRST same-host one-mana Aura (Wild Growth or Utopia Sprawl) ranked ahead of Overgrowth.
-// A one-mana Aura on another land and every board off the breakpoint keep the ranked order.
+// to just before the FIRST one-mana Aura (Wild Growth or Utopia Sprawl) ranked ahead of Overgrowth.
+// Every board off the breakpoint keeps the ranked order.
 // MTG_JUMBO_OG_BREAKPOINT=0 -> the ranked order always.
 bool JumboOvergrowthBreakpointOn()
 {
@@ -26536,7 +26584,7 @@ void JumboOvergrowthAtBreakpoint(const GameState& s, const std::vector<Action>& 
     for (int p = 0; p < og; ++p)
     {
         const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
-        if (a.kind == Action::Kind::CastFromHand && a.enchant_target == land
+        if (a.kind == Action::Kind::CastFromHand && a.enchant_target > 0
             && (a.card_name.str() == "Wild Growth" || a.card_name.str() == "Utopia Sprawl"))
         { wg = p; break; }
     }
@@ -26564,7 +26612,7 @@ void JumboOvergrowthAtBreakpoint(const GameState& s, const std::vector<Action>& 
         std::fprintf(stderr, "[jumbo-og] T%d land#%d outside=%d stacked=%d retaps=%d cost=%d\n", s.turn_number, land,
                      outside, stacked, retaps, cost);
     }
-    if (outside != cost && outside + stacked != cost) { return; }
+    if (outside != cost && stacked != cost) { return; }
     if (TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
     std::vector<int> trial = order;
     const int moved = trial[static_cast<std::size_t>(og)];
@@ -26578,12 +26626,12 @@ void JumboCactuarProvider::ArrangeCastOrder(const GameState& s,
                                              const std::vector<Action>& acts,
                                              std::vector<int>& order) const
 {
-    // USER 2026-11-11: Overgrowth never goes before either one-mana Aura ("I don't understand how
-    // Overgrowth ever goes before Wild Growth" / "I can't see why we would want Utopia Sprawl after
-    // Overgrowth") -- except the USER's later narrow breakpoint rule for a same-land Wild Growth
-    // (JumboOvergrowthAtBreakpoint, item 5n).
+    // USER 2026-11-11 and handoff 2026-11-14: move Overgrowth ahead of an earlier
+    // one-mana Aura only at its own land's mana breakpoint when the ranked order
+    // fails and the moved order pays every cast.
     JumboChariotAfterFirstUntapper(acts, order);
     JumboSurrakEarlyIfPaid(s, acts, order);
+    JumboFetchedUntapperBeforeOvergrowthIfPaid(s, acts, order);
     if (JumboOvergrowthBreakpointOn()) { JumboOvergrowthAtBreakpoint(s, acts, order); }
 }
 
@@ -50826,7 +50874,8 @@ std::vector<int> HydrasProvider::CounterDestroyArtEnchTargets(const GameState& s
 //                       tap (every land here is a basic Forest) and neither reads the other, so either
 //                       order pays the same total. Nissa's +1 / -8 are activations that trail the casts.
 //   3 Nature's Lore, Search for Tomorrow, Three Visits   land_search_on_resolve: an UNTAPPED Forest, after the
-//                       doublers (it taps for more) and before every creature (it helps pay). Same effect,
+//                       doublers (it taps for more) and before every creature (it helps pay). ArrangeCastOrder
+//                       moves one before the last doubler only when that rescues an otherwise unpayable line. Same effect,
 //                       so the same total in any order. Search's suspend is a special action, not a cast.
 //   4 Gargos            reduces_spell_subtype Hydra {4}: before every Hydra, Kalonian included. A 6-drop,
 //                       so after the fetches.
@@ -50867,6 +50916,40 @@ int HydrasProvider::CastOrderRank(const GameState& s, const CardDefinition& def)
 }
 
 bool HydrasProvider::CastOrderTotalByName() const { return HydrasCastOrderOn(); }
+
+// USER 2026-11-14: get the doublers out first unless the fetch must fund the
+// last one. This is one fixed reorder, and both sequences are checked against
+// the exact sequential payment walk before changing the user's ranked order.
+void HydrasProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& acts,
+                                      std::vector<int>& order) const
+{
+    if (!HydrasCastOrderOn()) { return; }
+    const auto is_doubler = [](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        const auto& n = a.card_name.str();
+        return n == "Vernal Bloom" || n == "Gauntlet of Power" || n == "Nissa, Who Shakes the World";
+    };
+    const auto is_fetch = [](const Action& a)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { return false; }
+        const auto& n = a.card_name.str();
+        return n == "Nature's Lore" || n == "Search for Tomorrow" || n == "Three Visits";
+    };
+    int last_doubler = -1, first_fetch = -1;
+    for (int p = 0; p < static_cast<int>(order.size()); ++p)
+    {
+        const Action& a = acts[static_cast<std::size_t>(order[static_cast<std::size_t>(p)])];
+        if (is_fetch(a) && last_doubler >= 0) { first_fetch = p; break; }
+        if (is_doubler(a)) { last_doubler = p; }
+    }
+    if (first_fetch < 0 || TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+    std::vector<int> trial = order;
+    const int moved = trial[static_cast<std::size_t>(first_fetch)];
+    trial.erase(trial.begin() + first_fetch);
+    trial.insert(trial.begin() + last_doubler, moved);
+    if (TurnSolver::OrderPaysSequentially(s, acts, trial)) { order.swap(trial); }
+}
 
 const char* HydrasProvider::CastOrderTierName(int rank) const
 {
