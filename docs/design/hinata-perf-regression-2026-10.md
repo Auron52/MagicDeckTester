@@ -170,3 +170,52 @@ approved depth-5 / 30 ms play block (including its search shape) from before
 `e55b07bd6`. The 30 ms budget had been explicitly approved on September 8.
 The regression play rows again resolve to depth 5. The play-row check now fails
 an enabled sidecar below depth 5, even if a stale artifact worker proposes one.
+
+### Matched depth-5 cost timeline
+
+The depth-4 adoption also obscured later source costs. I ran the same 500 games
+(100 smoke, 300 regression, 100 2HG), seeds and 30 ms budget at depth 5 on
+optimized Release builds, with 32 workers. The Hinata deck, keep table and old
+depth-5 hybrid play block were held fixed across source revisions. November 11
+used the old block in place of that commit's depth-4 emulated block; this
+isolates source cost. CPU below is process user + system time, so the 500-game
+means are **core seconds per game**, not elapsed wall time. Search units are
+deterministic; CPU depends on the machine and other load.
+
+| Source revision | Search units, 500 games | CPU seconds | Core seconds/game |
+|---|---:|---:|---:|
+| Oct 3 `06e75449` (before no-greedy purge) | 16,254,756 | not measured as process CPU | — |
+| Oct 21 `1e8c63dba` | 37,749,585 | 1,065 | 2.13 |
+| Oct 31 `3640b6bf1` | 39,163,716 | 1,364 | 2.73 |
+| Nov 3 `c7e9db6fd` | 39,174,614 | 1,538 | 3.08 |
+| Nov 7 `bd89779db` | 39,605,070 | 1,739 | 3.48 |
+| Nov 11 `12889b119` | 38,348,355 | 3,148 | 6.30 |
+| Nov 15 `3913426d1` source, old model | 37,807,927 | 2,167 | 4.33 |
+
+The October 5 no-greedy purge is still the largest **search-work** step: the
+October 3 to October 21 unit count rose 2.32x. Later, the unit count stayed
+near 38–40 million while CPU per unit increased in several steps: October 21
+to October 31, October 31 to November 3, November 3 to November 7, then a
+larger November 7 to November 11 jump. November 11 was a local peak and
+subsequent source changes recovered some, but not all, of its CPU cost.
+This matched sample does not establish that every current Hinata game costs
+10 core seconds; it does establish that depth-5 cost rose materially at fixed
+play settings. A few games are much slower than the mean.
+
+On the November 11 binary, an 80-game ablation (40 games each from seeds 1001
+and 2002, depth 5 / 30 ms) measured 339 process CPU seconds with defaults.
+Disabling `MTG_CACHE_READ_GUARD` reduced that to 246 seconds, although it
+increased search units from 6.70M to 7.13M and changed a play digest. This
+identifies the guard's cache-refusal/recomputation path as a substantial CPU
+cost **on that revision**, but disabling it restores unsound budget-dependent
+cache hits and is not a valid optimization. Disabling the rollout game cache
+cost 349 seconds, and disabling the priced ledger cost 344 seconds; neither
+explains the peak. Further profiling is needed to account for the remaining
+October–November CPU-per-unit increase without weakening search or cache
+correctness.
+
+The same 80-game guard ablation on the corrected November 15 build was much
+smaller: 267 CPU seconds with the guard versus 250 with it disabled. The play
+digests happened to match in this sample, but the search units did not (6.55M
+versus 6.98M). That result does not make disabling the guard sound; it shows
+that later source changes recovered much of the November 11 guard cost.
