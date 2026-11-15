@@ -50,7 +50,8 @@ KNOWN_TYPES = {
     "choose_color",
     # Metallic Mimic's as-enters creature-type choice is an option index with
     # heuristic_default (Elemental for this deck); the generic reply follows it.
-    "choose_creature_type",
+    # The newer creature_type prompt uses the same single-index reply contract.
+    "choose_creature_type", "creature_type",
     # Finale's optional library search after an empty graveyard choice; one
     # option index, with heuristic_default emitted by the spell decision.
     "attack_mode",

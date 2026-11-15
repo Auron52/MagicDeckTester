@@ -804,3 +804,21 @@ The proposed quota-first keep set, net of permanents already on the battlefield,
 Within overflow, shed the card furthest from being playable with current board and mana; break
 ties by duplicate redundancy. This is a proposal for the user's review. It has not been coded or
 validated against searched labels, and the generic cleanup ranking remains live.
+
+## Integrated verification after upstream Boars/Merfolk/Shadowborn (2026-11-15)
+
+The Red branch was rebased onto upstream `f92bb3b7c`. The current Release engine retains the
+Soulstoke put-then-Leadership T4 reference line; all ten reference games pass at human 4.400 and
+search 4.300 turns, zero shortfalls. Red smoke (3 rows), regular (6) and overnight (11) all match
+the accepted scores and play digests exactly, with no changed games. The focused Red unit binary
+passed 76 tests and 1,623 assertions. The regular tier's strict viewer reference protocol passed
+864 references, and the scenario suite passed 561 scenarios.
+
+The integrated `verify_deck.py --no-network` gate passes: 14/14 full card coverage, field audit,
+viewer surface and GUI wiring, mismatch seeds 7001/8001 × 60 in both arms, 8 invariant games / 148
+decisions, recorded Codex-play sweep, and suite registration. The new upstream `creature_type`
+prompt was added to the invariant driver; its focused rerun passed 4 games / 76 decisions. The
+earlier network cost audit passed before this upstream rebase. Two Landfall Elementals regular
+summary digests were repaired after a filtered rerun showed all six committed per-game logs
+unchanged. Global ground-truth logs are 1,251 consistent, zero stale or missing. Reference safety
+passes. The exhaustive mulligan profile is the next stage on this frozen play source.

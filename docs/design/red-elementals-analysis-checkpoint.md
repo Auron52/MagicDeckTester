@@ -5,6 +5,32 @@ then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify
 
 Last updated: 2026-11-15 (Codex continuation; the update below supersedes the older running-job notes).
 
+## Integrated verification update (2026-11-15, latest)
+
+- `redelem-analysis` has been rebased onto upstream `f92bb3b7c` (Boars, Merfolk and Shadowborn);
+  current play HEAD is `9591de110`. Merge conflicts kept both the upstream mechanics and Red Elementals
+  pins, provider routing and viewer decisions. The release engine builds.
+- The saved Soulstoke put then Legion Leadership `s1 gi0` d8 b0 line still wins T4. All ten reference
+  games pass (human 4.400, search 4.300 turns; zero shortfalls). Red smoke (3 rows), regular (6), and
+  overnight (11) match accepted scores and digests exactly. The strict reference protocol passes.
+- Two Landfall Elementals regular-tier summary digests were stale after the rebase. A filtered rerun
+  showed all six per-game logs unchanged; filtered acceptance repaired the two summaries. The global
+  GT-log consistency check reports 1,251 consistent, zero stale.
+- `verify_deck.py --no-network` passes the integrated coverage, fields, viewer, mismatch, invariant,
+  suite and recorded Codex-play gates. Its first pass revealed the new upstream `creature_type`
+  decision was missing from `play_invariants.py`; the driver now follows its emitted default. The
+  focused rerun passed 4 games / 76 decisions, and the full rerun passed 8 / 148. The network card
+  cost audit passed on the preceding base. Reference safety passed.
+- The focused Red test binary, linked from the current Release core and Red test object, passed all
+  76 cases and 1,623 assertions (including same-plan Soulstoke put plus Leadership). The rest of
+  the repository-wide unit-object build was stopped after that focused result. Next, commit the
+  small harness/GT/doc changes, build `mtg-analyze`,
+  run the sole-box `--gen-mulligan recommend` scout, then `mullgen.sh run` at the selected recipe.
+  After generation/validation, push the shared branch and update the primary checkout/viewer.
+- The Stage 5i discard proposal remains user-owned and unadopted. The human viewer's automatic
+  attacker declaration still prevents a deliberate Soulstoke hold for the opponent's end-step put;
+  this is disclosed in the ledger. The search and verifier's forced-hold path cover that window.
+
 ## Current continuation (2026-11-15, after the rebase)
 
 - Worktree `.claude/worktrees/redelem`, branch `redelem-analysis`, has been rebased onto
