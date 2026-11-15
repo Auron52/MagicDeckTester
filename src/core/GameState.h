@@ -414,6 +414,9 @@ struct GameState
     // 0 and would hand out a spurious instant win in every game of every deck. Never test emptiness
     // without this flag; use OpponentHasLost() below, which does it for you.
     bool                     opponent_library_dealt       = false;
+    // Mill's passive opponent plays the first land in hand on each of its turns.
+    // Stamped only when Deal uses the frozen 50-deck opponent pool.
+    bool                     opponent_plays_lands         = false;
     // The opponent was asked to draw from an empty library (CR 104.3c). Set by the simulated
     // opponent draw at the END of our turn -- which is also WHY the win turn for a deck-out is OUR
     // turn number and not the next one: the opponent never gets a main phase in this model, so on

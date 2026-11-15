@@ -519,9 +519,14 @@ void MillProvider::SurgicalTargetCandidates(
     // by mana value. With Tasha, maximize the estimated total mana value
     // Surgical can remove from the library, including printed three-ofs.
     // Neither the hidden hand nor shuffled library order chooses a name.
-    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::SurgicalTarget)
-        || targets.size() <= 1) { return; }
+    if (DecisionUnpruned(UnprunedGate::SurgicalTarget)) { return; }
     const int caster = state.active_player_index;
+    // Mill gains nothing by extracting its own cards. Keep those legal targets
+    // in the human dialog, but never rank one as an autonomous target or hint.
+    targets.erase(std::remove_if(targets.begin(), targets.end(), [caster](const auto& t) {
+        return t.owner == caster;
+    }), targets.end());
+    if (targets.size() <= 1) { return; }
     const auto& printed = opponentdeck::Selected(state.game_seed).cards;
     const bool tasha_in_hand = std::any_of(
         state.players[caster].hand.begin(), state.players[caster].hand.end(), [](const Card& card) {
@@ -607,6 +612,7 @@ std::string MillProvider::SurgicalCastTarget(const GameState& state, const std::
     }
     if (legal.empty()) { return {}; }
     SurgicalTargetCandidates(state, legal);
+    if (legal.empty()) { return {}; }
     const SurgicalTargetOption& selected = legal.front();
     return std::to_string(selected.owner) + ":" + selected.name
         + (selected.owner == state.active_player_index ? "|" : "|@library");

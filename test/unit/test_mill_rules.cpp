@@ -689,6 +689,134 @@ TEST_CASE("Mill Surgical chooses from public graveyards when the cast is reached
     CHECK(provider.SurgicalCastTarget(state, "1:Crab Umbra|@library") == "1:Crab Umbra|@library");
 }
 
+TEST_CASE("Mill Surgical suggests an opponent target in the live graveyard dialog")
+{
+    EnsureMillCards();
+    if (DecisionUnpruned(UnprunedGate::SurgicalTarget)) { return; }
+    MillProvider provider;
+    GameState state;
+    state.m_provider = &provider;
+    state.game_seed = 5; // Bruna opponent deck.
+    state.opponent_library_dealt = true;
+    state.players[0].graveyard.push_back(Named("Fractured Sanity", 21));
+    state.players[1].graveyard.push_back(Named("Bruna, Light of Alabaster", 100001));
+
+    CHECK(provider.SurgicalCastTarget(state, "@mill_surgical")
+          == "1:Bruna, Light of Alabaster|@library");
+    int suggested = -2;
+    std::vector<std::string> names;
+    DigChooser chooser = [&](const GameState&, int, const std::string& source,
+                             const std::vector<Card>& examined, const std::vector<int>&,
+                             int def) {
+        CHECK(source == "Surgical Extraction (target card in a graveyard)");
+        suggested = def;
+        for (const Card& card : examined) { names.push_back(card.m_name.str()); }
+        return def;
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &chooser;
+    ResolveSurgicalExtraction(state, 0, "0:Fractured Sanity|");
+    g_play_dig_chooser = saved;
+    const std::vector<std::string> expected{"Fractured Sanity", "Bruna, Light of Alabaster"};
+    CHECK(names == expected);
+    CHECK(suggested == 1);
+    CHECK(state.players[0].graveyard.size() == 1u);
+    CHECK(state.players[1].graveyard.empty());
+
+    std::vector<DecisionProvider::SurgicalTargetOption> own_only = {
+        {0, "Fractured Sanity", 1, 0, 0, 0, false},
+    };
+    provider.SurgicalTargetCandidates(state, own_only);
+    CHECK(own_only.empty());
+    state.players[1].graveyard.clear();
+    CHECK(provider.SurgicalCastTarget(state, "@mill_surgical").empty());
+}
+
+TEST_CASE("Mill opponent plays its leftmost land and immediately cracks a fetch")
+{
+    EnsureMillCards();
+    GameState state;
+    state.game_seed = 5;
+    state.opponent_library_dealt = true;
+    state.opponent_plays_lands = true;
+    state.players[1].hand.push_back(Named("Birds of Paradise", 100001));
+    state.players[1].hand.push_back(Named("Polluted Delta", 100002));
+    state.players[1].hand.push_back(Named("Island", 100003));
+    state.players[1].library.push_back(Named("Watery Grave", 100004));
+    for (int i = 0; i < 20; ++i)
+    { state.players[1].library.push_back(Named("Island", 100005 + i)); }
+    state.players[0].hand.push_back(Named("Archive Trap", 1));
+
+    ResolvePassiveOpponentLandTurn(state);
+    CHECK(state.players[1].hand.size() == 2u);
+    CHECK(state.players[1].hand[0].m_name == "Birds of Paradise");
+    CHECK(state.players[1].hand[1].m_name == "Island");
+    CHECK(state.players[1].life == 19);
+    REQUIRE(state.players[1].graveyard.size() == 14u); // fetch plus thirteen milled cards
+    CHECK(state.players[1].graveyard[0].m_name == "Polluted Delta");
+    REQUIRE(state.battlefield.size() == 1u);
+    CHECK(state.battlefield[0].card.m_name == "Watery Grave");
+    CHECK(state.battlefield[0].controller_index == 1);
+    CHECK(state.battlefield[0].tapped);
+    CHECK(state.opponent_searched_library_this_turn);
+    CHECK(state.search_count == 1);
+    CHECK(state.players[0].hand.empty());
+    REQUIRE(state.players[0].graveyard.size() == 1u);
+    CHECK(state.players[0].graveyard[0].m_name == "Archive Trap");
+
+    ResolvePassiveOpponentLandTurn(state); // next opponent turn: untap, play the Island in hand
+    CHECK_FALSE(state.battlefield[0].tapped);
+    CHECK(state.battlefield.size() == 2u);
+    CHECK(state.battlefield[1].card.m_name == "Island");
+}
+
+TEST_CASE("Mill viewer can hold a free Archive Trap after an opponent fetch")
+{
+    EnsureMillCards();
+    GameState state;
+    state.opponent_library_dealt = true;
+    state.opponent_plays_lands = true;
+    state.players[1].hand.push_back(Named("Evolving Wilds", 100001));
+    state.players[1].library.push_back(Named("Forest", 100002));
+    state.players[1].library.push_back(Named("Island", 100003));
+    state.players[0].hand.push_back(Named("Archive Trap", 1));
+    int offered = 0;
+    DigChooser hold = [&](const GameState&, int, const std::string& source,
+                          const std::vector<Card>& examined, const std::vector<int>&, int def) {
+        ++offered;
+        CHECK(source == "Archive Trap (opponent fetch)");
+        CHECK(examined.size() == 1u);
+        CHECK(def == 0);
+        return -1;
+    };
+    DigChooser* saved = g_play_dig_chooser;
+    g_play_dig_chooser = &hold;
+    ResolvePassiveOpponentLandTurn(state);
+    g_play_dig_chooser = saved;
+    CHECK(offered == 1);
+    CHECK(state.players[0].hand.size() == 1u);
+    CHECK(state.players[1].library.size() == 1u);
+    REQUIRE(state.battlefield.size() == 1u);
+    CHECK(state.battlefield[0].card.m_name == "Forest");
+    CHECK(state.battlefield[0].tapped);
+}
+
+TEST_CASE("Mill opponent pays life for a typed fetch with legacy card parameters")
+{
+    EnsureMillCards();
+    GameState state;
+    state.opponent_library_dealt = true;
+    state.opponent_plays_lands = true;
+    state.players[1].hand.push_back(Named("Windswept Heath", 100001));
+    state.players[1].library.push_back(Named("Forest", 100002));
+    ResolvePassiveOpponentLandTurn(state);
+    CHECK(state.players[1].life == 19);
+    CHECK(state.players[1].graveyard.size() == 1u);
+    REQUIRE(state.battlefield.size() == 1u);
+    CHECK(state.battlefield[0].card.m_name == "Forest");
+    CHECK(state.opponent_searched_library_this_turn);
+}
+
 TEST_CASE("Surgical target variant exists before a same-main mill makes it legal")
 {
     EnsureMillCards();

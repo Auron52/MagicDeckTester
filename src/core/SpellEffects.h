@@ -2765,6 +2765,61 @@ inline void ShuffleAfterSearch(GameState& state, int controller_index)
     ++state.search_count;
 }
 
+// Mill's passive opponent plays one land from hand during its main phase. A
+// fetch search opens a real opponent-turn instant window for each Archive Trap
+// already in our hand; the autonomous policy casts it for {0} immediately.
+inline void ResolvePassiveOpponentLandTurn(GameState& state)
+{
+    if (state.opponent_plays_lands)
+    {
+        // Its simplified turn still has an untap step. A fetched shock land
+        // enters tapped, then becomes untapped on the opponent's next turn.
+        for (Permanent& perm : state.battlefield)
+        {
+            if (perm.controller_index != 1) { continue; }
+            perm.tapped = false;
+            perm.entered_this_turn = false;
+        }
+    }
+    const opponentdeck::LandPlayResult play = opponentdeck::PlayLeftmostLand(state);
+    if (!play.played) { return; }
+    if (g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "land", "opponent plays " + play.land_name); }
+    if (!play.searched) { return; }
+    state.opponent_searched_library_this_turn = true;
+    ShuffleAfterSearch(state, 1);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "fetch", "opponent cracks " + play.land_name
+            + (play.fetched_name.empty() ? " (no land found)" : " for " + play.fetched_name));
+    }
+    std::vector<int> traps;
+    for (const Card& card : state.players[0].hand)
+    { if (card.m_name == "Archive Trap") { traps.push_back(card.m_number); } }
+    for (int number : traps)
+    {
+        if (state.opponent_decked || state.players[1].library.empty()) { break; }
+        Player& me = state.players[0];
+        auto it = std::find_if(me.hand.begin(), me.hand.end(), [number](const Card& card) {
+            return card.m_number == number;
+        });
+        if (it == me.hand.end()) { continue; }
+        if (g_play_dig_chooser && !g_tap_speculating)
+        {
+            const std::vector<Card> examined{*it};
+            const std::vector<int> legal{0};
+            if ((*g_play_dig_chooser)(state, 0, "Archive Trap (opponent fetch)",
+                                      examined, legal, 0) != 0) { continue; }
+        }
+        const Card trap = *it;
+        me.hand.erase(it);
+        me.graveyard.push_back(trap);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "cast", "Archive Trap for {0} on opponent's turn"); }
+        opponentdeck::MillToGraveyard(state, 13);
+    }
+}
+
 // Surgical Extraction: the pin is "owner:name|selected-card-numbers". The
 // target must be in a graveyard and is exiled; each additional same-name card
 // in its owner's graveyard, hand and library may independently be exiled. The search pins physical card
@@ -2809,6 +2864,10 @@ inline void ResolveSurgicalExtraction(GameState& state, int controller, std::str
     { pin = SurgicalDefaultTarget(state, controller); }
     if (g_play_dig_chooser && !g_tap_speculating)
     {
+        // The live target menu is complete, but Mill's hint comes from its
+        // opponent-only public-zone ranking rather than the first graveyard card.
+        const std::string suggested = ResolveProvider(state).SurgicalCastTarget(state, "@mill_surgical");
+        const std::string suggested_name = suggested.substr(0, suggested.find('|'));
         std::vector<Card> examined;
         std::vector<int> legal;
         std::vector<std::string> pins;
@@ -2822,9 +2881,9 @@ inline void ResolveSurgicalExtraction(GameState& state, int controller, std::str
             pins.push_back(candidate);
             examined.push_back(c);
         }
-        int def = 0;
+        int def = -1;
         for (int i = 0; i < static_cast<int>(pins.size()); ++i)
-        { if (pins[i] == pin) { def = i; break; } }
+        { if (pins[i] == suggested_name) { def = i; break; } }
         if (!pins.empty())
         {
             const int chosen = (*g_play_dig_chooser)(state, controller,

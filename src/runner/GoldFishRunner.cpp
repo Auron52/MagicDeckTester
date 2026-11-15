@@ -2070,7 +2070,8 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
 }
 
 
-GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index)
+GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int game_index,
+                                    bool legacy_passive_opponent_lands)
 {
     GameState state;
     state.game_seed = seed; // Trait stamps must see the same opponent list that Deal selects.
@@ -2143,6 +2144,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // so this is a no-op for every deck that cannot mill.
     opponentdeck::Deal(state, DeckTouchesOpponentZones(deck), seed,
                        DeckUsesDiverseOpponentPool(deck));
+    if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
 
     DealWishPool(state, deck);
 
@@ -2173,7 +2175,7 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
         [](const Card& c) { return c.m_name == "Tide Shaper" || c.m_name == "Spreading Seas"
                                   || c.m_name == "Sink into Stupor" || c.m_name == "Expropriate"
                                   || c.m_name == "Tidal Warrior" || c.m_name == "Rishadan Dockhand"; });
-    for (int i = 0; i < 3; ++i)
+    for (int i = 0; i < (state.opponent_plays_lands ? 0 : 3); ++i)
     {
         Card land;
         land.m_name = i < nonbasics ? "Opponent Nonbasic Land" : "Opponent Basic Land";

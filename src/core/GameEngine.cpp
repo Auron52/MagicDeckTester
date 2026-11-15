@@ -250,6 +250,13 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
     const int at = static_cast<int>(from);
     if (from == ResumeAt::NewTurn)
     {
+        // On the draw, their first turn precedes ours. They skip that draw,
+        // but play a land and may crack a fetch while our instants are live.
+        if (state.turn_number == 0 && state.opponent_plays_lands && !state.on_the_play)
+        {
+            ResolvePassiveOpponentLandTurn(state);
+            state.opponent_searched_library_this_turn = false;
+        }
         AIEngine::LandDrawCensusBeginTurn();   // MTG_LANDDRAW_CENSUS (diagnostic only; no-op unless set)
         // ++turn_number, or (a pending extra turn) ++extra_turns_taken with the round unchanged.
         // Lockstep twin: SimulateEndAndStartNextTurn. Identical to ++turn_number for every other deck.
@@ -345,6 +352,7 @@ void GameEngine::RunTurnFrom(GameState& state, ResumeAt from)
         // TurnSolver::SimulateEndAndStartNextTurn.
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
+        if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         // Sire of Insanity at the OPPONENT's notional end step ("each end step"): after their draw.
         // Our hand is empty by then in this pool (our own end step discarded it), so it is faithful and
         // inert; the opponent discards a dealt hand. Lockstep twin in the rollout; deck-gated.

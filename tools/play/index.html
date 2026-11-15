@@ -4804,6 +4804,11 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  if ((d.source||'')==='Archive Trap (opponent fetch)') {
+    return '<h3>Opponent cracked a fetchland</h3><div class="sub">You may cast Archive Trap for {0} now, during the opponent’s turn.</div>'+
+      '<div class="optgrid"><button class="optcard def" data-opt="0">Cast Archive Trap for {0}  ·  AI pick</button>'+
+      '<button class="optcard" data-opt="-1">Hold Archive Trap</button></div>';
+  }
   if ((d.source||'').startsWith('Surgical Extraction (target card in a graveyard)')) {
     let h='<h3>Surgical Extraction — target a graveyard card</h3>'+
       '<div class="sub">Choose a card in either graveyard. You will then choose which cards with that name to exile from its owner’s graveyard, hand, and library.</div><div class="tutgrid">';
@@ -5919,6 +5924,10 @@ function commitLook(d, oi){
 function commitVial(d, v){ pushChoice(d, v, v?'Vial: +counter':'Vial: hold'); }
 function commitDig(d, oi){
   const c=(d.examined||[]).find(x=>x.index===oi);
+  if ((d.source||'')==='Archive Trap (opponent fetch)') {
+    pushChoice(d, oi, oi===0?'Archive Trap: cast for {0}':'Archive Trap: hold');
+    return;
+  }
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
 }
 function commitLightPaws(d, oi){

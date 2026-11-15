@@ -1,12 +1,12 @@
 # Mill deck analysis
 
-Status: analyzed (2026-11-14).
+Status: analyzed (2026-11-14); opponent land policy updated 2026-11-15.
 
 ## Deck and opponent model
 
 Source list: `decks/Mill/Mill.cod` (60 cards, no sideboard). The user requested
 50 real decklists as passive-opponent library bases, selected by `seed % 50`.
-The opponent remains passive; the chosen library composition matters for
+The opponent draws and follows a fixed land policy; the chosen library composition matters for
 Tasha's Hideous Laughter, graveyard thresholds, and deck-out timing.
 
 ## Coverage and implementation
@@ -35,7 +35,23 @@ mainboards (each 60 cards), embedded in the binary. Alias directories and the
 three text-only lists are outside this pool. Every pool name has a cards.json
 definition. The game uses the actual seed modulo 50 to select one list, then
 shuffles its library with a separate deterministic salt and draws seven cards.
-The opponent remains passive; each of our turns advances its draw.
+The opponent draws on its turns and plays the leftmost land in hand. It cracks a
+zero-mana fetch immediately, selects the first eligible land in its library,
+and shuffles after searching. This opens an opponent-turn window to cast each
+Archive Trap already in our hand for {0}; the viewer asks whether to cast or
+hold it, while autonomous play casts it. The opponent still casts no spells
+and makes no combat decisions. References recorded before this land policy
+replay under the old passive land model; new recordings carry
+`opponent_land_model: 1` and use the current model.
+
+The 2026-11-15 smoke and regression batches measured this policy on Mill and
+Mill2HG. Mill's searched smoke means stayed at 4.6 turns; its depth-3
+regression mean improved from 5.0 to 4.6, and its shipped depth-5 mean stayed
+at 4.6. Depth-0 smoke moved from 6.80 to 6.82; depth-0 regression improved
+from 6.66 to 6.41. Mill2HG's regression mean improved from 4.8 to 4.6. Two
+searched games at seed 2003 moved from turn 5 to turn 6 at the usual budget;
+both recovered turn 5 when given more search budget. All 843 saved reference games replayed
+without drift, including the six older Mill recordings under their old model.
 
 Card effects implemented so far: literal mill into the appropriate graveyard;
 Tasha's ordered top-of-library exile until cumulative printed mana value reaches
@@ -44,8 +60,9 @@ Hedron and Ruin Crab landfall; Surgical's graveyard target and name-based
 exile; Archive Trap's conditional free cost; Oboro's paid self-bounce; and
 Drown/Fatal's target caps. The dedicated Mill provider explicitly preserves
 the fetch hold and owns the Hedron/Surgical search policies. Since the passive
-opponent casts no spells and has no creatures, autonomous Mill play omits
-Counterspell, Drown in the Loch, and Fatal Push. Human play retains their
+opponent casts no spells and its creatures do not threaten the Mill goldfish,
+autonomous Mill play omits Counterspell, Drown in the Loch, and Fatal Push.
+Human play retains their
 legal casts; `MTG_UNPRUNE=millcontrol` restores them for measurement.
 
 Oboro's self-bounce remains in the full search menu even before a Crab enters.

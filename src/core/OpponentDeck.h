@@ -16,6 +16,7 @@
 #include "GameState.h"
 #include "DrawCap.h"
 #include "OpponentDeckPool.h"
+#include "../cards/CardDatabase.h"
 #include <algorithm>
 #include <string>
 #include <utility>
@@ -94,6 +95,86 @@ inline void Deal(GameState& state, bool needed, uint64_t seed, bool use_diverse_
     // opponent and two fixtures that assert "no win" reported wins on turns 3 and 5. Any future
     // caller that builds a GameState by hand now simply gets the old, safe model.
     state.opponent_library_dealt = true;
+    state.opponent_plays_lands = use_diverse_pool;
+}
+
+struct LandPlayResult
+{
+    bool played = false;
+    bool searched = false;
+    std::string land_name;
+    std::string fetched_name;
+};
+
+// The Mill-only passive land policy: play the leftmost land in hand, then crack
+// an immediately usable fetch. Choose the first eligible library land; this is
+// an opponent policy, not a search branch for our solver. The caller performs
+// the shuffle and offers the Archive Trap instant window after resolution.
+inline LandPlayResult PlayLeftmostLand(GameState& state)
+{
+    LandPlayResult result;
+    if (!state.opponent_plays_lands || state.opponent_decked) { return result; }
+    Player& opp = state.players[1];
+    auto held = std::find_if(opp.hand.begin(), opp.hand.end(), [](const Card& c) {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->card.IsLand();
+    });
+    if (held == opp.hand.end()) { return result; }
+    const Card card = *held;
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(card);
+    opp.hand.erase(held);
+    result.played = true;
+    result.land_name = card.m_name.str();
+    auto enter = [&](const Card& entering, const CardDefinition& land_def, bool force_tapped) {
+        Permanent perm;
+        perm.card = land_def.card;
+        perm.card.m_number = entering.m_number;
+        perm.controller_index = 1;
+        perm.owner_index = 1;
+        perm.entered_this_turn = true;
+        // The passive opponent declines optional shock-land life payments.
+        perm.tapped = force_tapped || land_def.params.enters_tapped
+            || land_def.params.etb_pay_life_to_untap > 0;
+        state.battlefield.push_back(std::move(perm));
+    };
+    const bool typed_fetch = !def->params.fetch_land_types.empty();
+    const bool basic_fetch = def->params.land_search_activation_sacrifice_self
+        && def->params.land_search_basic_only && def->params.land_search_count == 1
+        && def->params.land_search_activation_cost.has_value()
+        && def->params.land_search_activation_cost->ManaValue() == 0;
+    // Older typed-fetch definitions omit the activation fields because the
+    // normal fetch resolver charges their printed one life directly.
+    const int life_cost = typed_fetch
+        ? std::max(1, def->params.land_search_activation_life_cost)
+        : def->params.land_search_activation_life_cost;
+    if ((!typed_fetch && !basic_fetch) || opp.life <= life_cost)
+    {
+        enter(card, *def, false);
+        return result;
+    }
+    // Fetch activation: tap and sacrifice this just-played land as costs.
+    opp.life -= life_cost;
+    opp.graveyard.push_back(card);
+    result.searched = true;
+    auto pick = std::find_if(opp.library.begin(), opp.library.end(), [&](const Card& candidate) {
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(candidate);
+        if (land == nullptr || !land->card.IsLand()) { return false; }
+        if (basic_fetch) { return land->card.HasSupertype(Supertype::Basic); }
+        for (const std::string& type : def->params.fetch_land_types)
+        for (const std::string& subtype : land->card.m_subtypes)
+        { if (type == subtype) { return true; } }
+        return false;
+    });
+    if (pick != opp.library.end())
+    {
+        const Card fetched = *pick;
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(fetched);
+        opp.library.erase(pick);
+        result.fetched_name = fetched.m_name.str();
+        // A passive opponent never pays a shock land's optional two life.
+        enter(fetched, *land, basic_fetch && def->params.land_search_tapped);
+    }
+    return result;
 }
 
 // The opponent's DRAW, simulated at the end of each of OUR turns.
