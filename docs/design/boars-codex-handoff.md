@@ -8,11 +8,12 @@ Codex notes there cover waiters and timers.
 
 The sections below this one record Claude's **2026-11-14 handoff**; their PIDs and "running right now" table are
 historical. The live integration worktree is `.claude/worktrees/boars-integration-next`, based on
-`origin/phase-1-2-deck-analyzer` at `8935b4fbd`. It contains the Boars changes plus the newer Fungus, Hydras, Jumbo and
-known-draw commits. The ten Boars references are protected on `origin/boars-analysis`; reference safety scanned all 33
-worktrees and passed. The rebased build, 3,242 unit cases (3,611,201 assertions), 558 scenarios, and all ten strict Boars
-viewer replays passed. A combined smoke/regression run was started on that rebased binary at 01:39 UTC; read
-`build/regression_rebased.log` in the integration worktree for its completion and audit before accepting GT.
+`origin/phase-1-2-deck-analyzer` at `510d0684b`. It contains the Boars changes plus the newer shared commits.
+The ten Boars references are protected on `origin/boars-analysis`; reference safety scanned all 33 worktrees and
+passed. The merged baseline passed 3,279 unit cases, 558 scenarios, and a 66-reference strict viewer sample.
+The previous combined smoke/regression run finished on the older `8935b4fbd` base: smoke 169 pass / 38 fail / 4 new,
+regression 268 pass / 59 fail / 7 new. Classifications are in `build/classify_{smoke,regression}_rebased.txt`;
+no GT was accepted. Reassess on the final integration binary before accepting GT.
 
 Included in the shared integration: a named sole fetch target through land resolution (including Courser), a held-fetch
 crack-before-cast line, the viewer's Hold control, Zhur-Taa Druid's green-only mana priority, Herald's Horn nonmatching
@@ -21,20 +22,30 @@ pass and all Boars references replay; its smoke/regression audits are in
 `.claude/worktrees/boars-integration/build/scratch/boars/integration_checkpoint_2026-11-15.md` from the repo root. Its GT was **not** accepted because the shared branch moved
 six source/GT commits while that run was in progress. The fresh rebased run is the one to accept.
 
-`boars-rank` remains **off and unmerged**. Its current pip rule reads every castable spell in hand, while the USER requires
-colours of the **selected line**. The measured rule helps Boars but has a Creature Giving aggregate loss; do not flip it
-on without the line-specific work and a new A/B.
+The fetch ranking candidate is now integrated with its default **off**. It reads coloured costs from the selected cast
+line and preserves distinct legal lines; see `docs/design/boars-fetch-line-rank-2026-11-15.md` for the 300-game cells
+and blind/real-shuffle audits. The earlier hand-wide candidate's raw Creature Giving aggregate was +4 turns, but all
+four contributing losses were clairvoyant and did not block review under the USER's rule. Those two Creature Giving
+play games carrying the raw loss were shuffle-dependent:
+gi125 changes the T1 Misty Rainforest target from Stomping Ground to Temple Garden; its first changed draw is T2
+(Tree of Tales versus Birds). gi138 changes the T1 line from Heath + Birds to Overgrown Tomb + Essence Warden; its first
+changed draw is T2 (Suture Priest versus Defense of the Heart). Each repeats in both search-salt cells. A five-salt
+blind-search ensemble gives both arms T5 in all twenty comparisons for these two games, so the original OFF T4 wins
+disappear. The archived logs are under `/workspaces/MagicDeckTester/build/scratch/boars/rank2/rc/{blind,cg125_0,cg125_1,cg138_off,cg138_on}`.
+CG 2HG gi258 is a separate line-choice variance with legal alternatives still present; the detailed verdict is below.
 
 A separate **Decimator of the Provinces emerge ranking candidate** is preserved in
-`.claude/worktrees/boars-integration/build/scratch/boars/emerge_ab/candidate.patch` from the repo root. It stays default OFF pending the USER's
-heuristic adoption decision. The engine already taps Somberwald Sage for its three mana before sacrificing it; a new unit
-test confirms both rollout and executor. The candidate ranks emerge victims by their lost pumped attack damage and
-discount, and prefers hardcast when it preserves attackers. It is scoped to depth 0 and the viewer: the unscoped version
-made searched Boars d3 gi38 one turn slower through budget work order. A/B with the scoped rule: Boars d0 1,000 smoke
-games saved 34 total turns (44 faster, 12 slower); separate 400-game seeds saved 23 turns for Boars and 32 for Boars 2HG.
-Every slower d0 game was one turn. Reference 10 still wins T4 and ranks Sage first in the viewer; the recorded Ignoble
-line remains selectable and replays with a repaired menu index. The focused Decimator tests passed with the flag on and
-off.
+`.claude/worktrees/boars-integration-next/build/scratch/boars/emerge_ab/candidate_rebased_provider.patch` from the repo
+root. The review and A/B evidence are in `docs/design/boars-decimator-emerge-rank-2026-11-15.md`. It stays default OFF
+pending the USER's heuristic adoption decision. The engine already taps Somberwald Sage for its three mana before
+sacrificing it; unit tests confirm rollout and executor payment. The candidate ranks victims by projected attack damage,
+the mana discount, future attacks, and exact lethal after cast triggers; it also keeps hardcast ahead when that preserves
+attackers. It is scoped to depth 0 and the viewer: the unscoped version made searched Boars d3 gi38 one turn slower
+through budget work order. In 1,800 paired games, the refined rule saved 53 total turns over 1,000 Boars smoke games,
+28 over 400 held-out Boars games, and 38 over 400 Boars 2HG games. Only two games slowed by one turn each; both
+recover at depth 8 with unlimited budget. After moving the judgment into BoarsProvider, a new A/B reproduced every
+previous `.wins` file byte for byte, focused tests passed with the flag on and off, and all ten Boars references passed
+strict replay with no play drift or enumeration gap. A 50-game Boars d3/b10 searched sample was byte-identical on/off.
 
 ## Where things are
 

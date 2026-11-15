@@ -170,6 +170,28 @@ int BoarsProvider::ManaSourceRank(const GameState& s, const CardDefinition& def)
     return birds ? base + 1 : base;
 }
 
+// The searched turn applies each emerge variant and its combat, so a static score only
+// perturbs finite-budget work order (Boars d3 gi38 lost a turn before this scope).
+// Depth-0 and the viewer need an order: preserve damage from the remaining attackers,
+// credit the mana discount, and keep the hard cast ahead when it spends no attacker.
+bool BoarsProvider::WantsEmergeVictimRank(const GameState& s, const CardDefinition& spell) const
+{
+    (void)s;
+    static const bool on = EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK", false);   // measurement candidate; DEFAULT OFF
+    return on && spell.card.m_name == "Decimator of the Provinces"
+        && (TurnSolver::InD0Runner() || HumanPlayActive());
+}
+
+int BoarsProvider::EmergeVictimRank(const GameState& s, const CardDefinition& spell,
+                                    const EmergeVictimRankMetrics& m) const
+{
+    (void)s; (void)spell;
+    const int saved = m.hard_without_attackers ? -1
+                    : 10 * std::max(0, m.hard_cost_value - m.emerge_cost_value);
+    return saved - 100 * (m.lost_attack_now + m.lost_attack_later)
+           + (m.lethal_attack ? 100000 : 0);
+}
+
 // ---- BoarsProvider: the USER-APPROVED cast order (MTG_BOARS_CAST_ORDER, DEFAULT ON) ------------------
 //
 // docs/design/boars-cast-order-2026-11-14.md, drafted for the USER's review (USER 2026-11-14: "If you want a ruling
@@ -2990,7 +3012,7 @@ bool DecisionProvider::LandSearchPickOrderKey(const GameState& s, int controller
     key = LandSearchLackMask(s, controller);
     // The fetch tie-break's inputs (LandSearchFetchPickOrder), only while it is on: bit 22 marks the arm (a pooled
     // batch flips it per job on one thread's memo), bits 23..27 the demanded mask, bits 32..63 the gain per mask.
-    if (FetchRankPipsOn())
+    if (FetchLineRankEnabled(s))
     {
         const FetchPipState st = ReadFetchPipState(s, controller);
         key |= std::uint64_t{ 1 } << 22;
@@ -3008,7 +3030,7 @@ void DecisionProvider::LandSearchFetchPickOrder(const GameState& s, int controll
     (void)subtype; (void)subtype_alt;
     // Exactly what this spec read before the fetch hooks existed: the land-search order with no subtype.
     LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks);
-    if (picks.size() < 2 || !FetchRankPipsOn()) { return; }
+    if (picks.size() < 2 || !FetchLineRankEnabled(s)) { return; }
     // The deliberate ranking (see FetchRankPipsOn): (1) adds a matched pip, (2) plain score, (3) dual, (4) demanded
     // colours made, (5) names. The picks are distinct, so (5) makes it a total order: the input order never shows.
     const unsigned lack = LandSearchLackMask(s, controller);

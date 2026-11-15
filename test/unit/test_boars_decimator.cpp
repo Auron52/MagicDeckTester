@@ -5,21 +5,29 @@
 #include <doctest/doctest.h>
 #include "ai/AIEngine.h"
 #include "ai/ManaPayment.h"
+#include "ai/DecisionProviders.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/EffectHandler.h"
+#include "core/EnvFlags.h"
 #include "core/GameSetup.h"
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
 #include "mtg_test_seam.h"
 #include <algorithm>
+#include <map>
 #include <string>
 #include <vector>
 
 namespace
 {
 const char* const kDec = "Decimator of the Provinces";
+const BoarsProvider& DBoarsProvider()
+{
+    static const BoarsProvider provider;
+    return provider;
+}
 const CardDefinition& DDef(const char* name)
 {
     static const bool loaded = [] {
@@ -191,6 +199,80 @@ TEST_CASE("Decimator: enumeration -- one emerge variant per victim class beside 
         CHECK(r.first.empty());
         CHECK(r.second);
     }
+}
+
+TEST_CASE("Decimator candidate: emerge ranks the damage left attacking and the hard-cast option")
+{
+    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK")) { return; }   // measurement arm only
+    auto scores = [](const GameState& s) {
+        TurnSolver::GreedyPermit permit(TurnSolver::GreedySite::D0Runner, 0);
+        std::map<int, int> best;   // 0 = hard cast; otherwise the emerge victim's card number
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+        {
+            for (const Action& a : p.actions)
+            {
+                if (a.kind != Action::Kind::CastFromHand || a.card_name.str() != kDec) { continue; }
+                const int key = a.emerge ? a.soulfire_own_targets : 0;
+                auto it = best.find(key);
+                if (it == best.end() || it->second < p.value) { best[key] = p.value; }
+            }
+        }
+        return best;
+    };
+    SUBCASE("Sage saves more mana than Ignoble while both are zero-power victims")
+    {
+        GameState s = DBase();
+        s.m_provider = &DBoarsProvider();
+        DForests(s, 5);
+        DPut(s, "Somberwald Sage", 43);
+        DPut(s, "Ignoble Hierarch", 30);
+        DPut(s, "Flinthoof Boar", 14);
+        s.players[0].hand.push_back(DCard(kDec, 60));
+        const auto best = scores(s);
+        REQUIRE(best.count(43));
+        REQUIRE(best.count(30));
+        CHECK(best.at(43) > best.at(30));
+    }
+    SUBCASE("when lands pay the hard cast, keeping Sage adds a pumped attacker")
+    {
+        GameState s = DBase();
+        s.m_provider = &DBoarsProvider();
+        DForests(s, 10);
+        DPut(s, "Somberwald Sage", 43);
+        DPut(s, "Flinthoof Boar", 14);
+        s.players[0].hand.push_back(DCard(kDec, 60));
+        const auto best = scores(s);
+        REQUIRE(best.count(0));
+        REQUIRE(best.count(43));
+        CHECK(best.at(0) > best.at(43));
+    }
+}
+
+TEST_CASE("Decimator candidate: a lethal Raggadragga emerge beats a setup cast")
+{
+    if (!EnvOn("MTG_BOARS_DECIMATOR_EMERGE_RANK")) { return; }
+    GameState s = DBase();
+    s.m_provider = &DBoarsProvider();
+    s.turn_number = 4;
+    s.players[1].life = 12;
+    DPut(s, "Stomping Ground", 49);
+    DPut(s, "Forest", 18);
+    DPut(s, "Forest", 17);
+    DPut(s, "Rootbound Crag", 42);
+    DPut(s, "Ignoble Hierarch", 30);
+    DPut(s, "Flinthoof Boar", 15);
+    DPut(s, "Raggadragga, Goreguts Boss", 40);
+    s.players[0].hand.push_back(DCard(kDec, 8));
+    s.players[0].hand.push_back(DCard("Zhur-Taa Druid", 59));
+
+    const TurnSolver::Plan p = TurnSolver::Solve(
+        s, /*is_pre_combat=*/true, TurnSolver::GreedyPermit(TurnSolver::GreedySite::D0Runner, 0));
+    bool emerged = false;
+    for (const Action& a : p.actions)
+    { if (a.card_name.str() == kDec && a.emerge && a.soulfire_own_targets == 40) { emerged = true; } }
+    CHECK(emerged);
+    TurnSolver::ApplyPlan(s, p, /*is_pre_combat=*/true);
+    CHECK(TurnSolver::ProjectedAttackDamageForTest(s) >= 12);
 }
 
 TEST_CASE("Decimator: the victim taps for this very cast, then dies -- both worlds")

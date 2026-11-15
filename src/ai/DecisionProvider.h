@@ -79,6 +79,18 @@ enum class LookKind;     // core/GameLogger.h
 
 struct Action;
 
+// Mechanics supplied to a provider that ranks an emerge victim for depth-0 play.
+// The solver computes payment and combat; the provider owns the judgement weights.
+struct EmergeVictimRankMetrics
+{
+    int hard_cost_value = 0;
+    int emerge_cost_value = 0;
+    int lost_attack_now = 0;
+    int lost_attack_later = 0;
+    bool hard_without_attackers = false;
+    bool lethal_attack = false;
+};
+
 // THE SCORED CANTRIP ORDER's inputs (DecisionProvider::CantripReadinessOf / ScoreTopDisposition; design:
 // docs/design/cantrip-search-optimization.md §3.3). Computed ONCE per resolution, before the candidates
 // are scored.
@@ -355,6 +367,12 @@ public:
     virtual int  SacCostVictimLive(const GameState& /*s*/, int /*controller*/) const { return -1; }
     virtual void SacCostVictimVariant(const GameState& /*s*/, int /*controller*/, int& bf_number,
                                       std::string& hand_name) const { bf_number = 0; hand_name.clear(); }
+    // A depth-0/viewer ordering of emerge victims. The searched action set is unchanged:
+    // every victim and the hard cast remain enumerable. Default 0 is byte-identical.
+    virtual bool WantsEmergeVictimRank(const GameState& /*s*/, const CardDefinition& /*spell*/) const
+    { return false; }
+    virtual int EmergeVictimRank(const GameState& /*s*/, const CardDefinition& /*spell*/,
+                                 const EmergeVictimRankMetrics& /*metrics*/) const { return 0; }
     // RippleFixed -- every ripple decision of this deck is a fixed answer (SpellEffects.h "RIPPLE"): every trigger
     // reveals, every castable match is taken or declined by RippleFreeCastAnswer (never -1), a free tutor takes
     // the FRONT of its candidate list at its resolution, a free sacrifice the SacCostVictimLive pick. The

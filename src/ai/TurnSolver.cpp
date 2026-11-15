@@ -51511,10 +51511,119 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 // EMERGE (Boars I4): each variant's bill is priced off ITS victim's printed MV (EmergeCastCost --
                 // generic only, floored at 0, reducers first). Identity on the additional-cost route.
                 const bool em = a.emerge && d->params.emerge_cost.has_value();
+                const bool em_rank_here = em && sv_prov.WantsEmergeVictimRank(state, *d);
+                std::optional<GameState> pumped_board;
+                int full_attack = 0;
+                if (em_rank_here && is_pre_combat)
+                {
+                    pumped_board.emplace(state);
+                    // Apply only the cast trigger's board bonus. The real resolver also emits a
+                    // viewer event, which a speculative rank must never write to the live history.
+                    for (Permanent& q : pumped_board->battlefield)
+                    {
+                        if (q.controller_index != me || !(q.card.IsCreature() || q.is_animated)) { continue; }
+                        q.temp_power_bonus += d->params.cast_trigger_team_pump_power;
+                        q.temp_tough_bonus += d->params.cast_trigger_team_pump_tough;
+                    }
+                    full_attack = PendingAttackDamage(*pumped_board);
+                }
+                ManaCost em_hard_cost;
+                bool hard_without_attackers = false;
+                if (em_rank_here)
+                {
+                    em_hard_cost = EffectiveSpellCostWithBase(*d, state, d->card.m_mana_cost);
+                    // A zero-power dork becomes a two-power attacker after this cast trigger.
+                    // Test the hard cast against that pumped board, so its mana is not called free.
+                    hard_without_attackers = AvailableManaPoolNoAttackers(pumped_board ? *pumped_board : state)
+                                                 .CanPay(em_hard_cost);
+                }
                 auto em_price = [&](Action& c) -> bool
                 {
                     if (!em) { return true; }
                     c.cost = EmergeCastCost(*d, state, EmergeVictimMv(state, c.soulfire_own_targets));
+                    // Measurement candidate for Boars' Decimator choice. The real payer may tap the
+                    // victim before sacrificing it; this only orders the legal variants. If the hard
+                    // cast is payable without spending an attacker, unused mana has no combat value.
+                    // Otherwise the discount is a small tie-break against the victim's lost attacks,
+                    // including the +2 Decimator would have given it. Keep every variant for the rollout.
+                    if (em_rank_here && c.trick_hand_target.empty())
+                    {
+                        EmergeVictimRankMetrics metrics;
+                        metrics.hard_cost_value = em_hard_cost.ManaValue();
+                        metrics.emerge_cost_value = c.cost.ManaValue();
+                        metrics.hard_without_attackers = hard_without_attackers;
+                        for (const Permanent& victim : state.battlefield)
+                        {
+                            if (victim.card.m_number != c.soulfire_own_targets
+                                || victim.controller_index != state.active_player_index) { continue; }
+                            const int power = victim.EffectivePower()
+                                            + ComputeLordBonus(victim.card, state, victim.controller_index,
+                                                               victim.AnimatedAllTypes(), &victim).first;
+                            int lost_now = 0;
+                            if (pumped_board)
+                            {
+                                GameState without = *pumped_board;
+                                without.battlefield.erase(std::remove_if(without.battlefield.begin(), without.battlefield.end(),
+                                    [&](const Permanent& q) { return q.card.m_number == victim.card.m_number; }),
+                                    without.battlefield.end());
+                                lost_now = std::max(0, full_attack - PendingAttackDamage(without));
+                            }
+                            const int lost_later = std::max(0, power) * std::max(0, ExpectedAttacks(state) - 1);
+                            metrics.lost_attack_now = lost_now;
+                            metrics.lost_attack_later = lost_later;
+                            break;
+                        }
+                        // Project the mechanical cast result on a scratch board. The victim can
+                        // fund its own emerge cost; it then leaves before on-cast triggers and
+                        // the spell enters after the cast pump. The provider decides how much a
+                        // lethal attack is worth to its depth-0 ranking.
+                        GameState after = state;
+                        bool paid = false;
+                        {
+                            PaySacVictimScope victim_pay(c.soulfire_own_targets);
+                            paid = TapForCostDirect(after, c.cost, /*for_creature=*/true);
+                        }
+                        if (paid)
+                        {
+                            auto& bf = after.battlefield;
+                            bf.erase(std::remove_if(bf.begin(), bf.end(), [&](const Permanent& q)
+                            { return q.card.m_number == c.soulfire_own_targets && q.controller_index == me; }), bf.end());
+                            // Raggadragga's seven-mana pump and Herald of Ilharg's counters and
+                            // damage resolve on cast before Decimator's own team pump. Omitting
+                            // them misses actual lethal lines even after the payer is exact.
+                            const int prior_probe = g_cast_trigger_mana_spent_probe;
+                            {
+                                RevealLogPause quiet;
+                                ++after.spells_cast_this_turn;
+                                FireOnCastTriggers(after, *d, c.cost.ManaValue());
+                            }
+                            g_cast_trigger_mana_spent_probe = prior_probe;
+                            for (Permanent& q : bf)
+                            {
+                                if (q.controller_index != me || !(q.card.IsCreature() || q.is_animated)) { continue; }
+                                q.temp_power_bonus += d->params.cast_trigger_team_pump_power;
+                                q.temp_tough_bonus += d->params.cast_trigger_team_pump_tough;
+                            }
+                            Permanent cast_body;
+                            cast_body.card = d->card;
+                            auto& hand = after.ActivePlayer().hand;
+                            for (auto hi = hand.begin(); hi != hand.end(); ++hi)
+                            {
+                                if (hi->m_name != c.card_name) { continue; }
+                                cast_body.card.m_number = hi->m_number;
+                                hand.erase(hi);
+                                break;
+                            }
+                            cast_body.controller_index = me;
+                            cast_body.owner_index = me;
+                            cast_body.entered_this_turn = true;
+                            bf.push_back(std::move(cast_body));
+                            const int attack = PendingAttackDamage(after);
+                            if (attack >= after.Opponent().life && after.ActivePlayer().life > 0)
+                            { metrics.lethal_attack = true; }
+                        }
+                        c.eval += sv_prov.EmergeVictimRank(state, *d, metrics);
+                    }
                     return !(g_emit_prune && c.cost.ManaValue() > mana_ceiling && !free_charge_live);
                 };
                 // INT-9 (DecisionProvider::SacCostVictimFixed, a USER-ordered restriction for Shadowborn): ONE
@@ -88112,6 +88221,10 @@ static bool CardHasPostEntryActivation(const CardParams& pp)
     // T5 at d5 b20, d5 b0 and d8 b0, yet hasted at once when handed the board after the cast. Fixture:
     // test/scenarios/boars_flinthoof_cast_then_haste.json. Only Flinthoof holds self_haste_cost.
     if (pp.self_haste_cost.has_value()) { return true; }
+    // Stromkirk Condemned's discard pump also has no {T}: a newly cast copy can
+    // activate this main phase. Its key already exists in CollectActivationKeys;
+    // this predicate must admit the cast plan to the searched site-9 fan.
+    if (pp.discard_team_pump_power > 0 || pp.discard_team_pump_toughness > 0) { return true; }
     return false;
 }
 

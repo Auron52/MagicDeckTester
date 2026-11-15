@@ -834,3 +834,13 @@ unintegrated. The two Creature Giving games deciding that bar still need root ca
 - follow-ups (not sweep flags): the d0 / beyond-horizon "cast with haste" playout option was adopted at `f98634b59` after a held-out A/B and full smoke/regression; Vampires' Stromkirk Condemned likely has the same site-9 gap as Flinthoof (not touched; changes Vampires play).
 - dismissed: 97006 "same top cards after every shuffle" = the designed common-random-numbers shuffle (keyed on seed + search count).
 - decision types seen across the sweep: mulligan, bottom, main_phase, land_entry, bounce, sacrifice, tutor_etb, dig, target, creature_type, lackey_put, legend_keep -- every Boars decision class in the 2c-ter classification fired (emerge victim, Ilharg put, legend keep, Ilharg dies tuck, Horn type + upkeep take, Raggadragga target, fetch target + hold, Turf bounce, shock).
+
+## Codex continuation (2026-11-15)
+
+The integrated baseline on `origin/phase-1-2-deck-analyzer` at `510d0684b` passed 3,279 unit cases, 558 scenarios, and a 66-reference strict viewer sample. The sole-target fetch plan now names its target through resolution, including Courser land drops. A 50-game Five Colour A/B moved two games by one turn each, for zero aggregate; seven blind salts tied. This is a plan-timing correctness change, not an adoption of the ranking candidate.
+
+The new fetch ranking candidate includes coloured costs from the selected cast line and preserves distinct legal cast lines. It is integrated but default off pending review; see `docs/design/boars-fetch-line-rank-2026-11-15.md` for the 300-game cells and audits. The earlier note above describes the historical hand-wide candidate. The new rank-on test sweep exposed Spirits' reviewed fetch order being reordered; Spirits and Mill now opt out of the generic rank.
+
+The Decimator emerge ranking candidate is also integrated but default off. It projects lethal after the actual cast triggers, ranks victims for depth-0 and viewer only, and keeps every searched victim/hardcast line legal. See `docs/design/boars-decimator-emerge-rank-2026-11-15.md` for the 1,800-game A/B and reference replay.
+
+Stromkirk Condemned now opens the same-main activation continuation after being cast. A paired 300-game Vampires play A/B found nine one-turn improvements and no slower games; d3/b10 found seven one-turn improvements and no slower games. The final integrated pre-scope binary passed 3,294 unit cases (3,612,352 assertions) and 558 scenarios. Smoke and final flag-on fetch tests are running at this point; the remaining Stage 5 checks and ground-truth acceptance are still open.

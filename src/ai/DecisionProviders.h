@@ -406,6 +406,8 @@ public:
 class MillProvider : public DeckProvider
 {
 public:
+    // Mill's Watery Grave preference is its own fetch rule.
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     const char* Name() const override { return "Mill"; }
     std::vector<std::string> FetchCandidates(const GameState&, int,
         const CardParams&) const override;
@@ -556,6 +558,9 @@ class BoarsProvider : public DeckProvider
 public:
     bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
     int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
+    bool WantsEmergeVictimRank(const GameState& s, const CardDefinition& spell) const override;
+    int EmergeVictimRank(const GameState& s, const CardDefinition& spell,
+                         const EmergeVictimRankMetrics& metrics) const override;
     uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
                                      const CardDefinition& entering) const override;
     // MTG_BOARS_CAST_ORDER (heurarm BOARS_CAST_ORDER, DEFAULT ON -- AI-drafted, USER-approved 2026-11-14,
@@ -4472,6 +4477,9 @@ public:
 class SpiritsProvider : public DeckProvider
 {
 public:
+    // The reviewed W/U/B Strand priority owns both fetch routes; generic pip ranking
+    // must not reorder its held-crack picks when the measurement flag is enabled.
+    bool FetchLineRankEnabled(const GameState&) const override { return false; }
     CertStance Certificate() const override
     { return { CertState::NotAssessed, "NOT ASSESSED. Combat looks like the only route to the "
                "opponent's life (no burn, no drain), but a sound winless-this-turn bound must price: "

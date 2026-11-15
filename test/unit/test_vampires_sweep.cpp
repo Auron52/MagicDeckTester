@@ -130,6 +130,23 @@ Action Cast(const std::string& name, int hand_index)
 
 }   // namespace
 
+TEST_CASE("Stromkirk Condemned cast opens the same-main discard-pump continuation")
+{
+    EnsureCardsLoaded();
+    GameState s = Fresh();
+    Hand(s, "Stromkirk Condemned", 1);
+    Hand(s, "Swamp", 2);   // a card remains to pay the discard cost after the cast
+    TurnSolver::Plan p;
+    p.actions.push_back(Cast("Stromkirk Condemned", 0));
+    CHECK((TurnSolver::PlanOpensBreakpointForTest(s, p) & (1 << 9)) != 0);
+
+    const auto before = TurnSolver::SnapshotActivatableAbilities(s);
+    GameState after = s;
+    after.players[0].hand.erase(after.players[0].hand.begin());
+    Put(after, "Stromkirk Condemned", 1, /*sick=*/true);
+    CHECK(TurnSolver::PostEntryActivationPending(after, before));
+}
+
 // ---- E. discard outlets in the executed order ------------------------------------------------------
 
 TEST_CASE("Sweep E: an unpinned outlet needs a card after the plan's own casts, in the executed order")
