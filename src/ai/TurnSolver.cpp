@@ -81822,6 +81822,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     PROF_INC(enumerate_calls);
     workctr::Inc(workctr::kEnumCall);
     bool enum_priced_stop = false;
+    const bool oracle_bp_cap_watch = g_bp_enum_depth > 0 && manaoracle::DecisionBudgetActive();
     const Player& ap              = state.ActivePlayer();
     ManaPool      pool            = AvailableManaPool(state);
     ManaPool      pool_noncreature = BuildNonCreaturePool(state);
@@ -82804,8 +82805,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
     static const bool s_enum_walk_poll = EnvOn("MTG_ENUM_WALK_POLL", true);
     auto enum_void_poll = [&]() -> bool
     {
-        if (!s_enum_walk_poll || ++g_walk_abandon_acc < kWalkAbandonStride) { return false; }
+        if ((!s_enum_walk_poll && !oracle_bp_cap_watch) || ++g_walk_abandon_acc < kWalkAbandonStride)
+        { return false; }
         g_walk_abandon_acc = 0;
+        if (oracle_bp_cap_watch && manaoracle::DecisionBudgetExceededWithOdo(enum_charge.visits, true))
+        {
+            enum_priced_stop = true;
+            g_bp_derive_interrupted = true;
+            return true;
+        }
+        if (!s_enum_walk_poll) { return false; }
         if (!gamework::Poll()) { return false; }
         enum_priced_stop = true;
         if (g_bp_enum_depth > 0) { g_bp_derive_interrupted = true; }
@@ -82833,6 +82842,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
             { dupactfold::g_brute_mismatch.fetch_add(1, std::memory_order_relaxed); }
         }
         ++enum_charge.visits;   // MTG_ENUM_CHARGE (see EnumChargeScope); a counter only when off
+        // AuditDecision's cap is checked between plans, but a plan apply can
+        // derive a breakpoint list for far longer than that. The odometer's
+        // priced work is deferred to EnumChargeScope's destructor, so include
+        // its pending visits in the observer's in-derivation cap poll.
+        if (oracle_bp_cap_watch && manaoracle::DecisionBudgetExceededWithOdo(enum_charge.visits))
+        {
+            enum_priced_stop = true;
+            g_bp_derive_interrupted = true;
+            return;
+        }
         // BRANCH SHAPE, EnumeratePlans side. Distinct from SolveUncached's funnel: this is the
         // odometer walk the odo/plans/dedup columns actually describe.
         if (eshape != nullptr) { shapestats::Bump(eshape->e_entered); ++ecallf.entered; }

@@ -305,8 +305,18 @@ long long DecisionCapNs()
 thread_local long long t_dec_applies = 0;    // applies made by the decision being audited (reported)
 thread_local long long t_dec_start   = 0;    // workctr::t_priced when it began
 thread_local long long t_dec_limit   = 0;    // > 0 inside AuditDecision: its budget, priced ns
+thread_local bool t_dec_forced_cap   = false; // an in-derivation poll stopped before its deferred charge posted
+thread_local bool t_dec_wall_cap     = false; // the oracle-only wall backstop caught unpriced repeated derivations
+thread_local unsigned t_dec_wall_polls = 0;
+thread_local std::chrono::steady_clock::time_point t_dec_wall_start{};
 inline long long DecisionSpentNs() { return workctr::t_priced - t_dec_start; }
-inline bool DecisionOut() { return t_dec_limit > 0 && DecisionSpentNs() >= t_dec_limit; }
+inline bool DecisionOut() { return t_dec_forced_cap || (t_dec_limit > 0 && DecisionSpentNs() >= t_dec_limit); }
+std::string DecisionCapLabel()
+{
+    const std::string n = std::to_string(t_dec_limit / 1000000000LL);
+    return t_dec_wall_cap ? "oracle audit wall backstop (" + n + " elapsed s)"
+                          : "decision work budget (MTG_MANA_ORACLE_DECISION_S=" + n + " priced s)";
+}
 std::atomic<long long> g_dec_capped{0}, g_dec_capped_plans{0};
 // MTG_MANA_ORACLE_COST_TRACE=1 (diagnostic, default off): what each menu plan's audit (PLAN-COST) and each
 // gate-rejected plan's check (GATE-COST) cost, in applies -- where a heavy decision's work goes.
@@ -3439,8 +3449,7 @@ void Emit(Cls c, const GameState& root, bool pre, const TurnSolver::Plan& plan, 
     std::string conv;
     if (c != C_CAPPED_DECISION && DecisionOut())
     {
-        conv = std::string("decision work budget (MTG_MANA_ORACLE_DECISION_S=") + std::to_string(t_dec_limit / 1000000000LL)
-             + " priced s) spent; the search behind this verdict may be cut. Would-be " + kClsName[c] + ": ";
+        conv = DecisionCapLabel() + " spent; the search behind this verdict may be cut. Would-be " + kClsName[c] + ": ";
         c = C_CAPPED_DECISION;
     }
     if (!Count(c)) { return; }
@@ -4868,6 +4877,33 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
 }
 } // namespace
 
+bool DecisionBudgetActive() { return t_dec_limit > 0; }
+
+bool DecisionBudgetExceededWithOdo(long long pending_visits, bool force_wall_poll)
+{
+    if (t_dec_limit <= 0) { return false; }
+    if (DecisionOut()) { return true; }
+    // EnumChargeScope posts its odometer work at EXIT, so a long breakpoint
+    // derivation otherwise cannot see the priced decision limit while it runs.
+    // Count its pending visits here, even inside a muted virtual-cache recompute:
+    // stopping an incomplete observer audit must be reported as capped, never
+    // allowed to create a clean verdict from a truncated continuation list.
+    if (DecisionSpentNs() + workctr::kPriceNs[workctr::kOdoVisit] * pending_visits >= t_dec_limit)
+    { t_dec_forced_cap = true; return true; }
+    // Physical work in a muted cache recompute is deliberately absent from
+    // workctr::t_priced. The oracle still did that work, and one audit can
+    // repeat thousands of such derivations. This wall backstop is diagnostic
+    // only: it never turns a miss into a clean result, and is polled at a
+    // stride so the ordinary breakpoint walk does not read a clock per plan.
+    if (force_wall_poll || ++t_dec_wall_polls >= 4096)
+    {
+        t_dec_wall_polls = 0;
+        if (std::chrono::steady_clock::now() - t_dec_wall_start >= std::chrono::nanoseconds(t_dec_limit))
+        { t_dec_wall_cap = true; t_dec_forced_cap = true; return true; }
+    }
+    return false;
+}
+
 bool CoversEngineOutcome(const GameState& state, bool pre, const TurnSolver::Plan& plan, bool scripted_only)
 {
     RevealLogPause pause;
@@ -5123,16 +5159,26 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     struct DecBudgetScope
     {
         long long saved_n, saved_start, saved_lim;
-        DecBudgetScope() : saved_n(t_dec_applies), saved_start(t_dec_start), saved_lim(t_dec_limit)
-        { t_dec_applies = 0; t_dec_start = workctr::t_priced; t_dec_limit = DecisionCapNs(); }
-        ~DecBudgetScope() { t_dec_applies = saved_n; t_dec_start = saved_start; t_dec_limit = saved_lim; }
+        bool saved_forced, saved_wall;
+        unsigned saved_polls;
+        std::chrono::steady_clock::time_point saved_wall_start;
+        DecBudgetScope() : saved_n(t_dec_applies), saved_start(t_dec_start), saved_lim(t_dec_limit),
+                           saved_forced(t_dec_forced_cap), saved_wall(t_dec_wall_cap),
+                           saved_polls(t_dec_wall_polls), saved_wall_start(t_dec_wall_start)
+        { t_dec_applies = 0; t_dec_start = workctr::t_priced; t_dec_limit = DecisionCapNs();
+          t_dec_forced_cap = false; t_dec_wall_cap = false; t_dec_wall_polls = 0;
+          t_dec_wall_start = std::chrono::steady_clock::now(); }
+        ~DecBudgetScope()
+        { t_dec_applies = saved_n; t_dec_start = saved_start; t_dec_limit = saved_lim;
+          t_dec_forced_cap = saved_forced; t_dec_wall_cap = saved_wall;
+          t_dec_wall_polls = saved_polls; t_dec_wall_start = saved_wall_start; }
     } dec_budget;
     long long dec_skipped = 0;
     auto skip_out = [&](const TurnSolver::Plan& p, const char* what)
     {
         ++dec_skipped;
-        Emit(C_CAPPED_DECISION, state, is_pre_combat, p, std::string("decision work budget (MTG_MANA_ORACLE_DECISION_S=")
-             + std::to_string(t_dec_limit / 1000000000LL) + " priced s) spent before this " + what + " was audited");
+        Emit(C_CAPPED_DECISION, state, is_pre_combat, p,
+             DecisionCapLabel() + " spent before this " + what + " was audited");
     };
     std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
     // MTG_MANA_ORACLE_ONLY_MENU=<n> (diagnostic, default 0 = off): audit only the decisions whose menu holds exactly
@@ -5245,10 +5291,11 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     {
         std::lock_guard<std::mutex> lk(g_print_mu);
         std::fprintf(stderr, "[mana-oracle] DECISION-COST %s plans=%zu gate_checked=%d applies=%lld (menu %lld, gate %lld) "
-                             "priced_ms=%lld ms=%lld%s\n",
+                             "priced_ms=%lld ms=%lld%s%s\n",
                      Ctx(state, is_pre_combat).c_str(), plans.size(), checked, t_dec_applies, plan_applies,
                      t_dec_applies - plan_applies, DecisionSpentNs() / 1000000LL, ms,
-                     DecisionOut() ? (" BUDGET-SPENT skipped=" + std::to_string(dec_skipped)).c_str() : "");
+                     DecisionOut() ? (" BUDGET-SPENT skipped=" + std::to_string(dec_skipped)).c_str() : "",
+                     t_dec_wall_cap ? " WALL-BP-CAP" : (t_dec_forced_cap ? " FORCED-BP-CAP" : ""));
     }
 }
 

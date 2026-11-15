@@ -109,6 +109,7 @@ namespace manaoracle
         // Titania's Elves), so a yield raised by a card the plan took off the library's top is hidden information
         // (ManaOracle.cpp, BoostedByHiddenCard).
         std::vector<int>       scaled_counted;
+        std::vector<int>       ripple_free_casts;
         // Past the script's end, keep making ENGINE steps instead of stopping at a frontier: the pure
         // replay of the engine's own line, whose first failing step the census measures from.
         bool                   all_engine = false;
