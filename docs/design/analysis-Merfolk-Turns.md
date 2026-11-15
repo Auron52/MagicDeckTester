@@ -786,9 +786,11 @@ alone saved 51.5% and 71.7% of priced work on the two searched sets without
 changing a searched win turn. Prophets victim ranking alone saved 6.5% and
 15.2% without a searched win-turn change. Seahunter's forced target alone
 improved one game in seed 2002 but used 5.1% more work there. The three choices
-together had the best measured quality and cost. The original narrowly gated
-extra-turn walk changed no win turns and consumed negligible extra work; a
-broader same-round walk is being tested separately before adoption.
+together had the best measured quality and cost. Both the original narrow
+extra-turn walk and a broader same-round walk changed no win turns in the
+paired 80 searched games; the broader walk also failed to recover the three
+known Codex-play leads. It was removed as a no-op. The direct-win shortcut
+needs a better guide than this deck's depth-zero policy to be useful.
 
 The 40-game discard-shed census recorded 4,796 rollout decisions and zero
 real-game decisions. It supplies no direct evidence for a new discard rule,

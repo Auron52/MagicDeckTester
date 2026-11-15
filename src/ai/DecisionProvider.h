@@ -4576,7 +4576,6 @@ public:
     // Merfolk Turns choices. Append new virtual hooks at the end so existing
     // provider call sites retain their offsets across incremental builds.
     virtual bool SeahunterCandidates(const GameState&, std::vector<std::string>&) const { return false; }
-    virtual bool MerfolkTurnWinWalkEnabled() const { return false; }
     virtual bool ProphetsSacrificeHeuristicEnabled() const { return false; }
 };
 

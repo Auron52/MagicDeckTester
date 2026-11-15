@@ -4405,7 +4405,6 @@ public:
 class MerfolkTurnsProvider : public DeckProvider
 {
 public:
-    bool MerfolkTurnWinWalkEnabled() const override { return true; }
     bool ProphetsSacrificeHeuristicEnabled() const override;
     bool SeahunterCandidates(const GameState& state, std::vector<std::string>& names) const override;
     CertStance Certificate() const override

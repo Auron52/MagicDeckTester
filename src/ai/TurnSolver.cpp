@@ -102352,7 +102352,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
             sfxprobe::t_pending.push_back(bk);
         }
-        if (g_et_chain_trial_active && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
+        if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
         // incumbent best win turn, so abandon it (win turn only grows from here).
@@ -102797,45 +102797,9 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
                                 TurnSolver::SearchLine& out)
 {
     static const bool on = EnvOn("MTG_ET_CHAIN_WALK", true); // DEFAULT ON; =0 disables the verified trial
-    static const bool merfolk_on = EnvOn("MTG_MERFOLK_TURN_WIN_WALK"); // experimental; default OFF
-    const bool merfolk = merfolk_on && ResolveProvider(start).MerfolkTurnWinWalkEnabled();
-    if ((!on && !merfolk) || (!merfolk && !ResolveProvider(start).ExtraTurnChainWalkEnabled())
+    if (!on || !ResolveProvider(start).ExtraTurnChainWalkEnabled()
         || start.TurnSeqCapped(max_turns)) { return false; }
-    if (merfolk)
-    {
-        if (HumanPlayActive() || DecisionUnpruned()) { return false; }
-        // Seahunter can put Prophets into play this turn. Include that setup
-        // only when a champion victim is already present and the activation is
-        // payable; otherwise the trial cannot plausibly win in this round.
-        bool prophets = false, fodder = false, seahunter_ready = false;
-        const int me = start.active_player_index;
-        for (const Permanent& p : start.battlefield)
-        {
-            if (p.controller_index != me) { continue; }
-            if (p.card.m_name == "Wanderwine Prophets") { prophets = true; }
-            else if (p.card.IsCreature() && CardHasSubtype(p.card, "Merfolk"))
-            { fodder = true; }
-            if (p.card.m_name != "Seahunter" || p.tapped
-                || !CanTapNow(p, start.battlefield)) { continue; }
-            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-            if (d == nullptr || !d->params.tap_tutor_put_cost) { continue; }
-            ManaPool have = AvailableManaPool(start);
-            have.AddPool(start.floating_mana);
-            const ManaCost cost = EffectiveActivationCost(
-                start, me, p.card, *d->params.tap_tutor_put_cost);
-            if (have.CanPay(cost)) { seahunter_ready = true; }
-        }
-        if (!prophets && start.pending_extra_turns == 0 && !start.in_extra_turn)
-        {
-            if (start.turn_number < 3 || !fodder || !seahunter_ready)
-            { return false; }
-            bool library_prophets = false;
-            for (const Card& c : start.ActivePlayer().library)
-            { if (c.m_name == "Wanderwine Prophets") { library_prophets = true; break; } }
-            if (!library_prophets) { return false; }
-        }
-    }
-    if (!merfolk && start.pending_extra_turns <= 0)
+    if (start.pending_extra_turns <= 0)
     {
         // A failed depth-zero trial can warm per-decision caches before the
         // complete search begins. Do not run one on setup turns that cannot
@@ -102959,7 +102923,7 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
     const int taken_before = start.extra_turns_taken;
     const int win = SimulateToEndImpl(trial, /*depth=*/0, max_turns, nullptr,
                                       start.turn_number, second_main, nullptr,
-                                      &steps, /*chain_only=*/!merfolk);
+                                      &steps, /*chain_only=*/true);
     if (trace_attempt)
     {
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -102972,7 +102936,7 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
                      static_cast<long long>(elapsed), workctr::t_priced - priced_start);
     }
     if (g_et_chain_trial_aborted || win != start.turn_number
-        || (!merfolk && trial.extra_turns_taken <= taken_before) || steps.empty())
+        || trial.extra_turns_taken <= taken_before || steps.empty())
     { return false; }
     ++wins;
     if (engines >= 2) { ++two_engine_wins; }
