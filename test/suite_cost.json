@@ -203,12 +203,12 @@
   },
   "hinata": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
-   "cost_per_game_ms": 3601.3067,
+   "cost_per_game_ms": 5169.6267,
    "jobs": 7,
    "key": "hinata",
    "tier": "regression",
-   "total_core_ms": 1615805,
-   "worst_case": "hinata_regression_d5_b30"
+   "total_core_ms": 2168727,
+   "worst_case": "hinata2hg_regression_d5_b30"
   },
   "hydras": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
@@ -299,6 +299,15 @@
    "tier": "regression",
    "total_core_ms": 583160,
    "worst_case": "merfolk_regression_d5_s3003"
+  },
+  "merfolkturns": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 2247.3933,
+   "jobs": 6,
+   "key": "merfolkturns",
+   "tier": "regression",
+   "total_core_ms": 780838,
+   "worst_case": "merfolkturns_regression_d5_b20"
   },
   "midrangeburn": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",

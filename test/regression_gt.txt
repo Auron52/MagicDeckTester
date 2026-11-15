@@ -1,4 +1,4 @@
-# Regression ground truth -- commit a0c050d34  date 2026-11-15
+# Regression ground truth -- commit fb3517beb  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -1210,3 +1210,14 @@ spirits_overnight_d5_s4004=4.6306/278f5f7b0040c034
 spirits_overnight_d5_s5005=4.6447/73077f962199619d
 spirits_overnight_d5_s6006=4.6259/63bbc2a56920ff50
 spirits_overnight_d5_s7007=4.6612/9d8dbf4836d53397
+merfolkturns_overnight_d0_s4004=6.0210/3cf3b725a7d1a052
+merfolkturns_overnight_d0_s6006=6.0180/ed0328fbfd80f18c
+merfolkturns_overnight_d0_s8008=6.0395/6e944dc96f18a2ea
+merfolkturns_overnight_d0_s10010=6.0440/7afc0b4cb76b426d
+merfolkturns_overnight_d3_s4004=5.5840/b8f97aa1e3924f66
+merfolkturns_overnight_d5_s4004=5.5667/2978966d42e9e292
+merfolkturns_overnight_d5_s5005=5.5800/a9223ae70e205218
+merfolkturns_overnight_d5_s6006=5.5067/2730dec53baf2844
+merfolkturns_overnight_d5_s7007=5.4767/c6c70e2764810de6
+merfolkturns_overnight_d3_s30161=5.3333/2c72d62de962ccd0
+merfolkturns_overnight_d5_s30161=5.3333/2c72d62de962ccd0

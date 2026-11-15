@@ -856,3 +856,23 @@ pruning across all 1,000 d0 games worsened its average from 6.093 to 6.105.
 The 2HG smoke row remains 6.0000 with a changed play digest. The smoke d0
 tradeoff is acknowledged in regression ground truth; smoke, regression, and
 2HG viewer audits completed without drift or board divergence.
+
+After merging the shared passive-opponent update, Merfolk retains its
+historical passive opponent because the deck does not read opponent lands or
+zones. Tidal Warrior's blue-fixing shortcut now explicitly rejects opponent
+lands in legal states that do have them. A focused unit case covers that
+boundary. On the merged Release build, smoke, regression, and 2HG all pass
+their accepted GT with identical per-game outcomes and play digests.
+
+The full overnight tier on the merged, exact-source PGO binary completed
+9,331 games and accepted eleven new GT rows. D0 averages were 6.0210,
+6.0180, 6.0395, and 6.0440 on seeds 4004, 6006, 8008, and 10010 (2,000
+games each). D3/b10 averaged 5.5840 on seed 4004 (125 games). D5/b20
+averaged 5.5667, 5.5800, 5.5067, and 5.4767 on seeds 4004, 5005,
+6006, and 7007 (300 games each). Both three-game unbudgeted sentinels
+averaged 5.3333. All 11 GT logs are consistent with the accepted results.
+The merged Release unit suite passes 3,170 cases and 3,601,126 assertions.
+The final pooled suite cost gate passes at 2,247.393 core-ms/game for
+Merfolk Turns versus 5,169.627 for Hinata in the same run, or 0.43x the
+pinned yardstick against the 3x limit. The Merfolk total was 780.8 core-s
+over six regression jobs. This replaces the pre-pruning 2.35x measurement.
