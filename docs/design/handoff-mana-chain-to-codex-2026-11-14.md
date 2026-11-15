@@ -142,6 +142,17 @@ The three `CAPPED-DECISION` seeds exhaust their budget in gate-observation
 enumeration before any rejected plan is checked. A fresh PGO build and
 integrated Gods gate are next.
 
+2026-11-15 later continuation: the narrower counter-land scarce-colour hold
+cleared the four remaining focused `APPLY-DROP` events but failed held-out
+adoption: 5,000 paired Gods games had zero faster, one slower, three other
+same-turn play changes, and +0.052% search units. It remains default off;
+see `docs/design/gods-counter-scarce-mask-2026-11-15.md`. The three capped
+decision seeds were replayed with a 900-second audit budget. All completed;
+their expensive decisions used 205, 264, and 560 priced seconds, with no
+remaining coverage gap. The default bounded decision budget is raised from
+300 to 600 seconds, pending the fresh full gate; see
+`docs/design/gods-oracle-decision-cap-2026-11-15.md`.
+
 ## The program (USER, standing)
 Run every deck through `python3 scripts/mana_clean.py run --games 5000` (always pass `--games 5000`), fix every issue,
 mark each deck. A deck leaves beta only after a clean analysis of >= 5,000 games on a FRESH seed block run after its

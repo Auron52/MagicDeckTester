@@ -296,10 +296,11 @@ int MaxGateChecks()
 // verdict still to come in the decision -- the plan being audited and every plan and gate-rejected plan after it
 // -- is reported as CAPPED-DECISION instead (Emit). That class FAILS the mana-clean gate exactly as CAPPED does:
 // a plan nobody checked is a plan nobody has shown clean. MTG_MANA_ORACLE_DECISION_S = the budget in priced
-// seconds (default 300); 0 = unbounded.
+// seconds (default 600); 0 = unbounded. The Gods 2026-11-15 cap repros
+// completed at 205/264/560 priced seconds; 300 truncated all three.
 long long DecisionCapNs()
 {
-    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_DECISION_S", 300))) * 1000000000LL;
+    static const long long v = static_cast<long long>(std::max(0, EnvInt("MTG_MANA_ORACLE_DECISION_S", 600))) * 1000000000LL;
     return v;
 }
 thread_local long long t_dec_applies = 0;    // applies made by the decision being audited (reported)
