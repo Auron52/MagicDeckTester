@@ -167,7 +167,7 @@ any MISS or ORACLE-GAP is found, 0 when clean.
 2 = every flag, 3 = + per-plan frontier trace, 4 = + the mana table and failed verifications);
 `MTG_MANA_ORACLE_TURN=<t>` limits the level-3/4 trace to one turn; `MTG_MANA_ORACLE_NODES` (per-plan
 apply cap, default 2000; a plan that hits it is realized once more under `MTG_MANA_ORACLE_NODES_RETRY`, default
-20000, always on -- the env changes the number only, see 13.14); `MTG_MANA_ORACLE_GATE_MAX` (gate-rejected plans checked per decision, default
+100000, always on -- the env changes the number only, see 13.14); `MTG_MANA_ORACLE_GATE_MAX` (gate-rejected plans checked per decision, default
 400); `MTG_MANA_ORACLE_MAX_PLANS` (menu cap, default all).
 
 **Where the code is.** `src/ai/ManaOracle.{h,cpp}` (the oracle), plus four guarded hooks, each a

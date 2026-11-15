@@ -193,3 +193,30 @@ one-headed classification, the final 16× rerun was stopped after that game's
 4× result had already recovered the old turn; the per-game verdicts are in
 `build/scratch/gods2hg_classify_regression_complete.txt`. The blind two-headed
 gain is modest but survives its paired confidence interval.
+
+## Visible-state natural-draw follow-up
+
+The user asked whether a residual blind loss can reflect a genuinely better
+natural draw. A default-off trial in an isolated worktree draws at
+four or more lands with three or more Gods in the graveyard, no Replenish in
+hand, at most one Replenish in the graveyard, and Mystic Retrieval still absent
+from the graveyard. These are observable facts; the rule never reads library
+order. With fully blind K=4/depth=1 search and blind mulligan bottoming, 1,000
+paired training games at seeds 8,700,001–8,701,000 had 784 baseline wins and
+780 trial wins. The loss-penalized average moved from 6.944 to 6.964 turns:
+71 games faster, 84 slower, 845 tied; paired 95% interval for the turn delta
+[-0.020, +0.060]. The broad exception has no measured benefit and stays off.
+Representative faster and slower game replays often diverge at an earlier
+main-phase plan because blind lookahead evaluates the future rule. A tighter
+visible-state trial requires at least four graveyard Gods, zero graveyard
+Replenishes, and at most 20 cards left in the library. On the same training
+block it changed 12 play digests but only two win turns: one unwon game became
+a turn-six win and one turn-seven win slipped to turn eight. The mean gain was
+0.002 turns per game, paired interval [-0.008, +0.004]. On a fresh 2,000-pair
+held-out block (seeds 8,800,001–8,802,000), the narrow rule changed only 16
+play digests: five win turns faster, five slower, 1,990 equal. Baseline won
+1,526 games and averaged 7.0105; the trial won 1,525 and averaged 7.0110.
+The paired delta was +0.0005 turns/game, interval [-0.0044, +0.0054]. Neither
+tested visible condition has a reproducible blind advantage, so the shipped
+strict-dredge rule and its zero-or-one-land natural-draw exception remain.
+Data are under `build/scratch/gods_visible_draw_trial/`.

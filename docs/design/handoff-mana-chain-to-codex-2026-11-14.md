@@ -75,8 +75,41 @@ stopped after the first one-mana payment. An audit-only extension of up to two
 extra taps, bounded by the plan's later named bill, removed all 30 gap events
 on those games. The 100-game unrelated Gods cost probe showed +11.5% oracle
 applies and +3.4% oracle time, with identical play. See
-`docs/design/gods-oracle-line-surplus-2026-11-15.md`. The fresh gate remains
-owed after source validation; no issue class is declared clean from a probe.
+`docs/design/gods-oracle-line-surplus-2026-11-15.md`. The fresh PGO gate
+`codex-gods-post-surplus-20261115` completed 5,000 paired oracle-on/off games
+with byte-identical play in all 157 chunks. It found zero `ORACLE-GAP` flags,
+but failed overall: two `APPLY-DROP` games, six `CAPPED`, four
+`CAPPED-DECISION`, and one `UNMODELED` (13 distinct games). The existing
+`MTG_SCARCE_COLOR_MASK=1` clears both dropped-action repros, but one of 1,000
+paired Gods games loses a turn-seven win even at unlimited depth-eight budget;
+the mask remains off. The Gods visible-state draw follow-up is complete: the
+broad four-land rule was slightly worse in 1,000 blind pairs, while a narrower
+four-Gods/no-Replenish-in-graveyard rule was essentially tied across 2,000
+held-out blind pairs (five faster, five slower, one fewer win). Neither is
+adopted; the isolated worktree was removed after the reference safety check.
+The `UNMODELED` seed 30034901 was a sibling-order audit cap: raising its
+initial limit to 20,000 resolved it, and a targeted on-demand sibling retry
+is implemented locally. Its focused default-setting replay reports zero
+issues; a fresh full gate is still owed.
+
+The new sibling retry passed 3,308 unit tests, its focused Gods replay, and
+the strict viewer check (854 references, zero drift). A full pooled PGO smoke
+and regression run finished 555 cells and 558 scenarios, but 71 cells differ
+from committed ground truth across unrelated decks. Three representative
+failed cells (Mill smoke d3, White Knights smoke d3, Creature Giving
+regression d3) replayed byte-identically on the parent source, current Release,
+and current PGO binaries, while all three differ from the committed GT files.
+That broad baseline drift predates the audit-only retry and was not accepted.
+The 1,231 GT files remain internally consistent. Focused comparison data are
+in `build/scratch/gods_pre_retry_replay/`; the full run is
+`build/scratch/gods_alt_order_retry_pgo_regression.out`.
+
+The six Gods `CAPPED` games were replayed with 20,000 and 100,000 retry caps
+on the same PGO binary. Raising the on-demand retry ceiling cleared all 46
+flags, added 28.4 oracle seconds across those six games, and left all six play
+logs byte-identical. The 100,000 cap is now the local default; it still needs
+build/unit validation and a fresh 5,000-game gate. The four
+`CAPPED-DECISION` games and two `APPLY-DROP` games remain.
 
 ## The program (USER, standing)
 Run every deck through `python3 scripts/mana_clean.py run --games 5000` (always pass `--games 5000`), fix every issue,
