@@ -17,6 +17,16 @@ Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is 
    2026-11-15. **Do not kill it.** Verdict handling: ledger "Stage 5 runtime verification", 5c2 paragraph.
    Run 1 (12 blocks, agent H) was NO SIGN: 0 changed of 12,000 paired.
 2. H2's own probe jobs are all finished. H2 has stopped once `logs/redelem/agentH2-handoff.md` exists.
+3. **The play viewer runs Red Elementals from the PRIMARY checkout on a local branch** (USER 2026-11-14: *"When
+   elementals is ready for such please launch the play viewer."*). At 00:50 UTC 2026-11-15 the orchestrator
+   switched `/workspaces/MagicDeckTester` from `phase-1-2-deck-analyzer` (`e944eeea4`, its fork point) to the
+   new local branch **`viewer/redelem` = `1864683a4`**, rebuilt it, and restarted the viewer there. Check
+   `ps` for `node tools/play/server.js`. The user's untracked `decks/Red Elementals/` folder was moved to
+   `build/scratch/redelem/primary-deck-backup/orig-dir`; its `.cod` is the committed copy except for CRLF line
+   endings. **After the shared push (item 6 below):** run `check_references_safe.py` and commit any new
+   references, switch the primary back with `git switch phase-1-2-deck-analyzer && git pull --rebase`,
+   rebuild, restart the viewer with `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups`,
+   and delete `viewer/redelem`.
 
 **Stage 5 results** (ledger section "Stage 5 runtime verification (agents H/H2)";
 `docs/design/red-elementals-search-cost.md`):
@@ -40,6 +50,11 @@ Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is 
    the suite's. Verify each flag against `cards.json`, and record `flags: N unresolved` in the ledger.
 3. **5h:** `scripts/audit_viewer_decisions.py` on RE and LFE, with the sweep included this time. Cover the
    `eot_put` decision.
+3b. **`verify_deck` viewer gate FAILS**, a Soulstoke `eot_put` HARD MISS. In the claude-play protocol the engine
+   decides combat, so Soulstoke always attacks and the end-step window never opens. H2 added a forcing driver
+   and a NOT_FORCED verdict to `audit_viewer_decisions.py verify_card`. Still owed: route the sweep path's
+   verdict through it, or get a USER-approved deferral. A related USER question is open: a human cannot hold an
+   attacker back in the viewer, so should a hold choice be exposed?
 4. **5i: discard bucket policy.** The analyzer said STATUS_QUO_OK: only 2 discard decisions in 400 d3 games. Write
    it up and PRESENT it to the USER. Do not adopt it.
 5. **Stage 6** report, with the 6a disclosure table (`.claude/skills/analyze-deck.md` Stage 6).
@@ -48,6 +63,10 @@ Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is 
    * run smoke (a full smoke took about 106 min on this box), `python3 test/check_gt_logs.py` and
      `python3 scripts/check_references_safe.py`;
    * push once, then watch CI in the background with `--interval 60`.
+   * **Upstream moved a lot:** as of 00:40 UTC, `origin/phase-1-2-deck-analyzer` is **107 commits** past the fork
+     point `e944eeea4`. They touch `src/ai/DecisionProviders.*`, `HeuristicArm.h`, `TurnSolver`, `cards.json`
+     and GT, so expect conflicts. Upstream play changes move redelem play too: re-accept its GT under the
+     rebased binary, never by hand-merging numbers (`check_gt_logs.py`).
 
    The backup branch `origin/wip/redelem-analysis` is at `cfa0d2c13`, and its CI is green on ubuntu, windows
    and the parity check. **The shared branch has not been pushed in this effort.**
