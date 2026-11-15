@@ -48,6 +48,9 @@ KNOWN_TYPES = {
     # Utopia Sprawl's as-enters colour selection is a single option index with
     # the engine's default exposed by the viewer, so reply_for's generic path applies.
     "choose_color",
+    # Metallic Mimic's as-enters creature-type choice is an option index with
+    # heuristic_default (Elemental for this deck); the generic reply follows it.
+    "choose_creature_type",
     # Finale's optional library search after an empty graveyard choice; one
     # option index, with heuristic_default emitted by the spell decision.
     "attack_mode",

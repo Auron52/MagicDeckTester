@@ -727,10 +727,10 @@ d5 b20 stays the play setting (the deck's profile, USER-owned settings are uncha
   `EndStepSacFaceUpDeadAfterCombat`, whose premise is false for this deck) were not taken over. A measured
   deck-specific narrowing belongs to Stage 5f.
 
-## User reference shortfall and current gate (2026-11-15)
+## User reference shortfall and resolution (2026-11-15)
 
-Ten user-played references are committed in `references/Red_Elementals/` (`ae3eca75f`). The shipped
-d5 b20 search averages 4.400 turns against the user's 4.400: eight ties, one search faster, one
+Ten user-played references are committed in `references/Red_Elementals/` (`ae3eca75f`). Before the fix,
+the shipped d5 b20 search averaged 4.400 turns against the user's 4.400: eight ties, one search faster, one
 search slower. In `claude_s1_gi0.json` the user wins T4, search T5 even at d8 b0 and with the
 Red Elementals provider prunes disabled. The user's T4 sequence is Soulstoke put Ball Lightning,
 then cast Legion Leadership targeting that Ball Lightning. `CollectActions` emits Leadership
@@ -738,12 +738,15 @@ targets from the pre-plan battlefield and from same-plan *hand casts*, but not f
 Soulstoke puts (`TurnSolver.cpp` solo-target-trick emission). The autonomous apply executes all
 casts before trailing `PutFromHandAbility` activations. Thus no searched plan can express the
 user's put-then-trick order. Human play's explicit sequence can express it and the target prompt
-sees Ball Lightning after the put. This is a search-completeness defect, not budget starvation.
+sees Ball Lightning after the put. This was a search-completeness defect, not budget starvation.
 
-The Codex-play fan-out was attempted with three same-type agents. The session supplied none of
-them shell or filesystem tools, so **zero games ran**. The Stage 5d gate is UN-RUN and must be
-repeated after the put-then-cast capability is fixed. Exhaustive mulligan generation must also
-wait: its labels would otherwise be evaluated on a play engine missing the observed T4 line.
+The solver now emits a same-plan Soulstoke put target for Leadership, requires that put in the
+subset, and executes it before the trick in both rollout and real execution. The variant is
+available when Soulstoke grants the creature haste, including Nova Chaser. The rebased Release
+binary wins `s1 gi0` on T4 at d8 b0, and its trace puts Ball Lightning before Leadership.
+`ref_bench.py --deck red_elementals` passes all ten references: human 4.400, search 4.300,
+zero shortfalls. The human viewer can also choose the put as one main-phase action and cast
+Leadership on the entered creature in its next main-phase decision (verified with seed 730013).
 
 Mulligan feasibility has started: `MTG_EQUIV_DISCOVER=1`, 400 probes, threshold 0.01 at depth 5
 completed on the 12-core box. It found **13 equivalence classes** among 14 distinct cards; only
@@ -751,11 +754,40 @@ Mountain and Fiery Islet merged. The size-7 composition space is `C(19,7) = 50,3
 This is a feasibility count, not a generation-time projection. Run the `recommend` scout on the
 corrected, frozen play engine before choosing `fast` or `complete`.
 
-The Stage 5h dynamic viewer audit (8 Red Elementals games, seed 620000; 6 Landfall Elementals
-games, seed 620100; each with a 40-game targeted search for misses) exited 0 for both decks.
-Blistering Firecat's `face_up` and Fulminator Mage's `target` were verified by the targeted
-search. Soulstoke's `eot_put` was UNVERIFIED in both: the automated combat always attacks with
-the source, so the window never opens. No hard misses remain, but 5h is not yet fully clean.
+The rebased Stage 5h dynamic Red viewer audit (8 games, seed 620000) exits 0 with all expected
+decisions surfaced. Its targeted forcing check holds Soulstoke untapped and verifies `eot_put`
+on seed 620000; Blistering Firecat's `face_up` also verifies. The earlier Landfall sweep
+(6 games, seed 620100) exited 0; it predates the rebase and should be repeated at the final gate.
+
+## Codex-play sweep
+
+- commit: `038d905a6` (play source; subsequent baseline and documentation commits do not change play)
+- seeds: 730000–730014; games: 15; choices: `logs/redelem/codex-play-730000-730014.json`
+- result: 12 equal win turns, three Codex wins one turn later, zero Codex wins earlier than the
+  autonomous d5 b20 search. The protocol exercised mulligan and bottom choices, Lightning Bolt
+  and Leadership targets, Mimic's subtype, Nova champion, and Thunderkin graveyard returns.
+- flags: 0 unresolved
+- The three Codex subagents initially had no shell/filesystem tools. The parent Codex session
+  drove all 15 distinct seeds directly using the same external-play protocol and checked the
+  state transitions against the deck's `cards.json` definitions. This is a Codex-play sweep;
+  no games are attributed to the tool-less subagents.
+
+The integrated gate passes on the rebased source: coverage 14/14, card costs against Scryfall,
+card fields, all regression tiers, viewer surface and GUI wiring, mismatch (seeds 7001/8001 x
+60, both arms), play invariants (8 games, 148 decisions), sweep and suite. The first full run
+found the `play_invariants.py` harness missing the upstream `choose_creature_type` decision;
+it now follows Mimic's emitted Elemental default, and the repeated runtime gate passes.
+`test/check_gt_logs.py` reports 1,226 consistent logs, zero stale or missing. The Red searched
+regression changes after the put-before-trick fix are only improvements: smoke 7 faster,
+regular 13 faster, overnight 51 faster, no slower games at any tier. The old baseline binary
+cannot replay against the rebased database (it does not know the new `Islandwalk` keyword),
+so the same-score digest changes cannot be line-diffed with `explain_game.py`; their scores
+and strict reference outcomes are unchanged.
+
+Human combat still uses the automatic attacker set. A player cannot deliberately hold
+Soulstoke to open its opponent-end-step put window; the targeted viewer audit reaches that
+prompt by forcing a legal hold. The autonomous search does evaluate hold/attack alternatives.
+This is a disclosed viewer interaction gap, not an unmodeled card effect.
 
 ## Stage 5i discard bucket proposal (not adopted)
 

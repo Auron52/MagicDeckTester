@@ -5,6 +5,37 @@ then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify
 
 Last updated: 2026-11-15 (Codex continuation; the update below supersedes the older running-job notes).
 
+## Current continuation (2026-11-15, after the rebase)
+
+- Worktree `.claude/worktrees/redelem`, branch `redelem-analysis`, has been rebased onto
+  `origin/phase-1-2-deck-analyzer` (`c171d3324` at rebase). The search-completeness fix is
+  in HEAD `038d905a6`: same-plan Soulstoke put targets can receive Legion Leadership, and the
+  put executes before the trick in rollout and real execution. The saved `s1 gi0` d8 b0 game
+  now wins T4 with Ball Lightning put before Leadership. All ten reference games pass:
+  human avg 4.400, search avg 4.300, zero shortfalls.
+- Red Elementals' smoke, regression and overnight tiers have been rerun and accepted after
+  per-game attribution. Searched outcomes only improved: smoke 7 faster; regular 13 faster;
+  overnight 51 faster, with zero slower in each. The rebased upstream Elementals regression
+  had two stale summary digests; an affected-deck rerun proved all six logs unchanged and its
+  filtered accept repaired them. `test/check_gt_logs.py` reports 1,226 consistent, zero stale.
+- Stage 5h: Red and Landfall viewer audits pass; the forced Soulstoke `eot_put` prompt and
+  Firecat `face_up` both verify. The human can put an Elemental in one main-phase decision and
+  target it with Leadership in the next. Stage 5d: parent Codex played 15 distinct seeds
+  730000–730014 through the external-play protocol; 12 equal win turns, three one turn later
+  than the d5 b20 search, zero unresolved flags. The subagents lacked shell tools and played
+  zero games. Choices are recorded in `logs/redelem/codex-play-730000-730014.json`.
+- `verify_deck.py` first full run passed card costs and every other gate except the harness
+  lacking upstream `choose_creature_type`. `scripts/play_invariants.py` now recognizes it and
+  follows the emitted default. The rerun with `--no-network` passes all runtime gates:
+  8 games / 148 invariant decisions, mismatch, viewer and suite. The full network card-cost
+  audit had passed immediately before this one-line harness fix. Reference safety passes.
+- **Currently running:** `MTG_BUILD_JOBS=5 ./build.sh release -- --target mtg-test` (session
+  42207) to compile and run the focused Red unit. Do not launch a batch beside the build.
+  Next: build `mtg-analyze`, run the bounded `--gen-mulligan recommend` scout, then start
+  `bash scripts/mullgen.sh run 'decks/Red Elementals' fast` on the frozen play source. Before
+  generation, update the ledger/checkpoint with any final test outcome and commit the source,
+  baselines and docs. The Stage 5i discard proposal remains user-owned and unadopted.
+
 ## Codex continuation update
 
 - The 48-block 5c2 job ended `rc=0`: one changed game (one worse, zero better) in 48,000 pairs;
