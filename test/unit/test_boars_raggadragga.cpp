@@ -17,6 +17,7 @@
 #include "mtg_test_seam.h"
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -79,6 +80,15 @@ Action RCast(const char* name)
     return a;
 }
 const char* kRagga = "Raggadragga, Goreguts Boss";
+struct RaggadraggaChooserScope
+{
+    LoyaltyTargetChooser chooser;
+    LoyaltyTargetChooser* saved;
+    explicit RaggadraggaChooserScope(LoyaltyTargetChooser fn)
+        : chooser(std::move(fn)), saved(g_play_loyalty_chooser)
+    { g_play_loyalty_chooser = &chooser; }
+    ~RaggadraggaChooserScope() { g_play_loyalty_chooser = saved; }
+};
 }   // namespace
 
 TEST_CASE("Raggadragga: card data and the deck stamps")
@@ -202,6 +212,34 @@ TEST_CASE("Raggadragga: the cast trigger reads the mana SPENT (intervening if) a
         }
         std::sort(pumped.begin(), pumped.end());
         CHECK(pumped == std::vector<int>{ 10, 11, 12 });
+    }
+    SUBCASE("human target chooser sees every legal creature after a seven-mana cast")
+    {
+        GameState s = board();
+        int asked = 0;
+        LoyaltyTargetChooser chooser = [&](const GameState& state, int controller,
+                                           const std::string& source, const std::string& prompt,
+                                           const std::vector<int>& legal, int) -> int
+        {
+            ++asked;
+            CHECK(controller == 0);
+            CHECK(source == kRagga);
+            CHECK(prompt.find("target creature") != std::string::npos);
+            CHECK(legal.size() == 3u);
+            for (int i = 0; i < static_cast<int>(legal.size()); ++i)
+            {
+                if (state.battlefield[static_cast<std::size_t>(legal[i])].card.m_number == 12) { return i; }
+            }
+            FAIL("Flinthoof Boar absent from the human target choices");
+            return 0;
+        };
+        {
+            RaggadraggaChooserScope scope(std::move(chooser));
+            FireOnCastTriggers(s, er, 7);
+        }
+        CHECK(asked == 1);
+        CHECK(RNum(s, 12).temp_power_bonus == 7);
+        CHECK(RNum(s, 11).temp_power_bonus == 0);
     }
     SUBCASE("the opponent's creatures are folded away in search; a shrouded creature is illegal")
     {

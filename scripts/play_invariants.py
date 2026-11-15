@@ -286,24 +286,23 @@ def drive_game(deck, profile, seed, gi, max_turns, reveal, determinism_samples=3
 
         transcript.append((tuple(choices), raw))
         reply = reply_for(obj)
-        # A PHANTOM PLAN: the menu offers a cast the apply then DROPS (the enumerator's order-free
-        # ritual affordability credit -- a Seething Song "paying for itself" off one Mountain;
-        # docs/design/analysis-Unpredictable Cyclone.md, Stages 3-5). The always-prompt viewer
-        # re-offers the identical menu, and a driver that keeps picking the no-op never advances
-        # (Unpredictable Cyclone, seed 8001 gi 0-3: 400 decisions on one turn-1 Seething Song).
-        # A real player passes: when the SAME main_phase menu comes back reporting dropped casts,
-        # reply -1 (the audit_viewer_decisions.py driver's repeated-menu rule) and record it as an
-        # advisory, so the phantom stays visible without masking a real runaway (any other repeat
-        # still burns the cap).
+        # A repeated menu can be a dropped phantom cast or a legal zero-cost action cycle
+        # (Lightning Greaves moving between creatures in Boars). A real player passes after
+        # revisiting the same menu. The viewer auditor uses this same progress rule. If passing
+        # still cannot advance, the decision cap continues to flag the genuine runaway.
         if t == "main_phase":
             key = (obj.get("turn"), obj.get("phase"),
                    tuple(p.get("summary", "") for p in obj.get("plans", [])))
-            if key in seen_menus and obj.get("dropped_casts") and reply != [-1]:
-                # dropped_reasons (the engine's per-drop reason, Q37): what the cast was short of.
-                why = "; ".join(r for r in (obj.get("dropped_reasons") or []) if r)
-                advisories.append(f"phantom plan re-offered at turn {obj.get('turn')}: dropped "
-                                  f"{obj.get('dropped_casts')}" + (f" ({why})" if why else "")
-                                  + " -- driver passed")
+            if key in seen_menus and reply != [-1]:
+                if obj.get("dropped_casts"):
+                    # dropped_reasons (the engine's per-drop reason, Q37): what the cast was short of.
+                    why = "; ".join(r for r in (obj.get("dropped_reasons") or []) if r)
+                    advisories.append(f"phantom plan re-offered at turn {obj.get('turn')}: dropped "
+                                      f"{obj.get('dropped_casts')}" + (f" ({why})" if why else "")
+                                      + " -- driver passed")
+                else:
+                    advisories.append(f"repeated main-phase menu at turn {obj.get('turn')}: "
+                                      "driver passed a repeatable action cycle")
                 reply = [-1]
             seen_menus.add(key)
         choices += reply

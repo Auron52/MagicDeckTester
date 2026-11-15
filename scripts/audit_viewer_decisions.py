@@ -2064,6 +2064,12 @@ RES_RE = re.compile(r"<<<CLAUDE_RESULT>>>")
 # targeted seed-search cannot reach either: a forward driver can only cast cards, it cannot stock a
 # graveyard. Keep this list SHORT and every entry backed by a test that exercises the human chooser.
 STATE_GATED_TYPES = {
+    ("cast_trigger_untap_pump_target_min_spent", "target"):
+        "Raggadragga asks for a target only after a spell costing at least seven mana is cast while it is "
+        "on the battlefield; the short forward sweep can cast Raggadragga without reaching that later "
+        "state. Pinned by test/unit/test_boars_raggadragga.cpp 'human target chooser sees every legal "
+        "creature after a seven-mana cast' and the Boars external-play sweep (seed 97001-97016) in "
+        "docs/design/analysis-Boars.md, which observed the target decision.",
     ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
     ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
 
