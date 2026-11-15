@@ -1277,6 +1277,24 @@ TEST_CASE("mana oracle: repeated casts admit exactly bounded six-action order pr
     CHECK_FALSE(Has(partial, "PHANTOM"));
 }
 
+TEST_CASE("mana oracle: a fixed hand sacrifice victim is not an alternate cast order")
+{
+    EnsureOracleCards();
+    static const ShadowbornProvider provider;
+    GameState s = Board({ "Lake of the Dead", "Reaper from the Abyss" });
+    s.m_provider = &provider;
+    s.players[0].life = s.players[1].life = 20;
+    Hand(s, { "Shadowborn Apostle", "Culling the Weak" });
+    Action culling = CastAction(s, "Culling the Weak");
+    culling.soulfire_own_targets = 100; // the hand Apostle, which must be cast before Culling
+    culling.trick_hand_target = "Shadowborn Apostle";
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Shadowborn Apostle"), culling });
+    const auto verdict = manaoracle::PlanVerdict(s, /*pre=*/true, plan, { plan });
+    INFO("verdict: ", Joined(verdict));
+    CHECK_FALSE(Has(verdict, "APPLY-DROP-ORDER"));
+    CHECK(Has(verdict, "PHANTOM"));
+}
+
 // THE EQUIP ROUTE'S TAPE (KittyEquipment mana-clean, 2026-11-04). The route's links go through RouteLinkApply: with no
 // tape armed (all of play) it is ApplyPlan and nothing else; armed, it records the link -- the board before and after,
 // the plan, the DFS frame -- and a DFS branch that does not win is rewound off it.

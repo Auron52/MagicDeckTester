@@ -3790,6 +3790,26 @@ std::string SiblingKey(const TurnSolver::Plan& p)
     return k;
 }
 
+// A fixed sacrifice-victim policy can require a hand creature to be cast before
+// the spell that eats it. Reordering that spell ahead of the creature may still
+// be rules-legal by sacrificing a different battlefield creature, but it is a
+// different victim choice, not an alternate payment/order of this searched line.
+// Shadowborn's Apostle-before-Culling policy is one such case (seed 30075090).
+bool ViolatesHandSacVictimOrder(const TurnSolver::Plan& p)
+{
+    std::set<std::string> earlier_casts;
+    for (const Action& a : p.actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        if (!a.trick_hand_target.empty() && a.def != nullptr
+            && a.def->params.sac_additional_creature
+            && earlier_casts.count(a.trick_hand_target) == 0)
+        { return true; }
+        earlier_casts.insert(a.card_name.str());
+    }
+    return false;
+}
+
 // The hand cards a plan means to use (a cast, a Vial put, a put-from-hand).
 std::multiset<std::string> PlanHandCards(const TurnSolver::Plan& p)
 {
@@ -4548,9 +4568,13 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             }
             return { std::move(got), cap };
         };
+        bool victim_order_skipped = false;
+        const bool fixed_sac_victim = ResolveProvider(root).SacCostVictimFixed(root);
         for (std::size_t ai = 0; ai < alts.size(); ++ai)
         {
             const TurnSolver::Plan& alt = alts[ai];
+            if (fixed_sac_victim && ViolatesHandSacVictimOrder(alt))
+            { victim_order_skipped = true; continue; }
             if (DecisionOut())
             { other_partial = true; if (other_why.empty()) { other_why = "the decision work budget ran out"; } break; }
             // HIT-ONLY (item 5f, Jumbo seed 30094355 T4: 80 engine-drop T&N x Finale x Greaves plans spent the
@@ -4664,7 +4688,10 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                                                "many actions to try every order");
             return;
         }
-        Emit(C_PHANTOM, root, pre, plan, dropped + "; no order or payment realises it");
+        Emit(C_PHANTOM, root, pre, plan, dropped + (victim_order_skipped
+            ? "; no policy-admissible order or payment realises it (a rejected order would cast the "
+              "sacrifice spell before its fixed hand victim)"
+            : "; no order or payment realises it"));
         return;
     }
     // ---- the engine realised the whole plan: I1 (cover) and I2 (domination) --------------------------
