@@ -47750,16 +47750,38 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
     if (s_line_surplus && LineGenericOrderLive()
         && (_lu.white + _lu.blue + _lu.black + _lu.red + _lu.green) > 0)
     {
-        struct Ent { int* res; int surplus; };
+        // MTG_LINE_SURPLUS_KEEP_DEMAND (default ON; =0 restores the prior single drain):
+        // the line total includes this cast's pips until payment lands, so subtract
+        // those already-paid pips before ranking the remaining colours. Spend each
+        // colour's true surplus first, then the demanded units only if needed.
+        static const bool s_keep_line_demand = EnvOn("MTG_LINE_SURPLUS_KEEP_DEMAND", true);
+        int later[5];
+        if (s_keep_line_demand) { LineOwedAfterOwnPips(later); }
+        else
+        { later[0] = _lu.white; later[1] = _lu.blue; later[2] = _lu.black;
+          later[3] = _lu.red; later[4] = _lu.green; }
+        struct Ent { int* res; int surplus; int owed; };
         Ent e[5] = {
-            { &reserve.white, reserve.white - _lu.white },
-            { &reserve.blue,  reserve.blue  - _lu.blue  },
-            { &reserve.black, reserve.black - _lu.black },
-            { &reserve.red,   reserve.red   - _lu.red   },
-            { &reserve.green, reserve.green - _lu.green },
+            { &reserve.white, reserve.white - later[0], later[0] },
+            { &reserve.blue,  reserve.blue  - later[1], later[1] },
+            { &reserve.black, reserve.black - later[2], later[2] },
+            { &reserve.red,   reserve.red   - later[3], later[3] },
+            { &reserve.green, reserve.green - later[4], later[4] },
         };
         std::stable_sort(std::begin(e), std::end(e),
                          [](const Ent& a, const Ent& b) { return a.surplus > b.surplus; });
+        // Keep the units the declared line still owes until every colour's surplus has
+        // had a chance to pay. Draining one colour to zero here can strand a later
+        // cast even when another colour has unused surplus (Shadowborn: Lake black
+        // and Lotus red paying Sire before Culling the Weak).
+        if (s_keep_line_demand)
+        {
+            for (Ent& x : e)
+            {
+                int spare = std::max(0, *x.res - x.owed);
+                while (cost.generic > 0 && spare > 0) { --cost.generic; --*x.res; --spare; }
+            }
+        }
         for (Ent& x : e) { drain(cost.generic, *x.res); }
         if (hold_c) { drain(cost.generic, reserve.colorless); }
         return;

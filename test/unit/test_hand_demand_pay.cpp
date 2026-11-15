@@ -176,6 +176,30 @@ TEST_CASE("Pay hand surplus first: Sire's generic spends the red, the black stay
     CHECK(off.floating_mana.red == 2);
 }
 
+TEST_CASE("Line surplus generic keeps Culling's black when Sire uses Lake and Lotus")
+{
+    GameState s;
+    s.active_player_index = 0;
+    s.turn_number = 4;
+    s.floating_mana.black = 5;  // Lake crack plus its sacrificed Swamp's tap
+    s.floating_mana.red = 3;    // Lotus Bloom
+    const ManaCost sire = DefHD("Sire of Insanity").card.m_mana_cost;
+    const ManaCost culling = DefHD("Culling the Weak").card.m_mana_cost;
+    LineUnpaidCostScope hold(AddManaCosts(sire, culling));
+    REQUIRE(TapForCostDirect(s, sire, /*for_creature=*/true));
+    if (EnvOn("MTG_LINE_SURPLUS_KEEP_DEMAND", true))
+    {
+        CHECK(s.floating_mana.black == 1);
+        CHECK(s.floating_mana.red == 1);
+        REQUIRE(TapForCostDirect(s, culling, /*for_creature=*/false));
+    }
+    else
+    {
+        CHECK(s.floating_mana.black == 0);
+        CHECK(s.floating_mana.red == 2);
+    }
+}
+
 TEST_CASE("Martyr sac first: the pre-cast pass skips an order that does not pay, and only for a Martyr already out")
 {
     static const MartyrLifegainProvider prov;
