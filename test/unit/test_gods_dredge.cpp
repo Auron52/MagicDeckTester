@@ -80,13 +80,15 @@ TEST_CASE("Gods search policy ranks physical dredgers and post-draw discards")
         ? std::atoi(std::getenv("MTG_GODS_DREDGE_RULE")) : 4;
     if (dredge_rule >= 4)
     {
-        CHECK(provider.DredgeHumanDefault(s, 0, menu) == (dredge_rule >= 5 ? 0 : 4));
+        CHECK(provider.DredgeHumanDefault(s, 0, menu) == 0);
         p.hand.push_back(MakeCard("Forest", 70, CardDatabase::Instance().Lookup("Forest")));
         CHECK(provider.DredgeHumanDefault(s, 0, menu) == 1); // highest dredge with land in hand
         p.hand.clear();
     }
     const auto offered = DredgeSearchChoices(s, 0, menu);
     if (dredge_rule >= 5)
+    { CHECK(offered == std::vector<int>{0}); }
+    else if (dredge_rule >= 4)
     { CHECK(offered == std::vector<int>{0}); }
     else if (dredge_rule >= 2)
     { CHECK(offered == std::vector<int>{14}); }
@@ -100,8 +102,18 @@ TEST_CASE("Gods search policy ranks physical dredgers and post-draw discards")
         const std::vector<int> no_pins;
         std::vector<int> recorded;
         ScriptedDredge chooser(no_pins, nullptr, &recorded);
-        CHECK(chooser.Choose(s, 0, menu) == (dredge_rule >= 5 ? 0 : 4));
-        CHECK(recorded == std::vector<int>{dredge_rule >= 5 ? 0 : 14});
+        CHECK(chooser.Choose(s, 0, menu) == 0);
+        CHECK(recorded == std::vector<int>{0});
+        for (int lands = 1; lands <= 2; ++lands)
+        {
+            Permanent field;
+            field.card = MakeCard("Forest", 80 + lands, CardDatabase::Instance().Lookup("Forest"));
+            field.controller_index = 0;
+            s.battlefield.push_back(std::move(field));
+            CHECK(DredgeSearchChoices(s, 0, menu) ==
+                  (lands == 1 ? std::vector<int>{0} : std::vector<int>{14}));
+        }
+        s.battlefield.clear();
     }
     if (dredge_rule >= 5)
     {

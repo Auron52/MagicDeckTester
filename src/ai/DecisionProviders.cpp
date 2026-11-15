@@ -24401,6 +24401,11 @@ static std::vector<int> GodsDredgeCandidatesForRule(
             { return { 0 }; }
             return { best };
         }
+        // With zero or one land and none in hand, Loam cannot be cast from
+        // lands alone. The user chose a natural draw here; at two lands Loam
+        // can instead recover the graveyard lands.
+        if (base_rule >= 4 && lands_in_play < 2 && hand_lands == 0)
+        { return { 0 }; }
         if (loam != 0 && lands_in_play < 3 && hand_lands == 0 && grave_lands > 0)
         { return { loam }; }
         if (base_rule >= 4)
@@ -24409,9 +24414,8 @@ static std::vector<int> GodsDredgeCandidatesForRule(
             static const bool retrieval_dredge_env = EnvOn("MTG_GODS_RETRIEVAL_DREDGE", true);
             const bool retrieval_dredge = heurarm::Flag(
                 heurarm::GODS_RETRIEVAL_DREDGE, retrieval_dredge_env);
-            if ((lands_in_play < 2 && hand_lands == 0)
-                || (lands_in_play >= 3 && grave_gods >= 3 && !has_replenish
-                    && (rule != 4 || !retrieval_dredge)))
+            if (lands_in_play >= 3 && grave_gods >= 3 && !has_replenish
+                && (rule != 4 || !retrieval_dredge))
             { return { 0 }; }
             return { best };
         }
