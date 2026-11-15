@@ -10374,8 +10374,8 @@ std::uint64_t LineColorlessHoldMask(const GameState& state, const ManaCost& cost
 //   * their {T} SOURCES, so a cast payment cannot tap one for mana and thereby nullify the {T} half
 //     of that activation's own cost (the source ends up TAPPED and the branch no-ops silently);
 //   * enough providers of each COLOUR their costs need, beyond this payment's own pips and the
-//     float, narrowest provider first (a mono source before a dual whose other colour a later cast
-//     may want; tie: lower battlefield index -- deterministic).
+//     float, preferring a provider whose other colours the line does not need, then narrowest
+//     provider and lower battlefield index.
 // Counts, not "every provider when scarce": LineColorlessHoldMask's shape rather than
 // ScarceColorHoldMask's, because holding more than the activation needs only makes the held attempt
 // fail and costs a second solve. Same reserved-first / unrestricted-retry contract as every mask
@@ -10522,9 +10522,33 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     if (np == 0) { return mask; }
     std::sort(prov, prov + np, [](const Prov& a, const Prov& b)
     { return a.breadth != b.breadth ? a.breadth < b.breadth : a.idx < b.idx; });
+    // A held activation provider can also be the only source of a cast colour. Prevent Damage
+    // s30027719 T6: holding Karplusan Forest for Pyrohemia's {R} spends a black source on Dina's
+    // {G} and strands Beseech's {B}{B}{B}; Battlefield Forge can supply the same {R} while its
+    // other colour is not owed by the line. Keep the historical breadth order as the =0 arm.
+    static const bool s_cast_demand_env = EnvOn("MTG_ACT_HOLD_CAST_DEMAND", true); // DEFAULT ON; =0 restores breadth order
+    const bool s_cast_demand = heurarm::Flag(heurarm::ACT_HOLD_CAST_DEMAND, s_cast_demand_env);
+    const int cast_demand = (g_line_unpaid_cost.white > 0 ? 1 : 0)
+                          | (g_line_unpaid_cost.blue  > 0 ? 2 : 0)
+                          | (g_line_unpaid_cost.black > 0 ? 4 : 0)
+                          | (g_line_unpaid_cost.red   > 0 ? 8 : 0)
+                          | (g_line_unpaid_cost.green > 0 ? 16 : 0);
+    auto preferred = [&](const Prov& a, const Prov& b, int colour) -> bool
+    {
+        if (s_cast_demand && cast_demand != 0)
+        {
+            const int competing = cast_demand & ~(1 << colour);
+            const int a_comp = std::popcount(static_cast<unsigned>(a.colors & competing));
+            const int b_comp = std::popcount(static_cast<unsigned>(b.colors & competing));
+            if (a_comp != b_comp) { return a_comp < b_comp; }
+        }
+        return a.breadth != b.breadth ? a.breadth < b.breadth : a.idx < b.idx;
+    };
     for (int c = 0; c < 5; ++c)
     {
         int left = need_cab[c];
+        if (left > 0 && s_cast_demand && cast_demand != 0)
+        { std::sort(prov, prov + np, [&](const Prov& a, const Prov& b) { return preferred(a, b, c); }); }
         for (int k = 0; k < np && left > 0; ++k)
         {
             if (!prov[k].cab_ok || !(prov[k].colors & (1 << c))) { continue; }
@@ -10536,6 +10560,8 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
     for (int c = 0; c < 5; ++c)
     {
         int left = need[c];
+        if (left > 0 && s_cast_demand && cast_demand != 0)
+        { std::sort(prov, prov + np, [&](const Prov& a, const Prov& b) { return preferred(a, b, c); }); }
         for (int k = 0; k < np && left > 0; ++k)
         {
             if (!(prov[k].colors & (1 << c))) { continue; }

@@ -88,6 +88,26 @@ int Opp(const GameState& s) { return s.players[1].life; }
 
 }   // namespace
 
+TEST_CASE("Prevent Damage activation hold keeps a cast-needed green source free")
+{
+    GameState s = Board();
+    Put(s, "Karplusan Forest");
+    Put(s, "Battlefield Forge");
+    PlanTraits t;
+    t.act_pips[3] = 1; // Pyrohemia activation after Dina and Beseech
+    PlanTraitsScope plan(&t);
+    LineUnpaidCostScope line(Cost(0, 0, /*b=*/4, /*r=*/1, /*g=*/1));
+    const std::int8_t old = heurarm::t_arm[heurarm::ACT_LINE_HOLD];
+    const std::int8_t old_rank = heurarm::t_arm[heurarm::ACT_HOLD_CAST_DEMAND];
+    heurarm::t_arm[heurarm::ACT_LINE_HOLD] = 1;
+    heurarm::t_arm[heurarm::ACT_HOLD_CAST_DEMAND] = 0;
+    CHECK(ActLineHoldMask(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1)) == (1ull << 0));
+    heurarm::t_arm[heurarm::ACT_HOLD_CAST_DEMAND] = 1;
+    CHECK(ActLineHoldMask(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1)) == (1ull << 1));
+    heurarm::t_arm[heurarm::ACT_HOLD_CAST_DEMAND] = old_rank;
+    heurarm::t_arm[heurarm::ACT_LINE_HOLD] = old;
+}
+
 TEST_CASE("Prevent Damage: Tamanoa gains on a painland's coloured tap, not on its painless {C} tap")
 {
     GameState s = Board();
