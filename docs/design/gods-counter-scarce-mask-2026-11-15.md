@@ -45,6 +45,24 @@ cells with exact ground-truth play digests, all 561 scenarios, and the strict
 viewer replay (zero play drift, board divergence, or enum gaps among 864
 references). The per-game audit reports zero changed games in either tier.
 
-The flag remains default off while a 5,000-game PGO paired sample checks for
-rarer quality losses. If adopted, the default-on change and a fresh Gods
-mana-clean gate require a new PGO build stamped with the adopted source.
+On a fresh 5,000-game paired PGO sample (seeds 9,200,001–9,205,000), both
+arms won 4,894 games. The flag-on arm changed four play digests: three kept
+their win turn and one moved from turn seven to turn eight; none improved.
+Loss-penalized average moved from 5.5748 to 5.5750, and search units from
+259,571,921 to 259,707,511 (+0.052%). The summed per-job runtime rose from
+32,444,377 to 33,094,097 ms (+2.0%); these sequential runs do not isolate
+CPU contention. In the slower game (seed 9,202,050, index 2,049), the shipped
+depth-six/budget-20 search chose Careful Study before Life from the Loam on
+turn four with the mask, delaying the win. At depth eight with unlimited budget,
+both arms make the same turn-four Loam play and win on turn seven. This is a
+bounded-search sensitivity, not a lost legal line. The held-out acceptance bar
+requires every affected deck's net turn change to be non-positive, so this
+version remains default off. The next step is to narrow its trigger further
+without losing the four focused oracle repairs, then repeat a fresh held-out
+comparison.
+
+A follow-up shortcut skipped a held solve when the payer's total-mana upper
+bound proved that reserving the scarce sources could not pay the current cast.
+It preserved the legal-payment set, but the slower seed still chose Study first
+and won on turn eight. The shortcut was discarded; the source remains the
+default-off trial measured above.
