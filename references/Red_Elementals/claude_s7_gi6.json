@@ -1,0 +1,301 @@
+{
+  "seed": 7, "game_index": 6, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Fiery Islet" }, { "num": 29, "name": "Lightning Bolt" }, { "num": 35, "name": "Mountain" }, { "num": 1, "name": "Ball Lightning" }, { "num": 57, "name": "Thunderkin Awakener" }, { "num": 30, "name": "Lightning Bolt" }, { "num": 52, "name": "Spark Elemental" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Spark Elemental"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Incandescent Soulstoke" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 35, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Thunderkin Awakener", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 2, "summary": "land=Fiery Islet; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 18,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 5, "num": 52, "is_land": false, "power": 3, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Thunderkin Awakener", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Spark Elemental (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 5, "num": 52, "tapped": true, "is_land": false, "power": 3, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Thunderkin Awakener", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Fiery Islet", "cast=Thunderkin Awakener"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Ball Lightning" }],
+  "events": [{ "turn": 1, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (its own trigger)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 4, "num": 35, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 57, "name": "Thunderkin Awakener", "cost": "{1}{R}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Lightning Bolt → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Lightning Bolt", "Lightning Bolt"], "cast_order_canonical": ["Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=Fiery Islet; cast: Thunderkin Awakener", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Thunderkin Awakener"], "actions": [{ "card": "Thunderkin Awakener" }] },
+    { "index": 2, "summary": "land=Fiery Islet; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 3, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 19, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 6,
+  "type": "gy_return_one",
+  "source": "Thunderkin Awakener (attack)",
+  "turn": 2,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 19, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 1,
+  "alt_text": "",
+  "candidates": [{ "index": 1, "name": "Spark Elemental" }],
+  "note": "reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return to the battlefield."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "trigger", "text": "Thunderkin Awakener (attack): returns Spark Elemental tapped and attacking (sacrificed at the next end step)" }, { "turn": 2, "kind": "return", "text": "♻️ Spark Elemental -- returned to the battlefield (Thunderkin Awakener (attack))" }, { "turn": 2, "kind": "combat", "text": "⚔ attacked: Thunderkin Awakener (1), Spark Elemental (3) — 4 to opponent (17→13)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 19, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 7, "num": 52, "tapped": true, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "cast=Lightning Bolt", "cast=Lightning Bolt"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Blistering Firecat" }],
+  "events": [{ "turn": 2, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (put onto the battlefield this turn)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 19, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "is_land": true, "taps": "UR" }, { "name": "Mountain", "idx": 4, "num": 35, "is_land": true, "taps": "R" }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Lightning Bolt → opponent, Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt", "Lightning Bolt"], "cast_order_canonical": ["Lightning Bolt", "Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }, { "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 1, "summary": "land=none; cast: Lightning Bolt → opponent", "declared_order_payability": "not_verified", "land": null, "casts": ["Lightning Bolt"], "actions": [{ "card": "Lightning Bolt", "burn_target": "opponent" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "sacrifice Fiery Islet to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fiery Islet", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 9,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 29, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Spark Elemental"], "library_size": 50, "land_drops_left": 1, "floating_mana": {"R": 2} },
+  "opponent": { "life": 13, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "3/3 Creature (opponent)" }, { "kind": "permanent", "index": 6, "label": "Thunderkin Awakener (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "3/3 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "Thunderkin Awakener (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Lightning Bolt",
+  "turn": 3,
+  "per_target_damage": 3, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 30, "name": "Lightning Bolt", "cost": "{R}", "mv": 1, "kind": "nonpermanent" }], "graveyard": ["Lightning Bolt", "Spark Elemental"], "library_size": 50, "land_drops_left": 1, "floating_mana": {"R": 1} },
+  "opponent": { "life": 10, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }, { "kind": "permanent", "index": 3, "label": "3/3 Creature (opponent)" }, { "kind": "permanent", "index": 6, "label": "Thunderkin Awakener (yours)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }, { "index": 2, "label": "3/3 Creature (opponent)", "targets": [{ "kind": "permanent", "index": 3 }] }, { "index": 3, "label": "Thunderkin Awakener (yours)", "targets": [{ "kind": "permanent", "index": 6 }] }],
+  "note": "reply an option index. Each chosen target takes 3 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 11,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (13→10)" }, { "turn": 3, "kind": "damage", "text": "🔥 Lightning Bolt: 3 to opponent (10→7)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Lightning Bolt", "Spark Elemental"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 12,
+  "type": "gy_return_one",
+  "source": "Thunderkin Awakener (attack)",
+  "turn": 3,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Lightning Bolt", "Spark Elemental"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 7, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 1,
+  "alt_text": "",
+  "candidates": [{ "index": 1, "name": "Spark Elemental" }],
+  "note": "reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return to the battlefield."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "trigger", "text": "Thunderkin Awakener (attack): returns Spark Elemental tapped and attacking (sacrificed at the next end step)" }, { "turn": 3, "kind": "return", "text": "♻️ Spark Elemental -- returned to the battlefield (Thunderkin Awakener (attack))" }, { "turn": 3, "kind": "combat", "text": "⚔ attacked: Thunderkin Awakener (1), Spark Elemental (3) — 4 to opponent (7→3)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 7, "num": 52, "tapped": true, "is_land": false, "power": 3, "toughness": 1 }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "tapped": true, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Lightning Bolt"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Nova Chaser" }],
+  "events": [{ "turn": 3, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (put onto the battlefield this turn)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "is_land": true, "taps": "UR" }, { "name": "Mountain", "idx": 4, "num": 35, "is_land": true, "taps": "R" }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Nova Chaser", "cost": "{3}{R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Lightning Bolt", "Spark Elemental"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "sacrifice Fiery Islet to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fiery Islet", "dig": true, "dig_sacrifice": true }] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 15,
+  "type": "gy_return_one",
+  "source": "Thunderkin Awakener (attack)",
+  "turn": 4,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 18, "battlefield": [{ "name": "Fiery Islet", "idx": 5, "num": 9, "is_land": true, "taps": "UR" }, { "name": "Mountain", "idx": 4, "num": 35, "is_land": true, "taps": "R" }, { "name": "Thunderkin Awakener", "idx": 6, "num": 57, "is_land": false, "power": 1, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 5, "name": "Blistering Firecat", "cost": "{1}{R}{R}{R}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 50, "name": "Nova Chaser", "cost": "{3}{R}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": ["Lightning Bolt", "Lightning Bolt", "Spark Elemental"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 3, "battlefield": [{ "name": "3/3 Creature", "idx": 3, "num": 500000, "is_land": false, "power": 3, "toughness": 3 }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "heuristic_default": 1,
+  "alt_text": "",
+  "candidates": [{ "index": 1, "name": "Spark Elemental" }],
+  "note": "reply 0 for the alternative (alt_text), or the index (1..n) of the graveyard card to return to the battlefield."
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "trigger", "text": "Thunderkin Awakener (attack): returns Spark Elemental tapped and attacking (sacrificed at the next end step)" },
+    { "turn": 4, "kind": "return", "text": "♻️ Spark Elemental -- returned to the battlefield (Thunderkin Awakener (attack))" },
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Thunderkin Awakener (1), Spark Elemental (3) — 4 to opponent (3→-1)" }
+  ]
+}

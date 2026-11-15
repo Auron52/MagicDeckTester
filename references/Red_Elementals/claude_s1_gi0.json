@@ -1,0 +1,284 @@
+{
+  "seed": 1, "game_index": 0, "win_turn": 4, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 35, "name": "Mountain" }, { "num": 52, "name": "Spark Elemental" }, { "num": 1, "name": "Ball Lightning" }, { "num": 25, "name": "Legion Leadership" }, { "num": 21, "name": "Incandescent Soulstoke" }, { "num": 36, "name": "Mountain" }, { "num": 9, "name": "Fiery Islet" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Mountain", "cast=Spark Elemental"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Mountain" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 35, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 52, "name": "Spark Elemental", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Spark Elemental", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Spark Elemental"], "actions": [{ "card": "Spark Elemental" }] },
+    { "index": 2, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 4, "num": 52, "is_land": false, "power": 3, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 1, "kind": "combat", "text": "⚔ attacked: Spark Elemental (3) — 3 to opponent (20→17)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Spark Elemental", "idx": 4, "num": 52, "tapped": true, "is_land": false, "power": 3, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Mountain", "cast=Flamekin Bladewhirl"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Flamekin Bladewhirl" }],
+  "events": [{ "turn": 1, "kind": "trigger", "text": "⏳ Spark Elemental -- sacrificed at the beginning of the end step (its own trigger)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Flamekin Bladewhirl", "cost": "{R}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 36, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Flamekin Bladewhirl"], "actions": [{ "card": "Flamekin Bladewhirl" }] },
+    { "index": 1, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Flamekin Bladewhirl"], "actions": [{ "card": "Flamekin Bladewhirl" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Flamekin Bladewhirl"], "actions": [{ "card": "Flamekin Bladewhirl" }] },
+    { "index": 3, "summary": "land=none; cast: Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": null, "casts": ["Flamekin Bladewhirl"], "actions": [{ "card": "Flamekin Bladewhirl" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 12,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 5,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "sick": true, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "land=Mountain", "cast=Incandescent Soulstoke"], "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Ball Lightning" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "is_land": false, "power": 2, "toughness": 1 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 36, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Incandescent Soulstoke", "cost": "{2}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 37, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 1, "summary": "land=Mountain; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 2, "summary": "land=Fiery Islet; cast: Incandescent Soulstoke", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Incandescent Soulstoke"], "actions": [{ "card": "Incandescent Soulstoke" }] },
+    { "index": 3, "summary": "land=Mountain; cast: Incandescent Soulstoke", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Incandescent Soulstoke"], "actions": [{ "card": "Incandescent Soulstoke" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 5, "summary": "land=Mountain; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 6, "summary": "land=none; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 7, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 9, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Incandescent Soulstoke", "idx": 7, "num": 21, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }], "graveyard": ["Spark Elemental"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 17, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Flamekin Bladewhirl (3) — 3 to opponent (17→14)" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "tapped": true, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Incandescent Soulstoke", "idx": 7, "num": 21, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 37, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }], "graveyard": ["Spark Elemental"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 6, "cast_order": ["**", "land=Mountain", "sfput=Ball Lightning#21", "cast=Legion Leadership"], "decision": {
+  "decision_index": 10,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Mountain" }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Incandescent Soulstoke", "idx": 7, "num": 21, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 35, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 4, "num": 36, "is_land": true, "taps": "R" }, { "name": "Mountain", "idx": 6, "num": 37, "is_land": true, "taps": "R" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }, { "num": 25, "name": "Legion Leadership", "cost": "{1}{R/W}", "mv": 2, "kind": "nonpermanent", "mdfc_land_back": "Legion Stronghold" }, { "num": 38, "name": "Mountain", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Fiery Islet; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 1, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 2, "summary": "land=Mountain; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 3, "summary": "land=none; cast: Ball Lightning", "declared_order_payability": "not_verified", "land": null, "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning" }] },
+    { "index": 4, "summary": "land=Fiery Islet; cast: Legion Leadership → Flamekin Bladewhirl, put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Legion Leadership", "Ball Lightning"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }, { "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 5, "summary": "land=Fiery Islet; cast: Legion Leadership → Incandescent Soulstoke, put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Legion Leadership", "Ball Lightning"], "actions": [{ "card": "Legion Leadership", "enchant_target": 21, "enchant_target_name": "Incandescent Soulstoke", "trick": true }, { "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 6, "summary": "land=Mountain; cast: Legion Leadership → Flamekin Bladewhirl, put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Legion Leadership", "Ball Lightning"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }, { "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 7, "summary": "land=Mountain; cast: Legion Leadership → Incandescent Soulstoke, put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Legion Leadership", "Ball Lightning"], "actions": [{ "card": "Legion Leadership", "enchant_target": 21, "enchant_target_name": "Incandescent Soulstoke", "trick": true }, { "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 8, "summary": "land=Fiery Islet; cast: put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 9, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 10, "summary": "land=Mountain; cast: put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 11, "summary": "land=none; cast: put Ball Lightning onto battlefield (Incandescent Soulstoke: haste, sacrificed at end step)", "declared_order_payability": "not_verified", "land": null, "casts": ["Ball Lightning"], "actions": [{ "card": "Ball Lightning", "src_num": 21, "activate": true, "cost_pips": "R", "activation_cost": "{1}{R}", "verb": "sfput", "activate_source": "Incandescent Soulstoke" }] },
+    { "index": 12, "summary": "land=Fiery Islet; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 13, "summary": "land=Fiery Islet; cast: Legion Leadership → Incandescent Soulstoke", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 21, "enchant_target_name": "Incandescent Soulstoke", "trick": true }] },
+    { "index": 14, "summary": "land=Mountain; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 15, "summary": "land=Mountain; cast: Legion Leadership → Incandescent Soulstoke", "declared_order_payability": "not_verified", "land": "Mountain", "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 21, "enchant_target_name": "Incandescent Soulstoke", "trick": true }] },
+    { "index": 16, "summary": "land=none; cast: Legion Leadership → Flamekin Bladewhirl", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 13, "enchant_target_name": "Flamekin Bladewhirl", "trick": true }] },
+    { "index": 17, "summary": "land=none; cast: Legion Leadership → Incandescent Soulstoke", "declared_order_payability": "not_verified", "land": null, "casts": ["Legion Leadership"], "actions": [{ "card": "Legion Leadership", "enchant_target": 21, "enchant_target_name": "Incandescent Soulstoke", "trick": true }] },
+    { "index": 18, "summary": "land=Fiery Islet; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Fiery Islet", "casts": [], "actions": [] },
+    { "index": 19, "summary": "land=Legion Leadership -> Legion Stronghold (back face); cast: (nothing)", "declared_order_payability": "not_verified", "land": "Legion Leadership", "casts": [], "actions": [] },
+    { "index": 20, "summary": "land=Mountain; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Mountain", "casts": [], "actions": [] },
+    { "index": 21, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 42,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 11,
+  "type": "target",
+  "source": "Legion Leadership",
+  "turn": 4,
+  "per_target_damage": 0, "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 9, "num": 1, "is_land": false, "power": 7, "toughness": 2 }, { "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Incandescent Soulstoke", "idx": 7, "num": 21, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Spark Elemental"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "legal_targets": [{ "kind": "permanent", "index": 5, "label": "Flamekin Bladewhirl (yours)" }, { "kind": "permanent", "index": 7, "label": "Incandescent Soulstoke (yours)" }, { "kind": "permanent", "index": 9, "label": "Ball Lightning (yours)" }],
+  "heuristic_default": 2,
+  "options": [{ "index": 0, "label": "Flamekin Bladewhirl (yours)", "targets": [{ "kind": "permanent", "index": 5 }] }, { "index": 1, "label": "Incandescent Soulstoke (yours)", "targets": [{ "kind": "permanent", "index": 7 }] }, { "index": 2, "label": "Ball Lightning (yours)", "targets": [{ "kind": "permanent", "index": 9 }] }],
+  "note": "reply an option index. Each chosen target takes 0 damage (up to 1 target(s)). Default = the AI's pick (face)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "reveals": [{ "turn": 4, "source": "Incandescent Soulstoke (put)", "cards": [{ "name": "Ball Lightning", "disposition": "→ battlefield (from hand)" }] }],
+  "mdfc_backs": ["Legion Stronghold"],
+  "me": { "life": 20, "battlefield": [{ "name": "Ball Lightning", "idx": 9, "num": 1, "is_land": false, "power": 14, "toughness": 2 }, { "name": "Flamekin Bladewhirl", "idx": 5, "num": 13, "is_land": false, "power": 3, "toughness": 2 }, { "name": "Incandescent Soulstoke", "idx": 7, "num": 21, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Mountain", "idx": 3, "num": 35, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 4, "num": 36, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 37, "tapped": true, "is_land": true }, { "name": "Mountain", "idx": 8, "num": 38, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 2, "name": "Ball Lightning", "cost": "{R}{R}{R}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 9, "name": "Fiery Islet", "cost": "", "mv": 0, "kind": "land" }], "graveyard": ["Legion Leadership", "Spark Elemental"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 14, "battlefield": [{ "name": "Opponent Basic Land", "idx": 0, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 1, "num": 0, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 0, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 4, "kind": "combat", "text": "⚔ attacked: Flamekin Bladewhirl (3), Ball Lightning (14) — 17 to opponent (14→-3)" }
+  ]
+}
