@@ -1,0 +1,577 @@
+{
+  "seed": 9, "game_index": 8, "win_turn": 6, "won": true,
+  "mulligan": { "count": 0, "bottom": [] }, "karoo_float": 1, "fetch_activation": 1, "opponent_land_model": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 1, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": false,
+  "to_bottom": 0,
+  "hand": [{ "num": 9, "name": "Darkslick Shores" }, { "num": 10, "name": "Darkslick Shores" }, { "num": 21, "name": "Fractured Sanity" }, { "num": 1, "name": "Archive Trap" }, { "num": 48, "name": "Swamp" }, { "num": 49, "name": "Tasha's Hideous Laughter" }, { "num": 27, "name": "Hedron Crab" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Darkslick Shores", "cast=Hedron Crab"], "decision": {
+  "decision_index": 1,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 1, "card": "Visions of Beyond" }],
+  "events": [{ "turn": 0, "kind": "land", "text": "opponent plays Haven of the Spirit Dragon" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 9, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 27, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Darkslick Shores; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 1, "summary": "land=Darkslick Shores; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 2, "summary": "land=Darkslick Shores; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "plans_hidden": 30,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 2,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 3,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 53, "hand_size": 6, "graveyard": [], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "cast=Hedron Crab", "land=Darkslick Shores"], "decision": {
+  "decision_index": 4,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Hedron Crab" }],
+  "events": [{ "turn": 1, "kind": "land", "text": "opponent plays Gruul Turf" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 10, "name": "Darkslick Shores", "cost": "", "mv": 0, "kind": "land" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 28, "name": "Hedron Crab", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 100036, "tapped": true, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Darkslick Shores; cast: Hedron Crab, Visions of Beyond", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab", "Visions of Beyond"], "cast_order_canonical": ["Hedron Crab", "Visions of Beyond"], "actions": [{ "card": "Hedron Crab" }, { "card": "Visions of Beyond" }] },
+    { "index": 1, "summary": "land=Darkslick Shores (after Hedron Crab); cast: Hedron Crab, Visions of Beyond", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_slot": 1, "casts": ["Hedron Crab", "Visions of Beyond"], "cast_order_canonical": ["Hedron Crab", "Visions of Beyond"], "actions": [{ "card": "Hedron Crab" }, { "card": "Visions of Beyond" }] },
+    { "index": 2, "summary": "land=Darkslick Shores; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 3, "summary": "land=Darkslick Shores (after the casts); cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "land_after_casts": true, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 5, "summary": "land=Swamp; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 6, "summary": "land=Swamp (after the casts); cast: Hedron Crab", "declared_order_payability": "not_verified", "land": "Swamp", "land_after_casts": true, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 8, "summary": "land=none; cast: Hedron Crab", "declared_order_payability": "not_verified", "land": null, "casts": ["Hedron Crab"], "actions": [{ "card": "Hedron Crab" }] },
+    { "index": 9, "summary": "land=Darkslick Shores; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 10, "summary": "land=Swamp; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 11, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 12, "summary": "land=Darkslick Shores; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 14, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 105, "summary": "land=Darkslick Shores; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Darkslick Shores", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 106, "summary": "land=Swamp; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 98,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 2,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 100036, "tapped": true, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 52, "hand_size": 6, "graveyard": [], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 6,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 2,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 100036, "tapped": true, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 49, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Glorybringer", "Lightning Bolt"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 2, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 2, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 100036, "tapped": true, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 46, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Glorybringer", "Lightning Bolt", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 8,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "sick": true, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 51, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Gruul Turf", "idx": 3, "num": 100036, "tapped": true, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }], "library_size": 46, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Glorybringer", "Lightning Bolt", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] }
+  ],
+  "plans_hidden": 6,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Swamp", "cast=Tasha's Hideous Laughter"], "decision": {
+  "decision_index": 9,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Archive Trap" }],
+  "events": [{ "turn": 2, "kind": "land", "text": "opponent plays Mountain" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 48, "name": "Swamp", "cost": "", "mv": 0, "kind": "land" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 45, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Glorybringer", "Lightning Bolt", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Swamp; cast: Tasha's Hideous Laughter", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Tasha's Hideous Laughter"], "actions": [{ "card": "Tasha's Hideous Laughter" }] },
+    { "index": 1, "summary": "land=Swamp; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 2, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 3, "summary": "land=Swamp; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [] },
+    { "index": 4, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 5, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 42, "summary": "land=Swamp; cast: Visions of Beyond, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Swamp", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 43, "summary": "land=Swamp; cast: cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": "Swamp", "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 48,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 10,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 45, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Glorybringer", "Lightning Bolt", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 3,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 49, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 42, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": [], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 3, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Tasha's Hideous Laughter"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 28, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Tasha's Hideous Laughter"], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 28, "hand_size": 6, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 14,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Archive Trap" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 21, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Tasha's Hideous Laughter"], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 27, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 2, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 21, "summary": "land=none; cast: Visions of Beyond, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 24,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 4, "decision": {
+  "decision_index": 15,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Oboro, Palace in the Clouds" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 34, "name": "Oboro, Palace in the Clouds", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 23, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Oboro, Palace in the Clouds; cast: Visions of Beyond, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Visions of Beyond", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Visions of Beyond" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 1, "summary": "land=Oboro, Palace in the Clouds; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 2, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 3, "summary": "land=Oboro, Palace in the Clouds; cast: Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 4, "summary": "land=Oboro, Palace in the Clouds; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": [], "actions": [] },
+    { "index": 5, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 16,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 10, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 23, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 17,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 4,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 10, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 20, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Glorybringer", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 18,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 4, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 10, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Visions of Beyond" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 2, "summary": "land=none; cast: Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 19,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "zone", "text": "🔙 Oboro, Palace in the Clouds: returned to owner's hand" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 34, "name": "Oboro, Palace in the Clouds", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 34, "name": "Oboro, Palace in the Clouds", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 48, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }], "library_size": 17, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Oboro, Palace in the Clouds", "cast=Visions of Beyond"], "decision": {
+  "decision_index": 21,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Drown in the Loch" }],
+  "events": [{ "turn": 4, "kind": "land", "text": "opponent plays Mountain" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 34, "name": "Oboro, Palace in the Clouds", "cost": "", "mv": 0, "kind": "land" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 16, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=Oboro, Palace in the Clouds; cast: Visions of Beyond, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Visions of Beyond", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Visions of Beyond" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 1, "summary": "land=Oboro, Palace in the Clouds; cast: Drown in the Loch, Visions of Beyond, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Drown in the Loch", "Visions of Beyond", "Oboro, Palace in the Clouds"], "cast_order_canonical": ["Drown in the Loch", "Visions of Beyond"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Visions of Beyond" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 2, "summary": "land=Oboro, Palace in the Clouds; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 3, "summary": "land=Oboro, Palace in the Clouds; cast: Drown in the Loch, Visions of Beyond", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Drown in the Loch", "Visions of Beyond"], "cast_order_canonical": ["Drown in the Loch", "Visions of Beyond"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Visions of Beyond" }] },
+    { "index": 4, "summary": "land=none; cast: Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond"], "actions": [{ "card": "Visions of Beyond" }] },
+    { "index": 5, "summary": "land=none; cast: Drown in the Loch, Visions of Beyond", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch", "Visions of Beyond"], "cast_order_canonical": ["Drown in the Loch", "Visions of Beyond"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Visions of Beyond" }] },
+    { "index": 6, "summary": "land=Oboro, Palace in the Clouds; cast: Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 7, "summary": "land=Oboro, Palace in the Clouds; cast: Drown in the Loch, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Drown in the Loch", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 8, "summary": "land=Oboro, Palace in the Clouds; cast: Oboro, Palace in the Clouds: return this land to its owner's hand, Visions of Beyond + Drown in the Loch on it (countered to graveyard)", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Oboro, Palace in the Clouds", "Visions of Beyond", "Drown in the Loch"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }, { "card": "Visions of Beyond", "remand_by": "Drown in the Loch", "remand_slot": 4 }] },
+    { "index": 9, "summary": "land=Oboro, Palace in the Clouds; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": [], "actions": [] },
+    { "index": 10, "summary": "land=Oboro, Palace in the Clouds; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 11, "summary": "land=Oboro, Palace in the Clouds; cast: Visions of Beyond + Drown in the Loch on it (countered to graveyard)", "declared_order_payability": "not_verified", "land": "Oboro, Palace in the Clouds", "casts": ["Visions of Beyond", "Drown in the Loch"], "actions": [{ "card": "Visions of Beyond", "remand_by": "Drown in the Loch", "remand_slot": 4 }] },
+    { "index": 12, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 14, "summary": "land=none; cast: Visions of Beyond + Drown in the Loch on it (countered to graveyard)", "declared_order_payability": "not_verified", "land": null, "casts": ["Visions of Beyond", "Drown in the Loch"], "actions": [{ "card": "Visions of Beyond", "remand_by": "Drown in the Loch", "remand_slot": 5 }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 22,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 5,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 16, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 23,
+  "type": "target",
+  "source": "Hedron Crab",
+  "turn": 5,
+  "mill_cards": 3,
+  "max_targets": 1, "min_targets": 1,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 53, "name": "Visions of Beyond", "cost": "{U}", "mv": 1, "kind": "nonpermanent", "is_draw": true }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter"], "library_size": 47, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 13, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "legal_targets": [{ "kind": "player", "index": 1, "label": "Opponent (face)" }, { "kind": "player", "index": 0, "label": "You (face)" }],
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "label": "Opponent (face)", "targets": [{ "kind": "player", "index": 1 }] }, { "index": 1, "label": "You (face)", "targets": [{ "kind": "player", "index": 0 }] }],
+  "note": "reply an option index -- the chosen player mills 3 cards (no damage is dealt). Default = the AI's pick (heuristic_default)."
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 24,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Fractured Sanity" }, { "turn": 5, "card": "Fractured Sanity" }, { "turn": 5, "card": "Tasha's Hideous Laughter" }],
+  "events": [{ "turn": 5, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }, { "turn": 5, "kind": "mill", "text": "Hedron Crab (landfall): opponent mill 3 card(s)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 50, "name": "Tasha's Hideous Laughter", "cost": "{1}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter", "Visions of Beyond"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 10, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Lightning Bolt", "Lightning Greaves", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Gruul Turf", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Tasha's Hideous Laughter", "declared_order_payability": "not_verified", "land": null, "casts": ["Tasha's Hideous Laughter"], "actions": [{ "card": "Tasha's Hideous Laughter" }] },
+    { "index": 1, "summary": "land=none; cast: Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 2, "summary": "land=none; cast: Drown in the Loch, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 4, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 35, "summary": "land=none; cast: Oboro, Palace in the Clouds: return this land to its owner's hand, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 36,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 25,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter", "Tasha's Hideous Laughter", "Visions of Beyond"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 3, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Lightning Bolt", "Lightning Greaves", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Glorybringer", "Gruul Turf", "Gruul Turf", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 26,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "tapped": true, "is_land": true }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "tapped": true, "is_land": true }, { "name": "Hedron Crab", "idx": 2, "num": 27, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "tapped": true, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "tapped": true, "is_land": true }, { "name": "Swamp", "idx": 9, "num": 48, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter", "Tasha's Hideous Laughter", "Visions of Beyond"], "library_size": 44, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }], "library_size": 3, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Lightning Bolt", "Lightning Greaves", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Glorybringer", "Gruul Turf", "Gruul Turf", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": false,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Glimpse the Unthinkable" }],
+  "events": [{ "turn": 5, "kind": "land", "text": "opponent plays Mountain" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Darkslick Shores", "idx": 1, "num": 9, "is_land": true, "taps": "UB" }, { "name": "Darkslick Shores", "idx": 5, "num": 10, "is_land": true, "taps": "UB" }, { "name": "Hedron Crab", "idx": 2, "num": 27, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Hedron Crab", "idx": 4, "num": 28, "is_land": false, "power": 0, "toughness": 2 }, { "name": "Oboro, Palace in the Clouds", "idx": 11, "num": 34, "is_land": true, "taps": "U" }, { "name": "Swamp", "idx": 9, "num": 48, "is_land": true, "taps": "B" }], "vial_counters": [], "hand": [{ "num": 1, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 2, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 3, "name": "Archive Trap", "cost": "{3}{U}{U}", "mv": 5, "kind": "nonpermanent" }, { "num": 13, "name": "Drown in the Loch", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }, { "num": 22, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 23, "name": "Fractured Sanity", "cost": "{U}{U}{U}", "mv": 3, "kind": "nonpermanent" }, { "num": 25, "name": "Glimpse the Unthinkable", "cost": "{U}{B}", "mv": 2, "kind": "nonpermanent" }], "graveyard": ["Fractured Sanity", "Tasha's Hideous Laughter", "Tasha's Hideous Laughter", "Visions of Beyond"], "library_size": 43, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "1/1 Creature", "idx": 8, "num": 500001, "is_land": false, "power": 1, "toughness": 1 }, { "name": "6/6 Creature", "idx": 7, "num": 500000, "is_land": false, "power": 6, "toughness": 6 }, { "name": "Gruul Turf", "idx": 3, "num": 100036, "is_land": true }, { "name": "Haven of the Spirit Dragon", "idx": 0, "num": 100058, "is_land": true }, { "name": "Mountain", "idx": 6, "num": 100031, "is_land": true }, { "name": "Mountain", "idx": 10, "num": 100018, "is_land": true }, { "name": "Mountain", "idx": 12, "num": 100019, "is_land": true }], "library_size": 2, "hand_size": 7, "graveyard": ["Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Atsushi, the Blazing Sky", "Dragonspeaker Shaman", "Fire Diamond", "Glorybringer", "Haven of the Spirit Dragon", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lathliss, Dragon Queen", "Lightning Bolt", "Lightning Bolt", "Lightning Bolt", "Lightning Greaves", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Scourge of Valkas", "Scourge of Valkas", "Urza's Incubator", "Urza's Incubator", "Urza's Incubator", "Utvara Hellkite"], "exile": ["Dragon Tempest", "Dragonspeaker Shaman", "Glorybringer", "Gruul Turf", "Gruul Turf", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Inferno of the Star Mounts", "Mind Stone", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Mountain", "Urza's Incubator", "Utvara Hellkite", "Utvara Hellkite"], "starting_deck": { "name": "Dragons", "slot": 9, "cards": [["Atsushi, the Blazing Sky", 3], ["Inferno of the Star Mounts", 3], ["Scourge of Valkas", 4], ["Dragon Tempest", 4], ["Lightning Bolt", 4], ["Mountain", 18], ["Gruul Turf", 3], ["Urza's Incubator", 4], ["Mind Stone", 2], ["Utvara Hellkite", 3], ["Fire Diamond", 1], ["Lathliss, Dragon Queen", 3], ["Lightning Greaves", 1], ["Dragonspeaker Shaman", 2], ["Sol Ring", 1], ["Glorybringer", 2], ["Haven of the Spirit Dragon", 2]] } },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Fractured Sanity, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Fractured Sanity", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Fractured Sanity" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 1, "summary": "land=none; cast: Fractured Sanity", "declared_order_payability": "not_verified", "land": null, "casts": ["Fractured Sanity"], "actions": [{ "card": "Fractured Sanity" }] },
+    { "index": 2, "summary": "land=none; cast: Glimpse the Unthinkable, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Glimpse the Unthinkable", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Glimpse the Unthinkable" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 3, "summary": "land=none; cast: Glimpse the Unthinkable", "declared_order_payability": "not_verified", "land": null, "casts": ["Glimpse the Unthinkable"], "actions": [{ "card": "Glimpse the Unthinkable" }] },
+    { "index": 4, "summary": "land=none; cast: Drown in the Loch, Glimpse the Unthinkable", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch", "Glimpse the Unthinkable"], "cast_order_canonical": ["Drown in the Loch", "Glimpse the Unthinkable"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Glimpse the Unthinkable" }] },
+    { "index": 5, "summary": "land=none; cast: Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 6, "summary": "land=none; cast: Drown in the Loch, Oboro, Palace in the Clouds: return this land to its owner's hand", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch", "Oboro, Palace in the Clouds"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 8, "summary": "land=none; cast: Drown in the Loch", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }] },
+    { "index": 9, "summary": "land=none; cast: Glimpse the Unthinkable + Drown in the Loch on it (countered to graveyard)", "declared_order_payability": "not_verified", "land": null, "casts": ["Glimpse the Unthinkable", "Drown in the Loch"], "actions": [{ "card": "Glimpse the Unthinkable", "remand_by": "Drown in the Loch", "remand_slot": 3 }] },
+    { "index": 10, "summary": "cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [{ "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 77, "summary": "land=none; cast: Glimpse the Unthinkable, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Glimpse the Unthinkable"], "actions": [{ "card": "Glimpse the Unthinkable" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 78, "summary": "land=none; cast: Oboro, Palace in the Clouds: return this land to its owner's hand, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Oboro, Palace in the Clouds"], "actions": [{ "card": "Oboro, Palace in the Clouds", "src_num": 34, "activate": true, "activation_cost": "{1}", "act_label": "return this land to its owner's hand", "x": 1 }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] },
+    { "index": 79, "summary": "land=none; cast: Drown in the Loch, cycle Fractured Sanity to draw", "declared_order_payability": "not_verified", "land": null, "casts": ["Drown in the Loch"], "actions": [{ "card": "Drown in the Loch" }, { "card": "Fractured Sanity", "dig": true, "dig_sacrifice": false }] }
+  ],
+  "plans_hidden": 84,
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ]
+}
