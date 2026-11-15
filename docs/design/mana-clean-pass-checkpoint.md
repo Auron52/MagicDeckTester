@@ -1753,3 +1753,16 @@ fungus 1,880, gods 4,300 (first run).
   In 5,000 fresh paired games, broad and narrow both averaged 5.4604 win
   turns, with zero faster or slower games and seven changed play digests.
   Fresh PGO re-gate is pending.
+
+* **Shadowborn Culling victim fallback (Codex, 2026-11-15):** The user allowed
+  a narrow nonsearched battlefield-Demon fallback when the preferred
+  hand-Apostle-first Culling line cannot pay. `MTG_SB_CULLING_FALLBACK` admits
+  one fallback only after the provider's exact sequential payment walk proves
+  the preferred version unpayable and the fallback payable; even a plan that
+  omits Apostle is compared with the hand cast added. Seed 30053099 T5 has
+  84 APPLY-DROP-ORDER flags with the fallback off and zero with it on (84
+  DROP-COVERED). All 3,305 unit cases pass. A fresh 5,000-pair A/B is
+  play- and outcome-identical at 4.7538 average win turns, with +0.0095%
+  work units. Integrated as `ddae6910a`; combined regression and fresh
+  PGO gate remain pending. Detail:
+  `docs/design/shadowborn-culling-fallback-codex-2026-11-15.md`.
