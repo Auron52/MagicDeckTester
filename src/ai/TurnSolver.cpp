@@ -20143,6 +20143,7 @@ static std::uint64_t ActionFoldSig(const Action& a)
     FoldMix(h, static_cast<std::uint64_t>(a.max_casts_after));
     FoldMix(h, static_cast<std::uint64_t>(a.enchant_target));
     FoldMix(h, std::hash<std::string>{}(a.trick_hand_target));
+    if (a.trick_put_target) { FoldMix(h, 0xB011u); }
     FoldMix(h, a.evoke  ? 1u : 0u);
     FoldMix(h, a.bestow ? 1u : 0u);
     FoldMix(h, a.adventure ? 1u : 0u);
@@ -22571,7 +22572,15 @@ static bool SubsetHasMissingTrickTarget(const GameState& state,
         bool found = false;
         for (int k : sel)
         {
-            if (k == j || cands[k].kind != Action::Kind::CastFromHand) { continue; }
+            if (k == j) { continue; }
+            if (cands[j].trick_put_target)
+            {
+                if (cands[k].kind == Action::Kind::PutFromHandAbility
+                    && cands[k].card_name == cands[j].trick_hand_target)
+                { found = true; break; }
+                continue;
+            }
+            if (cands[k].kind != Action::Kind::CastFromHand) { continue; }
             const CardDefinition* kd = cands[k].def;
             if (kd && kd->card.IsCreature() && cands[k].card_name == cands[j].trick_hand_target)
             { found = true; break; }
@@ -29833,6 +29842,8 @@ static std::string ExactFalseActionDiff(const Action& x, const Action& y)
     if (x.chosen_float_color.str() != y.chosen_float_color.str()) { add("chosen_float_color", x.chosen_float_color.str(), y.chosen_float_color.str()); }
     if (x.trick_hand_target != y.trick_hand_target)
     { add("trick_hand_target", x.trick_hand_target, y.trick_hand_target); }
+    if (x.trick_put_target != y.trick_put_target)
+    { add("trick_put_target", x.trick_put_target ? "1" : "0", y.trick_put_target ? "1" : "0"); }
     if (x.rock_mana.white != y.rock_mana.white)
     { add("rock_mana.white", std::to_string(x.rock_mana.white), std::to_string(y.rock_mana.white)); }
     if (x.rock_mana.blue != y.rock_mana.blue)
@@ -43151,6 +43162,26 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     if (attackers_only && !TrickHandRecipientCanAttackThisTurn(state, *hd)) { continue; }
                     if (!seen_hand.insert(hc.m_name.str()).second) { continue; }
                     emit(hc.m_number, 0, hc.m_name.str());
+                    // A battlefield put source can land this card before the trick. Keep this
+                    // as a separate searched target: the ordinary hand variant requires a cast.
+                    bool put_source = false;
+                    for (const Permanent& src : state.battlefield)
+                    {
+                        if (src.controller_index != state.active_player_index || src.tapped) { continue; }
+                        const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
+                        if (!sd || !sd->params.tap_put_from_hand_cost.has_value()) { continue; }
+                        if (sd->params.tap_put_from_hand_creature_only && !hd->card.IsCreature()) { continue; }
+                        for (const std::string& type : sd->params.tap_put_from_hand_types)
+                        { if (CardMatchesTypeName(hd->card, type)) { put_source = true; break; } }
+                        if (put_source) { break; }
+                    }
+                    if (put_source)
+                    {
+                        const std::size_t before = actions.size();
+                        emit(hc.m_number, 0, hc.m_name.str());
+                        for (std::size_t n = before; n < actions.size(); ++n)
+                        { actions[n].trick_put_target = true; }
+                    }
                 }
             }
             }
@@ -65144,6 +65175,17 @@ const std::vector<Action>& TurnSolver::DoublerPrepayActs(const GameState& state,
     return scratch;
 }
 
+bool TurnSolver::IsPreTrickPut(const std::vector<Action>& acts, const Action& put)
+{
+    if (put.kind != Action::Kind::PutFromHandAbility || !put.trick_hand_target.empty()) { return false; }
+    for (const Action& trick : acts)
+    {
+        if (trick.kind == Action::Kind::CastFromHand && trick.trick_put_target
+            && trick.trick_hand_target == put.card_name.str()) { return true; }
+    }
+    return false;
+}
+
 bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                       bool mint_prefix, bool hand_demand, bool allow_partial)
 {
@@ -77312,6 +77354,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
     });
+    // A trick aimed at a Soulstoke-style put recipient needs that recipient on the
+    // battlefield at cast time. Run the selected put before cast prepayment in both worlds.
+    for (const Action& a : plan.actions)
+    { if (TurnSolver::IsPreTrickPut(plan.actions, a)) { apply_trailing_activations({a}); } }
     // Loam declares physical graveyard targets before paying its own cost. Whole-plan
     // prepayment can spend a Mine earmarked for a later Loam before an earlier
     // spell's SBA, making that Mine appear to be a legal target. Pay this plan
@@ -77420,7 +77466,17 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                             != mihail_precast_sources.end();
                 }), mihail_filtered.end());
         }
-        const std::vector<Action>& own_final = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
+        const std::vector<Action>& after_mihail = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
+        std::vector<Action> pre_trick_filtered;
+        const bool has_pre_trick_put = std::any_of(plan.actions.begin(), plan.actions.end(), [&](const Action& a)
+        { return TurnSolver::IsPreTrickPut(plan.actions, a); });
+        if (has_pre_trick_put)
+        {
+            pre_trick_filtered = after_mihail;
+            pre_trick_filtered.erase(std::remove_if(pre_trick_filtered.begin(), pre_trick_filtered.end(),
+                [&](const Action& a) { return TurnSolver::IsPreTrickPut(plan.actions, a); }), pre_trick_filtered.end());
+        }
+        const std::vector<Action>& own_final = has_pre_trick_put ? pre_trick_filtered : after_mihail;
         if (pending_cont_acts.empty()) { apply_trailing_activations(own_final); }
         else
         {
@@ -80824,6 +80880,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.solo_target_trick)   // the trick variant (Morph INT-5; lockstep with legacy)
                 {
                     w.Put("#TT"); w.Int(act.enchant_target); w.Put('/'); w.Put(act.trick_hand_target);
+                    if (act.trick_put_target) { w.Put("#PUT"); }
                     w.Put('/'); w.Int(act.soulfire_own_targets); w.Put('/'); w.Int(act.chosen_x);
                 }
                 if (d && RemovalSearchesForController(*d)) { w.Put("#PX"); w.Int(act.enchant_target); }
@@ -86283,6 +86340,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (cd && cd->params.solo_target_trick)
                         {
                             k += "#TT"; k += std::to_string(act.enchant_target); k += '/'; k += act.trick_hand_target;
+                            if (act.trick_put_target) { k += "#PUT"; }
                             k += '/'; k += std::to_string(act.soulfire_own_targets); k += '/'; k += std::to_string(act.chosen_x);
                         }
                         // PATH TO EXILE's searched TARGET (land_search_for_removal_controller): one
@@ -98979,6 +99037,7 @@ static std::string PlanDomKey(const Action& a)
     if (a.face_down != 0) { k += "#FD"; k += std::to_string(a.face_down); }   // morph: face-down vs hard cast of one name (they collided)
     if (a.def != nullptr && a.def->params.solo_target_trick)   // the trick's target / strive count (INT-5)
     { k += "|TT"; k += std::to_string(a.enchant_target); k += '/'; k += a.trick_hand_target;
+      if (a.trick_put_target) { k += "#PUT"; }
       k += '/'; k += std::to_string(a.soulfire_own_targets); }
     k += '|'; k += std::to_string(a.sac_source_id);
     k += '|'; k += a.tutor_target.str();

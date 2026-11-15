@@ -8552,6 +8552,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
         return a.kind == Action::Kind::CastFromHand && d && d->params.return_up_to_gy_lands > 0;
     });
+    for (const Action& a : plan.actions)
+    { if (TurnSolver::IsPreTrickPut(plan.actions, a)) { exec_trailing_activations({a}); } }
     if (!loam_target_plan)
     { TurnSolver::BatchPrepayMainCasts(state, TurnSolver::DoublerPrepayActs(state, plan.actions, dbl_prepay_scratch),
                                       /*mint_prefix=*/false, /*hand_demand=*/false, /*allow_partial=*/true); }
@@ -9140,7 +9142,17 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         != mihail_precast_sources.end();
             }), mihail_filtered.end());
     }
-    const std::vector<Action>& own_final = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
+    const std::vector<Action>& after_mihail = mihail_precast_sources.empty() ? own_unfiltered : mihail_filtered;
+    std::vector<Action> pre_trick_filtered;
+    const bool has_pre_trick_put = std::any_of(plan.actions.begin(), plan.actions.end(), [&](const Action& a)
+    { return TurnSolver::IsPreTrickPut(plan.actions, a); });
+    if (has_pre_trick_put)
+    {
+        pre_trick_filtered = after_mihail;
+        pre_trick_filtered.erase(std::remove_if(pre_trick_filtered.begin(), pre_trick_filtered.end(),
+            [&](const Action& a) { return TurnSolver::IsPreTrickPut(plan.actions, a); }), pre_trick_filtered.end());
+    }
+    const std::vector<Action>& own_final = has_pre_trick_put ? pre_trick_filtered : after_mihail;
     // The section window forgets every card that has left the hand by now (TurnSolver::SectionForgetHandExits;
     // rollout twin before ApplyPlanDirect's trailing pass), so a cast card the trailing pass returns is new.
     if (BpHandEntryEnabled()) { TurnSolver::SectionForgetHandExits(exec_hand_at_section, state); }

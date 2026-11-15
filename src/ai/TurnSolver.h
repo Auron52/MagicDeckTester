@@ -650,6 +650,8 @@ struct Action
                                        // ALSO the Magnetic Theft CREATURE target when it is a same-plan
                                        // hand creature (same meaning, same filter -- the subset must
                                        // cast a creature of that name).
+    bool        trick_put_target = false; // Target enters through a same-plan PutFromHandAbility;
+                                       // that activation must resolve before this cast.
     int         attach_equip_id  = 0;  // MAGNETIC THEFT (CardParams::attach_target_equipment, "Attach
                                        // target Equipment to target creature"): the EQUIPMENT target's
                                        // card.m_number; the CREATURE target rides enchant_target (the
@@ -3321,6 +3323,7 @@ public:
     static bool BatchPrepayMainCasts(GameState& state, const std::vector<Action>& acts,
                                      bool mint_prefix = false, bool hand_demand = false,
                                      bool allow_partial = false);
+    static bool IsPreTrickPut(const std::vector<Action>& acts, const Action& put);
     // DOUBLER AFTER EXALTED (MTG_DOUBLER_AFTER_EXALTED, USER 2026-11-13; GameState::dbl_defer_* note):
     // the CR 500.4 half. Called by BOTH plan appliers (ApplyPlanDirect, the executor's TakeTurn) at the
     // same point, just before the whole-turn prepay: when the plan casts a power doubler and exalted is
