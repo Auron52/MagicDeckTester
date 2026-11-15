@@ -3,7 +3,31 @@
 Shared state for whichever agent (Claude or Codex) continues the Red Elementals analysis. Read this first,
 then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify files/processes before acting.
 
-Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is current).
+Last updated: 2026-11-15 (Codex continuation; the update below supersedes the older running-job notes).
+
+## Codex continuation update
+
+- The 48-block 5c2 job ended `rc=0`: one changed game (one worse, zero better) in 48,000 pairs;
+  verdict NO SIGN. Keep the default tie-break ON under the predeclared rule. The ledger and
+  `horizon-honest-leaf.md` now record it.
+- The ten user references are safe (`check_references_safe.py` passed). Their `s1 gi0` T4 line
+  exposes a concrete search gap: the user puts Ball Lightning with Soulstoke and *then* casts
+  Legion Leadership on it. Search enumerates Leadership targets before the plan, and applies
+  all casts before trailing put activations. It therefore cannot express that order at any depth.
+  Fix both action enumeration and scored/executed ordering, then rerun the reference benchmark,
+  per-game GT attribution and Stage 5d. Do not generate the definitive mulligan profile before
+  this play fix.
+- Codex-play fan-out was attempted with three Codex subagents. This session exposed no shell or
+  filesystem tools to any of them; zero games ran. Record Stage 5d as UN-RUN, not clean.
+- The viewer auditor's sweep escalation was corrected so `verify_card`'s `NOT_FORCED` result
+  remains unverified instead of being promoted back to HARD MISS. Dynamic sweeps passed with
+  no hard misses for Red Elementals (8 seeds from 620000) and Landfall Elementals (6 seeds from
+  620100). In both, Soulstoke's `eot_put` is UNVERIFIED: the automated combat attacks with it,
+  closing the end-step window. A hand-built protocol repro or a hold choice remains owed.
+- A Stage 5i discard bucket proposal is in the ledger, awaiting user review; it is not adopted.
+- Mulligan feasibility discovery completed (400 probes, threshold 0.01, d5): 13 classes; Mountain
+  and Fiery Islet merge, all other cards stay separate. The size-7 composition space is 50,388
+  hands. This is not a runtime estimate; the `recommend` scout belongs after the play fix.
 
 ## >>> CODEX HANDOFF -- START HERE (state at 2026-11-15 04:30 UTC, orchestrator; H2 block below still current) <<<
 

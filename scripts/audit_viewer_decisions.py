@@ -3091,7 +3091,7 @@ def main():
         print(f"\nESCALATING {len(by_card)} sweep miss(es) to a targeted seed-search "
               f"({VERIFY_BUDGET} games each) before reporting -- a short sweep not reaching a "
               f"board state is not evidence the decision is unreachable...")
-        still, reached = [], []
+        still, unreached, reached = [], [], []
         for name, miss in sorted(by_card.items()):
             card = next((c for c in cards if c.get("name") == name), None)
             status, detail = (("NOT_FORCED", {"note": "card not found"}) if card is None
@@ -3100,8 +3100,10 @@ def main():
             print(f"  {name}: expected {sorted(miss)} -> {status} {detail}")
             if status == "VERIFIED":
                 reached.append((name, sorted(miss)))
-            else:
+            elif status == "HARD_MISS":
                 still.extend((name, m, True) for m in sorted(detail.get("missing") or miss))
+            else:
+                unreached.extend((name, m, False) for m in sorted(detail.get("missing") or miss))
         if reached:
             print("  -> REACHABLE after all (sweep coverage, not a wiring gap): "
                   + "; ".join(f"{n} {ms}" for n, ms in reached))
@@ -3146,6 +3148,9 @@ def main():
         unverified = [(n, m, c) for (n, m, c) in still if not c]
         hard_miss += [(n, m, c) for (n, m, c) in still if c]
 
+    # A miss already classified NOT_FORCED by the first targeted search is resolved as
+    # unverified. Do not seed-search it again through the never-cast tail.
+    unverified.extend(unreached)
     if unverified:
         print("\nUNVERIFIED (not reachable by the targeted search either -- needs a hand-built repro):")
         for name, m, _ in unverified:

@@ -9,6 +9,13 @@ evaluate in it."*
 
 This doc is self-contained.
 
+## Red Elementals check (2026-11-15)
+
+At d5 b20, the 12-block check changed 0 of 12,000 paired games. A disjoint 48-block check
+(`--seed-base 3000000`, 48,000 pairs, fold binary at `38454a1a0`) changed one game: one turn worse,
+none better. The checker reports NO SIGN because fewer than 20 games changed. The default remains ON
+under the predeclared no-sign rule; the sample does not establish a benefit for this deck.
+
 ## 1. The defect
 
 Beyond the search horizon, **every line scores the same number**, so an action whose cost lands past

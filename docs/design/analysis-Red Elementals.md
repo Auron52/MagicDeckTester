@@ -586,18 +586,17 @@ logic bug; 7 of 9 are identical at 100x budget. That corrects agent H's hand tra
 exists"): a T6 line exists, and the search finds it at b2000 OFF or b20 ON. Input to play-budget sizing only;
 d5 b20 stays the play setting (the deck's profile, USER-owned settings are unchanged).
 
-**5c2 horizon-honest tie-break (`leaf_tiebreak_check.py`): NO SIGN at 12 blocks; 48-block re-run RUNNING.**
+**5c2 horizon-honest tie-break (`leaf_tiebreak_check.py`): NO SIGN at 12 and 48 blocks; default remains ON.**
 * Run 1 (agent H): 12 blocks x 1,000 games x 2 arms = 24,000 games at play settings (d5 b20), seeds
   1,000,000-2,100,000, HEAD `cfa0d2c13` snapshot, `MTG_PGO=0`. **0 changed games of 12,000 paired (0.000%)**,
   net +0 on both halves. Verdict NO SIGN AT THIS SAMPLE; the script asks for `--blocks 48`.
 * Run 2 (agent H2, launched 2026-11-14 21:40 UTC): `--blocks 48 --seed-base 3000000` (96,000 games, fresh seeds,
   no overlap with run 1) on the fold binary `38454a1a0` (snapshot `build/scratch/redelem/H2/bin_fold/mtg`,
   `MTG_BIN` override, `MTG_PGO=0`). Out `logs/leaf_tiebreak/redelem_H2_b48.out`, verdict
-  `build/scratch/redelem/H2/ltb48.log`, marker `H2/ltb48.DONE`. Heartbeat 12/12 busy; expected to finish around
-  05:30-06:00 UTC 2026-11-15. Handling: KEEP / NEUTRAL or still NO SIGN at 48 blocks -> keep the default ON (a
-  lever that never fires costs nothing; record it in `docs/design/horizon-honest-leaf.md`); OPT OUT -> add
-  `bool GradesNoWinLeaf() const override { return false; }` to `RedElementalsProvider`, record it there, and
-  re-accept the redelem GT.
+  `build/scratch/redelem/H2/ltb48.log`, marker `H2/ltb48.DONE` (`rc=0`). Of 48,000 paired games,
+  **one changed, one worse, zero better**; each 24,000-pair half had at most one change. The script reports
+  NO SIGN (below its 20-change threshold) and estimates 481 blocks for a directional sample. Keep the
+  default ON under the predeclared no-sign rule; this does not establish a benefit for this deck.
 * Reading: a deck that wins at ~T4.4 well inside the d5 horizon rarely reaches a no-win horizon, so the tie-break
   almost never binds. That is consistent with 0 / 12,000.
 
@@ -727,3 +726,49 @@ d5 b20 stays the play setting (the deck's profile, USER-owned settings are uncha
   s5000) at equal turns. Morph's work-cutting hooks (e.g. `TrickTargetsAttackersOnly`,
   `EndStepSacFaceUpDeadAfterCombat`, whose premise is false for this deck) were not taken over. A measured
   deck-specific narrowing belongs to Stage 5f.
+
+## User reference shortfall and current gate (2026-11-15)
+
+Ten user-played references are committed in `references/Red_Elementals/` (`ae3eca75f`). The shipped
+d5 b20 search averages 4.400 turns against the user's 4.400: eight ties, one search faster, one
+search slower. In `claude_s1_gi0.json` the user wins T4, search T5 even at d8 b0 and with the
+Red Elementals provider prunes disabled. The user's T4 sequence is Soulstoke put Ball Lightning,
+then cast Legion Leadership targeting that Ball Lightning. `CollectActions` emits Leadership
+targets from the pre-plan battlefield and from same-plan *hand casts*, but not from same-plan
+Soulstoke puts (`TurnSolver.cpp` solo-target-trick emission). The autonomous apply executes all
+casts before trailing `PutFromHandAbility` activations. Thus no searched plan can express the
+user's put-then-trick order. Human play's explicit sequence can express it and the target prompt
+sees Ball Lightning after the put. This is a search-completeness defect, not budget starvation.
+
+The Codex-play fan-out was attempted with three same-type agents. The session supplied none of
+them shell or filesystem tools, so **zero games ran**. The Stage 5d gate is UN-RUN and must be
+repeated after the put-then-cast capability is fixed. Exhaustive mulligan generation must also
+wait: its labels would otherwise be evaluated on a play engine missing the observed T4 line.
+
+Mulligan feasibility has started: `MTG_EQUIV_DISCOVER=1`, 400 probes, threshold 0.01 at depth 5
+completed on the 12-core box. It found **13 equivalence classes** among 14 distinct cards; only
+Mountain and Fiery Islet merged. The size-7 composition space is `C(19,7) = 50,388` hands.
+This is a feasibility count, not a generation-time projection. Run the `recommend` scout on the
+corrected, frozen play engine before choosing `fast` or `complete`.
+
+The Stage 5h dynamic viewer audit (8 Red Elementals games, seed 620000; 6 Landfall Elementals
+games, seed 620100; each with a 40-game targeted search for misses) exited 0 for both decks.
+Blistering Firecat's `face_up` and Fulminator Mage's `target` were verified by the targeted
+search. Soulstoke's `eot_put` was UNVERIFIED in both: the automated combat always attacks with
+the source, so the window never opens. No hard misses remain, but 5h is not yet fully clean.
+
+## Stage 5i discard bucket proposal (not adopted)
+
+The Stage 4 analyzer reported `STATUS_QUO_OK`: two cleanup discard decisions in 400 d3 games.
+The proposed quota-first keep set, net of permanents already on the battlefield, is:
+
+| bucket | hand quota and preference |
+|---|---|
+| Mana | Keep the next two land drops early, then one; count Mountain, Fiery Islet and Legion Stronghold as lands, but use the Leadership spell face when it makes a lethal attack. Keep red coverage before excess utility lands. |
+| Threats | Keep at least two available attackers or damage spells, counting a ready Thunderkin in the recursion bucket toward this floor. Prioritize a current-turn lethal Ball Lightning, Firecat or Spark, then other hasty bodies and Lightning Bolt. |
+| Enablers | Keep one Soulstoke when a puttable Elemental is in hand, one Leadership when a viable attacker is present, and one Metallic Mimic if it can enter before a useful Elemental. Extra copies are overflow. |
+| Recursion | Keep one Thunderkin when a returnable Elemental is or will soon be in the graveyard; Hellspark with unearth can count as its own threat. |
+
+Within overflow, shed the card furthest from being playable with current board and mana; break
+ties by duplicate redundancy. This is a proposal for the user's review. It has not been coded or
+validated against searched labels, and the generic cleanup ranking remains live.
