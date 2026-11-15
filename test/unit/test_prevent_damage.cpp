@@ -1431,6 +1431,43 @@ TEST_CASE("Prevent Damage useful-mode payment: the rest of the line stays payabl
     CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
 }
 
+TEST_CASE("Prevent Damage floated pain repairs a low-life two-cast line (seed 30044517 T6)")
+{
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts = 2;
+    t.cast_mv_total = 5;
+    t.cast_pips[3] = 1;   // Spellshock R
+    t.cast_pips[4] = 1;   // Living Wish G
+    PlanTraitsScope traits(&t);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 6;
+        s.players[0].life = 3;
+        Put(s, "Tarnished Citadel");
+        Put(s, "Tarnished Citadel");
+        Put(s, "Ancient Tomb");
+        Put(s, "Battlefield Forge");
+        Put(s, "Tamanoa");
+        Put(s, "Rhox Faithmender");
+        return s;
+    };
+    auto run = [&](bool enabled)
+    {
+        HeurArmSet arm(heurarm::PD_FLOAT_LINE_REPAIR, enabled);
+        GameState s = board();
+        LineUnpaidCostScope owed(Cost(3, 0, 0, /*r=*/1, /*g=*/1));
+        CHECK(Pay(s, Cost(2, 0, 0, /*r=*/1)));
+        const bool citadels_free = !s.battlefield[0].tapped && !s.battlefield[1].tapped;
+        const bool wish_pays = Pay(s, Cost(1, 0, 0, 0, /*g=*/1));
+        CHECK_FALSE(SelfHasLost(s));
+        return citadels_free && wish_pays;
+    };
+    CHECK_FALSE(run(false));
+    CHECK(run(true));
+}
+
 TEST_CASE("Prevent Damage harmful-mode payment: the rest of the line stays payable (seed 30024638 T3)")
 {
     // Karplusan Forest, Ancient Tomb, Brushland, Dina out (no gain engine); 17 life. Line: Living Wish {1}{G},

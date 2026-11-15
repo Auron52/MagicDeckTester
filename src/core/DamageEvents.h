@@ -927,6 +927,16 @@ inline bool LineHoldSearchEnabled()
     return heurarm::Flag(heurarm::PD_LINE_HOLD_SEARCH, v);
 }
 
+// A useful-pain line may need more total damage than its current life room, while
+// each tap is survivable after Tamanoa's intervening gain. The ordinary capped
+// repair still runs first; this fallback accepts only a payment whose exact
+// damage-event flush on a copy survives and leaves the next cast payable.
+inline bool FloatLineRepairEnabled()
+{
+    static const bool v = EnvOn("MTG_PD_FLOAT_LINE_REPAIR", true);   // DEFAULT ON; =0 = capped repair only
+    return heurarm::Flag(heurarm::PD_FLOAT_LINE_REPAIR, v);
+}
+
 // The breadth-first part of the hold search (LineHoldSearchEnabled). `layer` = the single pass's
 // stranding attempts as (hold, taps). `try_hold(hold, taps)` re-pays holding `hold` (on top of the
 // caller's t_pay_hold): 1 = accepted, 0 = paid but strands (`taps` = what it tapped), -1 = unpayable.
@@ -1291,6 +1301,33 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
                        return 0;
                    }))
             { paystats::Inc(paystats::kLineRepaired); return true; }
+            if (FloatLineRepairEnabled() && FloatFlushEnabled() && tam > 0 && tapped != 0)
+            {
+                auto try_float_hold = [&](std::uint64_t hold, std::uint64_t& taps) -> int
+                {
+                    pre_line.Restore(s, available);
+                    t_pay_cap = { true, kNoCap, barbs, /*pain_first=*/true, barb_total };
+                    bool r;
+                    { PayHoldScope hs(t_pay_hold | hold); r = attempt(); }
+                    taps = r ? TappedSince(s, pre_line.bf) : tapped;
+                    if (!r) { return 0; }
+                    if (line_ok(false) != 1) { return 0; }
+                    GameState checked = s;
+                    { TapSpeculationScope quiet; FlushDamageEvents(checked); }
+                    return checked.players[ctrl].life > 0 ? 1 : 0;
+                };
+                std::vector<HoldTry> float_layer;
+                for (std::uint64_t m = tapped; m != 0; m &= m - 1)
+                {
+                    const std::uint64_t hold = m & (~m + 1);
+                    std::uint64_t taps = 0;
+                    const int r = try_float_hold(hold, taps);
+                    if (r == 1) { paystats::Inc(paystats::kLineRepaired); return true; }
+                    float_layer.push_back({ hold, taps });
+                }
+                if (LineHoldSearchEnabled() && LineHoldSearch(float_layer, /*first_wins=*/true, try_float_hold))
+                { paystats::Inc(paystats::kLineRepaired); return true; }
+            }
             strand_post.Restore(s, available);
             t_pay_cap = cap;
             return true;
