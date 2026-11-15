@@ -30,7 +30,13 @@ Last updated: 2026-11-15 (Codex continuation; this section supersedes the older 
   (Gods decision and dredge changes). A pooled filtered smoke, regular and overnight run on
   the rebased Release engine passed every Red row and the 2HG canary with **identical scores
   and digests**; strict viewer replay again passed 864 references, with zero drift or enum
-  gaps. Next push and restore the primary checkout/viewer. The Stage 5i
+  gaps. The branch was pushed at `a27d7bf8a`; the primary checkout is back on
+  `phase-1-2-deck-analyzer` at that commit, and the viewer serves Red Elementals on port
+  8080 from the primary checkout with the persistent reference backup active. The local
+  `viewer/redelem` branch was removed after the reference safety scan. The original primary
+  `.vscode/settings.json` edit remains; the old local `test/ref_bench.json` cache is saved in
+  `build/scratch/redelem/primary-local-backup/` and in a stash because it conflicts with the
+  newer shared cache. The Stage 5i
   discard proposal remains unadopted and user-owned; the human viewer still automatically
   declares attackers, so deliberate Soulstoke holds need the forced-hold verifier path.
 
