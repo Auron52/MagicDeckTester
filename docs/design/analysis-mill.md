@@ -97,6 +97,10 @@ The static viewer auditor now passes. Glimpse and Hedron have player-target
 choices; Surgical, Drown's modes, Oboro's activation, and Archive Trap's cost
 choice ride the main-phase plan surface. Drown's Oracle-text modal regex still
 prints an advisory because that scan does not recognize the new modal parameter.
+For the seed-1 rejected line, the viewer now splits a held Polluted Delta crack
+before the queued Drowned Catacomb and Tasha's Hideous Laughter. The fetched
+land is chosen at resolution, and the continuation is validated against that
+new board; `test/viewer_linebuild_check.js` pins this route.
 
 Hedron target search uses a MillProvider-owned set of 16 periodic four-trigger
 patterns. It represents every target sequence for up to four triggers; a unit
