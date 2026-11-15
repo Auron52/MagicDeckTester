@@ -1,7 +1,8 @@
-# Regression ground truth -- commit cc2e1da05  date 2026-11-14
+# Regression ground truth -- commit d068a266e  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
+# accepted-with-regressions (smoke, 2026-11-15): Merfolk Turns smoke d0 gi247 T5 to T6 on merged shared source; reproduces with new Merfolk choices off; d0 net 28 faster and 1 slower, searched rows no slower; docs/design/analysis-Merfolk-Turns.md
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -213,10 +214,10 @@ spirits_smoke_d0_s1001=5.0070/62dc38df804bce43
 spirits_smoke_d3_s1001=4.5800/9bf700a5464ff80a
 spirits_smoke_d5_s1001=4.6500/b1de7e800cda6e9b
 spirits2hg_smoke_d3_s1001=5.1400/8e99f12bbe983564
-merfolkturns_smoke_d0_s1001=6.1280/83fa19badae84f7d
-merfolkturns_smoke_d3_s1001=5.7000/ef16c21c59d6836f
-merfolkturns_smoke_d5_s1001=5.6667/48bdd9b792d0984a
-merfolkturns2hg_smoke_d3_s1001=6.2000/67e1498e96bb1900
+merfolkturns_smoke_d0_s1001=6.0900/37aaad79cc9e7f6c
+merfolkturns_smoke_d3_s1001=5.6000/0325a7085fd5994e
+merfolkturns_smoke_d5_s1001=5.6000/51d5d3a32a66d056
+merfolkturns2hg_smoke_d3_s1001=6.0000/e611dbc207b782f6
 
 # --- regression ---
 mill_regression_d0_s2002=6.7800/9efa9b0dbb121ab3
@@ -548,10 +549,10 @@ spirits_regression_d0_s2002=4.9500/361ba8f18a84bb90
 spirits_regression_d3_s2002=4.6533/9ff8b34de3f4c570
 spirits_regression_d5_s2002=4.6667/13ddea095a681ad4
 spirits_regression_d5_s3003=4.7000/f7a45568d3581698
-merfolkturns_regression_d0_s2002=6.0530/e65a0deb606b7242
-merfolkturns_regression_d3_s2002=5.4000/1379ad677f77ef2e
-merfolkturns_regression_d5_s2002=5.6267/906cc093b24a0284
-merfolkturns_regression_d5_s3003=5.6533/22c6ef9cf9293bda
+merfolkturns_regression_d0_s2002=6.0110/d2981c17295707b1
+merfolkturns_regression_d3_s2002=5.3800/5b45f05b243a8b91
+merfolkturns_regression_d5_s2002=5.5800/cfdb79c8c6e0b0c3
+merfolkturns_regression_d5_s3003=5.6133/d08231c10ec08b2c
 
 # --- overnight ---
 mill_overnight_d0_s4004=6.8300/2dbd5b0890840fc1

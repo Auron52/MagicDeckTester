@@ -795,3 +795,33 @@ needs a better guide than this deck's depth-zero policy to be useful.
 The 40-game discard-shed census recorded 4,796 rollout decisions and zero
 real-game decisions. It supplies no direct evidence for a new discard rule,
 so the existing discard policy remains in place.
+
+After merging the latest shared engine source, the first official pooled
+Merfolk tier improved every measured average but exposed two searched games
+that moved from turn 5 to turn 6. Isolated replays traced both to Seahunter's
+Prophets-first target: the full tutor menu instead fetched Merfolk Sovereign,
+whose lord bonus made combat immediately lethal. Seahunter now keeps the full
+menu when the ready attackers, excluding the Seahunter that taps to tutor,
+could deal lethal damage with Sovereign's bonus. Focused replays restored both
+turn-5 wins while retaining the two sampled Prophets-assisted improvements.
+The corrected pooled tiers measured smoke d0 6.0900 (1,000 games), d3/b10
+5.6000 (10), and d5/b20 5.6000 (30); regression d0 6.0110 (1,000),
+d3/b10 5.3800 (50), and d5/b20 5.5800/5.6133 (150 games on each of two
+seeds). The two small unbudgeted d3/d5 regression sentinels stayed at 5.6667.
+All searched rows improved or held score: sixteen searched games became
+faster (including thirteen across the two d5 regression rows) and none
+slower. D0 regression improved 33 games and worsened none.
+Smoke d0 improved 28 and worsened one (index 247, turn 5 to 6); the same
+turn-6 result reproduces with every new Merfolk choice disabled on the merged
+source, while the pre-merge engine won turn 5. The old depth-zero line cast a
+second Seahunter during a Prophets extra turn and gave it Greaves haste; the
+merged engine leaves it in hand, so the win waits until turn 6. This is a
+greedy search-quality change outside the new choice rules. Smoke and
+regression viewer references had no play drift or board divergence, and
+their two strict beat references still passed. The overnight tier and final
+unit suite are running separately.
+
+The 2HG smoke row was run separately because the `--deck=merfolkturns` filter
+does not include `merfolkturns2hg`. Its ten games improved average 6.2000 to
+6.0000, two games faster and none slower. The smoke, regression, and 2HG rows
+were accepted; the single d0 slowdown is recorded in the smoke GT note.
