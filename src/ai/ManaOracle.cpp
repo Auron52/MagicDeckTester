@@ -41,6 +41,12 @@ thread_local bool  t_gate_observe = false;
 thread_local int   t_seq_step     = -1;
 thread_local RouteTape* t_route_tape = nullptr;
 
+void NoteRippleFreeCast(const GameState& state, int card_number)
+{
+    if (t_hook != nullptr && t_hook->target == &state)
+    { t_hook->ripple_free_casts.push_back(card_number); }
+}
+
 void RouteLinkApply(GameState& s, const TurnSolver::Plan& plan, bool in_dfs)
 {
     RouteTape* const tape = t_route_tape;
@@ -2731,6 +2737,7 @@ struct Outcome
     std::vector<PayOption>     script;
     std::vector<int>           pay_steps;   // Hook::pay_steps: the human-sequence step of each payment
     std::vector<int>           scaled_counted;   // Hook::scaled_counted
+    std::vector<int>           ripple_free_casts; // Hook::ripple_free_casts, survives a later tutor shuffle
     std::string                unscripted;  // a mana source the ENGINE tapped outside any payment
     int                        first_fail = -1;  // the first ENGINE step that failed (the census replay)
     // No drop reported: the engine-comparable sense (an optional payment with no option fails the same
@@ -3046,6 +3053,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 o.script     = script;
                 o.pay_steps  = h.pay_steps;
                 o.scaled_counted = h.scaled_counted;
+                o.ripple_free_casts = h.ripple_free_casts;
                 o.first_fail = h.first_fail;
                 o.left       = LeftHand(root, copy);
                 o.line       = LineKey(root, copy);
@@ -3761,6 +3769,22 @@ bool TapsHiddenCard(const GameState& root, const Outcome& o, std::string* what)
     const int a = root.active_player_index;
     const Library& lib0 = root.players[a].library;
     const Library& lib1 = o.st.players[a].library;
+    // A ripple cast is taken from a reveal on the library's top. Keep that
+    // provenance in the hook: a later Diabolic Intent shuffles the library,
+    // defeating every root/end-library order comparison below. A ritual copy
+    // cast this way can supply float for later actions in the same plan.
+    for (int n : o.ripple_free_casts)
+    {
+        if (LibraryTopVisible(root) && lib0.size() > 0 && n == lib0.RawAt(0).m_number) { continue; }
+        for (const Card& c : o.st.players[a].graveyard)
+        {
+            if (c.m_number != n) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d == nullptr || d->params.ritual_floating_mana <= 0) { continue; }
+            if (what != nullptr) { *what = c.m_name.str() + "#" + std::to_string(n) + " (a ritual rippled off the top)"; }
+            return true;
+        }
+    }
     if (lib1.size() >= lib0.size()) { return false; }
     std::set<int> still;
     for (std::size_t i = 0; i < lib1.size(); ++i) { still.insert(lib1.RawAt(i).m_number); }
@@ -4251,7 +4275,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 same = ScriptText(a.script) == ScriptText(b.script) && a.line == b.line && a.left == b.left
                     && a.unscripted == b.unscripted && a.cast_drops == b.cast_drops && a.act_drops == b.act_drops
                     && a.pay_steps == b.pay_steps && a.first_fail == b.first_fail && a.Clean() == b.Clean()
-                    && a.scaled_counted == b.scaled_counted
+                    && a.scaled_counted == b.scaled_counted && a.ripple_free_casts == b.ripple_free_casts
                     && CoreKey(a.st, /*canonical=*/false) == CoreKey(b.st, /*canonical=*/false);
             }
             if (!same)
@@ -4512,7 +4536,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         }
         if (!order_hidden.empty())
         {
-            Emit(C_HIDDEN_INFO, root, pre, plan, dropped + "; the only order that pays every action taps " + order_hidden
+            Emit(C_HIDDEN_INFO, root, pre, plan, dropped + "; the only order that pays every action uses " + order_hidden
                  + ", a card taken off the top of the library (hidden information, not an order's to know)");
             return;
         }
@@ -4823,11 +4847,11 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
             if (TapsHiddenCard(state, o, &card))
             {
                 g_eg_hidden.fetch_add(1, std::memory_order_relaxed);
-                EgTrace(state, pre, t, "hidden: paying it with " + ScriptText(o.script) + " taps " + card);
+                EgTrace(state, pre, t, "hidden: paying it with " + ScriptText(o.script) + " uses " + card);
                 if (hidden.cls == C_N)
                 {
                     hidden.cls    = C_HIDDEN_INFO;
-                    hidden.detail = "the only payments found tap " + card + ", a card the plan took off the top of "
+                    hidden.detail = "the only payments found use " + card + ", a card the plan took off the top of "
                                     "the library (hidden information, not a gate's to know): " + w.detail;
                 }
                 return false;

@@ -74602,6 +74602,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             FireProwess(state, *md);
             FlushNoncombatTriggersAtPriorityBoundary(state);
             if (state.own_death_live && SelfHasLost(state)) { return; }
+            manaoracle::NoteRippleFreeCast(state, c.m_number);
             casts.push_back(RippleCast{ std::move(c), md, std::move(tut) });
         }
         std::vector<std::vector<int>> inst(casts.size());

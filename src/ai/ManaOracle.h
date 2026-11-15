@@ -44,6 +44,15 @@ namespace manaoracle
     // Empty the payment-refine memo; once per game from TurnSolver::ClearPerGameCaches.
     void ClearRefineMemoPerGame();
     inline bool On() { return Level() > 0; }
+    // AuditDecision's deterministic priced cap, polled by breakpoint enumeration
+    // before its deferred odometer charge is posted. A stopped derivation is
+    // reported CAPPED-DECISION; these return false outside an oracle audit.
+    bool DecisionBudgetActive();
+    bool DecisionBudgetExceededWithOdo(long long pending_visits, bool force_wall_poll = false);
+    // A ripple copy was cast from a library reveal during this oracle apply.
+    // Record its physical id before a later tutor shuffles away the evidence
+    // from the final library order (Shadowborn's Dark Ritual chains).
+    void NoteRippleFreeCast(const GameState& state, int card_number);
 
     // One way to pay one payment: the taps to make (in order), and the floating units to set aside
     // for the duration of the payment so the payer cannot spend them (restored afterwards). The
