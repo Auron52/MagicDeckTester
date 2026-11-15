@@ -818,10 +818,41 @@ second Seahunter during a Prophets extra turn and gave it Greaves haste; the
 merged engine leaves it in hand, so the win waits until turn 6. This is a
 greedy search-quality change outside the new choice rules. Smoke and
 regression viewer references had no play drift or board divergence, and
-their two strict beat references still passed. The overnight tier and final
-unit suite are running separately.
+their two strict beat references still passed.
 
 The 2HG smoke row was run separately because the `--deck=merfolkturns` filter
 does not include `merfolkturns2hg`. Its ten games improved average 6.2000 to
 6.0000, two games faster and none slower. The smoke, regression, and 2HG rows
 were accepted; the single d0 slowdown is recorded in the smoke GT note.
+
+The first overnight held-out pass found three searched games delayed one turn
+by the choice package. Focused replay exposed real lines hidden by the
+initial pruning: a hand Merfolk could be cast before Seahunter fetched
+Prophets, a Tidal Warrior could turn a nonbasic into an Island after the
+existing blue mana was spent, and a harmless Tidal target could make a
+Pilgrimage token without overwriting Three Tree City's stronger mana ability.
+The target rules now keep these lines in search. The full Release unit suite
+passes on this source: 3,164 cases and 3,601,031 assertions.
+
+The corrected 600-game searched A/B (d5/b20, seeds 4004 and 5005, 300 games
+each) improved 26 wins and delayed one, with average turns 5.6133 to 5.5667
+and 5.6200 to 5.5800 respectively. Combined priced work fell from about
+152 million to 54 million units, a 64.8% reduction. The sole slower game,
+seed 4114/index 110, moved from turn 6 to 7. Each individual choice group's
+disable switch restores turn 6; the line diverges on turn 4 between casting
+two Pilgrimages and casting Seahunter. This is a bounded search-order
+interaction of the combined pruning, with a net 26-to-1 searched win-turn
+improvement in the held-out set. The paired `.wins` files and isolated game
+traces are in `build/scratch/merfolk-new-paired-wins/` and
+`build/scratch/merfolk-gi110-audit/` in this worktree.
+
+On the final source, the official smoke tier has d0 6.0930, d3/b10 5.6000,
+and d5/b20 5.6000. Regression has d0 6.0110, d3/b10 5.3600,
+d5/b20 5.5667 and 5.6133, and unchanged unbudgeted sentinels at 5.6667.
+Relative to the previously accepted source, the searched regression rows
+gained three one-turn improvements and no slowdowns. Smoke d0 has three
+one-turn slowdowns (indices 168, 302, 763); turning off the control ability
+pruning across all 1,000 d0 games worsened its average from 6.093 to 6.105.
+The 2HG smoke row remains 6.0000 with a changed play digest. The smoke d0
+tradeoff is acknowledged in regression ground truth; smoke, regression, and
+2HG viewer audits completed without drift or board divergence.
