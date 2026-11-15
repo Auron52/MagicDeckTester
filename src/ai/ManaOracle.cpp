@@ -4292,18 +4292,20 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     struct MainCost { const long long& a0; bool done = false; void Stop() { if (!done) { g_cost_main.fetch_add(t_dec_applies - a0); done = true; } } ~MainCost() { Stop(); } } _main_cost{ main_a0 };
     Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
-    // under a 100000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
+    // under a 200000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
     // (USER 2026-11-03), so the checker must be able to conclude. Fluctuator's cycling turns (each cycle a
     // payment off several coloured lands) put 75 plans per 3,000 games past 2000 applies; at 20000 every one
     // sampled finished. Gods' six capped games on the 30000-34999 block need up to 100000; that ceiling
-    // cleared all 46 flags for 28.4 extra oracle seconds across the six games. Checker-only: play never reads it.
+    // cleared all 46 flags for 28.4 extra oracle seconds across the six games. One new Gods game (s30035423)
+    // still capped at 100000; 200000 clears its two flags for 2.6 extra batch seconds, with identical play.
+    // Checker-only: play never reads it.
     // MTG_MANA_ORACLE_NODES_RETRY overrides the NUMBER
     // only (a value <= 0 is ignored; it is not an off switch). Not under AuditLine's own ceiling (the viewer
     // stays interactive).
     static const int s_retry = []
     {
-        const int v = EnvInt("MTG_MANA_ORACLE_NODES_RETRY", 100000);
-        return v > 0 ? v : 100000;
+        const int v = EnvInt("MTG_MANA_ORACLE_NODES_RETRY", 200000);
+        return v > 0 ? v : 200000;
     }();
     int cap_used = NodeCap();
     if (r.capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())

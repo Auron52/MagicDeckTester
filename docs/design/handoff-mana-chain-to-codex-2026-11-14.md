@@ -127,6 +127,21 @@ rebased onto `c6fd809f5`; the integrated source tree is
 Release build, tests, and then a fresh PGO gate are owed. The older
 `test/mana_clean.json` record remains the last completed official gate.
 
+2026-11-15 continuation: integrated Release passes 3,350 unit cases. A
+colour-specific Reflecting Pool anchor fix (commit `74082b96e`) clears all
+five new `APPLY-DROP` events in Gods seed 30035319. Its 1,000-pair Gods trial
+had one faster win, zero slower, and four play-digest changes. Combined
+Gods/Gods2HG smoke and regression had zero slower games; one two-headed
+play line changed at the same T6 and was accepted after a flag-off control
+reproduced the prior digest. See
+`docs/design/reflecting-pool-anchor-payment-2026-11-15.md`. The three older
+drop games still have four `APPLY-DROP` events. A focused replay at a
+200,000-node oracle retry cleared both `CAPPED` events in seed 30035423,
+with identical play and 2.6 extra batch seconds; the default is now 200,000.
+The three `CAPPED-DECISION` seeds exhaust their budget in gate-observation
+enumeration before any rejected plan is checked. A fresh PGO build and
+integrated Gods gate are next.
+
 ## The program (USER, standing)
 Run every deck through `python3 scripts/mana_clean.py run --games 5000` (always pass `--games 5000`), fix every issue,
 mark each deck. A deck leaves beta only after a clean analysis of >= 5,000 games on a FRESH seed block run after its
