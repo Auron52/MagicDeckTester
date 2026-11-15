@@ -1921,6 +1921,52 @@
      "seed": 30022000,
      "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 151,
+      "APPLY-DROP-ORDER": 66,
+      "CAPPED": 48,
+      "CONTINUATION-DIFFERS": 3,
+      "DOMINATED-LAND": 14288,
+      "DROP-COVERED": 911,
+      "ENUM-GAP": 2,
+      "HIDDEN-INFO": 271,
+      "ORACLE-GAP": 2,
+      "PHANTOM": 10407,
+      "UNMODELED": 6
+     },
+     "commit": "bd12aabe45099834b4e9ac77f6faf428f1e224c5",
+     "date": "2026-11-15T04:36:39Z",
+     "decisions": 38720,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 27000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 275,
+     "life_breakpoints": [],
+     "ms_off": 301736,
+     "ms_on": 2139966,
+     "report": "logs/mana_clean/20261115-043506/report.md",
+     "run": "20261115-043506",
+     "seed": 30027000,
+     "src": "91c08095fe0374ba01aa85edf25b03bbacd34a16",
+     "verdict": "issues"
     }
    ]
   },

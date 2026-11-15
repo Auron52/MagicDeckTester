@@ -1644,3 +1644,13 @@ fungus 1,880, gods 4,300 (first run).
   continuation (rollback census: 10/12 need-later). The deck stays beta; next block 37,000–41,999.
   Details: `docs/design/prevent-damage-activation-hold-codex-2026-11-15.md` and
   `logs/mana_clean/20261115-042452/report.md`.
+
+* **Dragonstorm remeasurement (Codex, 2026-11-15):** The shared PGO binary on fresh game indices
+  27,000–31,999 reports **275 issues** with byte-identical oracle-on/off play: ENUM-GAP 2,
+  APPLY-DROP 151, APPLY-DROP-ORDER 66, ORACLE-GAP 2, UNMODELED 6, CAPPED 48. The previous
+  2,781-issue gate used a different seed block, so these totals are not a paired effect estimate.
+  The 151 drops include multi-cast Lotus Bloom colour allocations (for example seed 30028103 T4
+  and seed 30028436 T5); the 66 order drops include ritual/Apex sequencing (seed 30028649 T4).
+  The two enum gaps share seed 30028849 T4, whose payable order starts Desperate Ritual before
+  Apex of Power. Dragonstorm remains beta; next fresh block 32,000–36,999. Detailed report:
+  `logs/mana_clean/20261115-043506/report.md`.
