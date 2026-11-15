@@ -7401,6 +7401,13 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // passes max_targets = 1 + paid extras with the floor equal to the ceiling; an up-to-one
             // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
             const bool trick = def.params.solo_target_trick;
+            const bool activated_target = def.params.tap_target_pump_cost.has_value();
+            const std::string ability_desc = !activated_target ? std::string()
+                : def.params.tap_target_pump_sets_island ? "made an Island until end of turn"
+                : def.params.tap_target_pump_taps_target_land ? "tapped"
+                : def.params.tap_target_pump_grants_unblockable ? "unblockable this turn"
+                : !def.params.tap_target_pump_power_per_subtype.empty() ? "given the ability's power change"
+                : "given the ability's pump";
             // Sakashima's Protege "enter as a copy of any permanent that entered this turn"
             // (ChooseCopyEntrantIndex routes here with the Protege's own def, e.g. off a cascade
             // flip): the legal set is EVERY battlefield permanent with entered_this_turn -- either
@@ -7493,6 +7500,17 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                     if      (t == CRACKLE_OPP_FACE)  { legal.push_back({ 0, 1 - controller, 0 }); legal_labels.push_back("Opponent"); }
                     else if (t == CRACKLE_SELF_FACE) { legal.push_back({ 0, controller, 0 });     legal_labels.push_back("You (self)"); }
                     else                             { legal.push_back({ 1, t, 0 });              legal_labels.push_back(s.battlefield[t].card.m_name.str()); }
+                }
+            }
+            else if (activated_target)
+            {
+                for (int bi = 0; bi < static_cast<int>(s.battlefield.size()); ++bi)
+                {
+                    const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+                    if (!TapTargetPumpTargetLegalFor(s, p, controller, def)) { continue; }
+                    legal.push_back({1, bi, 0});
+                    legal_labels.push_back(p.card.m_name.str()
+                        + (p.controller_index == controller ? " (yours)" : " (opponent)"));
                 }
             }
             else if (trick)          { CollectOwnCreatureTargets(s, controller, legal, legal_labels); }
@@ -7626,14 +7644,14 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
                 {
                     std::ostringstream ss;
                     ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
-                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc, mills_target_player);
+                    WriteTargetDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player);
                     ss << "}";
                     trace.push_back(ss.str());
                 }
                 return opts[chosen].targets;
             }
             std::cout << "<<<CLAUDE_DECISION>>>\n";
-            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, "", copy_desc, lifegain_desc, mills_target_player);
+            WriteTargetDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, opts, per_target, max_targets, def_idx, di, pump_desc, remove_desc, min_targets, false, ability_desc, copy_desc, lifegain_desc, mills_target_player);
             std::cout << "<<<END_DECISION>>>\n";
             std::cout.flush();
             if (AwaitMoreChoices()) { goto claude_retry_8; }

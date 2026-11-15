@@ -10632,6 +10632,20 @@ struct Dump
 inline Dump g_dump;
 }   // namespace paymemo
 
+// The payment probes put a paid creature on their scratch board to let a later cast use a
+// creature-count mana land. Credit only a body that remains after its own entry. A second legend
+// dies immediately, and Wanderwine Prophets champions another Merfolk (or itself dies); neither
+// can increase Three Tree City's Merfolk count for the next payment.
+static bool ScaledLandCreaturePersists(const GameState& state, const CardDefinition& def)
+{
+    if (def.params.champion_merfolk || def.params.devour > 0) { return false; }
+    if (!def.card.HasSupertype(Supertype::Legendary)) { return true; }
+    for (const Permanent& p : state.battlefield)
+    { if (p.controller_index == state.active_player_index && p.card.m_name == def.card.m_name)
+      { return false; } }
+    return true;
+}
+
 static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vector<Action>& cands,
                                          const std::vector<int>& sel, bool tap_sources,
                                          GameState* inplace = nullptr)
@@ -10703,6 +10717,27 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
     // Empty (no reveal-cost cast in the subset) for every other deck.
     thread_local std::vector<int> rv_charged;
     SameSubsetRevealSurcharge(state, cands, sel, &rv_charged);
+    // A creature cast earlier in the line can grow Three Tree City's fed mana before a later cast.
+    // The flat pool cannot see that growth, so this payment probe must try a cheaper-creature-first
+    // order and put each creature on its scratch battlefield after paying for it. Merfolk Turns s2 T3:
+    // Dockhand grows City from one to two Merfolk, then City funds Silvergill Douser.
+    bool scaled_land_growth = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || p.tapped) { continue; }
+        const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
+        if (!land || !IsScaledManaLand(*land) || LandTypeChangedToIsland(state, p)) { continue; }
+        const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
+            ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
+        for (int j : sel)
+        {
+            const Action& a = cands[j];
+            if (a.kind == Action::Kind::CastFromHand && a.def != nullptr
+                && a.def->card.IsCreature() && a.def->card.m_subtypes.HasId(chosen))
+            { scaled_land_growth = true; break; }
+        }
+        if (scaled_land_growth) { break; }
+    }
     // MTG_SOLVE_UNTAP_CREDIT (see SolveUntapCreditOn): a subset holding an ETB-untap cast is walked in
     // the realised cast order; every other subset keeps the selection order (byte-identical).
     bool untap_walk = false;
@@ -10711,13 +10746,22 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
         for (int j : sel) { if (IsEtbUntapCast(cands[j])) { untap_walk = true; break; } }
     }
     thread_local std::vector<int> untap_ord;
-    if (untap_walk)
+    if (untap_walk || scaled_land_growth)
     {
         untap_ord = sel;
         std::stable_sort(untap_ord.begin(), untap_ord.end(), [&](int x, int y)
-        { return CastOrderLess(state, cands[x], cands[y]); });
+        {
+            if (CastOrderLess(state, cands[x], cands[y])) { return true; }
+            if (CastOrderLess(state, cands[y], cands[x])) { return false; }
+            // Both Merfolk casts are in the same creature tier. Paying the one-mana Dockhand
+            // before the two-mana Douser raises City's yield in time to fund the latter.
+            if (scaled_land_growth && cands[x].def && cands[y].def
+                && cands[x].def->card.IsCreature() && cands[y].def->card.IsCreature())
+            { return cands[x].cost.ManaValue() < cands[y].cost.ManaValue(); }
+            return false;
+        });
     }
-    const std::vector<int>& walk_ord = untap_walk ? untap_ord : sel;
+    const std::vector<int>& walk_ord = (untap_walk || scaled_land_growth) ? untap_ord : sel;
     // SAC-FOR-MANA FLOATS FIRST (MTG_RESCUE_SAC_FLOAT, DEFAULT ON; =0 restores the skip). Both apply
     // worlds crack every SacForMana of a plan in their PRE-PASS, before any cast (ApplyPlanDirect /
     // AIEngine::TakeTurn), and the payer spends that float first -- as a cast's mana AND as a filter's
@@ -10848,6 +10892,15 @@ static bool SubsetPayableWithFiltersImpl(const GameState& state, const std::vect
                 if (!cost_ok) { cost_ok = TapForCostDirect(cp, bill, for_creature); reserved_host = -1; }
             }
             if (!cost_ok) { return false; }
+            if (scaled_land_growth && a.kind == Action::Kind::CastFromHand && def->card.IsCreature()
+                && ScaledLandCreaturePersists(cp, *def))
+            {
+                Permanent creature;
+                creature.card = def->card;
+                creature.controller_index = cp.active_player_index;
+                creature.owner_index = cp.active_player_index;
+                cp.battlefield.push_back(creature);
+            }
             // ...and its resolution: the ETB untap, after the creature's own payment.
             if (untapper)
             { EtbUntapLands(cp, cp.active_player_index, def->params.etb_untap_lands, /*log_ledger=*/false); }
@@ -11898,6 +11951,20 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                 { enter_haste_for_mana = true; break; }
             }
         }
+        bool grows_scaled_land = false;
+        if (def.card.IsCreature() && ScaledLandCreaturePersists(cp, def))
+        {
+            for (const Permanent& p : cp.battlefield)
+            {
+                if (p.controller_index != cp.active_player_index || p.tapped) { continue; }
+                const CardDefinition* land = CardDatabase::Instance().LookupCached(p.card);
+                if (land == nullptr || !IsScaledManaLand(*land) || LandTypeChangedToIsland(cp, p))
+                { continue; }
+                const uint16_t chosen = p.chosen_subtype_id != SubtypeRegistry::kNone
+                    ? p.chosen_subtype_id : SubtypeRegistry::Instance().Id(land->params.mana_per_creature_subtype);
+                if (def.card.m_subtypes.HasId(chosen)) { grows_scaled_land = true; break; }
+            }
+        }
         const bool joins_for_mana = (def.params.mana_rock && !def.card.IsCreature()
                                      && !def.params.lens_imprint_land)
                                  || def.params.hinata_cost_reducer
@@ -11909,7 +11976,7 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
                                  || def.params.noncreature_spell_tax > 0
                                  || (HasteDorkCreditEnabled()
                                      && def.params.other_nontoken_enters_counter_haste > 0)
-                                 || enter_haste_for_mana
+                                 || enter_haste_for_mana || grows_scaled_land
                                  // A land-tap bonus source (Vernal Bloom / Nissa / Gauntlet): the
                                  // lands still untapped after it tap for more (the Lens note above).
                                  || def.params.land_tap_bonus > 0;
@@ -47710,6 +47777,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     }
                     if (!human && !tgts.empty())
                     { ResolveProvider(state).TapTargetPumpTargets(state, src, is_pre_combat, tgts); }
+                    // The human chooses a target on the live board at activation. One
+                    // representative per X is enough here; a same-line land is seen then.
+                    if (human && !tgts.empty()) { tgts.resize(1); }
                     for (int ti : tgts)
                     {
                         if (ti < 0 || ti >= static_cast<int>(state.battlefield.size())) { continue; }
@@ -74933,6 +75003,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool untap_land = a.ability_mode == Action::AbilityMode::UntapLand;
             const TapTargetPumpPinScope _tpump_pin((tpump || target_pump || untap_land) ? a.sac_victim_id : 0,
                                                    tpump ? a.chosen_x : 0);
+            if (tpump && g_play_target_chooser != nullptr) { g_tap_target_pump_pin.target = 0; }
             // Walking Ballista's searched ping TARGET (0 = the opponent's face); twin in the other world.
             const CounterPingTargetPinScope _cp_pin(
                 a.ability_mode == Action::AbilityMode::CounterPing ? a.sac_victim_id : 0);
@@ -74942,6 +75013,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                                           src_id, a.ability_mode,
                                                           &a.discard_name.str()))
             {
+                if (tpump && g_play_target_chooser != nullptr)
+                { g_tap_target_pump_pin.target = ChooseTapTargetPumpTargetAtActivation(
+                    state, state.active_player_index, *a.def, a.sac_victim_id); }
                 const bool taps = PermAbilityTaps(a.ability_mode);   // SacDraw/Drain/ExileTop have no {T}
                 // A CREATURE source's ability may be paid with Secluded Courtyard's coloured mana
                 // (D12). Covers the K-1 repeat payments below too. Executor twin: AIEngine.
@@ -127060,7 +127134,7 @@ TurnSolver::LineCheck TurnSolver::CheckLineExact(const GameState& state_in, bool
                 std::string art;
                 for (const Permanent& perm : state.battlefield)
                 { if (perm.card.m_number == a.sac_victim_id) { art = perm.card.m_name.str(); break; } }
-                if (!hn.empty())
+                if (!HumanPlayActive() && !hn.empty())
                 {
                     addSub(a.card_name + " \xE2\x86\x92 " + hn, a.card_name + " pumps", hn, art,
                            "pumptarget", a.sac_victim_id);

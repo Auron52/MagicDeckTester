@@ -33609,6 +33609,38 @@ inline bool TapTargetPumpTargetLegalFor(const GameState& s, const Permanent& q, 
             || CardHasSubtype(q.card, source.params.tap_target_pump_requires_subtype));
 }
 
+// Human play chooses the target from the live board when the activation resolves. A land played
+// earlier in the same committed line is present here even though it was absent during enumeration.
+// Search keeps its pinned target; only the real play chooser takes this route.
+inline int ChooseTapTargetPumpTargetAtActivation(const GameState& state, int controller,
+                                                 const CardDefinition& source, int suggested)
+{
+    if (g_play_target_chooser == nullptr) { return suggested; }
+    std::vector<ChosenTarget> legal;
+    int fallback = 0;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (!TapTargetPumpTargetLegalFor(state, p, controller, source)) { continue; }
+        legal.push_back({1, i, 0});
+        if (fallback == 0 || p.card.m_number == suggested) { fallback = p.card.m_number; }
+    }
+    if (legal.empty()) { return 0; }
+    int def_index = legal.front().index;
+    for (const ChosenTarget& target : legal)
+    { if (state.battlefield[static_cast<std::size_t>(target.index)].card.m_number == fallback)
+      { def_index = target.index; break; } }
+    const auto picked = (*g_play_target_chooser)(state, source, controller, 1, 0,
+                                                {{1, def_index, 0}});
+    if (picked.size() == 1 && picked[0].kind == 1)
+    {
+        for (const ChosenTarget& target : legal)
+        { if (target.index == picked[0].index)
+          { return state.battlefield[static_cast<std::size_t>(target.index)].card.m_number; } }
+    }
+    return fallback;
+}
+
 inline bool SeahunterLibraryCandidate(const Card& card)
 {
     if (!CardHasSubtype(card, "Merfolk")) { return false; }

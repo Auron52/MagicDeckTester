@@ -10,6 +10,9 @@
 # accepted-with-regressions (regression, 2026-11-15): Passive opponent now draws lands from seed % 50, plays its leftmost land, and cracks zero-cost fetches. Hinata target counts and Midrange Burn Price of Progress use the developed board. Smoke searched games: 10 slower, 19 faster; two slower recover at higher budgets. Regression searched games: 37 slower, 40 faster; one recovers, others reflect the changed opponent land distribution and resulting play/draw sequences. All 843 legacy references replay.
 # accepted-with-regressions (smoke, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
 # accepted-with-regressions (regression, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
+# accepted-with-regressions (smoke, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
+# accepted-with-regressions (regression, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
+# accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -221,9 +224,9 @@ spirits_smoke_d0_s1001=5.0070/62dc38df804bce43
 spirits_smoke_d3_s1001=4.5800/9bf700a5464ff80a
 spirits_smoke_d5_s1001=4.6500/b1de7e800cda6e9b
 spirits2hg_smoke_d3_s1001=5.1400/8e99f12bbe983564
-merfolkturns_smoke_d0_s1001=6.0930/06c32b9fa75faaaf
-merfolkturns_smoke_d3_s1001=5.6000/0325a7085fd5994e
-merfolkturns_smoke_d5_s1001=5.6000/27b52c80372bb70e
+merfolkturns_smoke_d0_s1001=6.1000/c9a36151530fdf9d
+merfolkturns_smoke_d3_s1001=5.6000/4e8e854f1b47a21b
+merfolkturns_smoke_d5_s1001=5.6000/433805ebd2b38d3a
 merfolkturns2hg_smoke_d3_s1001=6.0000/291bd392566dd561
 
 # --- regression ---
@@ -556,10 +559,10 @@ spirits_regression_d0_s2002=4.9500/361ba8f18a84bb90
 spirits_regression_d3_s2002=4.6533/9ff8b34de3f4c570
 spirits_regression_d5_s2002=4.6667/13ddea095a681ad4
 spirits_regression_d5_s3003=4.7000/f7a45568d3581698
-merfolkturns_regression_d0_s2002=6.0110/4beb58d213a74198
-merfolkturns_regression_d3_s2002=5.3600/24dc14ebdb9b0908
-merfolkturns_regression_d5_s2002=5.5667/c476b13f9c6ffe8a
-merfolkturns_regression_d5_s3003=5.6133/ce49da555c2961c2
+merfolkturns_regression_d0_s2002=6.0120/88a39774b044c7a9
+merfolkturns_regression_d3_s2002=5.3600/c5d087392ebc73d3
+merfolkturns_regression_d5_s2002=5.5667/6fd429b8ce37928b
+merfolkturns_regression_d5_s3003=5.6133/b9f016818df561b6
 
 # --- overnight ---
 mill_overnight_d0_s4004=6.8300/2dbd5b0890840fc1
@@ -1212,14 +1215,14 @@ spirits_overnight_d5_s4004=4.6306/278f5f7b0040c034
 spirits_overnight_d5_s5005=4.6447/73077f962199619d
 spirits_overnight_d5_s6006=4.6259/63bbc2a56920ff50
 spirits_overnight_d5_s7007=4.6612/9d8dbf4836d53397
-merfolkturns_overnight_d0_s4004=6.0210/3cf3b725a7d1a052
-merfolkturns_overnight_d0_s6006=6.0180/ed0328fbfd80f18c
-merfolkturns_overnight_d0_s8008=6.0395/6e944dc96f18a2ea
-merfolkturns_overnight_d0_s10010=6.0440/7afc0b4cb76b426d
-merfolkturns_overnight_d3_s4004=5.5840/b8f97aa1e3924f66
-merfolkturns_overnight_d5_s4004=5.5667/2978966d42e9e292
-merfolkturns_overnight_d5_s5005=5.5800/a9223ae70e205218
-merfolkturns_overnight_d5_s6006=5.5067/2730dec53baf2844
-merfolkturns_overnight_d5_s7007=5.4767/c6c70e2764810de6
+merfolkturns_overnight_d0_s4004=6.0265/05cba892d5b02287
+merfolkturns_overnight_d0_s6006=6.0210/f941382f2173ddbf
+merfolkturns_overnight_d0_s8008=6.0445/b4e43bee98f7dda6
+merfolkturns_overnight_d0_s10010=6.0555/3dad36e6c288c46d
+merfolkturns_overnight_d3_s4004=5.5840/d4747a9d829eb019
+merfolkturns_overnight_d5_s4004=5.5667/5ec14358e1e2c3f6
+merfolkturns_overnight_d5_s5005=5.5767/1f7e595f3df2945d
+merfolkturns_overnight_d5_s6006=5.5067/b880609bab688348
+merfolkturns_overnight_d5_s7007=5.4767/7f9bcea94e0ae89b
 merfolkturns_overnight_d3_s30161=5.3333/2c72d62de962ccd0
 merfolkturns_overnight_d5_s30161=5.3333/2c72d62de962ccd0

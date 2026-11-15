@@ -1187,6 +1187,24 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
     return false;
 }
 
+// A resident Emperor Mihail II sees its own second copy CAST before the legend rule removes one
+// of them. Its optional {1} produces a Merfolk token, so that cast is not board-null. This is a
+// cast-trigger check, separate from the entry/death watcher above; it also protects any future
+// legendary subtype token maker with the same parameters.
+static bool DuplicateCastHasUpside(const GameState& s, int controller,
+                                   const CardDefinition& def)
+{
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* watcher = CardDatabase::Instance().LookupCached(p.card);
+        if (watcher == nullptr || watcher->params.cast_trigger_creates_tokens <= 0
+            || watcher->params.cast_trigger_subtype.empty()) { continue; }
+        if (CardHasSubtype(def.card, watcher->params.cast_trigger_subtype)) { return true; }
+    }
+    return false;
+}
+
 // Prune casting a legendary permanent we already control a copy of, when that card does nothing on
 // entry. See the hook comment in DecisionProvider.h for why the whitelist is positive rather than
 // an etb_* enumeration (the failure direction matters: a missed field would prune a GOOD cast).
@@ -1323,6 +1341,9 @@ bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controll
     {
         if (p.controller_index == controller && p.card.m_name == def.card.m_name)
         {
+            // Cast triggers resolve before the duplicate enters. Even d0 must see a second
+            // Mihail: the resident one can turn its cast into a token for {1}.
+            if (DuplicateCastHasUpside(s, controller, def)) { return true; }
             // ...unless the ENTRY or the legend-rule DEATH itself has upside, in which case the
             // cast was never the tie this prune assumes (see DuplicateEntryOrDeathHasUpside above:
             // a second Lathliss is a 5/5 Dragon token, a second Lyra Dawnbringer is three life-gain

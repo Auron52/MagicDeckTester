@@ -316,6 +316,40 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     CHECK(tokens == 1);
 }
 
+TEST_CASE("A second Emperor Mihail II cast remains available for the first one's token trigger")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 4;
+    state.m_provider = &provider;
+    AddPermanent(state, "Emperor Mihail II", 401);
+    for (int n = 0; n < 4; ++n) { AddPermanent(state, "Island", 500 + n); }
+    const CardDefinition* emperor = CardDatabase::Instance().Lookup("Emperor Mihail II");
+    REQUIRE(emperor != nullptr);
+    Card copy = emperor->card;
+    copy.m_number = 402;
+    state.players[0].hand.push_back(copy);
+    CHECK(provider.OfferDuplicateLegendCast(state, 0, *emperor));
+    bool offered = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        for (const Action& action : plan.actions)
+        { offered |= action.kind == Action::Kind::CastFromHand
+                  && action.card_name == "Emperor Mihail II"; }
+    }
+    CHECK(offered);
+    state.floating_mana.colorless = 1;
+    state.scripted_mihail_pay_choice.Pin(1);
+    state.scripted_mihail_pay_choice.bits[0] = 1;
+    FireOnCastTriggers(state, *emperor);
+    int tokens = 0;
+    for (const Permanent& p : state.battlefield)
+    { tokens += p.is_token && CardHasSubtype(p.card, "Merfolk"); }
+    CHECK(tokens == 1);
+}
+
 TEST_CASE("Mihail put by Vial or Seahunter can be paid for on a later cast")
 {
     LoadMerfolkCards();
@@ -891,6 +925,65 @@ TEST_CASE("Three Tree City converts two colorless feeders into blue at zero net 
         { offered |= a.kind == Action::Kind::CastFromHand && a.card_name == "Deeproot Pilgrimage"; }
     }
     CHECK(offered);
+}
+
+TEST_CASE("Three Tree City funds a second Merfolk cast after the first grows it")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    state.turn_number = 3;
+    state.m_provider = &provider;
+    AddPermanent(state, "Island", 10);
+    AddPermanent(state, "Sol Ring", 45);
+    AddPermanent(state, "Three Tree City", 51, SubtypeRegistry::Instance().Id("Merfolk"));
+    AddPermanent(state, "Tidal Warrior", 53);
+    REQUIRE(ScaledManaCreatureCount(state, &state.battlefield[2]) == 1);
+    for (const auto& [name, number] : std::vector<std::pair<const char*, int>>{
+             {"Rishadan Dockhand", 31}, {"Rogue's Passage", 35}, {"Silvergill Douser", 42}})
+    {
+        const CardDefinition* def = CardDatabase::Instance().Lookup(name);
+        REQUIRE(def != nullptr);
+        Card card = def->card;
+        card.m_number = number;
+        state.players[0].hand.push_back(card);
+    }
+    bool offered = false;
+    for (const TurnSolver::Plan& plan : TurnSolver::EnumerateMainPlans(state, true))
+    {
+        if (plan.land_to_play != "Rogue's Passage" || plan.actions.size() != 2) { continue; }
+        offered |= plan.actions[0].kind == Action::Kind::CastFromHand
+                && plan.actions[0].card_name == "Rishadan Dockhand"
+                && plan.actions[1].kind == Action::Kind::CastFromHand
+                && plan.actions[1].card_name == "Silvergill Douser";
+    }
+    CHECK(offered);
+}
+
+TEST_CASE("Tidal Warrior chooses a land played earlier in the same line from the live board")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Island", 10);
+    AddPermanent(state, "Tidal Warrior", 53);
+    // The land drop happens after the action menu was built, before the activation.
+    AddPermanent(state, "Rogue's Passage", 35);
+    const CardDefinition* warrior = CardDatabase::Instance().Lookup("Tidal Warrior");
+    REQUIRE(warrior != nullptr);
+    bool offered_passage = false;
+    TargetChooser choose = [&](const GameState& live, const CardDefinition&, int, int, int,
+                               const std::vector<ChosenTarget>&) {
+        offered_passage = TapTargetPumpTargetLegalFor(live, live.battlefield[2], 0, *warrior);
+        return std::vector<ChosenTarget>{{1, 2, 0}};
+    };
+    TargetChooser* saved = g_play_target_chooser;
+    g_play_target_chooser = &choose;
+    const int chosen = ChooseTapTargetPumpTargetAtActivation(state, 0, *warrior, 10);
+    g_play_target_chooser = saved;
+    CHECK(offered_passage);
+    CHECK(chosen == 35);
 }
 
 TEST_CASE("Wanderwine Prophets token sacrifice ceases to exist after its trigger")

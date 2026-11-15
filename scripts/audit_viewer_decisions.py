@@ -493,10 +493,10 @@ MANIFEST = {
     # Voldaren Estate "{5}, {T}: Create a Blood token": whether / when is a main_phase plan variant
     # (verbless `cast=Voldaren Estate`, the Conservatory precedent -- a land is never a hand cast).
     "tap_blood_cost":                ("main_phase",  truthy),
-    # Kessig Wolf Run "{X}{R}{G}, {T}: Target creature gets +X/+0 and gains trample" (2026-10-22): the
-    # TARGET and the X are main_phase plan VARIANTS (every legal X 0..max and every legal creature under
-    # human play; the `pumptarget` / `x` sub-choices of a verbless `cast=Kessig Wolf Run` line).
-    "tap_target_pump_cost":          ("main_phase",  present),
+    # Targeted tap abilities (Wolf Run, Tidal Warrior, Dockhand, Douser): activation and Wolf Run's X
+    # are main_phase choices. The target is picked on the live battlefield through `target` when the
+    # activation occurs, so a land played earlier in the line is included.
+    "tap_target_pump_cost":          ("target",      present),
     "tap_tutor_put_cost":             ("main_phase",  present),
     "target_pump_cost":              ("main_phase",  truthy),
     "untap_target_land":             ("main_phase",  truthy),
@@ -980,7 +980,7 @@ INERT_PARAMS = {
     "tap_blood_cost_less_per_subtype": "Voldaren Estate's Blood cost reduction (per Vampire we control, counted at activation) -- a cost detail, not a choice",
     "haste_if_opp_life_at_most": "Bloodghast's conditional haste (opponent at 10 or less life) -- a static, no choice",
     # ---- Kessig Wolf Run (2026-10-22) -- the pump's magnitudes and its keyword rider ----
-    "tap_target_pump_power": "Kessig Wolf Run's +N/+0 per X -- a printed magnitude (rides tap_target_pump_cost -> main_phase)",
+    "tap_target_pump_power": "Kessig Wolf Run's +N/+0 per X -- a printed magnitude (rides tap_target_pump_cost -> target)",
     "tap_target_pump_tough": "Kessig Wolf Run's +0 toughness -- a printed magnitude",
     "tap_target_pump_grants_trample": "Kessig Wolf Run's trample rider -- a printed grant, structurally inert (no blocker path); no choice",
     # ---- Vampires A1 (2026-10-18). Classified inert by the integrator; PENDING USER OK per the self-guard
@@ -1566,12 +1566,12 @@ INERT_PARAMS = {
     # Static cost reducer / mana restriction -- no choice:
     "reduces_spell_subtype": "static Goblin-spell cost reducer (Warchief, {1} less), no choice",
     "reduces_spell_subtype_also": "second OR-matched subtype on Banneret's mandatory cost reduction, no separate choice",
-    "tap_target_pump_grants_unblockable": "effect of a targeted tap activation; the target is the main_phase plan variant",
-    "tap_target_pump_power_per_subtype": "Douser's computed magnitude; the target is the main_phase plan variant",
-    "tap_target_pump_requires_subtype": "Sovereign target legality filter; the target is the main_phase plan variant",
-    "tap_target_pump_sets_island": "Tidal Warrior effect; the land is the main_phase plan variant",
-    "tap_target_pump_taps_target_land": "Dockhand effect; the land is the main_phase plan variant",
-    "tap_target_pump_targets_land": "land target legality filter; the land is the main_phase plan variant",
+    "tap_target_pump_grants_unblockable": "effect of a targeted tap activation; the target is chosen on the live battlefield",
+    "tap_target_pump_power_per_subtype": "Douser's computed magnitude; the target is chosen on the live battlefield",
+    "tap_target_pump_requires_subtype": "Sovereign target legality filter; the target is chosen on the live battlefield",
+    "tap_target_pump_sets_island": "Tidal Warrior effect; the land is chosen on the live battlefield",
+    "tap_target_pump_taps_target_land": "Dockhand effect; the land is chosen on the live battlefield",
+    "tap_target_pump_targets_land": "land target legality filter; the land is chosen on the live battlefield",
     "reduces_graveyard_cast_generic": "static graveyard-spell cost reducer (Patrician Geist, {1} less), no choice",
     # Millicent, Restless Revenant (integrator C1): the FLAT sibling of combat_damage_tokens_per_damage and
     # two token filters on her mandatory, untargeted triggers -- no target, mode, 'may' or division.
@@ -2188,7 +2188,7 @@ def modeled_tokens(card):
     ):
         t.add("target")
     if real_target(p.get("targeting", "none")) or p.get("keranos_first_draw") or p.get("spectacle_cost") \
-            or p.get("target_pump_cost") or p.get("untap_target_land") \
+            or p.get("target_pump_cost") or "tap_target_pump_cost" in p or p.get("untap_target_land") \
             or p.get("etb_modal_fight_opp_creature") or p.get("remove_counter_destroy_art_ench_cost"):
         t.add("target")
     if p.get("sacrifice_land"):                                            t.add("sacrifice")
