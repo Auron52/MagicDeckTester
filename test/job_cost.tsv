@@ -880,6 +880,12 @@ merfolk_smoke_d0_s1001	1
 merfolk_smoke_d3_s1001	4670
 merfolk_smoke_d5_s1001	3786
 merfolkturns2hg_smoke_d3_s1001	675873
+merfolkturns_regression_d0_s2002	1
+merfolkturns_regression_d3_s2002	124367
+merfolkturns_regression_d3_s30131	48541
+merfolkturns_regression_d5_s2002	232663
+merfolkturns_regression_d5_s3003	254771
+merfolkturns_regression_d5_s30131	95809
 merfolkturns_smoke_d0_s1001	1
 merfolkturns_smoke_d3_s1001	70293
 merfolkturns_smoke_d5_s1001	413530
