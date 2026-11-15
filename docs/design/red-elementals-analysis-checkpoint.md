@@ -5,6 +5,36 @@ then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify
 
 Last updated: 2026-11-15 (Codex continuation; the update below supersedes the older running-job notes).
 
+## Mulligan generation update (2026-11-15, current)
+
+- Red Elementals play verification is complete and committed through `dc09f4b6a`; the screened
+  mulligan contract is committed at `cbefb5068`. The screen chose 13 buckets and d1/b3 generation
+  labels (rank fidelity 1.0000, rho 0.9808; 0.18x the d5/b20 play cost). Mountain and Fiery Islet
+  are the sole merged pair. `src/` and the tracked deck files were clean at launch.
+- PGO+LTO was trained on the pooled 275-job / 7,447-game suite and built against source tree
+  `5c46ffd6d3350b10b6b5c6fad17e12018b865deb`. The `recommend` scout finished: 39,945
+  distinct seven-card hands, 126,958 play/draw cells across sizes 1-7, 727 s floor, projected
+  fast ~4.0 h and complete ~8.1 h. Its R=1 probe is reusable by the generation run.
+- The R30 generation completed 13:43 UTC (~2 h 17 m), faster than projected. Its structural
+  gate passed: K=13, 39,945 size-7 entries, bottoming enabled, 47,068 sub-cells, minimum R2.
+  The first-version A/B driver exited successfully 14:42 UTC: keep vs static -0.101750 turns
+  (4/4 seed pairs favorable, early-stop t=-15.3); confounded bottoming vs lookahead -0.029250
+  turns (4/4 favorable, early-stop t=-8.09). Both passed. Driver log:
+  `logs/redelem/mullgen-fast-driver.log`; generation log:
+  `logs/Red_Elementals_mullgen/gen.log`; A/B logs:
+  `logs/Red_Elementals_mullgen/ab_*.log`.
+- The driver's regular-tier regression visibility run moved all six Red rows, with searched games
+  faster=44/slower=28 and d0 faster=194/slower=97. Strict viewer protocol passed 864 references.
+  **Currently running:** `python3 test/keep_adoption_attribution.py regression redelem`
+  (session 79058) to classify all changed games before any GT acceptance. After attribution,
+  commit the generated runtime profile and gzipped raw, rebase onto upstream, rebuild and rerun
+  the relevant suite/attribution on the current engine before accepting GT and pushing.
+- Upstream shared branch had moved to `279d4f76f` at launch, adding Shadowborn, Prevent Damage,
+  and mana-payment changes. After generation and its driver validation, rebase the Red branch,
+  rebuild, and check the profile on the current engine before push. A completed, internally
+  consistent profile does not automatically expire on a later source commit; use the skill's
+  play/regression evidence to decide if the new source materially affects this deck.
+
 ## Integrated verification update (2026-11-15, latest)
 
 - `redelem-analysis` has been rebased onto upstream `f92bb3b7c` (Boars, Merfolk and Shadowborn);

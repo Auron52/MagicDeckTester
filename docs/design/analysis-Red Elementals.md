@@ -822,3 +822,28 @@ earlier network cost audit passed before this upstream rebase. Two Landfall Elem
 summary digests were repaired after a filtered rerun showed all six committed per-game logs
 unchanged. Global ground-truth logs are 1,251 consistent, zero stale or missing. Reference safety
 passes. The exhaustive mulligan profile is the next stage on this frozen play source.
+
+## Exhaustive mulligan profile (2026-11-15)
+
+The generation-setting screen selected d1/b3, with 13 expected buckets, rank fidelity 1.0000,
+rho 0.9808 and 0.18× the d5/b20 play cost. The optimized `recommend` scout confirmed that only
+Mountain and Fiery Islet merge. It counted **39,945** distinct seven-card hands after deck-copy
+constraints (the earlier 50,388 `C(19,7)` figure was an unconstrained upper bound), and 126,958
+play/draw cells across all hand sizes. Its floor took 727 seconds and projected `fast` at ~4 hours.
+
+The PGO+LTO `fast` R30 generation reused the scout floor and completed in 2 hours 17 minutes.
+The structural gate confirmed 39,945 size-seven entries, 47,068 smaller-hand cells, bottoming
+enabled, and at least R2 for every cell. The first-version in-game A/B passed both gates:
+
+| policy comparison | 1,000-game seed pairs | arm A | exhaustive arm | delta, exhaustive minus A |
+|---|---:|---:|---:|---:|
+| keep vs static, same bottoming | 4/4 favorable | 4.3403 | 4.2385 | -0.101750 turns |
+| bottoming vs lookahead, confound mode 3 | 4/4 favorable | 4.3375 | 4.3083 | -0.029250 turns |
+
+Both stopped early under the driver's predeclared significance rule (t=-15.3 and t=-8.09).
+The regular-tier visibility run moved six Red rows: searched games 44 faster, 28 slower; d0
+194 faster, 97 slower. The strict viewer protocol passed 864 references. The adoption audit
+replayed all 1,360 regular-tier games with the table off and on, reproducing both baselines:
+549 changed mulligan count, 130 changed bottom at the same count, two card-order-only digests,
+and **zero unexplained**. The profile is accepted by the A/B gates; final-engine rebase,
+GT acceptance, and shared-branch handoff remain to be completed.
