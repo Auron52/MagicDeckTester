@@ -862,6 +862,7 @@ enum Slot : int
     INWIN_CACHE,              // MTG_INWIN_CACHE  DEPTH-FREE IN-WINDOW PROOF CACHE (default ON since 2026-11-10): a completed node's win at turn w <= T+depth-1 (inside its exhaustively searched window) and its no-win bound clipped to T+depth-1 are properties of the in-window lines only, so they answer the same state at ANY remaining depth (a win only while w is inside the querying window). Per game, so it carries both across iterative-deepening passes and across decisions. MTG_INWIN_CACHE_VERIFY=1 recomputes each hit. See docs/design/cross-decision-tree-reuse.md
     ROLLOUT_GAME_CACHE,       // MTG_ROLLOUT_GAME_CACHE  E3, default ON (USER adoption 2026-11-11): a game-persistent map of outermost rollout answers under their start and turn-boundary keys, read when the per-decision leaf table misses. See namespace rgc in TurnSolver.cpp and docs/design/cross-turn-cache-experiments.md
     GODS_PHARIKA_GOD_ONE,    // MTG_GODS_PHARIKA_GOD_ONE  experimental: one own-graveyard God fuel target per Pharika state
+    GODS_RETRIEVAL_DREDGE,   // MTG_GODS_RETRIEVAL_DREDGE  Gods: dredge toward Mystic Retrieval and Replenish instead of taking the three-Gods natural draw. Default ON; =0 -> old draw
     HYDRAS_CAST_ORDER,        // MTG_HYDRAS_CAST_ORDER    Hydras TOTAL cast order (USER 2026-11-10: "Doublers and Gargos should be before the Hydras"): Vernal Bloom, Gauntlet / Nissa, the land fetches, Gargos, Greaves / Garruk / Kalonian, the X Hydras last (HydrasProvider::CastOrderRank). Default ON; =0 -> the generic tiers
     HYDRAS_MAX_X,             // MTG_HYDRAS_MAX_X         Hydras: every "enters with X" Hydra held to the most X its plan can pay (USER-requested LOSSY narrowing, 2026-11-10). DEFAULT ON (ADOPTED, USER 2026-11-11: "Max x sounds good. Honestly, almost anything that measures better and is cheaper is a good option." P1 A/B: -0.0083 turns at 0.80x ms over 2400 paired games, its one slower game recovers at d8 b0); =0 -> the full X range
     HYDRAS_SECOND_MAIN,       // MTG_HYDRAS_SECOND_MAIN   Hydras: Garruk, Primal Hunter's draw_greatest_power opens the searched post-combat main (USER 2026-11-10: "Second main -3 makes sense."). Default ON; =0 is the MEASUREMENT arm that prices the main 2 (GoldFishRunner::DeckUsesSecondMain)
@@ -1753,6 +1754,7 @@ inline const char* Name(int slot)
         "MTG_INWIN_CACHE",
         "MTG_ROLLOUT_GAME_CACHE",
         "MTG_GODS_PHARIKA_GOD_ONE",
+        "MTG_GODS_RETRIEVAL_DREDGE",
         "MTG_HYDRAS_CAST_ORDER",
         "MTG_HYDRAS_MAX_X",
         "MTG_HYDRAS_SECOND_MAIN",

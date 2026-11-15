@@ -176,13 +176,19 @@ TEST_CASE("Gods search policy ranks physical dredgers and post-draw discards")
         add_gy("Keranos, God of Storms", 40);
         add_gy("Mogis, God of Slaughter", 41);
         add_gy("Nylea, God of the Hunt", 42);
-        CHECK(DredgeSearchChoices(s, 0, menu)
-              == std::vector<int>{dredge_rule == 5 ? 11 : 0});
+        const bool retrieval_dredge = EnvOn("MTG_GODS_RETRIEVAL_DREDGE", true);
+        const int expected = dredge_rule == 5 || (dredge_rule == 4 && retrieval_dredge)
+            ? 11 : 0;
+        CHECK(DredgeSearchChoices(s, 0, menu) == std::vector<int>{expected});
         const std::vector<int> no_pins;
         std::vector<int> recorded;
         ScriptedDredge chooser(no_pins, nullptr, &recorded);
-        CHECK(chooser.Choose(s, 0, menu) == (dredge_rule == 5 ? 1 : 0));
-        CHECK(recorded == std::vector<int>{dredge_rule == 5 ? 11 : 0});
+        CHECK(chooser.Choose(s, 0, menu) == (expected == 11 ? 1 : 0));
+        CHECK(recorded == std::vector<int>{expected});
+        // Loam is already available to recover the lands this dredge mills.
+        p.hand.push_back(MakeCard("Life from the Loam", 71,
+                                  CardDatabase::Instance().Lookup("Life from the Loam")));
+        CHECK(DredgeSearchChoices(s, 0, menu) == std::vector<int>{expected});
     }
 }
 

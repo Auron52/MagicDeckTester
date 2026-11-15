@@ -24360,10 +24360,9 @@ static std::vector<int> GodsDredgeCandidatesForRule(
     { lands_in_play += p.controller_index == controller && is_land(p.card); }
     if (base_rule >= 2)
     {
-        // The narrow user rule: one decision in ordinary states. A natural draw
-        // is useful when land development has stalled or Gods are already in the
-        // graveyard but Replenish is still missing from hand. Those exceptions
-        // are observable from public zones and our hand, not the library order.
+        // One decision in ordinary states. Draw naturally when land development
+        // stalls; once mana is available, dredge toward Mystic Retrieval and
+        // Replenish instead of hoping to draw Replenish through the library.
         int hand_lands = 0;
         bool has_replenish = false;
         int grave_gods = 0;
@@ -24406,8 +24405,13 @@ static std::vector<int> GodsDredgeCandidatesForRule(
         { return { loam }; }
         if (base_rule >= 4)
         {
+            // DEFAULT ON; =0 restores the old three-Gods natural draw for A/B.
+            static const bool retrieval_dredge_env = EnvOn("MTG_GODS_RETRIEVAL_DREDGE", true);
+            const bool retrieval_dredge = heurarm::Flag(
+                heurarm::GODS_RETRIEVAL_DREDGE, retrieval_dredge_env);
             if ((lands_in_play < 2 && hand_lands == 0)
-                || (lands_in_play >= 3 && grave_gods >= 3 && !has_replenish))
+                || (lands_in_play >= 3 && grave_gods >= 3 && !has_replenish
+                    && (rule != 4 || !retrieval_dredge)))
             { return { 0 }; }
             return { best };
         }
