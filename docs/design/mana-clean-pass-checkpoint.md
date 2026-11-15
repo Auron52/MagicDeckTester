@@ -1679,3 +1679,18 @@ fungus 1,880, gods 4,300 (first run).
   are 42,000–46,999, 37,000–41,999, and 75,000–79,999 respectively. Full report:
   `logs/mana_clean/rebased-queue-20261115/report.md`. A later remote Merfolk solver
   update arrived during this run; the recorded source stamp identifies this gate.
+
+* **Post-Merfolk fresh blocks (Codex, 2026-11-15):** PGO source `24d8b2638f8a`,
+  15,000 games pooled in `postmerfolk-queue-20261115`; oracle-on/off play was
+  byte-identical. Prevent Damage 42,000–46,999 has **370 issues**: APPLY-DROP 20,
+  APPLY-DROP-ORDER 6, ORACLE-GAP 88, UNMODELED 11, CAPPED 245. Dragonstorm
+  37,000–41,999 has **382 issues**: ENUM-GAP 5, APPLY-DROP 121,
+  APPLY-DROP-ORDER 224, ORACLE-GAP 1, UNMODELED 1, CAPPED 30. Shadowborn
+  75,000–79,999 has **22 issues**: ENUM-GAP 1, APPLY-DROP 15,
+  APPLY-DROP-ORDER 5, ORACLE-GAP 1. The rollback census shows 20 depth-1 drops
+  for Prevent Damage; 42/30/40 depth-1/2/3+ Dragonstorm drops, with 35
+  need-later; and 3/0/12 Shadowborn drops, with 10 need-later. Fresh blocks
+  prevent interpreting changes in totals as paired effects. All three remain
+  beta. Next blocks: Prevent Damage 47,000–51,999, Dragonstorm
+  42,000–46,999, Shadowborn 80,000–84,999. Full report:
+  `logs/mana_clean/postmerfolk-queue-20261115/report.md`.
