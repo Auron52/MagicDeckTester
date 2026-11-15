@@ -6668,7 +6668,6 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
 }
 
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
-inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
 // The mana actually spent on the LAST FireOnCastTriggers call on this thread (-1 = none yet). A TEST PROBE only:
 // nothing in the engine reads it (Raggadragga's "if at least seven mana was spent to cast it" will read the
 // argument itself), so it can never move play. See the `mana_spent` contract below.

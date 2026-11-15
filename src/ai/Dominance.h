@@ -638,7 +638,7 @@ static_assert(sizeof(Player) == 216,
 // (PrepayWildTrueKey mixes the loaded credits, which are 0 whenever gtot no longer matches the float).
 // Mill/Archive Trap, Fatal Push revolt, and Merfolk tap watchers occupy upstream storage.
 // Boars adds the Horn upkeep pin and the Ilharg / legend pins. Recheck this size after merging fields.
-static_assert(sizeof(GameState) == 1616,   // upstream 1608 plus Boars upkeep storage
+static_assert(sizeof(GameState) == 1608,   // Boars fields fit in upstream storage
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 

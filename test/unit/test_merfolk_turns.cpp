@@ -292,8 +292,8 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     state.floating_mana.colorless = 2;
     state.scripted_mihail_pay_choice.Pin(2);
     state.scripted_mihail_pay_choice.bits[0] = 1; // pay first, decline second
-    FireOnCastTriggers(state, *merfolk);
-    FireOnCastTriggers(state, *merfolk);
+    FireOnCastTriggers(state, *merfolk, /*mana_spent=*/0);
+    FireOnCastTriggers(state, *merfolk, /*mana_spent=*/0);
     CHECK(state.scripted_mihail_trigger_ordinal == 2);
     CHECK(state.floating_mana.colorless == 1);
     int tokens = 0;
@@ -308,7 +308,7 @@ TEST_CASE("Emperor Mihail II pays each cast trigger independently")
     two.floating_mana.colorless = 2;
     two.scripted_mihail_pay_choice.Pin(2);
     two.scripted_mihail_pay_choice.bits[1] = 1; // decline first copy, pay second
-    FireOnCastTriggers(two, *merfolk);
+    FireOnCastTriggers(two, *merfolk, /*mana_spent=*/0);
     CHECK(two.scripted_mihail_trigger_ordinal == 2);
     tokens = 0;
     for (const Permanent& p : two.battlefield)
@@ -597,7 +597,7 @@ TEST_CASE("Mihail ordered choices retain high ordinals and distinct plan keys")
     state.floating_mana.colorless = 1;
     state.scripted_mihail_pay_choice = first;
     state.scripted_mihail_trigger_ordinal = 30;
-    FireOnCastTriggers(state, *merfolk);
+    FireOnCastTriggers(state, *merfolk, /*mana_spent=*/0);
     CHECK(state.scripted_mihail_trigger_ordinal == 31);
     CHECK(state.floating_mana.colorless == 0);
 }
@@ -621,8 +621,8 @@ TEST_CASE("Mihail human choice overrides the scripted choice for each trigger")
     };
     DigChooser* saved = g_play_dig_chooser;
     g_play_dig_chooser = &chooser;
-    FireOnCastTriggers(state, *merfolk);
-    FireOnCastTriggers(state, *merfolk);
+    FireOnCastTriggers(state, *merfolk, /*mana_spent=*/0);
+    FireOnCastTriggers(state, *merfolk, /*mana_spent=*/0);
     g_play_dig_chooser = saved;
     CHECK(prompts == 2);
     CHECK(state.floating_mana.colorless == 1);
