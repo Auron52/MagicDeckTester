@@ -1774,6 +1774,10 @@ public:
         // plan holding both such an activation and a cast whose ETB counts lands (see the axis in
         // AppendSubdecisionAxes); every other plan keeps -1.
         int8_t land_search_act_slot = -1;
+        // A held fetch used before this turn's land drop (for example, to let
+        // Drowned Catacomb see the fetched Island/Swamp). The activation is
+        // still the slot-0 prefix; this bit moves that prefix before the drop.
+        bool land_search_before_land = false;
         // SEARCHED COMBAT LANDFALL TARGET (2026-10-17; placed after land_search_act_slot, in its padding --
         // measured no size cost). The RANK every targeted landfall trigger (Phylath) takes for the lands
         // THIS turn's combat puts -- Primeval Titan's attack fetch and the in-combat Khalni crack. Distinct

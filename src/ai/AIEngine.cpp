@@ -5044,6 +5044,11 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
             if (plan.cast_trigger_target_choice >= 0)
             { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq()); }
+            if (plan.land_search_before_land)
+            {
+                TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
+                exec_ls_act_done = true;
+            }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -8433,7 +8438,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
     // MORPH -- the plan's LEAD turn-face-up actions, before every cast (lockstep twin of ApplyPlanDirect's).
     if (!(plan.human_sequence && plan.human_action_order && plan.searched_order && HumanPlayActive()))
     { TurnSolver::ApplyFaceUpLeadActs(state, plan.actions, m_logger); }
-    if (plan.land_search_act_slot == 0)
+    if (plan.land_search_act_slot == 0 && !exec_ls_act_done)
     {
         TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
         exec_ls_act_done = true;

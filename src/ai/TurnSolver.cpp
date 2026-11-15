@@ -29112,6 +29112,7 @@ static uint64_t BpCandFingerprint(const TurnSolver::Plan& p, int blind = kBlindN
     // ...and the PRE-CAST SUBSET (<= -2; TurnSolver::LandSearchActFirstMask) -- its own tag + the mask.
     else if (p.land_search_act_slot <= -2)
     { fold(0x1A62AC75ull); fold(static_cast<uint64_t>(TurnSolver::LandSearchActFirstMask(p.land_search_act_slot))); }
+    if (p.land_search_before_land) { fold(0x1A60AC76ull); }
     return h;
 }
 // DIAGNOSTIC ONLY (MTG_DEDUP_CENSUS). Names every Action field on which two candidates that share an
@@ -29413,6 +29414,7 @@ static bool IsApplyEmptyPlan(const TurnSolver::Plan& p)
         && p.combat_transform_choice == -1 && p.militia_pride_pay_choice == -1 && !p.mihail_pay_choice.IsPinned()
         && p.early_ondemand_crack == -1
         && p.land_search_act_slot == -1
+        && !p.land_search_before_land
         && p.look_top_pins.empty() && p.dredge_pins.empty() && p.keranos_targets.empty() && p.incinerator_targets.empty()
         && p.lackey_choice == -1 && p.ponder_choice == -1 && p.discard_choice == -1
         && p.putback_choice == -1
@@ -29722,6 +29724,7 @@ struct PutBounceFold
         }
         mix(static_cast<std::uint64_t>(p.land_slot + 300));
         mix(static_cast<std::uint64_t>(p.land_search_act_slot + 300));
+        mix(static_cast<std::uint64_t>(p.land_search_before_land));
         if (with_pins)
         {
             mix(p.land_search_pins.size());
@@ -57212,6 +57215,7 @@ namespace solvememo
             || a.mihail_pay_choice != b.mihail_pay_choice
             || a.early_ondemand_crack != b.early_ondemand_crack
             || a.land_search_act_slot != b.land_search_act_slot
+            || a.land_search_before_land != b.land_search_before_land
             || a.tapmode_choice != b.tapmode_choice || a.freshmode_choice != b.freshmode_choice
             || a.lackey_choice != b.lackey_choice || a.ponder_choice != b.ponder_choice
             || a.putback_choice != b.putback_choice
@@ -68853,6 +68857,11 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
                                  // greedy fallback stays pre-combat-only either way.
                                  || (M2ReconsiderEnabled() && plan.land_decided)))
     {
+        if (plan.land_search_before_land && !human_v2)
+        {
+            TurnSolver::ApplyLandSearchActs(state, plan.actions);
+            ls_act_done = true;
+        }
         if (plan.land_decided)
         {
             if (!plan.land_to_play.empty())
@@ -75838,7 +75847,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         }
     }
     if (human_v2) { ls_act_done = true; }
-    else if (plan.land_search_act_slot == 0)
+    else if (plan.land_search_act_slot == 0 && !ls_act_done)
     {
         for (const Action& a : plan.actions) { if (TurnSolver::IsLandSearchActivation(a)) { line_order_trace("landsearch", a); } }
         TurnSolver::ApplyLandSearchActs(state, plan.actions);
@@ -96632,12 +96641,107 @@ static void AppendHeldFetchCrackFirstPlans(const GameState& state, const GameSta
     plans.insert(plans.end(), std::make_move_iterator(out.begin()), std::make_move_iterator(out.end()));
 }
 
+// Mill fetch timing is a provider-owned one-option rule, rather than a search
+// over a known post-shuffle draw. A crack remains when its extra mana (or the
+// landfall it causes) unlocks an action sequence the held fetch cannot make,
+// or when public, fixed mill amounts guarantee a win now. Otherwise preserve the fetch for
+// a later Crab. Compare the actual emitted action sets, so two spells funded
+// jointly by the fetch are covered as well as one newly affordable spell.
+static void PreferMillFetchHold(const GameState& state, std::vector<TurnSolver::Plan>& plans)
+{
+    static const bool legacy = EnvOn("MTG_LEGACY_MILL_FETCH_TIMING"); // =1 restores both timing choices
+    if (legacy || HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)
+        || !ResolveProvider(state).PreferFetchHoldWhenCastUnaffected(state)) { return; }
+    auto is_mill_fetch = [](const std::string& name)
+    { return name == "Scalding Tarn" || name == "Polluted Delta"; };
+    auto key_of = [&](const TurnSolver::Plan& p, bool without_crack)
+    {
+        TurnSolver::Plan plain = p;
+        if (without_crack)
+        {
+            plain.actions.erase(std::remove_if(plain.actions.begin(), plain.actions.end(),
+                [](const Action& a) {
+                    return TurnSolver::IsLandSearchActivation(a)
+                        && (a.card_name == "Scalding Tarn" || a.card_name == "Polluted Delta");
+                }), plain.actions.end());
+        }
+        // A fetch shuffle can change what a later Visions draws. Those newly
+        // drawn casts cannot be evidence that mana was needed to crack now:
+        // compare only casts of cards already visible in our hand at this
+        // decision. This keeps the timing rule independent of hidden draws.
+        std::unordered_map<std::string, int> initial_hand;
+        for (const Card& c : state.ActivePlayer().hand) { ++initial_hand[c.m_name.str()]; }
+        plain.actions.erase(std::remove_if(plain.actions.begin(), plain.actions.end(), [&](const Action& a) {
+            if (a.kind != Action::Kind::CastFromHand) { return false; }
+            int& left = initial_hand[a.card_name.str()];
+            if (left == 0) { return true; }
+            --left;
+            return false;
+        }), plain.actions.end());
+        return p.land_to_play + '\x1f' + p.land_face + '\x1f'
+            + (p.land_from_top ? "top" : "hand") + '\x1f' + std::to_string(p.land_slot)
+            + '\x1f' + PlanSignatureFast(plain, false, false, false, false);
+    };
+    std::unordered_set<std::string> held_actions;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!p.fetch_target.empty() && is_mill_fetch(p.land_to_play)) { continue; }
+        bool cracks = false;
+        for (const Action& a : p.actions)
+        {
+            if (TurnSolver::IsLandSearchActivation(a) && is_mill_fetch(a.card_name.str()))
+            { cracks = true; break; }
+        }
+        if (!cracks) { held_actions.insert(key_of(p, false)); }
+    }
+    if (held_actions.empty()) { return; }
+    plans.erase(std::remove_if(plans.begin(), plans.end(), [&](const TurnSolver::Plan& p) {
+        const bool crack_on_play = !p.fetch_target.empty() && is_mill_fetch(p.land_to_play);
+        bool held_crack = false;
+        for (const Action& a : p.actions)
+        {
+            if (TurnSolver::IsLandSearchActivation(a) && is_mill_fetch(a.card_name.str()))
+            { held_crack = true; break; }
+        }
+        if (!crack_on_play && !held_crack) { return false; }
+        if (p.land_search_before_land) { return false; } // untaps the checkland
+        if (held_actions.find(key_of(p, held_crack)) == held_actions.end())
+        { return false; } // the fetched land enabled a different action set
+        // The library count is public; its contents are not. Only retain a
+        // redundant crack for a guaranteed mill kill, never because a trial
+        // apply saw the hidden order of Tasha's exiled cards.
+        int guaranteed = 0;
+        int mill_per_entry = 0;
+        const bool hedron_targets_opponent = p.landfall_target_choice < 0x100
+            || (p.landfall_target_choice & 0xF) == 0;
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index != state.active_player_index) { continue; }
+            if (q.card.m_name == "Ruin Crab"
+                || (hedron_targets_opponent && q.card.m_name == "Hedron Crab"))
+            { mill_per_entry += 3; }
+        }
+        int entries = crack_on_play ? 2 : 1;
+        if (held_crack && !p.land_to_play.empty()) { ++entries; }
+        guaranteed += mill_per_entry * entries;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand || !a.def) { continue; }
+            const CardParams& pp = a.def->params;
+            if (!pp.spell_mill_target_player) { guaranteed += pp.spell_mill_opponent; }
+        }
+        return !state.opponent_library_dealt
+            || guaranteed < static_cast<int>(state.Opponent().library.size());
+    }), plans.end());
+}
+
 static std::vector<TurnSolver::Plan> EnumerateM2PlansBody(const GameState& state, PbLazyLayout* pb_lazy = nullptr)
 {
     std::vector<TurnSolver::Plan> plans = EnumeratePlans(state, false);
     // The post-combat main's crack-first plans of every held untapped-land fetch (no land drop here: the board
     // is its own pre-drop state). See AppendHeldFetchCrackFirstPlans.
     AppendHeldFetchCrackFirstPlans(state, state, /*is_pre_combat=*/false, plans);
+    PreferMillFetchHold(state, plans);
     // Wave-0 bp_choice variants BEFORE the axes, mirroring the m1 host's order
     // (AppendBreakpointVariants first, axes second -- the axes' base-plan filters skip
     // bp_choice >= 0, which is what keeps the two additive rather than a cross product).
@@ -96854,6 +96958,7 @@ static void PlanDomCensus(const std::vector<TurnSolver::Plan>& all)
             for (int s : pl.prophets_sac_choice) { add(s); }
             add(pl.attack_land_search_choice); add(pl.upkeep_land_search_choice);
             add(pl.combat_crack_choice); add(pl.land_search_act_slot);
+            add(pl.land_search_before_land);
             add(pl.combat_transform_choice);
             add(pl.militia_pride_pay_choice);
             x += "|mihail";
@@ -98409,6 +98514,86 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     }
     // Colours the lands we already control can make (tapped or not -- a tapped land still covers
     // its colour on later turns, which is what "do we already have this colour" asks).
+    // A held fetch may need to resolve BEFORE a checkland enters. The ordinary
+    // held-fetch prefix runs after the drop, so enumerate this one ordered line
+    // on its actual post-crack board. Mill chooses the first legal fetch and
+    // its provider's first target; neither timing nor target is fanned here.
+    static thread_local bool in_mill_preland = false;
+    if (!in_mill_preland && g_bp_enum_depth == 0 && !HumanPlayActive()
+        && HeldFetchCrackFirstOn() && ResolveProvider(state).PreferFetchHoldWhenCastUnaffected(state))
+    {
+        const CardDefinition* check = CardDatabase::Instance().Lookup("Drowned Catacomb");
+        const bool in_hand = std::any_of(ap.hand.begin(), ap.hand.end(), [](const Card& c)
+        { return c.m_name == "Drowned Catacomb"; });
+        if (check && in_hand && LandWouldEnterTapped(state, *check))
+        {
+            const Action* fetch = nullptr;
+            for (const TurnSolver::Plan& p : all)
+            {
+                for (const Action& a : p.actions)
+                {
+                    if (TurnSolver::IsLandSearchActivation(a) && a.def
+                        && CrackPutsUntappedLand(*a.def)
+                        && (a.card_name == "Polluted Delta" || a.card_name == "Scalding Tarn"))
+                    { fetch = &a; break; }
+                }
+                if (fetch) { break; }
+            }
+            if (fetch)
+            {
+                const Action preland = *fetch;
+                std::unordered_set<std::string> afterland_lines;
+                for (const TurnSolver::Plan& q : all)
+                {
+                    if (q.land_to_play != "Drowned Catacomb") { continue; }
+                    bool cracks_after_land = false;
+                    TurnSolver::Plan stripped = q;
+                    stripped.actions.erase(std::remove_if(stripped.actions.begin(), stripped.actions.end(),
+                        [&](const Action& a) {
+                            const bool same = TurnSolver::IsLandSearchActivation(a)
+                                && a.card_name == preland.card_name;
+                            cracks_after_land |= same;
+                            return same;
+                        }), stripped.actions.end());
+                    if (cracks_after_land)
+                    {
+                        afterland_lines.insert(std::to_string(q.landfall_target_choice) + ':'
+                            + PlanSignatureFast(stripped, false, false, false, false));
+                    }
+                }
+                GameState cracked = state;
+                {
+                    ScriptedLandSearch _front(std::vector<int>{0});
+                    TurnSolver::ApplyLandSearchActs(cracked, std::vector<Action>{preland});
+                }
+                if (!LandWouldEnterTapped(cracked, *check))
+                {
+                    in_mill_preland = true;
+                    std::vector<TurnSolver::Plan> sub =
+                        EnumeratePlansWithLandUncachedBody(cracked, is_pre_combat, nullptr);
+                    in_mill_preland = false;
+                    for (TurnSolver::Plan& p : sub)
+                    {
+                        if (p.land_to_play != "Drowned Catacomb"
+                            || p.actions.empty() || p.land_search_act_slot != -1
+                            || !p.land_search_pins.empty()) { continue; }
+                        bool more_search = false;
+                        for (const Action& a : p.actions)
+                        { if (TurnSolver::IsLandSearchActivation(a)) { more_search = true; break; } }
+                        if (more_search) { continue; }
+                        const std::string same_line = std::to_string(p.landfall_target_choice) + ':'
+                            + PlanSignatureFast(p, false, false, false, false);
+                        if (afterland_lines.find(same_line) != afterland_lines.end()) { continue; }
+                        p.actions.insert(p.actions.begin(), preland);
+                        p.land_search_act_slot = TurnSolver::kLandSlotFirst;
+                        p.land_search_before_land = true;
+                        all.push_back(std::move(p));
+                    }
+                }
+            }
+        }
+    }
+
     bool have[6] = { false, false, false, false, false, false };
     for (const Permanent& p : state.battlefield)
     {
@@ -98612,6 +98797,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // QR1: the tapland stable_sort above can interleave the human cycle-seed plans among the older ones again, and
     // the breakpoint fan below caps its base plans IN LIST ORDER (MTG_BP_MAXBASE) -- so restore "older plans
     // first" here, or the seeds take the fan an older plan always had (EldraziDisplacerFlicker claude_s16_gi15 T4).
+    PreferMillFetchHold(state, all);
     OrderHumanCycleSeedPlans(state, all);
     AppendBreakpointVariants(state, all);
     if (EnvOn("MTG_AXES_MEM_TRACE") && all.size() >= 10000)

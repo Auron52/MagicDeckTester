@@ -386,8 +386,8 @@ public:
     std::vector<std::string> FetchCandidates(const GameState&, int,
         const CardParams&) const override;
     // Hedron/Ruin landfall can use a fetchland's second entry later in the turn.
-    // Keep both the battlefield hold and the searched crack-on-play option.
     bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return true; }
+    bool PreferFetchHoldWhenCastUnaffected(const GameState&) const override { return true; }
     int HedronMillTargetPolicyPeriod() const override { return 4; }
     bool FoldsZeroTriggerHedronPolicies() const override
     { return !DecisionUnpruned(UnprunedGate::HedronZeroTrigger); }

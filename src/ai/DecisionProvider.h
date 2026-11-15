@@ -540,6 +540,12 @@ public:
     virtual bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
     { (void)s; (void)fetch; return true; }
 
+    // When both timing choices support the same turn's other actions, a deck may
+    // prefer holding a fetch for a later landfall trigger. The solver keeps a
+    // crack that enables a new action set or wins this turn. Human play and the
+    // unpruned fetch audit retain every legal timing.
+    virtual bool PreferFetchHoldWhenCastUnaffected(const GameState&) const { return false; }
+
     // CanAutoFireAltPayload -- auto-fire safe alt payload: per-card predicate (the engine keeps the
     // deterministic re-scan loop; only the "is this free payload safe to fire" decision
     // is provider-owned).

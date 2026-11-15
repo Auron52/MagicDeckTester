@@ -18,11 +18,14 @@ Darkslick Shores, Drowned Catacomb, Fatal Push, Oboro, Palace in the Clouds,
 and Polluted Delta. Island, Swamp, Watery Grave, and Scalding Tarn were present.
 Scalding Tarn and Polluted Delta keep the battlefield fetch hold in Mill:
 Hedron and Ruin Crab can use the fetched land's second landfall entry later.
-The search offers both hold and an immediate crack with a pinned target; the
-viewer offers the hold and activated search. Autonomous Mill fetches pick the
-first available target in Watery Grave, Island, Swamp order. Outside Mill, both retain their
-prior immediate-on-play behavior. Their `produces` colors remain hand-fixing
-proxies; held copies have no mana ability.
+Autonomous Mill holds a fetch unless cracking enables a different cast sequence,
+lets a Drowned Catacomb enter untapped, or guarantees a mill win from public
+library count and fixed mill amounts. A held fetch can resolve before Drowned
+Catacomb is played, so the planner prices the cast against the same land order
+the executor uses. The viewer offers hold and activated search independently.
+Autonomous Mill fetches pick the first available target in Watery Grave, Island,
+Swamp order. Outside Mill, both retain their prior immediate-on-play behavior.
+Their `produces` colors remain hand-fixing proxies; held copies have no mana ability.
 
 The 50-deck pool is generated from a frozen manifest of current primary
 mainboards; each has exactly 60 cards. Its generated header passes `--check`.
@@ -52,6 +55,23 @@ from 6.66 to 6.41. Mill2HG's regression mean improved from 4.8 to 4.6. Two
 searched games at seed 2003 moved from turn 5 to turn 6 at the usual budget;
 both recovered turn 5 when given more search budget. All 843 saved reference games replayed
 without drift, including the six older Mill recordings under their old model.
+
+The later Mill fetch-timing update holds a fetch when the same actions can be
+made without cracking, keeps a crack when it enables a cast from the current
+hand, and uses only public, fixed mill amounts for the immediate mill-out
+exception. The autonomous planner can crack a held Delta before Drowned
+Catacomb; seed 1 now follows that order, casts Tasha on turn 3, and wins on
+turn 4. All six saved Mill references are met or beaten (search mean 5.5 turns;
+human mean 6.0). On the final build, the 5-game searched smoke cells were 5.0
+turns versus the previous 4.6, and the searched regression cells at seed 2002
+were 5.0 versus 4.6. The held-out cells at seed 4004 improved from their older
+5.6 baseline to 5.4; the same-binary legacy-timing arm also scored 5.4 there.
+The second held-out seed improved from 5.0 to 4.8 against both its baseline
+and the same-binary legacy-timing arm. The slower train games
+persisted at higher budgets and changed their subsequent draws after a
+different fetch/shuffle sequence; they are a measured cost of the deterministic
+hold rule, not a missing Catacomb line. The timing rule reduced searched smoke
+units from 195,074 to 127,474 in a same-binary legacy-timing A/B at depth 5.
 
 A fresh 50-seed sweep (`9001..9050`, one pass across the opponent pool) under
 the land policy scored 6.64 turns at depth 0 with nine unwon games, then 5.08

@@ -1,4 +1,4 @@
-# Regression ground truth -- commit fb3517beb  date 2026-11-15
+# Regression ground truth -- commit 61cad140c  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -8,14 +8,16 @@
 # accepted-with-regressions (regression, 2026-11-15): Mill opponent land and fetch policy changes outcomes. On seed 2003 the two searched T5-to-T6 cases recover at 4x and 16x search budget; regression d3 mean improves 5.0 to 4.6. Legacy references replay.
 # accepted-with-regressions (smoke, 2026-11-15): Passive opponent now draws lands from seed % 50, plays its leftmost land, and cracks zero-cost fetches. Hinata target counts and Midrange Burn Price of Progress use the developed board. Smoke searched games: 10 slower, 19 faster; two slower recover at higher budgets. Regression searched games: 37 slower, 40 faster; one recovers, others reflect the changed opponent land distribution and resulting play/draw sequences. All 843 legacy references replay.
 # accepted-with-regressions (regression, 2026-11-15): Passive opponent now draws lands from seed % 50, plays its leftmost land, and cracks zero-cost fetches. Hinata target counts and Midrange Burn Price of Progress use the developed board. Smoke searched games: 10 slower, 19 faster; two slower recover at higher budgets. Regression searched games: 37 slower, 40 faster; one recovers, others reflect the changed opponent land distribution and resulting play/draw sequences. All 843 legacy references replay.
+# accepted-with-regressions (smoke, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
+# accepted-with-regressions (regression, 2026-11-15): Mill fetch hold policy changes shuffle draws; smoke gi1/gi2 and regression seed 2003/2006 each win one turn later; seed 1 reference now wins turn 4; tested held-out seeds 4004 and 5005.
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
 # --- smoke ---
 mill_smoke_d0_s1001=6.8200/e69959f5c0c3cf89
-mill_smoke_d3_s1001=4.6000/b25c9fd7f2bf2c77
-mill_smoke_d5_s1001=4.6000/508ba095bc8ef8b8
-mill2hg_smoke_d5_s1001=4.6000/508ba095bc8ef8b8
+mill_smoke_d3_s1001=5.0000/82d21bf5d396f1a6
+mill_smoke_d5_s1001=5.0000/82d21bf5d396f1a6
+mill2hg_smoke_d5_s1001=5.0000/82d21bf5d396f1a6
 morph_smoke_d0_s1001=4.7380/2a16be40a3e862c3
 morph_smoke_d3_s1001=3.9800/e6391ce2fb15a901
 morph_smoke_d5_s1001=4.0600/bb06f38e95d96f75
@@ -226,10 +228,10 @@ merfolkturns2hg_smoke_d3_s1001=6.0000/291bd392566dd561
 
 # --- regression ---
 mill_regression_d0_s2002=6.4100/47b8b5e3bc2f438a
-mill_regression_d3_s2002=4.6000/6915496078dffdb8
-mill_regression_d5_s2002=4.6000/6915496078dffdb8
-mill_regression_d5_s3003=5.2000/58d2a99d73646578
-mill2hg_regression_d5_s2002=4.6000/6915496078dffdb8
+mill_regression_d3_s2002=5.0000/4d094873cbc88073
+mill_regression_d5_s2002=5.0000/4d094873cbc88073
+mill_regression_d5_s3003=5.2000/3f17aec415de8a4d
+mill2hg_regression_d5_s2002=5.0000/4d094873cbc88073
 morph_regression_d0_s2002=4.7730/258f39d48b3d2cb5
 morph_regression_d3_s2002=4.0267/532939362a099b06
 morph_regression_d5_s2002=4.0400/ea4fd2613864a91c

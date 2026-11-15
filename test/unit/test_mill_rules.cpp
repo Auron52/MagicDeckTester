@@ -359,12 +359,16 @@ TEST_CASE("Mill Hedron prefix masks preserve every reachable landfall outcome")
 TEST_CASE("Mill fetch hold and crack-on-play retain exactly the used Hedron bits")
 {
     EnsureMillCards();
-    struct FullHedronMill : MillProvider
+    struct TimingSearchMill : MillProvider
+    {
+        bool PreferFetchHoldWhenCastUnaffected(const GameState&) const override { return false; }
+    };
+    struct FullHedronMill : TimingSearchMill
     {
         bool FoldsZeroTriggerHedronPolicies() const override { return false; }
         bool FoldsUnusedHedronPolicyBits() const override { return false; }
     };
-    static const MillProvider folded;
+    static const TimingSearchMill folded;
     static const FullHedronMill full;
     const CardDefinition* crab = CardDatabase::Instance().Lookup("Hedron Crab");
     const CardDefinition* tarn = CardDatabase::Instance().Lookup("Scalding Tarn");
@@ -543,6 +547,139 @@ TEST_CASE("Mill holds modern Tarn and Delta, while other decks keep immediate fe
         CHECK(FetchResolvesOnPlay(state, *fetch));
         CHECK_FALSE(FetchCrackOnPlayOffered(state, *fetch));
         state.m_provider = &mill;
+    }
+}
+
+TEST_CASE("Mill fetch timing holds unless cracking enables a cast or empties the opponent library")
+{
+    EnsureMillCards();
+    static const MillProvider mill;
+    const CardDefinition* crab = CardDatabase::Instance().Lookup("Ruin Crab");
+    const CardDefinition* island = CardDatabase::Instance().Lookup("Island");
+    const CardDefinition* delta = CardDatabase::Instance().Lookup("Polluted Delta");
+    REQUIRE(crab != nullptr);
+    REQUIRE(island != nullptr);
+    REQUIRE(delta != nullptr);
+    auto setup = [&](int opponent_cards) {
+        GameState s;
+        s.m_provider = &mill;
+        s.active_player_index = 0;
+        s.turn_number = 3;
+        s.phase = Phase::PreCombatMain;
+        s.players[0].life = 20;
+        s.players[1].life = 20;
+        s.deck_has_landfall = true;
+        s.deck_has_land_search = true;
+        s.opponent_library_dealt = true;
+        s.players[0].library.push_back(Named("Watery Grave", 100));
+        for (int i = 0; i < opponent_cards; ++i)
+        { s.players[1].library.push_back(Named("Swamp", 100001 + i)); }
+        Permanent watcher;
+        watcher.card = crab->card;
+        watcher.card.m_number = 40;
+        watcher.controller_index = 0;
+        s.battlefield.push_back(watcher);
+        Permanent source;
+        source.card = island->card;
+        source.card.m_number = 41;
+        source.controller_index = 0;
+        s.battlefield.push_back(source);
+        s.players[0].hand.push_back(Named("Polluted Delta", 42));
+        return s;
+    };
+    auto has = [](const GameState& s, bool crack, const char* cast) {
+        for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+        {
+            if (p.land_to_play != "Polluted Delta" || p.fetch_target.empty() != !crack) { continue; }
+            if (cast == nullptr && p.actions.empty()) { return true; }
+            if (cast != nullptr && p.actions.size() == 1 && p.actions[0].card_name == cast)
+            { return true; }
+        }
+        return false;
+    };
+    GameState hold = setup(30);
+    hold.players[0].hand.push_back(Named("Hedron Crab", 43));
+    CHECK(has(hold, false, "Hedron Crab"));
+    CHECK_FALSE(has(hold, true, "Hedron Crab"));
+
+    GameState need_mana = setup(30);
+    need_mana.players[0].hand.push_back(Named("Glimpse the Unthinkable", 43));
+    CHECK(has(need_mana, true, "Glimpse the Unthinkable"));
+
+    GameState finish = setup(4);
+    CHECK(has(finish, true, nullptr));
+    const CardDefinition* hedron = CardDatabase::Instance().Lookup("Hedron Crab");
+    REQUIRE(hedron != nullptr);
+    finish.battlefield.front().card = hedron->card;
+    finish.battlefield.front().card.m_number = 40;
+    CHECK(has(finish, true, nullptr));
+}
+
+TEST_CASE("Mill can crack a held Delta before Drowned Catacomb and cast Tasha")
+{
+    EnsureMillCards();
+    static const MillProvider mill;
+    GameState s;
+    s.m_provider = &mill;
+    s.active_player_index = 0;
+    s.turn_number = 3;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    s.deck_has_land_search = true;
+    s.opponent_library_dealt = true;
+    for (int i = 0; i < 35; ++i)
+    { s.players[1].library.push_back(Named("Shivan Dragon", 100001 + i)); }
+    s.players[0].library.push_back(Named("Watery Grave", 100));
+    auto land = [&](const char* name, int id) {
+        Permanent p;
+        p.card = CardDatabase::Instance().Lookup(name)->card;
+        p.card.m_number = id;
+        p.controller_index = 0;
+        s.battlefield.push_back(p);
+    };
+    land("Darkslick Shores", 10);
+    land("Polluted Delta", 11);
+    s.players[0].hand.push_back(Named("Drowned Catacomb", 12));
+    s.players[0].hand.push_back(Named("Tasha's Hideous Laughter", 13));
+
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* line = nullptr;
+    for (const TurnSolver::Plan& p : plans)
+    {
+        if (!p.land_search_before_land || p.land_to_play != "Drowned Catacomb") { continue; }
+        for (const Action& a : p.actions)
+        { if (a.card_name == "Tasha's Hideous Laughter") { line = &p; break; } }
+        if (line) { break; }
+    }
+    REQUIRE(line != nullptr);
+    GameState after = s;
+    TurnSolver::ApplyPlan(after, *line, true);
+    CHECK(after.players[0].life == 17); // fetch plus untapped Watery Grave
+    CHECK(std::any_of(after.battlefield.begin(), after.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Drowned Catacomb"; }));
+    CHECK(std::any_of(after.players[0].graveyard.begin(), after.players[0].graveyard.end(), [](const Card& c)
+    { return c.m_name == "Tasha's Hideous Laughter"; }));
+    CHECK(after.players[1].library.size() < s.players[1].library.size());
+
+    for (const char* basic : {"Island", "Swamp"})
+    {
+        GameState fallback = s;
+        fallback.players[0].library = Library{};
+        fallback.players[0].library.push_back(Named(basic, 100));
+        const auto basic_plans = TurnSolver::EnumerateMainPlans(fallback, true);
+        const TurnSolver::Plan* basic_line = nullptr;
+        for (const TurnSolver::Plan& p : basic_plans)
+        {
+            if (!p.land_search_before_land || p.land_to_play != "Drowned Catacomb") { continue; }
+            for (const Action& a : p.actions)
+            { if (a.card_name == "Tasha's Hideous Laughter") { basic_line = &p; break; } }
+            if (basic_line) { break; }
+        }
+        REQUIRE(basic_line != nullptr);
+        TurnSolver::ApplyPlan(fallback, *basic_line, true);
+        CHECK(fallback.players[0].life == 19);
+        CHECK(fallback.players[1].library.size() < s.players[1].library.size());
     }
 }
 
