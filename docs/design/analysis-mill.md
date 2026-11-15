@@ -61,6 +61,12 @@ identical win turns in every game of this sample. Logs are
 job cost is 39,013 units per game, about 0.45 times Hinata's 86,019 under
 the same opponent-land update.
 
+After rebasing the land model, the full smoke and regression gate passed all
+534 jobs, 545 scenarios, and 843 strict reference replays with zero play
+drift. The full unit suite passed 3,138 cases and 3,600,555 assertions; the
+Mill and opponent-land subset passed 44 cases and 3,830 assertions. A new
+12-game viewer audit surfaced every expected decision type.
+
 The land policy is shared with decks whose cards observe opponent lands. The
 deck-derived trait enables it for Price of Progress and for Hinata paired with
 permanent-targeting spells, using the same 50-deck pool and legacy-reference
@@ -100,7 +106,9 @@ prints an advisory because that scan does not recognize the new modal parameter.
 For the seed-1 rejected line, the viewer now splits a held Polluted Delta crack
 before the queued Drowned Catacomb and Tasha's Hideous Laughter. The fetched
 land is chosen at resolution, and the continuation is validated against that
-new board; `test/viewer_linebuild_check.js` pins this route.
+new board. Replaying the reported choice found Island, put Drowned Catacomb
+onto the battlefield untapped, and accepted the Tasha cast;
+`test/viewer_linebuild_check.js` pins this route.
 
 Hedron target search uses a MillProvider-owned set of 16 periodic four-trigger
 patterns. It represents every target sequence for up to four triggers; a unit
