@@ -208,6 +208,7 @@ struct Job
     // OOM-killed the box at N=24 for a result identical to loading it once.
     int              fm_count           = -1;
     std::vector<int> fm_bottom;
+    bool            legacy_passive_opponent_lands = false; // historical Mill reference replay
     int             depth               = 0;
     int             budget_ms           = 0;
     // Per-GAME work ceiling in search units (see ai/GameWorkMeter.h). 0 = disarmed = byte-identical
@@ -841,6 +842,7 @@ Job ParseJob(const json& jspec, ProfileCache& cache)
         const std::string fm = jspec.value("force_mulligan", std::string());
         if (!fm.empty()) { ParseForcedMulliganSpec(fm, j.fm_count, j.fm_bottom); }
     }
+    j.legacy_passive_opponent_lands = jspec.value("legacy_passive_opponent_lands", false);
     j.depth               = jspec.value("depth", 0);
     j.budget_ms           = jspec.value("budget_ms", 0);
     j.sched_weight        = jspec.value("weight", 0);      // LPT priority override (see Job::sched_weight)
@@ -2502,7 +2504,8 @@ std::vector<BatchJobResult> BatchRunner::RunManifest(
                 indexcarry::Sink icarry;
                 if (s_index_carry) { indexcarry::t_sink = &icarry; }
                 GameState state = GoldFishRunner::SetupGame(
-                    job.deck, job.seed + static_cast<uint64_t>(wi.game), global_gi);
+                    job.deck, job.seed + static_cast<uint64_t>(wi.game), global_gi,
+                    job.legacy_passive_opponent_lands);
                 GoldFishRunner::PopulateOpponentSpawns(state, global_gi);
 
                 // Attach a logger for the play fingerprint. Default: DIGEST-ONLY (no structure

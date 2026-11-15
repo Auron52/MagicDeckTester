@@ -144,6 +144,31 @@ TEST_CASE("opponent deck: dealing is gated, and leaves 53 in library / 7 in hand
     }
 }
 
+TEST_CASE("opponent deck: cleanup discards the first hand card down to seven")
+{
+    GameState s;
+    opponentdeck::Deal(s, /*needed=*/true, 1, /*use_diverse_pool=*/true);
+    const int first = s.players[1].hand.front().m_number;
+    const int second = s.players[1].hand[1].m_number;
+    opponentdeck::EndOfTurnDraw(s);
+    opponentdeck::EndOfTurnDraw(s);
+    CHECK(s.players[1].hand.size() == 9u); // no cleanup during the draw step
+    opponentdeck::EndOfTurnCleanup(s);
+    CHECK(s.players[1].hand.size() == 7u);
+    REQUIRE(s.players[1].graveyard.size() == 2u);
+    CHECK(s.players[1].graveyard[0].m_number == first);
+    CHECK(s.players[1].graveyard[1].m_number == second);
+    opponentdeck::EndOfTurnCleanup(s);
+    CHECK(s.players[1].graveyard.size() == 2u);
+
+    GameState undealt;
+    undealt.players[1].hand = s.players[1].hand;
+    undealt.players[1].hand.push_back(s.players[1].graveyard.front());
+    opponentdeck::EndOfTurnCleanup(undealt);
+    CHECK(undealt.players[1].hand.size() == 8u);
+    CHECK(undealt.players[1].graveyard.empty());
+}
+
 TEST_CASE("opponent deck: the shuffle is seed-derived, not a shared stream")
 {
     // Two different game seeds must give different opponent orders (otherwise the derived salt is

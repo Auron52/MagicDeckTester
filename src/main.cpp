@@ -1850,6 +1850,28 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
     if (s.opponent_library_dealt)
     {
         os << ", \"library_size\": " << s.players[opp].library.size();
+        os << ", \"hand_size\": " << s.players[opp].hand.size();
+        std::vector<std::string> opp_gy;
+        for (const Card& c : s.players[opp].graveyard) { opp_gy.push_back(c.m_name.str()); }
+        std::sort(opp_gy.begin(), opp_gy.end());
+        os << ", \"graveyard\": "; JsonNameArray(os, opp_gy);
+        if (std::string(ResolveProvider(s).Name()) == "Mill")
+        {
+            std::vector<std::string> opp_exile;
+            for (const Card& c : s.exile)
+            { if (c.m_number >= opponentdeck::kNumberBase) { opp_exile.push_back(c.m_name.str()); } }
+            std::sort(opp_exile.begin(), opp_exile.end());
+            os << ", \"exile\": "; JsonNameArray(os, opp_exile);
+            const opponentdeck::DeckSpec& deck = opponentdeck::Selected(s.game_seed);
+            os << ", \"starting_deck\": { \"name\": "; JsonStr(os, deck.name);
+            os << ", \"slot\": " << (s.game_seed % opponentdeck::Pool().size()) << ", \"cards\": [";
+            for (size_t i = 0; i < deck.cards.size(); ++i)
+            {
+                if (i) { os << ", "; }
+                os << '['; JsonStr(os, deck.cards[i].first); os << ", " << deck.cards[i].second << ']';
+            }
+            os << "] }";
+        }
         if (s.opponent_decked) { os << ", \"decked\": true"; }
     }
     os << " },\n";
@@ -4417,6 +4439,11 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
         d.Note("reply an examined index to target that card in a graveyard. The target is mandatory; "
                "-1 takes the AI's pick. Afterward, choose which same-name cards to exile from each zone.");
     }
+    else if (source == "Archive Trap (opponent fetch)")
+    {
+        d.Note("reply 0 to cast Archive Trap for {0} now, during the opponent's turn, or -1 to hold it. "
+               "The AI casts it by default.");
+    }
     else if (source.find("(attack dig)") != std::string::npos)
     {
         d.Note("reply an examined index to put that card onto the battlefield (attaching is the "
@@ -6220,7 +6247,8 @@ g_play_soulfire_chooser = nullptr;
 void WriteClaudePlayTrace(const std::filesystem::path& log_dir, uint64_t seed, int game_index,
                           bool won, int win_turn, const std::string& mulligan_json,
                           const std::vector<std::string>& trace,
-                          const std::vector<PlayEvent>& final_events)
+                          const std::vector<PlayEvent>& final_events,
+                          bool opponent_land_model)
 {
 if (!log_dir.empty())
 {
@@ -6245,6 +6273,7 @@ if (!log_dir.empty())
     // A new recording uses held fetchlands and their separate activation. Earlier references
     // carry no stamp and replay through the old immediate-fetch path.
     if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
+    if (opponent_land_model) { out << ", \"opponent_land_model\": 1"; }
     // Same contract for the CR 510.4 two-step combat damage (CombatDamageStepsOn, GameLogger.h): a
     // reference without `combat_damage_steps` predates it and replays under --legacy-single-damage-step.
     if (CombatDamageStepsOn()) { out << ", \"combat_damage_steps\": 1"; }
@@ -9122,10 +9151,12 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
                          bool interactive = false,
                          bool then_auto = false,
                          const std::string& full_enum_spec = "",
-                         int auto_depth = -1, int auto_budget_ms = -1)
+                         int auto_depth = -1, int auto_budget_ms = -1,
+                         bool legacy_passive_opponent_lands = false)
 {
     g_play_magus_upkeep_prompt = magus_upkeep_prompt;
-    GameState state = GoldFishRunner::SetupGame(deck, seed, game_index);
+    GameState state = GoldFishRunner::SetupGame(deck, seed, game_index,
+                                                legacy_passive_opponent_lands);
     GoldFishRunner::PopulateOpponentSpawns(state, game_index);
     // Stamp stable per-copy card numbers (goldfish only does this under --log-dir). Claude-play needs
     // them so the emitted hand/decision JSON carries real "num"s and --force-mulligan can bottom a
@@ -9243,7 +9274,7 @@ static int RunClaudePlay(const Decklist& deck, const MulliganProfile& profile,
 
     // Game completed (every decision was supplied). Write the per-game trace if asked.
     WriteClaudePlayTrace(log_dir, seed, game_index, won, win_turn, mulligan_json, h.trace,
-                         h.event_log);
+                         h.event_log, state.opponent_plays_lands);
 
     WriteClaudePlayResult(state, h.event_log, h.dropped_log, won, win_turn, h.decisions_made,
                           mulligan_json, h.dropped_reason_log);
@@ -9789,8 +9820,11 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // and overriding it here would throw that away, so this stands down when it fired.
     if (!state.opponent_library_dealt)
     {
-        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck), state.game_seed,
-                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck));
+        const bool play_opponent_lands = GoldFishRunner::DeckNeedsOpponentLandPlay(deck);
+        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck)
+                               || play_opponent_lands, state.game_seed,
+                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck)
+                               || play_opponent_lands);
     }
 
     try
@@ -11203,6 +11237,7 @@ int main(int argc, char* argv[])
     std::string choices_str;          // comma-separated plan indices for --claude-play
     bool        play_interactive = false;   // --interactive: viewer persistent-child mode
     bool        choices_then_auto = false;  // --choices-then-auto: search plays on after the prefix
+    bool        legacy_passive_opponent_lands = false; // replay references recorded before opponent land play
     std::string firebreathe_str;      // #4: "turn:count,..." firebreathe-amount side-channel (turn-keyed)
     bool firebreathe_prompt = false;  // #4: --firebreathe-prompt -> exit-70 to ask when a turn is unanswered
     std::string jitte_str;            // Umezawa's Jitte: "turn:count,..." counter-spend side-channel
@@ -11254,6 +11289,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-combat-swap-defer") { g_play_legacy_combat_swap_defer = true; continue; }   // replay a reference recorded UNDER the 2026-10-06..22 human combat-swap deferral (stamp combat_swap_timing; value-less)
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-fetch-immediate") { g_play_legacy_fetch_immediate = true; continue; } // replay references recorded before fetchlands could be held and activated
+        if (flag == "--legacy-passive-opponent-lands") { legacy_passive_opponent_lands = true; continue; }
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-spell-copy")   { g_play_legacy_spell_copy = true; continue; }  // replay a reference recorded before the resolved-spell copy id (value-less; see GameLogger.h, Cyclone Q53)
@@ -11552,7 +11588,7 @@ int main(int argc, char* argv[])
                                  magus_upkeep_prompt,
                                  jitte_str, jitte_prompt, force_attackers_str, tap_pref_str,
                                  play_interactive, choices_then_auto, full_enum_str,
-                                 auto_depth, auto_budget_ms);
+                                 auto_depth, auto_budget_ms, legacy_passive_opponent_lands);
         }
 
         // Forced-mulligan replay (isolates play from mulligan/bottoming): reconstruct a recorded

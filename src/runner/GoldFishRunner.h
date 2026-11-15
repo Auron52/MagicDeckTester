@@ -110,7 +110,8 @@ public:
     // Build the initial GameState for a single game with the given seed and global game index.
     // The index selects the passive opponent's 10-game land pattern; standalone probes without
     // an index use seed modulo 10 for a deterministic sample of the same pattern.
-    static GameState SetupGame(const Decklist& deck, uint64_t seed, int game_index = -1);
+    static GameState SetupGame(const Decklist& deck, uint64_t seed, int game_index = -1,
+                               bool legacy_passive_opponent_lands = false);
 
     // Stamp the deck-derived trait fields (uses_second_main, deck_feeds_combat, dependency
     // pulls, graveyard readers) and the env shuffle salts onto a GameState. SetupGame calls
@@ -161,6 +162,8 @@ public:
     static bool DeckTouchesOpponentZones(const Decklist& deck);
     // Tasha's Hideous Laughter reads mana values from a real opposing deck.
     static bool DeckUsesDiverseOpponentPool(const Decklist& deck);
+    // Whether this deck's decisions observe the opponent developing lands.
+    static bool DeckNeedsOpponentLandPlay(const Decklist& deck);
     // Card-dependency-map closure (docs/design/card-dependency-map.md): which dependency
     // classes the main-phase classifier pulls to Main1 for this deck. Stamped onto
     // GameState::dep_enabler_main1 / dep_castpayoff_main1 by SetupGame.

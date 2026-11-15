@@ -77562,9 +77562,11 @@ static bool SimulateEndAndStartNextTurn(GameState& state)
         if (!PerformOpponentUpkeepHellbentDraw(state)) { return false; }
         opponentdeck::EndOfTurnDraw(state);
         if (!state.opponent_decked) { DrawHowlingMineCards(state, 1 - state.active_player_index); }
+        if (!state.opponent_decked) { ResolvePassiveOpponentLandTurn(state); }
         PerformEndStepDiscardHands(state, state.active_player_index);   // Sire at the opponent's end step (twin)
         PerformEndStepSelfSacrifices(state);   // morph at the opponent's end step (twin of RunTurnFrom's)
         PerformOpponentEndStepFaceUp(state);
+        opponentdeck::EndOfTurnCleanup(state);
         DayNightTurnBoundary(state);
         return true;
     };
@@ -100762,6 +100764,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         { Fold(k, static_cast<uint64_t>(state.scripted_prophets_sac[i] + 3)); }
     }
     Fold(k, state.on_the_play ? 1u : 0u);
+    if (state.opponent_plays_lands) { Fold(k, 0x0A11D5u); }
     Fold(k, state.opponent_lost_life_this_turn ? 1u : 0u);
     if (state.opponent_searched_library_this_turn) { Fold(k, 0xA8C41Eu); }
     if (state.hedron_mill_trigger_ordinal != 0)
@@ -101125,9 +101128,13 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
 
         Fold(k, 0x4A00 + static_cast<uint64_t>(pi)); // sub-section: hand (ordered; multiset when canon)
         Fold(k, static_cast<uint64_t>(p.hand.size()));
+        // A dealt opponent hand is ordered: Mill's policy plays its leftmost
+        // land, and cleanup discards its first card. Preserve that order even
+        // in a canonicalized search key or future turns can share a false hit.
+        const bool canonical_hand = canon && !(state.opponent_library_dealt && pi == 1);
         for (const Card& c : p.hand)
         {
-            if (canon)
+            if (canonical_hand)
             {
                 TranspositionTable::Key ck;
                 Fold(ck, c.m_name_hash);
@@ -101142,7 +101149,7 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
             // prior key (byte-identical results).
             if (c.m_is_staged) { Fold(k, static_cast<uint64_t>(c.m_staged_expiry)); }
         }
-        if (canon) { canon_flush(); }
+        if (canonical_hand) { canon_flush(); }
 
         Fold(k, 0x57A6 + static_cast<uint64_t>(pi)); // sub-section: staged cards
         Fold(k, static_cast<uint64_t>(p.staged_cards.size()));
@@ -123389,6 +123396,7 @@ static void BpVerifyStateSwap(const GameState& stored, const GameState& now, boo
     if (stored.on_the_play != now.on_the_play) { d += " on_the_play=" + std::to_string(static_cast<long long>(stored.on_the_play)) + "/" + std::to_string(static_cast<long long>(now.on_the_play)); }
     if (stored.opponent_decked != now.opponent_decked) { d += " opponent_decked=" + std::to_string(static_cast<long long>(stored.opponent_decked)) + "/" + std::to_string(static_cast<long long>(now.opponent_decked)); }
     if (stored.opponent_library_dealt != now.opponent_library_dealt) { d += " opponent_library_dealt=" + std::to_string(static_cast<long long>(stored.opponent_library_dealt)) + "/" + std::to_string(static_cast<long long>(now.opponent_library_dealt)); }
+    if (stored.opponent_plays_lands != now.opponent_plays_lands) { d += " opponent_plays_lands=" + std::to_string(static_cast<long long>(stored.opponent_plays_lands)) + "/" + std::to_string(static_cast<long long>(now.opponent_plays_lands)); }
     if (stored.opponent_lost_life_this_turn != now.opponent_lost_life_this_turn) { d += " opponent_lost_life_this_turn=" + std::to_string(static_cast<long long>(stored.opponent_lost_life_this_turn)) + "/" + std::to_string(static_cast<long long>(now.opponent_lost_life_this_turn)); }
     if (stored.permanent_left_under_control_this_turn != now.permanent_left_under_control_this_turn) { d += " permanent_left_under_control_this_turn=" + std::to_string(static_cast<long long>(stored.permanent_left_under_control_this_turn)) + "/" + std::to_string(static_cast<long long>(now.permanent_left_under_control_this_turn)); }
     if (stored.own_death_live != now.own_death_live) { d += " own_death_live=" + std::to_string(static_cast<long long>(stored.own_death_live)) + "/" + std::to_string(static_cast<long long>(now.own_death_live)); }

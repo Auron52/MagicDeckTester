@@ -7,6 +7,24 @@ shuffled and dealt a seven-card opening hand. This preserves the 53-card
 deck-out depth and gives Tasha an ordered mix of printed mana values. Other
 decks that touch the opponent's library keep the fixed list described below.
 
+**Update 2026-11-15:** The opponent now develops lands for decks whose cards
+observe that development: Archive Trap (fetch searches), Price of Progress
+(nonbasic count), and Hinata plus permanent-targeting spells (available targets).
+Those decks use the same `seed % 50` pool. Each opponent turn draws as before,
+plays the leftmost land in hand, and immediately cracks a zero-mana fetch for
+the first eligible library land. A fetch shuffles and opens Archive Trap's
+free-cast window. Older viewer references replay their original land model.
+Other decks retain the fixed opponent list or the historical three-land board.
+
+The paired smoke and regression measurements are small but mixed. Hinata's
+depth-5 smoke mean moved 5.45 → 5.43; its two ordinary regression rows moved
+5.4067 → 5.4133 and 5.7067 → 5.6800. Midrange Burn's depth-5 smoke mean
+moved 4.44 → 4.40; its regression rows moved 4.4333 → 4.4133 and
+4.2733 → 4.3067. The changed early Price of Progress damage explains many
+per-game differences because the opponent now builds its nonbasic count from
+actual land draws. Search cost stayed near baseline on both decks. Strict
+replay passed all 843 saved references using the legacy model where needed.
+
 **Status: CLOSED 2026-09-02** (`src/core/OpponentDeck.h`). Recorded 2026-09-02 from a user
 observation while diagnosing [analysis-Eldrazi Displacer Flicker.md](analysis-Eldrazi%20Displacer%20Flicker.md);
 implemented the same day. The history below is kept because the *shape* of the bug — and the two
@@ -44,8 +62,10 @@ avg** on a deck the user expects to kill around turn 4-5.
 
 ## What is modelled now
 
-A **fixed** 60-card list (24 lands / 20 creatures / 16 spells), identical for every deck under test,
-dealt with a 7-card opening hand. They still never cast, block, or decide anything.
+A **fixed** 60-card list (24 lands / 20 creatures / 16 spells) remains for decks
+that need an opponent library but do not observe its land development. Decks
+that do observe it use a frozen pool of 50 real mainboards, each dealt with a
+7-card opening hand. The opponent does not cast spells or block.
 
 Fixed rather than a mirror of the deck under test, deliberately: deck-out depth becomes a
 **constant** (53 cards after the opening hand), so a mill measurement is comparable across decks
@@ -55,7 +75,7 @@ instead of being a function of the mill deck's own size.
 card and cares whether it is a **land**, so the 24/36 split sets a real hit rate; discard effects
 need a hand to bite on, hence the opening seven.
 
-**The draw is simulated at the end of each of OUR turns.** There is no opponent turn to hang it on.
+**The draw is simulated at the end of each of OUR turns.** The opponent never becomes the active player.
 That slot is faithful either way — on the play, their turn N follows ours; on the draw, their turn
 N+1 follows our turn N and their turn 1 (where they are on the play) correctly draws nothing — and
 it is what makes the win turn come out right with no special-casing anywhere. Per the user
@@ -121,6 +141,6 @@ limitation is lifted.
 
 ## Still not modelled
 
-The opponent does not **play** anything they draw, does not attack or block, and takes no actions of
-any kind. Only their *zones* exist. Extending them to actually play the deck is a much larger piece
-of work (a real Phase 2 opponent) and is not implied by any of the above.
+The opponent plays lands under the deterministic policy above, but does not cast
+spells, attack, block, or choose combat actions. Extending them to actually play
+the deck is a much larger piece of work (a real Phase 2 opponent).

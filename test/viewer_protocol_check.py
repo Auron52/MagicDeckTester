@@ -465,6 +465,11 @@ def recording_rule_args(ref):
     fetchland collapse, so their same land pick produced different mana and shuffle timing. Replay
     those recordings with --legacy-fetch-immediate; new recordings carry the stamp.
 
+    `opponent_land_model` (2026-11-15): the passive opponent now plays its
+    leftmost land and cracks zero-cost fetches for Mill and other land-observing
+    decks. Older references used three fixed placeholder lands and no opponent
+    fetch searches; replay them with the old model so their saved lines survive.
+
     `pain_defer` (2026-10-08, USER report on Prevent_Damage/claude_s11_gi10: "I had to use the
     manual-tap option"): from then on an auto-tapped payment that funds a lifegain amplifier (Rhox
     Faithmender, Vito, ...) keeps the painful lands for the end-of-main sweep (dmgev::PainDeferEnabled).
@@ -494,6 +499,8 @@ def recording_rule_args(ref):
         args.append("--legacy-karoo-float")
     if not ref.get("fetch_activation"):
         args.append("--legacy-fetch-immediate")
+    if not ref.get("opponent_land_model"):
+        args.append("--legacy-passive-opponent-lands")
     if not ref.get("pain_defer"):
         args.append("--legacy-pain-pay")
     if not ref.get("gsz_copy_id"):

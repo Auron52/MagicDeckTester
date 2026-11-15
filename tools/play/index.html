@@ -132,6 +132,14 @@
   .row.padrow { gap:20px 16px; }
   .zone.lands { opacity:.97; } .zone.gy { opacity:.6; } .zone.gy .thumb { width:46px; } .zone.gy .thumb em { display:none; }
   .zone.oppz h3 { color:var(--bad); border-color:rgba(230,105,90,.25); }
+  .opp-public { margin:8px 0; padding:8px 10px; border:1px solid rgba(230,105,90,.25);
+                border-radius:7px; background:rgba(230,105,90,.04); }
+  .opp-public summary { cursor:pointer; color:var(--bad); font-size:12px; font-weight:600; }
+  .opp-public .public-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr));
+                              gap:3px 12px; max-height:180px; overflow:auto; margin-top:7px; }
+  .opp-public .public-card { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .opp-public .public-card b { color:var(--bad); margin-right:5px; }
+  .opp-public .public-note { color:var(--muted); font-size:11px; margin-top:5px; }
   .hint { color:var(--muted); font-size:12px; }
   /* top-bar badge shown when this (deck,seed,game#) already has a saved reference game */
   .refnote { font-size:12px; font-weight:600; color:#0c1116; background:var(--acc); border-radius:8px;
@@ -2439,6 +2447,12 @@ function plannedEnchantGroup(entry, planIdx, ord, planned) {
                    entry.name, [], planned);
 }
 function zoneRow(items, cls='') { return `<div class="row ${cls}">${items.length?items.join(''):'<span class="hint">none</span>'}</div>`; }
+function publicCards(names) {
+  const counts = new Map();
+  for (const name of names) counts.set(name, (counts.get(name)||0)+1);
+  return [...counts].sort((a,b)=>a[0].localeCompare(b[0]))
+    .map(([name,count])=>`<span class="public-card" title="${esc(name)}"><b>${count}×</b>${esc(name)}</span>`).join('');
+}
 
 // The set of decision types that overlay a central panel (board stays rendered behind).
 // MUST list every `d.Type("...")` the engine can emit besides main_phase: a type missing here makes
@@ -2665,7 +2679,19 @@ function renderBoard() {
   const oppB = `<b class="opp ${oppLifeDisp<=0?'dead':''}${oppFace||oppBoros?' facetgt':''}${oppFace&&isSelT(oppFace)||oppBoros&&S.variantTargetPick.selected?.num===0?' selected':''}"${oppFace?` data-tk="${tgtKey(oppFace)}"`:''}>${oppLifeDisp ?? '?'}</b>`;
   h += `<div class="lifebar"><span class="life">Opponent ${oppB}</span>`+
        // The opponent's library, when one was dealt (a deck-out / mill deck must see its target).
-       (d.opponent&&d.opponent.library_size!=null?`<span class="life" title="cards left in the opponent's library${d.opponent.decked?' -- DECKED':''}">library <b>${d.opponent.library_size}</b>${d.opponent.decked?' (decked)':''}</span>`:'')+`</div>`;
+       (opp.library_size!=null?`<span class="life" title="cards left in the opponent's library${opp.decked?' -- DECKED':''}">library <b>${opp.library_size}</b>${opp.decked?' (decked)':''}</span>`:'')+
+       (opp.hand_size!=null?`<span class="life">hand <b>${opp.hand_size}</b></span>`:'')+`</div>`;
+  if (opp.starting_deck) {
+    const deck = opp.starting_deck;
+    h += `<details class="opp-public" id="oppdeckdetails"${S.oppDeckOpen?' open':''}>`+
+         `<summary>Opponent deck: ${esc(deck.name)} (seed slot ${deck.slot}/50) · starting list</summary>`+
+         `<div class="public-cards">${(deck.cards||[]).map(([name,count])=>`<span class="public-card" title="${esc(name)}"><b>${count}×</b>${esc(name)}</span>`).join('')}</div>`+
+         `<div class="public-note">Starting list only; hidden hand and library order are not shown.</div></details>`;
+    h += `<div class="opp-public"><b>Opponent graveyard (${(opp.graveyard||[]).length})</b>`+
+         `<div class="public-cards">${publicCards(opp.graveyard||[])||'<span class="hint">empty</span>'}</div></div>`;
+    if ((opp.exile||[]).length) h += `<div class="opp-public"><b>Opponent exile (${opp.exile.length})</b>`+
+         `<div class="public-cards">${publicCards(opp.exile)}</div></div>`;
+  }
   if (oppBf.length) { h += `<div class="zone oppz"><h3>Opponent permanents (${oppPerms.length})</h3>${zoneRow(oppPerms.map(bfThumb))}</div>`;
     if (oppLands.length) h += `<div class="zone oppz lands"><h3>Opponent lands (${oppLands.length})</h3>${zoneRow(oppLands.map(bfThumb))}</div>`; }
   else h += `<div class="hint">opponent has no permanents</div>`;
@@ -2824,6 +2850,8 @@ function renderBoard() {
   // sticky commit/turn-plan footer, last so its position:sticky bottom:0 docks to the viewport.
   if (isMain) h += `<div id="planbar"></div>`;
   board.innerHTML = h;
+  const oppDeckDetails = board.querySelector('#oppdeckdetails');
+  if (oppDeckDetails) oppDeckDetails.ontoggle = () => { S.oppDeckOpen = oppDeckDetails.open; };
   // The revealed library top (Courser of Kruphix): clicking a PLAYABLE top land queues it as the land
   // drop from the top (LB.queueCard fromTop -> `landtop=`); clicking it again takes it back.
   if (isMain && me.library_top && (me.library_top.playable_land || me.library_top.playable_spell)) {
@@ -4776,6 +4804,11 @@ function lookPanelHtml(d, dec){
 // dimmed/non-takeable, and a "Take nothing" option declines. The AI's pick is tagged. After a card
 // enters hand the engine re-enumerates (the library shrank), so a dug card is playable THIS turn.
 function digPanelHtml(d){
+  if ((d.source||'')==='Archive Trap (opponent fetch)') {
+    return '<h3>Opponent cracked a fetchland</h3><div class="sub">You may cast Archive Trap for {0} now, during the opponent’s turn.</div>'+
+      '<div class="optgrid"><button class="optcard def" data-opt="0">Cast Archive Trap for {0}  ·  AI pick</button>'+
+      '<button class="optcard" data-opt="-1">Hold Archive Trap</button></div>';
+  }
   if ((d.source||'').startsWith('Surgical Extraction (target card in a graveyard)')) {
     let h='<h3>Surgical Extraction — target a graveyard card</h3>'+
       '<div class="sub">Choose a card in either graveyard. You will then choose which cards with that name to exile from its owner’s graveyard, hand, and library.</div><div class="tutgrid">';
@@ -5891,6 +5924,10 @@ function commitLook(d, oi){
 function commitVial(d, v){ pushChoice(d, v, v?'Vial: +counter':'Vial: hold'); }
 function commitDig(d, oi){
   const c=(d.examined||[]).find(x=>x.index===oi);
+  if ((d.source||'')==='Archive Trap (opponent fetch)') {
+    pushChoice(d, oi, oi===0?'Archive Trap: cast for {0}':'Archive Trap: hold');
+    return;
+  }
   pushChoice(d, oi, `${d.source}: ${oi<0||!c?'take nothing':'take '+c.name}`);
 }
 function commitLightPaws(d, oi){
