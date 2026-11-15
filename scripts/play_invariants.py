@@ -81,6 +81,15 @@ KNOWN_TYPES = {
     # every SelesnyaLifegain game that cast a Paragon and gained life FAILED the gate as "unknown
     # decision type" (found on the v2 list's verify_deck run, 2026-10-22).
     "lifegain_counters",
+    # Single-int picks with the engine default exposed as heuristic_default (the generic fallback follows it),
+    # first reached by Red Elementals' verify_deck run (2026-11-15):
+    #   gy_return_one -- main.cpp WriteGyReturnOneDecisionJson (Thunderkin Awakener's attack trigger, Abiding
+    #                    Grace, Emeria): 0 = the alternative, i >= 1 = return candidates[i-1];
+    #   face_up       -- WriteFaceUpDecisionJson (a face-down Firecat at the opponent's end step): option index or
+    #                    -1 = done, re-asked after each flip;
+    #   eot_put       -- WriteEotPutDecisionJson (Incandescent Soulstoke at the opponent's end step): option index
+    #                    or -1 = put nothing, re-asked while another untapped source remains.
+    "gy_return_one", "face_up", "eot_put",
 }
 D_START, D_END = "<<<CLAUDE_DECISION>>>", "<<<END_DECISION>>>"
 R_START, R_END = "<<<CLAUDE_RESULT>>>", "<<<END_RESULT>>>"

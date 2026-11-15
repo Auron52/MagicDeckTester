@@ -2565,6 +2565,33 @@ def pick_face_up_window(d, target_lc):
     return None
 
 
+def pick_eot_put_window(d, target_lc, put_names_lc):
+    """EOT_PUT forcing (Incandescent Soulstoke, agent H2 2026-11-15): the opponent-end-step `eot_put` modal exists
+    only while we control an UNTAPPED source that has been ours since our most recent turn began, {1}{R} is payable
+    from the mana we left untapped, and a matching creature card (`put_names_lc`) is in hand. The developing line
+    (pick_toward: the longest plan) taps out and attacks, so that window never opens -- the same shape as the
+    Morph face_up HARD MISS (INT-4). So, on a main_phase choice with the source on our battlefield and a matching
+    card in hand: a plan that casts NOTHING (land drop if one is offered; else pass), keeping every land and the
+    source untapped. Returns a choice, or None to defer to pick_toward."""
+    if d.get("type") != "main_phase":
+        return None
+    plans = d.get("plans", [])
+    if not plans:
+        return None
+    me = d.get("me") or {}
+    bf = me.get("battlefield") or []
+    hand = me.get("hand") or []
+    if not any(str(b.get("name", "")).lower() == target_lc for b in bf):
+        return None
+    if not any(str(c.get("name", "")).lower() in put_names_lc for c in hand):
+        return None
+    idle = [p for p in plans if not p.get("actions") and not p.get("casts")]
+    with_land = [p for p in idle if p.get("land")]
+    if with_land or idle:
+        return (with_land or idle)[0]["index"]
+    return -1
+
+
 # Games the sweep's auto-escalation drives per candidate card. 40 is what the manual --verify-card
 # runs used to settle Boros Garrison / Stingscourger / Shard Volley; the escalation only fires for a
 # card the sweep already flagged, so the cost is paid on failures, not every run.
@@ -2602,6 +2629,10 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
     land_names = {c.get("name", "") for c in load_deck_cards(deck)[0]
                   if "Land" in c.get("types", [])}
     back_lc = str((card.get("parameters") or {}).get("mdfc_back_name") or "").lower()
+    # eot_put forcing: the hand cards the source can put (its tap_put_from_hand_types, creature cards only).
+    put_types = set((card.get("parameters") or {}).get("tap_put_from_hand_types") or [])
+    eot_put_names_lc = {c.get("name", "").lower() for c in load_deck_cards(deck)[0]
+                        if "Creature" in c.get("types", []) and put_types & set(c.get("subtypes", []))}
     covered, cover_src, first_hit = set(), set(), {}
     cast_seen_anywhere = False
     route_seen = set()
@@ -2640,6 +2671,10 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
                 fu = pick_face_up_window(d, target_lc)
                 if fu is not None:
                     choice = fu
+            if "eot_put" in want:
+                ep = pick_eot_put_window(d, target_lc, eot_put_names_lc)
+                if ep is not None:
+                    choice = ep
             if t in ("jitte", "firebreathe"):   # side-channel reply, keyed by turn (see step())
                 jitte.append(("fb|" if t == "firebreathe" else "") + f"{d.get('turn_seq', d.get('turn'))}:{choice}")
                 continue
@@ -2693,6 +2728,18 @@ def verify_card(deck, prof, card_name, expected_types, base_seed, budget, max_tu
             return ("NOT_FORCED", {"note": "MDFC face needed for " + ", ".join(missing)
                                     + " was not played in the seed search", "missing": missing,
                                     "covered": sorted(covered)})
+        if set(missing) <= {"eot_put"}:
+            # Incandescent Soulstoke's opponent-end-step put needs the source UNTAPPED at that end step, ours
+            # since our turn began. The engine decides combat in the claude-play protocol (no attack/hold axis in
+            # the plans), and its searched hold (Plan::atk_dork_release = 4) never takes a tie, so the source
+            # attacks and the window closes in every seed-searched game -- even with pick_eot_put_window keeping
+            # the mana open. The emitter is wired (viewer_wiring); the window's autonomous play is covered by the
+            # Soulstoke scenario fixture and the "Soulstoke eot:" unit tests, but nothing forces the HUMAN prompt.
+            # A human cannot hold an attacker back in the viewer, which is a USER question (Red Elementals ledger,
+            # Stage 5 runtime verification).
+            return ("NOT_FORCED", {"note": "card was cast, but its source attacked every turn (the engine's combat "
+                                    "is not a protocol choice), so the opponent-end-step window never opened",
+                                    "missing": missing, "covered": sorted(covered)})
         if set(missing) <= {"firebreathe"}:
             # This is a combat-spend choice, not a cast trigger. The source
             # must remain in play while we attack AND have spare payable mana;

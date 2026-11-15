@@ -3,68 +3,37 @@
 Shared state for whichever agent (Claude or Codex) continues the Red Elementals analysis. Read this first,
 then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify files/processes before acting.
 
-Last updated: 2026-11-14 21:00 UTC (Claude coordinator, handing off to Codex).
+Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is current).
 
-## >>> CODEX HANDOFF -- START HERE (state at 2026-11-14 21:00 UTC) <<<
+## >>> CODEX HANDOFF -- START HERE (state at 2026-11-15 00:10 UTC, agent H2) <<<
 
 **What may still be RUNNING when you arrive.** Check each with `kill -0 <pid>` and `ps` before you touch the tree.
 
-1. **Claude agent "H2" may still be working in this worktree.** It holds UNCOMMITTED edits:
-   * the Stage 5f fold `MTG_REDELEM_TRICK_FOLD`, in `src/ai/HeuristicArm.h`, `src/ai/DecisionProviders.h` and
-     `src/ai/DecisionProviders.cpp`, plus a unit test in `test/unit/test_red_elementals.cpp`. A copy of the patch
-     is in `logs/redelem/agentH-trickfold.patch`;
-   * a draft ledger section in `docs/design/analysis-Red Elementals.md`;
-   * a new `docs/design/red-elementals-search-cost.md`.
+1. **5c2 tie-break re-run, 48 blocks (agent H2).** `leaf_tiebreak_check.py --blocks 48 --seed-base 3000000`
+   (96,000 games at d5 b20) on the fold binary snapshot `build/scratch/redelem/H2/bin_fold/mtg` (= `38454a1a0`
+   src), `MTG_PGO=0`. Shell PID 1416767, python PID 1416771, batch PID 1416779. Output
+   `logs/leaf_tiebreak/redelem_H2_b48.out`; verdict `build/scratch/redelem/H2/ltb48.log`; marker
+   `build/scratch/redelem/H2/ltb48.DONE` (`rc=`). Started 21:40 UTC, 12/12 busy, expected ~05:30-06:00 UTC
+   2026-11-15. **Do not kill it.** Verdict handling: ledger "Stage 5 runtime verification", 5c2 paragraph.
+   Run 1 (12 blocks, agent H) was NO SIGN: 0 changed of 12,000 paired.
+2. H2's own probe jobs are all finished. H2 has stopped once `logs/redelem/agentH2-handoff.md` exists.
 
-   If `logs/redelem/agentH2-handoff.md` exists, H2 has stopped: follow that file. If it does not exist and the
-   tree is still changing, H2 is live. Do not edit the same files. Wait for the handoff file, or ask the user to
-   stop the Claude agent.
-2. **Release build for the fold.** It is `MTG_BUILD_JOBS=4 ./build.sh`, ninja PID 1387809, log
-   `build/scratch/redelem/H/build_fold.log`. At 20:37 UTC it was at step 159/301; it compiles slowly beside job 3.
-3. **The 5c2 horizon tie-break check.** This is `scripts/leaf_tiebreak_check.py`: 12 blocks x 1000 games x 2
-   arms at play settings d5 b20, on a snapshot binary of HEAD `cfa0d2c13`
-   (`build/scratch/redelem/H/bin_cfa0/mtg`), with `MTG_PGO=0`. Python PID 1387602, batch PID 1387605. Output
-   `logs/leaf_tiebreak/redelem_H.out`. The verdict goes to `build/scratch/redelem/H/ltb.log`; the marker is
-   `build/scratch/redelem/H/ltb.DONE`. Started about 19:00 UTC and expected to take 5-8 h. **Do not kill it.**
-   Act on the verdict as `.claude/skills/analyze-deck.md` §5c2 says:
-   * KEEP or NEUTRAL: nothing to do.
-   * NO SIGN: re-run with a fresh `--seed-base` at the suggested `--blocks`.
-   * OPT OUT: add `bool GradesNoWinLeaf() const override { return false; }` to `RedElementalsProvider`, and
-     record it in `docs/design/horizon-honest-leaf.md`.
-
-**Stage 5 results so far** (agent H; numbers in `logs/redelem/agentH-handoff.md`, ledger section pending):
-* **5a mismatch harnesses: PASS.** 1,500 games across d0/d3/d5 and b10/b20/b100 produced 0 `[nonconv]` and 0
-  `[fd-diverge]`.
-* **5b depth sweep: PASS.** d0 to d3 is 103 faster / 0 slower. d3 to d5 is 0/0. d5 b20 to b100 is 1 faster.
-  The clock is about T4.4. Every slow outlier was mana screw or flood.
-* **5c budget starvation: NOT RUN.** The manifest is ready: `build/scratch/redelem/H/man_5c.json`. The only
-  sign of starvation so far is s7100 gi83, which wins T5 at b20 and T4 at b100.
-* **5f (b), "130 us/unit unbudgeted": EXPLAINED, not a defect.** The time is mulligan *bottoming*: with no keep
-  table yet, the deck plays clairvoyant full-game rollouts per candidate bottom. Those units are counted.
-  Budgeted cost is 254 us/unit, against martyr's 344. The keep table, which is the next pipeline stage, fixes
-  it. So open question 12 is answered.
-* **5f (a), +50% units: one candidate sound fold, `MTG_REDELEM_TRICK_FOLD`.** Legion Leadership may target only
-  creatures that can attack, and may not be cast after combat. H2 is building and A/B-testing it. The
-  adoption bar:
-  * 0 slower games (any slower game must recover at `--depth 8 --budget-ms 0`);
-  * the OFF arm reproduces s7100 d5 b20 digest `ec8b883b0636ad67`, avg 4.3750;
-  * units go down.
-
-  If it is adopted, re-accept GT for `redelem` only (`--deck=redelem,redelem2hg` for smoke). The A/B
-  manifest is `build/scratch/redelem/H/man_fold.json`.
-* **Not sound, so not taken:** Morph's `EndStepSacFaceUpDeadAfterCombat`. Post-combat Spark, Hellspark and
-  Ball Lightning feed Thunderkin, unearth and champion.
+**Stage 5 results** (ledger section "Stage 5 runtime verification (agents H/H2)";
+`docs/design/red-elementals-search-cost.md`):
+* **5a mismatch: PASS** (0 `[nonconv]`, 0 `[fd-diverge]` in 1,500 games).
+* **5b depth sweep: PASS**, monotone; slow outliers are mana screw or flood.
+* **5c budget starvation: DONE.** 2 of 9 slow games starve at b20 (s7100 gi83; s1001 gi46 with the fold off).
+  Both recover with budget; 7 of 9 are identical at b2000.
+* **5f (b): EXPLAINED.** The budget-0 tail is mulligan bottoming (no keep table).
+* **5f (a): fold `MTG_REDELEM_TRICK_FOLD` ADOPTED** (`38454a1a0`). Over 1,240 paired games it is 0 faster / 0
+  slower, units -4.0%, and the OFF arm reproduces `ec8b883b0636ad67`. The proof was re-checked card by card.
+  redelem smoke + regression GT were re-accepted with per-game attribution (`d7d0d55b6`).
+* **5c2: RUNNING** (above).
+* `verify_deck.py` gate lines: see the ledger (claude_sweep PENDING until 5d).
 
 **Remaining work for Codex, in order:**
-1. Finish H2's items, unless H2's handoff says they are done:
-   1. fold build, then the unit suite (`build/Release/mtg-test`) and `test/scenarios.sh`;
-   2. the fold A/B, then adopt it or keep it OFF;
-   3. 5c;
-   4. the 5c2 verdict;
-   5. `python3 scripts/verify_deck.py "decks/Red Elementals/Red Elementals.cod"`;
-   6. the ledger section "Stage 5 runtime verification" and `docs/design/red-elementals-search-cost.md`.
-
-   Commit locally.
+1. The 5c2 verdict (job 1 above), handled as the ledger's 5c2 paragraph says. Everything else of H/H2 is done
+   and committed.
 2. **5d sweep: about 20 games.** Run it AFTER the fold decision, because play changes. A Codex session fans out
    **Codex** agents, and the result is recorded as `## Codex-play sweep` (USER 2026-11-11; see
    `.claude/skills/claude-play.md` "Running a sweep" and "Recording a sweep"). Use a base seed disjoint from
@@ -125,6 +94,8 @@ is adopted, resize the overnight rows to the full set first.
 | 3-gap | Incandescent Soulstoke put at the OPPONENT's end step (searched; reuses the morph face-up window / `Plan::eot_face_up_choice`; source hold searched in every host) | `06f2e9c98` (code), `6db011c8b` (tests), `1e6c24632` (ledger) |
 | 4 | Baseline profile | `0f16b98a2` |
 | 4-bis/5j | Suite addition: cost gate 0.16x Hinata PASS; smoke/regression/overnight ENTRY rows + backstop + 2HG smoke canary; GT accepted per tier; LFE regression GT re-accepted (2 keys, Soulstoke window, attributed) | see the commits after `0f16b98a2` (rows + GT, then docs) |
+| 5a/5b/5c | Mismatch 0 lines (1,500 games); depth sweep monotone; budget: 2 of 9 slow games starve at b20, both recover | ledger "Stage 5 runtime verification (agents H/H2)" |
+| 5f | (b) the budget-0 cost anomaly = mulligan bottoming (no keep table), not a defect; (a) sound dead-trick fold `MTG_REDELEM_TRICK_FOLD` (0 faster / 0 slower over 1,240 games, units -4.0%); redelem smoke + regression GT re-accepted | `38454a1a0` (code + test), `d7d0d55b6` (GT); `docs/design/red-elementals-search-cost.md` |
 
 Stage 4a A/B: 0 slower / 0 faster vs the Morph-routed base on 840 games; the main-2 rule gives 1 faster,
 0 slower; ~50% more search units than the base (Morph's work-cutting hooks do not apply; Stage 5f candidate).
@@ -166,11 +137,17 @@ Design: `docs/design/opponent-end-step-window.md` §0. Measurements, disclosures
    * Owed at the keep-table adoption: resize the overnight rows to the FULL set and accept that on its own
      before adopting.
 3. **Stage 5.**
-   * `verify_deck.py`, nonconv/fd-diverge, depth sweep 0/3/5, `leaf_tiebreak_check.py`.
-   * 5d claude-play sweep: about 20 games. A Claude session uses Claude agents (Opus for flag
+   * DONE (agents H/H2): 5a mismatch, 5b depth sweep, 5c budget starvation, 5f (fold adopted, cost anomaly
+     explained). Details: ledger section "Stage 5 runtime verification (agents H/H2)" and
+     `docs/design/red-elementals-search-cost.md`.
+   * RUNNING: 5c2 `leaf_tiebreak_check.py` re-run at 48 blocks (run 1 at 12 blocks: NO SIGN, 0 / 12,000 changed).
+     Python PID and marker in `logs/redelem/agentH2-handoff.md`; verdict `build/scratch/redelem/H2/ltb48.log`,
+     marker `build/scratch/redelem/H2/ltb48.DONE`. Verdict handling is in the ledger's 5c2 paragraph.
+   * `verify_deck.py`: see the ledger for the gate lines (claude_sweep PENDING until 5d runs).
+   * NEXT: 5d claude-play sweep, about 20 games. A Claude session uses Claude agents (Opus for flag
      verification); a Codex session uses Codex agents.
-   * 5h `audit_viewer_decisions.py` with the sweep.
-   * 5e/5f/5g as needed. 5f means a deck-specific work-cutting narrowing for the ~50% extra units.
+   * NEXT: 5h `audit_viewer_decisions.py` with the sweep.
+   * 5e/5g as needed.
    * 5i: write the discard-bucket policy and **present it to the USER**. Do not adopt it unilaterally.
 4. **Stage 6** report, with the 6a disclosure table.
 5. **Push:** rebase onto `origin/phase-1-2-deck-analyzer` (never merge). Rebuild, then run smoke,
@@ -193,7 +170,9 @@ Design: `docs/design/opponent-end-step-window.md` §0. Measurements, disclosures
    decision.
 2. **Nova main-2 rule.** Confirm it. It gives up the main-1 hardcast where the champion is declined, which
    is what feeds the Thunderkin 10/2 reanimation line.
-3. **The ~50% extra search units vs the Morph-routed base.** Accept them, or do a Stage 5f narrowing?
+3. **The ~50% extra search units vs the Morph-routed base.** The sound fold `MTG_REDELEM_TRICK_FOLD` takes 4%
+   (adopted, default ON). The rest would need Morph's largest-attacker trick target (one cast-time Legion
+   Leadership target), which is LOSSY. Adopt a Red Elementals version? Default: not adopted.
 4. **Doomed-champion prune.** It measured exactly neutral (840/840 identical). Keep it ON?
 5. **Hellspark unearth replacement.** It is routed only through sacrifice and the end-step sweep.
 6. **Sunspine Lynx statics** are inert in goldfish, and INERT_PARAMS is set for Lynx and Thunderkin.
@@ -223,3 +202,7 @@ Design: `docs/design/opponent-end-step-window.md` §0. Measurements, disclosures
     only surfaced; the keep table will decide.
 15. **(agent H) A post-combat Nova Chaser cast with no Elemental is still offered.** Declining the champion
     sends it to the graveyard, where it feeds a Thunderkin return at toughness >= 3, so it is not dominated.
+16. **(agent H2) Mid-combat Legion Leadership is a modelling gap.** Leadership cannot be cast during combat, so it
+    cannot double an attacker that Thunderkin Awakener returned (for example a returned Ball Lightning, 6 -> 12).
+    That is a real MTG line. Generalise the doubler-after-exalted window to after attack triggers? Default: not
+    modelled; disclosed. The fold neither causes nor widens it.

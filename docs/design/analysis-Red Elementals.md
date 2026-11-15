@@ -543,7 +543,110 @@ units of d5 on this deck.
     Stage 5.
 
 ## Stage 5 — verification
-(not yet run)
+
+### Stage 5 runtime verification (agents H/H2, 2026-11-14)
+
+Scratch (regenerable, build volume): `build/scratch/redelem/H/` and `build/scratch/redelem/H2/`. Binaries:
+HEAD `cfa0d2c13` src (snapshot `H/bin_cfa0/mtg`) unless stated. Per-game parsing: `H/wins.py <err> [jobA jobB]`
+(reads `MTG_DUMP_WINS` `[win]` lines; prints per-job avg and the paired faster/slower list).
+
+**5a mismatch harnesses: PASS (0 lines).** One pooled batch (`H/man_5ab.json`, `MTG_FLAG_NONCONV=1
+MTG_FD_ORACLE=1 MTG_DUMP_WINS=1`): s7100 x200 at d0, d3 b10, d3 b20, d5 b20, d5 b100; s7400 x200 at d3 b10 and
+d5 b20; s1001 x100 at d5 b20. 1,500 games, **0 `[nonconv]`, 0 `[fd-diverge]`**. Flag inertness: the s1001 d5 b20
+job reproduces smoke GT exactly (4.3300, digest `e9296f6c95548caf`). (`MTG_FULL_DEPTH` is retired; full depth
+is the default.)
+
+**5b depth sweep: PASS (monotone).**
+
+| seed x200 | d0 | d3 b10 | d3 b20 | d5 b20 (play) | d5 b100 |
+|---|---|---|---|---|---|
+| s7100 | 4.9700 | 4.3750 | 4.3750 | 4.3750 (`ec8b883b0636ad67`) | 4.3700 |
+| s7400 | -- | 4.4050 | -- | 4.4050 | -- |
+
+Per game: d0 -> d3 103 faster / 0 slower; d3 -> d5 0 / 0 on both seeds; d5 b20 -> b100 1 faster (s7100 gi83,
+5 -> 4), 0 slower. The clock matches the deck's ~T4.3-4.4 shape. Slow-turn outliers, all read at d5 b20 (logs
+`H/out_<base>_<gi>/`, no mismatch flags): s7100 gi1 and gi10 (wt 6, two lands until T5/T6); s7400 gi8 (wt 7,
+two Mountains all game, Firecat / Soulstoke x2 uncastable), gi80 (wt 7, mulligan to 5, one land), gi45 / 74 /
+126 (wt 6, mulligan or short on lands); s1001 gi46 (wt 7, a smoke GT game: 8 lands in 12 cards, no Elemental left
+by T5; traced by hand, the best alternative also wins T7). All mana screw or flood; none is a search defect.
+
+**5c budget starvation (agent H2): the play budget is adequate.** One pooled batch (`H2/man_5c.json`,
+fold binary `38454a1a0`): the nine slowest 5b games, each at d5 b20 and d5 b2000 (100x).
+
+| game | b20 | b2000 | |
+|---|---|---|---|
+| s7100 gi1 / gi10 | 6 / 6 | 6 / 6 | screw, not budget |
+| s7100 gi83 | 5 | **4** | STARVED at b20 (already 4 at b100, 5b) |
+| s7400 gi8 / gi80 | 7 / 7 | 7 / 7 | screw / mulligan to 5 |
+| s7400 gi45 / gi74 / gi126 | 6 / 6 / 6 | 6 / 6 / 6 | mulligan / short on lands |
+| s1001 gi46 (smoke GT) | 6 | 6 | STARVED at b20 with the fold OFF (7 at b20, 6 at b2000); the fold frees enough budget to find the T6 win at b20 |
+
+So two of nine games are budget-limited at play settings. Both recover monotonically with budget, so neither is a
+logic bug; 7 of 9 are identical at 100x budget. That corrects agent H's hand trace of s1001 gi46 ("no faster line
+exists"): a T6 line exists, and the search finds it at b2000 OFF or b20 ON. Input to play-budget sizing only;
+d5 b20 stays the play setting (the deck's profile, USER-owned settings are unchanged).
+
+**5c2 horizon-honest tie-break (`leaf_tiebreak_check.py`): NO SIGN at 12 blocks; 48-block re-run RUNNING.**
+* Run 1 (agent H): 12 blocks x 1,000 games x 2 arms = 24,000 games at play settings (d5 b20), seeds
+  1,000,000-2,100,000, HEAD `cfa0d2c13` snapshot, `MTG_PGO=0`. **0 changed games of 12,000 paired (0.000%)**,
+  net +0 on both halves. Verdict NO SIGN AT THIS SAMPLE; the script asks for `--blocks 48`.
+* Run 2 (agent H2, launched 2026-11-14 21:40 UTC): `--blocks 48 --seed-base 3000000` (96,000 games, fresh seeds,
+  no overlap with run 1) on the fold binary `38454a1a0` (snapshot `build/scratch/redelem/H2/bin_fold/mtg`,
+  `MTG_BIN` override, `MTG_PGO=0`). Out `logs/leaf_tiebreak/redelem_H2_b48.out`, verdict
+  `build/scratch/redelem/H2/ltb48.log`, marker `H2/ltb48.DONE`. Heartbeat 12/12 busy; expected to finish around
+  05:30-06:00 UTC 2026-11-15. Handling: KEEP / NEUTRAL or still NO SIGN at 48 blocks -> keep the default ON (a
+  lever that never fires costs nothing; record it in `docs/design/horizon-honest-leaf.md`); OPT OUT -> add
+  `bool GradesNoWinLeaf() const override { return false; }` to `RedElementalsProvider`, record it there, and
+  re-accept the redelem GT.
+* Reading: a deck that wins at ~T4.4 well inside the d5 horizon rarely reaches a no-win horizon, so the tie-break
+  almost never binds. That is consistent with 0 / 12,000.
+
+**`verify_deck.py` (agent H2, after the fold; second run after two tooling fixes).**
+* PASS: coverage, card_costs, card_fields, regression_tiers, viewer_wiring, mismatch (seeds 7001/8001 x 60),
+  suite.
+* PASS: play_invariants, 8 games / 140 decisions. This needed `gy_return_one` / `face_up` / `eot_put` added to
+  `scripts/play_invariants.py` KNOWN_TYPES; run 1 failed on "unknown decision type gy_return_one".
+* SKIP: claude_sweep (PENDING until 5d runs) and clause_ledger.
+* **FAIL viewer: Incandescent Soulstoke `eot_put` HARD MISS.** The emitter is wired. The window needs the source
+  UNTAPPED at the opponent's end step, but the engine decides combat in the claude-play protocol (no attack/hold
+  axis in the plans), so Soulstoke attacks every turn and the window never opens.
+  * Agent H2 added the `pick_eot_put_window` forcing and a NOT_FORCED classification to `verify_card`
+    (`scripts/audit_viewer_decisions.py`). The SWEEP path still reports HARD MISS: not yet traced to where the
+    sweep decides it.
+  * Underlying USER question: a human cannot hold an attacker back in the viewer, so the human can practically
+    never use the window.
+  * Next agent: either route the sweep's verdict through `verify_card`'s NOT_FORCED, or record a USER-approved
+    deferral in "## Approved deferrals" (never self-approved).
+
+**5f runtime.** Full record: `docs/design/red-elementals-search-cost.md`.
+* (b) The "130 us/unit at budget 0, 3x martyr" anomaly (open question 12) is EXPLAINED and is not a defect: it
+  is the lookahead bottoming of mulligans (no keep table, so each bottom plays clairvoyant full games,
+  unbudgeted at budget 0). s30123 gi2 d5 b0: 141.0 s, of which 140.99 s is bottoming; all 29 SLOW-GAME lines
+  in 5a are mulligan games; budgeted cost per unit is 254 us vs martyr 344 (d5 b20). Remedy: the keep table.
+* (a) The +50% units: Morph's `EndStepSacFaceUpDeadAfterCombat` is NOT sound here (a post-combat Spark /
+  Hellspark / Ball Lightning feeds Thunderkin, unearth and a post-combat champion) and is not taken. Morph's
+  largest-attacker trick target is lossy (USER proposal, not adopted).
+
+* (a) ADOPTED (sound dominance fold, default ON): `MTG_REDELEM_TRICK_FOLD` (heurarm `REDELEM_TRICK_FOLD`),
+  `RedElementalsProvider::TrickTargetsAttackersOnly` + `TrickTargetCandidates`. Legion Leadership is not aimed
+  at a creature that cannot attack this turn and is not cast once combat is over. The proof was re-checked card
+  by card against `cards.json` for all 14 names (agent H2): no cast trigger, no spells-cast or graveyard/instant
+  count, nothing reads a non-attacker's power (Thunderkin reads toughness), champion / unearth / Soulstoke
+  unaffected, no mid-combat cast window (the doubler-after-exalted window needs exalted, which the list lacks).
+  Table in `red-elementals-search-cost.md`. **A/B, one pooled batch, 1,240 paired games (d3 b100 s300 x120,
+  s100 x120, s5000 x600; d5 b20 s7100 x200, s7400 x200): 0 faster, 0 slower, net 0; units -4.9 / -4.7 / -4.4 /
+  -2.4 / -3.6% (-4.0% total).** The OFF arm reproduces HEAD (s7100 d5 b20 4.3750 `ec8b883b0636ad67`; s7400
+  `c3c1c02f1ca1ce42`). Unit suite 3,096 / 3,096. Off: `MTG_REDELEM_TRICK_FOLD=0`; human play and
+  `MTG_UNPRUNE=tricktarget` keep every target.
+* GT re-accepted for `redelem` only (`d7d0d55b6`; commit `38454a1a0` binary, attributed per game). Smoke: s1001
+  gi46 7 -> 6 at d3 and d5; d0 gi143 7 -> 6, gi391 8 -> 7, gi861 6 -> 7. gi861 is the greedy d0 runner keeping
+  Leadership in hand and then skipping a T5 Fiery Islet draw; at d5 b20 and at d8 b0 it wins T5. `redelem2hg`
+  is byte-identical. Regression: 0 slower / 0 faster; 4 searched same-score play changes, each the dead Leadership
+  cast removed; d0 has 22 play changes and 0 score moves. No other deck routes to `RedElementalsProvider`.
+* 6a DISCLOSURE (modelling gap, pre-existing, both arms): Legion Leadership cannot be cast DURING combat, so it
+  cannot double a creature Thunderkin Awakener returned tapped and attacking (a real line: a returned Ball
+  Lightning 6 -> 12). USER question: generalise the doubler-after-exalted window to after attack triggers?
+* USER proposal (lossy, NOT adopted): Morph's largest-attacker trick target (one cast-time Leadership target).
 
 ## Approved deferrals
 (none yet)
