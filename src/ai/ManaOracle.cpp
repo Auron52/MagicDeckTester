@@ -1615,6 +1615,7 @@ struct PayEnum
     std::size_t                     cap    = 4096;
     bool                            capped = false;
     bool                            whole_float = false;   // MinimalPayments' fast form: no leftover split either
+    int                             line_surplus_taps = 0; // audit-only: one-unit taps saved for a later plan payment
     // LAZY STOP (USER 2026-11-06, lever (c) of docs/design/mana-oracle-memory-time.md): the caller can use at most
     // `want` options (Realize's apply room, plus one to learn whether the layer is cut), so the DFS stops once `out`
     // holds that many. It reuses `capped` to unwind, and `lazy` keeps the "payment enumeration capped" note off:
@@ -1958,6 +1959,32 @@ struct PayEnum
         }
     }
 
+    void ExtendLineSurplus()
+    {
+        if (line_surplus_taps == 0 || HasMultiUnit(cur)) { return; }
+        const std::size_t mark = cur.size();
+        std::function<void(std::size_t, int)> rec = [&](std::size_t from, int left)
+        {
+            if (capped || left == 0) { return; }
+            for (std::size_t c = from; c < srcs.size() && !capped; ++c)
+            {
+                const SrcClass& sc = srcs[c];
+                if (UsedCopies(static_cast<int>(c)) >= static_cast<int>(sc.nums.size())) { continue; }
+                for (std::size_t fi = 0; fi < sc.faces.size() && !capped; ++fi)
+                {
+                    const Face& f = sc.faces[fi];
+                    if (f.fed || f.net != 1) { continue; }
+                    cur.push_back({ static_cast<int>(c), static_cast<int>(fi) });
+                    t_trc_site = 2; Verify(cur); t_trc_site = 0;
+                    rec(c, left - 1);
+                    cur.pop_back();
+                }
+            }
+        };
+        rec(0, line_surplus_taps);
+        cur.resize(mark);
+    }
+
     // A paying set, extended with ANY number of further taps of the scaled dorks in `ahead` (every count vector
     // over their remaining copies; one extra tap is ExtendSurplus's, so two or more). Each such tap's yield drops
     // by one the moment the cast's additional cost sacrifices a creature it counts, so tapping it NOW, while this
@@ -2018,7 +2045,8 @@ struct PayEnum
     void Dfs(std::size_t ci, const int col[6], int total)
     {
         if (capped) { return; }
-        if (MaybeCovers(col, total, cost) && Verify(cur)) { ExtendFed(0); ExtendSurplus(); ExtendScaledAhead(); return; }
+        if (MaybeCovers(col, total, cost) && Verify(cur))
+        { ExtendFed(0); ExtendSurplus(); ExtendLineSurplus(); ExtendScaledAhead(); return; }
         if (ci >= srcs.size()) { return; }
         if (total + suffix_max[ci] < cost.ManaValue()) { return; }
         Dfs(ci + 1, col, total);   // skip this class...
@@ -2127,7 +2155,7 @@ std::vector<Pick> ScaledAheadClasses(const GameState& state, const std::vector<S
 std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& cost, bool for_creature,
                                        std::vector<std::string>* unmodeled, bool creature_ability, bool whole_float,
                                        const Card* spell, const Card* ability_src, int sac_victim,
-                                       std::size_t max_opts)
+                                       std::size_t max_opts, int line_surplus_taps)
 {
     // The payment's context, as the frontier saw it: a creature's activated ability being paid (the
     // Secluded Courtyard clause), the spell being paid for (a subtype restriction). Replayed around every
@@ -2189,6 +2217,7 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         if (wild > 0) { for (int c = 0; c < 5; ++c) { col[c] += wild; } }
         PayEnum pe{ state, cost, for_creature, srcs, suffix_max, st, seen, out };
         pe.whole_float = whole_float;
+        pe.line_surplus_taps = line_surplus_taps;
         pe.want        = max_opts;
         pe.memo_on = memo;
         // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 65536; it was 4096). With the tap memo a probe is a
@@ -3168,11 +3197,21 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             if (next.size() >= room) { note_cut(); break; }
             const std::size_t want = room - next.size() + 1;
             FrontierRec& f = fronts[i];
+            // DEFAULT ON; =0 disables. The audit may prepay ordinary lands for the line's later
+            // named mana bill after a one-mana first payment (Gods Study -> Magus).
+            // Play is untouched; an unspecified continuation is not charged here.
+            static const bool s_line_surplus = EnvOn("MTG_ORACLE_LINE_SURPLUS", true);
+            int line_surplus = 0;
+            if (s_line_surplus && f.index == 0 && f.cost.ManaValue() == 1)
+            {
+                for (const Action& a : plan.actions) { line_surplus += a.cost.ManaValue(); }
+                line_surplus = std::min(2, std::max(0, line_surplus - f.cost.ManaValue()));
+            }
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
                                   f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
-                                  f.sac_victim, want);
+                                  f.sac_victim, want, line_surplus);
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {

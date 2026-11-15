@@ -279,7 +279,8 @@ namespace manaoracle
                                            std::vector<std::string>* unmodeled, bool creature_ability = false,
                                            bool whole_float = false, const Card* spell = nullptr,
                                            const Card* ability_src = nullptr, int sac_victim = 0,
-                                           std::size_t max_opts = static_cast<std::size_t>(-1));
+                                           std::size_t max_opts = static_cast<std::size_t>(-1),
+                                           int line_surplus_taps = 0);
 
     // PAY REFINE (MTG_PAY_REFINE; TapForCostShared, ManaPayment.cpp). `pre` / `post`: the board before and after
     // ONE outermost payment of `cost` the engine just made. Returns true and `out` = the payment to make instead
