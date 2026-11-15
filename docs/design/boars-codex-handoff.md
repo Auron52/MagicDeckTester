@@ -8,7 +8,8 @@ Codex notes there cover waiters and timers.
 
 The sections below this one record Claude's **2026-11-14 handoff**; their PIDs and "running right now" table are
 historical. The live integration worktree is `.claude/worktrees/boars-integration-next`, based on
-`origin/phase-1-2-deck-analyzer` at `510d0684b`. It contains the Boars changes plus the newer shared commits.
+`origin/phase-1-2-deck-analyzer` at `8e1d089ff`. It contains the Boars changes plus the newer shared commits,
+including Mill's fetch-order and reference updates.
 The ten Boars references are protected on `origin/boars-analysis`; reference safety scanned all 33 worktrees and
 passed. The merged baseline passed 3,279 unit cases, 558 scenarios, and a 66-reference strict viewer sample.
 The previous combined smoke/regression run finished on the older `8935b4fbd` base: smoke 169 pass / 38 fail / 4 new,

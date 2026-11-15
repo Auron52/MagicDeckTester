@@ -6,7 +6,7 @@ The candidate ranks each legal fetch target against the coloured costs in the ac
 
 Providers with reviewed fetch rules opt out of this generic ranking. The flag-on unit sweep exposed Spirits' Strand priority being reordered on the held-crack route; Spirits and Mill now explicitly retain their own fetch orders.
 
-Paired 300-game cells on the rebased integration source, using the same seed and budget on both arms (`build/scratch/boars/line_rank_ab/manifest300.json`):
+Paired 300-game cells on the integration source based on `510d0684b`, using the same seed and budget on both arms (`build/scratch/boars/line_rank_ab/manifest300.json`). The later Mill rebase does not change these decks' providers, but the ranking remains off until reviewed:
 
 | Cell | Saved turns (on vs off) | Faster | Slower |
 |---|---:|---:|---:|
@@ -27,4 +27,4 @@ For all ten indices, 20 fresh realized shuffle salts with blind search gave thes
 
 CG 2HG gi258 is a distinct search judgment problem already traced in `docs/design/boars-codex-handoff.md`: taking the red fetch makes War-Riders castable, and search sometimes selects it instead of the legal two-Birds line. At depth 8 with unlimited budget under blind search, the latter remains legal but is not reliably selected. The line-aware ranking does not resolve that judgment. Do not use its raw paired loss as proof that a fetch target is unavailable, and do not turn the candidate on before reviewing that behavior.
 
-Artifacts: `build/scratch/boars/line_rank_ab/{ab300.err,off300.wins,on300.wins,cmp300.txt,manifest_slow_blind.json,slow_blind2.err,manifest_slow_real.json,slow_real.err}` in the primary build volume. The 95 focused fetch unit cases passed in `build/boars_line_rank_fetch_tests.log` within the integration worktree.
+Artifacts: `build/scratch/boars/line_rank_ab/{ab300.err,off300.wins,on300.wins,cmp300.txt,manifest_slow_blind.json,slow_blind2.err,manifest_slow_real.json,slow_real.err}` in the primary build volume. On the final Mill-rebased source, all 96 fetch unit cases and 4,237 assertions passed with `MTG_FETCH_RANK_PIPS=1` (`build/boars_rebased_mill_fetch_on_fixed.log`).

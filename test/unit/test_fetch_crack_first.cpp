@@ -80,7 +80,8 @@ bool CastsSpike(const TurnSolver::Plan& p)
 bool CracksFirst(const TurnSolver::Plan& p)
 {
     if (p.actions.empty() || !TurnSolver::IsLandSearchActivation(p.actions.front())) { return false; }
-    return (TurnSolver::LandSearchActFirstMask(p.land_search_act_slot) & 1) != 0;
+    return p.land_search_act_slot == TurnSolver::kLandSlotFirst
+        || (TurnSolver::LandSearchActFirstMask(p.land_search_act_slot) & 1) != 0;
 }
 void ResolveStack(GameState& st)
 {
