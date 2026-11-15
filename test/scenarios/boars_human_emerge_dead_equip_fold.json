@@ -1,0 +1,73 @@
+{
+  "deck": "decks/Boars/Boars.cod",
+  "profile": "decks/Boars/Boars.profile.json",
+  "turn": 6,
+  "on_the_play": true,
+  "active_life": 15,
+  "opponent_life": 12,
+  "battlefield": [
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Forest",
+      "controller": 0
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0
+    },
+    {
+      "name": "Stomping Ground",
+      "controller": 0
+    },
+    {
+      "name": "Ignoble Hierarch",
+      "controller": 0,
+      "sick": false
+    },
+    {
+      "name": "Lightning Greaves",
+      "controller": 0
+    }
+  ],
+  "hand": [
+    "Decimator of the Provinces"
+  ],
+  "library_filler": "Forest",
+  "library_size": 40,
+  "lands_played_this_turn": 1,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 6,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "_comment": [
+    "BOARS 5d SWEEP ITEM 5 (2026-11-14, seed 97010, plans 1/6): 'Decimator (emerge, sacrificing Ignoble Hierarch #31), equip Lightning Greaves -> #31'. A plan's equips run in the trailing pass, after its casts, so the victim is already in the graveyard and the equip refuses: the row realises the equip-less plan. The display hides it when that twin is shown (main.cpp WriteDecisionJson, EXACT-TWIN FOLDS (2)). The haste-unlock equip onto a SUMMONING-SICK dork is a real line and is never folded.",
+    "Board: 7 lands + a non-sick Hierarch + an unattached Greaves: the emerge off Hierarch ({5}{G}{G}{G} = 8) is payable (7 lands + Hierarch's own mana), so before the fold the menu also shows the dead 'equip Greaves -> the victim' variant."
+  ],
+  "expect_menu": [
+    {
+      "summary_contains": "sacrificing Ignoble Hierarch), equip Lightning Greaves",
+      "count": 0
+    },
+    {
+      "summary_contains": "Decimator of the Provinces (emerge, sacrificing Ignoble Hierarch)",
+      "count": 1
+    }
+  ]
+}

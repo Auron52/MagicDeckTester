@@ -114,7 +114,7 @@ TEST_CASE("Spellshock: the cast trigger is a damage event -> Tamanoa gains it, V
     {
         GameState s = Board2();
         Put2(s, "Spellshock");
-        FireOnCastTriggers(s, D("Rolling Earthquake"));
+        FireOnCastTriggers(s, D("Rolling Earthquake"), /*mana_spent=*/0);
         CHECK(Me2(s) == 18);                       // no gain engine: 2 damage
     }
     {
@@ -122,7 +122,7 @@ TEST_CASE("Spellshock: the cast trigger is a damage event -> Tamanoa gains it, V
         Put2(s, "Spellshock");
         Put2(s, "Tamanoa");
         Put2(s, "Vito, Thorn of the Dusk Rose");
-        FireOnCastTriggers(s, D("Beseech the Queen"));   // MV 6: no mana-value cap
+        FireOnCastTriggers(s, D("Beseech the Queen"), /*mana_spent=*/0);   // MV 6: no mana-value cap
         CHECK(Me2(s) == 20);                       // -2, Tamanoa +2
         CHECK(Opp2(s) == 18);                      // Vito: that much
     }
@@ -133,7 +133,7 @@ TEST_CASE("Spellshock: the cast trigger is a damage event -> Tamanoa gains it, V
         Put2(s, "Spellshock");
         Put2(s, "Tamanoa");
         Put2(s, "Dina, Soul Steeper");
-        FireOnCastTriggers(s, D("Green Sun's Zenith"));
+        FireOnCastTriggers(s, D("Green Sun's Zenith"), /*mana_spent=*/0);
         CHECK(Me2(s) == 20);
         CHECK(Opp2(s) == 18);
     }
@@ -143,7 +143,7 @@ TEST_CASE("Spellshock: the cast trigger is a damage event -> Tamanoa gains it, V
         s.players[0].life = 2;
         Put2(s, "Spellshock");
         Put2(s, "Tamanoa");
-        FireOnCastTriggers(s, D("Rolling Earthquake"));
+        FireOnCastTriggers(s, D("Rolling Earthquake"), /*mana_spent=*/0);
         CHECK(SelfHasLost(s));
     }
     {

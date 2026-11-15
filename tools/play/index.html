@@ -2459,7 +2459,26 @@ function publicCards(names) {
 // `dec` null, so the panel is hidden and the decision is unanswerable — the game just stalls on a
 // dead board (how lackey_put/echo/land_entry shipped: panel + wiring + commit written, whitelist
 // never updated). test/viewer_decision_types_check.js pins this list against src/main.cpp.
-const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','champion','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
+// legend_keep (CR 704.5j, every legend -- Boars I5b item 4): the group's short name from the source
+// ("Legend rule: choose <name> to keep") and one line telling a copy apart from its twins.
+function legendKeepName(d){
+  const m=/^Legend rule: choose (.*) to keep$/.exec(d.source||'');
+  return m?m[1]:'copy';
+}
+function legendKeepLabel(o){
+  const bits=[`#${o.card_num}`];
+  if (o.loyalty>0) bits.push(`${o.loyalty} loyalty`, o.can_activate?'can activate':'already activated');
+  if (o.is_creature) bits.push(o.sick?'summoning sick':'can attack');
+  if (o.tapped) bits.push('tapped');
+  if (o.attacked) bits.push('attacked this turn');
+  if (o.plus_counters) bits.push(`+${o.plus_counters}/+${o.plus_counters} counters`);
+  if (o.minus_counters) bits.push(`${o.minus_counters} -1/-1 counters`);
+  if (o.damage) bits.push(`${o.damage} damage`);
+  if (o.returns_at_end) bits.push('returns to hand at end of turn');
+  if (Array.isArray(o.attached) && o.attached.length) bits.push('with '+o.attached.join(', '));
+  return bits.join(' · ');
+}
+const SUBDECISIONS = ['scry','reorder','surveil','target','vial_charge','bounce','sacrifice','legend_keep','dig','discard','dredge','divide','expressive_iteration','retrace_discard','replicate','mulligan','bottom','dragon','lightpaws','firebreathe','storage_hold','lackey_put','free_cast','demonstrate','echo','land_entry','tutor_etb','sac_tutor','revive','rummage','attach_host','flicker','champion','face_up','treasurify','jitte','choose_color','choose_creature_type','choose_abilities','creature_type','attack_mode','lifegain_counters','madness','x_value','gy_return_one'];
 // The plan the engine flagged as a go-off, or null.
 //
 // TWO STRENGTHS, and the button says which (USER 2026-09-10: *"we require a much more aggressive,
@@ -3822,6 +3841,8 @@ function renderChooseDialog(v, line){
   function renderDimPick(dim, choices, remaining, picks){
     const panel=$('decpanel'), back=$('decback');
     back.className='modal'; back.style.display='block'; panel.className='show modal';
+    const holdChoice=dim.kind==='fetch' ? choices.find(c=>c.choice==='(hold: crack later)') : null;
+    const shownChoices=holdChoice ? choices.filter(c=>c!==holdChoice) : choices;
     // DISAMBIGUATION (viewer issue #13). Two tutors in one line (Crop Rotation + Sylvan Scrying)
     // produce two consecutive grids of the SAME 12 land images; the only thing telling them apart
     // used to be a small "<card> →?" heading, so the second pick read as a repeat of the first and
@@ -3861,13 +3882,14 @@ function renderChooseDialog(v, line){
     // only content is the overflowing badge -- the exact ugliness above, and the shape the deleted
     // flat picker produced for every mixed variant set (a variant that simply does not have this
     // dimension reports '—').
-    const sameCard = choices.every(c => (c.card||'') === (choices[0].card||''));
-    const listShape = sameCard || choices.some(c => !c.card)
+    const sameCard = shownChoices.every(c => (c.card||'') === (shownChoices[0].card||''));
+    const listShape = sameCard || shownChoices.some(c => !c.card)
                    || ['modal','borosmode','x','splice','replicate','devour','color','free','loyalty','exprovote','exprotake'].indexOf(dim.kind) >= 0;
     const prompt = dim.kind==='exprovote'
       ? 'You vote first. The passive opponent votes Money, so you will also choose one of their permanents to take.'
       : dim.kind==='exprotake'
       ? 'Choose an opponent-owned permanent to take for their Money vote. This choice does not target.'
+      : holdChoice ? 'Choose a land to fetch now, or hold the fetchland to crack later.'
       : `pick one of ${choices.length}.`;
     let h=`<div class="dimhead">${srcName?cardMini(srcName,'dimsrc'):''}`+
           `<div class="dimtext"><h3>${esc(dim.key)}?</h3>`+
@@ -3875,14 +3897,14 @@ function renderChooseDialog(v, line){
           `${esc(prompt)}</div></div></div>`+crumbs;
     if (listShape){
       h+=`<div class="optlist">`;
-      choices.forEach((c,i)=>{
+      shownChoices.forEach((c,i)=>{
         h+=`<button class="opt varpick${c.suggested?' suggested':''}" data-i="${i}" title="${esc(choiceText(c))}">${esc(choiceText(c))}`+
            (c.suggested?` <span class="suggbadge" title="the engine's Aura host ranking would pick this host">suggested</span>`:'')+`</button>`;
       });
       h+=`</div>`;
     } else {
       h+=`<div class="tutgrid">`;
-      choices.forEach((c,i)=>{
+      shownChoices.forEach((c,i)=>{
         // The badge shows only what the choice says BEYOND the card name under it -- "#2" for the
         // second of two same-named hosts, "X=2" for a value. When the choice IS the card name
         // (fetch/tutor) there is nothing left, so no badge: it would duplicate the <em> label and
@@ -3902,15 +3924,21 @@ function renderChooseDialog(v, line){
     }
     h+=`<div class="pbtns" style="margin-top:10px">`+
        (picks.length?`<button id="chooseback" class="ghost">Back</button>`:'')+
-       `<span class="spacer"></span><button id="choosecancel" class="ghost">Cancel</button></div>`;
+       `<span class="spacer"></span>`+
+       (holdChoice?`<button id="choosehold" class="ghost">Hold</button>`:
+        dim.kind==='fetch'?'':`<button id="choosecancel" class="ghost">Cancel</button>`)+`</div>`;
     panel.innerHTML=h;
     panel.querySelectorAll('.varpick').forEach(b=>b.onclick=()=>{
-      const c=choices[+b.dataset.i];
+      const c=shownChoices[+b.dataset.i];
       const next=remaining.filter(x=>choiceOf(x,dim.key)===c.choice);
       stepChoose(next, picks.concat([{key:dim.key, choice:c.choice, label:choiceText(c)}]));
     });
     if (picks.length) $('chooseback').onclick=()=>replay(picks.slice(0,-1));
-    $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
+    if (holdChoice) $('choosehold').onclick=()=>{
+      const next=remaining.filter(x=>choiceOf(x,dim.key)===holdChoice.choice);
+      stepChoose(next, picks.concat([{key:dim.key, choice:holdChoice.choice, label:'Hold'}]));
+    };
+    else if (dim.kind!=='fetch') $('choosecancel').onclick=()=>{ hideDecPanel(); renderBoard(); };
   }
 
   // Back: re-filter from the full variant set with all-but-the-last pick, re-asking that dimension.
@@ -4638,7 +4666,7 @@ function renderDecisionPanel(d, dec){
   const isLook = dec==='scry'||dec==='surveil'||dec==='reorder';
   const isModal = isLook || dec==='dig' || dec==='discard' || dec==='dredge' || dec==='expressive_iteration' || dec==='retrace_discard'
                 || dec==='replicate' || dec==='mulligan' || dec==='bottom' || dec==='land_entry' || dec==='dragon' || dec==='sac_tutor' || dec==='revive' || dec==='rummage'
-                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_creature_type' || dec==='choose_abilities'
+                || dec==='lightpaws' || dec==='firebreathe' || dec==='storage_hold' || dec==='jitte' || dec==='choose_color' || dec==='choose_creature_type' || dec==='choose_abilities' || dec==='creature_type'
                 || dec==='lackey_put' || dec==='demonstrate' || dec==='echo' || dec==='tutor_etb' // centered card-image modals
                 || dec==='attack_mode'   // Tectonic Giant's modal attack trigger -- centred, like demonstrate
                 || dec==='lifegain_counters'   // Nykthos Paragon's once-each-turn team wave -- same shape
@@ -4684,6 +4712,7 @@ function renderDecisionPanel(d, dec){
                   : dec==='choose_color' ? chooseColorPanelHtml(d)
                   : dec==='choose_creature_type' ? chooseCreatureTypePanelHtml(d)
                   : dec==='choose_abilities' ? chooseAbilitiesPanelHtml(d)
+                  : dec==='creature_type' ? creatureTypePanelHtml(d)
                   : promptPanelHtml(d, dec);   // divide + target/bounce/vial are bottom board prompts
   wireDecisionPanel(d, dec);
   // Pre-game keep/bottom decisions consult the deck's MULLIGAN TABLE, but its parse is expensive, so it
@@ -4819,6 +4848,20 @@ function digPanelHtml(d){
         (ai?'<span class="deftag">AI pick</span>':'')+'</span>';
     });
     return h+'</div>';
+  }
+  // Ilharg, the Raze-Boar's death "may" ("(dies to library)" in the source; Boars I5b): a yes/no on the card that
+  // just died -- tuck it into the library (third from the top) or leave it in the graveyard.
+  if (/\(dies to library\)/.test(d.source||'')) {
+    let h=`<h3>${esc((d.examined&&d.examined[0]&&d.examined[0].name)||'It')} died — put it into your library?</h3>`;
+    h+=`<div class="sub">${esc(d.source||'')}<br/>Third from the top (the bottom if your library has fewer than two cards). Otherwise it stays in your graveyard.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      h+=`<span class="cardmini tdig" data-opt="${c.index}" data-name="${esc(c.name)}" title="Put it into the library">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Into library</em></span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="ghost" data-opt="-1">Leave it in the graveyard</button></div>`;
+    return h;
   }
   if (/\(attack pay\)/.test(d.source||'')) {
     let h=`<h3>Militia's Pride — pay {W} for a Kithkin Soldier?</h3>`;
@@ -5031,10 +5074,14 @@ function lackeyPanelHtml(d){
   // game froze the moment Goblin Lackey connected (user-reported, Goblins seed 25).
   const aiPick=(d.ai_pick===undefined? d.heuristic_default : d.ai_pick);
   const defName=(cands.find(c=>c.index===aiPick)||{}).name;
-  let h=`<h3>Goblin Lackey — put a Goblin into play</h3>`;
-  h+=`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
+  // Ilharg, the Raze-Boar's attack put (Boars I5a) reuses this panel: d.trigger==='attack' -> generic wording.
+  const atk=d.trigger==='attack';
+  let h=atk?`<h3>${esc(d.source||'Attack trigger')} — put a creature onto the battlefield attacking</h3>`
+           :`<h3>Goblin Lackey — put a Goblin into play</h3>`;
+  h+=atk?`<div class="sub"><b>${esc(d.source||'')}</b> attacked — you may put a creature card from your hand onto the battlefield tapped and attacking (it returns to your hand at the beginning of the next end step). Click one, or decline.</div>`
+        :`<div class="sub"><b>${esc(d.source||'Goblin Lackey')}</b> dealt combat damage — you may put a Goblin permanent card from your hand onto the battlefield. Click one, or decline.</div>`;
   h+=`<div class="tutgrid">`;
-  if(!cands.length) h+=`<span class="hint">No Goblin permanent in hand.</span>`;
+  if(!cands.length) h+=`<span class="hint">${atk?'No creature card in hand.':'No Goblin permanent in hand.'}</span>`;
   cands.forEach(c=>{
     const def=c.index===aiPick && c.name===defName;
     h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
@@ -5539,9 +5586,14 @@ function promptPanelHtml(d, dec){
   if (dec==='legend_keep'){
     const sel=[...(S.boardSel||[])];
     const opt=sel.length?(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]):null;
-    const label=opt?`#${opt.card_num} · ${opt.loyalty} loyalty · ${opt.can_activate?'can activate':'already activated'}`:'(choose a Chandra)';
-    return `<h3>Keep one Chandra — legend rule</h3>`+
-      `<div class="sub">Click the copy to keep. The other goes to your graveyard. A fresh Chandra can use a loyalty ability even if the older copy already used one this turn.</div>`+
+    const who=legendKeepName(d);
+    const label=opt?legendKeepLabel(opt):`(choose a ${esc(who)})`;
+    const rows=(d.options||[]).map(o=>`<div>${esc(o.name)} — ${legendKeepLabel(o)}</div>`).join('');
+    const walker=(d.options||[]).some(o=>o.loyalty>0);
+    return `<h3>Keep one ${esc(who)} — legend rule</h3>`+
+      `<div class="sub">Click the copy to keep. The others go to your graveyard (a creature put there this way dies, so its death triggers fire).`+
+      (walker?` A fresh planeswalker can use a loyalty ability even if the older copy already used one this turn.`:'')+`</div>`+
+      `<div class="sub">${rows}</div>`+
       `<div class="pbtns"><span class="pcount">Keeping: <b>${label}</b></span>`+
       `<span class="spacer"></span><button id="decconfirm" class="primary" ${sel.length?'':'disabled'}>Keep this copy</button></div>`;
   }
@@ -5871,6 +5923,8 @@ function wireDecisionPanel(d, dec){
   }
   else if (dec==='choose_abilities')
     panel.querySelectorAll('[data-kw]').forEach(b=>b.onclick=()=>commitChooseAbilities(d, +b.dataset.kw));
+  else if (dec==='creature_type')
+    panel.querySelectorAll('[data-ct]').forEach(b=>b.onclick=()=>commitCreatureType(d, +b.dataset.ct));
   else if (dec==='land_entry')
     panel.querySelectorAll('button[data-le]').forEach(b=>b.onclick=()=>commitLandEntry(d, +b.dataset.le));
   else if (dec==='mulligan')
@@ -6453,6 +6507,24 @@ function commitChooseAbilities(d, idx){
   const nm=((d.options||[]).find(o=>o.index===idx)||{}).label||idx;
   pushChoice(d, idx, `${d.source||'permanent'}: chose ${nm}`);
 }
+// Herald's Horn / Urza's Incubator / Metallic Mimic / Adaptive Automaton (Boars I1): "As this enters, choose a
+// creature type" -- the engine lists every creature type the deck's creatures carry; reply = a menu index.
+function creatureTypePanelHtml(d){
+  const src=d.source||'this permanent', ai=(d.heuristic_default===undefined?-1:d.heuristic_default);
+  let h=`<h3>${esc(src)} — choose a creature type</h3>`;
+  h+=`<div class="sub">This is an <b>as-enters</b> choice: the type is <b>locked for the rest of the game</b>. Every creature type your deck's creatures carry is offered; the AI's pick is highlighted.</div>`;
+  h+=`<div class="tutgrid">`+cardMini(src)+`</div>`;
+  h+=`<div class="pbtns" style="margin-top:10px;flex-wrap:wrap"><span class="spacer"></span>`;
+  for (const t of (d.types||[])){
+    const isAi = (t.index===ai);
+    h+=`<button class="${isAi?'primary':'ghost'}" data-ct="${t.index}">${esc(t.name)}${isAi?'  ·  AI':''}</button>`;
+  }
+  return h+`</div>`;
+}
+function commitCreatureType(d, idx){
+  const nm=((d.types||[]).find(t=>t.index===idx)||{}).name||idx;
+  pushChoice(d, idx, `${d.source||'permanent'}: chose ${nm}`);
+}
 function commitChooseColor(d, ord){
   const nm=((d.colors||[]).find(c=>c.ordinal===ord)||{}).name||ord;
   pushChoice(d, ord, `${d.source||'permanent'}: chose ${nm}`);
@@ -6532,7 +6604,7 @@ function commitBoardSel(d, dec){
   } else if (dec==='legend_keep'){
     const opt=(d.options||[]).find(o=>'m:'+o.perm_index===sel[0]);
     oi=opt?opt.index:d.heuristic_default;
-    lab=`Legend rule: keep Chandra #${opt?opt.card_num:'default'}`;
+    lab=`Legend rule: keep ${legendKeepName(d)} #${opt?opt.card_num:'default'}`;
   } else if (dec==='sacrifice'){
     const need=sacBurstNeed(d);
     if (need>1){
@@ -6686,6 +6758,7 @@ const AUTO_RESOLVABLE = {
   choose_creature_type: 'Other as-enters creature-type choices',
   three_tree_city_type: 'Three Tree City — choose a creature type',
   choose_abilities:'As it enters — choose two abilities (locked for the game)',
+  creature_type:   'As it enters — choose a creature type (locked for the game)',
   // Not a dec.type: the `dig` modal's "(galadriel reveal)" source, special-cased in autoResolveDecision.
   galadriel_reveal:'Galadriel of Lothlórien — reveal a land and put it onto the battlefield',
 };

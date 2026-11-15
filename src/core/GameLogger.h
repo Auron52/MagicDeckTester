@@ -530,6 +530,20 @@ using EtbKeywordsChooser = std::function<int(const GameState& state, int control
                                              int heuristic_index)>;
 extern thread_local EtbKeywordsChooser* g_play_etb_keywords_chooser;
 
+// ---- Human-play "as this enters, choose a creature type" chooser (Boars I1, 2026-11-13) ------------
+// Herald's Horn / Urza's Incubator (chooses_creature_type) and Metallic Mimic / Adaptive Automaton (the
+// ChoosesCreatureTypeOnEnter family). Asked at the universal enter cascade (FireEtbWatchers) with the
+// entering card's name, the MENU (every creature subtype the controller's deck carries, most common
+// first -- DeckCreatureSubtypeMenu) and the provider pick's index; returns a menu index, anything out of
+// range keeps the provider's pick. Same lifetime and gating as the colour chooser above: set only by
+// RunClaudePlay, nulled by RevealLogPause and skipped under g_tap_speculating, so autonomous play and
+// the rollouts take the provider's pick in lockstep. Names (not interned ids) keep this header light.
+using CreatureTypeChooser = std::function<int(const GameState& state, int controller,
+                                              const std::string& source,
+                                              const std::vector<std::string>& menu,
+                                              int heuristic_index)>;
+extern thread_local CreatureTypeChooser* g_play_creature_type_chooser;
+
 // ---- Human-play Light-Paws tutor-attach chooser (which Aura Light-Paws fetches) -----------
 // Light-Paws, Emperor's Voice: whenever an Aura you CAST resolves, search your library for an Aura
 // (mana value <= the cast Aura's, a name different from every Aura you control, and whose own enchant
@@ -1172,7 +1186,7 @@ inline bool AllPlayHooksNull()
         && g_play_lifegain_counters_chooser == nullptr
         && g_play_fling_chooser == nullptr
         && g_play_etb_color_chooser == nullptr && g_play_etb_type_chooser == nullptr
-        && g_play_etb_keywords_chooser == nullptr
+        && g_play_etb_keywords_chooser == nullptr && g_play_creature_type_chooser == nullptr
         && g_play_madness_chooser == nullptr
         && g_play_gy_return_one_chooser == nullptr;
 }
@@ -1242,6 +1256,7 @@ struct RevealLogPause
     EtbColorChooser*    saved_etbcolchooser = nullptr;
     EtbTypeChooser*     saved_etbtypechooser = nullptr;
     EtbKeywordsChooser* saved_etbkwchooser = nullptr;
+    CreatureTypeChooser* saved_ctchooser = nullptr;
     MadnessChooser*     saved_madchooser = nullptr;   // Vampires A1 madness (fires from ResolvePendingMadness)
     std::vector<PlayReveal>* saved_revealsink;
     bool saved_real;
@@ -1302,6 +1317,7 @@ struct RevealLogPause
         saved_etbcolchooser = g_play_etb_color_chooser;
         saved_etbtypechooser = g_play_etb_type_chooser;
         saved_etbkwchooser = g_play_etb_keywords_chooser;
+        saved_ctchooser = g_play_creature_type_chooser;
         saved_madchooser = g_play_madness_chooser;
         g_real_resolution = false; g_reveal_logger = nullptr; g_play_top_chooser = nullptr; g_play_target_chooser = nullptr;
         g_play_bounce_chooser = nullptr; g_play_dig_chooser = nullptr; g_play_discard_chooser = nullptr;
@@ -1329,7 +1345,7 @@ struct RevealLogPause
         g_play_attackers_chooser = nullptr; g_play_tap_pref_chooser = nullptr;
         g_play_loyalty_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_type_chooser = nullptr;
-        g_play_etb_keywords_chooser = nullptr;
+        g_play_etb_keywords_chooser = nullptr; g_play_creature_type_chooser = nullptr;
         g_play_madness_chooser = nullptr;
     }
     ~RevealLogPause() { if (noop) { return; }
@@ -1371,6 +1387,7 @@ struct RevealLogPause
                         g_play_etb_color_chooser = saved_etbcolchooser;
                         g_play_etb_type_chooser = saved_etbtypechooser;
                         g_play_etb_keywords_chooser = saved_etbkwchooser;
+                        g_play_creature_type_chooser = saved_ctchooser;
                         g_play_madness_chooser = saved_madchooser; }
     RevealLogPause(const RevealLogPause&)            = delete;
     RevealLogPause& operator=(const RevealLogPause&) = delete;
@@ -1412,7 +1429,7 @@ struct ComboOffApplyPause
     AttackModeChooser* c28; BounceChooser* c29; BounceChooser* c30;
     LifegainCountersChooser* c31;
     EtbColorChooser* c32; EtbKeywordsChooser* c33;
-    EtbTypeChooser* c37;
+    EtbTypeChooser* c37; CreatureTypeChooser* c_ct;
     MadnessChooser* c34;
     XValueChooser* c35;
     GyReturnOneChooser* c36;
@@ -1437,7 +1454,7 @@ struct ComboOffApplyPause
         c30 = g_play_treasurify_chooser;
         c31 = g_play_lifegain_counters_chooser;
         c32 = g_play_etb_color_chooser; c33 = g_play_etb_keywords_chooser;
-        c37 = g_play_etb_type_chooser;
+        c37 = g_play_etb_type_chooser; c_ct = g_play_creature_type_chooser;
         c34 = g_play_madness_chooser;
         c35 = g_play_x_value_chooser;
         c36 = g_play_gy_return_one_chooser;
@@ -1460,7 +1477,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = nullptr;
         g_play_lifegain_counters_chooser = nullptr;
         g_play_etb_color_chooser = nullptr; g_play_etb_type_chooser = nullptr;
-        g_play_etb_keywords_chooser = nullptr;
+        g_play_etb_keywords_chooser = nullptr; g_play_creature_type_chooser = nullptr;
         g_play_madness_chooser = nullptr;
         g_play_x_value_chooser = nullptr;
         g_play_gy_return_one_chooser = nullptr;
@@ -1486,7 +1503,7 @@ struct ComboOffApplyPause
         g_play_treasurify_chooser = c30;
         g_play_lifegain_counters_chooser = c31;
         g_play_etb_color_chooser = c32; g_play_etb_keywords_chooser = c33;
-        g_play_etb_type_chooser = c37;
+        g_play_etb_type_chooser = c37; g_play_creature_type_chooser = c_ct;
         g_play_madness_chooser = c34;
         g_play_x_value_chooser = c35;
         g_play_gy_return_one_chooser = c36;
@@ -1568,6 +1585,19 @@ inline bool g_play_legacy_karoo_float = false;
 // immediate-fetch land drop. Replay only: live games keep the real enter/activate timing.
 inline bool g_play_legacy_fetch_immediate = false;
 inline bool LegacyFetchImmediateOn() { return g_play_legacy_fetch_immediate; }
+
+// HUMAN-PLAY FETCH: RESOLVE ON PLAY, OR HOLD -- the human's pick (USER 2026-11-14: "Human play doesn't need to
+// keep the hold, at least by default", then "maybe the right way to do this is to allow deferring the fetch in
+// the choice dialog?" and "I would be okay with it being on all of the time"). In human play a zero-mana
+// one-life fetchland's land drop is one plan per legal target PLUS one hold plan (kFetchHoldTarget,
+// SpellEffects.h): a target resolves the fetch at the drop, the hold keeps the fetchland on the battlefield
+// with its normal activation. No lever. `--legacy-human-fetch-hold` is the REPLAY flag for a reference
+// recorded under the earlier forced hold (stamped `fetch_activation` but not `fetch_on_play`;
+// test/viewer_protocol_check.py recording_rule_args): it restores that rule -- no on-play drop, no hold
+// plan -- so an old recording is never invalidated. Read ONLY under HumanPlayActive() (FetchResolvesOnPlay,
+// HumanFetchHoldVariant), so autonomous play never consults it.
+inline bool g_play_legacy_human_fetch_hold = false;
+inline bool LegacyHumanFetchHoldOn() { return g_play_legacy_human_fetch_hold; }
 
 inline bool HumanKarooFloatRuleOn()   // the rule the run plays under (the recording stamp reads this)
 {

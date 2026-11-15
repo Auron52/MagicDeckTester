@@ -1130,7 +1130,9 @@ void PerformGenesisWave(GameState& state, int controller, int x, const std::stri
         auto late_own_etb = [](const CardParams& pp)
         {
             return pp.etb_destroy_own_noncreature_max > 0 || pp.etb_destroy_artifact_enchantment_land
-                || pp.etb_destroy_nonartifact_nonblack || pp.etb_team_pump_per_creature;
+                || pp.etb_destroy_nonartifact_nonblack || pp.etb_team_pump_per_creature
+                || pp.etb_other_creatures_pump_power != 0 || pp.etb_other_creatures_pump_tough != 0
+                || pp.etb_other_creatures_grant_vigilance;   // End-Raze: pumps the simultaneous entrants too
         };
 
         // ---- PASS 2a: enter-watchers for every entrant, then the early own ETBs ---------------
@@ -1784,13 +1786,15 @@ void ApplyJitteMode(GameState& state, int controller, int jitte_id, int mode, in
 // order (approved collapse of the controller's trigger-order choice; each dig sees the library
 // as the previous one left it). Snapshots the triggering card numbers first: the puts below
 // push_back onto the battlefield, and stale indices are the classic reallocation bug.
-void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     if (atk_idx.empty()) { return; }
     Player& ap = state.players[controller];
     std::vector<int> trigger_nums;
-    for (int idx : atk_idx)
+    const int nsrc = DeclaredSpan(atk_idx, declared_n);   // DECLARED attackers only (CR 508.4)
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = atk_idx[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[idx];
         if (p.controller_index != controller) { continue; }
@@ -1941,12 +1945,17 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
 // ORDERS (AttackAttachCandidates), and the search branches over every entry (Plan::attack_attach_choice).
 // Legendary, so at most one trigger per combat; several would resolve in attacker order (the approved
 // battlefield-order collapse), the pin consumed by the first.
-void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live)
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live,
+                               int* declared_n)
 {
     if (!state.deck_has_attack_attach || atk_idx.empty()) { state.scripted_attack_attach = -1; return; }
     std::vector<int> sources;
-    for (const int ai : atk_idx)
+    // Sources: the DECLARED attackers only (CR 508.4). The repair below may drop a declared body (an attached Lizard
+    // Blades leaves combat), so the caller's declared count is recounted by number at the end.
+    const std::vector<int> decl_nums = DeclaredNumbers(state, atk_idx, declared_n ? *declared_n : -1);
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n ? *declared_n : -1); ++k)
     {
+        const int ai = atk_idx[static_cast<std::size_t>(k)];
         if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
         if (p.controller_index != controller || p.def_absent) { continue; }
@@ -2110,6 +2119,7 @@ void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int
             else if (!q.card.HasKeyword(Keyword::Vigilance)) { q.tapped = true; }
         }
         atk_idx.swap(repaired);
+        if (declared_n != nullptr) { *declared_n = RecountDeclared(state, atk_idx, decl_nums); }
         if (live && !was_there && EquipmentAttachedTo(state, controller, ch.equip_num, ch.host_num)
             && g_play_event_sink && !g_tap_speculating)
         {
@@ -2140,13 +2150,14 @@ void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int
 // searched pin GameState::scripted_bruna_gather (Plan::bruna_gather_choice), consumed by the first
 // gather. A human at the viewer picks each zone's subset with the reused `dragon` multi-pick.
 // The "or blocks" half is goldfish-inert (the opponent never attacks) -- signed off 2026-10-05.
-void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     // Snapshot the gathering attackers by card number first: the puts below append to the
-    // battlefield (indices stay valid) but a watcher cascade could reorder nothing else.
+    // battlefield (indices stay valid) but a watcher cascade could reorder nothing else. DECLARED only (CR 508.4).
     std::vector<int> brunas;
-    for (int ai : atk_idx)
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n); ++k)
     {
+        const int ai = atk_idx[static_cast<std::size_t>(k)];
         if (ai < 0 || ai >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& p = state.battlefield[static_cast<std::size_t>(ai)];
         if (p.controller_index != controller || p.def_absent) { continue; }
@@ -2642,15 +2653,16 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // NO projection addend is needed, and the reason is the mirror image of Dwalin's: a card entering
 // HAND adds no power to any declared attacker, so PendingAttackDamage is already exact. (Dwalin's
 // hone counters DO change this combat's damage, which is why they needed CountAttackHonePump.)
-void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx)
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n)
 {
     if (atk_idx.empty()) { return; }
     // SNAPSHOT the (host, equipment) pairs before resolving any of them -- the FireAttackDigAttach
     // precedent. Each dig mutates the library and the hand, and a dug card entering hand can fire
     // further watchers, so the battlefield must not be walked lazily underneath the resolution.
     std::vector<int> equip_nums;
-    for (int idx : atk_idx)
+    for (int k = 0; k < DeclaredSpan(atk_idx, declared_n); ++k)   // "equipped creature attacks": DECLARED only
     {
+        const int idx = atk_idx[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& host = state.battlefield[idx];
         if (host.controller_index != controller) { continue; }
@@ -4876,6 +4888,10 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
                 OpponentGainsLife(state, active,
                                   def->params.tap_opponent_lifegain * gamesetup::OpponentHeads());
             }
+            // Zhur-Taa Druid's tap ping: raw opponent life + the lost-life flag, both restored below on
+            // failure from opp_life_snap / oll_snap (ApplyTapManaPing's contract). The mana cache counts it
+            // per tap and replays it per tap, apart from the drip (ManaCacheEntry::drip_life).
+            ApplyTapManaPing(state, active, *def);
             // LAND AURAS ("Whenever enchanted land is tapped for mana, add an additional {G}").
             // Credited HERE, at the single choke point every tap branch funnels through, rather
             // than in each of the six places that build `next` -- one site cannot drift out of
@@ -6859,6 +6875,9 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 // inline copy of this scan because it also needs the slot for its undo; the two use the
                 // same ZoneCard(...).IsLand() first-match predicate and must stay that way.)
                 if (td->params.gy_land_exile_mana) { ExileGraveyardLandForMana(state, hit_active); }
+                // Zhur-Taa Druid: its ping has no painless mode, so it replays per tap, exactly as
+                // activate() applied it (the entry's drip_life excludes it -- see the store below).
+                ApplyTapManaPing(state, hit_active, *td);
             }
             // Drip (Grove of the Burnwillows): one aggregate call -- order-independent, and going
             // through OpponentGainsLife re-reads RemedyActive, so a Tainted Remedy board flips the
@@ -7080,10 +7099,14 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
             if (out_leftover)  { e.leftover = *out_leftover; }
             const int active = state.active_player_index;
             const int n = static_cast<int>(state.battlefield.size());
-            // Only drip moves the OPPONENT's life during a payment (tap_self_damage hits the active
-            // player), so the magnitude of that one diff is the total drip the solve applied -- and
-            // magnitude is all the replay needs, since OpponentGainsLife re-derives the sign.
-            e.drip_life = std::abs(state.players[1 - active].life - mc_opp_life_pre);
+            // Two things move the OPPONENT's life during a payment (tap_self_damage hits the active
+            // player): the Grove drip and the Zhur-Taa ping. The ping is counted per tap in the loop below
+            // (every mana tap of a ping dork pings, there is no painless mode) and REPLAYED per tap, so the
+            // drip is the observed diff with the pings added back -- its magnitude is all the replay needs,
+            // since OpponentGainsLife re-derives the sign. (Before the ping existed this was the bare diff,
+            // which a Druid tap would have replayed as the opponent GAINING life.) Set after the loop.
+            const int mc_opp_life_post = state.players[1 - active].life;
+            int mc_ping_total = 0;
             // Painland self-damage: the observed active-life delta (taps are the only thing a solve
             // does to our life). Aggregate, because per-tap replay cannot see which MODE paid.
             e.self_life = mc_life_pre - state.players[active].life;
@@ -7106,6 +7129,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 {
                     const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                     if (!McAllSources() && !McSimpleTap(pd)) { storable = false; break; }
+                    if (pd) { mc_ping_total += pd->params.tap_mana_damage_each_opponent * gamesetup::OpponentHeads(); }
                     int burn = 0;
                     if (pd && pd->params.storage_land)
                     {
@@ -7123,6 +7147,7 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                     e.taps.push_back({ desc, slot, burn, p.mana_tap_mark, t_bt_flex_collect ? p.mana_flex : std::uint8_t{0} });
                 }
             }
+            e.drip_life = std::abs(mc_opp_life_post - mc_opp_life_pre + mc_ping_total);
         }
         if (tapstats::Enabled() && !storable)
         { tapstats::g_mc_unstorable.fetch_add(1, std::memory_order_relaxed); }

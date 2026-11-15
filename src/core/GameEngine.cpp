@@ -424,6 +424,10 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_militia_pride_pay = -1;
     state.scripted_mihail_pay_choice.Clear();
     state.scripted_mihail_trigger_ordinal = 0;
+    state.scripted_attack_put = -1;     // Ilharg's searched attack put (same lockstep)
+    // The turn's searched legend-rule keep ends; the NEXT-UPKEEP pin (Boars LK3) becomes the keep in force until the end
+    // of the upkeep (LegendKeepCloseUpkeep, the end of UpkeepTail). Lockstep twin in SimulateEndAndStartNextTurn.
+    LegendKeepOpenUpkeep(state);
     state.scripted_attack_attach = -1;  // searched Raubahn attack attach (same lockstep)
     state.scripted_fb_hold = -1;        // searched banked-hold rank (MTG_FB_HOLD_SEARCHED; same lockstep)
     // (scripted_upkeep_land_search is NOT cleared here: it is read at the upkeep that follows.)
@@ -778,6 +782,8 @@ void GameEngine::UpkeepTail(GameState& state)
     PerformUpkeepGyReanimate(state, emeria_snapshot);
     // Mirri's Guile: arrange the top 3 at upkeep (before the draw). Lockstep in both worlds.
     PerformUpkeepReorder(state);
+    // Herald's Horn's look-at-top "may" (Boars I1): folded take, else the searched pin. Lockstep twin.
+    PerformUpkeepHornReveal(state);
 
     // Echo (CR 702.29) at TRUE upkeep timing -- BEFORE the draw step, after the other upkeep
     // triggers, mirroring the rollout's position in SimulateEndAndStartNextTurn (lockstep). See
@@ -852,6 +858,9 @@ void GameEngine::UpkeepTail(GameState& state)
     state.scripted_upkeep_tutor = -1;
 
     ResolveStack(state);
+    // The upkeep is over: its searched legend keep (Boars LK3, opened at the untap) stops deciding. Lockstep twin just
+    // before the rollout's draw in SimulateEndAndStartNextTurn.
+    LegendKeepCloseUpkeep(state);
 }
 
 void GameEngine::DrawStep(GameState& state)
@@ -1158,13 +1167,19 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // reaches the attacking Plants too. Searched (Plan::combat_crack_choice); the human is asked.
     FireCombatLandSearchCracks(state, state.active_player_index, atk_idx);
 
-    const int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join
+    int declared_n = static_cast<int>(atk_idx.size());   // CR 508.4: before tokens join (Ilharg's put may shrink it)
+    const int exalted_at_declare = ExaltedAtDeclare(state, state.active_player_index, declared_n);   // CR 506.5
+    NotePlayCombatDeclared(state, atk_idx);   // display-only hint (PlayCombatDisplay): never read by play
     // Mavren Fein, Dusk Apostle: "whenever one or more nontoken Vampires you control attack, create a
     // 1/1 white Vampire token with lifelink" -- once per combat, over the DECLARED attackers, BEFORE the
     // Adeline block so its untapped, non-attacking token is never appended to atk_idx. Mirrors
     // TurnSolver::SimulateCombat (lockstep, ONE shared helper). Param-gated inert.
     FireAttackOneOrMoreTokens(state, state.active_player_index, atk_idx);
     FireMilitiaPrideTokens(state, state.active_player_index, atk_idx);
+    // Ilharg, the Raze-Boar's attack put (Boars I5a): after the declared count, before anything reads power, so a
+    // put End-Raze's ETB pump lands before damage. Mirrors SimulateOneCombatAfterTitan (lockstep, ONE shared
+    // helper). Param-gated inert (one scan of the declared attackers).
+    FireAttackPutFromHand(state, state.active_player_index, atk_idx, declared_n);
     // Attack triggers that create tapped-and-attacking tokens (Adeline). Fire only when at
     // least one creature is attacking; the new tokens deal damage this combat too.
     // Geist of Saint Traft's Angel: "exile that token at end of combat" -- the numbers collected here are
@@ -1174,7 +1189,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     {
         // atk_idx is passed, not omitted: a creature-scoped token trigger (Hero of Bladehold's
         // "whenever THIS CREATURE attacks") must fire only when its own source is in that list.
-        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx, &eoc_exile_nums);
+        int tok_start = FireAttackCreateTokens(state, state.active_player_index, &atk_idx, declared_n, &eoc_exile_nums);
         for (int i = tok_start; i < static_cast<int>(state.battlefield.size()); ++i)
         {
             atk_idx.push_back(i);
@@ -1189,27 +1204,30 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // Goblins attack-trigger self-pumps (Piledriver +2/+0 per other attacking Goblin; Muxus +1/+1
     // per other Goblin you control): applied at declare-attackers BEFORE the damage loop reads power,
     // as until-end-of-turn temp bonuses. Mirrors TurnSolver::SimulateCombat (lockstep). Gated inert.
-    ApplyAttackSelfPumps(state, state.active_player_index, atk_idx);
+    ApplyAttackSelfPumps(state, state.active_player_index, atk_idx, declared_n);
 
     // Battle cry (Accorder Paladin, Hero of Bladehold): each OTHER attacking creature gets +1/+0
     // per attacking battle-cry source. AFTER the token block above, so Hero's own Soldiers and
     // Adeline's Human are pumped too (CR 603.3b -- the player orders simultaneous attack triggers,
     // and tokens-first is strictly dominant here). Mirrors TurnSolver::SimulateCombat. Gated inert.
-    ApplyBattleCry(state, state.active_player_index, atk_idx);
+    ApplyBattleCry(state, state.active_player_index, atk_idx, declared_n);
     // Annihilator (Emrakul, Ulamog the Infinite Gyre): the defending player sacrifices N permanents.
     // Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared helper). Deck-gated inert.
-    ApplyAnnihilator(state, state.active_player_index, atk_idx);
-    ApplyAttackExileDefenderTop(state, state.active_player_index, atk_idx);
+    ApplyAnnihilator(state, state.active_player_index, atk_idx, declared_n);
+    ApplyAttackExileDefenderTop(state, state.active_player_index, atk_idx, declared_n);
 
     // Two-Headed Hellkite attack-trigger draw (attack_draw_cards): drawn at declare-attackers,
     // so the cards are in hand for the post-combat main. Mirrors TurnSolver::SimulateCombat.
-    ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx);
-    ApplyGoblinGuideAttackTriggers(state, state.active_player_index, atk_idx);
+    ApplyAttackDrawTriggers(state, state.active_player_index, atk_idx, declared_n);
+    ApplyGoblinGuideAttackTriggers(state, state.active_player_index, atk_idx, declared_n);
 
     // Jorn, God of Winter (attack_untap_snow_permanents): did it attack? The untap itself is applied
     // AFTER ResolveCombatDamage, which is where attackers get tapped -- see AttackUntapSnowFires.
     // Mirrors TurnSolver::SimulateCombat (same two shared helpers, same two points).
-    const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx);
+    const bool jorn_untap = AttackUntapSnowFires(state, state.active_player_index, atk_idx, declared_n);
+    // Raggadragga (attack_untap_mana_ability_attackers, Boars I3b): the DECLARED attackers with a mana ability (the
+    // first declared_n slots), by m_number; untapped right after ResolveCombatDamage, beside Jorn's untap.
+    const std::vector<int> ragga_untap = AttackUntapManaAttackers(state, state.active_player_index, atk_idx, declared_n);
 
     // Blossoming Bogbeast: gain 2, then team +X/+X (X = life gained this turn). AFTER the token
     // block above so tokens put onto the battlefield attacking receive the pump (CR 603.3b lets the
@@ -1217,7 +1235,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // an opponent that never blocks -- the ApplyBattleCry precedent), and BEFORE the damage loop
     // reads power, so the counters the gain triggers grow this very swing. Mirrors
     // TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
-    ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx);
+    ApplyAttackLifegainTeamPump(state, state.active_player_index, atk_idx, declared_n);
     // Harbin, Vanguard Aviator: "whenever you attack with five or more Soldiers" -- counted over the
     // DECLARED attackers (declared_n, captured before the token block), pump applied after it.
     // Mirrors TurnSolver::SimulateCombat (lockstep -- ONE shared helper). Gated inert.
@@ -1230,7 +1248,7 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // they have). BEFORE Firebreathe so a greedy leftover-mana sink can never eat the swap's mana.
     // Mirrors TurnSolver::SimulateCombat (lockstep; ONE shared helper each). Both inert unless a
     // Bruna / an Aura-swap pin is present.
-    FireAttackGatherAuras(state, state.active_player_index, atk_idx);
+    FireAttackGatherAuras(state, state.active_player_index, atk_idx, declared_n);
     ApplyCombatAuraSwap(state, state.active_player_index, atk_idx);
     // Bloodline Keeper's IN-COMBAT transform (Vampires B): after every attack trigger (Mavren Fein's
     // token may be the fifth Vampire) and before anything reads power, so Lord of Lineage's +2/+2
@@ -1244,9 +1262,10 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // byte-identical to the rollout's BuildPool -> lockstep. Inert without a firebreathing param.
     m_ai.Firebreathe(state, atk_idx);
 
-    // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to a creature attacking ALONE.
-    int exalted_bonus = (static_cast<int>(atk_idx.size()) == 1)
-                        ? CountExalted(state.battlefield, state.active_player_index) : 0;
+    // Exalted (Ignoble Hierarch): +1/+1 per Exalted ability to the creature DECLARED alone (CR 506.5; an
+    // undeclared token / put body joining it does not cancel it). Shared with SimulateOneCombatAfterTitan.
+    int exalted_bonus = ExaltedBonusForCombat(state, atk_idx, declared_n, exalted_at_declare);
+    NotePlayCombatExalted(state, atk_idx, exalted_bonus);   // display-only: the board after combat shows +N/+N
     // Doubler after exalted (USER 2026-11-13, MTG_DOUBLER_AFTER_EXALTED): the plan's trailing doublers
     // are cast now, after exalted resolved, so they double its +E too. Lockstep twin: SimulateCombat.
     if (exalted_bonus > 0)
@@ -1293,25 +1312,27 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // picks through two attach_host board-clicks). Repairs atk_idx (an attached Lizard Blades leaves
     // combat, CR 506.4). Immediately before the Skyhunter dig so the trigger order is one place in both
     // worlds. Mirrors TurnSolver::SimulateCombat (lockstep, ONE shared body). Param-gated inert.
-    FireAttackAttachEquipment(state, state.active_player_index, atk_idx, /*live=*/true);
+    FireAttackAttachEquipment(state, state.active_player_index, atk_idx, /*live=*/true, &declared_n);
 
     // Armored Skyhunter attack-trigger dig-and-attach: fired AFTER attack pumps/draws and BEFORE
     // the damage loop reads power, so a put-and-attached Colossus Hammer swings this combat.
     // Mirrors TurnSolver::SimulateCombat (lockstep). Param-gated inert for every other deck.
-    FireAttackDigAttach(state, state.active_player_index, atk_idx);
+    FireAttackDigAttach(state, state.active_player_index, atk_idx, declared_n);
 
     // Adaptive Omnitool's attack dig-to-HAND. Same two-world lockstep contract, immediately after
     // its dig-and-attach sibling so the trigger order is one place in both worlds. Ordering against
     // the Skyhunter put is unobservable here (this one only moves a card to hand, which cannot
     // change what the put may legally attach to), but keeping them adjacent is what makes that
     // checkable. Param-gated inert for every other deck.
-    FireAttackEquipDigHand(state, state.active_player_index, atk_idx);
+    FireAttackEquipDigHand(state, state.active_player_index, atk_idx, declared_n);
 
     // Surtland Flinger's attack-trigger fling: sacrifice another creature, deal its power (doubled
     // for a Giant) to the opponent's face. AFTER the pumps so the victim's power is read buffed,
     // BEFORE ResolveCombatDamage so a sacrificed attacker deals no combat damage. Mutates atk_idx
     // (the sacrifice shifts battlefield indices) -- see the contract note on the function.
-    FireAttackSacFling(state, state.active_player_index, atk_idx);
+    { const std::vector<int> decl_nums = DeclaredNumbers(state, atk_idx, declared_n);
+      FireAttackSacFling(state, state.active_player_index, atk_idx, declared_n);
+      declared_n = RecountDeclared(state, atk_idx, decl_nums); }
 
     // Captured HERE, after every declare-attackers trigger has resolved, so the combat-damage
     // event's "(before->after)" range reports COMBAT DAMAGE ONLY. It used to be captured before
@@ -1324,11 +1345,15 @@ void GameEngine::CombatPhase(GameState& state, bool additional)
     // rollout (ResolveCombatDamage, Combat.cpp) so the two can never disagree on what an attack
     // does. Only the real game collects the per-attacker descriptions for the play viewer.
     const CombatDamageResult combat =
-        ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr);
+        ResolveCombatDamage(state, atk_idx, exalted_bonus, /*collect_descs=*/g_play_event_sink != nullptr, declared_n);
     // Walking Ballista's post-combat-damage lethal finish (shared; rollout twin: SimulateOneCombat). Runs
     // AFTER the damage and its lifelink gains, BEFORE the history line below reads total_combat_dmg.
     CounterPingFinish(state, state.active_player_index);
     if (jorn_untap) { UntapSnowPermanents(state, state.active_player_index); }   // Jorn, see above
+    UntapManaAttackers(state, state.active_player_index, ragga_untap);   // Raggadragga, see above (no-op when empty)
+    // Zhur-Taa Druid's post-combat lethal finish (shared; rollout twin: SimulateOneCombat). No-op unless
+    // ready ping dorks alone are lethal -- i.e. for every deck without one.
+    PingDorkFinish(state, state.active_player_index);
     const int total_combat_dmg = combat.total_damage;
     const int trigger_life_loss = combat.trigger_life_loss;
 
@@ -1380,6 +1405,10 @@ void GameEngine::EndStep(GameState& state)
     // begins, with its trigger (CR 603.4) -- snapshotted here, before any beginning-of-step effect below.
     // Lockstep twin at the top of TurnSolver::SimulateEndAndStartNextTurn; 0 for every deck without it.
     const int morbid_triggers = SnapshotEndStepMorbidTriggers(state);
+    // Zhur-Taa Druid's free end-step ping (a sound dominance fold; lockstep twin at the same position in
+    // TurnSolver::SimulateEndAndStartNextTurn). A lethal one is a win THIS turn: PlayOutFrom reads
+    // CheckWinCondition right after RunTurn, before the counter advances. No-op without a ping dork.
+    PingDorkEndSweep(state, state.active_player_index);
     // Our coin trigger can resolve before our delayed sacrifice/exile triggers.
     // That order preserves a marked Bronze-Blooded put through Athreos's return.
     PerformAthreosCoinEndStep(state, state.active_player_index);
@@ -1401,6 +1430,9 @@ void GameEngine::EndStep(GameState& state)
     // (Permanent::sac_at_end_step). Lockstep twin at the same position in
     // TurnSolver::SimulateEndAndStartNextTurn; no-op for every deck that never sets the flag.
     PerformEndStepDelayedSacrifices(state);
+    // Ilharg's put: "Return that creature to your hand at the beginning of the next end step"
+    // (Permanent::return_at_end_step). Lockstep twin at the same position in the rollout; no-op without the bit.
+    PerformEndStepDelayedReturns(state);
     // Berserk's "destroy that creature if it attacked this turn" (Permanent::destroy_at_end_if_attacked).
     // Lockstep twin at the same position in TurnSolver::SimulateEndAndStartNextTurn; no-op without the bit.
     DestroyAttackedAtEndStep(state);
@@ -1428,6 +1460,10 @@ void GameEngine::EndStep(GameState& state)
     // twin in TurnSolver::SimulateEndAndStartNextTurn; deck-gated -> inert elsewhere.
     PerformEndStepMorbidDestroy(state, morbid_triggers);
     PerformEndStepDiscardHands(state, state.active_player_index);
+    // CR 704.3: the end step's SBA check -- a legend an end-step trigger returned or put (a delayed return,
+    // Abiding Grace) is legend-ruled before cleanup, not at the next turn's combat. Lockstep twin in
+    // TurnSolver::SimulateEndAndStartNextTurn, same position.
+    LegendRuleSbaCheckpoint(state);
     // TODO: other "end of turn" triggered abilities (Phase 1.2)
     ResolveStack(state);
 }
@@ -1499,6 +1535,7 @@ void GameEngine::CleanupStep(GameState& state)
         p.temp_haste            = false;   // "gains haste until end of turn" (Expedite) expires
         p.temp_lifelink         = false;   // Heliod's "gains lifelink until end of turn" expires
         p.temp_double_strike    = false;   // Valiant Knight's team "gain double strike until EOT"
+        p.temp_vigilance        = false;   // End-Raze Forerunners' team "gain vigilance until EOT"
         p.temp_indestructible   = false;
         if (p.islandize_target == p.card.m_number) { p.islandize_target = 0; }
         p.is_animated           = false;
@@ -1587,6 +1624,9 @@ void GameEngine::ResolveStack(GameState& state)
         // before the next stack object or turn action can see the new hand.
         ResolvePendingMiracle(state, m_logger);
         CheckStateBasedActions(state);
+        // CR 704.5j after EVERY resolution, not only a legendary spell's (EffectHandler::Resolve): a GSZ-put second
+        // Surrak, a reanimated copy. Rollout twin: DepletionSbaAtResolution's exit (TurnSolver.cpp).
+        LegendRuleSbaCheckpoint(state);
     }
 }
 

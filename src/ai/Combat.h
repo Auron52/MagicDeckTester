@@ -38,8 +38,10 @@ struct CombatDamageResult
 // life loss, Utvara Hellkite's Dragon tokens, Goblin Lackey's cheat-into-play), and tap the
 // non-vigilant attackers. `exalted_bonus` is the caller's already-computed Exalted bonus (nonzero
 // only when exactly one creature attacks).
+// `declared_n` = the DECLARED prefix of atk_idx (CR 508.4): only those are SOURCES of the "whenever a creature attacks"
+// hooks fired here (Leeching Sliver's life loss, Utvara's tokens); -1 = all (Boars I5b).
 CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>& atk_idx,
-                                       int exalted_bonus, bool collect_descs);
+                                       int exalted_bonus, bool collect_descs, int declared_n = -1);
 
 // ---- MTG_FB_HOLD_BANKED: the combat pump keeps BANKED mana unless the pump is lethal ----------------
 //

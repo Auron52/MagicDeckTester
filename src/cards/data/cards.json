@@ -228,6 +228,168 @@
    }
   },
   {
+   "name": "Decimator of the Provinces",
+   "mana_cost": "{10}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Eldrazi",
+    "Boar"
+   ],
+   "keywords": [
+    "Trample",
+    "Haste"
+   ],
+   "power": 7,
+   "toughness": 7,
+   "oracle_text": "Emerge {6}{G}{G}{G} (You may cast this spell by sacrificing a creature and paying the emerge cost reduced by that creature's mana value.)\nWhen you cast this spell, creatures you control get +2/+2 and gain trample until end of turn.\nTrample, haste [EMERGE (CR 702.119; emerge_cost, Boars I4): an ALTERNATIVE-cost cast variant (Action::emerge) sharing its hand slot with the hard cast, offered once per sacrifice-victim CLASS -- every own battlefield creature class (SacReadinessVictimReps: identity + readiness dominance, both sound folds) plus every distinct creature name in hand that the same plan casts first (the victim must already be on the battlefield, so that cast is ordered before this one). The victim is SEARCHED. Bill = EmergeCastCost: emerge_cost through every cost reducer (a Herald's Horn naming Boar takes {1} off), then minus the victim's printed mana value off the GENERIC part only, floored at 0 -- the {G}{G}{G} is never reduced, so an End-Raze Forerunners victim pays exactly {G}{G}{G}. The victim is still on the battlefield while mana is paid, so it may tap for this very cast, and is then sacrificed (the full death cascade) BEFORE the cast triggers: a Herald of Ilharg or Raggadragga victim never sees this cast. Mana value stays 10 either way (Herald of Ilharg's MV>=5 damage); Raggadragga's 7-mana check reads the mana actually paid. In human play the victim is the `sacrifice` board click, asked at the cast BEFORE payment. CAST TRIGGER (cast_trigger_team_pump_power/_tough 2): resolves above the spell in both worlds, so Decimator itself is not pumped; +2/+2 until end of turn on every creature we control as it resolves. [PARTIAL, PROVISIONAL (D2): TRAMPLE -- the printed keyword and the trigger's 'gain trample' (cast_trigger_team_pump_trample) -- is recorded and inert: the goldfish opponent never blocks, so all of every attacker's power already reaches the player.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "emerge_cost": "{6}{G}{G}{G}",
+    "cast_trigger_team_pump_power": 2,
+    "cast_trigger_team_pump_tough": 2,
+    "cast_trigger_team_pump_trample": true
+   }
+  },
+  {
+   "name": "End-Raze Forerunners",
+   "mana_cost": "{5}{G}{G}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar"
+   ],
+   "keywords": [
+    "Vigilance",
+    "Trample",
+    "Haste"
+   ],
+   "power": 7,
+   "toughness": 7,
+   "oracle_text": "Vigilance, trample, haste\nWhen this creature enters, other creatures you control get +2/+2 and gain vigilance and trample until end of turn. [etb_other_creatures_pump_power 2 / etb_other_creatures_pump_tough 2: until-EOT temp bonuses on every OTHER creature (and animated permanent) you control at RESOLUTION (CR 608.2h); a creature entering later gets nothing (CR 611.2c). Applied in the shared FireOwnEtbTriggersBody beside Craterhoof Behemoth, so a cast, an Ilharg put and every other enter route pump identically in executor and rollout; a simultaneous mass put pumps the other entrants too (the late own-ETB pass). etb_other_creatures_grant_vigilance: sets Permanent::temp_vigilance, read by CreatureHasVigilance at the attack-tap sites -- NOT inert here: a vigilant attacking Zhur-Taa Druid or mana dork stays untapped and still taps for mana (and the Druid's ping) after combat, and that combat-kept mana opens this turn's second main (UntapSecondMainLive's combat-kept-mana clause). The printed vigilance and haste are live keywords. The toughness half is applied for fidelity and is inert in effect (the opponent deals no damage). A grant arriving after attackers are declared (an Ilharg put) must not spare an already-declared attacker from its tap (CR 508.1f) -- owed by the Ilharg put helper. [PARTIAL, PROVISIONAL (D2): the TRAMPLE grant and the printed trample are not modelled -- provably inert: trample only matters when assigning combat damage through blockers (CR 702.19b) and the goldfish opponent never blocks; Keyword::Trample has no reader in Combat.cpp. The accepted Craterhoof Behemoth collapse.]]",
+   "template": "custom",
+   "parameters": {
+    "etb_other_creatures_pump_power": 2,
+    "etb_other_creatures_pump_tough": 2,
+    "etb_other_creatures_grant_vigilance": true
+   }
+  },
+  {
+   "name": "Flinthoof Boar",
+   "mana_cost": "{1}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar"
+   ],
+   "keywords": [],
+   "power": 2,
+   "toughness": 2,
+   "oracle_text": "This creature gets +1/+1 as long as you control a Mountain.\n{R}: This creature gains haste until end of turn. (It can attack and {T} this turn.) [BOTH clauses modelled. Clause 1: self_pump_if_land_subtype Mountain -- a conditional static self-buff (CR 611.3) in the shared ComputeLordBonus, continuously evaluated against the lands you control by CURRENT subtype (LandHasSubtypeNow: a basic Mountain, Stomping Ground's Mountain Forest, a fetched one); one +1/+1 however many Mountains. Clause 2: self_haste_cost {R} -> Action::Kind::ActivatePump MODE 6 (ApplyActivatePump, shared executor+rollout), a SEARCHED main-phase activation setting Permanent::temp_haste (until end of turn, cleared at both cleanup sites). Offered once (the grant is idempotent) and only while this creature is untapped and could attack only WITH the grant (summoning-sick, no other haste source), in a main phase with combat still ahead -- every other activation is a provable no-op (the Wirewood Lodge rule): haste only lifts summoning sickness, and this card has no {T} ability. A Flinthoof cast this main is reached through breakpoint site 9 (kActSelfHaste). Deliberately NOT team_pump_grants_haste (that is the Minotaur routing signature). It is an ability of a creature, not a creature spell, so creature-spell-only mana (Somberwald Sage) cannot pay it.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "self_pump_if_land_subtype": "Mountain",
+    "self_haste_cost": "{R}"
+   }
+  },
+  {
+   "name": "Herald of Ilharg",
+   "mana_cost": "{2}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Boar",
+    "Beast"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 3,
+   "toughness": 3,
+   "oracle_text": "Trample\nWhenever you cast a creature spell, put two +1/+1 counters on this creature. If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to each opponent. [Cast trigger modelled (Boars I2b, 2026-11-13): creature_cast_trigger_plus_counters 2 + creature_cast_counter_damage_min_mv 5, fired from the shared FireOnCastTriggers at every cast site (executor and rollout in lockstep). The two counters go on through PutPlusCounters (the doubler-aware chokepoint); then, if the cast spell's PRINTED mana value is 5 or more, Herald deals damage equal to ALL counters on it (read after the two are added, so the first trigger off a 5-drop deals 2) to EACH opponent (x the opponent heads in 2HG). Herald's Horn and emerge reduce the cost, never the mana value, so a Decimator cast for emerge still triggers the damage. Herald is on the stack during its own cast and never triggers off itself; a Herald already on the battlefield does, and several Heralds each resolve their own count. A creature PUT onto the battlefield (Ilharg) is not cast and does not trigger. The order of simultaneous cast triggers is inert: each Herald reads only its own counters. The this-turn lethal projection credits the trigger (MTG_ATTACK_HERALD_TRIGGER). [PARTIAL, PROVISIONAL: Trample is recorded and inert -- the goldfish opponent never blocks, so it changes no damage.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "creature_cast_trigger_plus_counters": 2,
+    "creature_cast_counter_damage_min_mv": 5
+   }
+  },
+  {
+   "name": "Herald's Horn",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells you cast of the chosen type cost {1} less to cast.\nAt the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen type, you may reveal it and put it into your hand. [ALL clauses modelled. Clause 1 (as enters, choose a creature type): chooses_creature_type -> the universal enter cascade (FireEtbWatchers) asks the provider's ChosenCreatureSubtypeId and stores Permanent::chosen_subtype_id (folded into the sim key). [PROVISIONAL provider one-option prune (Boars D4): BoarsProvider names Boar -- not provably best in every state (a Human-heavy remainder would favour Human); a type no card in the deck carries is strictly dominated. Human play is offered every creature type the deck's creatures carry (the creature_type decision).] Clause 2: the Urza's Incubator reducer at amount 1 with reduces_spell_subtype_creature_only -- GENERIC only, floored at 0, stacking per copy; a same-turn Horn is credited by CountSameTurnReducers. Clause 3: upkeep_look_top_chosen_type_to_hand -> the shared PerformUpkeepHornReveal at GameEngine::UpkeepTail and the rollout's upkeep (lockstep, before the draw); one trigger per Horn, each reading the then-current top against ITS OWN chosen type. A take is a put-into-hand (HandEntryReason::Reveal), not a draw. The 'may': TAKE is FOLDED where provably dominant (leaving it means the draw step draws it anyway, so taking is that line plus one card one draw early; it loses only when the extra card forces a cleanup discard, so the fold holds whenever hand + 2 cannot exceed the maximum hand size); otherwise it is SEARCHED (Plan::upkeep_horn_choice, a BoundaryFan digit) and the provider default beyond the horizon is TAKE; human play asks through the dig chooser.]",
+   "template": "custom",
+   "parameters": {
+    "chooses_creature_type": true,
+    "reduces_spell_subtype_amount": 1,
+    "reduces_spell_subtype_creature_only": true,
+    "upkeep_look_top_chosen_type_to_hand": true
+   }
+  },
+  {
+   "name": "Ilharg, the Raze-Boar",
+   "mana_cost": "{3}{R}{R}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Boar",
+    "God"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nWhenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking. Return that creature to your hand at the beginning of the next end step.\nWhen Ilharg dies or is put into exile from the battlefield, you may put it into its owner's library third from the top. [attack_put_creature_from_hand: a CREATURE-SCOPED attack trigger (Ilharg must be a DECLARED attacker), resolved at declare-attackers in BOTH combats through one shared body (FireAttackPutFromHand) after the declared count is taken and before anything reads power: the put card enters TAPPED and ATTACKING (the declared non-vigilant attackers are tapped first, CR 508.1f), joins this combat's attacker list but was never declared (CR 508.4), so its own attack triggers do not fire for it, and it is NOT cast (no Herald of Ilharg counters, no Decimator cast pump). It enters through the shared enter cascade, so End-Raze Forerunners' team +2/+2 lands before combat damage; then the legend rule. WHICH card (or none) is SEARCHED (Plan::attack_put_choice -> GameState::scripted_attack_put, a card number or decline); human play asks through the lackey_put decision. attack_put_return_at_end_step: Permanent::return_at_end_step, swept at the beginning of the end step in both worlds -- the creature returns to its owner's hand (attachments fall off); a body that already left the battlefield (emerge victim, legend rule) is not found (CR 603.7c).] [dies_to_library_position 3 (Boars I5b): the DIES half is a TRIGGER resolved in the shared OnCreatureDies after every dies-watcher (CR 603.6c / 700.4): the card does reach the graveyard, then, if the 'may' is taken, it goes into its owner's library third from the top -- a library of fewer than two cards takes it at the bottom. Reachable in this list through the legend rule (a second Ilharg cast, or put by Ilharg's own attack trigger) and as Decimator of the Provinces' emerge victim. The 'may' is SEARCHED in both worlds (with the seeded library the tuck changes a later draw): every cast that kills an Ilharg is twinned tuck / leave (Action::dies_tuck), and an attack put that dooms a copy carries the answer in its pin. Human play asks a yes/no (the dig decision). Beyond the search horizon: tuck unless another Ilharg stays on the battlefield.] [PARTIAL/PROVISIONAL (user sign-off, D3): EXILE half -- 'or is put into exile from the battlefield' is not wired: no card in Boars exiles a permanent we control and the goldfish opponent never acts, so the exile event cannot occur in this list.] [Trample: inert -- no blocker path in the goldfish engine (D2 PROVISIONAL).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "attack_put_creature_from_hand": true,
+    "attack_put_return_at_end_step": true,
+    "dies_to_library_position": 3
+   }
+  },
+  {
+   "name": "Raggadragga, Goreguts Boss",
+   "mana_cost": "{2}{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Human",
+    "Boar"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 4,
+   "oracle_text": "Each creature you control with a mana ability gets +2/+2.\nWhenever a creature you control with a mana ability attacks, untap it.\nWhenever you cast a spell, if at least seven mana was spent to cast it, untap target creature. It gets +7/+7 and gains trample until end of turn. [Anthem: lord_affects_mana_ability_creatures + power_bonus/tough_bonus 2 -- a ComputeLordBonus match on CreatureHasManaAbility (a printed mana ability -- mana_dork template, a creature that produces mana, a creature mana rock, a sacrifice-for-mana body, an animated mana land -- or a Brightcap-style GRANTED tap ability). It does not depend on whether the ability can be activated now, so a summoning-sick Birds is a 2/3. Raggadragga has no mana ability and never buffs itself. Attack untap: attack_untap_mana_ability_attackers -- each DECLARED attacker we control with a mana ability is untapped (the Jorn shape: noted at declare-attackers, applied right after combat damage, where this engine taps attackers -- the same post-combat state, since no priority window opens in combat). A creature put onto the battlefield attacking (Ilharg) was never declared and does not trigger (CR 508.4). The untapped creature's mana is spendable in the post-combat main. Cast trigger: cast_trigger_untap_pump_target_min_spent 7, power 7, tough 7 -- fires at every cast site with the mana actually spent on the cost paid (after Herald's Horn reductions, an X, emerge; minus convoke; a free cast spends 0). The target is any creature (shroud honoured: a Lightning Greaves host is illegal), chosen as the trigger is put on the stack and SEARCHED (the cast-trigger target rank; the opponent's creatures are folded away in search, a sound dominance against a passive opponent; the human picks from the full legal set). Untapping a tapped mana creature mid-main is new mana, so the rest of the phase is re-planned (breakpoint site 9). +7/+7 is an until-end-of-turn bonus. PROVISIONAL (D2): 'gains trample' is recorded (cast_trigger_untap_pump_grants_trample) and never applied -- this engine has no blocker path, so trample is inert against the goldfish opponent, who never blocks. Legend rule modelled.]",
+   "template": "custom",
+   "parameters": {
+    "lord_affects_mana_ability_creatures": true,
+    "power_bonus": 2,
+    "tough_bonus": 2,
+    "attack_untap_mana_ability_attackers": true,
+    "cast_trigger_untap_pump_target_min_spent": 7,
+    "cast_trigger_untap_pump_power": 7,
+    "cast_trigger_untap_pump_tough": 7,
+    "cast_trigger_untap_pump_grants_trample": true
+   }
+  },
+  {
    "name": "Sacred Foundry",
    "mana_cost": "",
    "types": ["Land"],
@@ -1956,10 +2118,11 @@
    ],
    "subtypes": [],
    "keywords": [],
-   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [Resolved by PerformFetch: pulls a chosen library land (FetchCandidates colour heuristic), that land enters resolving its own shock/tapped choice, pay 1 life, fetchland to graveyard. Keeps a W/B/R/G `produces` ONLY so a copy in HAND counts as a flexible colour source for fixing heuristics; it never taps for mana (never reaches the battlefield). 'Then shuffle' IS modelled (PerformFetch ends with ShuffleAfterSearch, deterministic and lockstep), and a fail-to-find still shuffles (CR 701.19b, WhiffShuffle).]",
-   "template": "basic_land",
+   "oracle_text": "{T}, Pay 1 life, Sacrifice this land: Search your library for a Forest or Plains card, put it onto the battlefield, then shuffle. [REAL battlefield fetchland (Boars I1, 2026-11-13; the Wooded Foothills / Arid Mesa shape): its entry and searched activation are separate decisions; the activation pays 1 life and sacrifices this land as costs, then searches Forest or Plains (by CURRENT subtype, so a Stomping Ground or a basic Forest qualifies) and shuffles. It cannot tap for mana. Instant-speed activation is collapsed to our searched main-phase activation slots. hand_fixing_produces W/B/R/G is a HAND-only colour hint (Creature Giving's cleanup-discard cover reads it); it is not a mana ability.]",
+   "template": "custom",
    "parameters": {
-    "produces": [
+    "produces": [],
+    "hand_fixing_produces": [
      "W",
      "B",
      "R",
@@ -1968,7 +2131,12 @@
     "fetch_land_types": [
      "Forest",
      "Plains"
-    ]
+    ],
+    "land_search_count": 1,
+    "land_search_activation_cost": "",
+    "land_search_activation_taps": true,
+    "land_search_activation_sacrifice_self": true,
+    "land_search_activation_life_cost": 1
    }
   },
   {
@@ -15565,8 +15733,7 @@
     "figure_four_cost": "{R/W}{R/W}{R/W}",
     "figure_eight_cost": "{R/W}{R/W}{R/W}{R/W}{R/W}{R/W}"
    }
-  }
-,
+  },
   {
    "name": "Expropriate",
    "mana_cost": "{7}{U}{U}",
@@ -15851,7 +16018,7 @@
     "gy_cast_permanent_max_mv": 2
    }
   },
-{
+  {
    "name": "Gemstone Mine",
    "mana_cost": "",
    "types": [
@@ -15874,7 +16041,7 @@
     "sacrifice_when_mana_counters_empty": true
    }
   },
-{
+  {
    "name": "Tendo Ice Bridge",
    "mana_cost": "",
    "types": [
@@ -15896,7 +16063,7 @@
     "enters_with_mana_counters": 1
    }
   },
-{
+  {
    "name": "Vivid Creek",
    "mana_cost": "",
    "types": [
@@ -15918,7 +16085,7 @@
     "enters_with_mana_counters": 2
    }
   },
-{
+  {
    "name": "Careful Study",
    "mana_cost": "{U}",
    "types": [
@@ -15933,7 +16100,7 @@
     "post_draw_discard": 2
    }
   },
-{
+  {
    "name": "Faithless Looting",
    "mana_cost": "{R}",
    "types": [
@@ -15949,7 +16116,7 @@
     "flashback_cost": "{2}{R}"
    }
   },
-{
+  {
    "name": "Replenish",
    "mana_cost": "{3}{W}",
    "types": [
@@ -15963,7 +16130,7 @@
     "replenish_enchantments": true
    }
   },
-{
+  {
    "name": "Purphoros, God of the Forge",
    "mana_cost": "{3}{R}",
    "types": [
@@ -15992,7 +16159,7 @@
     "team_pump_mainphase": true
    }
   },
-{
+  {
    "name": "Mystic Retrieval",
    "mana_cost": "{3}{U}",
    "types": [
@@ -16012,7 +16179,7 @@
     "flashback_cost": "{2}{R}"
    }
   },
-{
+  {
    "name": "Magus of the Bazaar",
    "mana_cost": "{1}{U}",
    "types": [
@@ -16033,7 +16200,7 @@
     "tap_post_draw_discard": 3
    }
   },
-{
+  {
    "name": "Cephalid Coliseum",
    "mana_cost": "",
    "types": [
@@ -16051,7 +16218,7 @@
     "threshold_loot_cost": "{U}"
    }
   },
-{
+  {
    "name": "Golgari Grave-Troll",
    "mana_cost": "{4}{G}",
    "types": [
@@ -16073,7 +16240,7 @@
    },
    "oracle_text": "This creature enters with a +1/+1 counter on it for each creature card in your graveyard.\n{1}, Remove a +1/+1 counter from this creature: Regenerate this creature.\nDredge 6 (If you would draw a card, you may mill six cards instead. If you do, return this card from your graveyard to your hand.) [The counter count is read as it enters, after it leaves the graveyard, and counter doublers apply. Dredge is an optional per-draw replacement. The regeneration activation is inert against the passive goldfish opponent: it never blocks or deals combat damage to our creature, and this deck has no spell or ability that destroys its own Grave-Troll. The activation spends mana and a counter for no reachable benefit; no shield is created.]"
   },
-{
+  {
    "name": "Stinkweed Imp",
    "mana_cost": "{2}{B}",
    "types": [
@@ -16093,7 +16260,7 @@
    },
    "oracle_text": "Flying\nWhenever this creature deals combat damage to a creature, destroy that creature.\nDredge 5 (If you would draw a card, you may mill five cards instead. If you do, return this card from your graveyard to your hand.) [Flying is a keyword. Dredge is an optional per-draw replacement. The combat-damage trigger is unreachable in the passive-opponent goldfish: the opponent declares no blockers, so this creature never deals combat damage to a creature.]"
   },
-{
+  {
    "name": "Life from the Loam",
    "mana_cost": "{1}{G}",
    "types": [
@@ -16108,7 +16275,7 @@
    },
    "oracle_text": "Return up to three target land cards from your graveyard to your hand.\nDredge 3 (If you would draw a card, you may mill three cards instead. If you do, return this card from your graveyard to your hand.) [The cast selects zero to three distinct physical land cards in the graveyard; resolution returns each surviving target without shuffling. Dredge is an optional per-draw replacement.]"
   },
-{
+  {
    "name": "Keranos, God of Storms",
    "mana_cost": "{3}{U}{R}",
    "types": ["Enchantment", "Creature"],
@@ -16121,7 +16288,7 @@
    "oracle_text": "Indestructible\nAs long as your devotion to blue and red is less than seven, Keranos isn't a creature.\nReveal the first card you draw on each of your turns. Whenever you reveal a land card this way, draw a card. Whenever you reveal a nonland card this way, Keranos deals 3 damage to any target. [keranos_first_draw: the central actual-draw hook ignores dredge replacements and opponent-turn draws, consumes a per-own-turn marker before bonus draws, and queues the land bonus draw or nonland damage trigger. BoundaryFan searches next-turn targets after adaptive draw replacements; in-plan draw effects search live damage targets with keranos_targets. The target chooser surfaces the same legal board options in human play.]",
    "parameters": {"creature_requires_devotion": 7, "devotion_color": "UR", "keranos_first_draw": true}
   },
-{
+  {
    "name": "Mogis, God of Slaughter",
    "mana_cost": "{2}{B}{R}",
    "types": ["Enchantment", "Creature"],
@@ -16134,7 +16301,7 @@
    "oracle_text": "Indestructible\nAs long as your devotion to black and red is less than seven, Mogis isn't a creature.\nAt the beginning of each opponent's upkeep, Mogis deals 2 damage to that player unless they sacrifice a creature. [mogis_opponent_upkeep: the executor and rollout both fire this at the compressed opponent upkeep, skipped before an extra turn; the passive opponent sacrifices an available creature if one exists and otherwise takes two damage. Its choice is resolved by a deterministic passive opponent policy.]",
    "parameters": {"creature_requires_devotion": 7, "devotion_color": "BR", "mogis_opponent_upkeep": true}
   },
-{
+  {
    "name": "Klothys, God of Destiny",
    "mana_cost": "{1}{R}{G}",
    "types": ["Enchantment", "Creature"],
@@ -16147,7 +16314,7 @@
    "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Klothys isn't a creature.\nAt the beginning of your precombat main phase, exile target card from a graveyard. If it was a land card, add {R} or {G}. Otherwise, you gain 2 life and Klothys deals 2 damage to each opponent. [klothys_first_main: executor and rollout select a live physical card from either graveyard and exile it at first-main entry. BoundaryFan searches every graveyard card and both mana colours for land targets after upkeep/draw changes; human play shows the graveyard target and land-colour prompts.]",
    "parameters": {"creature_requires_devotion": 7, "devotion_color": "RG", "klothys_first_main": true}
   },
-{
+  {
    "name": "Ephara, God of the Polis",
    "mana_cost": "{2}{W}{U}",
    "types": ["Enchantment", "Creature"],
@@ -16160,7 +16327,7 @@
    "oracle_text": "Indestructible\nAs long as your devotion to white and blue is less than seven, Ephara isn't a creature.\nAt the beginning of each upkeep, if you had another creature enter the battlefield under your control last turn, draw a card. [ephara_upkeep_draw: the shared creature-entry watcher records own entries; executor and rollout advance this history over the compressed opponent turn and extra-turn boundary, then draw on each qualifying upkeep. Each draw uses the ordinary replacement/actual-draw hook, and BoundaryFan searches any dredge replacement at its occurrence.]",
    "parameters": {"creature_requires_devotion": 7, "devotion_color": "WU", "ephara_upkeep_draw": true}
   },
-{
+  {
    "name": "Phenax, God of Deception",
    "mana_cost": "{3}{U}{B}",
    "types": ["Enchantment", "Creature"],
@@ -16173,7 +16340,7 @@
    "oracle_text": "Indestructible\nAs long as your devotion to blue and black is less than seven, Phenax isn't a creature.\nCreatures you control have \"{T}: Target player mills X cards, where X is this creature's toughness.\" [grants_tap_mill_toughness: every live creature gets a tap action, targeting either player; live toughness includes all buffs. Opponent mill moves cards to graveyard and preserves the deck-out win projection.]",
    "parameters": {"creature_requires_devotion": 7, "devotion_color": "UB", "grants_tap_mill_toughness": true}
   },
-{
+  {
       "name": "Pharika, God of Affliction",
       "mana_cost": "{1}{B}{G}",
       "types": [
@@ -16199,7 +16366,7 @@
          "pharika_exile_cost": "{B}{G}"
       }
    },
-{
+  {
       "name": "Purphoros, Bronze-Blooded",
       "mana_cost": "{4}{R}",
       "types": [
@@ -16228,7 +16395,7 @@
          "bronze_put_cost": "{2}{R}"
       }
    },
-{
+  {
       "name": "Xenagos, God of Revels",
       "mana_cost": "{3}{R}{G}",
       "types": ["Enchantment", "Creature"],
@@ -16241,7 +16408,7 @@
       "oracle_text": "Indestructible\nAs long as your devotion to red and green is less than seven, Xenagos isn't a creature.\nAt the beginning of combat on your turn, another target creature you control gains haste and gets +X/+X until end of turn, where X is that creature's power.",
       "parameters": {"creature_requires_devotion": 7, "devotion_color": "RG", "xenagos_combat_pump": true}
    },
-{
+  {
       "name": "Iroas, God of Victory",
       "mana_cost": "{2}{R}{W}",
       "types": ["Enchantment", "Creature"],
@@ -16254,7 +16421,7 @@
       "oracle_text": "Indestructible\nAs long as your devotion to red and white is less than seven, Iroas isn't a creature.\nCreatures you control have menace.\nPrevent all damage that would be dealt to attacking creatures you control.",
       "parameters": {"creature_requires_devotion": 7, "devotion_color": "RW", "iroas_combat_guard": true}
    },
-{
+  {
       "name": "Karametra, God of Harvests",
       "mana_cost": "{3}{G}{W}",
       "types": ["Enchantment", "Creature"],
@@ -16269,7 +16436,7 @@
          "land_search_count": 1, "land_search_tapped": true, "land_search_optional": true,
          "land_search_subtype": "Forest"}
    },
-{
+  {
       "name": "Athreos, God of Passage",
       "mana_cost": "{1}{W}{B}",
       "types": ["Enchantment", "Creature"],
@@ -16282,7 +16449,7 @@
       "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nWhenever another creature you own dies, return it to your hand unless target opponent pays 3 life.",
       "parameters": {"creature_requires_devotion": 7, "devotion_color": "WB", "athreos_passage": true}
    },
-{
+  {
       "name": "Athreos, Shroud-Veiled",
       "mana_cost": "{4}{W}{B}",
       "types": ["Enchantment", "Creature"],
@@ -16295,7 +16462,7 @@
       "oracle_text": "Indestructible\nAs long as your devotion to white and black is less than seven, Athreos isn't a creature.\nAt the beginning of your end step, put a coin counter on another target creature.\nWhenever a creature with a coin counter on it dies or is put into exile, return that card to the battlefield under your control.",
       "parameters": {"creature_requires_devotion": 7, "devotion_color": "WB", "athreos_shroud": true}
    },
-{
+  {
       "name": "Kruphix, God of Horizons",
       "mana_cost": "{3}{G}{U}",
       "types": [
@@ -16322,7 +16489,7 @@
          "kruphix_banks_mana": true
       }
    },
-   {
+  {
       "name": "Wild Defiance",
       "mana_cost": "{2}{G}",
       "types": [
@@ -16337,7 +16504,7 @@
          "spell_target_watch_pump_tough": 3
       }
    },
-   {
+  {
       "name": "Berserk",
       "mana_cost": "{G}",
       "types": [
@@ -16354,7 +16521,7 @@
          "cast_only_before_combat_damage": true
       }
    },
-   {
+  {
       "name": "Temur Battle Rage",
       "mana_cost": "{1}{R}",
       "types": [
@@ -16369,7 +16536,7 @@
          "grants_temp_double_strike": true
       }
    },
-   {
+  {
       "name": "Might of Old Krosa",
       "mana_cost": "{G}",
       "types": [
@@ -16387,7 +16554,7 @@
          "mainphase_tough_bonus": 4
       }
    },
-   {
+  {
       "name": "Vines of Vastwood",
       "mana_cost": "{G}",
       "types": [
@@ -16404,7 +16571,7 @@
          "kicked_tough_bonus": 4
       }
    },
-   {
+  {
       "name": "Legion Leadership",
       "mana_cost": "{1}{R/W}",
       "types": [
@@ -16425,7 +16592,7 @@
          "mdfc_back_enters_tapped": true
       }
    },
-   {
+  {
       "name": "Spellskite",
       "mana_cost": "{2}",
       "types": [
@@ -16445,7 +16612,7 @@
          "redirects_spell_target_to_self": true
       }
    },
-   {
+  {
       "name": "Blistering Firecat",
       "mana_cost": "{1}{R}{R}{R}",
       "types": [
@@ -16468,7 +16635,7 @@
          "endstep_sacrifice_self": true
       }
    },
-   {
+  {
       "name": "Hystrodon",
       "mana_cost": "{4}{G}",
       "types": [
@@ -16489,7 +16656,7 @@
          "combat_damage_self_may_draw": 1
       }
    },
-   {
+  {
       "name": "Den Protector",
       "mana_cost": "{1}{G}",
       "types": [
@@ -16509,7 +16676,7 @@
          "turned_face_up_return_gy_to_hand": true
       }
    },
-   {
+  {
       "name": "Fire-Lit Thicket",
       "mana_cost": "",
       "types": [
@@ -17156,6 +17323,28 @@
     "allow_self_target": true,
     "destroy_target_creature_max_mv": 2,
     "revolt_destroy_max_mv": 4
+   }
+  },
+  {
+   "name": "Zhur-Taa Druid",
+   "mana_cost": "{R}{G}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Human",
+    "Druid"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{T}: Add {G}.\nWhenever you tap this creature for mana, it deals 1 damage to each opponent. [FULLY MODELED. mana_dork producing G (summoning sickness applies to its {T}; haste lifts it). tap_mana_damage_each_opponent 1: EVERY tap FOR MANA -- any payment (spells, equip, activations), the greedy payer, the backtracking payer and its mana-cache replay, in both the executor and the rollout -- deals 1 damage x OpponentHeads() at the tap (ApplyTapManaPing; 2HG = 2 to the team). The trigger uses the stack; resolving it at the tap is an inert timing collapse vs a passive opponent. No once-per-turn assumption: an untapped-again Druid (Raggadragga) pings again. Tapping for a non-mana reason (attacking, convoke) does not ping. END-STEP FREE PING (PingDorkEndSweep, a sound dominance fold, both worlds and human play, first thing in the end step): every untapped Druid that can tap is tapped for its ping -- no mana burn, and nothing after the last main can use the body or the mana. POST-COMBAT LETHAL FINISH (PingDorkFinish, both worlds, autonomous play only): right after combat damage, when the untapped Druids' pings cover the opponent's remaining life they are tapped then. Not modelled: the ping does not feed the armed damage-event model or noncombat-damage trackers (no deck pairs them).]",
+   "template": "mana_dork",
+   "parameters": {
+    "produces": [
+     "G"
+    ],
+    "tap_mana_damage_each_opponent": 1
    }
   }
  ]

@@ -29,9 +29,10 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
 
     // Fetchland: the land drop sacrifices the fetchland to search out a real land. fetch_target
     // names the searched choice; empty -> PerformFetch falls back to its own top heuristic pick.
-    // ...or the crack-on-play variant offered beside a kept hold (FetchCrackOnPlayOffered): the plan pinned
-    // a target, so the fetch resolves now and its land pays for this plan's casts.
-    if (FetchResolvesOnPlay(state, def) || FetchCrackOnPlayPinned(state, def, opts.fetch_target))
+    // A named target can crack a fetch beside an autonomous hold; the human HOLD choice leaves it
+    // on the battlefield for a later activation.
+    if ((FetchResolvesOnPlay(state, def) && opts.fetch_target != kFetchHoldTarget)
+        || FetchCrackOnPlayPinned(state, def, opts.fetch_target))
     {
         Card fetchland = card;
         leave_zone();
@@ -252,7 +253,12 @@ bool PlayLandFromHand(GameState& state, std::size_t hand_index, const CardDefini
     Player& ap = state.ActivePlayer();
     if (hand_index >= ap.hand.size()) { return false; }
     auto it = ap.hand.begin() + static_cast<std::ptrdiff_t>(hand_index);
-    return PlayLandCore(state, *it, def, opts, [&ap, it]() { ap.hand.erase(it); });
+    const bool played = PlayLandCore(state, *it, def, opts, [&ap, it]() { ap.hand.erase(it); });
+    // CR 704.3: SBAs are checked before the player receives priority after the land play, so a second legendary
+    // land (The Grey Havens) is legend-ruled NOW, not at the next beginning of combat (LegendRuleSbaCheckpoint).
+    // THE land drop for every caller, so this is executor/rollout lockstep.
+    if (played) { LegendRuleSbaCheckpoint(state); }
+    return played;
 }
 
 bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const LandPlayOptions& opts)
@@ -264,7 +270,9 @@ bool PlayLandFromLibraryTop(GameState& state, const CardDefinition& def, const L
     const Card top = ap.library.DrawTop();
     LandPlayOptions o = opts;
     o.from_library_top = true;   // the log records the source (GameLogger::LogPlayLand)
-    return PlayLandCore(state, top, def, o, []() {});
+    const bool played = PlayLandCore(state, top, def, o, []() {});
+    if (played) { LegendRuleSbaCheckpoint(state); }   // CR 704.3, as PlayLandFromHand
+    return played;
 }
 
 // Would the extra mana from an UNTAPPED first land sit idle this turn? See the call site in

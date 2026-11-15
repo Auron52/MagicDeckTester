@@ -536,9 +536,11 @@ public:
     // Search policy for a fetchland played from hand/top. True keeps the legal
     // battlefield hold and later activation; false resolves the zero-mana,
     // one-life fetch on play. Human play and the unpruned audit always keep the
-    // hold. Decks without a reviewed policy keep the full timing choice.
+    // hold. DEFAULT FALSE (USER 2026-11-14: "We shouldn't fetch hold for the
+    // decks. Only very specific decks care about the hold."): a deck whose line
+    // genuinely needs the deferred crack opts in by overriding this to true.
     virtual bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const
-    { (void)s; (void)fetch; return true; }
+    { (void)s; (void)fetch; return false; }
 
     // When both timing choices support the same turn's other actions, a deck may
     // prefer holding a fetch for a later landfall trigger. The solver keeps a
@@ -837,6 +839,23 @@ public:
     // provider-owned answer to "which card is least needed in hand now" -- so a deck with authored
     // discard buckets gets a put-back default that agrees with them.
     virtual std::vector<int> PutBackRanking(const GameState& s, int controller) const;
+
+    // Ilharg, the Raze-Boar's attack put (CardParams::attack_put_creature_from_hand, Boars I5a): the DEFAULT
+    // pick among `cands` (creature cards in `controller`'s hand), as an index into `cands`. ONLY the playout
+    // policy beyond the horizon / the d0 runner and the base plan's unpinned resolution read it -- inside the
+    // search window the card (or decline) is the searched Plan::attack_put_choice pin, every distinct name
+    // branched, so this ORDERS and never narrows. Default (DecisionProviders.cpp): the most power the put adds
+    // this combat (printed power + its ETB team pump per other creature we control), a legendary we already
+    // control last (the legend rule), then higher mana value, then lower card number. `cands` is non-empty.
+    virtual int AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const;
+
+    // Ilharg, the Raze-Boar's death "may" (CardParams::dies_to_library_position, Boars I5b item 3): the DEFAULT for
+    // an UNPINNED death -- true = put it into the library, false = leave it in the graveyard. ONLY the playout beyond
+    // the horizon / the d0 runner reach it (inside the search window every death a plan causes is pinned by
+    // Action::dies_tuck or Plan::attack_put_choice's tuck bit), and it pre-selects the human's `dig` yes/no when
+    // nothing is pinned. Default (DecisionProviders.cpp): tuck unless another permanent of the same name stays on
+    // `controller`'s battlefield (a legend-rule loser beside its survivor would be redrawn into the same rule).
+    virtual bool DiesTuckDefault(const GameState& s, int controller, const Card& dead) const;
 
     // Search-only dredge menu. Entries are physical graveyard card numbers;
     // zero means take the ordinary draw. The default keeps the complete menu.
@@ -1180,6 +1199,15 @@ public:
     // Stable, so ties keep battlefield order (oldest first).
     virtual void CastTriggerTargetOrder(const GameState& s, int controller, bool destroy,
                                         std::vector<int>& class_reps) const;
+
+    // UntapPumpTargetOrder -- Raggadragga's "untap target creature. It gets +7/+7 and gains trample until end of
+    // turn" (Boars I3b). Same contract as CastTriggerTargetOrder: `class_reps` (battlefield indices, one per
+    // identity class, creatures only) is ORDERED in place, never restricted; the search branches over every class
+    // (Plan::cast_trigger_target_choice). Base rule: own TAPPED creatures with a mana ability that can tap now,
+    // largest mana yield first (the untap is new mana this phase -- a tapped Somberwald Sage refunds 3); then own
+    // untapped creatures that can still attack, highest attack power first (+7/+7 on a swing); then the rest of
+    // ours (highest power first); the opponent's last. Stable (oldest first on a tie).
+    virtual void UntapPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const;
 
     // JitteSpendCount -- Umezawa's Jitte: how many charge counters to spend on "+2/+2 until end
     // of turn" for THIS attacker's combat damage. Default -1 = greedy spend-all INCLUDING the
@@ -3239,23 +3267,47 @@ public:
     // at the call site (best-first for ranking providers), so overrides select from it instead of
     // re-running an expensive ranking.
     //
-    // DEFAULT = ONE option, the top pick (USER standing rule 2026-08-21: "if I don't specify, the
-    // assumption should be that the heuristic picks only one option to return" -- the silent
-    // top-n widths this replaces were "a major performance headache and I don't even know it is
-    // happening"). Widening is a USER-REVIEW gate ("the AI will need to convince me it is
-    // necessary"), and when granted it should be CONFIDENCE-CONDITIONAL, per STATE, not a
-    // per-deck constant: "sometimes you are 100% confident in the decision and other times need
-    // to search multiple. This design allows that" -- return 1 when the doctrine is sure, the
-    // genuinely-ambiguous set when it is not. Engine-side, MTG_UNPRUNED and HUMAN PLAY bypass
-    // this entirely (the audit must see every target; the viewer keeps every legal option).
+    // DEFAULT = EVERY legal target, in the provider's order (USER 2026-11-14: "Wait, why do we only try the
+    // first candidate by default? That sounds bad. It's a different story if we have an intentional prune.").
+    // The old default (the top pick only) applied the 2026-08-21 standing rule -- "if I don't specify, the
+    // assumption should be that the heuristic picks only one option to return" -- to an UNRANKED fallback:
+    // GenericProvider's list is library order, so its "top pick" was whichever legal name sat highest in
+    // the library (Boars seed 5158 gi153 T1: Mountain over Stomping Ground / Forest with Birds of Paradise
+    // in hand). That rule now governs only an INTENTIONAL provider prune: a provider that has a reviewed
+    // fetch doctrine narrows here explicitly (FetchTopPickOnly below), and widening one of those is still a
+    // USER-review gate ("the AI will need to convince me it is necessary"), CONFIDENCE-CONDITIONAL per
+    // state when granted: "sometimes you are 100% confident in the decision and other times need to search
+    // multiple. This design allows that". The ORDER still matters with the full fan: it is the order a
+    // finite budget spends in, and the pick of every greedy consumer (the playout beyond the horizon, the
+    // d0 runner, PerformFetch with no named target). Engine-side, MTG_UNPRUNED and HUMAN PLAY bypass this
+    // entirely (the audit must see every target; the viewer keeps every legal option).
     virtual std::vector<std::string>
     FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
                           const std::vector<std::string>& ranked) const
     {
         (void)s; (void)controller; (void)fetch_pp;
+        return ranked;
+    }
+    // The explicit one-option prune for a provider whose fetch ranking IS a reviewed doctrine (the
+    // pre-2026-11-14 default, kept byte-identical where a provider relied on it).
+    static std::vector<std::string> FetchTopPickOnly(const std::vector<std::string>& ranked)
+    {
         if (ranked.size() <= 1) { return ranked; }
         return { ranked.front() };
     }
+    // OnPlayFetchWidth -- how many of a fetchland's ordered targets the AUTONOMOUS search fans at the LAND DROP
+    // (the fetch resolving on play; NarrowOnPlayFetch). DEFAULT 1, the top of the shared fetch order: an
+    // INTENTIONAL, measured prune (agent default taken 2026-11-14 under the NEVER-BLOCK rule, pending the USER's
+    // ruling; the USER: "Searching every target is something that enables clairvoyance"). Held-out seed 71001,
+    // shuffle salts decoupled, 300 g/cell: the full fan vs top-1 was MIXED -- Boars play -0.033, but boars2hg
+    // +0.020, Creature Giving play +0.027 (t 3.4), cg2hg d3 +0.042 turns -- while the ORDER alone (top-1 of the
+    // hand-aware list) was better or neutral on every deck (logs/boars-research/rank-handoff.md). The width is
+    // a per-deck question: a provider whose fetch genuinely needs the alternatives returns more here (a
+    // USER-review gate, confidence-conditional per state when granted). Not read in human play or the
+    // unpruned audit (every legal target), and not the ACTIVATION of a held fetchland (LandSearchFetchPickWidth).
+    // 0 = no extra cap: a provider with its OWN reviewed width keeps it (Cyclone: the rule pick + Xander's Lounge).
+    virtual int OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
+    { (void)s; (void)fetch; return 1; }
 
     // TutorSearchWidth -- tutor BREADTH policy: how many of TutorCandidates' ordered targets the
     // post-dedup tutor axis actually scores, INCLUDING the provider's best (so 1 == the old
@@ -3989,6 +4041,29 @@ public:
     virtual int FetchLandSearchPickWidth(const GameState& s, int controller,
                                          const std::vector<std::vector<std::string>>& picks) const
     { (void)s; (void)controller; return static_cast<int>(picks.size()); }
+    // LandSearchFetchPickOrder / LandSearchFetchPickWidth -- the same ORDER and NARROWING for a FETCHLAND-shaped
+    // search ("a <subtype> or <subtype_alt> card", LandSearchSpec::subtype_alt set: a battlefield fetchland's
+    // activation, Karametra's cast trigger). ONE list serves both routes of a battlefield fetchland (USER
+    // 2026-11-14, "We should obviously use the same heuristic that just grabs Stomping Ground"): its
+    // ACTIVATION (in-plan pins, crack-first roots) and its ON-PLAY resolution at the land drop
+    // (OnPlayFetchCandidates, DecisionProviders.h) both read LandSearchPicksMemo. Base: the land-search
+    // order above with no subtype (exactly what this spec read before these hooks existed) and no narrowing,
+    // so every provider that does not override them is byte-identical. A provider whose fetch ranking is a
+    // reviewed doctrine overrides both (and keys or declines the memo, LandSearchPickOrderKey's CONTRACT).
+    // Same contexts as above: the width is autonomous play only (human play / MTG_UNPRUNE=landpick never
+    // narrow). Subtype ids are SubtypeRegistry ids (0 = none).
+    virtual void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                          bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                          std::uint16_t subtype_alt,
+                                          std::vector<std::vector<std::string>>& picks) const
+    { (void)subtype; (void)subtype_alt;
+      LandSearchPickOrder(s, controller, count, to_hand, basic_only, share_land_type, 0, picks); }
+    virtual int LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
+                                         bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                         std::uint16_t subtype_alt,
+                                         const std::vector<std::vector<std::string>>& picks) const
+    { (void)s; (void)controller; (void)count; (void)to_hand; (void)basic_only; (void)share_land_type;
+      (void)subtype; (void)subtype_alt; return static_cast<int>(picks.size()); }
     // LandSearchAdmitsLand -- the same narrowing at the CLASS level: may the autonomous world's pick hold
     // this land at all? Applied BEFORE the maximal-pick walk, so the picks are re-formed without the
     // rejected lands -- "up to N" then reaches a smaller complete pick, or none (the search finds
@@ -4114,6 +4189,13 @@ public:
     // LegendKeepIndex -- legend rule (CR 704.5j): you control two or more legendary permanents with
     // the same name, so you CHOOSE one to keep and the rest go to the graveyard. `duplicates` is the
     // battlefield indices of one such same-name group, ascending; return the index to KEEP.
+    //
+    // SUPERSEDED IN THE SEARCH WINDOW (Boars I5b item 4, 2026-11-13): the keep is now SEARCHED -- a legendary
+    // cast beside a same-name permanent is twinned (Action::legend_keep 1 keep-oldest / 2 keep-newest), a plan
+    // casting two copies is fanned, and Ilharg's attack put carries kAttackPutKeepNewBit -- and a human is asked
+    // for every legend (LegendKeepPick, SpellEffects.h). This hook is now ONLY the playout policy beyond the
+    // horizon, the d0 runner's keep, the human prompt's default, and the keep for entry routes that carry no
+    // searched rider (token copies, reanimation, flicker returns). The measurement below is kept as history.
     //
     // The base rule keeps the OLDEST (lowest battlefield index). The rules make this the
     // controller's choice for a reason: the copies are not interchangeable once one carries an aura,

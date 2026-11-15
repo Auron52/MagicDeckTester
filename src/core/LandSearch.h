@@ -23,7 +23,7 @@
 //   Nature's Lore              1 Forest card, untapped                 spell resolution
 //   Skyshroud Claim            2 Forest cards, untapped                spell resolution
 //
-// Arid Mesa and Wooded Foothills now use SacLandSearch: they enter, may be held, and pay one life
+// Arid Mesa, Wooded Foothills and (Boars I1, 2026-11-13) Windswept Heath now use SacLandSearch: they enter, may be held, and pay one life
 // on activation. Legacy fetches still use the immediate PerformFetch collapse. The search spec
 // accepts either printed subtype and includes both in its memo key. Crop Rotation's
 // PerformLandTutorToBattlefield puts ONE card through
@@ -256,13 +256,29 @@ inline std::vector<std::vector<std::string>> LandSearchPicksUncached(const GameS
         }
         for (auto& v : splits) { out.push_back(std::move(v)); }
     }
-    prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
-                             spec.subtype_alt == SubtypeRegistry::kNone ? spec.subtype : SubtypeRegistry::kNone, out);
-    // The provider's NARROWING (LandSearchPickWidth): autonomous play only; see LandSearchPickPruned.
-    if (LandSearchPickPruned() && spec.subtype_alt == SubtypeRegistry::kNone)
+    // A fetchland-shaped spec ("X or Y card") has its own pair of hooks (LandSearchFetchPickOrder / Width,
+    // whose base is exactly the plain order with no subtype and no narrowing): the ONE list both routes of a
+    // battlefield fetchland read -- its activation and its on-play land drop (OnPlayFetchCandidates).
+    const bool fetch_shape = spec.subtype_alt != SubtypeRegistry::kNone;
+    if (fetch_shape)
     {
-        const int w = prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
-                                               spec.share_land_type, spec.subtype, out);
+        prov.LandSearchFetchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                                      spec.subtype, spec.subtype_alt, out);
+    }
+    else
+    {
+        prov.LandSearchPickOrder(s, ctrl, spec.count, spec.to_hand, spec.basic_only, spec.share_land_type,
+                                 spec.subtype, out);
+    }
+    // The provider's NARROWING (LandSearchPickWidth / LandSearchFetchPickWidth): autonomous play only; see
+    // LandSearchPickPruned.
+    if (LandSearchPickPruned())
+    {
+        const int w = fetch_shape
+            ? prov.LandSearchFetchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                            spec.share_land_type, spec.subtype, spec.subtype_alt, out)
+            : prov.LandSearchPickWidth(s, ctrl, spec.count, spec.to_hand, spec.basic_only,
+                                       spec.share_land_type, spec.subtype, out);
         if (w >= 1 && w < static_cast<int>(out.size())) { out.resize(static_cast<std::size_t>(w)); }
     }
     // A fetchland's search narrows only through its own hook (DecisionProvider::FetchLandSearchPickWidth).
@@ -776,6 +792,14 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
             LandSearchCreditFilter(state, spec, LandSearchMemoSlot(state, controller, spec), *put_credit,
                                    t_credit_idx);
             if (!t_credit_idx.empty()) { def_k = static_cast<std::size_t>(t_credit_idx.front()); }
+        }
+        // ...else the pick the PLAN was priced with (a crack-first root's pin, TurnSolver.cpp "CRACK-FIRST
+        // ROOTS": its casts were enumerated on the board this pick produces). Only the default moves.
+        else if (pin >= 0 && !picks.empty())
+        {
+            def_k = static_cast<std::size_t>(
+                LandSearchPinDecode(LandSearchMemoSlot(state, controller, spec), pin).pick);
+            if (def_k >= picks.size()) { def_k = 0; }
         }
         // The picks hold CLASS REPRESENTATIVES (Evolving Wilds stands for Terramorphic Expanse too) and
         // the prompts offer REAL names, so the two are matched by identity class, never by name: with

@@ -1,0 +1,36 @@
+{
+  "deck": "decks/Boars/Boars.cod",
+  "profile": "decks/Boars/Boars.profile.json",
+  "turn": 2,
+  "on_the_play": false,
+  "active_life": 20,
+  "opponent_life": 20,
+  "battlefield": [
+    { "name": "Stomping Ground", "controller": 0 }
+  ],
+  "hand": [
+    "Windswept Heath",
+    "Flinthoof Boar"
+  ],
+  "library_top": [
+    "Forest",
+    "Stomping Ground"
+  ],
+  "library_filler": "Ilharg, the Raze-Boar",
+  "library_size": 40,
+  "depth": 0,
+  "budget_ms": 20,
+  "max_turns": 2,
+  "env": {
+    "MTG_HUMAN_PLAY": "1"
+  },
+  "_comment": [
+    "BOARS 5d SWEEP ITEM 3 (2026-11-14, seed 97007 '--choices 1,3,0,0,0', plans 0-1): the human land-drop 'hold, then crack this main + cast X' plan was shown ONCE PER FETCH TARGET with an identical summary, actions and fetch_target '(hold: crack later)' -- the rows differ only in Plan::land_search_pins, which in human play merely seed the default of the tutor_etb picker asked at the crack. The display folds such exact twins (main.cpp WriteDecisionJson, EXACT-TWIN FOLDS (1)); enumeration, indices and line matching are untouched.",
+    "Windswept Heath (Forest or Plains) has two legal targets here (Forest, Stomping Ground): before the fold two identical 'crack + Flinthoof' rows, after it one. The on-play target rows stay one per target."
+  ],
+  "expect_menu": [
+    { "summary_contains": "land=Windswept Heath; cast: Windswept Heath: sacrifice it: search for land(s), put them onto the battlefield, Flinthoof Boar", "count": 1 },
+    { "summary_contains": "land=Windswept Heath; cast: Flinthoof Boar", "fetch_target": "Forest", "count": 1 },
+    { "summary_contains": "land=Windswept Heath; cast: Flinthoof Boar", "fetch_target": "Stomping Ground", "count": 1 }
+  ]
+}

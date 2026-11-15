@@ -223,6 +223,15 @@ struct StackEntry
     int                 trick_redirect = 0;         // Spellskite redirect of a solo-target trick (the
                                         // Spellskite's m_number; Action::trick_redirect via CastRiders).
                                         // 0 = none. Read by EffectHandler's ResolveSoloTargetTrick call.
+    std::int8_t         dies_tuck      = 0;         // Ilharg's death "may" (Action::dies_tuck via CastRiders):
+                                        // 0 none, 1 tuck, 2 leave. Stamped by the executor's cast site;
+                                        // EffectHandler::Resolve installs it (DiesTuckPinScope) for the
+                                        // resolution, so a legend-rule loser reads it. The rollout twin is
+                                        // apply_one's scope over the whole inline cast + resolution.
+    std::int8_t         legend_keep    = 0;         // CR 704.5j keep (Action::legend_keep via CastRiders, Boars
+                                        // I5b item 4): 0 unpinned, 1 keep the oldest copy, 2 keep the newest.
+                                        // EffectHandler::Resolve installs it (LegendKeepPinScope) for the
+                                        // resolution; the rollout twin is apply_one's scope.
     int                 player_target  = 0;         // "TARGET PLAYER gains N life" (Heroes' Reunion, Rest
                                         // for the Weary): 0 = the caster, 1 = the opponent. Stamped by the
                                         // executor's cast site from the CastRiders rider (Action::
@@ -251,9 +260,12 @@ struct StackEntry
         CastExileTargets,  // Ulamog CH's "exile two target permanents": targets chosen at PUSH
                            // (CR 603.3d), stored as m_numbers in targets[i].permanent_index
         CastDestroyTarget, // Ulamog IG's "destroy target permanent": same target storage
-        Ripple             // RIPPLE N (CR 702.60; Thrumming Stone grants 4): one per instance, pushed ABOVE
+        Ripple,            // RIPPLE N (CR 702.60; Thrumming Stone grants 4): one per instance, pushed ABOVE
                            // the spell by PushCastTriggers; N rides `enchant_target`. Resolved by
                            // EffectHandler::ResolveRippleTrigger (SpellEffects.h "RIPPLE" decides).
+        CastTeamPump       // Decimator of the Provinces' "creatures you control get +P/+T [and trample] until
+                           // end of turn" cast trigger (cast_trigger_team_pump_*), re-read off the source's
+                           // definition at resolution; ResolveCastTriggerTeamPump (both worlds).
     };
     TriggerKind         trigger_kind = TriggerKind::None;  // meaningful on EntryType::Triggered
     bool                is_copy     = false;  // demonstrate copy: resolves its payload but was
@@ -321,6 +333,14 @@ struct RippleScript
     bool          pinned      = false;  // a plan pin drives this script (false = the playout policy)
     bool          per_name    = false;  // F1: the reveal budget/caps persist across same-name casts
 };
+
+// Plan::attack_put_choice / GameState::scripted_attack_put: the TUCK bit of a positive pin (Ilharg's death "may" for
+// the legend-rule loser the put makes, Boars I5b item 3). Card numbers stay far below it (a deck is ~60-100 cards).
+constexpr int kAttackPutTuckBit = 0x2000;
+// ...and the KEEP-NEW bit (CR 704.5j, Boars I5b item 4): putting a legendary card beside a same-name permanent makes a
+// legend-rule choice. Set = keep the PUT copy (the older one dies); a positive pin without it = keep the OLDER copy.
+// Both explicit; the search fans the keep-new twin only where the put makes a same-name group. Still < INT16_MAX.
+constexpr int kAttackPutKeepNewBit = 0x4000;
 
 struct GameState
 {
@@ -1247,6 +1267,8 @@ struct GameState
     // silently narrows nothing beats one that silently deletes casts).
     bool                     uses_second_main      = false;
     // Does the deck run an attack-untap card (Jorn, God of Winter: attack_untap_snow_permanents)?
+    // (Also stamped for a COMBAT-KEPT-MANA card -- End-Raze Forerunners' team vigilance grant, Boars I3a --
+    // whose clause lives in the same predicate; the name is historical.)
     // DECK CONSTANT, stamped by StampDeckTraits. Short-circuits UntapSecondMainLive -- read at every
     // post-combat site of every deck -- so a deck without one never pays its battlefield scan.
     // Lives in the padding after the two bools above, so sizeof(GameState) does not move.
@@ -1259,6 +1281,19 @@ struct GameState
     // sizeof(GameState) does not move. Default FALSE: an unstamped state opens no second main,
     // which is the conservative direction (the pre-existing behaviour).
     bool                     deck_has_attack_dig_hand = false;
+    // Raggadragga's cast trigger (Boars I3b) untapped a TAPPED creature with a mana ability that can tap now:
+    // a MONOTONIC count (wraps at 256; never reset), bumped only by ResolveUntapPumpTarget. Its ONLY reader is
+    // breakpoint site 9's activation-key delta (CollectActivationKeys' kActUntapRefund on the Raggadragga), which
+    // compares it against the snapshot taken when the phase's plan started -- so only a CHANGE within one apply
+    // matters, never the absolute value: two states that differ only here have identical futures (Dominance.h
+    // classification: nothing to fold). 0 for every deck without the card. In the bool padding (sizeof unchanged).
+    std::uint8_t             cast_untap_refunds = 0;
+    // Raggadragga's untap-pump trigger INSTANCE ordinal (Boars I4c): a MONOTONIC count (wraps at 256; never reset),
+    // bumped once per untap-pump trigger by FireOnCastTriggers (both worlds). Its ONLY reader is UntapPumpRankFor,
+    // which takes it relative to the ordinal saved when the live cast-trigger target pin was installed -- so only the
+    // CHANGE since an install matters, never the absolute value (Dominance.h: nothing to fold). 0 for every deck
+    // without the card. In the bool padding (sizeof unchanged).
+    std::uint8_t             cast_untap_pump_ordinal = 0;
     // THE COMBAT LANDFALL-TARGET RANK (Plan::combat_landfall_target_choice, 2026-10-17) -- a per-turn
     // COMBAT PIN like scripted_combat_land_search_crack, placed HERE (int8_t, in this bool padding) because
     // an int beside the other combat pins costs sizeof(GameState) +8 (measured). The rank into
@@ -1279,10 +1314,38 @@ struct GameState
     // with the combat pins at both turn starts, folded value-gated into the dominance key and the
     // post-apply dedup key. At most 7 sources are addressable (the list runs two Keepers).
     std::int8_t              scripted_combat_transform = -1;
+    // Ilharg, the Raze-Boar's searched death "may" (CardParams::dies_to_library_position, Boars I5b item 3): the
+    // TRANSIENT pin a death reads -- 0 = unpinned (the provider's DiesTuckDefault: the playout beyond the horizon,
+    // the d0 runner), 1 = put it into the library, 2 = leave it in the graveyard. Set ONLY inside a
+    // DiesTuckPinScope (SpellEffects.h): the cast that causes the death (both cast paths, from Action::dies_tuck),
+    // the spell's resolution (StackEntry::dies_tuck, EffectHandler::Resolve) and the attack put's legend rule
+    // (Plan::attack_put_choice's tuck bit). Back to 0 at every node boundary, so nothing folds it.
+    std::int8_t              dies_tuck_pin = 0;
+    // THE TURN'S SEARCHED LEGEND-RULE KEEP (CR 704.5j; Boars LK, 2026-11-13): Plan::legend_keep_turn, the keep for
+    // every legend rule of THIS turn that no name-scoped rider pins (LegendKeepPinScope: the cast / attack-put twins of
+    // I5b item 4) -- a legendary LAND drop (legend-ruled at the beginning-of-combat SBA), a put onto the battlefield
+    // (Goblin Lackey, the tutor-puts, Genesis Wave, Pod, Vial, Stoneforge), a free cast nested in another card's
+    // resolution (Unpredictable Cyclone, cascade, Breaching Dragonstorm), a token or copy entrant, a reanimation.
+    // 0 = unpinned (the provider's LegendKeepIndex -- the playout policy beyond the horizon), 1 = keep the OLDEST
+    // copy, 2 = keep the NEWEST. Written write-when-set by WritePostApplyStatePins (before the plan's actions, both
+    // worlds), cleared with the combat pins at both turn starts, folded value-gated into the dominance / dedup keys.
+    // Read by LegendKeepPick for the active player's groups only. Placed in the 1-byte hole after dies_tuck_pin
+    // (sizeof(GameState) unchanged, measured).
+    std::int8_t              scripted_legend_keep = 0;
     // Militia's Pride payment count, installed by the pre-combat plan and consumed at attack triggers.
     std::int16_t             scripted_militia_pride_pay = -1;
     MihailPayChoices        scripted_mihail_pay_choice; // one entry per trigger in resolution order
     std::size_t             scripted_mihail_trigger_ordinal = 0;
+    // Ilharg, the Raze-Boar's attack put (Plan::attack_put_choice, Boars I5a): a per-turn COMBAT PIN.
+    // -1 = unpinned (the provider's AttackPutDefault -- the playout policy), -2 = decline, > 0 = the CARD NUMBER
+    // of the hand card to put. Consumed by the FIRST attack-put trigger (FireAttackPutFromHand); written by
+    // WritePostApplyStatePins, cleared with the combat pins at both turn starts, folded value-gated into the
+    // dominance and dedup keys.
+    // ...and Ilharg's death "may" for a LEGEND-RULE loser the put makes (Boars I5b item 3): a positive pin with
+    // kAttackPutTuckBit set means "put that card, and TUCK the copy the legend rule kills"; a positive pin without it
+    // means "put it, and LEAVE the dead copy in the graveyard". Both are explicit (the search fans the tuck twin only
+    // where the put dooms a copy with CardParams::dies_to_library_position); -1 leaves both to the defaults.
+    std::int16_t             scripted_attack_put = -1;
     // Does the deck (or the passive opponent's list) run a SYMMETRIC noncreature-spell tax
     // (Thalia, Guardian of Thraben: CardParams::noncreature_spell_tax)? DECK CONSTANT, stamped by
     // StampDeckTraits; gates EffectiveSpellCost's tax walk so a deck without a taxer never pays it.
@@ -1337,6 +1400,13 @@ struct GameState
     // Index into GameEngine::UpkeepTutorOptions at the NEXT upkeep: 0 holds, positive
     // choices pay for an instant tutor-to-top before the draw. Cleared at that upkeep.
     std::int16_t             scripted_upkeep_tutor = -1;
+    // HERALD'S HORN's searched upkeep "may" (Boars I1; Plan::upkeep_horn_choice, a BoundaryFan digit): bit k = 1
+    // means LEAVE the k-th RESIDUAL take/leave decision of the NEXT upkeep (one whose take is not provably
+    // dominant, HornTakeFoldHolds), 0 = take; -1 = unpinned (every residual takes -- the playout default).
+    // Written at the turn's apply / the crossing's Stamp and consumed + cleared by that upkeep
+    // (PerformUpkeepHornReveal, both worlds). FUTURE-DETERMINING: folded value-gated in dominance::Build(),
+    // BuildDedupKey's pending pins and the boundary keys.
+    std::int16_t             scripted_upkeep_horn = -1;
     // PROFANE TUTOR's off-suspend FETCH (MTG_PROFANE_RESOLVE_FAN, default ON): a suspended tutor_to_hand card
     // arriving at the NEXT upkeep. PACKED kLandSearchPinBits per tutor-search ordinal at that upkeep, in
     // resolution order (a ripple free copy's own search first, then the arrival's), each a rank into the

@@ -1614,6 +1614,19 @@
     "toughness": "1",
     "type_line": "Creature — Zombie Fungus"
   },
+  "Decimator of the Provinces": {
+    "cmc": 10.0,
+    "keywords": [
+      "Emerge",
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{10}",
+    "oracle_text": "Emerge {6}{G}{G}{G} (You may cast this spell by sacrificing a creature and paying the emerge cost reduced by that creature's mana value.)\nWhen you cast this spell, creatures you control get +2/+2 and gain trample until end of turn.\nTrample, haste",
+    "power": "7",
+    "toughness": "7",
+    "type_line": "Creature — Eldrazi Boar"
+  },
   "Deconstruction Hammer": {
     "cmc": 1.0,
     "keywords": [
@@ -2025,6 +2038,19 @@
     "toughness": "15",
     "type_line": "Legendary Creature — Eldrazi"
   },
+  "End-Raze Forerunners": {
+    "cmc": 8.0,
+    "keywords": [
+      "Haste",
+      "Trample",
+      "Vigilance"
+    ],
+    "mana_cost": "{5}{G}{G}{G}",
+    "oracle_text": "Vigilance, trample, haste\nWhen this creature enters, other creatures you control get +2/+2 and gain vigilance and trample until end of turn.",
+    "power": "7",
+    "toughness": "7",
+    "type_line": "Creature — Boar"
+  },
   "Enduring Innocence": {
     "cmc": 3.0,
     "keywords": [
@@ -2385,6 +2411,15 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Elemental Shaman"
+  },
+  "Flinthoof Boar": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{1}{G}",
+    "oracle_text": "This creature gets +1/+1 as long as you control a Mountain.\n{R}: This creature gains haste until end of turn. (It can attack and {T} this turn.)",
+    "power": "2",
+    "toughness": "2",
+    "type_line": "Creature — Boar"
   },
   "Flooded Strand": {
     "cmc": 0.0,
@@ -3148,6 +3183,26 @@
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
   },
+  "Herald of Ilharg": {
+    "cmc": 4.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{2}{R}{G}",
+    "oracle_text": "Trample\nWhenever you cast a creature spell, put two +1/+1 counters on this creature. If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to each opponent.",
+    "power": "3",
+    "toughness": "3",
+    "type_line": "Creature — Boar Beast"
+  },
+  "Herald's Horn": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "As this artifact enters, choose a creature type.\nCreature spells you cast of the chosen type cost {1} less to cast.\nAt the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen type, you may reveal it and put it into your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Hero of Bladehold": {
     "cmc": 4.0,
     "keywords": [
@@ -3332,6 +3387,17 @@
     "power": "0",
     "toughness": "1",
     "type_line": "Creature — Goblin Shaman"
+  },
+  "Ilharg, the Raze-Boar": {
+    "cmc": 5.0,
+    "keywords": [
+      "Trample"
+    ],
+    "mana_cost": "{3}{R}{R}",
+    "oracle_text": "Trample\nWhenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking. Return that creature to your hand at the beginning of the next end step.\nWhen Ilharg dies or is put into exile from the battlefield, you may put it into its owner's library third from the top.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Legendary Creature — Boar God"
   },
   "Impolite Entrance": {
     "cmc": 1.0,
@@ -5279,6 +5345,15 @@
     "power": "2",
     "toughness": "3",
     "type_line": "Creature — Minotaur Shaman"
+  },
+  "Raggadragga, Goreguts Boss": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{G}",
+    "oracle_text": "Each creature you control with a mana ability gets +2/+2.\nWhenever a creature you control with a mana ability attacks, untap it.\nWhenever you cast a spell, if at least seven mana was spent to cast it, untap target creature. It gets +7/+7 and gains trample until end of turn.",
+    "power": "4",
+    "toughness": "4",
+    "type_line": "Legendary Creature — Human Boar"
   },
   "Rakdos Carnarium": {
     "cmc": 0.0,
@@ -8040,5 +8115,14 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Zhur-Taa Druid": {
+    "cmc": 2.0,
+    "keywords": [],
+    "mana_cost": "{R}{G}",
+    "oracle_text": "{T}: Add {G}.\nWhenever you tap this creature for mana, it deals 1 damage to each opponent.",
+    "power": "1",
+    "toughness": "1",
+    "type_line": "Creature — Human Druid"
   }
 }

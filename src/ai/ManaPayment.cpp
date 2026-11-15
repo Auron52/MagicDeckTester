@@ -501,10 +501,12 @@ static void VerifyPaySnapRestore(const std::vector<Permanent>& now,
         // only turn a silent divergence into a loud one.
         if (a.temp_lifelink != b.temp_lifelink)       { fail(i, "temp_lifelink"); }
         if (a.temp_double_strike != b.temp_double_strike) { fail(i, "temp_double_strike"); }
+        if (a.temp_vigilance != b.temp_vigilance)     { fail(i, "temp_vigilance"); }
         if (a.paired_with != b.paired_with)           { fail(i, "paired_with"); }
         if (a.exile_at_end != b.exile_at_end)         { fail(i, "exile_at_end"); }
         if (a.sac_at_end_step != b.sac_at_end_step)   { fail(i, "sac_at_end_step"); }
         if (a.destroy_at_end_if_attacked != b.destroy_at_end_if_attacked) { fail(i, "destroy_at_end_if_attacked"); }
+        if (a.return_at_end_step != b.return_at_end_step) { fail(i, "return_at_end_step"); }
         if (a.chosen_subtype_id != b.chosen_subtype_id) { fail(i, "chosen_subtype_id"); }
         if (a.is_animated != b.is_animated)           { fail(i, "is_animated"); }
         // Typed vs all-types animation (Gideon's +1 vs Mutavault): same is_animated bit, but a
@@ -679,6 +681,9 @@ void TapSourceIntoFloat(GameState& state, int active, Permanent& p, const CardDe
                           def.params.tap_opponent_lifegain * gamesetup::OpponentHeads(),
                           def.card.m_name.str());
     }
+    // Zhur-Taa Druid: every tap FOR MANA deals its ping to each opponent (no mode is painless). One read of
+    // an int for every other source.
+    ApplyTapManaPing(state, active, def);
     // Karoo bounce land ({U}{R} from one tap): produce one mana of EACH colour it makes, so a
     // lone Izzet Boilerworks can pay a two-colour cost (Expressive Iteration {U}{R}) the planner
     // promised. Crediting `amt` of the single matched colour would lose the second colour --
@@ -4671,6 +4676,13 @@ ManaCost GraveyardCastSpellCost(const CardDefinition& def, const GameState& stat
     return cost;
 }
 
+ManaCost EmergeCastCost(const CardDefinition& def, const GameState& state, int victim_mv)
+{
+    ManaCost c = EffectiveSpellCostWithBase(def, state, *def.params.emerge_cost);
+    c.generic = std::max(0, c.generic - std::max(0, victim_mv));
+    return c;
+}
+
 int XSpellUnabsorbedReduction(const CardDefinition& def, const GameState& state)
 {
     if (!def.card.m_mana_cost.has_x) { return 0; }
@@ -6667,7 +6679,7 @@ static bool IsDependentAttachSpell(const Action& a)
     // otherwise set only on attach spells, handled above).
     if (a.trick_hand_target.empty() || a.attach_equip_id != 0) { return false; }
     const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
-    return d != nullptr && SacCreatureCostFoldsByReadiness(d->params);
+    return a.emerge || (d != nullptr && SacCreatureCostFoldsByReadiness(d->params));   // + emerge (Boars I4)
 }
 
 void ApplyAttachSpellDependencyOrder(const std::vector<Action>& acts, std::vector<int>& order)
@@ -8043,6 +8055,7 @@ int SeedPaySourceSig(const Permanent& p, int me)
         || q.creature_mana_only || q.colored_creature_only || q.mana_only_spell_min_mv > 0
         || q.domain_mana || q.mana_colors_of_graveyard_legends || q.gy_land_exile_mana
         || !q.mana_requires_land_subtype.empty() || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+        || q.tap_mana_damage_each_opponent > 0   // Zhur-Taa: its tap moves the opponent's life
         || q.energy_per_colored_tap > 0 || p.is_animated)
     { return kSeedSourceUnsupported; }
     if (q.is_filter || q.land_search_activation_cost.has_value() || q.sacrifice_draw_cost.has_value())
@@ -8405,7 +8418,8 @@ std::size_t CastAndResolveRemand(GameState& state, int controller, const CardDef
     state.mv_cast_this_turn += remand_def.card.m_mana_cost.ManaValue();
     if (post_combat) { NoteMain2StagerCast(state, remand_def); }
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-    FireOnCastTriggers(state, remand_def);
+    // Paid in X's one bill as its own EffectiveSpellCost (AddRemandRiderCost): that share is what it spent.
+    FireOnCastTriggers(state, remand_def, EffectiveSpellCost(remand_def, state).ManaValue());
     FireProwess(state, remand_def);
     // Resolution: Remand returns X to hand; a hard counter puts it in the
     // owner's graveyard. Both use this combined-cast rider to target a spell.
@@ -8470,7 +8484,7 @@ std::size_t CastAndResolveRemandChain(GameState& state, int controller, const Ca
     state.mv_cast_this_turn += a_def.card.m_mana_cost.ManaValue();
     if (post_combat) { NoteMain2StagerCast(state, a_def); }
     if (state.casts_remaining_this_turn > 0) { --state.casts_remaining_this_turn; }
-    FireOnCastTriggers(state, a_def);
+    FireOnCastTriggers(state, a_def, EffectiveSpellCost(a_def, state).ManaValue());   // its share of the bill
     FireProwess(state, a_def);
     // B targets A and resolves first: A to hand, B draws.
     return CastAndResolveRemand(state, controller, b_def, post_combat, /*countered=*/true, a_card, b_out);

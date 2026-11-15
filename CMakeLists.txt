@@ -376,6 +376,16 @@ add_executable(mtg-test
     test/unit/test_kicker_additional_cost.cpp
     test/unit/test_morph_pumps.cpp
     test/unit/test_morph.cpp
+    test/unit/test_boars_cards.cpp
+    test/unit/test_fetch_crack_first.cpp
+    test/unit/test_boars_zhurtaa.cpp
+    test/unit/test_boars_herald.cpp
+    test/unit/test_boars_endraze.cpp
+    test/unit/test_boars_raggadragga.cpp
+    test/unit/test_boars_decimator.cpp
+    test/unit/test_boars_ilharg.cpp
+    test/unit/test_boars_i5b.cpp
+    test/unit/test_boars_fetch_rank.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp

@@ -39,6 +39,15 @@
    "total_core_ms": 78695,
    "worst_case": "auras_regression_d3_b10"
   },
+  "boars": {
+   "cost_metric": "searched_depth_budget_pooled_seeds_v2",
+   "cost_per_game_ms": 10755.6933,
+   "jobs": 7,
+   "key": "boars",
+   "tier": "regression",
+   "total_core_ms": 3791111,
+   "worst_case": "boars2hg_regression_d5_b20"
+  },
   "breaching": {
    "cost_metric": "searched_depth_budget_pooled_seeds_v2",
    "cost_per_game_ms": 5.99,

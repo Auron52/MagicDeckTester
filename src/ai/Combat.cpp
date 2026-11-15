@@ -222,7 +222,7 @@ static void RefindCombatSources(const GameState& state, int controller, std::vec
 // The play-viewer description keeps ONE "<name> (<damage>)" per attacker, its total over both steps, in
 // attack order: test/viewer_protocol_check.py parses that line into the reference-replay attacker pin.
 static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std::vector<int>& atk_idx,
-                                                     int exalted_bonus, bool collect_descs,
+                                                     int exalted_bonus, bool collect_descs, int declared_n,
                                                      const BoardSources& bs_in,
                                                      const std::vector<char>& fs_of,
                                                      const std::vector<char>& ds_of)
@@ -386,9 +386,11 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
         {
             // The attack-trigger hooks the single-step path fires after its damage loop -- once, after
             // the last damage, in the same order relative to lifelink and the combat-damage hooks.
-            std::vector<const Permanent*> attackers;
+            std::vector<const Permanent*> attackers;   // the hooks' SOURCES: the declared prefix (CR 508.4)
             attackers.reserve(n);
-            for (int idx : atk) { if (idx >= 0) { attackers.push_back(&state.battlefield[idx]); } }
+            const int nd = DeclaredSpan(atk, declared_n);
+            for (int k = 0; k < nd; ++k)
+            { const int idx = atk[static_cast<std::size_t>(k)]; if (idx >= 0) { attackers.push_back(&state.battlefield[idx]); } }
             out.trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
             if (out.trigger_life_loss > 0)
             {
@@ -434,7 +436,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
 }
 
 CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>& atk_idx,
-                                       int exalted_bonus, bool collect_descs)
+                                       int exalted_bonus, bool collect_descs, int declared_n)
 {
     // MTG_LACKEY_PIN_FOLD: Goblin Lackey's put pin is THIS combat's -- spent once combat damage is over, whether or
     // not a put fired (no Lackey connected, nothing matching in hand), on every return path including the
@@ -503,7 +505,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         if (ds_of[k] || fs_of[k]) { any_first_step = true; }
     }
     if (any_first_step && CombatDamageStepsOn())   // =false only when replaying a pre-rule reference
-    { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, bs, fs_of, ds_of); }
+    { return ResolveCombatDamageTwoStep(state, atk_idx, exalted_bonus, collect_descs, declared_n, bs, fs_of, ds_of); }
 
     // The ordinary one-step path historically tapped each attacker inside the
     // damage loop. For a Pilgrimage board, resolve the simultaneous declare-
@@ -616,8 +618,13 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
 
     // Attack triggers (e.g. Leeching Sliver: each attacking Sliver costs the opponent 1 life).
     // Life LOSS, not combat damage: it still marks the lost-life flag (which drives spectacle), and
-    // is folded into the total only for the attack log.
-    out.trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, attackers);
+    // is folded into the total only for the attack log. SOURCES = the declared prefix (CR 508.4; `attackers` is 1:1
+    // with atk_idx); the whole list when nothing undeclared joined it, so every such board reads `attackers` itself.
+    std::vector<const Permanent*> declared_src;
+    const std::size_t nd = static_cast<std::size_t>(DeclaredSpan(atk_idx, declared_n));
+    if (nd < attackers.size()) { declared_src.assign(attackers.begin(), attackers.begin() + static_cast<std::ptrdiff_t>(nd)); }
+    const std::vector<const Permanent*>& trig_src = nd < attackers.size() ? declared_src : attackers;
+    out.trigger_life_loss = CountAttackTriggerLifeLoss(state.battlefield, active, trig_src);
     if (out.trigger_life_loss > 0)
     {
         state.players[opp_idx].life -= out.trigger_life_loss;
@@ -629,7 +636,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
     // NOT added to this combat). Each token entering fires FireEtbWatchers (Scourge ping / Lathliss
     // token) via CreateToken. `attackers` still holds the pre-token attacker pointers, which
     // FireUtvaraAttackTokens reads before any CreateToken.
-    FireUtvaraAttackTokens(state, active, attackers);
+    FireUtvaraAttackTokens(state, active, trig_src);
 
     // Drana-style team counters (combat_damage_counters_each_attacker) from a source that dealt
     // damage in this single step. Only reachable by a source WITHOUT first strike (Drana's own

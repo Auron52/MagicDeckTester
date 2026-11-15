@@ -73,6 +73,11 @@ struct CardParams
     std::optional<ManaCost> spectacle_cost;  // alternate cost when opponent lost life this turn
     std::vector<Color> produces;   // mana colors this card produces
     std::optional<ManaCost> self_bounce_cost; // Oboro: {1}: return this land to hand
+    // A battlefield fetchland's IN-HAND colour hint (the uncracked-fetchland.md "split the field" step, Boars I1):
+    // the colours a copy in hand stands for in a deck's colour-cover heuristics, kept OFF `produces` so the
+    // permanent can never tap for them. Read only by CreatureGivingProvider's cleanup-discard cover (land_bits),
+    // whose USER-settled rule was written against Windswept Heath's old W/B/R/G hint. Empty = no hint.
+    std::vector<Color> hand_fixing_produces;
     // Modal double-faced LAND (MDFC Pathway lands, e.g. Branchloft // Boulderloft): the FRONT face
     // is this card (name + `produces` above); the BACK face is a distinct single-color land the
     // player may CHOOSE to play instead. When `mdfc_back_name` is set the DB synthesizes a back-face
@@ -976,7 +981,17 @@ struct CardParams
     // (which DO buff themselves) byte-identical.
     bool lord_excludes_self = false;
     std::string self_pump_if_other_subtype_or_land;
+    // "This creature gets +1/+1 as long as you control a <land subtype>." Read in ComputeLordBonus. With
+    // self_pump_if_other_subtype_or_land (Kumena's Speaker) it is that card's land half; ON ITS OWN
+    // (Flinthoof Boar, "as long as you control a Mountain") it is the whole condition -- one +1/+1 however
+    // many such lands, by CURRENT subtype (LandHasSubtypeNow).
     std::string self_pump_if_land_subtype;
+    // Flinthoof Boar: "{R}: This creature gains haste until end of turn." A SELF keyword grant, enumerated as
+    // a searched main-phase Action::Kind::ActivatePump MODE 6 (ApplyActivatePump sets Permanent::temp_haste)
+    // and offered only while it can matter (SelfHasteActivationLive: the creature could attack only with the
+    // grant, combat still ahead). Deliberately NOT team_pump_grants_haste: that is a Minotaur routing
+    // signature term and feeds the combat firebreathing converter. nullopt = no such ability.
+    std::optional<ManaCost> self_haste_cost;
     bool self_pump_if_opponent_island = false;
 
     // Characteristic-defining ability: this creature's power equals the number of
@@ -1147,6 +1162,17 @@ struct CardParams
     // this exactly once -- on the original cast -- which is the rules-correct count.
     // 0 = not an instant/sorcery cast-trigger -> byte-identical for every other deck.
     int                      cast_trigger_instant_sorcery_tokens = 0;
+
+    // Herald of Ilharg (Boars I2b): "Whenever you cast a creature spell, put two +1/+1 counters on this creature.
+    // If that spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it
+    // to each opponent." Fired from FireOnCastTriggers (every cast site, executor + rollout lockstep): the counters
+    // go on through PutPlusCounters (the doubler chokepoint), THEN -- when the cast spell's PRINTED mana value
+    // (CR 202.3; a reduction or emerge never changes it; X is not counted, no Boars creature has one) is >=
+    // creature_cast_counter_damage_min_mv -- damage equal to ALL counters on it (TotalCountersOn, read after the
+    // put) to each opponent (x OpponentHeads). A put onto the battlefield is not a cast and never reaches here.
+    // 0 = none -> byte-identical for every other card.
+    int                      creature_cast_trigger_plus_counters = 0;
+    int                      creature_cast_counter_damage_min_mv = 0;   // 0 = no damage rider
 
     // Attack-trigger token creation (e.g. Adeline, Resplendent Cathar: "Whenever you
     // attack, for each opponent, create a 1/1 white Human token that's tapped and
@@ -1649,6 +1675,14 @@ struct CardParams
     // (-> that much DAMAGE with a Tainted Remedy / Plague Drone). Applied via OpponentGainsLife
     // at tap time, mirroring tap_self_damage. Gated > 0 so other decks are unaffected.
     int tap_opponent_lifegain = 0;
+
+    // Per-tap-for-mana damage to EACH opponent (Zhur-Taa Druid: "{T}: Add {G}. Whenever you tap this
+    // creature for mana, it deals 1 damage to each opponent."). The Grove drip with the sign flipped:
+    // every tap FOR MANA (any payment, both worlds, the backtracker, the mana-cache replay) deals this
+    // much x OpponentHeads() via ApplyTapManaPing. Tapping for any other reason (attacking, convoke) does
+    // not. A leftover untapped Druid is tapped for its free ping at the end step (PingDorkEndSweep), and
+    // a lethal set is tapped right after combat damage (PingDorkFinish). 0 for every other card.
+    int tap_mana_damage_each_opponent = 0;
 
     // Fetchland (Windswept Heath etc.): "{T}, pay 1 life, sacrifice this land: search your
     // library for a land whose subtype is in this list, put it onto the battlefield, then
@@ -2975,6 +3009,13 @@ struct CardParams
     bool chooses_creature_type = false;
     // Type choice without a spell-cost discount (Three Tree City).
     bool choose_type_on_enter = false;
+    // Herald's Horn: "At the beginning of your upkeep, look at the top card of your library. If it's a
+    // creature card of the chosen type, you may reveal it and put it into your hand." The chosen type is
+    // this permanent's chosen_subtype_id (chooses_creature_type). Resolved by PerformUpkeepHornReveal at both
+    // upkeep sites (GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn, lockstep). The
+    // "may" is FOLDED to take where provably dominant (HornTakeFoldHolds) and otherwise SEARCHED
+    // (GameState::scripted_upkeep_horn, Plan::upkeep_horn_choice -- a BoundaryFan digit).
+    bool upkeep_look_top_chosen_type_to_hand = false;
 
     // ---- "As this creature enters, choose a creature type. This creature is the chosen type in
     // addition to its other types." (Metallic Mimic, Adaptive Automaton) -- 2026-09-26, Pirates.
@@ -3779,6 +3820,68 @@ struct CardParams
     // battlefield at resolution (later arrivals correctly excluded, CR 611.2c). The trample
     // grant is inert (passive opponent never blocks) and not modelled -- disclosed.
     bool etb_team_pump_per_creature = false;
+    // End-Raze Forerunners ETB (Boars I3a): "other creatures you control get +P/+T and gain vigilance and
+    // trample until end of turn". Temp bonuses on every OTHER own creature / animated permanent at
+    // RESOLUTION (CR 608.2h; later arrivals get nothing, CR 611.2c), in the shared FireOwnEtbTriggersBody
+    // beside Craterhoof (both worlds, every entry route). The vigilance grant sets Permanent::temp_vigilance
+    // (read by CreatureHasVigilance). The trample grant is inert (nothing blocks; D2, PROVISIONAL).
+    int  etb_other_creatures_pump_power = 0;
+    int  etb_other_creatures_pump_tough = 0;
+    bool etb_other_creatures_grant_vigilance = false;
+    // Raggadragga, Goreguts Boss (Boars I3b). Three clauses, each with ONE shared site in SpellEffects.h:
+    //   * lord_affects_mana_ability_creatures (+ power_bonus / tough_bonus): "Each creature you control with a
+    //     mana ability gets +2/+2" -- a ComputeLordBonus match on CreatureHasManaAbility (HAS the ability, not
+    //     can-use: a summoning-sick Birds is pumped). Layer 7c, both worlds through the one lord walk.
+    //   * attack_untap_mana_ability_attackers: "Whenever a creature you control with a mana ability attacks,
+    //     untap it." DECLARED attackers only (AttackUntapManaAttackers at declare-attackers, UntapManaAttackers
+    //     right after ResolveCombatDamage -- the Jorn shape, both combats); main 2 via UntapSecondMainLive.
+    //   * cast_trigger_untap_pump_target_min_spent (+ _power / _tough / _grants_trample): "Whenever you cast a
+    //     spell, if at least N mana was spent to cast it, untap target creature. It gets +P/+T and gains
+    //     trample until end of turn." Read off FireOnCastTriggers' mana_spent; the target is the searched
+    //     cast-trigger target (Plan::cast_trigger_target_choice, creatures only). Trample recorded, inert (D2).
+    bool lord_affects_mana_ability_creatures = false;
+    bool attack_untap_mana_ability_attackers = false;
+    int  cast_trigger_untap_pump_target_min_spent = 0;
+    int  cast_trigger_untap_pump_power = 0;
+    int  cast_trigger_untap_pump_tough = 0;
+    bool cast_trigger_untap_pump_grants_trample = false;
+    // Decimator of the Provinces (Boars I4). Two clauses:
+    //   * emerge_cost "{6}{G}{G}{G}": EMERGE (CR 702.119) -- an ALTERNATIVE cost, "sacrifice a creature and pay
+    //     the emerge cost reduced by that creature's mana value". A searched cast variant (Action::emerge, one
+    //     per victim class off the SAC-ANY-CREATURE post-pass, sharing hand_index with the hard cast). Bill =
+    //     EmergeCastCost (ManaPayment.h): EffectiveSpellCostWithBase(emerge_cost) -- every reducer, so Herald's
+    //     Horn applies (CR 601.2f) -- minus the victim's printed MV off GENERIC only, floored at 0. Mana value
+    //     stays the printed one. Read the sacrifice through CastSacsCreature(params, emerge) -- NEVER fold it
+    //     into HasSacCreatureAdditionalCost (that predicate is params-only and would sacrifice on the hard cast).
+    //   * cast_trigger_team_pump_power / _tough (+ _trample, recorded, INERT -- D2): "When you cast this spell,
+    //     creatures you control get +P/+T [and gain trample] until end of turn." TriggerKind::CastTeamPump in
+    //     the executor, the inline twin in the rollout's apply_one, ONE resolver (ResolveCastTriggerTeamPump).
+    //     It resolves before the spell, so the spell itself is never pumped.
+    std::optional<ManaCost> emerge_cost;
+    int  cast_trigger_team_pump_power = 0;
+    int  cast_trigger_team_pump_tough = 0;
+    bool cast_trigger_team_pump_trample = false;
+    // Ilharg, the Raze-Boar (Boars I5a). Two clauses, split on purpose (a Sneak Attack-style card would put
+    // without the return):
+    //   * attack_put_creature_from_hand: "Whenever [this] attacks, you may put a creature card from your hand
+    //     onto the battlefield tapped and attacking." CREATURE-SCOPED (the source must be a DECLARED attacker).
+    //     ONE shared body, FireAttackPutFromHand (SpellEffects.h), at the same point in both combats. The card
+    //     to put (or decline) is the searched GameState::scripted_attack_put pin (Plan::attack_put_choice).
+    //   * attack_put_return_at_end_step: "Return that creature to your hand at the beginning of the next end
+    //     step." -> Permanent::return_at_end_step on the put body, swept by PerformEndStepDelayedReturns at both
+    //     end-step sites. Requires attack_put_creature_from_hand (the loader throws otherwise).
+    bool attack_put_creature_from_hand = false;
+    bool attack_put_return_at_end_step = false;
+    // Ilharg, the Raze-Boar's death clause (Boars I5b item 3): "When [this] dies ..., you may put it into its
+    // owner's library N-th from the top." A TRIGGER (CR 603.6c leaves-the-battlefield; CR 700.4 dies): the card did
+    // reach the graveyard, so every dies-watcher still fires; then, if the "may" is taken, the newest graveyard copy
+    // (by m_number) is inserted at library index min(N-1, size) -- a library shorter than N-1 cards takes it at the
+    // bottom (the Long-Term Plans clamp). 0 = no such clause. Resolved in OnCreatureDies (SpellEffects.h), shared by
+    // both worlds. The "may" is SEARCHED: the cast that causes the death carries Action::dies_tuck (an emerge victim,
+    // a legend-rule loser), an attack put of a legendary duplicate carries it in Plan::attack_put_choice's tuck bit;
+    // human play asks through the `dig` yes/no. The EXILE half ("or is put into exile from the battlefield") is not
+    // wired (D3 PROVISIONAL: nothing in Boars can exile our permanent).
+    int  dies_to_library_position = 0;
     // Ghalta, Stampede Tyrant: "When this creature enters, put any number of creature cards from
     // your hand onto the battlefield." Modelled as ALL creature cards -- see the resolution site in
     // SpellEffects.h for why that is weakly dominant against a passive opponent, and for the
@@ -5027,6 +5130,14 @@ inline bool SacCreatureCostFoldsByReadiness(const CardParams& p)
 {
     return p.sac_additional_creature;
 }
+// The ACTION-aware form: does THIS cast sacrifice a creature as a cost? The additional-cost routes always do;
+// an EMERGE cast (Action::emerge / CastRiders::emerge, Decimator of the Provinces) does too, while the HARD cast
+// of the same card does not. Every cast-site question "is a victim paid here" reads this, never
+// HasSacCreatureAdditionalCost, whenever the emerge flag is in scope.
+inline bool CastSacsCreature(const CardParams& p, bool emerge)
+{
+    return HasSacCreatureAdditionalCost(p) || (emerge && p.emerge_cost.has_value());
+}
 // The LEGACY colour route only (Natural Order): name-folded victims, the rollout's in-branch
 // payment, the post-dedup same-plan victim axis (MTG_SAC_CREATURE_AXIS).
 inline bool SacCreatureCostLegacyRoute(const CardParams& p)
@@ -5104,6 +5215,11 @@ struct CardDefinition
     //     a weaker vanilla token.
     // false for a Register-built definition (no JSON to audit).
     bool upkeep_fold_audited = false;
+    // HERALD'S HORN TAKE FOLD's premise (Boars I1; the proof is at SpellEffects.h HornTakeFoldHolds): every raw
+    // `parameters` key, the template and every keyword are on an audited list of things that can NOT put a card
+    // into its controller's hand during a turn (net of the card's own play). A WHITELIST, like the Overlord
+    // fold's: a param invented tomorrow is NOT audited, and an unaudited card where the fold looks disables it.
+    bool hand_gain_audited = false;
     bool upkeep_fold_keeper  = false;
     // THE SEQUENTIAL-WALK SUPPLY BOUND's card-data premise (TurnSolver.cpp SeqWalkProvablyShort): template,
     // every `parameters` key and every keyword are in the audited set (CardDatabase.cpp, beside the upkeep

@@ -29,6 +29,7 @@
 #include <array>
 #include <bit>     // std::popcount -- MSVC has no __builtin_popcount (Windows CI, 2026-11-12)
 #include <cstdint>
+#include <functional>   // EmergeResolveVictim's payable probe (human play)
 #include <cstring>   // LandAuraMemo: UntapLandHosts stored by memcpy
 #include <type_traits>
 #include <atomic>
@@ -1425,6 +1426,14 @@ inline constexpr int kTutorDeclineChoice = 1000000;
 // ("Forerunner of the Coalition -> (decline search)") -- and parenthesised so it can never be a
 // card name.
 inline constexpr const char* kTutorDeclineTarget = "(decline search)";
+// HUMAN-PLAY FETCH HOLD sentinel (USER 2026-11-14: "allow deferring the fetch in the choice dialog", "on all of
+// the time"). A Plan::fetch_target of this value is the land drop's HOLD variant: PlayLandCore (LandPlay.cpp)
+// plays the fetchland onto the battlefield uncracked instead of resolving it on play, so its normal
+// activation (`landsearch=` / `act=`) stays available later. Emitted only by the human-play land-drop fan
+// (HumanFetchHoldVariant), beside one variant per legal target; executor and rollout share PlayLandCore, so
+// they stay in lockstep. Readable on purpose (the choose dialog's text) and parenthesised so it can never be
+// a card name.
+inline constexpr const char* kFetchHoldTarget = "(hold: crack later)";
 inline int PermanentManaYield(const GameState&, const Permanent&, const CardDefinition&);   // defined below
 inline void EtbUntapLands(GameState&, int controller, int count, bool log_ledger = true);    // defined below
 inline void EtbUntapTapAheadIntoFloat(GameState&, int controller, int count,
@@ -2134,6 +2143,35 @@ inline void OpponentGainsLife(GameState& state, int controller_index, int amount
                       std::string(remedied ? "🩸 opponent −" : "＋ opponent +") + std::to_string(amount)
                       + " life" + src);
     }
+}
+
+// ZHUR-TAA DRUID's tap-for-mana ping (CardParams::tap_mana_damage_each_opponent): "Whenever you tap this
+// creature for mana, it deals 1 damage to each opponent." Called at EVERY tap-for-mana choke point --
+// TapSourceIntoFloat (the greedy payer and the human pre-tap), the backtracking payer's activate() and the
+// mana cache's hit replay -- so both worlds charge it exactly once per committed tap, and a creature tapped
+// twice in a turn (untapped by Raggadragga) pings twice. Returns the damage dealt (0 for every other card).
+// RAW life loss + the opponent-lost-life flag, deliberately: those are exactly the two fields every payment
+// rollback snapshots (the backtracker's opp_life_snap / oll_snap, the payer's NoncombatStateSnapshot), so a
+// failed branch undoes it completely. It does NOT route through the armed damage-event model or
+// RecordNoncombatDamageToPlayer (whose queue a mid-payment branch could not undo); no deck pairs a ping dork
+// with a damage-prevention / noncombat-damage card (disclosed in the card's oracle bracket).
+// 2HG: "each opponent" -> once per opposing head into the shared team pool.
+inline int ApplyTapManaPing(GameState& state, int active, const CardDefinition& def)
+{
+    const int per = def.params.tap_mana_damage_each_opponent;
+    if (per <= 0) { return 0; }
+    const int dmg = per * gamesetup::OpponentHeads();
+    const int opp = 1 - active;
+    const int before = state.players[opp].life;
+    state.players[opp].life -= dmg;
+    state.opponent_lost_life_this_turn = true;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "damage", def.card.m_name.str() + ": tapped for mana, "
+                      + std::to_string(dmg) + " damage to opponent (" + std::to_string(before)
+                      + "\xE2\x86\x92" + std::to_string(state.players[opp].life) + ")");
+    }
+    return dmg;
 }
 
 // The ALT-COST lifegain payload ("rather than pay this spell's mana cost, you may have ... gain N
@@ -4883,6 +4921,103 @@ inline int CountExalted(const std::vector<Permanent>& battlefield, int controlle
     return n;
 }
 
+// Exalted's "attacks ALONE" is about DECLARATION (CR 506.5 / 702.83: a creature attacks alone if it is the only
+// creature DECLARED as an attacker). A creature put onto the battlefield attacking -- an attack-trigger token (Adeline,
+// Hero, Militia's Pride), Ilharg's put -- was never declared (CR 508.4) and does not stop the lone declared attacker
+// from getting its bonus; nor does its own exalted trigger (it was not on the battlefield when the creature attacked).
+// So BOTH combat worlds take `ExaltedAtDeclare` when the declared count is captured, and resolve it with
+// `ExaltedBonusForCombat` where they used to read `atk_idx.size() == 1`:
+//   * declared prefix now 0 (the lone declared attacker left the battlefield, e.g. legend-ruled by a put copy) -> 0
+//     (CR 608.2b: the trigger's creature is gone);
+//   * the lone declared attacker is the ONLY attacker -> the bonus is RETURNED and ResolveCombatDamage adds it (the
+//     historical path, byte-identical for every board without undeclared attackers);
+//   * undeclared bodies joined it -> the bonus is applied to the declared creature as +N/+N until end of turn (the
+//     card's own wording) and 0 is returned, so the joined bodies do not get it.
+inline int ExaltedAtDeclare(const GameState& state, int controller, int declared_n)
+{
+    return declared_n == 1 ? CountExalted(state.battlefield, controller) : 0;
+}
+inline int ExaltedBonusForCombat(GameState& state, const std::vector<int>& atk_idx, int declared_n,
+                                 int exalted_at_declare)
+{
+    if (exalted_at_declare <= 0 || declared_n != 1 || atk_idx.empty()) { return 0; }
+    if (atk_idx.size() == 1) { return exalted_at_declare; }
+    const int i = atk_idx.front();
+    if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { return 0; }
+    Permanent& lone = state.battlefield[static_cast<std::size_t>(i)];
+    lone.temp_power_bonus += exalted_at_declare;
+    lone.temp_tough_bonus += exalted_at_declare;
+    return 0;
+}
+
+// DISPLAY-ONLY COMBAT HINT for the human-play board writers (Boars 5d sweep, 2026-11-14: seed 97004's post-combat
+// board showed a lone exalted attacker without its +1/+1; seed 97007's legend_keep read `attacked: false` for a
+// declared Ilharg and for the copy it put onto the battlefield attacking). Two facts the GameState does not carry:
+//   * which creatures are ATTACKING this turn -- Permanent::AttacksThisTurn is counted only for a deck with an
+//     attack-count reader (NoteAttacksDeclared), and a body put onto the battlefield attacking never attacked
+//     (CR 508.4) though it IS attacking;
+//   * the lone-attacker exalted bonus, which ResolveCombatDamage adds to the damage (ExaltedBonusForCombat returns
+//     it rather than writing a temp pump, so every key and both worlds are unchanged) -- but the card says "+1/+1
+//     until end of turn", so the board shown after combat should read it.
+// Written ONLY by the real game with an event sink bound (the viewer / --claude-play / human-line scenarios) and
+// never under speculation, so autonomous play and every search scope never write it; read only by the display.
+struct PlayCombatDisplay
+{
+    int              turn          = -1;
+    std::vector<int> attacking;          // card m_numbers (> 0) attacking in this turn's combat
+    int              exalted_num   = 0;  // the lone attacker carrying the exalted bonus, 0 = none
+    int              exalted_bonus = 0;
+};
+inline thread_local PlayCombatDisplay g_play_combat_display;
+inline bool PlayCombatDisplayLive() { return g_play_event_sink != nullptr && !g_tap_speculating; }
+// Declared attackers (CR 508.1): starts this turn's record.
+inline void NotePlayCombatDeclared(const GameState& state, const std::vector<int>& atk_idx)
+{
+    if (!PlayCombatDisplayLive()) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    for (int i : atk_idx)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const int n = state.battlefield[static_cast<std::size_t>(i)].card.m_number;
+        if (n > 0 && std::find(d.attacking.begin(), d.attacking.end(), n) == d.attacking.end())
+        { d.attacking.push_back(n); }
+    }
+}
+// A body put onto the battlefield attacking (Ilharg's put, CR 508.4): attacking, never declared.
+inline void NotePlayCombatAttackingNum(const GameState& state, int num)
+{
+    if (!PlayCombatDisplayLive() || num <= 0) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    if (std::find(d.attacking.begin(), d.attacking.end(), num) == d.attacking.end()) { d.attacking.push_back(num); }
+}
+inline void NotePlayCombatExalted(const GameState& state, const std::vector<int>& atk_idx, int bonus)
+{
+    if (!PlayCombatDisplayLive() || bonus <= 0 || atk_idx.empty()) { return; }
+    const int i = atk_idx.front();
+    if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { return; }
+    PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number) { d = PlayCombatDisplay{}; d.turn = state.turn_number; }
+    d.exalted_num   = state.battlefield[static_cast<std::size_t>(i)].card.m_number;
+    d.exalted_bonus = bonus;
+}
+// The readers (display only). A record from an earlier turn reads as nothing.
+inline bool PlayCombatShownAttacking(const GameState& state, const Permanent& p)
+{
+    const PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number || p.card.m_number <= 0 || p.controller_index != state.active_player_index)
+    { return false; }
+    return std::find(d.attacking.begin(), d.attacking.end(), p.card.m_number) != d.attacking.end();
+}
+inline int PlayCombatShownExalted(const GameState& state, const Permanent& p)
+{
+    const PlayCombatDisplay& d = g_play_combat_display;
+    if (d.turn != state.turn_number || d.exalted_num <= 0 || p.card.m_number != d.exalted_num
+        || p.controller_index != state.active_player_index) { return 0; }
+    return d.exalted_bonus;
+}
+
 // ---- Board-level HASTE SOURCES, gathered once -------------------------------------------------
 //
 // The haste scans in CanAttackFull / CanTapNow are asked PER CREATURE and each re-walks the whole
@@ -5875,6 +6010,9 @@ inline bool CreatureHasVigilance(const Permanent& creature, const GameState& sta
                                  const std::vector<int>* granter_idx = nullptr)
 {
     if (creature.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    // End-Raze Forerunners' ETB "other creatures you control ... gain vigilance ... until end of
+    // turn" (Permanent::temp_vigilance; cleared at both cleanup sites). Never set elsewhere.
+    if (creature.temp_vigilance) { return true; }
     auto grants = [&](const Permanent& a)
     {
         if (a.controller_index != creature.controller_index) { return false; }
@@ -6060,6 +6198,45 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
     return best;
 }
 
+// The DECLARED prefix of an attacker list (CR 508.1 / 508.4). Both combats keep atk_idx as the declared attackers
+// first, then the bodies put onto the battlefield attacking (attack-trigger tokens, Militia's Pride, Ilharg's put),
+// and carry `declared_n` = the prefix length. A "whenever <this / a> creature attacks" trigger is a DECLARATION
+// trigger: only the prefix can be its SOURCE (a creature put onto the battlefield attacking "never attacked").
+// Recipients of the resulting effect ("each other attacking creature", "each other attacking Goblin") still read the
+// whole list. -1 = the whole list (projection / unit-test callers that pass only declared attackers). Boars I5b.
+inline int DeclaredSpan(const std::vector<int>& atk, int declared_n)
+{
+    const int n = static_cast<int>(atk.size());
+    return declared_n < 0 ? n : std::min(declared_n, n);
+}
+
+// After a helper rebuilt atk_idx by card number (order kept, departed bodies dropped), the new declared prefix =
+// how many of the old prefix's card numbers are still in it. `nums` = the old prefix's numbers, taken before.
+inline std::vector<int> DeclaredNumbers(const GameState& state, const std::vector<int>& atk, int declared_n)
+{
+    std::vector<int> nums;
+    const int n = declared_n < 0 ? static_cast<int>(atk.size()) : std::min<int>(declared_n, static_cast<int>(atk.size()));
+    for (int k = 0; k < n; ++k)
+    {
+        const int i = atk[static_cast<std::size_t>(k)];
+        if (i >= 0 && i < static_cast<int>(state.battlefield.size()))
+        { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
+    }
+    return nums;
+}
+inline int RecountDeclared(const GameState& state, const std::vector<int>& atk, const std::vector<int>& nums)
+{
+    int n = 0;
+    for (const int i : atk)
+    {
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { break; }
+        if (std::find(nums.begin(), nums.end(), state.battlefield[static_cast<std::size_t>(i)].card.m_number)
+            == nums.end()) { break; }
+        ++n;
+    }
+    return n;
+}
+
 // FireAttackDigAttach -- body in SpellEffects.cpp. Armored Skyhunter's attack trigger ("look at
 // the top six... you may put an Aura or Equipment card... onto the battlefield... attach it to a
 // creature you control; rest on the bottom"). Called from GameEngine::CombatPhase AND the
@@ -6069,7 +6246,7 @@ inline int ResolveEnchantTarget(const GameState& state, int controller, int ench
 // shared enter cascade (Puresteel's equipment-ETB draw fires). WHICH card and WHICH host are
 // provider-owned (AttackDigPutCandidates / AttackDigAttachHost, human-overridable via the dig /
 // attach-host choosers). Rest bottomed in examined order (approved deterministic collapse).
-void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackDigAttach(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 // FireAttackAttachEquipment -- body in SpellEffects.cpp. Raubahn, Bull of Ala Mhigo's attack trigger
 // (CardParams::attack_attach_equipment): "whenever Raubahn attacks, attach up to one target Equipment
 // you control to target attacking creature". Called from GameEngine::CombatPhase AND the rollout's
@@ -6086,12 +6263,13 @@ void FireAttackDigAttach(GameState& state, int controller, const std::vector<int
 // afterwards: re-found by card number (a Wargear re-host sacrifice shifts indices) and filtered to
 // creatures (an attacking Lizard Blades attached this way is removed from combat, CR 506.4). `live`
 // = a real resolution: the human chooser (two attach_host board-clicks) and the play event.
-void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live);
+void FireAttackAttachEquipment(GameState& state, int controller, std::vector<int>& atk_idx, bool live,
+                               int* declared_n = nullptr);
 // Bruna, Light of Alabaster's attack trigger (attack_gather_auras). Fired at declare-attackers in
 // BOTH worlds (GameEngine::CombatPhase / TurnSolver::SimulateCombat) after the attack pumps and
 // BEFORE the damage loop reads power, so the gathered Auras swing THIS combat. Only APPENDS to the
 // battlefield (put Auras), so `atk_idx` stays valid. See the definition for the full rules note.
-void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackGatherAuras(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 // Arcanum Wings' Aura swap (aura_swap_cost): exchange the Aura-swap permanent `wings_number` with
 // the hand Aura at `hand_index` -- simultaneous, on resolution; the hand Aura is PUT (not cast, does
 // not target, CR 303.4f) onto the same host and ENTERS (its ETB fires: Colossification taps the
@@ -6124,7 +6302,7 @@ void ApplyCombatAuraSwap(GameState& state, int controller, std::vector<int>& atk
 // so the type filter, the provider ranking, the human dig chooser (with -1 as the printed "may")
 // and the rest-to-bottom all come for free. Needs no attack-damage projection addend: a card
 // entering hand adds no power to a declared attacker.
-void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx);
+void FireAttackEquipDigHand(GameState& state, int controller, const std::vector<int>& atk_idx, int declared_n = -1);
 
 // ApplyAttachAllEquipment -- body in SpellEffects.cpp. Balan's "{1}{W}: Attach all Equipment you
 // control to Balan" (cost paid by the caller). Routes every controlled Equipment not already on
@@ -6491,7 +6669,28 @@ inline void ResolveChandraExileCast(GameState& state, int controller, const Card
 
 bool TapForCostDirect(GameState& state, const ManaCost& cost_in, bool for_creature);
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
+// The mana actually spent on the LAST FireOnCastTriggers call on this thread (-1 = none yet). A TEST PROBE only:
+// nothing in the engine reads it (Raggadragga's "if at least seven mana was spent to cast it" will read the
+// argument itself), so it can never move play. See the `mana_spent` contract below.
+inline thread_local int g_cast_trigger_mana_spent_probe = -1;
+
+// MANA SPENT (Boars I2b, the plumbing for Raggadragga's intervening if; CR 601.2h / 106.1): `mana_spent` is the
+// total mana actually paid for THIS spell's cost -- after every reduction (Herald's Horn, Medallions, Hinata's
+// X discount), with {X} folded into generic, minus the pips paid by convoke (a tapped creature is not mana) or by
+// Phyrexian life, and WITHOUT a Remand rider that rides the same bill (that is the Remand's own cost). A cast
+// "without paying its mana cost" (cascade, ripple, suspend, Garth, a banked free cast) or for an alternative cost
+// that is not mana (Invigorate's lifegain, Fireblast's sacrifice) spends 0. REQUIRED with no default, so every
+// cast site had to state it (the ComputeLordBonus-signature lesson). Every site is in both worlds' shared paths;
+// the executor's CastSpellFromHand and the rollout's apply_one compute it off their lockstep `effective` / `ec`.
+inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
+                                                 const std::string& src_name, bool untap_pump,
+                                                 int rank_override);                           // defined below
+inline int UntapPumpRankFor(const GameState& state, int ahead = 0);                              // defined below
+inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
+                                   int power, int tough);                                       // defined below
+inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
+    g_cast_trigger_mana_spent_probe = mana_spent;
     int mv = cast_def.card.m_mana_cost.ManaValue();
     int active = state.active_player_index;
     if (cast_def.card.IsCreature())
@@ -6539,6 +6738,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                        std::vector<std::string> kws; };
     std::vector<TokenSpec> to_create;
     int clues = 0;   // Malcolm's investigate, deferred past the loop like to_create
+    // Raggadragga's untap + pump triggers (Boars I3b), deferred past the loop like to_create: the untap and the
+    // pump change the battlefield the loop walks. Each entry is the source's definition (one per Raggadragga).
+    std::vector<const CardDefinition*> untap_pumps;
 
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -6642,6 +6844,54 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
                               "\xF0\x9F\x94\xA5 Aria of Flame (" + std::to_string(dmg) + " verse): "
                               + std::to_string(dmg) + " to opponent (" + std::to_string(before)
                               + "\xE2\x86\x92" + std::to_string(before - dmg) + ")");
+            }
+        }
+
+        // Herald of Ilharg: "Whenever you cast a creature spell, put two +1/+1 counters on this creature. If that
+        // spell has mana value 5 or greater, this creature deals damage equal to the number of counters on it to
+        // each opponent." Herald is on the stack, not the battlefield, during its own cast, so it never sees
+        // itself; another Herald already out does. The MV test is on resolution (a second sentence, not an
+        // intervening if) and reads the PRINTED MV (`mv`): Herald's Horn / emerge reduce the cost, never the MV,
+        // so a Decimator cast for emerge still deals the damage. "Number of counters" is read AFTER the put, and
+        // counts every counter (TotalCountersOn). Each Herald resolves its own trigger with its own count; the
+        // order of simultaneous cast triggers is inert (each reads only its own counters). Index the battlefield,
+        // not `p` (a const ref); neither the put nor face damage reallocates it.
+        // Raggadragga, Goreguts Boss: "Whenever you cast a spell, if at least seven mana was spent to cast it, ..."
+        // The INTERVENING IF (CR 603.4) reads the mana actually spent (this function's contract above): Herald's
+        // Horn makes End-Raze 7 (fires) and two Horns make it 6 (does not); a free cast spends 0. Any spell type.
+        // Raggadragga is on the stack during its own cast, so it never sees itself.
+        if (def->params.cast_trigger_untap_pump_target_min_spent > 0 && p.controller_index == active
+            && mana_spent >= def->params.cast_trigger_untap_pump_target_min_spent)
+        { untap_pumps.push_back(def); }
+
+        if (def->params.creature_cast_trigger_plus_counters > 0 && cast_def.card.IsCreature()
+            && p.controller_index == active)
+        {
+            Permanent& h = state.battlefield[static_cast<std::size_t>(i)];
+            PutPlusCounters(state, h, def->params.creature_cast_trigger_plus_counters);
+            if (def->params.creature_cast_counter_damage_min_mv > 0
+                && mv >= def->params.creature_cast_counter_damage_min_mv)
+            {
+                const int n = TotalCountersOn(h);
+                const int before = state.players[1 - active].life;
+                for (int head = 0; head < gamesetup::OpponentHeads(); ++head)
+                { DealPermanentAbilityDamage(state, active, *def, n, /*target=*/0, /*ask_human=*/false); }
+                if (g_play_event_sink != nullptr && !g_tap_speculating)
+                {
+                    EmitPlayEvent(state.turn_number, "damage",
+                                  def->card.m_name.str() + " (" + cast_def.card.m_name.str() + ", MV "
+                                  + std::to_string(mv) + "): " + std::to_string(def->params.creature_cast_trigger_plus_counters)
+                                  + " +1/+1 counters, then " + std::to_string(n)
+                                  + " damage to each opponent (" + std::to_string(before) + "\xE2\x86\x92"
+                                  + std::to_string(state.players[1 - active].life) + ")");
+                }
+            }
+            else if (g_play_event_sink != nullptr && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "ability",
+                              def->card.m_name.str() + " (" + cast_def.card.m_name.str()
+                              + "): " + std::to_string(def->params.creature_cast_trigger_plus_counters)
+                              + " +1/+1 counters");
             }
         }
 
@@ -6758,6 +7008,24 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def)
     { CreateTokens(state, active, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
     // After the loop: CreateClueTokens push_backs onto the battlefield (would invalidate `p`).
     if (clues > 0) { CreateClueTokens(state, active, clues); }
+    // Raggadragga's untap + pump, each with its own target, chosen as the trigger is put on the stack (the shared
+    // searched chooser: Plan::cast_trigger_target_choice's rank policy; the board-click `target` decision in human
+    // play). ORDER vs the other cast triggers (Herald of Ilharg's counters, Decimator's team pump) is the
+    // controller's (CR 603.3b) and inert: pumps and counters commute and the untap is independent of both, so a
+    // fixed order is a sound identity. After the tokens above, which are then legal targets (a superset).
+    // PER-INSTANCE target (Boars I4c, risk 3): each trigger instance reads ITS OWN digit of the searched rank
+    // (UntapPumpRankFor: the instance ordinal GameState::cast_untap_pump_ordinal, relative to the pin's install), then
+    // advances the ordinal -- so two qualifying casts in one turn take independent targets.
+    for (const CardDefinition* rd : untap_pumps)
+    {
+        const int rank = UntapPumpRankFor(state);
+        state.cast_untap_pump_ordinal = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal + 1);
+        const std::vector<int> nums = ChooseCastTriggerTargets(state, active, 1, /*destroy=*/false,
+                                                               rd->card.m_name.str(), /*untap_pump=*/true, rank);
+        if (nums.empty()) { continue; }   // no legal target (every creature shrouded): removed (CR 603.3d)
+        ResolveUntapPumpTarget(state, active, rd->card.m_name.str(), nums.front(),
+                               rd->params.cast_trigger_untap_pump_power, rd->params.cast_trigger_untap_pump_tough);
+    }
     // Every cast trigger above has resolved (they sit above the spell); the draw triggers of any card
     // one of them drew (Parun, Kor Spiritdancer, Sram) resolve now, still before the spell -- the Niv
     // loop. One bool test for every deck without it. Shared by every cast site in both worlds.
@@ -6848,8 +7116,15 @@ inline bool IsLordPermanent(const CardDefinition& def)
     return def.card.IsCreature()
         && (def.params.power_bonus != 0 || def.params.tough_bonus != 0)
         && (!def.params.subtypes_affected.empty() || def.params.affects_all_creatures
-            || def.params.lord_affects_chosen_subtype);
+            || def.params.lord_affects_chosen_subtype
+            || def.params.lord_affects_mana_ability_creatures);   // Raggadragga (Boars I3b)
 }
+
+// "<creature> with a mana ability" (Raggadragga, Goreguts Boss; Boars I3b). Defined beside ManaDefOf below
+// (it reads the Brightcap-style live grant). HAS the ability, never "can use it now" (CR 605.1a): summoning
+// sickness, tapped state and payability are irrelevant, so a sick Birds is still pumped. `self` may be null
+// (a hand-card projection): the definition alone answers.
+inline bool CreatureHasManaAbility(const GameState& state, const Permanent* self, const Card& c);
 
 // TAKES THE WHOLE GameState, not just the battlefield (changed 2026-08-23 for Neheb, the Worthy).
 // A CONDITIONAL anthem -- "as long as you have one or fewer cards in hand, Minotaurs you control
@@ -6918,7 +7193,12 @@ inline std::pair<int,int> ComputeLordBonus(
             tb += sdef->params.static_artifact_tough;
         }
         // Kumena's Speaker: one bonus if EITHER condition holds, never one per Merfolk.
-        if (sdef && !sdef->params.self_pump_if_other_subtype_or_land.empty())
+        // Flinthoof Boar (Boars I1): the land condition ALONE ("as long as you control a Mountain") -- the
+        // same one-bonus test with the other-subtype half absent. Kumena sets both params, so its path is
+        // the identical sequence of tests (byte-identical); before this the land param was read only
+        // inside Kumena's gate and did nothing on its own.
+        if (sdef && (!sdef->params.self_pump_if_other_subtype_or_land.empty()
+                     || !sdef->params.self_pump_if_land_subtype.empty()))
         {
             bool eligible = false;
             for (const Permanent& q : battlefield)
@@ -6926,9 +7206,11 @@ inline std::pair<int,int> ComputeLordBonus(
                 if (q.controller_index != controller_index) { continue; }
                 if (q.card.IsLand())
                 {
-                    eligible = LandHasSubtypeNow(state, q, sdef->params.self_pump_if_land_subtype);
+                    eligible = !sdef->params.self_pump_if_land_subtype.empty()
+                            && LandHasSubtypeNow(state, q, sdef->params.self_pump_if_land_subtype);
                 }
-                else if (self == nullptr || &q != self)
+                else if (!sdef->params.self_pump_if_other_subtype_or_land.empty()
+                         && (self == nullptr || &q != self))
                 {
                     for (const std::string& st : q.card.m_subtypes)
                         if (st == sdef->params.self_pump_if_other_subtype_or_land) { eligible = true; }
@@ -7014,6 +7296,12 @@ inline std::pair<int,int> ComputeLordBonus(
         if (ldef->params.affects_all_creatures)
         {
             matches = true;   // anthem for every creature you control (Benalish Marshal)
+        }
+        else if (ldef->params.lord_affects_mana_ability_creatures)
+        {
+            // Raggadragga: "Each creature you control with a mana ability gets +2/+2." Raggadragga itself has
+            // none, so it never buffs itself. Before the subtype branches: the card has no subtypes_affected.
+            matches = CreatureHasManaAbility(state, self, creature);
         }
         else if (ldef->params.lord_affects_chosen_subtype)
         {
@@ -8889,6 +9177,192 @@ struct LifegainCounterTargetPinScope
 // enters_with_x_plus_counters entrant, so every other deck's queue stays empty (byte-identical); the
 // general 0-toughness entrant is the same rule and a follow-up, not a rider on this card.
 inline thread_local std::vector<int> g_pending_zero_toughness;
+// LEGEND-RULE KEEP (CR 704.5j: the controller CHOOSES which same-name legendary permanent to keep; Boars I5b item 4).
+// The choice is made in ONE place, LegendKeepPick, read by BOTH the provisional loser below (LegendRuleLoser, during
+// the enter cascade) and the state-based action itself (EnforceLegendRule), so the copy the watchers treat as dead is
+// always the copy the SBA removes:
+//   * SEARCHED (a pin): the cast / attack put that makes the group carries Action::legend_keep (StackEntry::
+//     legend_keep for the executor's resolution) or kAttackPutKeepNewBit, installed for the dynamic extent of that
+//     cast / resolution / put by LegendKeepPinScope. 1 = keep the OLDEST copy (lowest battlefield index -- entry
+//     order), 2 = keep the NEWEST. The pin names the legend it decides, so a nested legend rule for another name is
+//     not captured by it. The search branches both answers (CollectActions' LEGEND-KEEP pass; AppendSubdecisionAxes'
+//     same-plan fan; the attack-put axis), so no in-window pick is made by the engine.
+//   * HUMAN PLAY: the board-click `legend_keep` decision (g_play_sacrifice_chooser, nulled in every hypothetical by
+//     RevealLogPause) for EVERY legend whose copies differ (LegendCopiesInterchangeable is the identity fold: a
+//     group of field-identical copies has no decision content and is not asked). Asked at the FIRST point the
+//     answer is needed -- possibly the provisional loser check inside the enter cascade, which is rules-faithful:
+//     the SBA happens before any enter trigger is put on the stack (CR 704.3) -- and the answer is remembered for
+//     the group (g_legend_keep_asked) so the SBA removes exactly the copy the cascade already treated as dead.
+//     The new copy's own enter trigger is unaffected either way: it triggered on entering and resolves even if
+//     that copy is the one put into the graveyard (the engine banks it inline; LegendRuleLoser only hides the
+//     doomed copy from OTHER watchers' sight and target lists).
+//   * SEARCHED FOR THE TURN (Boars LK): every OTHER entry route -- a legendary land drop, a put onto the battlefield, a
+//     free cast nested in another card's resolution, a token / copy entrant, a reanimation -- reads the plan's
+//     Plan::legend_keep_turn through GameState::scripted_legend_keep (1 oldest / 2 newest, the active player's
+//     groups). AppendSubdecisionAxes' LEGEND-KEEP TURN FAN twins every plan whose turn can reach such a group.
+//   * UNPINNED (the playout beyond the horizon, the d0 runner, a plan no fan reached): the provider's
+//     LegendKeepIndex (the permitted playout policy).
+// THE SEARCHED LEGEND KEEP'S BYTE (GameState::scripted_legend_keep; Boars LK + LK3, 2026-11-13):
+//   bits 0-1  the keep IN FORCE now (0 none -> the provider, 1 keep the oldest copy, 2 keep the newest): the turn's
+//             Plan::legend_keep_turn in the main phases, the NEXT-UPKEEP pin below while the upkeep runs.
+//   bits 2-3  the NEXT upkeep's keep (Plan::upkeep_legend_keep_choice, a BoundaryFan digit; Boars LK3): 0 uncovered,
+//             1 oldest, 2 newest, 3 COVERED-and-follow-the-provider (the fan's rank 0, so ties keep its pick). Written
+//             by the plan apply / the crossing's Stamp, it SURVIVES the turn boundary like scripted_upkeep_horn.
+//   bit 4     the upkeep window is open with a covering pin (set at the turn start, cleared at the end of the upkeep).
+// An upkeep-only route (Marit Lage's Slumber's token, Emeria / Defense of the Heart puts, an upkeep arrival) fires
+// before any plan of its turn, so the turn pin cannot reach it: LegendKeepOpenUpkeep (both worlds' turn starts,
+// GameEngine::UntapStep / SimulateEndAndStartNextTurn) moves the upkeep pin into the keep in force, and
+// LegendKeepCloseUpkeep (the end of GameEngine::UpkeepTail / just before the rollout's draw) drops it.
+constexpr int kLegendKeepNowMask       = 0x03;
+constexpr int kLegendKeepUpkeepShift   = 2;
+constexpr int kLegendKeepUpkeepMask    = 0x0C;
+constexpr int kLegendKeepUpkeepWindow  = 0x10;
+constexpr int kLegendKeepUpkeepFollow  = 3;     // the upkeep pin's "covered, the provider's own pick"
+inline int LegendKeepNow(const GameState& s) { return s.scripted_legend_keep & kLegendKeepNowMask; }
+inline int LegendKeepUpkeepPin(const GameState& s)
+{ return (s.scripted_legend_keep & kLegendKeepUpkeepMask) >> kLegendKeepUpkeepShift; }
+inline void SetLegendKeepNow(GameState& s, int v)
+{ s.scripted_legend_keep = static_cast<std::int8_t>((s.scripted_legend_keep & ~kLegendKeepNowMask) | (v & kLegendKeepNowMask)); }
+inline void SetLegendKeepUpkeepPin(GameState& s, int v)
+{
+    s.scripted_legend_keep = static_cast<std::int8_t>((s.scripted_legend_keep & ~kLegendKeepUpkeepMask)
+                                                      | ((v & 3) << kLegendKeepUpkeepShift));
+}
+inline void LegendKeepOpenUpkeep(GameState& s)
+{
+    const int u = LegendKeepUpkeepPin(s);
+    s.scripted_legend_keep = static_cast<std::int8_t>(
+        u == 0 ? 0 : (kLegendKeepUpkeepWindow | (u == kLegendKeepUpkeepFollow ? 0 : u)));
+}
+inline void LegendKeepCloseUpkeep(GameState& s) { s.scripted_legend_keep = 0; }
+// The BoundaryFan's probe for the upkeep digit (TurnSolver.cpp): armed only around a crossing that fans it. The first
+// active-player legend rule of the covered upkeep whose copies DIFFER records the provider's own pick (0 = oldest,
+// 1 = newest, 2 = a middle copy); `seen` says one was met (the digit's width is learned from it).
+struct UpkeepLegendKeepProbe { bool seen = false; int provider_pick = 0; };
+inline thread_local UpkeepLegendKeepProbe* t_upkeep_legend_keep_probe = nullptr;
+struct LegendKeepPin
+{
+    std::int8_t v = 0;     // 0 none, 1 keep oldest, 2 keep newest
+    std::string name;      // the legend it decides
+};
+inline thread_local LegendKeepPin g_legend_keep_pin;
+struct LegendKeepPinScope
+{
+    LegendKeepPin prev;
+    bool          armed;
+    LegendKeepPinScope(int v, const std::string& name) : armed(v != 0)
+    {
+        if (!armed) { return; }
+        prev = g_legend_keep_pin;
+        g_legend_keep_pin.v    = static_cast<std::int8_t>(v == 1 ? 1 : 2);
+        g_legend_keep_pin.name = name;
+    }
+    ~LegendKeepPinScope() { if (armed) { g_legend_keep_pin = std::move(prev); } }
+    LegendKeepPinScope(const LegendKeepPinScope&) = delete;
+    LegendKeepPinScope& operator=(const LegendKeepPinScope&) = delete;
+};
+// The human's (or the identity fold's) answer for one same-name group, remembered from the provisional check to the
+// SBA. Real human play only (the chooser is null in every hypothetical), so no search branch can read it.
+struct LegendKeepAsked
+{
+    int              controller = -1;
+    int              turn       = -1;
+    std::vector<int> nums;          // the group's card numbers, in battlefield order
+    int              keep_num   = 0;
+};
+inline thread_local LegendKeepAsked g_legend_keep_asked;
+// IDENTITY FOLD: every copy of the group is field-identical apart from its card number and battlefield slot -- same
+// tapped state, age (summoning sickness), control age, token-ness and counters, and nothing else that can tell two
+// copies apart (damage, attachments either way, temp pumps / keywords, loyalty or a used loyalty ability, end-step
+// riders, having attacked, animation, copy effects, chosen values, once-per-turn flags). Fail closed: any of those
+// present on any copy makes the group a real decision.
+inline bool LegendCopiesInterchangeable(const GameState& state, const std::vector<int>& dup)
+{
+    if (dup.size() < 2) { return true; }
+    auto counts = [](const Permanent& p, int (&c)[8])
+    {
+        for (int& x : c) { x = 0; }
+        for (const Counter& k : p.counters)
+        {
+            const int t = static_cast<int>(k.type);
+            if (t >= 0 && t < 8) { c[t] += k.count; } else { c[7] += 1000 + k.count; }
+        }
+    };
+    const Permanent& a = state.battlefield[static_cast<std::size_t>(dup.front())];
+    int ca[8];
+    counts(a, ca);
+    for (int idx : dup)
+    {
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(idx)];
+        if (p.damage != 0 || p.pending_death_trigger != 0 || p.aura_attached_to != 0 || p.equipped_to != 0
+            || p.marked_for_destruction || p.temp_power_bonus != 0 || p.temp_tough_bonus != 0
+            || p.charge_counters != 0 || p.verse_counters != 0 || p.storage_counters != 0 || p.loyalty != 0
+            || p.loyalty_activated_this_turn || p.temp_haste || p.temp_lifelink || p.temp_double_strike
+            || p.temp_vigilance || p.temp_indestructible || p.exile_at_end || p.sac_at_end_step
+            || p.destroy_at_end_if_attacked || p.return_at_end_step || p.AttacksThisTurn() != 0 || p.is_animated
+            || !static_cast<const std::string&>(p.copy_printed_name).empty() || p.chosen_color != -1
+            || p.chosen_subtype_id != 0 || p.chosen_keyword_mask != 0 || p.linked_exile_number != 0
+            || p.once_per_turn_used || p.skip_next_untap || p.paired_with != 0)
+        { return false; }
+        if (p.tapped != a.tapped || p.entered_this_turn != a.entered_this_turn
+            || p.gained_control_this_turn != a.gained_control_this_turn || p.is_token != a.is_token)
+        { return false; }
+        int cp[8];
+        counts(p, cp);
+        for (int t = 0; t < 8; ++t) { if (cp[t] != ca[t]) { return false; } }
+        for (const Permanent& q : state.battlefield)
+        { if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number) { return false; } }
+    }
+    return true;
+}
+// The battlefield index to KEEP for one same-name group `dup` (ascending battlefield indices) of `name`.
+inline int LegendKeepPick(const GameState& state, int controller, const std::vector<int>& dup, const std::string& name)
+{
+    if (dup.empty()) { return -1; }
+    if (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == name)
+    { return g_legend_keep_pin.v == 1 ? dup.front() : dup.back(); }
+    // ...else the TURN's searched keep (GameState::scripted_legend_keep, Boars LK): the plan's answer for every
+    // legend rule no rider names -- land drops, puts, nested free casts, token / copy entrants, reanimation.
+    // The upkeep digit's probe (Boars LK3): the provider's own pick for the first differing group of a covered upkeep.
+    if (t_upkeep_legend_keep_probe != nullptr && !t_upkeep_legend_keep_probe->seen
+        && (state.scripted_legend_keep & kLegendKeepUpkeepWindow) != 0 && controller == state.active_player_index
+        && dup.size() >= 2 && !LegendCopiesInterchangeable(state, dup))
+    {
+        const int pk = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
+        t_upkeep_legend_keep_probe->seen = true;
+        t_upkeep_legend_keep_probe->provider_pick = pk == dup.front() ? 0 : pk == dup.back() ? 1 : 2;
+    }
+    if (LegendKeepNow(state) != 0 && controller == state.active_player_index)
+    { return LegendKeepNow(state) == 1 ? dup.front() : dup.back(); }
+    int keep = ResolveProvider(state).LegendKeepIndex(state, controller, dup);
+    if (g_play_sacrifice_chooser == nullptr || controller != state.active_player_index) { return keep; }
+    std::vector<int> nums;
+    nums.reserve(dup.size());
+    for (int idx : dup) { nums.push_back(state.battlefield[static_cast<std::size_t>(idx)].card.m_number); }
+    LegendKeepAsked& asked = g_legend_keep_asked;
+    if (asked.controller == controller && asked.turn == state.turn_number && asked.nums == nums)
+    {
+        for (int idx : dup)
+        { if (state.battlefield[static_cast<std::size_t>(idx)].card.m_number == asked.keep_num) { return idx; } }
+    }
+    if (!LegendCopiesInterchangeable(state, dup))
+    {
+        auto it = std::find(dup.begin(), dup.end(), keep);
+        const int default_option = it == dup.end() ? 0 : static_cast<int>(it - dup.begin());
+        // "Chandra, Torch of Defiance" -> "Chandra": the card's short name, as a player says it.
+        const std::size_t comma = name.find(',');
+        const std::string shortname = comma == std::string::npos ? name : name.substr(0, comma);
+        const int chosen = (*g_play_sacrifice_chooser)(state, controller,
+            "Legend rule: choose " + shortname + " to keep", dup, default_option);
+        if (chosen >= 0 && chosen < static_cast<int>(dup.size())) { keep = dup[static_cast<std::size_t>(chosen)]; }
+    }
+    asked.controller = controller;
+    asked.turn       = state.turn_number;
+    asked.nums       = std::move(nums);
+    asked.keep_num   = (keep >= 0 && keep < static_cast<int>(state.battlefield.size()))
+                     ? state.battlefield[static_cast<std::size_t>(keep)].card.m_number : 0;
+    return keep;
+}
 // LEGEND-RULE LOSER (MTG_LEGEND_SBA_FIRST, HeuristicArm.h). The legend rule is a state-based action
 // (CR 704.5j), and SBAs are performed BEFORE any triggered ability goes on the stack (CR 704.3), so
 // the copy the legend rule removes is gone before an enter trigger RESOLVES -- it cannot see the
@@ -8926,7 +9400,9 @@ inline bool LegendRuleLoser(const Permanent& q, const GameState& state)
         dup.push_back(i);
     }
     if (self < 0) { return false; }
-    const int keep = ResolveProvider(state).LegendKeepIndex(state, q.controller_index, dup);
+    // The SAME pick the SBA will make (LegendKeepPick: the searched pin, the human's remembered answer, else the
+    // provider), so the copy the watchers treat as dead is the one EnforceLegendRule removes.
+    const int keep = LegendKeepPick(state, q.controller_index, dup, q.card.m_name.str());
     return keep != self;
 }
 inline bool DoomedEntrant(const Permanent& q, const GameState& state)
@@ -10050,11 +10526,12 @@ inline bool CardHasSubtypeId(const Card& c, uint16_t sub_id)
 // deck built around two equally-sized tribes is not a case any shipped deck presents. If a deck ever
 // wants a genuine per-copy choice, this becomes a plan sub-decision and Permanent::chosen_subtype_id
 // must then be folded into the sim key as a real searched branch (it already is, see BuildSimKey).
-inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller)
+// The creature-subtype tally DominantCreatureSubtypeId and DeckCreatureSubtypeMenu share (one walk, so the
+// provider's pick and the human menu can never disagree about which types the deck carries). Writes up to
+// 32 (id, count) slots in first-seen order and returns the slot count.
+inline int TallyDeckCreatureSubtypes(const GameState& state, int controller, uint16_t (&ids)[32], int (&counts)[32])
 {
     // Small open-addressed tally: decks carry a handful of distinct creature subtypes.
-    uint16_t ids[32]   = {0};
-    int      counts[32] = {0};
     int      n = 0;
     auto tally = [&](const Card& c)
     {
@@ -10092,6 +10569,15 @@ inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller
         tally((qd && qd->params.chosen_type_added_to_self) ? qd->card : q.card);
     }
 
+    return n;
+}
+
+inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller)
+{
+    uint16_t ids[32]   = {0};
+    int      counts[32] = {0};
+    const int n = TallyDeckCreatureSubtypes(state, controller, ids, counts);
+
     uint16_t best = SubtypeRegistry::kNone;
     int      best_n = 0;
     for (int k = 0; k < n; ++k)
@@ -10100,6 +10586,25 @@ inline uint16_t DominantCreatureSubtypeId(const GameState& state, int controller
         { best = ids[k]; best_n = counts[k]; }
     }
     return best;
+}
+
+// The human `creature_type` menu (Boars I1): every creature subtype the controller's deck carries (the same
+// tally), MOST COMMON FIRST, ties on the lower interned id -- so the provider's DominantCreatureSubtypeId pick
+// is entry 0 whenever it is the generic one. A type no card in the deck carries is never listed: choosing it
+// makes both the reduction and any type-keyed effect match nothing (strictly dominated).
+inline std::vector<uint16_t> DeckCreatureSubtypeMenu(const GameState& state, int controller)
+{
+    uint16_t ids[32]   = {0};
+    int      counts[32] = {0};
+    const int n = TallyDeckCreatureSubtypes(state, controller, ids, counts);
+    std::vector<int> order(static_cast<std::size_t>(n));
+    for (int k = 0; k < n; ++k) { order[static_cast<std::size_t>(k)] = k; }
+    std::sort(order.begin(), order.end(), [&](int a, int b)
+    { return counts[a] != counts[b] ? counts[a] > counts[b] : ids[a] < ids[b]; });
+    std::vector<uint16_t> out;
+    out.reserve(order.size());
+    for (int k : order) { out.push_back(ids[k]); }
+    return out;
 }
 
 // The subtype id a reducer permanent actually discounts: its CHOSEN type when the card says "choose
@@ -10330,8 +10835,8 @@ inline bool LandfallTargetFoldKey(const GameState& state, const Permanent& p, st
     if (p.damage != 0 || p.pending_death_trigger != 0 || p.marked_for_destruction) { return false; }
     if (p.aura_attached_to != 0 || p.equipped_to != 0 || p.paired_with != 0)      { return false; }
     if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)                       { return false; }
-    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.exile_at_end
-        || p.sac_at_end_step || p.destroy_at_end_if_attacked
+    if (p.temp_haste || p.temp_lifelink || p.temp_double_strike || p.temp_vigilance || p.exile_at_end
+        || p.sac_at_end_step || p.destroy_at_end_if_attacked || p.return_at_end_step
         || p.skip_next_untap || p.etb_tap_pending)                                { return false; }
     if (p.is_animated || p.echo_resolved)                                         { return false; }
     if (p.charge_counters != 0 || p.verse_counters != 0 || p.lore_counters != 0
@@ -11039,7 +11544,7 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
         {
             uint16_t chosen = ResolveProvider(state).ChosenCreatureSubtypeId(
                 state, e.controller_index, *ed);
-            if (g_play_etb_type_chooser && !g_tap_speculating)
+            if (ed->params.choose_type_on_enter && g_play_etb_type_chooser && !g_tap_speculating)
             {
                 std::vector<std::string> menu;
                 menu.reserve(kCreatureTypeCatalog.size());
@@ -11054,6 +11559,26 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
                     state, e.controller_index, ed->card.m_name.str(), menu, default_index);
                 if (picked >= 0 && picked < static_cast<int>(menu.size()))
                 { chosen = SubtypeRegistry::Instance().Id(menu[static_cast<std::size_t>(picked)]); }
+            }
+            // HUMAN PLAY (the `creature_type` decision, Boars I1): offer every creature type the deck's
+            // creatures carry, the provider's pick as the default. Null in every search / rollout scope
+            // (RevealLogPause) and skipped while speculating, so autonomous play keeps the provider's pick.
+            if (!ed->params.choose_type_on_enter && g_play_creature_type_chooser && !g_tap_speculating)
+            {
+                const int ctl = e.controller_index;
+                const std::string src_name = ed->card.m_name.str();
+                std::vector<uint16_t> ids = DeckCreatureSubtypeMenu(state, ctl);
+                int dflt = -1;
+                for (std::size_t k = 0; k < ids.size(); ++k) { if (ids[k] == chosen) { dflt = static_cast<int>(k); break; } }
+                if (dflt < 0 && chosen != SubtypeRegistry::kNone) { ids.push_back(chosen); dflt = static_cast<int>(ids.size()) - 1; }
+                if (!ids.empty())
+                {
+                    std::vector<std::string> names;
+                    names.reserve(ids.size());
+                    for (uint16_t id : ids) { names.push_back(SubtypeRegistry::Instance().Name(id)); }
+                    const int pick = (*g_play_creature_type_chooser)(state, ctl, src_name, names, dflt);
+                    if (pick >= 0 && pick < static_cast<int>(ids.size())) { chosen = ids[static_cast<std::size_t>(pick)]; }
+                }
             }
             state.battlefield[entered_index].chosen_subtype_id = chosen;
             // Metallic Mimic / Adaptive Automaton: "This creature is the chosen type in addition to
@@ -12875,6 +13400,41 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         }
     }
 
+    // End-Raze Forerunners (Boars I3a): "When this creature enters, OTHER creatures you control get +2/+2
+    // and gain vigilance and trample until end of turn." Recipients read at RESOLUTION (CR 608.2h), so a
+    // creature entering later this turn gets nothing (CR 611.2c). Shared by every enter route in both
+    // worlds (cast, put, Ilharg's tapped-and-attacking put), so executor and rollout pump identically.
+    // VIGILANCE (temp_vigilance) is NOT inert: an untapped vigilant attacker -- a Zhur-Taa Druid or any
+    // mana dork -- still taps for mana after combat. It spares only creatures whose attack tap has not
+    // happened yet (the deferred tap in ResolveCombatDamage); a grant that lands after attackers are
+    // declared (Ilharg's put) must not spare a declared attacker -- the Ilharg put helper applies the
+    // declaration tap first (owed by Boars I5, CR 508.1f). TRAMPLE is not modelled (D2: nothing blocks).
+    // Param-gated -> byte-identical for every deck without the card.
+    if (p.etb_other_creatures_pump_power != 0 || p.etb_other_creatures_pump_tough != 0
+        || p.etb_other_creatures_grant_vigilance)
+    {
+        int hit = 0;
+        for (int qi = 0; qi < static_cast<int>(state.battlefield.size()); ++qi)
+        {
+            if (qi == entered_index) { continue; }
+            Permanent& q = state.battlefield[qi];
+            if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+            q.temp_power_bonus += p.etb_other_creatures_pump_power;
+            q.temp_tough_bonus += p.etb_other_creatures_pump_tough;
+            if (p.etb_other_creatures_grant_vigilance) { q.temp_vigilance = true; }
+            ++hit;
+        }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "etb",
+                          def->card.m_name.str() + ": " + std::to_string(hit) + " other creature(s) get +"
+                          + std::to_string(p.etb_other_creatures_pump_power) + "/+"
+                          + std::to_string(p.etb_other_creatures_pump_tough)
+                          + (p.etb_other_creatures_grant_vigilance ? " and vigilance" : "")
+                          + " until end of turn");
+        }
+    }
+
     // Thalia's Lieutenant: "When this creature enters, put a +1/+1 counter on each other Human you
     // control." The Human set is read at RESOLUTION (CR 608.2), so every matching creature on the
     // board now gets one -- including a second Lieutenant / Champion of the Parish, whose own
@@ -14227,6 +14787,79 @@ inline void ResolveAthreosExile(GameState& state, const Permanent& leaving)
     }
 }
 
+// ILHARG'S DEATH "MAY" PIN (GameState::dies_tuck_pin, Boars I5b item 3). Installs a searched Action::dies_tuck value
+// (1 / 3 tuck, 2 / 4 leave -- 3 / 4 are the same answers for a same-plan legend duplicate) as the pin 1 / 2 for the
+// dynamic extent of one cast / resolution / attack put and restores the previous value after; a 0 value arms
+// nothing, so a nested scope with no rider never clears an outer one.
+struct DiesTuckPinScope
+{
+    GameState&  s;
+    std::int8_t prev;
+    bool        armed;
+    DiesTuckPinScope(GameState& st, int v) : s(st), prev(st.dies_tuck_pin), armed(v != 0)
+    { if (armed) { s.dies_tuck_pin = static_cast<std::int8_t>((v == 1 || v == 3) ? 1 : 2); } }
+    ~DiesTuckPinScope() { if (armed) { s.dies_tuck_pin = prev; } }
+    DiesTuckPinScope(const DiesTuckPinScope&) = delete;
+    DiesTuckPinScope& operator=(const DiesTuckPinScope&) = delete;
+};
+
+// "When Ilharg dies ..., you may put it into its owner's library third from the top." (CardParams::
+// dies_to_library_position, Boars I5b item 3). A TRIGGER (CR 603.6c / 700.4): the card is in the graveyard (the death
+// site pushed it) and every dies-watcher has fired. The "may":
+//   * human play: the `dig` yes/no (g_play_dig_chooser, one examined card, legal {0}; 0 = tuck, -1 = leave), the
+//     Militia's Pride precedent; pre-selected with the searched pin when present, else the provider default;
+//   * a pinned death (GameState::dies_tuck_pin, from the cast / resolution / attack put that caused it): the pin --
+//     the search branched both answers (Action::dies_tuck twins, Plan::attack_put_choice's tuck bit);
+//   * unpinned (the playout beyond the horizon, the d0 runner): DecisionProvider::DiesTuckDefault.
+// Placement: the newest graveyard copy BY m_number (name fallback) is inserted at library index min(N-1, size) --
+// "if fewer than N-1 cards, the bottom" (the Long-Term Plans clamp; no RNG is drawn, so the seeded draw order of
+// every other card is untouched apart from the shift). NOT a top stack: top_stacked_turn stays unset.
+inline void ResolveDiesToLibraryPosition(GameState& state, int dead_controller, const Card& dead_card,
+                                         int position)
+{
+    std::vector<Card>& gy = state.players[dead_controller].graveyard;
+    std::size_t hit = gy.size();
+    for (std::size_t g = gy.size(); g-- > 0; )
+    { if (gy[g].m_number == dead_card.m_number) { hit = g; break; } }
+    if (hit == gy.size())
+    {
+        for (std::size_t g = gy.size(); g-- > 0; )
+        { if (gy[g].m_name == dead_card.m_name) { hit = g; break; } }
+    }
+    if (hit == gy.size()) { return; }   // already gone (nothing to put)
+    const int pin = state.dies_tuck_pin;
+    bool tuck = pin == 1 ? true
+              : pin == 2 ? false
+              : ResolveProvider(state).DiesTuckDefault(state, dead_controller, dead_card);
+    if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+    {
+        const std::vector<Card> examined{ gy[hit] };
+        const std::vector<int>  legal{ 0 };
+        const std::string source = dead_card.m_name.str()
+            + " (dies to library) -- put it into your library " + std::to_string(position)
+            + (position == 1 ? "st" : position == 2 ? "nd" : position == 3 ? "rd" : "th") + " from the top?";
+        tuck = (*g_play_dig_chooser)(state, dead_controller, source, examined, legal, tuck ? 0 : -1) == 0;
+    }
+    if (!tuck) { return; }
+    Card back = gy[hit];
+    gy.erase(gy.begin() + static_cast<std::ptrdiff_t>(hit));
+    auto& lib = state.players[dead_controller].library;
+    const std::size_t at = std::min<std::size_t>(static_cast<std::size_t>(position - 1), lib.size());
+    const int num = back.m_number;
+    const std::string nm = back.m_name.str();
+    lib.insert(lib.begin() + static_cast<std::ptrdiff_t>(at), std::move(back));
+    if (RevealVisible())
+    {
+        EmitReveal(state.turn_number, nm + " (dies)", { num }, { nm }, { num }, {},
+                   /*dispositions*/ { "\xE2\x86\x92 library, " + std::to_string(at + 1) + " from the top" });
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      nm + " died -- put into its owner's library " + std::to_string(at + 1) + " from the top");
+    }
+}
+
 inline void OnCreatureDies(GameState& state, int dead_controller, const Card& dead_card,
                            bool dead_was_token, int dead_minus_counters,
                            const std::vector<int>* dwatch,
@@ -14299,6 +14932,15 @@ inline void OnCreatureDies(GameState& state, int dead_controller, const Card& de
                 }
             }
         }
+    }
+    // Ilharg, the Raze-Boar's death clause (Boars I5b item 3): "you may put it into its owner's library third from
+    // the top" -- beside Worldspine (a trigger on the same graveyard copy). Only a CREATURE dies (CR 700.4); a token
+    // ceased to exist (CR 111.7). See ResolveDiesToLibraryPosition.
+    if (!dead_was_token && dead_card.IsCreature())
+    {
+        const CardDefinition* dd = CardDatabase::Instance().LookupCached(dead_card);
+        if (dd && dd->params.dies_to_library_position > 0)
+        { ResolveDiesToLibraryPosition(state, dead_controller, dead_card, dd->params.dies_to_library_position); }
     }
     // "Put into a graveyard from anywhere -> its owner shuffles their GRAVEYARD into their library"
     // (Emrakul / Ulamog the Infinite Gyre): the death site pushed the card first. Deck-gated (one bool).
@@ -14529,7 +15171,13 @@ inline void ApplyGarthActivate(GameState& state, int controller, int garth_id,
     // (a multicolored conjure would ping Mana Cannons -- none of the six is multicolored).
     ++state.spells_cast_this_turn;
     state.mv_cast_this_turn += cd->card.m_mana_cost.ManaValue();   // CFT damage accumulator (lockstep pair)
-    FireOnCastTriggers(state, *cd);
+    // "You still pay its costs": both callers pay the copy's cost (its Action::cost, {X} folded in) just before
+    // this, so the mana spent is the printed cost plus Braingeyser's X.
+    {
+        const ManaCost& mc = cd->card.m_mana_cost;
+        const int x_paid = mc.has_x ? std::max(1, static_cast<int>(mc.x_pips)) * std::max(0, braingeyser_x) : 0;
+        FireOnCastTriggers(state, *cd, mc.ManaValue() + x_paid);
+    }
 
     if (name == "Black Lotus" || name == "Shivan Dragon")
     {
@@ -16096,6 +16744,7 @@ inline std::string AttachHostClassKey(const GameState& state, const Permanent& p
     k += p.tapped ? "T" : "u";
     k += "/" + std::to_string(p.temp_power_bonus) + "," + std::to_string(p.temp_tough_bonus)
        + (p.temp_haste ? "h" : "") + (p.temp_lifelink ? "L" : "") + (p.temp_double_strike ? "D" : "")
+       + (p.temp_vigilance ? "V" : "")
        + "/c" + p.counters.KeyFragment();
     std::vector<std::string> worn;
     for (const Permanent& q : state.battlefield)
@@ -17898,6 +18547,55 @@ inline void PerformEndStepDelayedSacrifices(GameState& state)
     }
 }
 
+// Ilharg, the Raze-Boar's delayed trigger (Permanent::return_at_end_step, Boars I5a): "Return that creature to
+// your hand at the beginning of the next end step." Called right after PerformEndStepDelayedSacrifices at BOTH
+// end-step sites in lockstep (GameEngine::EndStep, TurnSolver's SimulateEndAndStartNextTurn), before cleanup, so
+// the returned card counts toward the cleanup hand size. Re-found by m_number + the bit after each return. A body
+// that already left the battlefield (an emerge victim in main 2, a legend-rule loser) is simply not found: the
+// delayed trigger does nothing (CR 603.7c -- it tracks that object only). Attachments fall off (CR 301.5c);
+// counters and until-end-of-turn effects die with the object (CR 400.7). No-op (one bit test per permanent) for
+// every deck without the param.
+inline void PerformEndStepDelayedReturns(GameState& state)
+{
+    std::vector<std::pair<int, int>> due;   // (m_number, controller)
+    for (const Permanent& p : state.battlefield)
+    { if (p.return_at_end_step) { due.emplace_back(p.card.m_number, p.controller_index); } }
+    for (const std::pair<int, int>& d : due)
+    {
+        for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+            if (q.card.m_number != d.first || q.controller_index != d.second || !q.return_at_end_step)
+            { continue; }
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "zone",
+                              "\xE2\x8F\xB3 " + q.card.m_name.str()
+                              + " -- returned to hand at the beginning of the end step (put attacking by Ilharg)");
+            }
+            const int num = q.card.m_number;
+            const int owner = q.owner_index;
+            Card returned = RevealedCard(q.card);
+            if (!q.copy_printed_name.empty())
+            {
+                const CardDefinition* printed = CardDatabase::Instance().Lookup(q.copy_printed_name.str());
+                if (printed) { returned = printed->card; returned.m_number = num; }
+            }
+            for (Permanent& o : state.battlefield)
+            {
+                if (o.equipped_to      == num) { o.equipped_to      = 0; }
+                if (o.aura_attached_to == num) { o.aura_attached_to = 0; }
+            }
+            state.battlefield.erase(state.battlefield.begin() + i);
+            FireLeavesBattlefieldTriggers(state, d.second, returned);
+            EnterHand(state, owner, returned, HandEntryReason::Bounce);
+            RefreshDevotionCreatures(state);
+            RefreshReconfigureCreatures(state);
+            break;
+        }
+    }
+}
+
 // Berserk's delayed trigger (CardParams::trick_destroy_at_end_if_attacked -> Permanent::
 // destroy_at_end_if_attacked): "At the beginning of the next end step, destroy that creature if it
 // attacked this turn." Called right after PerformEndStepDelayedSacrifices at BOTH end-step sites
@@ -18288,17 +18986,25 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
 //     creature dies through OnCreatureDies (+ FireOppCreatureDies for the opponent's).
 inline thread_local int g_cast_trigger_target_pin      = -1;
 inline thread_local int g_cast_trigger_target_pin_turn = -1;
+// The Raggadragga instance ordinal (GameState::cast_untap_pump_ordinal) when the live pin was installed: the pin's
+// digit j belongs to the j-th untap-pump trigger AFTER the install (Boars I4c). Read only by UntapPumpRankFor.
+inline thread_local int g_cast_trigger_target_pin_base = 0;
 struct ScriptedCastTriggerTarget
 {
-    int saved, saved_turn;
+    int saved, saved_turn, saved_base;
     bool active;
-    ScriptedCastTriggerTarget(int k, int turn_seq)
-        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn), active(k >= 0)
+    ScriptedCastTriggerTarget(int k, int turn_seq, int ordinal = 0)
+        : saved(g_cast_trigger_target_pin), saved_turn(g_cast_trigger_target_pin_turn),
+          saved_base(g_cast_trigger_target_pin_base), active(k >= 0)
     {
-        if (active) { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; }
+        if (active)
+        { g_cast_trigger_target_pin = k; g_cast_trigger_target_pin_turn = turn_seq; g_cast_trigger_target_pin_base = ordinal; }
     }
     ~ScriptedCastTriggerTarget()
-    { if (active) { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; } }
+    {
+        if (active)
+        { g_cast_trigger_target_pin = saved; g_cast_trigger_target_pin_turn = saved_turn; g_cast_trigger_target_pin_base = saved_base; }
+    }
     ScriptedCastTriggerTarget(const ScriptedCastTriggerTarget&) = delete;
     ScriptedCastTriggerTarget& operator=(const ScriptedCastTriggerTarget&) = delete;
 };
@@ -18306,6 +19012,45 @@ struct ScriptedCastTriggerTarget
 // turn of a round is stale inside that round's extra turn.
 inline int CastTriggerTargetPinFor(const GameState& state)
 { return g_cast_trigger_target_pin_turn == state.TurnSeq() ? g_cast_trigger_target_pin : -1; }
+
+// RAGGADRAGGA'S PER-INSTANCE RANK (Boars I4c -- ledger risk 3). Raggadragga's untap-pump trigger takes ONE target
+// per trigger INSTANCE, and two qualifying casts in one turn must be able to take different ones (a shared whole-turn
+// rank made "untap the Sage on the first, pump the Boar on the second" unfindable at any budget). So the pin is a
+// TUPLE of per-instance ranks, packed self-describing in Plan::cast_trigger_target_choice:
+//     0                         = every instance takes rank 0 (the provider's front) -- the base plan;
+//     (payload << 4) | B, B>=1  = instance j takes digit j = (payload >> (B*j)) & (2^B - 1).
+// Instance j = the j-th untap-pump trigger since the pin was INSTALLED (GameState::cast_untap_pump_ordinal minus the
+// ordinal saved at install), so a breakpoint re-solve's own pin starts at its own digit 0, and a continuation that
+// installs nothing inherits the outer pin's remaining digits -- the same lockstep both worlds already keep for the
+// pin itself (ApplyPlanDirect's _sctt, AIEngine's cast_trigger_target_exec, each installed with the state's ordinal).
+// Only the untap-pump consumer decodes; the Ulamogs read the raw rank exactly as before (byte-identical). B and the
+// digit count come from RaggaUntapPumpAxisWidth / RaggaUntapPumpInstances at variant generation; a digit past the real
+// option count clamps at resolution like every other rank.
+constexpr int kUntapPumpPayloadBits = 27;   // int32 rank storage: 31 value bits minus the 4-bit B field
+inline int UntapPumpRankDigit(int k, int j)
+{
+    if (k <= 0 || j < 0) { return 0; }
+    const int b = k & 15;
+    if (b <= 0 || b * j >= kUntapPumpPayloadBits) { return 0; }
+    return ((k >> 4) >> (b * j)) & ((1 << b) - 1);
+}
+// `ahead`: the instance that many triggers after the next one (the axis reads the base plan's inherited digits).
+inline int UntapPumpRankFor(const GameState& state, int ahead)
+{
+    const int k = CastTriggerTargetPinFor(state);
+    if (k <= 0) { return k; }
+    const int j = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal
+                                            - static_cast<std::uint8_t>(g_cast_trigger_target_pin_base));
+    return UntapPumpRankDigit(k, j + ahead);
+}
+// Pack per-instance digits (each < 2^b) into the rank above. All zero -> 0.
+inline int UntapPumpRankPack(const std::vector<int>& digits, int b)
+{
+    long long payload = 0;
+    for (std::size_t j = 0; j < digits.size(); ++j)
+    { payload |= static_cast<long long>(digits[j]) << (b * static_cast<int>(j)); }
+    return payload == 0 ? 0 : static_cast<int>((payload << 4) | b);
+}
 
 // How many N-target options the classes (sizes `counts`) give: multisets of size n with each class used at
 // most counts[i] times. Exact; used by the axis to size its width.
@@ -18332,17 +19077,35 @@ inline bool CastTriggerTargetFoldKey(const GameState& state, const Permanent& p,
 }
 // The legal set, folded and ORDERED: `classes[c]` = the battlefield indices of class c (ascending), the
 // classes in the provider's order.
+// `untap_pump` (Raggadragga's "untap target creature. It gets +7/+7 ...", Boars I3b): the legal set is CREATURES
+// only (an animated permanent is one), and in SEARCH (no human chooser) the opponent's creatures are dropped
+// whenever one of ours is legal -- a SOUND fold, not a prune: untapping or pumping a creature of the passive
+// opponent, who never attacks or blocks, changes nothing, so it is weakly dominated by any own target. Human play
+// keeps the full set. The fold key already splits tapped / untapped and summoning-sick / not (LandfallTargetFoldKey
+// mixes `tapped` and `entered_this_turn`), and refuses any temp bonus -- so "untap the tapped Sage" and "pump the
+// untapped Sage" are distinct options, as they must be.
 inline void CastTriggerTargetClasses(const GameState& state, int controller, bool destroy,
-                                     std::vector<std::vector<int>>& classes)
+                                     std::vector<std::vector<int>>& classes, bool untap_pump = false)
 {
     classes.clear();
     std::vector<int> linked;
     LandfallTargetLinks(state, linked);
     std::vector<std::uint64_t> keys;   // parallel to classes; 0 = singleton
+    bool drop_opp = false;
+    if (untap_pump && !g_play_loyalty_chooser)
+    {
+        for (const Permanent& q : state.battlefield)
+        {
+            if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)
+                && !CreatureHasShroud(q, state)) { drop_opp = true; break; }
+        }
+    }
     for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
     {
         const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
         if ((q.card.IsCreature() || q.is_animated) && CreatureHasShroud(q, state)) { continue; }
+        if (untap_pump && !(q.card.IsCreature() || q.is_animated)) { continue; }
+        if (drop_opp && q.controller_index != controller) { continue; }
         std::uint64_t k = 0;
         const bool foldable = CastTriggerTargetFoldKey(state, q, k, &linked);
         bool placed = false;
@@ -18357,7 +19120,8 @@ inline void CastTriggerTargetClasses(const GameState& state, int controller, boo
     std::vector<int> reps;
     reps.reserve(classes.size());
     for (const auto& c : classes) { reps.push_back(c.front()); }
-    ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps);
+    if (untap_pump) { ResolveProvider(state).UntapPumpTargetOrder(state, controller, reps); }
+    else            { ResolveProvider(state).CastTriggerTargetOrder(state, controller, destroy, reps); }
     std::vector<std::vector<int>> ordered;
     ordered.reserve(classes.size());
     for (int r : reps)
@@ -18406,11 +19170,13 @@ inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<in
 }
 // THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
 // removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
+// `rank_override` >= -1: use it instead of the live pin (Raggadragga's per-instance digit, UntapPumpRankFor); -2 = the pin.
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
-                                                 const std::string& src_name)
+                                                 const std::string& src_name, bool untap_pump = false,
+                                                 int rank_override = -2)
 {
     std::vector<std::vector<int>> classes;
-    CastTriggerTargetClasses(state, controller, destroy, classes);
+    CastTriggerTargetClasses(state, controller, destroy, classes, untap_pump);
     std::size_t legal_n = 0;
     for (const auto& c : classes) { legal_n += c.size(); }
     if (n <= 0 || legal_n < static_cast<std::size_t>(n))
@@ -18423,7 +19189,8 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
         }
         return {};
     }
-    std::vector<int> pick = CastTriggerTargetOption(classes, n, CastTriggerTargetPinFor(state));
+    std::vector<int> pick = CastTriggerTargetOption(classes, n,
+                                                    rank_override >= -1 ? rank_override : CastTriggerTargetPinFor(state));
     if (static_cast<int>(pick.size()) != n) { return {}; }
     // HUMAN PLAY: one board-click per target over the FULL legal set (every permanent not yet picked).
     if (g_play_loyalty_chooser)
@@ -18447,8 +19214,10 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
             int c = dflt_idx;
             if (static_cast<int>(legal.size()) > left)   // a forced pick is not a choice (CR 601.2c)
             {
-                const std::string what = std::string(destroy ? "destroyed" : "exiled")
-                    + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
+                const std::string what = untap_pump
+                    ? std::string("untapped and pumped until end of turn (target creature -- mandatory)")
+                    : std::string(destroy ? "destroyed" : "exiled")
+                      + " (target permanent " + std::to_string(j + 1) + " of " + std::to_string(n) + " -- mandatory)";
                 const int got = (*g_play_loyalty_chooser)(state, controller, src_name, what, legal, dflt_idx);
                 if (got >= 0 && got < static_cast<int>(legal.size())) { c = got; }
             }
@@ -18459,6 +19228,41 @@ inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int con
     std::vector<int> nums;
     for (int i : pick) { nums.push_back(state.battlefield[static_cast<std::size_t>(i)].card.m_number); }
     return nums;
+}
+// Raggadragga's cast trigger resolving (Boars I3b): "untap target creature. It gets +P/+T and gains trample until
+// end of turn." Re-found by m_number (CR 608.2b: gone, or no longer a creature -> the trigger does nothing). The
+// intervening if ("at least seven mana was spent") was checked when the trigger fired; the amount cannot change, so
+// the re-check on resolution is the same answer. An untap EFFECT for the payment-rollback ledger. Untapping a
+// TAPPED creature with a mana ability that can tap now is NEW MANA the phase's plan was priced without, so it
+// bumps GameState::cast_untap_refunds -- breakpoint site 9's activation-key delta (kActUntapRefund) then re-plans
+// the rest of the phase in BOTH worlds, so "cast the 7-drop with the Sage, untap the Sage, cast another creature"
+// is findable. Trample: recorded, never applied (D2 -- no blocker path; inert against the goldfish).
+inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
+                                   int power, int tough)
+{
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.card.m_number != number) { continue; }
+        if (!(q.card.IsCreature() || q.is_animated)) { return; }
+        const bool was_tapped = q.tapped;
+        if (was_tapped)
+        {
+            state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
+            q.tapped = false;
+            if (q.controller_index == controller && CreatureHasManaAbility(state, &q, q.card)
+                && CanTapNow(q, state.battlefield))
+            { state.cast_untap_refunds = static_cast<std::uint8_t>(state.cast_untap_refunds + 1); }
+        }
+        q.temp_power_bonus += power;
+        q.temp_tough_bonus += tough;
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          src_name + ": " + (was_tapped ? "untaps " : "") + q.card.m_name.str() + ", +"
+                          + std::to_string(power) + "/+" + std::to_string(tough) + " and trample until end of turn");
+        }
+        return;
+    }
 }
 inline int SweepOrphanedAuras(GameState& state);   // defined below
 inline void ResolveCastTriggerTargets(GameState& state, int controller, const std::string& src_name,
@@ -18521,6 +19325,29 @@ inline void ResolveCastTriggerTargets(GameState& state, int controller, const st
         }
     }
     SweepOrphanedAuras(state);   // an Aura on an exiled / destroyed host (CR 704.5m)
+}
+// "When you cast this spell, creatures you control get +P/+T and gain trample until end of turn" (Decimator of
+// the Provinces, cast_trigger_team_pump_*): resolving the trigger -- THE one resolver for both worlds (the
+// executor's TriggerKind::CastTeamPump, apply_one's inline cast-trigger block). Every creature the controller
+// controls AS IT RESOLVES (an emerge victim is already gone; the spell is still on the stack). Cleanup clears the
+// temp bonuses. Trample is recorded on the card only and inert (D2: nothing blocks).
+inline void ResolveCastTriggerTeamPump(GameState& state, int controller, int power, int tough,
+                                       const std::string& src_name)
+{
+    int hit = 0;
+    for (Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || !(q.card.IsCreature() || q.is_animated)) { continue; }
+        q.temp_power_bonus += power;
+        q.temp_tough_bonus += tough;
+        ++hit;
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      src_name + ": " + std::to_string(hit) + " creature(s) get +" + std::to_string(power) + "/+"
+                      + std::to_string(tough) + " and trample until end of turn");
+    }
 }
 // "When you cast this spell, take an extra turn after this one" (Emrakul): resolving the trigger.
 inline void ResolveCastTriggerExtraTurn(GameState& state, const std::string& src_name,
@@ -19231,11 +20058,12 @@ inline std::vector<int> FlingVictimCandidates(const GameState& state, int contro
 // find_by_id): snapshot card numbers, re-derive indices by id. It also gives the
 // "a sacrificed attacker stops dealing combat damage" rule for free -- the dead id is simply not
 // found and drops out of the vector.
-inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices);
+inline void FireAttackSacFlingImpl(GameState& state, int controller, std::vector<int>& attacker_indices,
+                                   int declared_n);
 inline void FireAttackSacFling(GameState& state, int controller,
-                               std::vector<int>& attacker_indices)
+                               std::vector<int>& attacker_indices, int declared_n = -1)
 {
-    FireAttackSacFlingImpl(state, controller, attacker_indices);
+    FireAttackSacFlingImpl(state, controller, attacker_indices, declared_n);
     // THIS combat's pin, spent whether or not a fling fired (no Flinger attacked, nothing to sacrifice): a
     // pinned variant whose fling never fired then leaves combat in its base plan's state, which is what
     // MTG_COMBAT_PIN_FOLD compares (TurnSolver.cpp PlanHasCombatPin). MTG_FLING_PIN_FOLD=0: it rides on to the
@@ -19243,15 +20071,17 @@ inline void FireAttackSacFling(GameState& state, int controller,
     if (FlingPinFoldOn()) { state.scripted_fling_victim = -1; }
 }
 inline void FireAttackSacFlingImpl(GameState& state, int controller,
-                                   std::vector<int>& attacker_indices)
+                                   std::vector<int>& attacker_indices, int declared_n)
 {
     if (attacker_indices.empty()) { return; }
     const int bf0 = static_cast<int>(state.battlefield.size());
 
-    // Collect the fling SOURCES by card number (indices will move under us).
+    // Collect the fling SOURCES by card number (indices will move under us) -- DECLARED attackers only.
     std::vector<int> src_ids;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf0) { continue; }
         const Permanent& s = state.battlefield[idx];
         if (s.controller_index != controller) { continue; }
@@ -20126,6 +20956,31 @@ inline bool DiscardTeamPumpLive(const GameState& state, int controller, int sour
     return false;
 }
 
+// Flinthoof Boar's "{R}: This creature gains haste until end of turn" (CardParams::self_haste_cost,
+// ActivatePump MODE 6, Boars I1). THE ONE LIVENESS PREDICATE, read by the enumeration (CollectActions),
+// breakpoint site 9's key (CollectActivationKeys) and both pay sites (the rollout's trailing pass and the
+// executor) BEFORE anything is paid, so the worlds agree by construction. Live iff the source is ours, a
+// creature with the param, and could attack ONLY with the grant: CanAttackFull says no now and yes once
+// temp_haste is set -- i.e. untapped, not a defender, summoning-sick (entered / gained control this turn)
+// and with no other haste source. Every other activation is a PROVABLE no-op and is never offered (the
+// Wirewood Lodge rule): haste only lifts the summoning-sickness restriction (CR 302.6), and the card has no
+// {T} ability, so a creature that can already attack (or never can) gains nothing. The "combat still
+// ahead" half is the enumerator's (it knows the phase); the apply sites run inside the same main.
+inline bool SelfHasteActivationLive(const GameState& state, int controller, int source_id)
+{
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || p.card.m_number != source_id) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.self_haste_cost.has_value()) { return false; }
+        if (p.temp_haste || CanAttackFull(p, state.battlefield, controller)) { return false; }
+        Permanent hasted = p;
+        hasted.temp_haste = true;
+        return CanAttackFull(hasted, state.battlefield, controller);
+    }
+    return false;
+}
+
 // ---- Main-phase ACTIVATED PUMP (Action::Kind::ActivatePump) -------------------------------------
 // One shared apply for both shapes, called IDENTICALLY from the rollout (TurnSolver's trailing
 // apply pass) and the executor (AIEngine::TakeTurn) so the two worlds stay lockstep.
@@ -20149,6 +21004,9 @@ inline bool DiscardTeamPumpLive(const GameState& state, int controller, int sour
 //             once-each-turn use -> DISCARD (the cost) -> [MADNESS: ResolvePendingMadness] -> the +P/+T on every
 //             matching creature we control AS IT RESOLVES (a madness-cast Vampire is included, the
 //             2016 ruling; one cast later this turn is not, CR 611.2c). k is always 1.
+//   mode 5 -- the LOOP-FUNDED team pump (AccomplishedAlchemist); applied here as mode 2 by both callers.
+//   mode 6 -- SELF HASTE (Flinthoof Boar, CardParams::self_haste_cost): the source gains temp_haste until
+//             end of turn. Both callers check SelfHasteActivationLive before paying. k is always 1.
 inline int ApplyActivatePump(GameState& state, int controller, int source_id, int mode, int k,
                              const std::string& discard_pin = std::string())
 {
@@ -20161,6 +21019,16 @@ inline int ApplyActivatePump(GameState& state, int controller, int source_id, in
     if (src < 0) { return 0; }   // source left the battlefield: stranded-outlet safe, a full no-op
     const CardDefinition* sd = CardDatabase::Instance().LookupCached(state.battlefield[src].card);
     if (!sd) { return 0; }
+    if (mode == 6)
+    {
+        // Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn." The mana was paid
+        // by the caller after SelfHasteActivationLive held; the grant is idempotent, so k is always 1.
+        Permanent& s = state.battlefield[src];
+        s.temp_haste = true;
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", s.card.m_name.str() + ": gains haste until end of turn"); }
+        return 1;
+    }
     if (mode == 4)
     {
         // Liveness re-checked HERE as well as by both callers before they pay (no mana is involved,
@@ -22264,7 +23132,8 @@ inline bool MadnessPinnedOptionNow(const GameState& state, const MadnessPending&
 // ResolveSuspendRipple in CastOffSuspend). It is the ONE path both worlds
 // can call at every madness site, including the rollout's cleanup.
 inline void FireProwess(GameState& state, const CardDefinition& def);   // defined far below
-inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source)
+inline void CastFromMadness(GameState& state, int controller, const Card& card, const std::string& source,
+                            int mana_spent)   // the madness cost actually paid (MadnessOption::reduced)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
     if (d == nullptr) { state.players[controller].graveyard.push_back(card); return; }
@@ -22278,7 +23147,7 @@ inline void CastFromMadness(GameState& state, int controller, const Card& card, 
                 ? d->params.max_casts_after
                 : std::min(state.casts_remaining_this_turn, d->params.max_casts_after);
     }
-    FireOnCastTriggers(state, *d);
+    FireOnCastTriggers(state, *d, mana_spent);
     FireProwess(state, *d);
     Permanent perm;
     perm.card              = d->card;
@@ -22392,7 +23261,7 @@ inline int ResolvePendingMadness(GameState& state, std::vector<MadnessPending>& 
             pca = prev;
             if (paid)
             {
-                CastFromMadness(state, pend.owner, pend.card, pend.cause);
+                CastFromMadness(state, pend.owner, pend.card, pend.cause, o.reduced.ManaValue());
                 ++casts;
                 cast = true;
             }
@@ -22936,12 +23805,14 @@ inline void ApplyAttackQuestCounters(GameState& state, int controller,
 }
 
 inline void ApplyAttackSelfPumps(GameState& state, int controller,
-                                 const std::vector<int>& attacker_indices)
+                                 const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // sources: declared only (CR 508.4)
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -23005,8 +23876,9 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
             if (src.controller_index != controller) { continue; }
             const CardDefinition* sd = CardDatabase::Instance().LookupCached(src.card);
             if (!sd || sd->params.attack_pump_matching_power <= 0) { continue; }
-            for (int idx : attacker_indices)
+            for (int k = 0; k < nsrc; ++k)   // the triggering attacker must have been DECLARED
             {
+                const int idx = attacker_indices[static_cast<std::size_t>(k)];
                 if (idx < 0 || idx >= bf_all) { continue; }
                 Permanent& a = state.battlefield[idx];
                 if (a.controller_index != controller) { continue; }
@@ -23037,16 +23909,18 @@ inline void ApplyAttackSelfPumps(GameState& state, int controller,
 // triggers, and putting the tokens in first is strictly dominant against an opponent that never
 // blocks). Duration is free: temp_power_bonus is already zeroed by the CR 514.2 cleanup.
 inline void ApplyBattleCry(GameState& state, int controller,
-                           const std::vector<int>& attacker_indices)
+                           const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
 
     // Pass 1: total battle cry among the controller's ATTACKING creatures. Early-out keeps every
-    // non-battle-cry deck at one cheap scan of the attacker list.
+    // non-battle-cry deck at one cheap scan of the attacker list. SOURCES: the DECLARED prefix only.
     int bc_total = 0;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // battle cry triggers on DECLARATION
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& src = state.battlefield[idx];
         if (src.controller_index != controller) { continue; }
@@ -23056,15 +23930,18 @@ inline void ApplyBattleCry(GameState& state, int controller,
     }
     if (bc_total <= 0) { return; }
 
-    // Pass 2: each attacker gets the total MINUS its own contribution ("each other").
-    for (int idx : attacker_indices)
+    // Pass 2: each attacker gets the total MINUS its own contribution ("each other"). A body put onto the
+    // battlefield attacking never triggered its own battle cry, so it gets every declared source's bonus.
+    for (int k = 0; k < static_cast<int>(attacker_indices.size()); ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         Permanent& a = state.battlefield[idx];
         if (a.controller_index != controller) { continue; }
         int own = 0;
+        const bool declared = k < nsrc;
         if (const CardDefinition* d = CardDatabase::Instance().LookupCached(a.card))
-        { own = d->params.battle_cry_power; }
+        { own = declared ? d->params.battle_cry_power : 0; }
         a.temp_power_bonus += bc_total - own;
     }
 }
@@ -23080,13 +23957,16 @@ inline void ApplyBattleCry(GameState& state, int controller,
 // through SacrificePermanentAt (graveyard, death watchers) + FireOppCreatureDies. `attacker_indices` is
 // REMAPPED in place across the erases (a spawn sits at a lower battlefield index than a creature we
 // cast later). Gated on GameState::deck_has_annihilator: one bool test per combat elsewhere.
-inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices)
+inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>& attacker_indices,
+                             int declared_n = -1)
 {
     if (!state.deck_has_annihilator || attacker_indices.empty()) { return; }
     int total = 0;
     std::string names;
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
         if (a.controller_index != controller) { continue; }
@@ -23129,11 +24009,13 @@ inline void ApplyAnnihilator(GameState& state, int controller, std::vector<int>&
 // are absent from attacker_indices, as required by CR 508.4. The goldfish opponent never
 // attacks; its library is dealt whenever a deck contains this parameter.
 inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
-                                       const std::vector<int>& attacker_indices)
+                                       const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (controller != 0 || !state.opponent_library_dealt || attacker_indices.empty()) { return; }
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
         if (attacker.controller_index != controller) { continue; }
@@ -23158,14 +24040,16 @@ inline void ApplyAttackExileDefenderTop(GameState& state, int controller,
 // Gated: an attacker whose def leaves attack_draw_cards at 0 is untouched -> other decks
 // byte-identical.
 inline void ApplyAttackDrawTriggers(GameState& state, int controller,
-                                    const std::vector<int>& attacker_indices)
+                                    const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     DrawTriggerFlushScope _dtf(state);   // the Niv loop: this effect's draws ping AFTER it resolves
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
     Player& pl = state.players[controller];
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -23186,12 +24070,14 @@ inline void ApplyAttackDrawTriggers(GameState& state, int controller,
 // into that player's hand, not drawn; a nonland stays on top. The passive opponent has one
 // modelled library, shared by the two-headed abstraction.
 inline void ApplyGoblinGuideAttackTriggers(GameState& state, int controller,
-                                           const std::vector<int>& attacker_indices)
+                                           const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (!state.opponent_library_dealt) { return; }
     Player& defender = state.players[1 - controller];
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { continue; }
         const Permanent& attacker = state.battlefield[static_cast<std::size_t>(idx)];
         if (attacker.controller_index != controller) { continue; }
@@ -23273,12 +24159,14 @@ inline void ApplyBorosCharm(GameState& state, int controller, int mode, int targ
 // would need it.
 // Gated: an attacker leaving both params at 0/false is untouched -> other decks byte-identical.
 inline void ApplyAttackLifegainTeamPump(GameState& state, int controller,
-                                        const std::vector<int>& attacker_indices)
+                                        const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     if (attacker_indices.empty()) { return; }
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         if (state.battlefield[idx].controller_index != controller) { continue; }
         const CardDefinition* d =
@@ -24909,7 +25797,7 @@ inline void CastOffSuspend(GameState& state, int controller, const Card& card)
         }
         if (def->tmpl == CardTemplate::DirectDamage)
         {
-            FireOnCastTriggers(state, *def);
+            FireOnCastTriggers(state, *def, /*mana_spent=*/0);   // cast off suspend without paying its mana cost
             FireProwess(state, *def);
             FlushNoncombatTriggersAtPriorityBoundary(state);
             // Cast triggers resolve ABOVE the spell. Lethal Eidolon damage ends the game
@@ -25550,11 +26438,13 @@ inline int SnowPermanentCount(const GameState& state, int controller_index)
 // SnowPermanentCount uses. Gated: no attacker with the param -> untouched, every other deck
 // byte-identical.
 inline bool AttackUntapSnowFires(const GameState& state, int controller,
-                                 const std::vector<int>& attacker_indices)
+                                 const std::vector<int>& attacker_indices, int declared_n = -1)
 {
     const int bf_size = static_cast<int>(state.battlefield.size());
-    for (int idx : attacker_indices)
+    const int nsrc = DeclaredSpan(attacker_indices, declared_n);   // CR 508.4
+    for (int k = 0; k < nsrc; ++k)
     {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
         if (idx < 0 || idx >= bf_size) { continue; }
         const Permanent& self = state.battlefield[idx];
         if (self.controller_index != controller) { continue; }
@@ -25575,6 +26465,72 @@ inline void UntapSnowPermanents(GameState& state, int controller)
         if (p.controller_index != controller || !p.tapped) { continue; }
         if (p.card.HasSupertype(Supertype::Snow) || (ice_grants && p.ice_counters > 0))
         { p.tapped = false; }
+    }
+}
+
+// ---- Raggadragga, Goreguts Boss (Boars I3b): "Whenever a creature you control with a mana ability attacks, ----
+// untap it." (CardParams::attack_untap_mana_ability_attackers). The Jorn shape, both worlds, two steps:
+//   * AttackUntapManaAttackers at declare-attackers -- the DECLARED attackers (the first `declared_n` slots of the
+//     attack list, captured before any token or put joins it: a creature put onto the battlefield attacking was
+//     never declared and does not "attack", CR 508.4 -- Ilharg's put, I5) that we control and that have a mana
+//     ability, provided we control a Raggadragga at declaration. Returned as m_numbers (stable across the index
+//     shifts the attack-trigger helpers cause).
+//   * UntapManaAttackers right AFTER ResolveCombatDamage (where this engine taps attackers): same post-combat
+//     state as untapping on the trigger (damage reads no tapped status; no priority window in combat), so the
+//     mana is spendable in the post-combat main (UntapSecondMainLive's Raggadragga clause). A firebreathing /
+//     combat-aura mana read before damage would not see it -- no such card in a Raggadragga deck (Jorn's note).
+// One trigger per Raggadragga, and untap is idempotent (the legend rule caps it at one anyway). Gated on the deck
+// constant deck_has_attack_untap, then on a Raggadragga actually being out -> every other deck byte-identical.
+inline bool ControlsManaAttackUntapper(const GameState& state, int controller)
+{
+    if (!state.deck_has_attack_untap) { return false; }
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller || q.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.attack_untap_mana_ability_attackers) { return true; }
+    }
+    return false;
+}
+// Does attacking with `p` cost it no mana -- the attack untaps it (Raggadragga)? The VIGILANCE-EQUIVALENT test the
+// dork attack/hold providers read beside the printed keyword and temp_vigilance: a sound exemption, holding such
+// a creature home "for its mana" buys nothing.
+inline bool AttackUntapsAttacker(const GameState& state, const Permanent& p)
+{
+    return (p.card.IsCreature() || p.is_animated) && ControlsManaAttackUntapper(state, p.controller_index)
+        && CreatureHasManaAbility(state, &p, p.card);
+}
+inline std::vector<int> AttackUntapManaAttackers(const GameState& state, int controller,
+                                                 const std::vector<int>& attacker_indices, int declared_n)
+{
+    std::vector<int> out;
+    if (!ControlsManaAttackUntapper(state, controller)) { return out; }
+    const int bf_size = static_cast<int>(state.battlefield.size());
+    const int n = std::min<int>(declared_n, static_cast<int>(attacker_indices.size()));
+    for (int k = 0; k < n; ++k)
+    {
+        const int idx = attacker_indices[static_cast<std::size_t>(k)];
+        if (idx < 0 || idx >= bf_size) { continue; }
+        const Permanent& a = state.battlefield[static_cast<std::size_t>(idx)];
+        if (a.controller_index != controller) { continue; }
+        if (CreatureHasManaAbility(state, &a, a.card)) { out.push_back(a.card.m_number); }
+    }
+    return out;
+}
+inline void UntapManaAttackers(GameState& state, int controller, const std::vector<int>& numbers)
+{
+    if (numbers.empty()) { return; }
+    // Mana-payment rollback (PayRollback.h): an untap EFFECT fired this turn (UntapSnowPermanents' note).
+    state.pay_ledger.NoteUntapEffect(state.TurnSeq(), state.active_player_index);
+    for (Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller || !p.tapped) { continue; }
+        if (std::find(numbers.begin(), numbers.end(), p.card.m_number) != numbers.end())
+        {
+            p.tapped = false;
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "trigger", "Raggadragga: untaps attacking " + p.card.m_name.str()); }
+        }
     }
 }
 
@@ -25631,16 +26587,57 @@ inline void NoteAttacksDeclared(GameState& state, int controller, const std::vec
 // "Fired" == a Jorn we control that could attack this turn: the goldfish always attacks with it (it is
 // no mana source, so no provider holds it back), and attacking untaps it, so it is untapped here
 // either way. A Jorn cast this turn is summoning-sick, did not attack, and does not open main 2.
+//
+// SECOND CLAUSE (Boars I3a, D6): COMBAT-KEPT MANA. End-Raze Forerunners' ETB grants the team vigilance
+// until end of turn (Permanent::temp_vigilance), so an attacking mana creature does not tap and still
+// has its mana after combat -- mana main 1 could only have used by NOT attacking with it. The phase
+// is live when an own creature with a mana ability carries the grant and is untapped post-combat.
+// Also a pure function of the post-combat board (temp_vigilance is board state, cleared at cleanup).
+// "Attacked" is not checked: the attack count is only tracked for extra-combat decks, and an untapped
+// granted dork that stayed home opens a main that holds a superset of main 1's remaining options --
+// opening main 2 never removes a line, it only costs search, so the slightly wider condition is sound.
+// Printed vigilance is deliberately NOT read here (Faeburrow-style decks have their own second-main
+// classification; reading it would move their play). EXTENSIBLE: Raggadragga's "untap each creature
+// with a mana ability after combat" (Boars I3b) belongs in this same predicate -- add its clause
+// beside this one and stamp deck_has_attack_untap for it in StampDeckTraits.
+inline bool CombatKeptManaCreature(const Permanent& p, const CardDefinition* d)
+{
+    return d != nullptr && p.temp_vigilance && !p.tapped && (p.card.IsCreature() || p.is_animated)
+        && !d->params.produces.empty();
+}
 inline bool UntapSecondMainLive(const GameState& state)
 {
     if (!state.deck_has_attack_untap) { return false; }   // deck constant: no scan for other decks
     const int me = state.active_player_index;
+    const bool ragga = ControlsManaAttackUntapper(state, me);   // Raggadragga out (third clause below)
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != me) { continue; }
         const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
         if (d && d->params.attack_untap_snow_permanents && CanAttackFull(p, state.battlefield, me))
         { return true; }
+        if (CombatKeptManaCreature(p, d)) { return true; }   // End-Raze's vigilance grant (Boars I3a)
+        // THIRD CLAUSE (Boars I3b, D6): Raggadragga's attack untap. A pure-board proxy (the Jorn precedent): we
+        // control a Raggadragga AND an own creature with a mana ability that is untapped and can tap now. An
+        // attacking one was untapped by the trigger; one that stayed home only widens main 2 to a superset of main
+        // 1's remaining options (sound, the I3a argument). No per-turn stamp field: the board already is the key.
+        if (ragga && !p.tapped && (p.card.IsCreature() || p.is_animated) && CreatureHasManaAbility(state, &p, p.card)
+            && CanTapNow(p, state.battlefield))
+        { return true; }
+        // FOURTH CLAUSE (Boars I5a, D6): Ilharg's put body (Permanent::return_at_end_step) is a resource that exists
+        // only from combat until the end step -- a legal EMERGE victim in main 2 (Decimator of the Provinces: the
+        // body cast for {G}{G}{G} after an End-Raze / Decimator put, a 7/7 that STAYS). Live when such a body is
+        // on our battlefield AND an emerge card is in hand. Affordability is not checked: opening main 2 only
+        // widens the phase to a superset of main 1's remaining options (the I3a argument), so the wider
+        // condition is sound. A pure function of the post-combat board + hand (both already in every key).
+        if (p.return_at_end_step)
+        {
+            for (const Card& c : state.players[me].hand)
+            {
+                const CardDefinition* hd = CardDatabase::Instance().LookupCached(c);
+                if (hd && hd->params.emerge_cost.has_value() && !c.m_is_staged) { return true; }
+            }
+        }
     }
     return false;
 }
@@ -27564,6 +28561,162 @@ inline void FireMilitiaPrideTokens(GameState& state, int controller, std::vector
     }
 }
 
+// ---- ILHARG, THE RAZE-BOAR's ATTACK PUT (CardParams::attack_put_creature_from_hand, Boars I5a) ----------------
+// "Whenever Ilharg attacks, you may put a creature card from your hand onto the battlefield tapped and attacking.
+// Return that creature to your hand at the beginning of the next end step." ONE shared body, called at the same
+// point in BOTH combats (GameEngine::CombatPhase, TurnSolver's SimulateOneCombatAfterTitan): after `declared_n` is
+// taken and before anything reads power, so a put End-Raze Forerunners' ETB team pump lands before damage.
+//   * CREATURE-SCOPED: a source fires only from the DECLARED prefix atk_idx[0, declared_n) (the Hero of Bladehold
+//     gate) -- a put Ilharg was never declared (CR 508.4) and does not trigger itself.
+//   * The pick: GameState::scripted_attack_put (consumed by the FIRST trigger): -2 = decline, > 0 = the hand card
+//     with that number (missing -> the default, counted in g_attack_put_pin_miss), -1 = the provider's
+//     AttackPutDefault (beyond the horizon -- the playout policy; inside the window the pin is searched).
+//     Human play asks through the shared `lackey_put` chooser (every creature card in hand, unpruned).
+//   * CR 508.1f: the declared non-vigilant attackers are tapped FIRST (this engine otherwise defers the attack
+//     tap to ResolveCombatDamage), so an End-Raze put cannot leave them untapped through its vigilance grant.
+//   * The put body enters TAPPED, through the shared enter cascade (FireEtbWatchers + FireOwnEtbTriggers), NOT
+//     cast (no cast triggers), then the legend rule. atk_idx is rebuilt BY CARD NUMBER afterwards (an enter /
+//     legend-rule erase shifts indices), the declared prefix first (`declared_n` shrinks if a declared attacker
+//     left), then the put body appended as an undeclared attacker.
+// `live` = false (the projection's scratch copy): no chooser, no reveal, no play event.
+inline std::atomic<long long> g_attack_put_pin_miss{0};
+inline void FireAttackPutFromHand(GameState& state, int controller, std::vector<int>& atk_idx, int& declared_n,
+                                  bool live = true)
+{
+    int pin = state.scripted_attack_put;
+    state.scripted_attack_put = -1;
+    // Ilharg's death "may" for the legend-rule loser this put makes (Boars I5b item 3): a positive pin carries it
+    // EXPLICITLY -- kAttackPutTuckBit = tuck, no bit = leave. Unpinned (-1) leaves it to DiesTuckDefault.
+    int pin_tuck = 0;
+    // ...and the CR 704.5j keep for the same-name group the put makes (Boars I5b item 4): kAttackPutKeepNewBit = keep
+    // the PUT copy, no bit = keep the older one. Unpinned (-1) leaves it to the provider's LegendKeepIndex.
+    int pin_keep = 0;
+    if (pin > 0)
+    {
+        pin_tuck = (pin & kAttackPutTuckBit) ? 1 : 2;
+        pin_keep = (pin & kAttackPutKeepNewBit) ? 2 : 1;
+        pin &= ~(kAttackPutTuckBit | kAttackPutKeepNewBit);
+    }
+    const int nd = std::min(declared_n, static_cast<int>(atk_idx.size()));
+    std::vector<std::pair<int, const CardDefinition*>> srcs;   // (m_number, def) -- identified before any put
+    for (int k = 0; k < nd; ++k)
+    {
+        const int i = atk_idx[static_cast<std::size_t>(k)];
+        if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+        const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d && d->params.attack_put_creature_from_hand) { srcs.emplace_back(p.card.m_number, d); }
+    }
+    if (srcs.empty()) { return; }
+    bool first = true;
+    for (const auto& [src_num, sd] : srcs)
+    {
+        const int want = first ? pin : -1;
+        const int want_tuck = first ? pin_tuck : 0;
+        const int want_keep = first ? pin_keep : 0;
+        first = false;
+        Player& ap = state.players[controller];
+        std::vector<int> cand_hand;
+        for (int h = 0; h < static_cast<int>(ap.hand.size()); ++h)
+        {
+            const Card& c = ap.hand[static_cast<std::size_t>(h)];
+            if (c.m_is_staged) { continue; }   // impulse-exiled, not in hand (the Lackey rule)
+            const CardDefinition* cd = CardDatabase::Instance().LookupCached(c);
+            if (cd && cd->card.IsCreature()) { cand_hand.push_back(h); }
+        }
+        if (cand_hand.empty() || want == -2) { continue; }   // "may": nothing to put, or the searched decline
+        std::vector<Card> cards;
+        cards.reserve(cand_hand.size());
+        for (int h : cand_hand) { cards.push_back(ap.hand[static_cast<std::size_t>(h)]); }
+        int pick = -1;
+        if (want > 0)
+        {
+            for (int k = 0; k < static_cast<int>(cards.size()); ++k)
+            { if (cards[static_cast<std::size_t>(k)].m_number == want) { pick = k; break; } }
+            if (pick < 0) { g_attack_put_pin_miss.fetch_add(1, std::memory_order_relaxed); }
+        }
+        if (pick < 0) { pick = ResolveProvider(state).AttackPutDefault(state, controller, cards); }
+        if (live && g_play_lackey_chooser && !g_tap_speculating)
+        {
+            const int r = (*g_play_lackey_chooser)(state, controller, sd->card.m_name.str() + " (attack)", cards, pick);
+            if (r == -1) { continue; }   // the human declined
+            if (r >= 0 && r < static_cast<int>(cards.size())) { pick = r; }
+        }
+        // CR 508.1f: the declaration taps every declared non-vigilant attacker before any attack trigger resolves.
+        const int ndk = std::min(declared_n, static_cast<int>(atk_idx.size()));
+        for (int k = 0; k < ndk; ++k)
+        {
+            const int i = atk_idx[static_cast<std::size_t>(k)];
+            if (i < 0 || i >= static_cast<int>(state.battlefield.size())) { continue; }
+            Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (!CreatureHasVigilance(p, state)) { p.tapped = true; }
+        }
+        std::vector<int> atk_nums;
+        atk_nums.reserve(atk_idx.size());
+        for (int i : atk_idx)
+        {
+            atk_nums.push_back(i >= 0 && i < static_cast<int>(state.battlefield.size())
+                               ? state.battlefield[static_cast<std::size_t>(i)].card.m_number : -1);
+        }
+        const int hidx = cand_hand[static_cast<std::size_t>(pick)];
+        const Card raw = ap.hand[static_cast<std::size_t>(hidx)];
+        ap.hand.erase(ap.hand.begin() + hidx);
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(raw);
+        Permanent perm;
+        perm.card               = d ? d->card : raw;
+        perm.card.m_number      = raw.m_number;
+        perm.controller_index   = controller;
+        perm.owner_index        = controller;
+        perm.entered_this_turn  = true;
+        perm.tapped             = true;
+        perm.return_at_end_step = sd->params.attack_put_return_at_end_step;
+        state.battlefield.push_back(perm);
+        int slot = static_cast<int>(state.battlefield.size()) - 1;
+        if (live) { NotePlayCombatAttackingNum(state, raw.m_number); }   // display-only (PlayCombatDisplay)
+        if (live && RevealVisible())
+        {
+            EmitReveal(state.turn_number, sd->card.m_name.str() + " (put attacking)",
+                       { raw.m_number }, { raw.m_name.str() }, { raw.m_number }, {},
+                       /*dispositions*/ { "\xE2\x86\x92 battlefield tapped and attacking (from hand)" });
+        }
+        if (live && g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger",
+                          sd->card.m_name.str() + " attacked -- put " + raw.m_name.str()
+                          + " onto the battlefield tapped and attacking");
+        }
+        {
+            DiesTuckPinScope _dies_tuck(state, want_tuck);   // a legend-rule loser reads the searched "may" (I5b)
+            LegendKeepPinScope _legend_keep(want_keep, raw.m_name.str());   // ...and the searched keep (I5b item 4)
+            FireEtbWatchers(state, controller, slot);
+            slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+            if (slot >= 0) { FireOwnEtbTriggers(state, controller, slot); }
+            slot = RefindPermanentByNumber(state, controller, raw.m_number, slot);
+            if (slot >= 0 && state.battlefield[static_cast<std::size_t>(slot)].card.HasSupertype(Supertype::Legendary))
+            { EnforceLegendRule(state, controller); }
+        }
+        // Rebuild the attacker list by card number: the declared prefix first, then the undeclared rest, then the
+        // put body (if it survived its own cascade and the legend rule).
+        std::vector<int> rebuilt;
+        rebuilt.reserve(atk_nums.size() + 1);
+        int new_declared = 0;
+        for (int k = 0; k < static_cast<int>(atk_nums.size()); ++k)
+        {
+            if (atk_nums[static_cast<std::size_t>(k)] < 0) { continue; }
+            const int hint = atk_idx[static_cast<std::size_t>(k)];
+            const int at = RefindPermanentByNumber(state, controller, atk_nums[static_cast<std::size_t>(k)], hint);
+            if (at < 0) { continue; }
+            rebuilt.push_back(at);
+            if (k < declared_n) { ++new_declared; }
+        }
+        const int put_at = RefindPermanentByNumber(state, controller, raw.m_number, -1);
+        if (put_at >= 0) { rebuilt.push_back(put_at); }
+        atk_idx.swap(rebuilt);
+        declared_n = new_declared;
+    }
+}
+
 // `attacker_indices` is the DECLARED attacker list and is REQUIRED for correctness, not an
 // optimisation: a source with attack_tokens_require_self_attacking must be in it. Adeline's trigger
 // is player-scoped ("whenever YOU attack") and ignores the list; Hero's is creature-scoped
@@ -27575,7 +28728,7 @@ inline void FireMilitiaPrideTokens(GameState& state, int controller, std::vector
 // token made for a source with attack_token_exile_end_of_combat ("exile that token at end of combat"),
 // for the caller to hand to ExileEndOfCombatTokens after combat damage. Both combat worlds pass it.
 inline int FireAttackCreateTokens(GameState& state, int controller_index,
-                                 const std::vector<int>* attacker_indices = nullptr,
+                                 const std::vector<int>* attacker_indices = nullptr, int declared_n = -1,
                                  std::vector<int>* exile_eoc_nums = nullptr)
 {
     int start = static_cast<int>(state.battlefield.size());
@@ -27599,8 +28752,10 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
         if (def->params.attack_tokens_require_self_attacking)
         {
             if (attacker_indices == nullptr) { continue; }   // no attacker list => cannot be declared
-            bool declared = false;
-            for (int ai : *attacker_indices) { if (ai == i) { declared = true; break; } }
+            bool declared = false;   // DECLARED prefix only: a put Hero never attacked (CR 508.4)
+            const int nsrc = DeclaredSpan(*attacker_indices, declared_n);
+            for (int k = 0; k < nsrc; ++k)
+            { if ((*attacker_indices)[static_cast<std::size_t>(k)] == i) { declared = true; break; } }
             if (!declared) { continue; }
         }
         // Adeline: "for each opponent, create a ... token ... attacking that player" -- one per
@@ -27644,6 +28799,12 @@ inline int FireAttackCreateTokens(GameState& state, int controller_index,
     }
     return start;
 }
+
+// Existing Geist callers pass the end-of-combat token list as the fourth argument.
+inline int FireAttackCreateTokens(GameState& state, int controller_index,
+                                 const std::vector<int>* attacker_indices,
+                                 std::vector<int>* exile_eoc_nums)
+{ return FireAttackCreateTokens(state, controller_index, attacker_indices, -1, exile_eoc_nums); }
 
 // "Exile that token at end of combat" (Geist of Saint Traft's Angel; CR 511.2 -- a delayed trigger at
 // the beginning of the end of combat step). Called in BOTH worlds after combat damage has resolved
@@ -27814,21 +28975,9 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     for (const auto& g : groups)
     {
         if (g.second.size() < 2) { continue; }
-        int keep = ResolveProvider(state).LegendKeepIndex(state, controller_index, g.second);
-        // A human chooses which Chandra survives. Reuse the existing board-click
-        // chooser at the real SBA; rollouts have that chooser nulled and use the
-        // provider's deterministic keep. Chandra has no enter/leave watcher that
-        // depends on the provisional LegendRuleLoser check before this SBA.
-        if (g.first == "Chandra, Torch of Defiance" && g_play_sacrifice_chooser != nullptr
-            && controller_index == state.active_player_index)
-        {
-            auto it = std::find(g.second.begin(), g.second.end(), keep);
-            const int default_option = it == g.second.end() ? 0 : static_cast<int>(it - g.second.begin());
-            const int chosen = (*g_play_sacrifice_chooser)(state, controller_index,
-                "Legend rule: choose Chandra to keep", g.second, default_option);
-            if (chosen >= 0 && chosen < static_cast<int>(g.second.size()))
-            { keep = g.second[static_cast<std::size_t>(chosen)]; }
-        }
+        // The searched pin, else (human play) the board-click keep for every legend whose copies differ, asked at the
+        // first point the answer is needed and remembered to here, else the provider (LegendKeepPick, above).
+        const int keep = LegendKeepPick(state, controller_index, g.second, g.first);
         // MTG_TRACE=legend: is "keep the original" ever actually WRONG? One copy dies either way and
         // the ETB is already banked before this state-based action runs, so the choice is purely
         // about WHICH BODY survives -- i.e. it can only matter when the copies differ in a way that
@@ -27852,14 +29001,21 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
             // Auras are NOT compared here (the link is aura->host via aura_attached_to, so it needs
             // a battlefield scan); noted so a "differs=0" is read as "none of these five differ",
             // not as "the copies are provably identical".
-            TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d",
+            // pinned=1: a searched rider decided (LegendKeepPinScope); 2: the turn's searched keep; 3: the upkeep's
+            // searched keep (Boars LK3); 0: the provider's LegendKeepIndex (or a human). interch=1: LegendCopiesInterchangeable -- the keep cannot matter.
+            TRACE("legend", "T%d %s n=%zu keep=%s tap=%d sick=%d dmg=%d ctr=%d pump=%d differs=%d pinned=%d interch=%d",
                   state.turn_number, g.first.c_str(), g.second.size(),
                   keep == g.second.front() ? "oldest" : "other",
                   d_tap, d_sick, d_dmg, d_ctr, d_pump,
-                  (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0);
+                  (d_tap || d_sick || d_dmg || d_ctr || d_pump) ? 1 : 0,
+                  (g_legend_keep_pin.v != 0 && g_legend_keep_pin.name == g.first) ? 1
+                  : (LegendKeepNow(state) != 0 && controller_index == state.active_player_index)
+                    ? ((state.scripted_legend_keep & kLegendKeepUpkeepWindow) != 0 ? 3 : 2) : 0,
+                  LegendCopiesInterchangeable(state, g.second) ? 1 : 0);
         }
         for (int idx : g.second) { if (idx != keep) { doomed.push_back(idx); } }
     }
+    if (g_legend_keep_asked.controller >= 0) { g_legend_keep_asked = LegendKeepAsked{}; }   // this SBA consumed it
     if (doomed.empty()) { return; }
     std::sort(doomed.begin(), doomed.end());
     // Attachments fall off a doomed legend (CR 704.5j + 301.5c): zero aura_attached_to /
@@ -27920,6 +29076,42 @@ inline void EnforceLegendRule(GameState& state, int controller_index)
     GyShuffleBatch _gyb(state);
     for (const DoomedDeath& dd : doomed_creatures)
     { OnCreatureDies(state, dd.controller, dd.card, dd.token, dd.minus, nullptr, dd.total); }
+}
+
+// Does `controller` control two legendary permanents with the same name? Allocation-free; the cheap guard the
+// LEGEND-RULE SBA CHECKPOINTS below test before paying EnforceLegendRule's grouping.
+inline bool HasDuplicateLegend(const GameState& state, int controller)
+{
+    const std::size_t n = state.battlefield.size();
+    for (std::size_t i = 0; i < n; ++i)
+    {
+        const Permanent& a = state.battlefield[i];
+        if (a.controller_index != controller || !a.card.HasSupertype(Supertype::Legendary)) { continue; }
+        for (std::size_t j = i + 1; j < n; ++j)
+        {
+            const Permanent& b = state.battlefield[j];
+            if (b.controller_index == controller && b.card.m_name == a.card.m_name
+                && b.card.HasSupertype(Supertype::Legendary)) { return true; }
+        }
+    }
+    return false;
+}
+
+// THE LEGEND RULE AS A STATE-BASED ACTION (CR 704.3 / 704.5j; Boars LK, 2026-11-13). SBAs are checked whenever a
+// player would receive priority -- after every land play, every resolution, and in the end step -- not only at the
+// beginning of combat. Until this checkpoint the engine enforced the rule only where a LEGENDARY spell resolved
+// (EffectHandler::Resolve / the rollout's cast twins), at a handful of put sites, and at the beginning of combat.
+// Every other entry kept both copies until the next combat: a second The Grey Havens played in MAIN 2 survived the
+// opponent's turn and untapped beside the first, so BOTH tapped for mana in the next main 1 (and a GSZ-put second
+// Surrak, an end-step return, likewise). Run at the land drop (LandPlay.cpp, both worlds' one chokepoint), after
+// every stack resolution (GameEngine::ResolveStack / the rollout's apply_one exit, DepletionSbaAtResolution), and at
+// the end of the end step (GameEngine::EndStep / SimulateEndAndStartNextTurn). The keep is LegendKeepPick's: the
+// turn's searched pin (Plan::legend_keep_turn) for the active player. Every player is checked (SBAs are global);
+// a no-op without a duplicate.
+inline void LegendRuleSbaCheckpoint(GameState& state)
+{
+    for (int c = 0; c < static_cast<int>(state.players.size()); ++c)
+    { if (HasDuplicateLegend(state, c)) { EnforceLegendRule(state, c); } }
 }
 
 // "You gain N life" / "TARGET PLAYER gains N life" as a spell's own resolution (Feed the Clan; Heroes'
@@ -31509,6 +32701,7 @@ inline void RitualTapAheadIntoFloat(GameState& state, int chosen_x)
         if (d == nullptr || !is_src(p, *d)) { continue; }
         const CardParams& q = d->params;
         if (q.gy_land_exile_mana || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
+            || q.tap_mana_damage_each_opponent > 0   // Zhur-Taa ping: a side effect, like the drip
             || q.storage_land || q.domain_mana || q.colored_creature_only) { continue; }
         bool depletion = false;
         for (const Counter& c : p.counters)
@@ -33468,6 +34661,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     c.temp_haste = false;
     c.temp_lifelink = false;
     c.temp_double_strike = false;
+    c.temp_vigilance = false;
     c.temp_indestructible = false;
     c.once_per_turn_used = false;
     std::uint64_t k = 0;
@@ -33477,7 +34671,7 @@ inline std::uint64_t StealAttackBodyKey(const GameState& s, const Permanent& q)
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_power_bonus + 4096)));
     mix(static_cast<std::uint64_t>(static_cast<std::uint32_t>(q.temp_tough_bonus + 4096)));
     mix((q.temp_haste ? 1u : 0u) | (q.temp_lifelink ? 2u : 0u) | (q.temp_double_strike ? 4u : 0u)
-        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u));
+        | (q.once_per_turn_used ? 8u : 0u) | (q.cond_haste ? 16u : 0u) | (q.temp_vigilance ? 32u : 0u));
     return k;
 }
 
@@ -34717,6 +35911,65 @@ inline void CounterPingFinish(GameState& state, int active)
         if (state.players[1 - active].life <= 0) { break; }
     }
     g_counter_ping_target_pin = saved_target;
+}
+
+// ---- ZHUR-TAA DRUID: the two whole-turn ping folds (CardParams::tap_mana_damage_each_opponent) ----
+// An own, untapped ping dork that may {T} now (summoning sickness / haste: CanTapNow). Its ping is
+// ApplyTapManaPing's. The mana it makes is not floated: nothing after either call site can spend it.
+inline bool PingDorkReady(const GameState& state, const Permanent& q, int active, const CardDefinition** out)
+{
+    if (q.controller_index != active || q.tapped || q.def_absent || !q.card.IsCreature()) { return false; }
+    const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+    if (d == nullptr || d->params.tap_mana_damage_each_opponent <= 0) { return false; }
+    if (!CanTapNow(q, state.battlefield)) { return false; }
+    if (out) { *out = d; }
+    return true;
+}
+// Taps every ready ping dork (stopping once the opponent is dead); returns how many it tapped.
+inline int TapReadyPingDorks(GameState& state, int active)
+{
+    int n = 0;
+    for (std::size_t i = 0; i < state.battlefield.size(); ++i)
+    {
+        if (state.players[1 - active].life <= 0) { break; }
+        const CardDefinition* d = nullptr;
+        if (!PingDorkReady(state, state.battlefield[i], active, &d)) { continue; }
+        state.battlefield[i].tapped = true;
+        ApplyTapManaPing(state, active, *d);
+        ++n;
+    }
+    return n;
+}
+// THE END-STEP FREE PING, first thing in OUR end step in BOTH worlds (GameEngine::EndStep /
+// TurnSolver's SimulateEndAndStartNextTurn) and in human play. A SOUND DOMINANCE FOLD, not a pick: the
+// last main phase is over, there is no mana burn and the passive opponent never attacks, so neither the
+// untapped body nor the {G} can be used for anything after this point, and tapping it adds the ping at
+// no cost -- tapping weakly dominates not tapping. (It is NOT at end of main 1, where the drip/pain
+// sweeps sit: a Druid there may still attack, or be untapped by Raggadragga's attack trigger and tap
+// again.) A lethal sweep wins THIS turn: the rollout's caller returns before the turn counter advances.
+inline int PingDorkEndSweep(GameState& state, int active)
+{
+    if (state.players[1 - active].life <= 0 || state.players[active].life <= 0) { return 0; }
+    return TapReadyPingDorks(state, active);
+}
+// THE POST-COMBAT LETHAL FINISH (CounterPingFinish's twin, called right after it in both worlds): when
+// the ready ping dorks' pings alone cover the opponent's remaining life, tap them right after combat
+// damage -- a proven kill at the check point the search already reads, so the win is seen at combat
+// rather than only at the end step. Autonomous play only (the human's end step sweeps them anyway).
+inline void PingDorkFinish(GameState& state, int active)
+{
+    if (HumanPlayActive()) { return; }
+    const int opp_life = state.players[1 - active].life;
+    if (opp_life <= 0 || state.players[active].life <= 0) { return; }
+    int reach = 0;
+    for (const Permanent& q : state.battlefield)
+    {
+        const CardDefinition* d = nullptr;
+        if (PingDorkReady(state, q, active, &d))
+        { reach += d->params.tap_mana_damage_each_opponent * gamesetup::OpponentHeads(); }
+    }
+    if (reach == 0 || reach < opp_life) { return; }
+    TapReadyPingDorks(state, active);
 }
 
 // K counter pings beyond the first (the repeatable CounterPing's K-1, both worlds' repeat dispatch).
@@ -38823,6 +40076,31 @@ inline const CardDefinition* ManaDefOf(const GameState& state, const Permanent& 
     return d;
 }
 
+// Raggadragga's "creature with a mana ability" (declared above IsLordPermanent's neighbour; Boars I3b). PRINTED
+// or GRANTED, never activatability (CR 605.1a), so unlike ManaDefOf the grant half does NOT ask GrantedBodyCanTap:
+// a summoning-sick Saproling under a Brightcap still HAS the ability. Definition half: a mana dork, a creature
+// mana rock, a sacrifice-for-mana body (Eldrazi Spawn, Generator Servant), any creature def that `produces`, and
+// Accomplished Alchemist's life-yield tap. An animated land with a mana ability is a creature that has one.
+inline bool CardDefHasManaAbility(const CardDefinition& d)
+{
+    return d.tmpl == CardTemplate::ManaDork || d.tmpl == CardTemplate::BasicLand || d.params.mana_rock
+        || d.params.sac_for_mana_amount > 0 || !d.params.produces.empty() || d.params.mana_per_life_gained;
+}
+inline bool CreatureHasManaAbility(const GameState& state, const Permanent* self, const Card& c)
+{
+    const CardDefinition* d = (self != nullptr && self->def_absent) ? nullptr
+                                                                    : CardDatabase::Instance().LookupCached(c);
+    if (d != nullptr && CardDefHasManaAbility(*d))
+    {
+        // A land def only counts while it IS a creature (animated); a land card in hand is no creature.
+        if (d->tmpl != CardTemplate::BasicLand && !(d->card.IsLand() && !d->card.IsCreature())) { return true; }
+        return self != nullptr && self->is_animated;
+    }
+    if (self == nullptr || !state.deck_has_mana_grant) { return false; }   // deck constant: no walk elsewhere
+    const ManaGrant g = LiveManaGrant(state, self->controller_index);
+    return GrantReaches(g, *self);
+}
+
 // THE SAME-PLAN GRANT CREDIT (MTG_GRANT_CAST_CREDIT; TurnSolver's CollectActions stamps it on
 // Action::rock_mana). What casting `granter` (Brightcap Badger) THIS turn adds to the casts after it:
 // one unit of the grant's colour per body already on the battlefield that the grant would reach and
@@ -39790,7 +41068,7 @@ inline void EtbUntapTapAheadIntoFloat(GameState& state, int controller, int coun
             { if (c == Color::Colorless) { pain_c = true; break; } }
         }
         if (q.gy_land_exile_mana || (q.tap_self_damage > 0 && !pain_c)
-            || q.tap_opponent_lifegain > 0
+            || q.tap_opponent_lifegain > 0 || q.tap_mana_damage_each_opponent > 0
             || q.storage_land || q.domain_mana || q.colored_creature_only
             || IsManaConversionSource(q)) { continue; }
         bool depletion = false;
@@ -47703,6 +48981,143 @@ inline void ResolvePutBackFromHand(GameState& state, int controller, int n,
     }
 }
 
+// ---- HERALD'S HORN's upkeep reveal (Boars I1, 2026-11-13) ------------------------------------------------
+// "At the beginning of your upkeep, look at the top card of your library. If it's a creature card of the chosen
+// type, you may reveal it and put it into your hand." One trigger per Horn the active player controls, in
+// battlefield order; each reads the THEN-CURRENT top (an earlier take exposes the next card) against ITS OWN
+// chosen type (Permanent::chosen_subtype_id), the top's type from its DEFINITION (library cards are
+// placeholders). A take is a put-into-hand (HandEntryReason::Reveal), NOT a draw (USER 2026-09-06). Called from
+// GameEngine::UpkeepTail and the rollout's SimulateEndAndStartNextTurn at the same point (lockstep), before the
+// draw. Param-gated: one battlefield scan that finds nothing for every deck without the card.
+//
+// THE "MAY". Leaving the creature on top means the draw step draws it anyway (nothing in this engine sits between
+// the upkeep and the draw that reads the library), so TAKE is exactly "LEAVE, plus the next card one draw early":
+// the take world holds every card the leave world holds, plus one. It is worse only when that extra card forces a
+// CLEANUP DISCARD (CR 514.1) the leave world avoids, or through a later shuffle's different library (the USER
+// 2026-10-13 clairvoyant class -- not a regression). So:
+//   * FOLD to take wherever no discard is reachable this turn (HornTakeFoldHolds) -- a sound dominance fold;
+//   * otherwise the take/leave is SEARCHED: GameState::scripted_upkeep_horn (bit k = leave the k-th residual
+//     decision), written from Plan::upkeep_horn_choice / the BoundaryFan horn digit, consumed and cleared here.
+//     Unpinned (beyond the horizon, the d0 runner) a residual takes -- the permitted playout policy.
+//   * human play asks every match through the shared `dig` chooser ("(upkeep reveal)"; 0 = take, -1 = leave).
+inline constexpr int kHornPinOrdinals = 4;   // residual decisions one upkeep can pin (the deck runs 2 Horns)
+// BoundaryFan probe: the number of RESIDUAL decisions the crossing met (TurnSolver's horn digit width = 2^n).
+inline thread_local int* t_upkeep_horn_probe = nullptr;
+// Residual decisions resolved with NO pin (the playout default) -- for tests / census.
+inline std::atomic<long long> g_horn_unpinned{0};
+
+// TAKE IS PROVABLY DOMINANT (no cleanup discard reachable this turn). The take world's hand at cleanup is at most
+// its hand now + 1 (this take) + 1 (the draw step) + `later_triggers` (one card per Horn trigger still to resolve
+// this upkeep) + whatever else could put a card into hand this turn -- and that last term is ZERO when every card
+// that could act this turn is hand_gain_audited (CardDatabase.cpp): the battlefield, the hand, the graveyard and
+// staged cards of the controller, and the library cards the upkeep and draw can still bring (the top
+// 2 + later_triggers). Playing cards only shrinks the hand. So when that bound is within the maximum hand size
+// (unlimited with a no_max_hand_size permanent) no discard can happen and the leave world is the take world minus a
+// card. Anything unaudited makes the bound unknown and the decision is searched instead.
+inline bool HornTakeFoldHolds(const GameState& state, int controller, int later_triggers)
+{
+    const Player& pl = state.players[controller];
+    auto audited = [](const Card& c)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        return d != nullptr && d->hand_gain_audited;
+    };
+    bool unlimited = false;
+    // Ilharg, the Raze-Boar's end-step RETURN (attack_put_return_at_end_step, Boars I5a) is a hand gain: a BOUNDED
+    // term of +1 per attack-put source that could attack this turn (on the battlefield, in hand, or among the looked
+    // cards), one put -- hence at most one return -- per trigger. (The returned card left this hand for the put, so
+    // the true net is 0; the +1 is kept as the conservative bound the take fold's proof can read without that.)
+    int put_returns = 0;
+    auto put_return_src = [](const CardDefinition* d)
+    { return d != nullptr && d->params.attack_put_return_at_end_step; };
+    for (const Permanent& q : state.battlefield)
+    {
+        if (q.controller_index != controller) { continue; }
+        const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+        if (d == nullptr || !d->hand_gain_audited) { return false; }
+        if (d->params.no_max_hand_size) { unlimited = true; }
+        if (put_return_src(d)) { ++put_returns; }
+    }
+    for (const Card& c : pl.hand)
+    {
+        if (!audited(c)) { return false; }
+        if (put_return_src(CardDatabase::Instance().LookupCached(c))) { ++put_returns; }
+    }
+    for (const Card& c : pl.graveyard) { if (!audited(c)) { return false; } }
+    for (const StagedCard& sc : pl.staged_cards) { if (!audited(sc.card)) { return false; } }
+    const int look = 2 + later_triggers;
+    int k = 0;
+    for (const Card& c : pl.library)
+    {
+        if (k++ >= look) { break; }
+        if (!audited(c)) { return false; }
+        if (put_return_src(CardDatabase::Instance().LookupCached(c))) { ++put_returns; }
+    }
+    if (unlimited) { return true; }
+    return static_cast<int>(pl.hand.size()) + 2 + later_triggers + put_returns <= 7;
+}
+
+inline void PerformUpkeepHornReveal(GameState& state)
+{
+    const int me = state.active_player_index;
+    const int pin = state.scripted_upkeep_horn;
+    state.scripted_upkeep_horn = -1;   // consumed by this upkeep whatever it finds
+    // Snapshot the Horns first (a take never changes the battlefield, but keep the walk independent of it).
+    std::vector<std::pair<std::string, uint16_t>> horns;   // (name, chosen type)
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != me || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.upkeep_look_top_chosen_type_to_hand)
+        { horns.emplace_back(p.card.m_name.str(), p.chosen_subtype_id); }
+    }
+    if (horns.empty()) { return; }
+    int residual = 0;   // residual decisions met so far (the pin's bit index)
+    for (std::size_t h = 0; h < horns.size(); ++h)
+    {
+        Player& ap = state.players[me];
+        if (ap.library.empty()) { break; }
+        const CardDefinition* td = CardDatabase::Instance().LookupCached(ap.library.front());
+        const uint16_t chosen = horns[h].second;
+        if (td == nullptr || !td->card.IsCreature() || chosen == SubtypeRegistry::kNone
+            || !CardHasSubtypeId(td->card, chosen))
+        {
+            // The look happens even when the top card misses the chosen type. Show that private
+            // peek in the viewer history so the next draw has an explanation; it stays on top.
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "ability", horns[h].first + ": looked at "
+                            + ap.library.front().m_name.str() + " (not the chosen creature type; left on top)"); }
+            continue;
+        }
+        const int later = static_cast<int>(horns.size() - h - 1);
+        bool take = true;
+        if (g_play_dig_chooser && !g_tap_speculating)
+        {
+            const std::vector<Card> examined{ ap.library.front() };
+            const std::vector<int>  legal{ 0 };
+            take = (*g_play_dig_chooser)(state, me, horns[h].first + " (upkeep reveal)", examined, legal, 0) == 0;
+        }
+        else if (!HornTakeFoldHolds(state, me, later))
+        {
+            if (t_upkeep_horn_probe != nullptr) { ++*t_upkeep_horn_probe; }
+            if (pin >= 0 && residual < kHornPinOrdinals) { take = ((pin >> residual) & 1) == 0; }
+            else if (pin < 0) { g_horn_unpinned.fetch_add(1, std::memory_order_relaxed); }
+            ++residual;
+        }
+        if (!take)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "ability", horns[h].first + ": left " + td->card.m_name.str() + " on top"); }
+            continue;
+        }
+        Card c = ap.library.DrawTop();
+        const std::string cname = c.m_name.str();
+        EnterHand(state, me, std::move(c), HandEntryReason::Reveal);
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "tutor", horns[h].first + ": revealed " + cname + " into hand"); }
+    }
+}
+
 // Upkeep-reorder trigger sweep (Mirri's Guile). One reorder per permanent carrying the param
 // (a second copy's reorder is a heuristic no-op but stays faithful). Called from BOTH upkeep
 // sites (GameEngine::UpkeepStep + the rollout's turn transition) -- lockstep.
@@ -48779,7 +50194,16 @@ inline void PerformFetch(GameState& state, int controller_index,
     std::string want = target_name;
     if (want.empty())
     {
-        std::vector<std::string> cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp);
+        // A battlefield-model fetchland's front pick comes from the SAME list its activation searches
+        // (LandSearchPicksMemo; OnPlayFetchCandidates in DecisionProviders.cpp is the land drop's reader);
+        // a legacy immediate-model fetchland keeps FetchCandidates.
+        std::vector<std::string> cands;
+        if (fetch_pp.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn())
+        {
+            for (const std::vector<std::string>& pick : LandSearchPicksMemo(state, controller_index, LandSearchSpecOf(fetch_pp)))
+            { if (!pick.empty()) { cands.push_back(pick.front()); break; } }
+        }
+        else { cands = ResolveProvider(state).FetchCandidates(state, controller_index, fetch_pp); }
         // Whiff: no legal target (life already paid). The library was still searched -> shuffle.
         if (cands.empty()) { WhiffShuffle(state, controller_index, "fetch"); return; }
         want = cands.front();
@@ -48835,7 +50259,7 @@ inline bool SacLandTwins(const GameState& state, const Permanent& a, const Perma
         if (p->card.IsCreature() || p->is_animated || !p->counters.empty() || p->damage != 0
             || p->storage_counters != 0 || p->charge_counters != 0 || p->verse_counters != 0
             || p->lore_counters != 0 || p->skip_next_untap || p->exile_at_end || p->sac_at_end_step
-            || p->destroy_at_end_if_attacked || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
+            || p->destroy_at_end_if_attacked || p->return_at_end_step || p->marked_for_destruction || p->islandize_target != 0 || p->paired_with != 0
             || p->aura_attached_to != 0 || p->equipped_to != 0) { return false; }
     }
     for (const Permanent& q : state.battlefield)
@@ -49339,6 +50763,93 @@ inline int ResolveSacReadinessVictimId(const GameState& state, int victim_id)
     }
     return victim_id;
 }
+// EMERGE victim's printed mana value (CR 702.119a; Decimator of the Provinces, Boars I4): an own
+// battlefield creature by card m_number (a token that is not a copy is 0), else a HAND card of that number
+// (the same-plan hand victim at enumeration time). X counts as 0. 0 when not found. Callers resolve the pin
+// first (ResolveSacReadinessVictimId), so the bill is priced off the creature REALLY sacrificed.
+inline int EmergeVictimMv(const GameState& state, int victim_id)
+{
+    if (victim_id <= 0) { return 0; }
+    const int active = state.active_player_index;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.card.m_number != victim_id) { continue; }
+        if (p.is_token) { return p.card.m_mana_cost.ManaValue(); }
+        return CleanupDiscardManaValue(p.card);
+    }
+    for (const Card& c : state.players[static_cast<std::size_t>(active)].hand)
+    {
+        if (c.m_number == victim_id) { return CleanupDiscardManaValue(c); }
+    }
+    return 0;
+}
+// EMERGE victim, resolved ONCE per cast at BOTH cast sites (rollout apply_one, executor CastSpellFromHand),
+// BEFORE the bill is priced -- the victim's mana value sets it (CR 702.119a, 601.2b/f), so the bill and the
+// sacrifice can never disagree. The plan's pin through ResolveSacReadinessVictimId (a same-plan hand pin maps
+// onto the copy the plan cast); a stale pin falls back to the front readiness class, exactly the fallback
+// PerformSacrificeCreatureCost itself takes. HUMAN PLAY: the `sacrifice` board click is asked HERE, before
+// payment (Diabolic Intent's prompt sits inside PerformSacrificeCreatureCost, after payment -- right for an
+// additional cost of fixed price, wrong for emerge); the caller then sacrifices with the chooser muted
+// (SacChooserMute), one prompt not two. The chooser is null in every search / rollout scope (RevealLogPause),
+// so autonomous play never reaches it. Returns the victim's card m_number, 0 = no creature (drop the cast).
+// `payable` (human play only -- the chooser branch is the only reader): does the emerge bill priced off THIS victim
+// pay on the current board? The board click then offers only victims whose cast can actually happen (Boars 5d sweep,
+// seeds 97001 / 97009: a "sacrificing Sage" plan's click listed Ignoble Hierarch, whose {5}{G}{G}{G} the board could
+// not pay, and picking it silently dropped the cast). Nothing is lost: an unpayable victim's cast is dropped anyway.
+// If no candidate pays, the click keeps every candidate (the cast drops whichever is picked, and says so).
+inline int EmergeResolveVictim(const GameState& state, const std::string& spell_name, int pin,
+                               const std::function<bool(int victim_num)>* payable = nullptr)
+{
+    const int active = state.active_player_index;
+    const int id = ResolveSacReadinessVictimId(state, pin);
+    int idx = -1;
+    if (id > 0)
+    {
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index == active && p.card.m_number == id && p.card.IsCreature()) { idx = i; break; }
+        }
+    }
+    if (idx < 0)
+    {
+        const std::vector<int> reps = SacReadinessVictimReps(state, active);
+        if (!reps.empty()) { idx = reps.front(); }
+    }
+    if (g_play_sacrifice_chooser && idx >= 0)
+    {
+        std::vector<int> cands = SacCreatureCandidateIndices(state, active, std::string{});
+        if (payable != nullptr && *payable && cands.size() > 1)
+        {
+            std::vector<int> ok;
+            for (int ci : cands)
+            { if ((*payable)(state.battlefield[static_cast<std::size_t>(ci)].card.m_number)) { ok.push_back(ci); } }
+            if (!ok.empty())
+            {
+                if (std::find(ok.begin(), ok.end(), idx) == ok.end()) { idx = ok.front(); }
+                cands.swap(ok);
+            }
+        }
+        if (cands.size() > 1)   // a single legal victim is forced -- no prompt for a non-choice
+        {
+            int def_opt = 0;
+            for (int k = 0; k < static_cast<int>(cands.size()); ++k) { if (cands[k] == idx) { def_opt = k; break; } }
+            const int chosen = (*g_play_sacrifice_chooser)(state, active, spell_name, cands, def_opt);
+            if (chosen >= 0 && chosen < static_cast<int>(cands.size())) { idx = cands[static_cast<std::size_t>(chosen)]; }
+        }
+    }
+    return idx >= 0 ? state.battlefield[static_cast<std::size_t>(idx)].card.m_number : 0;
+}
+// Mutes the human `sacrifice` chooser for one PerformSacrificeCreatureCost call whose victim was already
+// asked (EmergeResolveVictim). Inert when no chooser is installed.
+struct SacChooserMute
+{
+    BounceChooser* saved;
+    SacChooserMute() : saved(g_play_sacrifice_chooser) { g_play_sacrifice_chooser = nullptr; }
+    ~SacChooserMute() { g_play_sacrifice_chooser = saved; }
+    SacChooserMute(const SacChooserMute&) = delete;
+    SacChooserMute& operator=(const SacChooserMute&) = delete;
+};
 // Can a readiness-route "sacrifice a creature" cost be paid on this board? (CR 601.2h: with no legal
 // victim the spell cannot be cast at all.) Checked at both cast sites BEFORE any mana is spent, so a
 // plan whose victim never arrived drops the cast instead of casting it for free.
@@ -51375,7 +52886,7 @@ inline void TryPumpThenSwordsRedirect(GameState& state, int active, int target_b
         Card inv = ap.hand[i];
         ap.hand.erase(ap.hand.begin() + i);
         OpponentGainsLife(state, active, pp.alt_lifegain_cost);
-        FireOnCastTriggers(state, *d);
+        FireOnCastTriggers(state, *d, /*mana_spent=*/0);   // alternative cost: lifegain, no mana
         FireProwess(state, *d);
         state.battlefield[target_bi].temp_power_bonus += pp.power_bonus;
         state.battlefield[target_bi].temp_tough_bonus += pp.tough_bonus;
@@ -52181,7 +53692,9 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
         | (p.landfall_resolved_once ? 16777216 : 0) | (p.landfall_resolved_twice ? 33554432 : 0)   // Scythecat Cub
         | (p.destroy_at_end_if_attacked ? 67108864 : 0));   // Berserk's delayed destroy
     if (p.AttacksThisTurn() != 0) { k += "|atk"; add(p.AttacksThisTurn()); }   // Moraug's attack count (gated)
+    if (p.return_at_end_step) { k += "|ret"; }   // Ilharg put body: returns to hand at end step (gated)
     if (p.enduring_noncreature) { k += "|encr"; }   // Enduring Innocence's noncreature return (gated)
+    if (p.temp_vigilance) { k += "|vig"; }   // End-Raze Forerunners' until-EOT vigilance (gated)
     add(p.damage); add(p.temp_power_bonus); add(p.temp_tough_bonus); add(p.pending_death_trigger);
     add(p.charge_counters); add(p.verse_counters); add(p.lore_counters); add(p.storage_counters);
     add(p.loyalty); add(p.ice_counters); add(p.age_counters); add(p.spore_counters);

@@ -122,6 +122,131 @@ uint16_t DecisionProvider::ChosenCreatureSubtypeId(const GameState& state, int c
     return DominantCreatureSubtypeId(state, controller);
 }
 
+// Boars D4 (PROVISIONAL provider one-option prune, surfaced to the USER): Herald's Horn names Boar whenever the
+// deck carries one. Every other chosen-type card (none in this list) keeps the generic deck-derived pick.
+uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                                const CardDefinition& entering) const
+{
+    if (entering.params.upkeep_look_top_chosen_type_to_hand)
+    {
+        static const uint16_t boar = SubtypeRegistry::Instance().Id("Boar");
+        for (uint16_t id : DeckCreatureSubtypeMenu(state, controller)) { if (id == boar) { return boar; } }
+    }
+    return DecisionProvider::ChosenCreatureSubtypeId(state, controller, entering);
+}
+
+inline bool DorkTapLastEnabled();   // defined with the generic mana-creature band below
+
+// Zhur-Taa's green-only mana deals damage when spent. Spend it before a ready Birds on a shared
+// green/generic pip; Birds' five colours are more useful for the rest of the line. Both normally
+// occupy the same mana-creature band, so moving Birds one slot later preserves the land-before-body
+// order. With Raggadragga (or vigilance) and combat still ahead, keep the larger Druid attacker:
+// it can untap and ping after combat, while Birds is the smaller body to spend pre-combat.
+int BoarsProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int base = DeckProvider::ManaSourceRank(s, def);
+    static const bool on = EnvOn("MTG_BOARS_DRUID_TAP_FIRST", true);   // DEFAULT ON; =0 restores the generic rank
+    if (!on || !DorkTapLastEnabled()) { return base; }
+    const bool druid = def.params.tap_mana_damage_each_opponent > 0;
+    const bool birds = def.card.m_name == "Birds of Paradise";
+    if (!druid && !birds) { return base; }
+    bool ready_druid = false, ready_birds = false, druid_attacks = false;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd == nullptr || !CanTapNow(p, s.battlefield)) { continue; }
+        if (pd->params.tap_mana_damage_each_opponent > 0)
+        {
+            ready_druid = true;
+            if (s.phase == Phase::PreCombatMain && CanAttackFull(p, s.battlefield, s.active_player_index)
+                && (AttackUntapsAttacker(s, p) || CreatureHasVigilance(p, s)))
+            { druid_attacks = true; }
+        }
+        if (p.card.m_name == "Birds of Paradise") { ready_birds = true; }
+    }
+    if (!ready_druid || !ready_birds) { return base; }
+    if (druid_attacks) { return druid ? base + 1 : base; }
+    return birds ? base + 1 : base;
+}
+
+// ---- BoarsProvider: the USER-APPROVED cast order (MTG_BOARS_CAST_ORDER, DEFAULT ON) ------------------
+//
+// docs/design/boars-cast-order-2026-11-14.md, drafted for the USER's review (USER 2026-11-14: "If you want a ruling
+// on the cast order I recommend you come up with a recommended order and I review it"), then APPROVED by the USER
+// the same day ("That order seems reasonable to me."). =0 is DeckProvider::CastOrderRank byte-for-byte (every creature at the generic 10,
+// Greaves and Herald's Horn at 20). What in this list is order-sensitive, by the card text:
+//   * Herald's Horn's {1} reduction reaches only Boar spells cast AFTER it resolves -> first.
+//   * Herald of Ilharg counts only creature spells cast AFTER it is on the battlefield, and an MV >= 5 cast deals
+//     ALL its counters -> Herald first among the creatures, every cheap creature before every 5+ one.
+//   * Raggadragga's untap needs it on the battlefield before a 7+ spell -> in the <= 4 block, ahead of the big ones.
+//   * End-Raze's ETB pumps the OTHER creatures already there -> after every creature but Decimator.
+//   * Decimator's cast pump reaches the creatures already there, and an emerge victim must be there -> last.
+//   * Lightning Greaves is order-free by its text (equip is a separate activation); it is paid from lands before
+//     Somberwald Sage's creature-only mana is spent.
+// Every slot is read off PARAMS, so an unlisted card lands by its shape; the name breaks every tie.
+static bool BoarsOrderEnabled()
+{
+    static const bool on = EnvOn("MTG_BOARS_CAST_ORDER", true);   // DEFAULT ON (USER approved 2026-11-14); =0 -> generic
+    return heurarm::Flag(heurarm::BOARS_CAST_ORDER, on);
+}
+
+namespace
+{
+constexpr int kBoarsReducer  = 1;    // Herald's Horn
+constexpr int kBoarsEquip    = 2;    // Lightning Greaves
+constexpr int kBoarsCounter  = 3;    // Herald of Ilharg
+constexpr int kBoarsSmall    = 10;   // + mana value (0..4)
+constexpr int kBoarsBig      = 20;   // + mana value (5..9), clamped
+constexpr int kBoarsEtbPump  = 40;   // End-Raze Forerunners
+constexpr int kBoarsCastPump = 50;   // Decimator of the Provinces
+constexpr int kBoarsUnlisted = 100;  // + the generic rank
+}  // namespace
+
+int BoarsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderRank(s, def); }
+    const CardParams& p = def.params;
+    if (!def.card.IsCreature())
+    {
+        if (p.chooses_creature_type && p.reduces_spell_subtype_creature_only) { return kBoarsReducer; }
+        if (p.is_equipment)                     { return kBoarsEquip; }
+        return kBoarsUnlisted + DeckProvider::CastOrderRank(s, def);
+    }
+    if (p.creature_cast_trigger_plus_counters > 0) { return kBoarsCounter; }
+    if (p.cast_trigger_team_pump_power > 0)        { return kBoarsCastPump; }
+    if (p.etb_other_creatures_pump_power > 0)      { return kBoarsEtbPump; }
+    const int mv = def.card.m_mana_cost.ManaValue();
+    if (mv <= 4) { return kBoarsSmall + std::max(mv, 0); }
+    return kBoarsBig + std::min(mv, 19);
+}
+
+bool BoarsProvider::CastOrderTotalByName() const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderTotalByName(); }
+    return true;
+}
+
+const char* BoarsProvider::CastOrderTierName(int rank) const
+{
+    if (!BoarsOrderEnabled()) { return DeckProvider::CastOrderTierName(rank); }
+    switch (rank)
+    {
+        case kBoarsReducer:  return "SUBTYPE COST REDUCER (Herald's Horn): first -- its {1} reaches only the Boars cast after it";
+        case kBoarsEquip:    return "EQUIPMENT (Lightning Greaves): order-free; paid from lands before Sage's creature-only mana";
+        case kBoarsCounter:  return "CAST-COUNTER (Herald of Ilharg): first creature -- every later creature cast adds two counters";
+        case kBoarsEtbPump:  return "ETB TEAM PUMP (End-Raze Forerunners): after every other creature but Decimator";
+        case kBoarsCastPump: return "CAST TEAM PUMP + EMERGE (Decimator of the Provinces): last";
+        default: break;
+    }
+    if (rank >= kBoarsSmall && rank < kBoarsBig)
+    { return "CREATURE MV <= 4: cheapest first, then by NAME -- they build Herald's counters before the 5+ casts"; }
+    if (rank >= kBoarsBig && rank < kBoarsEtbPump)
+    { return "CREATURE MV >= 5 (Ilharg): after the cheap creatures (Herald's damage reads every counter)"; }
+    if (rank >= kBoarsUnlisted) { return "UNLISTED NONCREATURE: generic rank + 100, then by NAME"; }
+    return nullptr;
+}
+
 uint16_t KithkinProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                    const CardDefinition& entering) const
 {
@@ -885,6 +1010,7 @@ GenericProvider::TutorCandidates(const GameState& s, int controller, const CardP
     return all;
 }
 
+static std::vector<std::string> AllLegalFetchTargets(const GameState& s, int controller, const CardParams& fetch_pp);
 std::vector<std::string>
 GenericProvider::FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const
 {
@@ -894,6 +1020,86 @@ GenericProvider::FetchCandidates(const GameState& s, int controller, const CardP
     // deck's doubled colours), so it is NOT a safe deck-agnostic default; it stays an archetype
     // override. A generic fetchland deck thus searches its fetch targets rather than whiffing.
     // (Previously returned {} -> a generic fetch paid 1 life and fetched nothing.)
+    // ORDER (2026-11-14): the same fetch-shaped land-search order a battlefield fetchland's activation reads
+    // (LandSearchFetchPickOrder; base = the colours the hand NEEDS and the board LACKS first), stable on library
+    // order -- one heuristic for a legacy immediate-model fetchland and a battlefield one (USER: "We should
+    // obviously use the same heuristic that just grabs Stomping Ground"). Providers with their own ranking start
+    // from AllLegalFetchTargets (library order), never from here.
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);
+    if (all.size() < 2 || fetch_pp.fetch_land_types.size() < 2) { return all; }
+    std::vector<std::vector<std::string>> picks;
+    picks.reserve(all.size());
+    for (std::string& nm : all) { picks.push_back({ std::move(nm) }); }
+    const SubtypeRegistry& reg = SubtypeRegistry::Instance();
+    LandSearchFetchPickOrder(s, controller, 1, 0, false, false, reg.Id(fetch_pp.fetch_land_types[0]),
+                             reg.Id(fetch_pp.fetch_land_types[1]), picks);
+    std::vector<std::string> out;
+    out.reserve(picks.size());
+    for (std::vector<std::string>& pk : picks) { if (!pk.empty()) { out.push_back(std::move(pk.front())); } }
+    return out;
+}
+
+// A PROVIDER-RANKED fetchland's battlefield picks (LandSearchFetchPickOrder / Width overrides of AntiLifegain,
+// Modern RW Burn through it, Five Colour and Morph, 2026-11-14): the provider's own FetchCandidates ranking,
+// applied to the land-search pick list so a battlefield fetchland's activation and its on-play land drop read
+// ONE list. Picks the ranking names come first in its order, the rest after in their own order; the width is
+// the provider's FetchSearchCandidates of that ranking (each of these four: the top pick only, an existing
+// provider prune pending USER review). A fetch-shaped spec with one land per pick only (every fetchland).
+static CardParams FetchParamsForSpec(std::uint16_t subtype, std::uint16_t subtype_alt)
+{
+    const SubtypeRegistry& reg = SubtypeRegistry::Instance();
+    CardParams fp;
+    fp.fetch_land_types = { reg.Name(subtype), reg.Name(subtype_alt) };
+    return fp;
+}
+static void OrderFetchPicksByProvider(const DecisionProvider& prov, const GameState& s, int controller, int count,
+                                      std::uint16_t subtype, std::uint16_t subtype_alt,
+                                      std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || picks.size() < 2) { return; }
+    const std::vector<std::string> ranked = prov.FetchCandidates(s, controller, FetchParamsForSpec(subtype, subtype_alt));
+    std::vector<std::vector<std::string>> out;
+    out.reserve(picks.size());
+    std::vector<bool> used(picks.size(), false);
+    for (const std::string& nm : ranked)
+    {
+        for (std::size_t i = 0; i < picks.size(); ++i)
+        {
+            if (!used[i] && picks[i].size() == 1 && picks[i][0] == nm) { used[i] = true; out.push_back(std::move(picks[i])); break; }
+        }
+    }
+    for (std::size_t i = 0; i < picks.size(); ++i) { if (!used[i]) { out.push_back(std::move(picks[i])); } }
+    picks = std::move(out);
+}
+static int FetchPicksWidthByProvider(const DecisionProvider& prov, const GameState& s, int controller, int count,
+                                     std::uint16_t subtype, std::uint16_t subtype_alt,
+                                     const std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || picks.size() < 2) { return static_cast<int>(picks.size()); }
+    const CardParams fp = FetchParamsForSpec(subtype, subtype_alt);
+    const std::vector<std::string> ranked = prov.FetchCandidates(s, controller, fp);
+    if (ranked.empty()) { return static_cast<int>(picks.size()); }
+    return static_cast<int>(prov.FetchSearchCandidates(s, controller, fp, ranked).size());
+}
+#define MTG_FETCH_PICKS_BY_PROVIDER(Cls)                                                                         \
+    void Cls::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int, bool, bool,          \
+                                       std::uint16_t subtype, std::uint16_t subtype_alt,                         \
+                                       std::vector<std::vector<std::string>>& picks) const                       \
+    { OrderFetchPicksByProvider(*this, s, controller, count, subtype, subtype_alt, picks); }                     \
+    int Cls::LandSearchFetchPickWidth(const GameState& s, int controller, int count, int, bool, bool,           \
+                                      std::uint16_t subtype, std::uint16_t subtype_alt,                          \
+                                      const std::vector<std::vector<std::string>>& picks) const                  \
+    { return FetchPicksWidthByProvider(*this, s, controller, count, subtype, subtype_alt, picks); }               \
+    bool Cls::LandSearchPickOrderKey(const GameState&, int, std::uint64_t&) const { return false; }
+MTG_FETCH_PICKS_BY_PROVIDER(AntiLifegainProvider)
+MTG_FETCH_PICKS_BY_PROVIDER(FiveColourProvider)
+MTG_FETCH_PICKS_BY_PROVIDER(MorphProvider)
+#undef MTG_FETCH_PICKS_BY_PROVIDER
+
+// Every legal target of a fetchland: the distinct library land names carrying one of its subtypes, in
+// library order. GenericProvider's list, and the full set human play widens a narrowed provider list to.
+static std::vector<std::string> AllLegalFetchTargets(const GameState& s, int controller, const CardParams& fetch_pp)
+{
     const Player& ap = s.players[controller];
     std::vector<std::string>        all;
     std::unordered_set<std::string> seen;
@@ -1196,6 +1402,10 @@ static bool DuplicateEntryOrDeathHasUpside(const GameState& s, int controller,
         for (const std::string& w : want) { if (one(w)) { return true; } }
         return false;
     };
+    // The legendary card's OWN death clause (Ilharg, the Raze-Boar: "When Ilharg dies ..., you may put it into its
+    // owner's library third from the top"; Boars I5b item 3): the legend-rule death puts a known card back into the
+    // draws, and the searched "may" (Action::dies_tuck) weighs it -- not the tie the prune assumes.
+    if (def.params.dies_to_library_position > 0) { return true; }
     for (const Permanent& p : s.battlefield)
     {
         if (p.controller_index != controller) { continue; }
@@ -1618,6 +1828,41 @@ std::vector<int> DecisionProvider::CleanupDiscardCandidates(
 // goldfish, and the only player whose Brainstorm resolves -- so it is read only when `controller` is
 // active; otherwise (never reached today) the hand order stands. Indices are de-duplicated and every
 // hand index the shed order omits is appended in hand order, so the ranking is always total.
+// See DecisionProvider.h. Read only where nothing is pinned (beyond the horizon, the d0 runner, the human pre-select).
+bool DecisionProvider::DiesTuckDefault(const GameState& s, int controller, const Card& dead) const
+{
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == controller && q.card.m_name == dead.m_name) { return false; } }
+    return true;
+}
+
+int DecisionProvider::AttackPutDefault(const GameState& s, int controller, const std::vector<Card>& cands) const
+{
+    int others = 0;
+    for (const Permanent& q : s.battlefield)
+    { if (q.controller_index == controller && (q.card.IsCreature() || q.is_animated)) { ++others; } }
+    int best = 0;
+    long long best_key = 0;
+    for (int i = 0; i < static_cast<int>(cands.size()); ++i)
+    {
+        const Card& c = cands[static_cast<std::size_t>(i)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        const int pw = d ? d->card.m_power.value_or(0) + d->params.etb_other_creatures_pump_power * others : 0;
+        bool dup_legend = false;
+        if (d && d->card.HasSupertype(Supertype::Legendary))
+        {
+            for (const Permanent& q : s.battlefield)
+            { if (q.controller_index == controller && q.card.m_name == c.m_name) { dup_legend = true; break; } }
+        }
+        const int mv = d ? d->card.m_mana_cost.ManaValue() : 0;
+        // Lexicographic: not a doomed legend, power, mana value, then the LOWER card number.
+        const long long key = (dup_legend ? 0LL : 1LL) * 1000000000000LL + static_cast<long long>(pw + 1000) * 1000000LL
+                            + static_cast<long long>(mv) * 10000LL + (9999 - std::min(c.m_number, 9999));
+        if (i == 0 || key > best_key) { best = i; best_key = key; }
+    }
+    return best;
+}
+
 std::vector<int> DecisionProvider::PutBackRanking(const GameState& s, int controller) const
 {
     const int n = static_cast<int>(s.players[controller].hand.size());
@@ -2436,6 +2681,37 @@ void DecisionProvider::CastTriggerTargetOrder(const GameState& s, int controller
     }
     std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b)
     { return a.tier != b.tier ? a.tier < b.tier : a.power < b.power; });
+    for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
+}
+
+static int AttackPowerOf(const GameState& s, const Permanent& p);   // defined below (the exalted hold)
+void DecisionProvider::UntapPumpTargetOrder(const GameState& s, int controller, std::vector<int>& class_reps) const
+{
+    // ORDER ONLY (see the declaration). Keys computed once per class.
+    if (class_reps.size() < 2) { return; }
+    struct Keyed { int tier; int key; int idx; };
+    std::vector<Keyed> keyed;
+    keyed.reserve(class_reps.size());
+    // A pure function of the board (no phase read: the two worlds must order identically).
+    for (int idx : class_reps)
+    {
+        const Permanent& q = s.battlefield[static_cast<std::size_t>(idx)];
+        Keyed k{ 3, 0, idx };
+        if (q.controller_index != controller) { k.tier = 4; }
+        else
+        {
+            const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
+            const bool refund = q.tapped && d != nullptr && CreatureHasManaAbility(s, &q, q.card)
+                             && CanTapNow(q, s.battlefield);
+            if (refund) { k.tier = 0; k.key = -PermanentManaYield(s, q, *d); }
+            else if (!q.tapped && CanAttackFull(q, s.battlefield, controller))
+            { k.tier = 1; k.key = -AttackPowerOf(s, q); }
+            else { k.tier = 2; k.key = -AttackPowerOf(s, q); }
+        }
+        keyed.push_back(k);
+    }
+    std::stable_sort(keyed.begin(), keyed.end(), [](const Keyed& a, const Keyed& b)
+    { return a.tier != b.tier ? a.tier < b.tier : a.key < b.key; });
     for (std::size_t i = 0; i < keyed.size(); ++i) { class_reps[i] = keyed[i].idx; }
 }
 
@@ -5792,7 +6068,10 @@ static bool HoldManaSourceForCollapsedMain(const GameState& s, const Permanent& 
     // A vigilant dork does not tap to attack, so its mana survives combat and the hold buys
     // nothing (USER 2026-08-21: vigilance -> freely attack). Gated with the feature so the
     // default path stays byte-identical.
-    if (DorkAtkSearchEnabled() && p.card.HasKeyword(Keyword::Vigilance)) { return false; }
+    if (DorkAtkSearchEnabled() && (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance)) { return false; }   // + End-Raze grant
+    // Raggadragga's attack untap is vigilance-equivalent for mana (Boars I3b): attacking costs the dork nothing, and
+    // its anthem makes a "0-power" dork a 2/3 that EffectivePower (no lords) would misread. Sound exemption.
+    if (AttackUntapsAttacker(s, p))                         { return false; }
     if (p.EffectivePower() > 0)                             { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)            { return false; }
@@ -6024,7 +6303,8 @@ static bool ProviderHeldDorkReleasable(const GameState& s, const Permanent& p)
     if (!DorkAtkSearchEnabled() || !DorkAtkProviderHoldEnabled())   { return false; }
     if (p.tapped || !p.card.IsCreature())                          { return false; }
     if (p.controller_index != s.active_player_index)               { return false; }
-    if (p.card.HasKeyword(Keyword::Vigilance))                     { return false; }
+    if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return false; }   // + End-Raze until-EOT grant
+    if (AttackUntapsAttacker(s, p))                                { return false; }   // + Raggadragga's attack untap
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     if (!d || d->tmpl != CardTemplate::ManaDork)                   { return false; }
     if (!CanTapNow(p, s.battlefield))                              { return false; }
@@ -6139,8 +6419,8 @@ int DorkAtkContestedKind(const GameState& s)
             // VIGILANCE IS EXEMPT (USER: "vigilance dorks like Faeburrow Elder ... can and should
             // freely attack"): a vigilant dork does not tap to attack, so its mana survives combat
             // and there is nothing to contest. Same exemption the tower applies on the release side.
-            if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance)
-                && CanTapNow(p, s.battlefield))
+            if (DorkAtkHoldDirEnabled() && !p.card.HasKeyword(Keyword::Vigilance) && !p.temp_vigilance
+                && CanTapNow(p, s.battlefield) && !AttackUntapsAttacker(s, p))   // + Raggadragga's untap
             {
                 const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
                 if (pd && pd->tmpl == CardTemplate::ManaDork) { ++atk_dorks; }
@@ -8400,7 +8680,7 @@ AntiLifegainProvider::FetchCandidates(const GameState& state, int controller_ind
     // all of them -- identical to the generic "return all matching library lands" path.
     if (DecisionUnpruned(UnprunedGate::Fetch))
     {
-        return GenericProvider::FetchCandidates(state, controller_index, fetch_pp);
+        return AllLegalFetchTargets(state, controller_index, fetch_pp);
     }
 
     const Player& ap = state.players[controller_index];
@@ -9236,6 +9516,47 @@ bool MirrorwingProvider::ShouldAttackWith(const GameState& s, const Permanent& p
 
 // ---- MorphProvider ---------------------------------------------------------
 // The exalted-aware hold (4x Ignoble Hierarch), same rule and switch as Mirrorwing / Anti-Lifegain.
+// Ilharg's put happens after attackers are declared but before combat damage. If every creature it
+// can put is an End-Raze-style team pump, a 0-power dork declared alongside Ilharg will deal that
+// pump's damage. The ordinary exalted-aware rule cannot see it yet and holds the dork at 0 power.
+// A searched put pin takes precedence; a decline or a different put keeps the normal hold. For an
+// unpinned human combat, only the unambiguous all-pump hand gets this advance credit.
+static bool BoarsAttackPutPumpsDorks(const GameState& s)
+{
+    const int pin = s.scripted_attack_put > 0
+        ? s.scripted_attack_put & ~(kAttackPutTuckBit | kAttackPutKeepNewBit)
+        : s.scripted_attack_put;
+    if (pin == -2 || CountExalted(s.battlefield, s.active_player_index) > 0) { return false; }
+    bool pump = false;
+    for (const Card& c : s.players[s.active_player_index].hand)
+    {
+        if (c.m_is_staged) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || !d->card.IsCreature()) { continue; }
+        if (pin > 0 && c.m_number != pin) { continue; }
+        if (d->params.etb_other_creatures_pump_power <= 0) { return false; }
+        pump = true;
+    }
+    if (!pump) { return false; }
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != s.active_player_index) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(q.card);
+        if (d && d->params.attack_put_creature_from_hand
+            && CanAttackFull(q, s.battlefield, s.active_player_index)) { return true; }
+    }
+    return false;
+}
+
+// The exalted-aware hold (3x Ignoble Hierarch), same rule and switch as Morph / Mirrorwing / Anti-Lifegain.
+bool BoarsProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
+{
+    static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
+    if (!enabled) { return true; }
+    if (AttackPowerOf(s, p) <= 0 && BoarsAttackPutPumpsDorks(s)) { return true; }
+    return ExaltedAwareShouldAttack(s, p);
+}
+
 bool MorphProvider::ShouldAttackWith(const GameState& s, const Permanent& p) const
 {
     static const bool enabled = !EnvOn("MTG_NO_EXALTED_ATTACK");
@@ -9644,7 +9965,7 @@ bool MorphProvider::DeadDoubleStrikeGrantFold() const
 //     reader is Den Protector's regrowth, which a CRACKED fetch only adds to. FetchResolvesOnPlay keeps the hold under
 //     human play, MTG_UNPRUNED (UnprunedGate::Fetch) and at 3 life or less.
 // (2) Order: the pick producing the most colours first (Stomping Ground: both the deck's colours), then the generic
-//     library order (Forest / Mountain). FetchSearchCandidates keeps the base default, the top pick only; the engine
+//     library order (Forest / Mountain). FetchSearchCandidates and LandSearchFetchPickWidth keep the top pick only (explicit since 2026-11-14); the engine
 //     fans every target under human play / MTG_UNPRUNED. Read off params.produces, never a card name.
 // Life: fetch 1 + shock 2. The shock's own pay-life rule (life > 2) and the redirect group's life rule (D: never a
 // group that would leave us at 0 or below) read the current life, so a fetch paid earlier cannot overdraw either.
@@ -9661,7 +9982,7 @@ bool MorphProvider::ConsiderFetchHold(const GameState& s, const CardDefinition& 
 std::vector<std::string> MorphProvider::FetchCandidates(const GameState& s, int controller,
                                                         const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = DeckProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() <= 1 || !MorphFetchRuleOn()) { return all; }
     auto colours = [](const std::string& nm) -> int
     {
@@ -20435,6 +20756,11 @@ std::vector<int> CreatureGivingProvider::CleanupDiscardCandidates(
         if (d == nullptr || d->params.reflecting) { return 0u; }
         unsigned b = 0;
         for (Color c : d->params.produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } }
+        // A battlefield fetchland in hand (Windswept Heath since Boars I1) produces nothing itself: read its
+        // in-hand hint, the W/B/R/G it carried as `produces` when this USER-settled rule was written, so the
+        // rule's cover is unchanged by the fetchland model change.
+        if (d->params.produces.empty())
+        { for (Color c : d->params.hand_fixing_produces) { if (c != Color::Colorless) { b |= 1u << ci(c); } } }
         return b;
     };
     auto land_tier = [](const CardDefinition* d) -> int
@@ -20899,7 +21225,8 @@ bool FiveColourProvider::ShouldAttackWith(const GameState& s, const Permanent& p
     if (!taps_for_mana && !gy_abilities) { return true; }        // a real attacker -> swing
 
     // Vigilance: attacking costs it nothing, so never hold it back.
-    if (p.card.HasKeyword(Keyword::Vigilance)) { return true; }
+    if (p.card.HasKeyword(Keyword::Vigilance) || p.temp_vigilance) { return true; }   // + End-Raze grant
+    if (AttackUntapsAttacker(s, p))            { return true; }  // + Raggadragga's attack untap (Boars I3b)
     if (AttackHasNonPowerValue(s, p))          { return true; }  // attack-trigger value
 
     // Never forfeit a kill: if everything that CAN attack already adds up to lethal, swing with all
@@ -21640,7 +21967,7 @@ std::vector<std::string>
 FiveColourProvider::FetchCandidates(const GameState& s, int controller,
                                     const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() < 2 || DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
 
     constexpr int NC = 6;                    // W,U,B,R,G,C
@@ -23400,7 +23727,9 @@ bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinit
 {
     // The only distinct Burn line found needs two Searing Blazes, two opposing
     // creatures, and no intervening need for the fetched mana. Keep it in the
-    // unpruned audit and the viewer; the ordinary search spends no timing fan.
+    // unpruned audit; the ordinary search spends no timing fan. (Human play is not
+    // read here: its land drop always offers each target AND a hold plan,
+    // HumanFetchHoldVariant, USER 2026-11-14.)
     static const bool auto_crack = EnvOn("MTG_RW_BURN_FETCH_AUTOCRACK", true); // DEFAULT ON; =0 restores full hold search
     return !auto_crack;
 }
@@ -23408,7 +23737,7 @@ bool ModernRwBurnProvider::ConsiderFetchHold(const GameState&, const CardDefinit
 std::vector<std::string> ModernRwBurnProvider::FetchCandidates(
     const GameState& s, int controller, const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (DecisionUnpruned(UnprunedGate::Fetch)) { return all; }
 
     int white_sources = 0;
@@ -23449,14 +23778,77 @@ static bool LegacyImmediateOutsideMill(const GameState& state, const CardDefinit
         && std::string(ResolveProvider(state).Name()) != "Mill";
 }
 
+void WidenHumanFetchTargets(const GameState& state, int controller, const CardParams& fetch_pp,
+                            std::vector<std::string>& cands)
+{
+    if (!HumanPlayActive() || LegacyFetchImmediateOn()) { return; }
+    for (std::string& nm : AllLegalFetchTargets(state, controller, fetch_pp))
+    { if (std::find(cands.begin(), cands.end(), nm) == cands.end()) { cands.push_back(std::move(nm)); } }
+}
+
+static bool BattlefieldModelFetch(const CardParams& p)
+{
+    return !p.fetch_land_types.empty() && p.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn();
+}
+
+std::vector<std::string> OnPlayFetchCandidates(const GameState& state, int controller, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    std::vector<std::string> cands;
+    if (BattlefieldModelFetch(p) && !LegacyImmediateOutsideMill(state, land))
+    {
+        for (const std::vector<std::string>& pick : LandSearchPicksMemo(state, controller, LandSearchSpecOf(p)))
+        { if (!pick.empty()) { cands.push_back(pick.front()); } }
+    }
+    else { cands = ResolveProvider(state).FetchCandidates(state, controller, p); }
+    WidenHumanFetchTargets(state, controller, p, cands);
+    return cands;
+}
+
+void NarrowOnPlayFetch(const GameState& state, int controller, const CardDefinition& land,
+                       std::vector<std::string>& cands)
+{
+    if (cands.size() <= 1 || DecisionUnpruned(UnprunedGate::Fetch) || HumanPlayActive()) { return; }
+    const DecisionProvider& prov = ResolveProvider(state);
+    // The battlefield list already carries LandSearchFetchPickWidth; the legacy one its FetchSearchCandidates.
+    if (!BattlefieldModelFetch(land.params) || LegacyImmediateOutsideMill(state, land))
+    { cands = prov.FetchSearchCandidates(state, controller, land.params, cands); }
+    // Then the land drop's own width (OnPlayFetchWidth, default the top pick -- see its declaration).
+    const int w = prov.OnPlayFetchWidth(state, land);
+    if (w > 0 && static_cast<int>(cands.size()) > w) { cands.resize(static_cast<std::size_t>(w)); }
+}
+
+// The modern zero-mana, one-life, sacrifice-self, single-land fetch template: the only activated search
+// safe to collapse through PerformFetch (other activated searches keep their full cost path).
+static bool OnePayLifeFetch(const CardParams& p)
+{
+    return p.land_search_activation_cost->ManaValue() == 0 && p.land_search_activation_life_cost == 1
+        && p.land_search_activation_sacrifice_self && p.land_search_count == 1;
+}
+
+// HUMAN PLAY offers both on the land drop (USER 2026-11-14: "Human play doesn't need to keep the hold, at
+// least by default", "allow deferring the fetch in the choice dialog", "I would be okay with it being on all
+// of the time"): one variant per legal target resolves the fetch on play, and one kFetchHoldTarget variant
+// keeps it on the battlefield. Not on a replay of a reference recorded under an older rule.
+static bool HumanFetchChoiceOn()
+{
+    return HumanPlayActive() && !LegacyFetchImmediateOn() && !LegacyHumanFetchHoldOn();
+}
+
 bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
     if (p.fetch_land_types.empty()) { return false; }
     if (LegacyImmediateOutsideMill(state, land)) { return true; }
     if (!p.land_search_activation_cost.has_value() || LegacyFetchImmediateOn()) { return true; }
-    if (!ModernFetchCollapsible(state, p)) { return false; }
-    if (HumanPlayActive() || DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    if (!OnePayLifeFetch(p)) { return false; }
+    // Human play: on play unless the land drop's plan names kFetchHoldTarget (PlayLandCore). The <=3-life
+    // safety is an AUTONOMOUS policy: the human sees the same targets + hold dialog at every life total.
+    if (HumanFetchChoiceOn()) { return true; }
+    if (state.players[state.active_player_index].life <= 3) { return false; }
+    if (DecisionUnpruned(UnprunedGate::Fetch)) { return false; }
+    // A replay under --legacy-human-fetch-hold: the pre-2026-11-14 human rule, always held.
+    if (HumanPlayActive()) { return false; }
     return !ResolveProvider(state).ConsiderFetchHold(state, land);
 }
 
@@ -23473,8 +23865,7 @@ bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land)
 // non-empty fetch_target that PlayLandCore collapses (FetchCrackOnPlayPinned). Byte-identical for every
 // deck that does not offer the hold with a modern fetch: Modern RW Burn / FiveColour / Anti-Lifegain
 // decline the hold (FetchResolvesOnPlay is already true there), and the legacy fetch shape is immediate.
-// Not in HUMAN PLAY: the viewer's menu indices are what saved references replay by, so its menu is left
-// exactly as it was (a viewer surface for the same line is an open item in docs/design/analysis-Spirits.md).
+// Human play offers target choices and an explicit hold; legacy reference replays retain their prior route.
 bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land)
 {
     const CardParams& p = land.params;
@@ -23484,10 +23875,17 @@ bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land)
 }
 
 // The apply's half: a modern fetch played WITH a pinned target is the crack-on-play variant above.
-// (A hold variant always carries an empty target; human play never emits a pinned one.)
+// (A held autonomous variant carries an empty target; the human hold uses kFetchHoldTarget.)
 bool FetchCrackOnPlayPinned(const GameState& state, const CardDefinition& land, const std::string& target)
 {
     return !target.empty() && !HumanPlayActive() && ModernFetchCollapsible(state, land.params);
+}
+
+bool HumanFetchHoldVariant(const GameState& state, const CardDefinition& land)
+{
+    const CardParams& p = land.params;
+    return HumanFetchChoiceOn() && !p.fetch_land_types.empty() && p.land_search_activation_cost.has_value()
+        && OnePayLifeFetch(p) && FetchResolvesOnPlay(state, land);
 }
 
 int ModernRwBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
@@ -24291,6 +24689,7 @@ namespace
     const ExtraTurnsProvider     g_extra_turns;
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
+    const BoarsProvider          g_boars;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -26944,6 +27343,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // that signature alone. Params carried by no other deck, OR-ed across six cards (see the class note);
     // INT-2 appends the morph params (morph_cost, megamorph_cost, ...) to the same OR.
     bool morph = false;
+    // BOARS (R/G Boar ramp-tribal; BoarsProvider). MUST return ABOVE `anti`: the fetchlands' fetch_land_types set
+    // that signature alone. Params carried by no other deck (see the class note; I2-I5 append to the OR).
+    bool boars = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -27130,6 +27532,16 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.endstep_sacrifice_self || p.combat_damage_self_may_draw > 0
             || p.turned_face_up_return_gy_to_hand)
         { morph = true; }
+        // Boars: Flinthoof Boar's self haste, Zhur-Taa Druid's tap-for-mana ping, Herald of Ilharg's creature-cast
+        // counters (the class note lists what later integrators OR in).
+        if (p.self_haste_cost.has_value() || p.tap_mana_damage_each_opponent > 0
+            || p.creature_cast_trigger_plus_counters > 0
+            || p.etb_other_creatures_grant_vigilance    // End-Raze Forerunners (I3a)
+            || p.lord_affects_mana_ability_creatures || p.attack_untap_mana_ability_attackers
+            || p.cast_trigger_untap_pump_target_min_spent > 0    // Raggadragga (I3b)
+            || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0   // Decimator (I4)
+            || p.attack_put_creature_from_hand)   // Ilharg, the Raze-Boar (I5a)
+        { boars = true; }
         if (p.replenish_enchantments || p.own_creature_enters_opp_damage > 0
             || p.tap_post_draw_discard > 0 || p.threshold_loot_cost.has_value())
         { gods = true; }
@@ -27691,6 +28103,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // param); its signature is carried by no other deck (see the flag).
     // Morph: FIRST -- its signature is carried by no other deck, and it must beat `anti` (Wooded Foothills).
     if (morph)       { return g_morph; }
+    // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
+    if (boars)       { return g_boars; }
     if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
     // Spirits: above `anti`, `goblin` and `vial && slivers` (see the flag). Its signature is carried by
@@ -35552,7 +35966,7 @@ std::vector<std::string> CycloneLtpTargets(const GameState& s, int me, const std
 std::vector<std::string> CycloneProvider::FetchCandidates(const GameState& s, int controller,
                                                           const CardParams& fetch_pp) const
 {
-    std::vector<std::string> all = GenericProvider::FetchCandidates(s, controller, fetch_pp);
+    std::vector<std::string> all = AllLegalFetchTargets(s, controller, fetch_pp);   // library order
     if (all.size() <= 1 || !CycloneFetchRuleOn()) { return all; }
     const bool short_red = CycloneShortOnRed(s, controller);
     std::vector<int> tier(all.size());
@@ -35571,7 +35985,9 @@ std::vector<std::string> CycloneProvider::FetchSearchCandidates(const GameState&
                                                                 const CardParams& fetch_pp,
                                                                 const std::vector<std::string>& ranked) const
 {
-    if (!CycloneFetchRuleOn()) { return DeckProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked); }
+    // Rule off: the top pick only -- the base default this arm read until 2026-11-14 (the USER then made the default
+    // every target); kept so the lever's off arm is byte-identical.
+    if (!CycloneFetchRuleOn()) { (void)s; (void)controller; (void)fetch_pp; return FetchTopPickOnly(ranked); }
     if (ranked.size() <= 1) { return ranked; }
     // The rule's pick, plus the enters-tapped triome (Xander's Lounge) beside it: "arguably the triome should be
     // fetched if we don't need the mana" -- the search decides whether the mana is needed.
@@ -42609,7 +43025,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
         v.push_back(p.is_token); v.push_back(p.entered_this_turn); v.push_back(p.fresh_hold_exempt);
         v.push_back(p.gained_control_this_turn); v.push_back(p.marked_for_destruction); v.push_back(p.is_animated);
         v.push_back(p.animated_printed_types); v.push_back(p.temp_haste); v.push_back(p.temp_lifelink);
-        v.push_back(p.temp_double_strike); v.push_back(p.skip_next_untap); v.push_back(p.etb_tap_pending);
+        v.push_back(p.temp_double_strike); v.push_back(p.temp_vigilance); v.push_back(p.skip_next_untap); v.push_back(p.etb_tap_pending);
         v.push_back(p.exile_at_end); v.push_back(p.pay_sac_eaten); v.push_back(p.mana_tap_mark); v.push_back(p.echo_resolved);
         v.push_back(p.storage_hold_this_turn); v.push_back(p.loyalty_activated_this_turn);
         v.push_back(p.colored_cast_lifegain_used_this_turn); v.push_back(p.storied_draw_used_this_turn);

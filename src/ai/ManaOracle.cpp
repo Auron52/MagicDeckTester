@@ -879,9 +879,64 @@ Res Resources(const GameState& s, bool with_float)
 
 int Get(const Res& r, const std::string& k) { auto it = r.find(k); return it == r.end() ? 0 : it->second; }
 
-// a >= b on every resource. `strict` is set when some resource is strictly larger.
-bool Covers(const Res& a, const Res& b, bool* strict)
+// GENERAL FLOAT COVERS A RESTRICTED UNIT OF THE SAME KEY (Boars 5d sweep, seed 97013). A unit floating in the GENERAL
+// pool (F:) can pay everything a creature-only (FC:) or big-spell-only (FB:) unit of the same colour can, and more,
+// so a board holding the general unit is at least as good as one holding the restricted one. Without this the
+// payment refine could never give back a general source whose re-tap makes general mana where the engine's payment
+// had floated a restricted unit: Decimator's emerge {5}{G}{G}{G} off {Hierarch (the victim), four lands, Birds,
+// Somberwald Sage for its last 2} floated one creature-only {W}; {Hierarch, four lands, Sage x3} pays it exactly and
+// gives Birds back (whose re-tap makes a general {W}), but the per-key compare read FC:W 0 < 1 and refused it --
+// Birds stayed tapped and missed the lethal swing. In place on two [pool][key] tables (pool 0 general, 1 creature-
+// only, 2 big-spell-only; keys WUBRGC*): each restricted deficit is moved onto x's general surplus of that key.
+// Inert unless a restricted reserve is nonzero, i.e. on every board without Sage / Troyan-type sources.
+void CoverRestrictedFromGeneral(int (&u)[3][7], const int (&v)[3][7])
 {
+    for (int c = 0; c < 7; ++c)
+    {
+        for (int r = 1; r < 3; ++r)
+        {
+            const int need = v[r][c] - u[r][c];
+            if (need <= 0) { continue; }
+            const int spare = u[0][c] - v[0][c];
+            const int t = std::min(need, std::max(0, spare));
+            u[0][c] -= t; u[r][c] += t;
+        }
+    }
+}
+void CoverRestrictedFromGeneral(Res& a, const Res& b)
+{
+    static const char kKeys[] = "WUBRGC*";
+    for (int c = 0; c < 7; ++c)
+    {
+        const std::string g = std::string("F:") + kKeys[c];
+        for (const char* tag : { "FC:", "FB:" })
+        {
+            const std::string k = std::string(tag) + kKeys[c];
+            const int need = Get(b, k) - Get(a, k);
+            if (need <= 0) { continue; }
+            const int t = std::min(need, std::max(0, Get(a, g) - Get(b, g)));
+            if (t <= 0) { continue; }
+            a[g] -= t;
+            if (a[g] == 0) { a.erase(g); }
+            a[k] += t;
+        }
+    }
+}
+
+// a >= b on every resource. `strict` is set when some resource is strictly larger.
+bool Covers(const Res& a_in, const Res& b, bool* strict)
+{
+    Res a_adj;
+    const Res* ap = &a_in;
+    if (a_in.find("F:W") != a_in.end() || a_in.find("F:U") != a_in.end() || a_in.find("F:B") != a_in.end()
+        || a_in.find("F:R") != a_in.end() || a_in.find("F:G") != a_in.end() || a_in.find("F:C") != a_in.end()
+        || a_in.find("F:*") != a_in.end())
+    {
+        bool restricted = false;
+        for (const auto& kv : b) { if (kv.first.rfind("FC:", 0) == 0 || kv.first.rfind("FB:", 0) == 0) { restricted = true; break; } }
+        if (restricted) { a_adj = a_in; CoverRestrictedFromGeneral(a_adj, b); ap = &a_adj; }
+    }
+    const Res& a = *ap;
     bool st = false;
     for (const auto& kv : b) { if (Get(a, kv.first) < kv.second) { return false; } }
     for (const auto& kv : a)
@@ -948,12 +1003,20 @@ bool CoversBoards(const GameState& x, const GameState& y, bool with_float, bool*
     {
         const ManaPool* xs[3] = { &x.floating_mana, &x.floating_creature_mana, &x.floating_bigspell_mana };
         const ManaPool* ys[3] = { &y.floating_mana, &y.floating_creature_mana, &y.floating_bigspell_mana };
-        for (int i = 0; i < 3 && ok; ++i)
+        int uu[3][7], vv[3][7];
+        for (int i = 0; i < 3; ++i)
         {
             const ManaPool& f = *xs[i];
             const ManaPool& g = *ys[i];
-            const int u[7] = { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild };
-            const int v[7] = { g.white, g.blue, g.black, g.red, g.green, g.colorless, g.wild };
+            const int u0[7] = { f.white, f.blue, f.black, f.red, f.green, f.colorless, f.wild };
+            const int v0[7] = { g.white, g.blue, g.black, g.red, g.green, g.colorless, g.wild };
+            for (int c = 0; c < 7; ++c) { uu[i][c] = u0[c]; vv[i][c] = v0[c]; }
+        }
+        CoverRestrictedFromGeneral(uu, vv);
+        for (int i = 0; i < 3 && ok; ++i)
+        {
+            const int* u = uu[i];
+            const int* v = vv[i];
             if (t_cover_c_fold && u[5] < v[5])
             {
                 // Spend the other keys' surplus on the {C} deficit; what is left over is still a strict gain.

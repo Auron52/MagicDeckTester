@@ -184,6 +184,69 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
             def.upkeep_fold_audited = audited;
             def.upkeep_fold_keeper  = audited && !drawback && benign_kw && def.card.IsCreature();
         }
+        // HERALD'S HORN TAKE FOLD's premise (CardDefinition::hand_gain_audited; the fold and its proof are at
+        // SpellEffects.h HornTakeFoldHolds). Audited 2026-11-13 card by card for the Boars list: none of these
+        // keys can put a card into its controller's hand mid-turn, net of the card's own play --
+        //   * mana / land keys: produce mana, enter tapped, pay life; a fetch SEARCHES onto the battlefield;
+        //   * etb_bounce_land (Gruul Turf): the Karoo returns a land, but it left the hand to be played, so the
+        //     hand is not larger than before it was played (net 0). A Karoo put from the LIBRARY needs a
+        //     non-land-typed land search, which is no audited card's;
+        //   * Lightning Greaves' equip keys, Flinthoof Boar's static pump and self haste;
+        //   * Zhur-Taa Druid's tap_mana_damage_each_opponent (Boars I2a): its ping deals damage, it never moves a card;
+        //   * Herald of Ilharg's cast trigger (Boars I2b): +1/+1 counters and damage, it never moves a card;
+        //   * End-Raze Forerunners' ETB (Boars I3a): until-EOT +2/+2 and vigilance on the team, it never moves a card;
+        //   * Herald's Horn's own keys: its upkeep take is COUNTED explicitly by the fold (one card per trigger).
+        // Anything else -- including every param a later Boars card adds -- is unaudited until someone audits it.
+        {
+            static const char* const kHandAuditedParams[] = {
+                "produces", "hand_fixing_produces", "produces_amount", "produces_one_color", "creature_mana_only", "enters_tapped",
+                "etb_pay_life_to_untap", "checkland_subtypes", "etb_bounce_land",
+                "fetch_land_types", "land_search_count", "land_search_activation_cost", "land_search_activation_taps",
+                "land_search_activation_sacrifice_self", "land_search_activation_life_cost",
+                "is_equipment", "equip_cost_generic", "equip_grants_haste", "equip_grants_shroud",
+                "self_pump_if_land_subtype", "self_haste_cost",
+                "chooses_creature_type", "reduces_spell_subtype_amount", "reduces_spell_subtype_creature_only",
+                "upkeep_look_top_chosen_type_to_hand",
+                "tap_mana_damage_each_opponent",   // Zhur-Taa Druid: damage only, never a card
+                "creature_cast_trigger_plus_counters", "creature_cast_counter_damage_min_mv",   // Herald of Ilharg: counters + damage
+                "etb_other_creatures_pump_power", "etb_other_creatures_pump_tough",              // End-Raze Forerunners (I3a):
+                "etb_other_creatures_grant_vigilance",                                           //   a temp pump + vigilance, never a card
+                // Raggadragga (I3b): an anthem, an attack untap and a cast-trigger untap + pump -- never a card.
+                "lord_affects_mana_ability_creatures", "power_bonus", "tough_bonus",
+                "attack_untap_mana_ability_attackers", "cast_trigger_untap_pump_target_min_spent",
+                "cast_trigger_untap_pump_power", "cast_trigger_untap_pump_tough", "cast_trigger_untap_pump_grants_trample",
+                // Decimator of the Provinces (I4): an alternative cost and a cast-trigger team pump -- never a card.
+                "emerge_cost", "cast_trigger_team_pump_power", "cast_trigger_team_pump_tough", "cast_trigger_team_pump_trample",
+                // Ilharg, the Raze-Boar (I5a): the put moves a card hand -> battlefield (the hand only shrinks); the
+                // end-step RETURN is a hand gain, so it is audited ONLY together with HornTakeFoldHolds' explicit
+                // bounded term (+1 per attack-put source that could attack this turn) -- never on its own.
+                "attack_put_creature_from_hand", "attack_put_return_at_end_step",
+                // Ilharg's death clause (I5b): graveyard -> LIBRARY (third from the top), never the hand.
+                "dies_to_library_position",
+            };
+            static const char* const kHandAuditedTemplates[] = { "custom", "vanilla_creature", "basic_land", "mana_dork" };
+            static const char* const kHandBenignKeywords[] = {
+                "Flying", "Exalted", "Equip", "Trample", "Haste", "Vigilance", "Reach", "First strike",
+                "Double strike", "Menace", "Lifelink", "Deathtouch", "Defender",
+            };
+            auto in = [](const auto& arr, const std::string& k)
+            { for (const char* a : arr) { if (k == a) { return true; } } return false; };
+            bool ok = in(kHandAuditedTemplates, entry.value("template", std::string("custom")));
+            if (ok && entry.contains("parameters") && entry["parameters"].is_object())
+            {
+                for (auto it = entry["parameters"].begin(); it != entry["parameters"].end(); ++it)
+                { if (!in(kHandAuditedParams, it.key())) { ok = false; break; } }
+            }
+            if (ok && entry.contains("keywords") && entry["keywords"].is_array())
+            {
+                for (const json& kw : entry["keywords"])
+                {
+                    const std::string k = kw.is_string() ? kw.get<std::string>() : std::string{};
+                    if (!in(kHandBenignKeywords, k)) { ok = false; break; }
+                }
+            }
+            def.hand_gain_audited = ok;
+        }
         // THE SEQUENTIAL-WALK SUPPLY BOUND's premises (CardDefinition::walk_bound_audited; the bound and its
         // proof are at TurnSolver.cpp SeqWalkProvablyShort). A WHITELIST of raw keys, like the upkeep fold's:
         // a param invented tomorrow is NOT audited, and an unaudited card anywhere the bound looks (a walk
@@ -1049,6 +1112,10 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     }
     if (params.contains("self_bounce_cost"))
         p.self_bounce_cost = ManaCostFromString(params["self_bounce_cost"].get<std::string>());
+    for (const std::string& c : params.value("hand_fixing_produces", json::array()))
+    {
+        p.hand_fixing_produces.push_back(ColorFromString(c));
+    }
     p.mdfc_back_name = params.value("mdfc_back_name", std::string{});
     for (const std::string& c : params.value("mdfc_back_produces", json::array()))
     {
@@ -1283,6 +1350,8 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.lord_excludes_self           = params.value("lord_excludes_self", false);
     p.self_pump_if_other_subtype_or_land = params.value("self_pump_if_other_subtype_or_land", std::string{});
     p.self_pump_if_land_subtype = params.value("self_pump_if_land_subtype", std::string{});
+    if (params.contains("self_haste_cost"))
+        p.self_haste_cost = ManaCostFromString(params["self_haste_cost"].get<std::string>());
     p.self_pump_if_opponent_island = params.value("self_pump_if_opponent_island", false);
     p.power_equals_creature_count  = params.value("power_equals_creature_count", false);
     p.toughness_equals_creature_count = params.value("toughness_equals_creature_count", false);
@@ -1482,6 +1551,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.discard_random_after_tutor = params.value("discard_random_after_tutor", false);
     p.controller_lifegain_equals_power = params.value("controller_lifegain_equals_power", false);
     p.tap_opponent_lifegain     = params.value("tap_opponent_lifegain", 0);
+    p.tap_mana_damage_each_opponent = params.value("tap_mana_damage_each_opponent", 0);
+    p.creature_cast_trigger_plus_counters = params.value("creature_cast_trigger_plus_counters", 0);
+    p.creature_cast_counter_damage_min_mv = params.value("creature_cast_counter_damage_min_mv", 0);
     for (const std::string& s : params.value("fetch_land_types", json::array()))
         p.fetch_land_types.push_back(s);
     p.target_own_creature       = params.value("target_own_creature", false);
@@ -1793,6 +1865,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         params.value("reduces_graveyard_cast_generic", 0);   // Patrician Geist
     p.chooses_creature_type     = params.value("chooses_creature_type", false);
     p.choose_type_on_enter      = params.value("choose_type_on_enter", false);
+    p.upkeep_look_top_chosen_type_to_hand = params.value("upkeep_look_top_chosen_type_to_hand", false);
     p.chosen_type_added_to_self = params.value("chosen_type_added_to_self", false);
     p.own_creature_enters_opp_life_loss = params.value("own_creature_enters_opp_life_loss", 0);
     p.own_creature_enters_opp_damage = params.value("own_creature_enters_opp_damage", 0);
@@ -1994,6 +2067,30 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.mana_requires_land_subtype   = params.value("mana_requires_land_subtype", std::string{});
     p.untap_target_land = params.value("untap_target_land", false);
     p.etb_team_pump_per_creature   = params.value("etb_team_pump_per_creature", false);
+    p.etb_other_creatures_pump_power = params.value("etb_other_creatures_pump_power", 0);   // End-Raze Forerunners
+    p.etb_other_creatures_pump_tough = params.value("etb_other_creatures_pump_tough", 0);
+    p.etb_other_creatures_grant_vigilance = params.value("etb_other_creatures_grant_vigilance", false);
+    // Raggadragga, Goreguts Boss (Boars I3b)
+    p.lord_affects_mana_ability_creatures = params.value("lord_affects_mana_ability_creatures", false);
+    p.attack_untap_mana_ability_attackers = params.value("attack_untap_mana_ability_attackers", false);
+    p.cast_trigger_untap_pump_target_min_spent = params.value("cast_trigger_untap_pump_target_min_spent", 0);
+    p.cast_trigger_untap_pump_power = params.value("cast_trigger_untap_pump_power", 0);
+    p.cast_trigger_untap_pump_tough = params.value("cast_trigger_untap_pump_tough", 0);
+    p.cast_trigger_untap_pump_grants_trample = params.value("cast_trigger_untap_pump_grants_trample", false);
+    // Decimator of the Provinces (Boars I4): emerge + the cast-trigger team pump.
+    if (params.contains("emerge_cost"))
+        p.emerge_cost = ManaCostFromString(params["emerge_cost"].get<std::string>());
+    p.cast_trigger_team_pump_power   = params.value("cast_trigger_team_pump_power", 0);
+    p.cast_trigger_team_pump_tough   = params.value("cast_trigger_team_pump_tough", 0);
+    p.cast_trigger_team_pump_trample = params.value("cast_trigger_team_pump_trample", false);
+    // Ilharg, the Raze-Boar (Boars I5a): the attack-trigger put and its end-step return.
+    p.attack_put_creature_from_hand = params.value("attack_put_creature_from_hand", false);
+    p.attack_put_return_at_end_step = params.value("attack_put_return_at_end_step", false);
+    if (p.attack_put_return_at_end_step && !p.attack_put_creature_from_hand)
+        throw std::runtime_error("attack_put_return_at_end_step requires attack_put_creature_from_hand");
+    p.dies_to_library_position = params.value("dies_to_library_position", 0);   // Ilharg's death clause (I5b)
+    if (p.dies_to_library_position < 0)
+        throw std::runtime_error("dies_to_library_position must be >= 0");
     p.etb_put_creature_cards_from_hand = params.value("etb_put_creature_cards_from_hand", false);
     p.upkeep_reorder               = params.value("upkeep_reorder", 0);
     // Saga (CR 714): scheduling + the three chapter effects. All default to inert.

@@ -567,6 +567,8 @@ static std::string FdPlanText(const TurnSolver::Plan& p)
     // The RECORDED continuation rides the phase too (replayed by the post-loop catch-all), and a
     // committed line whose projection depends on it reads as a plain cast list without this:
     // knights s1115 d3's T3 "Plains + Acclaimed Contender" only wins T4 WITH its recorded Vial.
+    if (p.legend_keep_turn != 0) { s += " lkeep" + std::to_string(static_cast<int>(p.legend_keep_turn)); }   // Boars LK
+    if (p.upkeep_legend_keep_choice >= 0) { s += " ulkeep" + std::to_string(static_cast<int>(p.upkeep_legend_keep_choice)); }   // LK3
     if (!p.breakpoint_actions.empty())
     {
         s += " | bp[";
@@ -748,13 +750,14 @@ inline bool CarriesPostApplyPin(const TurnSolver::Plan& p)
         || p.attack_land_search_choice >= 0 || p.combat_crack_choice >= 0 || p.discard_choice >= 0
         || p.vial_charge_choice >= 0 || p.saga_target_choice >= 0 || p.upkeep_land_search_choice >= 0
         || p.grace_choice >= 0 || p.upkeep_gy_reanimate_choice >= 0 || p.demon_trigger_choice >= 0
-        || p.upkeep_tutor_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
+        || p.upkeep_tutor_choice >= 0 || p.upkeep_horn_choice >= 0 || p.upkeep_legend_keep_choice >= 0 || p.miracle_choice >= 0 || p.suspend_tutor_choice >= 0 || p.echo_choice >= 0
         || p.doth_put_choice >= 0 || p.eot_face_up_choice >= 0
         || p.atk_dork_release >= 0 || p.combat_landfall_target_choice >= 0 || p.landfall_target_choice >= 0
         || p.cast_trigger_target_choice >= 0
         || p.combat_transform_choice >= 0
         || p.militia_pride_pay_choice >= 0
         || p.mihail_pay_choice.IsPinned() || !p.prophets_sac_choice.empty()
+        || p.militia_pride_pay_choice >= 0 || p.attack_put_choice != -1 || p.legend_keep_turn != 0
         || p.sweep_choice >= 0 || p.le_fire_choice >= 0 || p.dig_choice == 0 || p.dig_choice == 1;
 }
 // A re-solve's payment pair (tap mode, fresh-spend) matters exactly when it differs from the committed
@@ -797,6 +800,9 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
         && s.scripted_mihail_pay_choice != p.mihail_pay_choice)                                         { ok = false; }
     if (!p.prophets_sac_choice.empty()
         && s.scripted_prophets_sac != p.prophets_sac_choice)                                       { ok = false; }
+    if (p.attack_put_choice != -1 && s.scripted_attack_put != p.attack_put_choice)                 { ok = false; }
+    if (p.legend_keep_turn != 0 && LegendKeepNow(s) != p.legend_keep_turn)                          { ok = false; }
+    if (p.upkeep_legend_keep_choice >= 0 && LegendKeepUpkeepPin(s) != p.upkeep_legend_keep_choice)   { ok = false; }
     if (p.landfall_target_choice >= 0  && LandfallTargetPinFor(s) != p.landfall_target_choice)     { ok = false; }
     if (p.cast_trigger_target_choice >= 0 && CastTriggerTargetPinFor(s) != p.cast_trigger_target_choice) { ok = false; }
     if (p.saga_target_choice >= 0      && s.scripted_saga_target != p.saga_target_choice)          { ok = false; }
@@ -804,6 +810,7 @@ inline void RecordReSolveRealized(const GameState& s, const TurnSolver::Plan& p,
     if (p.upkeep_gy_reanimate_choice >= 0
         && s.scripted_upkeep_gy_reanimate != p.upkeep_gy_reanimate_choice)                       { ok = false; }
     if (p.upkeep_tutor_choice >= 0 && s.scripted_upkeep_tutor != p.upkeep_tutor_choice)            { ok = false; }
+    if (p.upkeep_horn_choice >= 0 && s.scripted_upkeep_horn != p.upkeep_horn_choice)               { ok = false; }
     if (p.miracle_choice >= 0 && s.scripted_miracle_choice != p.miracle_choice)                    { ok = false; }
     if (p.suspend_tutor_choice >= 0 && s.scripted_suspend_tutor != p.suspend_tutor_choice)          { ok = false; }
     if (p.demon_trigger_choice >= 0 && s.scripted_demon_trigger != p.demon_trigger_choice)      { ok = false; }
@@ -3257,6 +3264,24 @@ void AIEngine::DecideCrossingFetch(GameState& state)
         state.scripted_upkeep_land_search = land_pin;
         if (land_pin != 0) { m_committed_line.clear(); }
     }
+    // Herald's Horn's residual take/leave (Boars I1), when the committed line's crossing recorded none. A leave
+    // deviates from what the queued line assumed (its playout took), so it clears that line.
+    const int horn_pin = TurnSolver::ChooseRealCrossingHorn(view, m_lookahead_depth, m_max_turns, &budget,
+                                                            m_search_post_combat);
+    if (horn_pin != -2)
+    {
+        state.scripted_upkeep_horn = static_cast<std::int16_t>(horn_pin);
+        if (horn_pin != 0) { m_committed_line.clear(); }
+    }
+    // The NEXT upkeep's legend-rule keep (Boars LK3), when the committed line's crossing recorded none (no-op without
+    // an upkeep entry route beside a legend of ours). A pick other than the provider's deviates from the queued line.
+    const int ulk_pin = TurnSolver::ChooseRealCrossingUpkeepLegend(view, m_lookahead_depth, m_max_turns, &budget,
+                                                                   m_search_post_combat);
+    if (ulk_pin != -2)
+    {
+        SetLegendKeepUpkeepPin(state, ulk_pin);
+        if (ulk_pin != kLegendKeepUpkeepFollow) { m_committed_line.clear(); }
+    }
     // Morph's opponent-end-step flip, when the committed line's crossing recorded none (no-op without a face-down
     // permanent). A pick other than the front deviates from what the queued line assumed, so it clears that line.
     const int fu_pin = TurnSolver::ChooseRealCrossingFaceUp(view, m_lookahead_depth, m_max_turns, &budget,
@@ -5043,12 +5068,19 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (plan.landfall_target_choice >= 0)
             { landfall_target_exec.emplace(plan.landfall_target_choice, state.TurnSeq()); }
             if (plan.cast_trigger_target_choice >= 0)
-            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq()); }
+            { cast_trigger_target_exec.emplace(plan.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal); }
             if (plan.land_search_before_land)
             {
                 TurnSolver::ApplyLandSearchActs(state, plan.actions, m_logger);
                 exec_ls_act_done = true;
             }
+            // The turn's searched legend-rule keep (Plan::legend_keep_turn) BEFORE the land drop: the legend rule is an
+            // SBA at the drop itself (LegendRuleSbaCheckpoint), and the drop's ETBs can put a duplicate (The Grey Havens'
+            // scry -> Galadriel of Lothlorien's reveal put). The rollout writes it before its drop (ApplyPlanDirect's
+            // WritePostApplyStatePins precedes PlayLandByName); without this the executor's drop read the provider's
+            // keep (Galadriel seed 9101 gi1/gi2/gi6 T5, MTG_TRACE=legend pinned=0). WritePostApplyStatePins below
+            // writes the same value again (idempotent).
+            if (plan.legend_keep_turn != 0) { SetLegendKeepNow(state, plan.legend_keep_turn); }
             if (fold_land && plan.land_decided && !plan.land_to_play.empty())
             {
                 const CardDefinition* ld = CardDatabase::Instance().Lookup(plan.land_to_play);
@@ -5307,7 +5339,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         if (x.landfall_target_choice >= 0)
         { landfall_target_exec.reset(); landfall_target_exec.emplace(x.landfall_target_choice, state.TurnSeq()); }
         if (x.cast_trigger_target_choice >= 0)
-        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq()); }
+        { cast_trigger_target_exec.reset(); cast_trigger_target_exec.emplace(x.cast_trigger_target_choice, state.TurnSeq(), state.cast_untap_pump_ordinal); }
         rs_last = x;
     };
 
@@ -5701,7 +5733,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
         state.mv_cast_this_turn += def->card.m_mana_cost.ManaValue();
         if (m_exec_post_combat) { NoteMain2StagerCast(state, *def); }
         state.stack.push_back(std::move(entry));
-        FireOnCastTriggers(state, *def);
+        FireOnCastTriggers(state, *def, effective.ManaValue());   // the retrace cost paid above
         FireProwess(state, *def);
         // A retrace cast is a cast: its cascade fires exactly as a hand cast's does (this is
         // Throes of Chaos's ONLY effect -- since cascade moved to cast-trigger entries, this
@@ -7677,6 +7709,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
             if (a.gy_exile_mode == 4
                 && !DiscardTeamPumpLive(state, state.active_player_index, a.sac_source_id,
                                         a.discard_name.str())) { continue; }
+            // Flinthoof Boar's self haste (mode 6): liveness first -- lockstep twin of the rollout's.
+            if (a.gy_exile_mode == 6
+                && !SelfHasteActivationLive(state, state.active_player_index, a.sac_source_id)) { continue; }
             // Mode 5: the loop-funded team pump (AccomplishedAlchemist; lockstep with ApplyPlanDirect's trailing
             // pass): fund the real cost with the untap loop (FundTeamPumpByLoop, shared), then pay it with this
             // world's payer.
@@ -7714,6 +7749,7 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     std::string what;
                     if (a.gy_exile_mode == 1)      { what = "pump (discard)"; }
                     else if (a.gy_exile_mode == 3) { what = "self pump + lifelink"; }
+                    else if (a.gy_exile_mode == 6) { what = "gains haste until end of turn"; }
                     else if (a.gy_exile_mode == 4)
                     {
                         // Stromkirk Condemned's discard-cost team pump (Vampires A2).
@@ -10182,6 +10218,13 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     const int      attach_equip_id = riders.attach_equip_id;
     const InternedName remand_name = riders.remand_by;   // the REMAND rider (Action::remand_by)
     const InternedName remand_chain_name = riders.remand_chain_by;   // ...and Remand-on-Remand's A
+    // Ilharg's death "may" (Action::dies_tuck, Boars I5b item 3): pinned over the whole cast, so an EMERGE victim
+    // sacrificed below reads it; the spell's own resolution reads the StackEntry copy (EffectHandler::Resolve).
+    // Lockstep twin: apply_one's scope.
+    DiesTuckPinScope _dies_tuck(state, riders.dies_tuck);
+    // The CR 704.5j keep (Action::legend_keep, Boars I5b item 4): pinned over the whole cast for any inline legend
+    // rule; the spell's own resolution reads the StackEntry copy (EffectHandler::Resolve). Twin: apply_one's scope.
+    LegendKeepPinScope _legend_keep(riders.legend_keep, hand_card_in.m_name.str());
     m_last_cast_remanded = false;
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached((*hand_card_p));
@@ -10346,6 +10389,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // "Target player gains N life": the searched player target (0 = us). Read at resolution by
     // ApplyCastLifegain (EffectHandler) -- the rollout twin passes apply_one's rider.
     if (riders.player_target != 0) { entry.player_target = riders.player_target; }
+    entry.dies_tuck = riders.dies_tuck;   // Ilharg's death "may" for this spell's resolution (legend-rule loser)
+    entry.legend_keep = riders.legend_keep;   // the CR 704.5j keep for this spell's resolution (I5b item 4)
     if (riders.trick_redirect != 0) { entry.trick_redirect = riders.trick_redirect; }   // Spellskite
     // Magnetic Theft: the searched Equipment target, read at resolution by the shared
     // ResolveAttachTargetEquipment (the creature target is entry.enchant_target). Param-gated, so no
@@ -10618,6 +10663,32 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // EVOKE (Reveillark): the alternate cost replaces the printed one wholesale (CR 702.75;
     // lockstep with the enumeration's a.cost and the rollout's apply_one).
     if (evoke && def->params.evoke_cost.has_value()) { effective = *def->params.evoke_cost; }
+    // EMERGE (Decimator, CR 702.119; Boars I4): resolve the victim FIRST (human play asks the `sacrifice` board
+    // click here, before the bill), then price the alternative cost off ITS mana value. Lockstep twin of the
+    // rollout's apply_one; the victim may tap for this cast (scope below) and is sacrificed before the cast
+    // triggers fire.
+    const bool em_cast = riders.emerge && def->params.emerge_cost.has_value() && !free_cast;
+    int em_victim = 0;
+    if (em_cast)
+    {
+        // Human play (the board click is the only reader): offer only victims whose bill this board pays -- the
+        // same payer this cast uses below, on a scratch copy, with the victim's own mana free (PaySacVictimScope).
+        const std::function<bool(int)> em_payable = [&](int victim_num) -> bool
+        {
+            GameState probe = state;
+            const RevealLogPause quiet;
+            const ManaCost bill = EmergeCastCost(*def, probe, EmergeVictimMv(probe, victim_num));
+            PaySacVictimScope _pv(victim_num);
+            SpellSubtypePayScope _ss(&def->card);
+            ManaPool av = AvailableManaPool(probe);
+            return TapForCost(probe, bill, av, /*for_creature=*/true);
+        };
+        em_victim = EmergeResolveVictim(state, def->card.m_name.str(), own_targets,
+                                        g_play_sacrifice_chooser ? &em_payable : nullptr);
+        own_targets = em_victim;
+        entry.soulfire_own_targets = em_victim;
+        effective = EmergeCastCost(*def, state, EmergeVictimMv(state, em_victim));
+    }
     if (riders.awaken && def->params.awaken_cost.has_value()) { effective = *def->params.awaken_cost; }
     // MORPH: the face-down cast pays a flat {3} (lockstep twin of the rollout's apply_one).
     if (riders.face_down != 0 && !def->params.face_down_real_name.empty())
@@ -10690,6 +10761,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // REMAND rider: the Remand is paid in X's ONE bill (lockstep with apply_one and the enumeration's
     // combined Action::cost). X's own cost is kept for the log line.
     const ManaCost x_effective = effective;
+    // MANA SPENT (FireOnCastTriggers' contract; rollout twin: apply_one's cast_mana_spent): X's own bill, before
+    // the Remand rider joins it, less the creature-spell convoke taps below; a free / Fireblast / alternative-
+    // lifegain cast spends none (set where those are decided, below).
+    int cast_mana_spent = x_effective.ManaValue();
     ManaCost remand_cost;
     if (remand_def != nullptr)
     {
@@ -10710,6 +10785,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     if (IsFireblastAlternative(*def, tutor_target)
         && !PayFireblastAlternative(state, state.active_player_index, tutor_target)) { return; }
     bool haste_from_mana = false;   // Generator Servant's rider, set at the payment below
+    if (alt_lifegain > 0 || spend_free) { cast_mana_spent = 0; }
     if (alt_lifegain > 0)
     {
         // Alternative cost: pay no mana; instead the payload's players gain alt_lifegain life
@@ -10761,7 +10837,8 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // publish -- the additional-cost victim (own_targets) pays before any other source.
         // A sacrifice-a-LAND cast's predicted victim pays first too (SacLandPayVictim; the rollout
         // twin is apply_one's identical publish).
-        PaySacVictimScope _psv(HasSacCreatureAdditionalCost(def->params)
+        PaySacVictimScope _psv(em_cast ? em_victim   // the emerge victim taps for this cast, then dies
+            : HasSacCreatureAdditionalCost(def->params)
             ? SacCostPayVictimId(state, def->params, own_targets)
             : (def->params.sacrifice_land ? SacLandPayVictim(state, effective) : 0));
         // Phyrexian life gate (before the tap, which mutates): the payment must leave us alive.
@@ -10773,8 +10850,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         }
         // "Sacrifice a creature" with NO creature left (the generic route): the spell cannot be cast
         // (CR 601.2h) -- drop it before any mana moves. Twin of the rollout apply's identical gate.
-        if (SacCreatureCostFoldsByReadiness(def->params)
-            && !SacReadinessVictimAvailable(state, state.active_player_index))
+        if ((SacCreatureCostFoldsByReadiness(def->params)
+             && !SacReadinessVictimAvailable(state, state.active_player_index))
+            || (em_cast && em_victim <= 0))   // emerge with no creature to sacrifice (never the hard cast)
         {
             return;
         }
@@ -10804,7 +10882,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
         // CREATURE-SPELL CONVOKE AT THE CAST (lockstep twin of apply_one): tap the arm's bodies on the
         // board as it stands now and reduce by what was tapped; untapped again if the payment fails.
         ConvokeCastTaps _cv;
+        const int cv_before = effective.ManaValue();
         _cv.Tap(state, state.active_player_index, *def, convoke_green, convoke_other, effective);
+        cast_mana_spent = std::max(0, cast_mana_spent - (cv_before - effective.ManaValue()));   // a tapped body is not mana
         SpellSubtypePayScope _ssps(&def->card);   // see the Giada note at the other cast site
         // GENERATOR SERVANT: a creature SPELL spends one haste-tagged {C} on its own bill first --
         // the executor twin of apply_one's take (TakeHasteFloatForCreatureSpell). `effective` stays
@@ -11016,6 +11096,14 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
                                      def->params.sac_additional_creature_color, own_targets,
                                      SacCreatureCostFoldsByReadiness(def->params));
     }
+    // EMERGE: the resolved victim (asked already in human play -> chooser muted) dies HERE, with the mana and
+    // before FireOnCastTriggers -- a Herald of Ilharg / Raggadragga victim never sees this cast. Twin: apply_one.
+    if (em_cast && em_victim > 0)
+    {
+        SacChooserMute _mute;
+        PerformSacrificeCreatureCost(state, (*hand_card_p).m_name.str(), std::string{}, em_victim,
+                                     /*readiness_route=*/true);
+    }
 
     // REMAND: keep the physical card -- a countered X goes back to its owner's hand under its own number.
     Card remand_x_card;
@@ -11137,7 +11225,7 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // trigger or spell can resolve. The paid cast remains committed on the stack.
     if (state.own_death_live && SelfHasLost(state)) { return; }
     // On-cast triggers fire when the spell is cast (CR 603.3), before it resolves.
-    FireOnCastTriggers(state, *def);
+    FireOnCastTriggers(state, *def, cast_mana_spent);
     FireProwess(state, *def);
     // Real-stack cast triggers (cascade instances, demonstrate): pushed ABOVE the spell entry
     // so they -- and the free casts they make -- resolve BEFORE the spell itself (CR 601.2i /

@@ -209,6 +209,10 @@
 // bytes to every Card/Permanent but no mutable Permanent field; existing card and state folds apply.
 // Extraplanar Lens adds an interned imprinted land name (8 bytes). It is exact-match state:
 // two otherwise identical Lenses can double different named lands. Folded below when set.
+// 328 -> 328 (2026-11-13, Boars I3a): Permanent gained `temp_vigilance` (End-Raze Forerunners' until-EOT
+// team grant), a bool in existing padding -- THE TRIPWIRE DID NOT FIRE. Classification: BOUNDARY
+// ASSERTION, the verbatim temp_double_strike argument (until-EOT, cleared at cleanup; refused in
+// AtCleanBoundary, never compared). Also folded into the sim keys, gated on set.
 static_assert(sizeof(Permanent) == 328,
               "Permanent changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
@@ -632,11 +636,9 @@ static_assert(sizeof(Player) == 216,
 // +8 bytes (2026-11-14, mana-clean item W; 1496 -> 1504): `prepay_wild_true` grows to 33 bytes (gheld[5] + gtot: the
 // generic pips' re-assignable credits, MTG_PREPAY_WILD_DEFER). Same classification and the same value-gated fold
 // (PrepayWildTrueKey mixes the loaded credits, which are 0 whenever gtot no longer matches the float).
-// Mill/Archive Trap and Fatal Push revolt state and Deeproot Pilgrimage's
-// deck-constant tap-watcher gate both occupy aligned storage. Mill's
-// future-determining flags are folded in Build() when live; the Pilgrimage
-// gate is identical across states of one game.
-static_assert(sizeof(GameState) == 1608,   // combined Mill and Merfolk Turns fields
+// Mill/Archive Trap, Fatal Push revolt, and Merfolk tap watchers occupy upstream storage.
+// Boars adds the Horn upkeep pin and the Ilharg / legend pins. Recheck this size after merging fields.
+static_assert(sizeof(GameState) == 1616,   // upstream 1608 plus Boars upkeep storage
               "GameState changed size -- fold any new field into dominance::Build() (see the "
               "MAINTENANCE HAZARD note at the top of Dominance.h) before updating this number.");
 
@@ -851,9 +853,11 @@ inline bool AtCleanBoundary(const GameState& s)
         if (p.damage != 0 || p.pending_death_trigger != 0)          { return false; }
         if (p.temp_power_bonus != 0 || p.temp_tough_bonus != 0)     { return false; }
         if (p.temp_haste || p.is_animated || p.exile_at_end
-            || p.sac_at_end_step || p.destroy_at_end_if_attacked)   { return false; }
+            || p.sac_at_end_step || p.destroy_at_end_if_attacked
+            || p.return_at_end_step)                                 { return false; }   // Ilharg's put (I5a)
         if (p.temp_lifelink)                                        { return false; }   // Heliod until-EOT grant
         if (p.temp_double_strike)                                   { return false; }   // Valiant Knight until-EOT grant
+        if (p.temp_vigilance)                                       { return false; }   // End-Raze Forerunners until-EOT grant
         if (p.temp_indestructible)                                  { return false; }   // Boros Charm until-EOT grant
         if (p.etb_tap_pending)                                      { return false; }   // Colossification deferral (mid-turn only)
         if (p.marked_for_destruction)                               { return false; }
@@ -1065,6 +1069,10 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
              i < s.scripted_prophets_sac.size(); ++i)
         { fold(static_cast<std::uint64_t>(s.scripted_prophets_sac[i] + 3)); }
     }
+    if (s.scripted_attack_put != -1)   // Ilharg's attack put (I5a), its own domain tag
+    { fold(0x1A66000000ull + static_cast<std::uint64_t>(static_cast<std::uint32_t>(s.scripted_attack_put + 3))); }
+    if (s.scripted_legend_keep != 0)   // the turn's legend-rule keep (Boars LK), its own domain tag
+    { fold(0x1E6C700000ull + static_cast<std::uint64_t>(s.scripted_legend_keep)); }
     if (s.scripted_early_ondemand_crack) { fold(0xEA4CCA1100ull); }
     // The searched echo pin (Plan::echo_choice): FUTURE-DETERMINING across the turn boundary (set during the
     // turn's apply, consumed at the NEXT upkeep -- the scripted_upkeep_gy_reanimate class), value-gated with
@@ -1077,6 +1085,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     { fold(0xD0E700000000ull + static_cast<std::uint64_t>(s.scripted_doth_put)); }
     if (s.scripted_upkeep_tutor >= 0)
     { fold(0x555054555400ull + static_cast<std::uint64_t>(s.scripted_upkeep_tutor)); }
+    // Herald's Horn's take/leave mask (Boars I1): the same set-at-apply, consumed-at-next-upkeep class.
+    if (s.scripted_upkeep_horn >= 0)
+    { fold(0x484F524E0000ull + static_cast<std::uint64_t>(s.scripted_upkeep_horn)); }
     if (s.scripted_miracle_choice >= 0)
     { fold(0x4D4952410000ull + static_cast<std::uint64_t>(s.scripted_miracle_choice)); }
     // Profane Tutor's off-suspend fetch (GameState::scripted_suspend_tutor): set at a crossing, consumed at the

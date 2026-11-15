@@ -193,10 +193,10 @@ TEST_CASE("Chandra emblem survives loyalty death and stacks on every spell cast"
     ApplyLoyaltyAbility(s, 0, 102, 3);
     CHECK(s.players[0].emblem_spell_cast_damage == 5);
     REQUIRE(s.battlefield.size() == 1); // Chandra dies to the loyalty cost
-    FireOnCastTriggers(s, BurnDef("Grim Lavamancer"));
+    FireOnCastTriggers(s, BurnDef("Grim Lavamancer"), /*mana_spent=*/0);
     CHECK(s.players[1].life == 15);
     s.players[0].emblem_spell_cast_damage += 5;
-    FireOnCastTriggers(s, BurnDef("Lightning Bolt"));
+    FireOnCastTriggers(s, BurnDef("Lightning Bolt"), /*mana_spent=*/0);
     CHECK(s.players[1].life == 5);
 }
 
@@ -307,7 +307,7 @@ TEST_CASE("Chandra minus and emblem human targets use their rules-legal chooser"
     };
     g_play_target_chooser = &emblem;
     s.players[0].emblem_spell_cast_damage = 5;
-    FireOnCastTriggers(s, BurnDef("Lightning Bolt"));
+    FireOnCastTriggers(s, BurnDef("Lightning Bolt"), /*mana_spent=*/0);
     CHECK(emblem_asked == 1); CHECK(s.players[0].life == 15); CHECK(s.players[1].life == 20);
 }
 

@@ -510,6 +510,27 @@ struct Action
     // and is folded into plan_signature / ActionFoldSig only when nonzero, so every other key is
     // unchanged. In the padding after the int8 block above (sizeof(Action) unchanged).
     std::int8_t player_target      = 0;
+    // ILHARG'S DEATH "MAY" (CardParams::dies_to_library_position, Boars I5b item 3): what THIS cast does with an
+    // Ilharg it kills -- the emerge victim it sacrifices, or the legend-rule loser its resolution makes. 0 = the
+    // cast kills no such creature (every other action), 1 = put it into its owner's library third from the top,
+    // 2 = leave it in the graveyard. A SEARCHED axis: the DIES-TUCK post-pass (CollectActions) twins every cast
+    // that kills one; it rides CastRiders into both cast paths (a DiesTuckPinScope over the cast) and the
+    // executor's StackEntry (the resolution's legend rule), and is folded into plan_signature / ActSig /
+    // ActionFoldSig only when nonzero, so every other key is unchanged. 3 / 4 are the same answers (tuck / leave)
+    // for a legendary copy whose duplicate is only in HAND (no copy on the battlefield yet): the death happens only
+    // if the SAME plan casts another copy first, so plan_signature tags 3 / 4 only in that case -- the twins of a
+    // plan casting one copy carry an inert rider and fold onto one plan (a sound identity fold).
+    std::int8_t dies_tuck          = 0;
+    // LEGEND-RULE KEEP (CR 704.5j, Boars I5b item 4): which copy THIS cast's legend rule keeps when the cast is a
+    // legendary card and another same-name permanent of ours is on the battlefield at its resolution. 0 = no
+    // legend rule (every other action) / unpinned (the provider's LegendKeepIndex -- the playout policy beyond
+    // the horizon), 1 = keep the OLDEST copy (the new one dies), 2 = keep the NEWEST (the cast copy survives,
+    // the older one dies). A SEARCHED axis: the LEGEND-KEEP pass (CollectActions) twins a legendary cast with a
+    // same-name permanent already on the battlefield, and AppendSubdecisionAxes fans a plan that casts two copies
+    // of one legend (every cast of that name in the plan carries the same answer, so execution order cannot
+    // matter). Rides CastRiders into both cast paths (a LegendKeepPinScope over the cast) and the executor's
+    // StackEntry (the resolution); folded into plan_signature / ActSig / ActionFoldSig only when nonzero.
+    std::int8_t legend_keep        = 0;
     // LURRUS OF THE DREAM-DEN (CardParams::gy_cast_permanent_max_mv, 2026-11-10): a CastFromGraveyard
     // cast made under a graveyard CAST PERMISSION -- the permission source's card.m_number (a deck card
     // number, so it fits). -1 for every other action, including a retrace cast (which carries
@@ -665,6 +686,16 @@ struct Action
                                        // dominated by the cheaper hard cast). Recompute sites
                                        // must swap in evoke_cost (the phyrexian/convoke lockstep
                                        // list); plan_signature carries #E.
+    bool        emerge           = false;
+                                       // EMERGE (Decimator of the Provinces, CR 702.119; Boars I4):
+                                       // this CastFromHand pays CardParams::emerge_cost reduced by the
+                                       // victim's printed MV (generic only) and SACRIFICES that victim
+                                       // as the cost -- the victim's m_number rides soulfire_own_targets
+                                       // (the sac-additional-cost carrier), a same-plan hand victim also
+                                       // rides trick_hand_target. One variant per victim class, sharing
+                                       // hand_index with the hard cast (SAC-ANY-CREATURE post-pass).
+                                       // Bill = EmergeCastCost; a victim question reads
+                                       // CastSacsCreature(params, emerge). plan_signature carries #EM.
     bool        adventure        = false;
                                        // ADVENTURE (CR 715 -- Brightcap Badger // Fungus Frolic):
                                        // this CastFromHand is the ADVENTURE mode -- pay the
@@ -848,6 +879,11 @@ struct Action
                                        // projection silently misses a cast Goblin Guide / Monastery
                                        // Swiftspear. Stamped once by CollectActions (both enumerators
                                        // share it), 0 for every non-creature / summoning-sick cast.
+    // GREEDY SELF-HASTE RIDER (MTG_GREEDY_SELF_HASTE; Solve only -- the d0 runner and the horizon playout): an
+    // ActivatePump mode-6 action (Flinthoof Boar's "{R}: haste") for a self_haste_cost creature still IN HAND, the
+    // hand slot whose cast it hastes. A subset may hold it only together with that cast (SubsetHasUncastHasteRider);
+    // the trailing pass of both apply worlds activates it once the cast has landed. -1 = not a rider.
+    int  haste_rider_hand      = -1;
     // Goblin Tomb Raider (static_artifact_haste) cast with NO durable artifact on board: its hasty
     // attack power IF the same subset also puts a durable artifact onto the battlefield
     // (adds_durable_artifact on another selected action). Credited into haste_cast_atk only then.
@@ -1154,11 +1190,23 @@ struct CastRiders
     int      trick_redirect    = 0;
     // Action::face_down (morph): the FACE-DOWN cast -- {3} and the "<name> (Face-down)" face.
     std::int8_t face_down      = 0;
+    // Action::emerge (Decimator of the Provinces): pay EmergeCastCost and sacrifice the pinned victim
+    // (own_targets) BEFORE the cast triggers fire -- both worlds' cast paths read it here.
+    bool     emerge            = false;
+    // Action::dies_tuck (Ilharg's death "may"): installed as GameState::dies_tuck_pin over the cast by both
+    // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
+    std::int8_t dies_tuck      = 0;
+    // Action::legend_keep (CR 704.5j keep, Boars I5b item 4): installed as the legend-keep pin over the cast by both
+    // worlds' cast paths, and stamped on the executor's StackEntry for the resolution.
+    std::int8_t legend_keep    = 0;
 
     static CastRiders Of(const Action& a)
     {
         CastRiders r;
         r.cast_from_top = a.cast_from_top;
+        r.emerge            = a.emerge;
+        r.dies_tuck         = a.dies_tuck;
+        r.legend_keep       = a.legend_keep;
         r.face_down         = a.face_down;
         r.trick_redirect    = a.trick_redirect;
         r.gy_cast_source_id = a.gy_cast_source_id;
@@ -1747,6 +1795,28 @@ public:
         // -1 = no search pin; 0 = decline all. The shared combat resolver consumes it.
         std::int16_t militia_pride_pay_choice = -1;
         MihailPayChoices mihail_pay_choice; // optional {1} in trigger order
+        // Ilharg, the Raze-Boar's attack put (Boars I5a): -1 = no pin (the provider's AttackPutDefault), -2 = decline,
+        // > 0 = the CARD NUMBER of the creature card to put (a number, not a rank: a cast between plan time and combat
+        // re-ranks the hand -- the Flinger reasoning). Rides GameState::scripted_attack_put. Folded wherever
+        // militia_pride_pay_choice is (VALUE-gated: != -1). A positive pin may carry kAttackPutTuckBit (GameState.h):
+        // Ilharg's death "may" for the legend-rule loser the put makes (I5b item 3) -- bit = tuck, no bit = leave.
+        std::int16_t attack_put_choice = -1;
+        // THE TURN'S LEGEND-RULE KEEP (CR 704.5j, Boars LK 2026-11-13): 0 = no pin (the provider's LegendKeepIndex),
+        // 1 = keep the OLDEST copy, 2 = keep the NEWEST, for every legend rule of this turn that no name-scoped rider
+        // (Action::legend_keep, kAttackPutKeepNewBit) decides: a legendary land drop, a put, a nested free cast, a
+        // token / copy entrant, a reanimation. Fanned by AppendSubdecisionAxes' LEGEND-KEEP TURN FAN (the base is
+        // stamped 1, the twin 2) only where the turn can reach such a group (LegendKeepTurnFanLive). Rides
+        // GameState::scripted_legend_keep (WritePostApplyStatePins, both worlds). Folded VALUE-gated (!= 0) wherever
+        // attack_put_choice is, and an axis variant (PlanIsAxisVariantExceptOrder): a twin whose turn met no group
+        // lands on its base's state.
+        std::int8_t legend_keep_turn = 0;
+        // THE NEXT UPKEEP's legend-rule keep (Boars LK3): an upkeep-only route (Marit Lage's Slumber's token, an
+        // Emeria / Defense of the Heart put, an upkeep arrival) fires before any plan of its turn, so it rides the
+        // boundary: a BoundaryFan digit (rank 0 = 3, covered and the provider's own pick, so ties keep it; then 1 keep
+        // the oldest / 2 keep the newest, whichever the provider did not pick), recorded only where the crossing's
+        // upkeep met a legend group whose copies differ. Rides bits 2-3 of GameState::scripted_legend_keep
+        // (SetLegendKeepUpkeepPin, write-when-set); -1 = none chosen.
+        std::int8_t upkeep_legend_keep_choice = -1;
         // THE LAND-SEARCH ACTIVATIONS' POSITION in the cast sequence (follow-up (b) of the land-search
         // design, 2026-10-15; re-expressed in Plan::land_slot's position semantics when the land drop
         // became a position). Every board activation runs in the TRAILING pass, after the plan's
@@ -1808,8 +1878,9 @@ public:
         // (ScriptedCastTriggerTarget, keyed on GameState::TurnSeq) and folded into every plan key while
         // live. Emitted by AppendSubdecisionAxes for plans that cast a targeted cast-trigger card from
         // hand, every option (no width cap -- a cap would make the later options unfindable at any budget).
-        // int16_t: a two-target option list on a wide board exceeds 127.
-        int16_t cast_trigger_target_choice = -1;
+        // int16_t: a two-target option list on a wide board exceeds 127. int32_t since Boars I4c: Raggadragga's
+        // PER-INSTANCE ranks pack one digit per trigger instance (UntapPumpRankPack, SpellEffects.h).
+        int32_t cast_trigger_target_choice = -1;
         // SEARCHED DEMON TRIGGERS (Shadowborn INT-2): Reaper from the Abyss's end-step morbid destroy TARGET
         // (bits 0-7) and Abhorrent Overlord's upkeep sacrifice VICTIM (bits 8-15), each PACKED per trigger
         // ordinal (kDemonPinBits bits, low first) as a RANK into the trigger's resolution-time class list
@@ -1910,6 +1981,8 @@ public:
         // Next upkeep's paid tutor-to-top choice: 0 hold, positive index into the
         // live payable source/target menu. The boundary fan chooses it before draw.
         std::int16_t upkeep_tutor_choice = -1;
+        // Herald's Horn's next-upkeep take/leave mask (GameState::scripted_upkeep_horn; -1 = none chosen).
+        std::int16_t upkeep_horn_choice = -1;
         std::int8_t miracle_choice = -1; // first-draw optional cast: 0 decline, 1 cast
         // Provider MOVE-ORDER front tier (DecisionProvider::PlanMoveOrderFront; Morph INT-8 (E): plans that
         // cast or regrow a Berserk-shape doubler are tried first). ORDERING ONLY, sorted below atk_forfeit and
@@ -2211,6 +2284,12 @@ public:
     // The uncached greedy solve behind Solve() (which memoizes it per decision under MTG_SOLVE_MEMO
     // -- see namespace solvememo in TurnSolver.cpp). Same permit.
     static Plan SolveUncached(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    // ...whose greedy walk is SolveUncachedBody; SolveUncached adds the crack-first comparison (a battlefield
+    // fetch whose untapped land pays this main's casts -- see "CRACK-FIRST ROOTS" in TurnSolver.cpp).
+    // `floor_num`: only sources numbered above it (one canonical order per set of cracks).
+    static Plan SolveUncachedBody(const GameState& state, bool is_pre_combat, const GreedyPermit& permit);
+    static Plan SolveCrackFirst(const GameState& state, bool is_pre_combat, const GreedyPermit& permit,
+                                int floor_num);
     // The rollout / d0 Arcanum Wings combat-swap pin (MTG_ROLLOUT_AURA_SWAP, Bruna sweep E): applied
     // ONLY to a whole main-phase greedy plan (the horizon leaf, the d0 runner's plan).
     static void PinRolloutAuraSwap(const GameState& state, bool is_pre_combat, Plan& plan);
@@ -2876,6 +2955,20 @@ public:
                                                            SearchBudget* budget, bool second_main);
     static int ChooseRealCrossingLand(GameState& state, int depth, int max_turns,
                                       SearchBudget* budget, bool second_main);
+    // ...and Herald's Horn's upkeep "may" (Boars I1): a residual take/leave the committed line left unpinned is
+    // searched at the end of the real turn; the winner goes to state.scripted_upkeep_horn (-2 = nothing to decide).
+    static int ChooseRealCrossingHorn(GameState& state, int depth, int max_turns,
+                                      SearchBudget* budget, bool second_main);
+    // Test hook: every crossing the horn axis makes from `state`, as (recorded pin or -2, hand size after it).
+    static std::vector<std::pair<int, int>> HornBoundaryForTest(const GameState& state);
+    // ...and the NEXT upkeep's legend-rule keep (Boars LK3): an upkeep legend rule whose copies differ that the
+    // committed line left unpinned is searched at the end of the real turn; the winner goes to bits 2-3 of
+    // state.scripted_legend_keep (-2 = nothing to decide).
+    static int ChooseRealCrossingUpkeepLegend(GameState& state, int depth, int max_turns,
+                                              SearchBudget* budget, bool second_main);
+    // Test hook: every crossing the upkeep-legend digit makes from `state`, as (recorded pin or -2, the kept copy's
+    // summoning-sick flag for the first legendary name with a duplicate in the crossed upkeep... -1 when none).
+    static std::vector<std::pair<int, int>> UpkeepLegendBoundaryForTest(const GameState& state);
     // ...and morph's opponent-end-step flip: an unpinned flip menu (a face-down permanent of ours) is searched at
     // the end of the real turn, one crossing per menu rank; the winner goes to state.scripted_eot_face_up (-2 =
     // nothing to decide: no face-down permanent, or a one-entry menu).
@@ -3012,6 +3105,12 @@ public:
     // Ardenn's begin-combat attach applied first, then every attack-trigger addend -- Raubahn's
     // CountAttackAttachPump included). Test hook only: lets a unit test assert projection == realised.
     static int ProjectedAttackDamageForTest(const GameState& state);
+    // Test hook: PlanOpensBreakpoint's site mask for one plan (bit k = breakpoint site k), the predicate wave 0
+    // and the wave walker select base plans with. Lets a unit test pin that a class's plans are fanned at all.
+    static int PlanOpensBreakpointForTest(const GameState& state, const Plan& p);
+    // Test hook (Boars I5a): AppendSubdecisionAxes over `plans` (the base plans of one enumeration node), exactly
+    // as the search fans them; returns the list with every axis variant appended.
+    static std::vector<Plan> SubdecisionAxesForTest(const GameState& state, bool is_pre_combat, std::vector<Plan> plans);
     // Test hook (searched echo, MTG_ECHO_AXIS): the rollout's turn boundary itself (end step, cleanup,
     // untap, upkeep -- echo included -- and the draw), exactly as every search host runs it. False = the
     // game ended on the boundary (an empty-library draw).
@@ -4088,6 +4187,8 @@ public:
         // caller stamps it there (StampBoundaryPins); -2 = nothing chosen. Never set by FSLineWin itself.
         int boundary_doth = -2;
         int boundary_tutor = -2;
+        int boundary_horn = -2;    // ...and Herald's Horn's take/leave mask (Plan::upkeep_horn_choice)
+        int boundary_ulk = -2;     // ...and the next upkeep's legend keep (Plan::upkeep_legend_keep_choice, LK3)
         int boundary_miracle = -2;
         int boundary_stut = -2;   // ...and Profane Tutor's off-suspend fetch (Plan::suspend_tutor_choice)
         int boundary_grace = -2;

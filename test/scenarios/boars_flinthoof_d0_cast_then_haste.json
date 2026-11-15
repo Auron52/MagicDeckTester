@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Boars (2026-11-14, d0haste). The GREEDY twin of boars_flinthoof_cast_then_haste.json: the same frame",
+    "(Stomping Ground + Forest + a non-sick Ignoble Hierarch, Flinthoof in hand, opponent at 4; cast",
+    "Flinthoof {1}{G} as a 3/3, {R} haste, attack alone with exalted = 4) played by the DEPTH-0 RUNNER,",
+    "whose policy is TurnSolver::Solve -- the same policy every playout turn beyond the search horizon",
+    "uses. Solve had no route to a just-cast Flinthoof's haste (CollectActions offers the activation only",
+    "for a creature already on the battlefield) and won T5. MTG_GREEDY_SELF_HASTE adds the rider",
+    "(AppendGreedySelfHasteRiders): cast + {R} reserved + activation applied, scored with its attack."
+  ],
+  "deck": "decks/Boars/Boars.cod",
+  "profile": "decks/Boars/Boars.profile.json",
+  "turn": 4, "on_the_play": false, "active_life": 18, "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Stomping Ground" },
+    { "name": "Forest" },
+    { "name": "Ignoble Hierarch" }
+  ],
+  "hand": [ "Flinthoof Boar", "Decimator of the Provinces", "End-Raze Forerunners" ],
+  "library_top": [ "Decimator of the Provinces", "End-Raze Forerunners", "Decimator of the Provinces" ],
+  "library_filler": "End-Raze Forerunners", "library_size": 40,
+  "depth": 0, "budget_ms": 0, "max_turns": 8,
+  "expect_win_turn": 4
+}

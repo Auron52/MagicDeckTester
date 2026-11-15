@@ -939,6 +939,9 @@ enum Slot : int
     CCO_NC_PRIORITY,         // MTG_CCO_NC_PRIORITY  item C2, Pirates: inside a line or unseen continuation, a castable hand noncreature has a pip only unrestricted mana can pay; this payment plus that pip needs all unrestricted supply of its colour or more total mana than unrestricted sources provide. A creature-only land pays the current creature or generic ability ahead of an unrestricted source even when another hand creature wants the land's colour. Ordering only. Default ON; =0 -> hand-creature keep wins
     PREPAY_CCO_VIAL_DIG,     // MTG_PREPAY_CCO_VIAL_DIG  item C2, Pirates s30070533: a joint prepay ahead of a Vial-put ETB dig cannot price the undeclared continuation. When a castable undeclared noncreature in hand needs coloured mana and the current bill plus it exceeds unrestricted supply while creature-only mana exists, decline the joint prepay and pay casts in order. Default ON; =0 -> historical joint prepay
     BP_FADE_POST_ENTRY,      // MTG_BP_FADE_POST_ENTRY  a freshly cast Saproling Burst opens the site-9 activation continuation in this main. Default ON; =0 -> historical main-2-only pops
+    ATTACK_HERALD_TRIGGER,    // MTG_ATTACK_HERALD_TRIGGER  the this-turn damage projection (both consider() sites) adds Herald of Ilharg's cast trigger (Boars I2b): each creature cast of the plan puts the counters on every Herald out, an MV>=5 cast deals each Herald's running count x heads, and a pre-combat ATTACKING Herald's growth is attack damage; a Herald cast earlier in the plan joins for later casts. Default ON; =0 -> not projected
+    BOARS_CAST_ORDER,         // MTG_BOARS_CAST_ORDER  Boars' TOTAL cast order (AI-drafted, USER-approved 2026-11-14: "That order seems reasonable to me."; docs/design/boars-cast-order-2026-11-14.md): Herald's Horn > Lightning Greaves > Herald of Ilharg > creatures of mana value <= 4 cheapest first > other 5+ creatures (Ilharg) > End-Raze Forerunners (ETB pumps the others) > Decimator (cast pump, emerge victim on board); ties by name. DEFAULT ON; =0 -> the generic tiers (BoarsProvider::CastOrderRank)
+    GREEDY_SELF_HASTE,        // MTG_GREEDY_SELF_HASTE  the GREEDY policy (Solve: the d0 runner and the horizon playout, never a searched frame) offers "cast this self_haste_cost creature, keep its haste cost, activate it" (Flinthoof Boar): a pre-combat rider action per such creature in hand, valid only beside its cast, scored with the attack it enables (haste_attack_power + one attack of eval) and APPLIED by both worlds' trailing pass. Only Flinthoof holds the param (every other deck byte-identical). Held-out seed 99001, 400 g/cell paired: Boars d0 -24 turns (24 better / 0 worse), d3 b10 and d5 b20 0/0; Boars 2HG d0 -20 (22/2), d3 b10 0 (3/3), d5 b20 -1 (1/0) -- docs/design/boars-greedy-self-haste.md. DEFAULT ON; =0 -> no rider (the pre-2026-11-14 policy)
     COUNT
 };
 
@@ -1822,6 +1825,9 @@ inline const char* Name(int slot)
         "MTG_CCO_NC_PRIORITY",
         "MTG_PREPAY_CCO_VIAL_DIG",
         "MTG_BP_FADE_POST_ENTRY",
+        "MTG_ATTACK_HERALD_TRIGGER",
+        "MTG_BOARS_CAST_ORDER",
+        "MTG_GREEDY_SELF_HASTE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

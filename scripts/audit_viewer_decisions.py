@@ -107,6 +107,9 @@ MANIFEST = {
     "enters_look_top_land_or_hand": ("dig",           truthy),
     "attack_nontoken_pay_token_cost": ("dig",       truthy),   # Militia's Pride: pay or decline for each nontoken attacker
     "cast_subtype_pay_token_cost": ("dig",          truthy),   # Emperor Mihail II: pay {1} or decline on each Merfolk cast trigger
+    # Ilharg, the Raze-Boar (Boars I5b): "When Ilharg dies ..., you may put it into its owner's library third from
+    # the top" -- asked as a `dig` yes/no "(dies to library)" (ResolveDiesToLibraryPosition).
+    "dies_to_library_position": ("dig",             positive),
     "cast_reorder":          ("reorder",              positive),
     # Brainstorm (2026-10-17): "then put two cards from your hand on top of your library in any order"
     # -- reuses the `dig` chooser, asked twice at resolution ("(put back: top)", "(put back: second)")
@@ -116,6 +119,10 @@ MANIFEST = {
     "post_draw_discard":     ("discard",              positive),
     "tap_post_draw_discard": ("discard",            positive),
     "threshold_loot_cost":   ("main_phase",           truthy),
+    # Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn" is a searched main-phase plan
+    # action (Action::Kind::ActivatePump mode 6, `act=Flinthoof Boar`), surfaced in the main_phase plan list
+    # (DECISIONS.md row). Its BOARD_ACTIVATIONS row covers the board verb; this is the decision-manifest row.
+    "self_haste_cost":       ("main_phase",           truthy),
     "etb_dig_count":         ("dig",                  positive),
     "upkeep_adds_charge":    ("vial_charge",          truthy),
     "retrace":               ("retrace_discard",      truthy),
@@ -390,6 +397,17 @@ MANIFEST = {
     # USER 2026-09-08: "Coldsteel heart is also not asking for a colour. That is kind of an issue."
     "etb_choose_color":      ("choose_color",         truthy),
     "choose_type_on_enter":  ("choose_creature_type", truthy),
+    # Herald's Horn / Urza's Incubator ("as this enters, choose a creature type") and Metallic Mimic /
+    # Adaptive Automaton (Boars I1, 2026-11-13). The same as-enters shape as Coldsteel Heart: asked at the
+    # universal enter cascade (FireEtbWatchers -> g_play_creature_type_chooser), decision type
+    # `creature_type` (WriteCreatureTypeDecisionJson / creatureTypePanelHtml), the menu = every creature
+    # type the deck's creatures carry. Autonomous play keeps the provider's pick (ChosenCreatureSubtypeId).
+    "chooses_creature_type": ("creature_type",        truthy),
+    "chosen_type_added_to_self": ("creature_type",    truthy),
+    # Herald's Horn's upkeep "you may reveal it and put it into your hand" (Boars I1): the shared `dig`
+    # chooser "(upkeep reveal)", asked at the REAL upkeep only when the top is a creature of the chosen
+    # type (PerformUpkeepHornReveal); 0 = take, -1 = leave it on top.
+    "upkeep_look_top_chosen_type_to_hand": ("dig",    truthy),
     # Rick, Steadfast Leader (Soldiers, 2026-10-04): "As this enters, choose two abilities from among
     # first strike, vigilance, and lifelink." The Coldsteel Heart shape exactly -- an as-enters
     # REPLACEMENT decided at resolution (g_play_etb_keywords_chooser in FireOwnEtbTriggers), its own
@@ -547,6 +565,11 @@ MANIFEST = {
     # (WriteLackeyDecisionJson / lackeyPanelHtml), a resolution-time chooser (g_play_lackey_chooser in
     # FireCombatDamageCheatIntoPlay). Heuristic default = highest-MV matching hand card.
     "combat_damage_puts_subtype_from_hand": ("lackey_put", truthy),
+    # Ilharg, the Raze-Boar (Boars I5a): "whenever Ilharg attacks, you MAY put a creature card from your hand onto
+    # the battlefield tapped and attacking" -- WHICH card (or decline) reuses `lackey_put` (g_play_lackey_chooser in
+    # the shared FireAttackPutFromHand, both combats; the JSON carries "trigger": "attack" and generic wording).
+    # The end-step return is mandatory -- no decision.
+    "attack_put_creature_from_hand": ("lackey_put", truthy),
     # Maelstrom Archangel: "you MAY cast a spell from your hand without paying its mana cost" on
     # combat damage. Was modelled as #FREE plan variants inside the ordinary main-phase menu, which
     # made a one-time TRIGGER behave like a standing option (castable at any moment in the phase) and
@@ -564,6 +587,10 @@ MANIFEST = {
     # a searched cast variant (battlefield classes + same-plan hand creatures); the human picks at CAST
     # through the `sacrifice` board click (PerformSacrificeCreatureCost, g_play_sacrifice_chooser).
     "sac_additional_creature":       ("sacrifice",    truthy),
+    # Decimator of the Provinces (Boars I4): EMERGE. The MODE (emerge vs hard cast) is a main_phase variant of the
+    # hand slot (Action::emerge, #EM1/#EM0, the CheckLine `emerge` sub); WHICH creature dies is the `sacrifice`
+    # board click, asked at the cast BEFORE payment (EmergeResolveVictim -- the victim's MV sets the bill).
+    "emerge_cost":                   ("sacrifice",    truthy),
     # Lake of the Dead: WHICH Swamp its entry replacement / its crack eats -- the `sacrifice` board click
     # over every Swamp (ChooseSubtypeLandSacrifice); the autonomous side folds soundly (tap-first +
     # basic-subset dominance).
@@ -699,6 +726,9 @@ MANIFEST = {
     # prompted.
     "cast_trigger_exile_target_permanents":   ("target", positive),
     "cast_trigger_destroy_target_permanents": ("target", positive),
+    # Raggadragga, Goreguts Boss (Boars I3b): "untap target creature. It gets +7/+7 ..." -- the same shared `target`
+    # board-click at ChooseCastTriggerTargets(untap_pump), creatures only, full legal set in human play.
+    "cast_trigger_untap_pump_target_min_spent": ("target", positive),
     # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
     # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
     # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
@@ -806,6 +836,9 @@ BOARD_ACTIVATIONS = {
     "garth_copy_ability":                        ("activate",       truthy,   None),  # Garth's tap
     "untap_creature_cost":                       ("activate",       truthy,   "untap_creature_cost"),
     "team_pump_cost":                            ("activate",       truthy,   "team_pump_cost"),
+    # Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn" -- ActivatePump mode 6,
+    # offered only while the creature is summoning-sick with combat ahead (SelfHasteActivationLive).
+    "self_haste_cost":                           ("activate",       truthy,   "self_haste_cost"),
     "firebreathing_discard":                     ("activate",       truthy,   "firebreathing_cost"),
     "attach_all_equipment_cost":                 ("verb:attachall", truthy,   "attach_all_equipment_cost"),
     "tap_put_from_hand_cost":                    ("verb:sfput",     truthy,   "tap_put_from_hand_cost"),
@@ -1240,6 +1273,12 @@ INERT_PARAMS = {
     "etb_opponent_lifegain": "automatic ETB", "opponent_lifegain": "automatic",
     "lifegain_to_loss": "automatic replacement", "on_cast_trigger_damage": "automatic on-cast self-damage",
     "on_cast_trigger_max_mv": "trigger threshold", "tap_opponent_lifegain": "automatic on tap",
+    "tap_mana_damage_each_opponent": "automatic on tap (end-step free ping: no decision)",
+    "creature_cast_trigger_plus_counters": "automatic on-cast trigger (Herald of Ilharg: mandatory, untargeted, fixed count; Boars I2b)",
+    "creature_cast_counter_damage_min_mv": "trigger threshold (Herald of Ilharg: damage to EACH opponent, no target; Boars I2b)",
+    "etb_other_creatures_pump_power": "automatic ETB team pump (End-Raze Forerunners: mandatory, untargeted, every OTHER own creature; Boars I3a)",
+    "etb_other_creatures_pump_tough": "automatic ETB team pump (End-Raze Forerunners, toughness half; Boars I3a)",
+    "etb_other_creatures_grant_vigilance": "automatic ETB team keyword grant (End-Raze Forerunners: vigilance until EOT, no choice; Boars I3a)",
     "tap_self_damage": "automatic on tap", "taps_spawn_opp_token": "automatic on tap (Forbidden Orchard)",
     "upkeep_creates_tokens": "automatic upkeep trigger", "landfall_damage": "damage modifier (rides `targeting`)",
     "grants_double_strike": "static grant", "grants_haste": "static grant",
@@ -1255,6 +1294,7 @@ INERT_PARAMS = {
     "tutor_types": "tutor detail (rides tutor)", "subtypes_affected": "lord/replicate subtype list",
     # mana production (color/source auto-resolved in the payment engine, not a surfaced choice today)
     "produces": "mana production (color auto-resolved in payment)", "produces_amount": "mana amount",
+    "hand_fixing_produces": "Windswept Heath: an IN-HAND colour hint for Creature Giving's discard cover; never a mana ability, no choice",
     "mdfc_back_produces": "MDFC back-face mana (colour auto-resolves once the face is picked; the face pick itself rides main_phase via mdfc_back_name)",
     "mana_rock": "mana source (color auto-resolved)", "is_filter": "mana filter (color auto-resolved)",
     "ramp_filter": "mana filter (color auto-resolved)", "reflecting": "Reflecting-Pool mana (auto-resolved)",
@@ -1584,12 +1624,8 @@ INERT_PARAMS = {
     # much to reduce -- so none of them creates a decision to surface.
     "reduces_spell_subtype_amount": "magnitude of the static subtype cost reduction, no choice",
     "reduces_spell_subtype_creature_only": "scope of the static subtype cost reduction, no choice",
-    # Urza's Incubator's "as this enters, choose a creature type". Modelled as a DETERMINISTIC,
-    # deck-derived choice (DominantCreatureSubtypeId -> Permanent::chosen_subtype_id), not a player
-    # decision: the tribe the deck is built around dominates every alternative, and the answer is a
-    # game-constant so no line ever turns on it. If it is ever made a real per-copy searched branch,
-    # this row must move to MANIFEST and get a chooser + GUI branch.
-    "chooses_creature_type": "ETB creature-type choice resolved deterministically from the deck, no player choice",
+    # Urza's Incubator's "as this enters, choose a creature type" MOVED TO MANIFEST (`creature_type`,
+    # Boars I1 2026-11-13): the human is now asked; autonomous play keeps the provider's deck-derived pick.
     # Dragon Tempest's "whenever a creature you control with flying enters, it gains haste until end
     # of turn" -- mandatory, untargeted, and it grants to the creature that just entered. Nothing to
     # pick. Sits beside grants_haste / equip_grants_haste, which are classified the same way.
@@ -1613,6 +1649,15 @@ INERT_PARAMS = {
     # planeswalker/Garth heuristic sub-picks -- were user-approved 2026-08-06, disclosed in 6a.)
     "attack_draw_cards": "automatic attack trigger (Two-Headed Hellkite: draw on attack), no choice",
     "attack_untap_snow_permanents": "automatic attack trigger (Jorn: untap each snow permanent), no choice",
+    "attack_untap_mana_ability_attackers": "automatic attack trigger (Raggadragga: untap each attacking mana creature), no choice; Boars I3b",
+    "lord_affects_mana_ability_creatures": "static anthem (Raggadragga: creatures with a mana ability +2/+2), no choice; Boars I3b",
+    "cast_trigger_untap_pump_power": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
+    "cast_trigger_untap_pump_tough": "Raggadragga's cast-trigger pump amount (the target is cast_trigger_untap_pump_target_min_spent's decision)",
+    "cast_trigger_untap_pump_grants_trample": "Raggadragga's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
+    "cast_trigger_team_pump_power": "Decimator of the Provinces' MANDATORY untargeted cast trigger (creatures you control +2/+2 until end of turn), no choice; Boars I4",
+    "cast_trigger_team_pump_tough": "Decimator of the Provinces' cast-trigger pump amount, no choice; Boars I4",
+    "cast_trigger_team_pump_trample": "Decimator's trample grant: recorded, inert (no blocker path; D2 PROVISIONAL)",
+    "attack_put_return_at_end_step": "Ilharg, the Raze-Boar's MANDATORY delayed return of the put creature at the beginning of the end step, no choice; Boars I5a",
     "colored_cast_lifegain": "automatic on-cast lifegain (Ancient Cornucopia, once per turn), no choice",
     "multicolor_cast_damage_per_color": "automatic on-cast trigger (Mana Cannons); 'any target' -> face in goldfish (disclosed)",
     "domain_mana": "domain-scaled mana production (Faeburrow/Bloom Tender); color/amount auto-resolved in payment (left to engine)",
@@ -1771,7 +1816,7 @@ INERT_PARAMS = {
     # disclosed as known inert gaps: the chosen creature type (from the deck, exactly like
     # chooses_creature_type above) and Daring Buccaneer's reveal-or-pay (auto-reveal; paying is
     # strictly dominated -- consistent with the user's D5 ruling "okay if there is something to reveal").
-    "chosen_type_added_to_self": "Pirates: Metallic Mimic / Adaptive Automaton 'as this enters, choose a creature type ... is the chosen type in addition' -- resolved deterministically from the deck (DominantCreatureSubtypeId), the chooses_creature_type precedent; the deck's tribe weakly dominates every alternative for these cards. No player choice surfaced (disclosed inert gap)",
+    # chosen_type_added_to_self MOVED TO MANIFEST (`creature_type`, Boars I1 2026-11-13).
     "other_chosen_subtype_enters_counters": "Pirates: Metallic Mimic's mandatory as-enters +1/+1 counter replacement (CR 614) on other creatures of the chosen type, no choice",
     "lord_affects_chosen_subtype": "Pirates: Adaptive Automaton's static lord scope (the chosen type), no choice",
     "etb_creates_treasures": "Pirates: Corsair Captain's mandatory ETB Treasure (sac-for-mana is a searched plan action / payment choice)",
@@ -2049,6 +2094,7 @@ STATE_GATED_TYPES = {
 
 def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_side=False):
     names = set()
+    counts = {}   # copies per name (the legend-rule keep needs two copies of one legend)
     if deck_path.lower().endswith(".cod"):
         # Cockatrice XML: <card number="4" name="..."/> under the "main" zone (plus the "side" zone
         # with --sideboard: a wish deck -- Prevent Damage's four Living Wish -- plays its sideboard,
@@ -2062,18 +2108,29 @@ def load_deck_cards(deck_path, cards_json="src/cards/data/cards.json", include_s
                 nm = card.get("name")
                 if nm:
                     names.add(nm.strip())
+                    try:
+                        counts[nm.strip()] = counts.get(nm.strip(), 0) + int(card.get("number") or 1)
+                    except ValueError:
+                        counts[nm.strip()] = counts.get(nm.strip(), 0) + 1
     else:
         for ln in open(deck_path):
             ln = ln.strip()
             if not ln or ln.lower() in ("sideboard", "mainboard"):
                 continue
-            names.add(re.sub(r"^\s*\d+x?\s+", "", ln).strip())
+            nm = re.sub(r"^\s*\d+x?\s+", "", ln).strip()
+            names.add(nm)
+            m = re.match(r"^\s*(\d+)", ln)
+            counts[nm] = counts.get(nm, 0) + (int(m.group(1)) if m else 1)
     d = json.load(open(cards_json))
     cards = d if isinstance(d, list) else list(d.get("cards", d.values()))
     # An alternate printing listed by its oracle name (an entry's scryfall_name) is the same card.
     alias = {c["scryfall_name"]: c["name"] for c in cards if c.get("scryfall_name") and c.get("name")}
     names = {alias.get(n, n) for n in names}
-    return [c for c in cards if c.get("name") in names], names
+    counts = {alias.get(n, n): k for n, k in counts.items()}
+    out = [c for c in cards if c.get("name") in names]
+    for c in out:
+        c["_deck_count"] = counts.get(c.get("name"), 1)
+    return out, names
 
 
 def expected_for_card(card, deck_cards=None):
@@ -2122,6 +2179,13 @@ def expected_for_card(card, deck_cards=None):
         exp.add("x_value")
     if card.get("name") in NAME_CHOICES:
         exp.add(NAME_CHOICES[card["name"]])
+    # The legend rule (CR 704.5j): two copies of one legendary permanent -> the board-click `legend_keep`
+    # (LegendKeepPick in SpellEffects.h; every legend since Boars I5b item 4, not just Chandra). Asked only when the
+    # copies differ (identical copies fold), so a sweep can legitimately miss it; expected only for a deck that runs
+    # two or more copies of the card.
+    if ("Legendary" in (card.get("supertypes") or []) and card.get("_deck_count", 1) >= 2
+            and not set(card.get("types") or []) <= {"Instant", "Sorcery"}):
+        exp.add("legend_keep")
     if p.get("klothys_first_main"):
         exp.add("choose_color")
     if p.get("replenish_enchantments") and deck_cards is not None:
@@ -2226,7 +2290,8 @@ def modeled_tokens(card):
     # Diabolic Intent / Culling the Weak (any creature) and Lake of the Dead's two Swamp sacrifices:
     # all surfaced through the `sacrifice` board click (see MANIFEST).
     if p.get("sac_additional_creature") or p.get("etb_replace_sacrifice_land_subtype") \
-            or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands"):
+            or p.get("sac_for_mana_victim_land_subtype") or p.get("buyback_sacrifice_islands") \
+            or p.get("emerge_cost"):   # + Decimator's emerge victim (Boars I4)
         t.add("sacrifice")
     # Shadowborn INT-2: the Apostle's six (and its Demon search, a plan variant) and the Overlord's upkeep
     # sacrifice are `sacrifice` board clicks; Reaper's morbid destroy is a `target` board click.
@@ -2269,7 +2334,8 @@ def modeled_tokens(card):
         t.update({"target", "search"})
     # Unpredictable Cyclone phase 2: the Ulamogs' targeted CAST triggers (the `target` board-click,
     # one pick per target, at ChooseCastTriggerTargets).
-    if p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0:
+    if (p.get("cast_trigger_exile_target_permanents", 0) > 0 or p.get("cast_trigger_destroy_target_permanents", 0) > 0
+            or p.get("cast_trigger_untap_pump_target_min_spent", 0) > 0):   # + Raggadragga (Boars I3b)
         t.add("target")
     if p.get("transmute_cost") or p.get("life_gated_put_creatures_cost"):
         t.add("search")

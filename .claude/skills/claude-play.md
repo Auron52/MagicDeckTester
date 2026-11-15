@@ -183,6 +183,14 @@ deterministic game applying the prior `--choices`, then prints the next decision
   answer rides the turn-keyed side channel `--firebreathe "<turn>:<count>,..."`, NOT `--choices`.
   Without the flag the pump resolves greedily — that is not a missing decision, so do not flag it
   (three 2026-10-18 sweep agents did).
+  **Fetchlands (zero-mana, pay-1-life: Arid Mesa, Wooded Foothills, ...) — targets + HOLD (USER
+  2026-11-14).** Playing one from hand is one `main_phase` plan PER legal target (`fetch_target` names
+  the land; the fetch resolves at the drop, 1 life) **plus one hold plan** whose `fetch_target` is
+  `"(hold: crack later)"`: the fetchland enters uncracked and its activation shows up in later plans
+  (`landsearch=<fetch>` / `act=<fetch>`, followed by a `tutor_etb` pick when it resolves). Holding is
+  always offered, at every life total, even with a single legal target. With `--validate-line`, a bare
+  `land=Arid Mesa` returns a `choose` over the targets and the hold; `act=Arid Mesa;cast=Lava Spike` on a
+  held Mesa is ONE line (crack, then cast off the fetched land).
 
   > **`-1` IS NOT A UNIVERSAL "PASS" — check the `type` before you reply.** On a
   > `main_phase` decision `-1` means "cast nothing", which is a normal way to advance. On

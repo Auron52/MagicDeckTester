@@ -1092,7 +1092,7 @@ TEST_CASE("midrange burn: armed cast-trigger damage records actual damage and tr
     s.dmg_events_armed = true;
     MBPut(s, "Eidolon of the Great Revel", 1, 1);
     MBPut(s, "Chandra's Incinerator", 2, 1); MBPut(s, "Goblin Guide", 3);
-    FireOnCastTriggers(s, MBDef("Lightning Bolt"));
+    FireOnCastTriggers(s, MBDef("Lightning Bolt"), /*mana_spent=*/0);
     CHECK(s.players[0].life == 18);
     CHECK(s.noncombat_damage_received_this_turn[0] == 2);
     CHECK(s.noncombat_damage_received_this_turn[1] == 0);
@@ -1237,7 +1237,7 @@ TEST_CASE("midrange burn: each Chandra emblem's Incinerator trigger resolves bef
     };
     g_play_target_chooser = &choose;
     { NoncombatTriggerScope outer_loyalty_resolution(s);
-      FireOnCastTriggers(s, MBDef("Lightning Bolt"));
+      FireOnCastTriggers(s, MBDef("Lightning Bolt"), /*mana_spent=*/0);
       CHECK(s.noncombat_trigger_depth == 1); }
     CHECK(emblem_prompts == 2); CHECK(inc_prompts == 2);
     CHECK(s.players[1].life == 10);

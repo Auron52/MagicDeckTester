@@ -4,6 +4,7 @@
 #pragma once
 
 #include "ai/AIEngine.h"
+#include "core/GameEngine.h"
 
 #include <string>
 
@@ -49,6 +50,29 @@ struct MtgTestSeam
                             false, false, -1, 0, 0, 0, /*evoke=*/true, false, false, riders);
     }
 
+    // The executor's hand cast in EMERGE mode (Decimator of the Provinces, Boars I4): CastRiders::emerge with the
+    // victim's card m_number in own_targets -- exactly what cast_by_name passes for an Action::emerge variant.
+    static void CastEmergeFromHand(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int victim)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.emerge = true;
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, victim, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
+    // The executor's hand cast with Ilharg's death "may" rider (CastRiders::dies_tuck, Boars I5b item 3), optionally
+    // in EMERGE mode off `victim`. Pushes the StackEntry (carrying dies_tuck); the caller resolves it.
+    static void CastWithDiesTuck(AIEngine& e, GameState& s, Card& hand_card, ManaPool& avail, int dies_tuck,
+                                 bool emerge = false, int victim = 0, int legend_keep = 0)
+    {
+        CastRiders riders = e.m_cast_riders.Take();
+        riders.emerge    = emerge;
+        riders.dies_tuck = static_cast<std::int8_t>(dies_tuck);
+        riders.legend_keep = static_cast<std::int8_t>(legend_keep);   // CR 704.5j keep (Boars I5b item 4)
+        e.CastSpellFromHand(s, hand_card, avail, 0, std::string(), 0, victim, -1, -1, 0, std::string(), 0,
+                            false, false, -1, 0, 0, 0, false, false, false, riders);
+    }
+
     // Commit ONE phase plan, so the engine's next TakeTurn for that phase EXECUTES it (the
     // committed-line pop) instead of searching -- the only way a test can hand the real executor a
     // specific plan, e.g. to check it realises a plan exactly as the rollout's ApplyPlan does.
@@ -82,4 +106,10 @@ struct MtgTestSeam
     static bool UseSurplusLandAbilities(AIEngine& e, GameState& s, const std::function<void(GameState&)>& resolve,
                                         int dig_choice, const Action* seed)
     { return e.UseSurplusLandAbilities(s, resolve, dig_choice, seed); }
+    // GameEngine's private executor steps (Boars LK: the legend-rule SBA checkpoints).
+    static void GeResolveStack(GameEngine& g, GameState& s) { g.ResolveStack(s); }
+    static void GeEndStep(GameEngine& g, GameState& s) { g.EndStep(s); }
+    // ...and the untap + upkeep (Boars LK3: the next-upkeep legend keep opens at the untap, closes at the upkeep's end).
+    static void GeUntapStep(GameEngine& g, GameState& s) { g.UntapStep(s); }
+    static void GeUpkeepStep(GameEngine& g, GameState& s) { g.UpkeepStep(s); }
 };

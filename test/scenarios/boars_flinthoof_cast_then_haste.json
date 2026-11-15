@@ -1,0 +1,28 @@
+{
+  "_comment": [
+    "Boars (2026-11-14, Stage 5d claude-play sweep seed 97009). BREAKPOINT SITE 9 for Flinthoof Boar's",
+    "self haste: a Flinthoof CAST this main can activate {R}: haste in the same phase. Frame: Stomping",
+    "Ground + Forest + a non-sick Ignoble Hierarch, Flinthoof in hand, opponent at 4. Exact lethal this",
+    "turn: cast Flinthoof ({1}{G}; 3/3 -- Stomping Ground is a Mountain), {R} haste, attack ALONE",
+    "(Hierarch's exalted, +1/+1) = 4. Nothing else in hand deals damage, and the Hierarch alone deals 1.",
+    "The haste is reachable ONLY as a site-9 continuation (activations are enumerated against the",
+    "battlefield the plan started from, and site 9 is searched-only), so PlanOpensBreakpoint must fan out",
+    "the Flinthoof-casting plan -- CardHasPostEntryActivation's self_haste_cost clause. Before it, the",
+    "search never reached the haste from a frame where Flinthoof was still in hand (win T5 here, at",
+    "--depth 8 --budget-ms 0 too). Settings = the deck's play settings (d5 b20)."
+  ],
+  "deck": "decks/Boars/Boars.cod",
+  "profile": "decks/Boars/Boars.profile.json",
+  "turn": 4, "on_the_play": false, "active_life": 18, "opponent_life": 4,
+  "resume_at": "main1",
+  "battlefield": [
+    { "name": "Stomping Ground" },
+    { "name": "Forest" },
+    { "name": "Ignoble Hierarch" }
+  ],
+  "hand": [ "Flinthoof Boar", "Decimator of the Provinces", "End-Raze Forerunners" ],
+  "library_top": [ "Decimator of the Provinces", "End-Raze Forerunners", "Decimator of the Provinces" ],
+  "library_filler": "End-Raze Forerunners", "library_size": 40,
+  "depth": 5, "budget_ms": 20, "max_turns": 8,
+  "expect_win_turn": 4
+}

@@ -171,22 +171,30 @@ TEST_CASE("INT-9 free casts: a revealed Dark Ritual is always cast (its pins say
     CHECK(s.players[0].graveyard.size() == 2);
 }
 
-TEST_CASE("INT-9 free casts: a revealed Thrumming Stone is cast and the legend rule keeps the battlefield copy")
+TEST_CASE("INT-9 free casts: a revealed Thrumming Stone is cast and the legend rule keeps the copy the cast names")
 {
-    GameState s = Base9(6);
-    s.battlefield.push_back(Perm9(kStone9, 40));
-    s.players[0].hand.push_back(Card9(kStone9, 60));
-    Lib9(s, { kStone9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9 });
-    const std::vector<Action> casts = Casts9(s, kStone9);
-    REQUIRE(casts.size() == 1);
-    Rollout9(s, casts.front());
-    CHECK(CountBf9(s, kStone9) == 1);
-    bool kept_old = false;
-    for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == kStone9 && p.card.m_number == 40) { kept_old = true; } }
-    CHECK(kept_old);                                  // the copy already on the battlefield stays
-    int stones_gy = 0;
-    for (const Card& c : s.players[0].graveyard) { if (c.m_name.str() == kStone9) { ++stones_gy; } }
-    CHECK(stones_gy == 2);                            // the hard copy AND the free copy were cast
+    // Boars I5b item 4: the legend-rule keep (CR 704.5j) is the controller's choice and is SEARCHED in the window, so
+    // the one ripple variant is twinned legend_keep 1 (keep the battlefield copy) / 2 (keep the new one). Both twins
+    // cast the hard copy AND the free copy; each leaves exactly one Stone, the one its answer names.
+    GameState s0 = Base9(6);
+    s0.battlefield.push_back(Perm9(kStone9, 40));
+    s0.players[0].hand.push_back(Card9(kStone9, 60));
+    Lib9(s0, { kStone9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9, kSw9 });
+    const std::vector<Action> casts = Casts9(s0, kStone9);
+    REQUIRE(casts.size() == 2);                       // ONE ripple variant x the two keep answers
+    CHECK(casts[0].legend_keep + casts[1].legend_keep == 3);
+    for (const Action& a : casts)
+    {
+        GameState s = s0;
+        Rollout9(s, a);
+        CHECK(CountBf9(s, kStone9) == 1);
+        bool kept_old = false;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_name.str() == kStone9 && p.card.m_number == 40) { kept_old = true; } }
+        CHECK(kept_old == (a.legend_keep == 1));      // keep-oldest: the copy already on the battlefield stays
+        int stones_gy = 0;
+        for (const Card& c : s.players[0].graveyard) { if (c.m_name.str() == kStone9) { ++stones_gy; } }
+        CHECK(stones_gy == 2);                        // the hard copy AND the free copy were cast
+    }
 }
 
 TEST_CASE("INT-9 free casts: a revealed Diabolic Intent is declined (bottomed), the hard Intent resolves")

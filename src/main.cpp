@@ -264,8 +264,11 @@ static void JsonBattlefield(std::ostream& os, const GameState& s, int controller
         // Current P/T (sweep: "creature current power/toughness incl. temp pumps not exposed"). The
         // shared combat readers, so the number shown is the number combat deals / SBA checks.
         const bool has_pt = p.card.IsCreature() || p.is_animated;
-        const int  pw     = has_pt ? CombatPowerOf(p, s) : 0;
-        const int  tf     = has_pt ? LethalToughness(p, s) : 0;
+        // ...plus a lone attacker's exalted +N/+N (until end of turn), which combat adds to its damage rather than
+        // writing a temp pump: the display-only PlayCombatDisplay hint (Boars 5d sweep, seed 97004).
+        const int  exl    = has_pt ? PlayCombatShownExalted(s, p) : 0;
+        const int  pw     = has_pt ? CombatPowerOf(p, s) + exl : 0;
+        const int  tf     = has_pt ? LethalToughness(p, s) + exl : 0;
         bool sick = false;
         if (has_pt && p.entered_this_turn)
         {
@@ -1251,6 +1254,12 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         + " (discard " + (a.discard_name.empty() ? std::string("a card")
                                                                  : a.discard_name.str()) + ")";
                 }
+                else if (a.gy_exile_mode == 6)
+                {
+                    // Flinthoof Boar (Boars I1): "{R}: This creature gains haste until end of turn." The
+                    // source's number names WHICH copy (two summoning-sick Flinthoofs are two options).
+                    tag = a.card_name + " #" + std::to_string(a.sac_source_id) + ": gains haste until end of turn";
+                }
                 else if (a.gy_exile_mode == 3)
                 {
                     // Resplendent Angel's self pump + lifelink. Without this branch it fell into
@@ -1384,6 +1393,8 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                  + (a.twobrid_colored > 1 ? "s" : "") + " with colour)"; }
         // Evoke variant (Reveillark): same lesson -- the evoke and hard casts share a name.
         if (a.evoke) { tag += " (evoke)"; }
+        // EMERGE (Decimator): one variant per victim, each a different bill -- name the victim.
+        if (a.emerge) { tag += " (emerge, sacrificing " + EnchantTargetName(s, a.soulfire_own_targets) + ")"; }
         // MORPH (CR 702.37): the face-down cast ({3}, a nameless 2/2) shares the hard cast's name.
         if (a.face_down == 1) { tag += " (face down)"; }
         if (a.face_down == 2) { tag += " (face down, then turned face up)"; }
@@ -1954,10 +1965,13 @@ public:
 
     // The pre-game board: mulligan and bottoming happen before any permanent exists, so they emit
     // a fixed empty board rather than reading one off a GameState they do not have.
+    // The life shown is the game's STARTING life (gamesetup::StartingLife: MTG_START_LIFE / the job's
+    // starting_life), both seats -- a literal 20 read wrong under 2HG's 30 (Boars 5d sweep, seed 97013).
     DecisionJson& PregameBoard()
     {
-        m_os << "  \"me\": { \"life\": 20, \"battlefield\": [] },\n";
-        m_os << "  \"opponent\": { \"life\": 20, \"battlefield\": [] },\n";
+        const int life = gamesetup::StartingLife();
+        m_os << "  \"me\": { \"life\": " << life << ", \"battlefield\": [] },\n";
+        m_os << "  \"opponent\": { \"life\": " << life << ", \"battlefield\": [] },\n";
         return *this;
     }
 
@@ -2284,6 +2298,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                      + "|" + std::to_string(a.twobrid_colored)
                      + (a.draw_target != 0 ? "|dt" + std::to_string(a.draw_target) : std::string())
                      + (a.evoke ? "|e" : "") + (a.free_cast ? "|f" : "")
+                     + (a.emerge ? "|em" + std::to_string(a.soulfire_own_targets) : std::string())
                      + (a.remand_by.empty() ? "" : "|rm:" + a.remand_by.str())
                      + (a.remand_chain_by.empty() ? "" : "|rc:" + a.remand_chain_by.str())
                      + (a.pitch_name.empty() ? "" : "|px:" + a.pitch_name.str()) + ";";
@@ -2353,6 +2368,86 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
                 }
                 if (!arm) { continue; }
                 if (!cv_seen.insert(SummarizePlan(plans[i], s)).second) { hide_bundle[i] = 1; }
+            }
+        }
+        // EXACT-TWIN FOLDS (Boars 5d sweep, 2026-11-14). Two plan shapes whose rows are the same line as a plan
+        // already shown, in human play. A row is hidden only when an EARLIER VISIBLE plan equals it field for field
+        // (Plan::operator==) once the one axis below is normalised -- so no line leaves the menu. Hidden, not
+        // removed: enumeration, scoring, every REAL index and CheckLine's matching are untouched.
+        if (HumanPlayActive())
+        {
+            auto twin_key = [](const TurnSolver::Plan& p) {
+                return p.land_to_play + "|" + p.fetch_target + "|" + p.land_face + "|"
+                     + std::to_string(static_cast<int>(p.land_slot)) + (p.land_from_top ? "T|" : "|")
+                     + std::to_string(p.actions.size());
+            };
+            // (1) LAND-SEARCH PIN TWINS (item 3: every sweep agent saw "hold, then crack this main + cast X" once
+            //     per fetch target, identical summary, actions and "(hold: crack later)"). A plan's
+            //     land_search_pins only choose the DEFAULT of the tutor_etb picker in human play
+            //     (PerformLandSearch asks g_play_tutor_chooser at every land search, the pin seeding its default),
+            //     so a plan that differs from a shown one in its pins alone is the same line asking the same
+            //     question -- the human picks the target at the crack.
+            if (s.deck_has_land_search)
+            {
+                std::unordered_map<std::string, std::vector<size_t>> shown;
+                for (size_t i = 0; i < plans.size(); ++i)
+                {
+                    if (hide_bundle[i]) { continue; }
+                    std::vector<size_t>& bucket = shown[twin_key(plans[i])];
+                    bool twin = false;
+                    if (!plans[i].land_search_pins.empty())
+                    {
+                        for (size_t j : bucket)
+                        {
+                            TurnSolver::Plan q = plans[i];
+                            q.land_search_pins = plans[j].land_search_pins;
+                            q.value            = plans[j].value;
+                            if (q == plans[j]) { twin = true; break; }
+                        }
+                    }
+                    if (twin) { hide_bundle[i] = 1; } else { bucket.push_back(i); }
+                }
+            }
+            // (2) DEAD EQUIP ONTO THE EMERGE VICTIM (item 5, seed 97010: "Decimator (emerge, sacrificing Ignoble
+            //     Hierarch #31), equip Lightning Greaves -> #31"). The plan's equips run in the trailing pass, after
+            //     its casts, by when the victim is in the graveyard and the equip refuses -- the row realises the
+            //     same plan without that equip. The one EARLY equip (the haste unlock, FireManaUnlockEquips) fires
+            //     only onto a still-locked mana source, i.e. a summoning-sick host: that line (equip a sick dork,
+            //     tap it, sacrifice it) is real and stays. Hidden only when the equip-less twin is shown.
+            for (size_t i = 0; i < plans.size(); ++i)
+            {
+                if (hide_bundle[i]) { continue; }
+                const std::vector<Action>& acts = plans[i].actions;
+                std::vector<int> victims;
+                for (const Action& a : acts)
+                {
+                    if (a.kind == Action::Kind::CastFromHand && a.emerge && a.soulfire_own_targets > 0)
+                    { victims.push_back(a.soulfire_own_targets); }
+                }
+                if (victims.empty()) { continue; }
+                size_t dead = acts.size();
+                for (size_t x = 0; x < acts.size() && dead == acts.size(); ++x)
+                {
+                    const Action& e = acts[x];
+                    if (e.kind != Action::Kind::Equip
+                        || std::find(victims.begin(), victims.end(), e.sac_victim_id) == victims.end()) { continue; }
+                    const Permanent* host = nullptr;
+                    for (const Permanent& q : s.battlefield)
+                    { if (q.card.m_number == e.sac_victim_id && q.controller_index == s.active_player_index) { host = &q; break; } }
+                    if (host == nullptr || host->entered_this_turn) { continue; }   // a hand / sick host: keep
+                    dead = x;
+                }
+                if (dead == acts.size()) { continue; }
+                TurnSolver::Plan q = plans[i];
+                q.actions.erase(q.actions.begin() + static_cast<std::ptrdiff_t>(dead));
+                const std::string k = twin_key(q);
+                for (size_t j = 0; j < plans.size(); ++j)
+                {
+                    if (j == i || hide_bundle[j] || twin_key(plans[j]) != k) { continue; }
+                    TurnSolver::Plan r = q;
+                    r.value = plans[j].value;
+                    if (r == plans[j]) { hide_bundle[i] = 1; break; }
+                }
             }
         }
     }
@@ -3279,6 +3374,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             }
             // Evoke variant (Reveillark): same bestow lesson -- the two casts share a name.
             if (ac.evoke)                         { os << ", \"evoke\": true"; }
+            if (ac.emerge)                        { os << ", \"emerge\": true"; }   // Decimator (Boars I4)
             // MORPH: the face-down cast (1) / face-down cast turned face up at once (2) -- the hard cast
             // shares the name, so the flag tells them apart (human composer: cast=X+facedown / +facedownup).
             if (ac.face_down != 0)
@@ -3373,7 +3469,7 @@ static void WriteDecisionJson(std::ostream& os, const GameState& s,
             {
                 const CardDefinition* sd = ac.def ? ac.def
                                                   : CardDatabase::Instance().Lookup(ac.card_name);
-                if (sd && HasSacCreatureAdditionalCost(sd->params))
+                if (sd && CastSacsCreature(sd->params, ac.emerge))   // + an emerge victim (Boars I4)
                 {
                     os << ", \"sac_victim\": " << ac.soulfire_own_targets
                        << ", \"sac_victim_name\": ";
@@ -4287,6 +4383,38 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
         {
             os << ", \"card_num\": " << p.card.m_number << ", \"loyalty\": " << p.loyalty
                << ", \"can_activate\": " << (!p.loyalty_activated_this_turn ? "true" : "false");
+            // Every legend (Boars I5b item 4), not just Chandra: what tells the copies apart, so the player can
+            // see what each keep buys -- summoning sickness, combat, counters, attachments, end-step riders.
+            int plus = 0, minus = 0;
+            for (const Counter& c : p.counters)
+            {
+                if (c.type == Counter::Type::PlusOnePlusOne) { plus += c.count; }
+                else if (c.type == Counter::Type::MinusOneMinusOne) { minus += c.count; }
+            }
+            bool sick = false;
+            if ((p.card.IsCreature() || p.is_animated) && p.entered_this_turn)
+            {
+                Permanent q = p;
+                q.tapped = false;
+                sick = !CanAttackFull(q, s.battlefield, p.controller_index);
+            }
+            std::vector<std::string> attached;
+            for (const Permanent& e : s.battlefield)
+            {
+                if (e.equipped_to == p.card.m_number || e.aura_attached_to == p.card.m_number)
+                { attached.push_back(e.card.m_name.str()); }
+            }
+            os << ", \"is_creature\": " << (p.card.IsCreature() ? "true" : "false")
+               << ", \"sick\": " << (sick ? "true" : "false")
+               // declared this turn (the attack count, kept only for an attack-count deck) OR attacking in this
+               // turn's combat -- incl. a body put onto the battlefield attacking (Boars 5d sweep, seed 97007)
+               << ", \"attacked\": " << (p.AttacksThisTurn() != 0 || PlayCombatShownAttacking(s, p) ? "true" : "false")
+               << ", \"plus_counters\": " << plus << ", \"minus_counters\": " << minus
+               << ", \"damage\": " << p.damage
+               << ", \"returns_at_end\": " << (p.return_at_end_step ? "true" : "false")
+               << ", \"attached\": [";
+            for (std::size_t k = 0; k < attached.size(); ++k) { if (k) { os << ", "; } JsonStr(os, attached[k]); }
+            os << "]";
         }
         os << " }";
     });
@@ -4308,8 +4436,14 @@ static void WriteBounceDecisionJson(std::ostream& os, const GameState& s, const 
     }
     if (legend_keep)
     {
-        d.Note("reply an option index -- keep that Chandra; the other goes to the graveyard. "
-               "Default = the AI's pick.");
+        // The group's name as the source says it ("Legend rule: choose <name> to keep") -- every legend, not just
+        // Chandra (Boars I5b item 4).
+        std::string who = source.substr(std::string("Legend rule: ").size());
+        if (who.rfind("choose ", 0) == 0) { who = who.substr(7); }
+        const std::size_t tail = who.rfind(" to keep");
+        if (tail != std::string::npos) { who = who.substr(0, tail); }
+        d.Note("reply an option index -- keep that " + who + "; the other copies go to the graveyard (a creature "
+               "put there this way dies). Default = the AI's pick.");
         return;
     }
     d.Note(std::string("reply an option index -- the ") + noun + " to "
@@ -4563,6 +4697,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                      "listed) to put that card on top of your library BENEATH the one you just chose (it is "
                      "the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick.");
     }
+    else if (source.find("(dies to library)") != std::string::npos)
+    {
+        // Ilharg, the Raze-Boar's death "may" (SpellEffects.h ResolveDiesToLibraryPosition; Boars I5b item 3) reuses
+        // this modal as a yes/no: `examined[0]` is the card that just died (already in the graveyard).
+        d.Note("reply 0 to put this card (which just died and is in your graveyard) into your library at the "
+               "position named in the source (third from the top; the bottom if your library is shorter). Reply "
+               "-1 to leave it in the graveyard. Default = the search's pick when it pinned one, otherwise the AI's "
+               "default (tuck unless another copy stays on your battlefield).");
+    }
     else if (source.find("(attack pay)") != std::string::npos)
     {
         d.Note("reply 0 to pay {W} for this declared nontoken attacker's Militia's Pride trigger. "
@@ -4628,13 +4771,11 @@ static void WriteEtbColorDecisionJson(std::ostream& os, const GameState& s, cons
 }
 
 static void WriteEtbTypeDecisionJson(std::ostream& os, const GameState& s,
-                                     const std::string& source,
-                                     const std::vector<std::string>& menu,
+                                     const std::string& source, const std::vector<std::string>& menu,
                                      int heuristic_default, int decision_index)
 {
     DecisionJson d(os, decision_index);
-    d.Type("choose_creature_type").Source(source).Turn(s).Board(s)
-     .HeuristicDefault(heuristic_default);
+    d.Type("choose_creature_type").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
     d.Array("options", menu.size(), [&](std::size_t i)
     {
         os << "{ \"index\": " << i << ", \"name\": ";
@@ -4642,6 +4783,22 @@ static void WriteEtbTypeDecisionJson(std::ostream& os, const GameState& s,
         os << " }";
     });
     d.Note("Reply with the index of any creature type. The chosen type is locked to this permanent.");
+}
+
+// Herald's Horn and other type choices with a deck-based creature-type menu.
+static void WriteCreatureTypeDecisionJson(std::ostream& os, const GameState& s,
+                                          const std::string& source, const std::vector<std::string>& menu,
+                                          int heuristic_default, int decision_index)
+{
+    DecisionJson d(os, decision_index);
+    d.Type("creature_type").Source(source).Turn(s).Board(s).HeuristicDefault(heuristic_default);
+    d.Array("types", menu.size(), [&](std::size_t i)
+    {
+        os << "{ \"index\": " << i << ", \"name\": ";
+        JsonStr(os, menu[i]);
+        os << " }";
+    });
+    d.Note("Reply with a type index to lock that type for this permanent. Default is the AI pick.");
 }
 
 // "As this enters, choose two abilities" decision (Rick, Steadfast Leader / Greymond, Avacyn's
@@ -4706,6 +4863,15 @@ static void WriteLackeyDecisionJson(std::ostream& os, const GameState& s, const 
     {
         os << "{ \"index\": " << i << ", \"name\": "; JsonStr(os, candidates[i].m_name.str()); os << " }";
     });
+    // Ilharg, the Raze-Boar's attack put (Boars I5a) reuses this decision: the shared FireAttackPutFromHand passes a
+    // source ending in "(attack)". The candidates are creature cards and the put is tapped and attacking.
+    const bool attack = source.size() >= 8 && source.compare(source.size() - 8, 8, "(attack)") == 0;
+    if (attack)
+    {
+        d.Word("trigger", "attack");
+        d.Note("reply a candidate index to put that creature card from hand onto the battlefield tapped and attacking (it returns to hand at the beginning of the next end step), or -1 to decline. Default = the AI's pick.");
+        return;
+    }
     d.Note("reply a candidate index to put that Goblin permanent from hand onto the battlefield, or -1 to decline. Default = the AI's pick.");
 }
 
@@ -6183,6 +6349,7 @@ g_play_dig_chooser = nullptr;
 g_play_etb_color_chooser = nullptr;
 g_play_etb_type_chooser = nullptr;
 g_play_etb_keywords_chooser = nullptr;
+g_play_creature_type_chooser = nullptr;
 g_play_discard_chooser = nullptr;
 g_dredge_chooser = nullptr;
 g_play_ei_chooser = nullptr;
@@ -6274,6 +6441,10 @@ if (!log_dir.empty())
     // carry no stamp and replay through the old immediate-fetch path.
     if (!LegacyFetchImmediateOn()) { out << ", \"fetch_activation\": 1"; }
     if (opponent_land_model) { out << ", \"opponent_land_model\": 1"; }
+    // ...and since USER 2026-11-14 a human-play fetch's land drop offers each target (resolve ON PLAY) and a
+    // hold (kFetchHoldTarget). A `fetch_activation` reference without `fetch_on_play` was played under the
+    // earlier forced hold and replays under --legacy-human-fetch-hold.
+    if (!LegacyFetchImmediateOn() && !LegacyHumanFetchHoldOn()) { out << ", \"fetch_on_play\": 1"; }
     // Same contract for the CR 510.4 two-step combat damage (CombatDamageStepsOn, GameLogger.h): a
     // reference without `combat_damage_steps` predates it and replays under --legacy-single-damage-step.
     if (CombatDamageStepsOn()) { out << ", \"combat_damage_steps\": 1"; }
@@ -6537,6 +6708,7 @@ struct ClaudePlayHarness
     EtbColorChooser       etb_color_chooser;
     EtbTypeChooser        etb_type_chooser;
     EtbKeywordsChooser    etb_keywords_chooser;
+    CreatureTypeChooser   creature_type_chooser;
     LightPawsChooser      lightpaws_chooser;
     LackeyChooser         lackey_chooser;
     FreeCastChooser       free_cast_chooser;
@@ -7903,6 +8075,37 @@ void ClaudePlayHarness::InstallCardChoosers(AIEngine& ai)
             std::exit(70);
         };
     g_play_etb_keywords_chooser = &etb_keywords_chooser;
+
+    // "As this enters, choose a creature type" (Herald's Horn / Urza's Incubator / Metallic Mimic / Adaptive
+    // Automaton). Shares the --choices stream; the reply is a MENU INDEX, anything out of range keeps the
+    // provider's pick. Locked for the permanent's lifetime, so the human is asked (Boars I1).
+    creature_type_chooser =
+        [this](const GameState& s, int controller, const std::string& source,
+               const std::vector<std::string>& menu, int heuristic_index) -> int
+        {
+            (void)controller;
+            int di = static_cast<int>(cursor);
+            if (cursor < choices.size())
+            {
+                int chosen = choices[cursor++];
+                ++decisions_made;
+                if (!log_dir.empty())
+                {
+                    std::ostringstream ss;
+                    ss << "{ \"chosen\": " << chosen << ", \"decision\": ";
+                    WriteCreatureTypeDecisionJson(ss, s, source, menu, heuristic_index, di);
+                    ss << "}";
+                    trace.push_back(ss.str());
+                }
+                return chosen;
+            }
+            std::cout << "<<<CLAUDE_DECISION>>>\n";
+            WriteCreatureTypeDecisionJson(std::cout, s, source, menu, heuristic_index, di);
+            std::cout << "<<<END_DECISION>>>\n";
+            std::cout.flush();
+            std::exit(70);
+        };
+    g_play_creature_type_chooser = &creature_type_chooser;
 
 
     // Light-Paws tutor-attach (Light-Paws, Emperor's Voice): the player picks which library Aura it
@@ -9904,6 +10107,7 @@ static int RunScenario(const std::filesystem::path& scenario_path)
             // staged with the features that read them (LifegainHeliodCombo, 2026-10-27).
             if (const int pc = e.value("plus_counters", 0); pc > 0) { p.counters.Add(Counter::Type::PlusOnePlusOne, pc); }
             p.temp_lifelink     = e.value("temp_lifelink", false);
+            p.temp_vigilance    = e.value("temp_vigilance", false);   // End-Raze until-EOT grant (Boars I3a)
             p.hone_counters     = e.value("hone_counters", 0);
             // A staged planeswalker's loyalty (Permanent::loyalty is the source of truth; the Loyalty counter
             // mirrors it for the viewer). Only when the fixture names it, so every existing fixture is unchanged.
@@ -10045,6 +10249,54 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // a win turn cannot tell "the line is legal and offered" from "the line does not exist". Issue 6
     // (the hasted-dork mana unlock) is exactly that shape. Runs on the board as authored -- no untap
     // or draw step -- which is what makes it a deterministic statement about THIS position.
+    // Optional MENU assertion ("expect_menu": [{"summary_contains": "...", "count": N}, ...]): the main-phase menu
+    // the viewer / --claude-play would SHOW on this board (WriteDecisionJson, incl. its display folds), counted by
+    // summary substring. Guards menu-display collapses, which no line verdict can see (a hidden twin row still
+    // matches every line). Optional per entry: "fetch_target" (exact) narrows the rows counted. Runs on the board
+    // as authored, like validate_line, and returns.
+    if (j.contains("expect_menu"))
+    {
+        GameState s = state;
+        s.turn_number = turn;
+        const std::vector<TurnSolver::Plan> menu = TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true);
+        std::ostringstream ms;
+        WriteDecisionJson(ms, s, menu, /*is_pre_combat=*/true, 0, 0);
+        const std::string txt = ms.str();
+        const std::size_t a = txt.find('{'), b = txt.rfind('}');
+        json dj;
+        try { dj = json::parse(txt.substr(a, b - a + 1)); }
+        catch (const std::exception& e) { std::cout << "scenario: FAIL menu JSON did not parse: " << e.what() << "\n"; return 1; }
+        const json rows = dj.value("plans", json::array());
+        std::cout << "scenario: menu rows=" << rows.size() << " plans=" << menu.size() << "\n";
+        bool ok = true;
+        for (const auto& want : j.at("expect_menu"))
+        {
+            const std::string sub = want.value("summary_contains", std::string());
+            const bool has_ft = want.contains("fetch_target");
+            const std::string ft = has_ft ? want.at("fetch_target").get<std::string>() : std::string();
+            int n = 0;
+            for (const auto& r : rows)
+            {
+                if (r.value("summary", std::string()).find(sub) == std::string::npos) { continue; }
+                if (has_ft && (!r.contains("fetch_target") || !r.at("fetch_target").is_string()
+                               || r.at("fetch_target").get<std::string>() != ft)) { continue; }
+                ++n;
+            }
+            const int want_n = want.value("count", -1);
+            std::cout << "scenario:   rows with \"" << sub << "\"" << (has_ft ? " fetch_target=" + ft : std::string())
+                      << ": " << n << " (want " << want_n << ")\n";
+            if (n != want_n) { ok = false; }
+        }
+        if (!ok)
+        {
+            for (const auto& r : rows)
+            { std::cout << "scenario:   row " << r.value("index", -1) << " " << r.value("summary", std::string()) << "\n"; }
+            std::cout << "scenario: FAIL menu counts\n";
+            return 1;
+        }
+        std::cout << "scenario: PASS (menu)\n";
+        return 0;
+    }
     if (j.contains("validate_line"))
     {
         GameState s = state;
@@ -11308,6 +11560,7 @@ int main(int argc, char* argv[])
         if (flag == "--legacy-karoo-float")  { g_play_legacy_karoo_float = true; continue; } // replay a reference recorded before the human Karoo tap-in-response float (value-less; see HumanKarooFloatOn)
         if (flag == "--legacy-fetch-immediate") { g_play_legacy_fetch_immediate = true; continue; } // replay references recorded before fetchlands could be held and activated
         if (flag == "--legacy-passive-opponent-lands") { legacy_passive_opponent_lands = true; continue; }
+        if (flag == "--legacy-human-fetch-hold") { g_play_legacy_human_fetch_hold = true; continue; } // replay references recorded under the human-play fetch hold (no fetch_on_play stamp; see LegacyHumanFetchHoldOn)
         if (flag == "--legacy-pain-pay")     { g_play_legacy_pain_pay = true; continue; }    // replay a reference recorded before the Prevent Damage pain deferral (value-less; see GameLogger.h)
         if (flag == "--legacy-single-damage-step") { g_play_legacy_single_damage_step = true; continue; } // replay a reference recorded before the CR 510.4 two-step combat damage (value-less; see GameLogger.h)
         if (flag == "--legacy-spell-copy")   { g_play_legacy_spell_copy = true; continue; }  // replay a reference recorded before the resolved-spell copy id (value-less; see GameLogger.h, Cyclone Q53)

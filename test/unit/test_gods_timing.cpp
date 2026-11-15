@@ -306,11 +306,11 @@ TEST_CASE("Karametra searches a physical Forest on a later creature cast and can
     {
         const std::vector<int> decline_pin{kLandSearchPinMask};
         ScriptedLandSearch pins(decline_pin);
-        FireOnCastTriggers(s, *creature);
+        FireOnCastTriggers(s, *creature, /*mana_spent=*/0);
     }
     CHECK(s.players[0].library.size() == 1);
     CHECK(s.battlefield.size() == 1);
-    FireOnCastTriggers(s, *creature);
+    FireOnCastTriggers(s, *creature, /*mana_spent=*/0);
     REQUIRE(s.battlefield.size() == 2);
     CHECK(s.battlefield[1].card.m_number == 212);
     CHECK(s.battlefield[1].tapped);

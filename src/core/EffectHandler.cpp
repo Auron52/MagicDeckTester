@@ -276,6 +276,11 @@ void EffectHandler::MoveToGraveyard(GameState& state, const StackEntry& entry)
 
 bool EffectHandler::Resolve(GameState& state, const StackEntry& entry, const CardDefinition& def)
 {
+    // Ilharg's death "may" (StackEntry::dies_tuck, Boars I5b item 3): a legend-rule loser this resolution makes
+    // reads the cast's searched pin. 0 arms nothing. Rollout twin: apply_one's scope over the inline resolution.
+    DiesTuckPinScope _dies_tuck(state, entry.dies_tuck);
+    // The CR 704.5j keep (StackEntry::legend_keep, Boars I5b item 4): which copy this resolution's legend rule keeps.
+    LegendKeepPinScope _legend_keep(entry.legend_keep, def.card.m_name.str());
     // Own-death decks may pay their last life to activate a mana source. The
     // game ends at the priority boundary, before the paid spell/trigger resolves.
     if (state.own_death_live && SelfHasLost(state)) { return false; }
@@ -1240,6 +1245,18 @@ void EffectHandler::PushCastTriggers(GameState& state, const CardDefinition& def
         te.controller_index = controller;
         state.stack.push_back(std::move(te));
     }
+    // Decimator of the Provinces: "When you cast this spell, creatures you control get +2/+2 and gain trample
+    // until end of turn." Untargeted; the affected set is fixed as it RESOLVES (above the spell, so the spell
+    // itself is never pumped). Lockstep twin: apply_one's inline cast-trigger block. 0 for every other card.
+    if (def.params.cast_trigger_team_pump_power > 0 || def.params.cast_trigger_team_pump_tough > 0)
+    {
+        StackEntry te;
+        te.type             = StackEntry::EntryType::Triggered;
+        te.trigger_kind     = StackEntry::TriggerKind::CastTeamPump;
+        te.source           = def.card;
+        te.controller_index = controller;
+        state.stack.push_back(std::move(te));
+    }
     // The Ulamogs' TARGETED cast triggers: targets chosen NOW, as the trigger is put on the stack (CR
     // 603.3d), by the shared chooser (the searched rank policy); fewer legal targets than it needs ->
     // removed (not pushed). Lockstep twin: apply_one's inline block (same chooser, same board).
@@ -1365,7 +1382,7 @@ bool EffectHandler::PushFreeCast(GameState& state, const Card& card, int control
     }
     state.stack.push_back(std::move(e));
     if (state.own_death_live && SelfHasLost(state)) { return true; }
-    FireOnCastTriggers(state, *def);
+    FireOnCastTriggers(state, *def, /*mana_spent=*/0);   // "without paying its mana cost"
     FireProwess(state, *def);
     FlushNoncombatTriggersAtPriorityBoundary(state);
     if (state.own_death_live && SelfHasLost(state)) { return true; }
@@ -1390,6 +1407,10 @@ bool EffectHandler::ResolveTriggered(GameState& state, const StackEntry& entry,
             ResolveDemonstrate(state, entry, def);      return true;
         case StackEntry::TriggerKind::ExtraTurn:
             ResolveCastTriggerExtraTurn(state, entry.source.m_name.str()); return true;
+        case StackEntry::TriggerKind::CastTeamPump:
+            ResolveCastTriggerTeamPump(state, entry.controller_index, def.params.cast_trigger_team_pump_power,
+                                       def.params.cast_trigger_team_pump_tough, entry.source.m_name.str());
+            return true;
         case StackEntry::TriggerKind::CastExileTargets:
         case StackEntry::TriggerKind::CastDestroyTarget:
         {

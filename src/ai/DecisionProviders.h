@@ -33,6 +33,26 @@ bool FetchResolvesOnPlay(const GameState& state, const CardDefinition& land);
 // The immediate-crack variants offered BESIDE a kept hold (see the .cpp), and the apply's test for one.
 bool FetchCrackOnPlayOffered(const GameState& state, const CardDefinition& land);
 bool FetchCrackOnPlayPinned(const GameState& state, const CardDefinition& land, const std::string& target);
+// HUMAN PLAY: this fetchland's land drop also gets a kFetchHoldTarget (play it uncracked) variant beside
+// its per-target on-play variants. False outside human play and on a legacy-rule replay.
+bool HumanFetchHoldVariant(const GameState& state, const CardDefinition& land);
+// HUMAN PLAY's on-play fetch fan: `cands` (the provider's FetchCandidates, in its order) widened with every
+// other legal target (distinct library land names of a fetched subtype, library order), so the human --
+// not the provider -- picks what the land drop fetches. A no-op outside human play and on a legacy
+// immediate-fetch replay (a recording made before the hold model, when the provider's list was the menu).
+void WidenHumanFetchTargets(const GameState& state, int controller, const CardParams& fetch_pp,
+                            std::vector<std::string>& cands);
+// THE ON-PLAY FETCH TARGETS (USER 2026-11-14: "We should obviously use the same heuristic that just grabs Stomping
+// Ground"). A BATTLEFIELD-model fetchland (land_search_activation_cost) resolving at its land drop takes its targets,
+// in order, from the SAME list its activation searches -- LandSearchPicksMemo(LandSearchSpecOf(params)), ordered by
+// the provider's LandSearchFetchPickOrder and (autonomous play only) narrowed by LandSearchFetchPickWidth -- so
+// the two routes cannot disagree. A legacy immediate-model fetchland (no activation params, or a
+// --legacy-fetch-immediate replay) keeps FetchCandidates. Human play widens either list to every legal target
+// (WidenHumanFetchTargets). OnPlayFetchCandidates is the full ordered list; NarrowOnPlayFetch applies the
+// search's width to it (FetchSearchCandidates for the legacy model; the battlefield list is already narrowed).
+std::vector<std::string> OnPlayFetchCandidates(const GameState& state, int controller, const CardDefinition& land);
+void NarrowOnPlayFetch(const GameState& state, int controller, const CardDefinition& land,
+                       std::vector<std::string>& cands);
 
 // GRANULAR un-pruning: the global MTG_UNPRUNED opens EVERY branch-narrowing gate at once,
 // which explodes the search (the full 100-game d5 audit does not finish in hours because a
@@ -458,6 +478,24 @@ public:
     bool ConsiderFetchHold(const GameState& s, const CardDefinition& fetch) const override;
     std::vector<std::string> FetchCandidates(const GameState& s, int controller,
                                              const CardParams& fetch_pp) const override;
+    // EXISTING PROVIDER PRUNE, PENDING USER REVIEW (2026-11-14): the search fans only the top pick (Stomping Ground
+    // under INT-9). This was the base default until the USER ruled the default should search every target ("why do
+    // we only try the first candidate by default? ... It's a different story if we have an intentional prune");
+    // kept explicit so Morph's play is byte-identical, in both MTG_MORPH_FETCH_RULE arms.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     void FaceUpRegrowOrder(const GameState& s, std::vector<std::string>& names) const override;
     bool FaceUpTrailFlipAfterTargetCast() const override;
     // R11-R13: MTG_MORPH_WATCHER_IN_PLAN, MTG_MORPH_TBR_OTHER, MTG_MORPH_TIE_NONMANA (each DEFAULT ON).
@@ -478,6 +516,58 @@ public:
                "attacker that can still swing -- including a face-down creature turned face up with "
                "haste (Blistering Firecat) once morph lands -- before claiming no line wins." }; }
     const char* Name() const override { return "Morph"; }
+};
+
+// =============================================================================================
+// BoarsProvider -- the Boars deck (R/G Boar ramp-tribal; ledger docs/design/analysis-Boars.md). Created by Boars
+// I1 (2026-11-13) because Herald's Horn's creature-type choice is a provider decision.
+//
+// DERIVES FROM DeckProvider (the Generic surface), NOT from the provider the list rode before this branch:
+// AntiLifegainProvider, reached only because the fetchlands' fetch_land_types set the `anti` signature (the
+// Morph precedent, word for word). None of that provider's hooks is about this deck, so they are deliberately
+// not inherited; the change of provider is a play change for a deck with no ground truth yet. The ONE
+// behaviour kept is the shared exalted-aware attack hold (3x Ignoble Hierarch; ExaltedAwareShouldAttack).
+//
+// What it adds:
+//   * ChosenCreatureSubtypeId: Herald's Horn names BOAR. A PROVISIONAL one-option provider prune (Boars D4,
+//     surfaced to the USER): Boar is not provably the best type in every state (a Human-heavy remainder would
+//     favour Human for Somberwald Sage / Zhur-Taa Druid / Raggadragga), so the choice is a narrowing, not a
+//     fold. Human play is offered every creature type the deck carries (the `creature_type` decision).
+//
+// SIGNATURE (DetectDecisionProvider's `boars`): params carried by no other deck. TODAY: Flinthoof Boar's
+// self_haste_cost (I1), Zhur-Taa Druid's tap_mana_damage_each_opponent (I2a), Herald of Ilharg's
+// creature_cast_trigger_plus_counters (I2b), End-Raze Forerunners' etb_other_creatures_grant_vigilance (I3a),
+// Raggadragga's lord_affects_mana_ability_creatures / attack_untap_mana_ability_attackers /
+// cast_trigger_untap_pump_target_min_spent (I3b), Decimator of the Provinces' emerge_cost /
+// cast_trigger_team_pump_power (I4), Ilharg, the Raze-Boar's attack_put_creature_from_hand (I5a).
+// Herald's Horn's
+// upkeep_look_top_chosen_type_to_hand is deliberately EXCLUDED: the Horn is a colourless tribal staple any tribal
+// deck may add (the Lightning Greaves / Metallic Mimic exclusion). OWED (I3-I5): OR in each new Boars-only param
+// -- Raggadragga's, Decimator's emerge/cast pump, Ilharg's attack put -- so one deckbuilding swap cannot lose the
+// routing.
+// =============================================================================================
+class BoarsProvider : public DeckProvider
+{
+public:
+    bool ShouldAttackWith(const GameState& s, const Permanent& p) const override;
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
+    uint16_t ChosenCreatureSubtypeId(const GameState& state, int controller,
+                                     const CardDefinition& entering) const override;
+    // MTG_BOARS_CAST_ORDER (heurarm BOARS_CAST_ORDER, DEFAULT ON -- AI-drafted, USER-approved 2026-11-14,
+    // docs/design/boars-cast-order-2026-11-14.md): Herald's Horn > Lightning Greaves > Herald of Ilharg > the
+    // creatures of mana value <= 4 cheapest first > the other 5+ creatures (Ilharg) > End-Raze Forerunners >
+    // Decimator of the Provinces; ties by NAME. =0 -> DeckProvider's rank byte-for-byte.
+    int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
+    bool CastOrderTotalByName() const override;
+    const char* CastOrderTierName(int rank) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A sound winless-turn bound must price every attacker that can still swing this "
+               "turn -- Flinthoof's {R} haste, Lightning Greaves, Ilharg's tapped-and-attacking put, Herald of "
+               "Ilharg's counters, End-Raze / Decimator team pumps, Raggadragga's anthem on mana creatures, exalted "
+               "and Zhur-Taa Druid's tap pings -- plus the mana a turn can make (Somberwald Sage's creature-only "
+               "burst, Gruul Turf), before claiming no line wins." }; }
+    const char* Name() const override { return "Boars"; }
 };
 
 // Extra Turns starts with the generic decision surface. Its own provider gives the
@@ -959,6 +1049,24 @@ public:
     bool ArchetypeCardValue(const GameState&, const CardDefinition&, int, int&) const override;
     std::vector<std::string> TutorCandidates(const GameState&, int, const CardParams&) const override;
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
+    // EXISTING PROVIDER PRUNE, PENDING USER REVIEW (2026-11-14): one fetch target searched. FetchCandidates here
+    // already returns the single best pick; ModernRwBurnProvider inherits this override, and its own list can hold
+    // more than one name (the fallback when neither Sacred Foundry nor Mountain is left). Explicit since the base
+    // default became EVERY target (USER 2026-11-14), so both decks' play is byte-identical.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
     bool CanAutoFireAltPayload(const GameState&, int, const CardDefinition&) const override;
     // CastEnablerFirst: no override -- enabler-first is the generic param-derived ENABLES tier
@@ -2065,12 +2173,28 @@ public:
     const char* Name() const override { return "FiveColour"; }
     std::vector<std::string> FetchCandidates(const GameState&, int, const CardParams&) const override;
     bool ConsiderFetchHold(const GameState&, const CardDefinition&) const override { return false; }
-    // Fetch search breadth: the base-class DEFAULT (top entry only) is exactly this deck's
-    // reviewed policy -- no override needed. Evidence that top-1 is right here: the wide fan's
+    // Fetch search breadth: TOP ENTRY ONLY, this deck's reviewed policy (USER 2026-08-21, "I meant for our
+    // heuristic to be used with just the top entry"). It was the base-class default until 2026-11-14, when the
+    // USER made the default every target; explicit since then (byte-identical). Evidence that top-1 is right
+    // here: the wide fan's
     // coupled-metric edge (+0.034 held-out 8/8 keys) was proven 100% CLAIRVOYANCE by the
     // MTG_SHUFFLE_SALT_SEARCH decouple ensemble (salts 1-4, 2,400 games: uncap 5.0558 WORST in
     // every salt vs top-1 5.0317) -- the extra targets only "won" by pre-seeing the deterministic
     // post-fetch shuffle. See docs/design/fivecolour-gen-leaf-cost-wallclock.md RESOLUTION.
+    std::vector<std::string> FetchSearchCandidates(const GameState&, int, const CardParams&,
+                                                   const std::vector<std::string>& ranked) const override
+    { return FetchTopPickOnly(ranked); }
+    // The battlefield fetchland's pick list ranked by THIS provider's FetchCandidates, narrowed to its
+    // FetchSearchCandidates (top-1: an existing provider prune, pending USER review), so its activation and its
+    // on-play land drop read ONE list (USER 2026-11-14). The order reads hand / board / library order, so the
+    // pick-list memo is declined (LandSearchPickOrderKey = false). DecisionProviders.cpp, after GenericProvider.
+    void LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  std::vector<std::vector<std::string>>& picks) const override;
+    int  LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand, bool basic_only,
+                                  bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+                                  const std::vector<std::vector<std::string>>& picks) const override;
+    bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     void ModalSplitCandidates(const GameState&, const CardDefinition&,
                               std::vector<int>&) const override;
     // Hold a live UTILITY mana dork (Deathrite Shaman / Bloom Tender / Birds) out of combat when
@@ -3972,6 +4096,9 @@ public:
     std::vector<std::string> FetchCandidates(const GameState& s, int controller, const CardParams& fetch_pp) const override;
     std::vector<std::string> FetchSearchCandidates(const GameState& s, int controller, const CardParams& fetch_pp,
                                                    const std::vector<std::string>& ranked) const override;
+    // The land drop keeps the provider's OWN width (the rule pick + Xander's Lounge): no extra top-1 cap from the
+    // base OnPlayFetchWidth (2026-11-14), which would cut the triome the USER asked to have searched.
+    int OnPlayFetchWidth(const GameState&, const CardDefinition&) const override { return 0; }
     // MYRIAD LANDSCAPE (MTG_CYCLONE_MYRIAD_RULE): two Islands, the one-option pick; two Mountains searched
     // beside them only while short on red.
     void LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,
@@ -4340,6 +4467,9 @@ public:
     bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const override;
     int  FetchLandSearchPickWidth(const GameState& s, int controller,
                                   const std::vector<std::vector<std::string>>& picks) const override;
+    // The reviewed Strand rule searches its preferred target plus a maker for each missing colour.
+    // Preserve that width at the land drop; the generic top-one cap would strand a required Island.
+    int OnPlayFetchWidth(const GameState&, const CardDefinition&) const override { return 0; }
     // White Orchid Phantom on OUR OWN nonbasic land: offered to the search only while a basic land
     // card remains in our library (a SOUND prune: with none, the trade loses a land and finds
     // nothing, and no card in the Spirits 60 reads a land in the graveyard or a land dying).

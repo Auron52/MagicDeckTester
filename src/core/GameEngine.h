@@ -68,6 +68,7 @@ public:
     // first-main trigger, stopping before the AI chooses a spell to cast.
     bool AdvanceToFirstMainForTest(GameState& state);
 
+    friend struct MtgTestSeam;   // tests reach ResolveStack / EndStep (test/unit/mtg_test_seam.h)
 private:
     AIEngine&    m_ai;
     GameLogger*  m_logger = nullptr;

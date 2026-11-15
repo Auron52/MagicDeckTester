@@ -46,6 +46,7 @@ thread_local BounceChooser*  g_play_fling_chooser  = nullptr;
 thread_local EtbColorChooser* g_play_etb_color_chooser = nullptr;
 thread_local EtbTypeChooser* g_play_etb_type_chooser = nullptr;
 thread_local EtbKeywordsChooser* g_play_etb_keywords_chooser = nullptr;
+thread_local CreatureTypeChooser* g_play_creature_type_chooser = nullptr;
 thread_local DiscardChooser* g_play_discard_chooser = nullptr;
 thread_local EIChooser*      g_play_ei_chooser      = nullptr;
 thread_local RetraceDiscardChooser* g_play_retrace_chooser = nullptr;
