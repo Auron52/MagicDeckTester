@@ -602,7 +602,7 @@ launch unless the user requests a restart.
   lead to the 4-hour period ending up different for every agent and thereby much less thrashing."*
   * **Why:** several sessions push to the same branch. Every push forces the others to rebase (and, when
     `src` or GT replays, rebuild and re-run smoke), and CI uses `cancel-in-progress`, so frequent pushes
-    keep cancelling each other's Windows / determinism-parity runs. Fewer, batched pushes per session --
+    keep cancelling each other's Windows runs. Fewer, batched pushes per session --
     with each session's window falling at a different time -- cut that churn.
   * **How:** commit locally as you go; integrate and push the shared branch (currently
     `phase-1-2-deck-analyzer`) in ONE batch at most every 4 hours, counted from your session's last push
@@ -617,7 +617,7 @@ launch unless the user requests a restart.
     once (see the play-server hard rules above); this rule never delays protecting one.
 
 - **After pushing platform-sensitive code, WATCH CI and report the Windows result.**
-  `.github/workflows/build.yml` builds on **ubuntu-latest AND windows-latest** on every push
+  `.github/workflows/build.yml` builds on **windows-latest** on every push
   (any branch) that touches `src/**`, `test/unit/**`, `CMakeLists.txt`, `CMakePresets.json`,
   `cmake/**`, `build.*`, `play.*`, or `tools/play/**`. You cannot verify MSVC from the Linux
   container, so CI is the only Windows signal — and **push CI notifies, it does not block**
@@ -640,9 +640,7 @@ launch unless the user requests a restart.
   pivot to it at once** and fix it before going on (*"if it does fail then we should pivot and fix it, but most
   of the time not waiting should save us time."*). Do NOT rely on email: pushes
   authenticate as `dtippett-bot`, so GitHub's failure mail goes to the bot's mailbox, not the
-  user's. The job that matters most is **determinism parity** — it asserts Linux and Windows
-  produce the same result for the same seed, which is what `src/core/Library.h`'s open-coded
-  MSVC shuffle exists to guarantee. If it goes red, root-cause it; never rebaseline over it.
+  user's. Agents run Linux builds and regression checks locally; the CI job checks Windows.
 
 - **WORKTREES LIVE UNDER `.claude/worktrees/` (the persistent host mount), NEVER `/tmp` (user
   directive, 2026-10-06).** `/tmp` and `/workspaces` are the container's overlay filesystem: a
