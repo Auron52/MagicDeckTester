@@ -269,6 +269,7 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
         // The action menu is built before the plan pays any spells. Existing
         // Islands may be spent first, leaving a later blue spell dependent on
         // converting a nonbasic. Keep one such target whenever blue is needed.
+        int blue_target = -1;
         if (blue_need > 0)
         {
             for (int i : targets)
@@ -279,10 +280,42 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
                     || d == nullptr || IsBasicLandCard(*d)
                     || std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue)
                        != d->params.produces.end()) { continue; }
-                targets.assign(1, i);
-                return;
+                blue_target = i;
+                break;
             }
         }
+        if (!pilgrimage)
+        {
+            if (blue_target >= 0) { targets.assign(1, blue_target); }
+            else { targets.clear(); }
+            return;
+        }
+        // Turning Three Tree City into an Island can erase a stronger mana
+        // ability. For Pilgrimage's tap trigger, retain a harmless Island (or
+        // tapped land) beside the blue-fixing target. This keeps the target
+        // menu to at most two lands.
+        int token_target = -1;
+        for (int i : targets)
+        {
+            const Permanent& land = state.battlefield[static_cast<std::size_t>(i)];
+            if (land.controller_index == state.active_player_index && land.tapped)
+            { token_target = i; break; }
+        }
+        if (token_target < 0)
+        {
+            for (int i : targets)
+            {
+                const Permanent& land = state.battlefield[static_cast<std::size_t>(i)];
+                if (land.controller_index == state.active_player_index
+                    && (land.card.m_name == "Island" || LandTypeChangedToIsland(state, land)))
+                { token_target = i; break; }
+            }
+        }
+        if (token_target < 0) { token_target = targets.front(); }
+        targets.clear();
+        if (blue_target >= 0) { targets.push_back(blue_target); }
+        if (token_target != blue_target) { targets.push_back(token_target); }
+        return;
     }
     if (!pilgrimage) { targets.clear(); return; }
     // The target is otherwise inert in this passive-opponent game. A tapped

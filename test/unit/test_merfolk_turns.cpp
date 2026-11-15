@@ -202,6 +202,11 @@ TEST_CASE("Tidal Warrior keeps nonbasic blue conversion after planned blue spend
     std::vector<int> targets{2};
     provider.TapTargetPumpTargets(state, state.battlefield[3], true, targets);
     CHECK(targets == std::vector<int>{2});
+
+    AddPermanent(state, "Deeproot Pilgrimage", 224);
+    targets = {0, 2};
+    provider.TapTargetPumpTargets(state, state.battlefield[3], true, targets);
+    CHECK(targets == std::vector<int>{2, 0});
 }
 
 TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefield path")
