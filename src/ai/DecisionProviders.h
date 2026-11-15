@@ -729,6 +729,10 @@ public:
                "reach, and our own death, before it can be sound." }; }
     const char* Name() const override { return "PreventDamage"; }
     bool SelfDamageUseful(const GameState& s, int controller) const override;
+    // Keep a red pip available for a Rolling Earthquake already in hand when another
+    // payment has a proven alternative. The armed payer checks this target against
+    // the same line-repair survival and mana-feasibility rules as a named cast.
+    std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
     // Our life is this deck's fuel (every tap and cast can cost it), so a no-win leaf that ties on
     // opponent life prefers the line that kept more of it. MTG_PD_LEAF_OWN_LIFE; see the base hook.
     bool NoWinLeafPricesOwnLife() const override;

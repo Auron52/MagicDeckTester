@@ -25025,6 +25025,17 @@ bool PreventDamageProvider::SelfDamageUseful(const GameState& s, int controller)
     return dmgev::SelfDamageGainEngine(s, controller);
 }
 
+std::vector<ManaCost> PreventDamageProvider::PaymentHoldUp(const GameState& s, int controller) const
+{
+    if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
+    static const InternedName k_quake("Rolling Earthquake");
+    for (const Card& c : s.players[controller].hand)
+    {
+        if (c.m_name == k_quake) { ManaCost red; red.red = 1; return {red}; }
+    }
+    return {};
+}
+
 bool PreventDamageProvider::NoWinLeafPricesOwnLife() const
 {
     static const bool s_on = EnvOn("MTG_PD_LEAF_OWN_LIFE");

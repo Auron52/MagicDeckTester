@@ -1416,11 +1416,19 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // an OVER-estimate of what is still owed once earlier casts have paid, so the check can
         // only err toward the historical payment).
         const PlanTraits* pt = CurrentPlanTraits();
-        if (pt == nullptr || pt->mana_casts < 2) { return -1; }
+        const bool named_line = pt != nullptr && pt->mana_casts >= 2;
+        static const bool s_later_hand_hold = EnvOn("MTG_PD_LATER_HAND_HOLD", true);
+        const bool later_hand_hold = state.dmg_events_armed && cost_in.red == 0
+            && heurarm::Flag(heurarm::PD_LATER_HAND_HOLD, s_later_hand_hold);
+        const std::vector<ManaCost> hand_holds = later_hand_hold
+            ? ResolveProvider(state).PaymentHoldUp(state, state.active_player_index) : std::vector<ManaCost>{};
+        if (!named_line && hand_holds.empty()) { return -1; }
         if (probe) { return 1; }
         const int cur[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
-        int need[5], need_tot = std::max(0, pt->cast_mv_total - cost_in.ManaValue());
-        for (int c = 0; c < 5; ++c) { need[c] = std::max(0, pt->cast_pips[c] - cur[c]); }
+        int need[5] = { 0, 0, 0, 0, 0 };
+        int need_tot = named_line ? std::max(0, pt->cast_mv_total - cost_in.ManaValue()) : 0;
+        if (named_line)
+        { for (int c = 0; c < 5; ++c) { need[c] = std::max(0, pt->cast_pips[c] - cur[c]); } }
         // EXACT REST OF LINE, demand half (MTG_PD_LINE_OK_EXACT -- see dmgev::LineOkExactEnabled).
         // That estimate still counts every cast the line has ALREADY paid, so on its last cast it
         // asks the board to pay the earlier casts a second time; once the supply test below is
@@ -1434,7 +1442,7 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         // left over from an outer line, e.g. during a breakpoint continuation whose casts are not
         // in it, usually is not) -- and only to LOWER the estimate: the demand side can only relax.
         const bool exact = dmgev::LineOkExactEnabled();
-        if (exact)
+        if (exact && named_line)
         {
             const ManaCost& lu = g_line_unpaid_cost;
             const int lu_mv = lu.ManaValue();
@@ -1446,6 +1454,15 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
                 for (int c = 0; c < 5; ++c) { need[c] = std::min(need[c], owed[c] - cur[c]); }
                 need_tot = std::min(need_tot, lu_mv - cost_in.ManaValue());
             }
+        }
+        for (const ManaCost& hold : hand_holds)
+        {
+            need_tot = std::max(need_tot, hold.ManaValue());
+            need[0] = std::max(need[0], hold.white);
+            need[1] = std::max(need[1], hold.blue);
+            need[2] = std::max(need[2], hold.black);
+            need[3] = std::max(need[3], hold.red);
+            need[4] = std::max(need[4], hold.green);
         }
         const int a = state.active_player_index;
         const ManaPool& fl = state.floating_mana;

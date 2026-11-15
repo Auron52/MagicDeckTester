@@ -1508,6 +1508,49 @@ TEST_CASE("Prevent Damage harmful-mode payment: the rest of the line stays payab
     CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
 }
 
+TEST_CASE("Prevent Damage holds red for a known later Earthquake after Living Wish (seed 30050876 T5)")
+{
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts = 1;   // The initial Dina plan has ended; Wish and Earthquake are a continuation.
+    PlanTraitsScope traits(&t);
+    auto board = []()
+    {
+        GameState s = Board();
+        s.turn_number = 5;
+        s.players[0].life = 8;
+        Put(s, "Tarnished Citadel");
+        Put(s, "Ancient Tomb");
+        Put(s, "Vito, Thorn of the Dusk Rose");
+        Put(s, "Battlefield Forge");
+        Put(s, "City of Brass");
+        Put(s, "Reflecting Pool");
+        Put(s, "Dina, Soul Steeper");
+        s.battlefield[4].tapped = true;   // Dina's {B}
+        s.battlefield[5].tapped = true;   // Dina's {G}
+        const CardDefinition* quake = CardDatabase::Instance().Lookup("Rolling Earthquake");
+        REQUIRE(quake != nullptr);
+        s.players[0].hand.push_back(quake->card);
+        return s;
+    };
+    {
+        HeurArmSet off(heurarm::PD_LATER_HAND_HOLD, false);
+        GameState s = board();
+        REQUIRE(Pay(s, Cost(1, 0, 0, 0, /*g=*/1)));   // Living Wish
+        CHECK(s.battlefield[3].tapped);               // Forge spent as generic
+        CHECK_FALSE(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+    }
+    {
+        HeurArmSet on(heurarm::PD_LATER_HAND_HOLD, true);
+        GameState s = board();
+        REQUIRE(Pay(s, Cost(1, 0, 0, 0, /*g=*/1)));
+        CHECK_FALSE(s.battlefield[3].tapped);
+        CHECK(s.battlefield[1].tapped);   // Tomb paid generic, its spare {C} floats.
+        CHECK(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+        CHECK_FALSE(SelfHasLost(s));
+    }
+}
+
 TEST_CASE("Prevent Damage line repair: a deeper hold set when every single hold strands (useful, seed 30029561 T6)")
 {
     // Citadel, Forge, Brushland, Vito, Citadel, Brushland, Tamanoa, Reflecting Pool; 8 life. Line: Tamanoa
