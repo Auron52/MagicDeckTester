@@ -5,7 +5,7 @@ then `docs/design/analysis-Red Elementals.md` (the per-deck ledger), then verify
 
 Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is current).
 
-## >>> CODEX HANDOFF -- START HERE (state at 2026-11-15 00:10 UTC, agent H2) <<<
+## >>> CODEX HANDOFF -- START HERE (state at 2026-11-15 04:30 UTC, orchestrator; H2 block below still current) <<<
 
 **What may still be RUNNING when you arrive.** Check each with `kill -0 <pid>` and `ps` before you touch the tree.
 
@@ -27,6 +27,35 @@ Last updated: 2026-11-15 00:10 UTC (Claude agent H2; the handoff block below is 
    references, switch the primary back with `git switch phase-1-2-deck-analyzer && git pull --rebase`,
    rebuild, restart the viewer with `MDT_REFERENCE_BACKUP_DIR=/home/vscode/.claude/mdt-reference-backups`,
    and delete `viewer/redelem`.
+
+**NEW 2026-11-15: the USER played 10 reference games in the viewer.** They are committed as
+`references/Red_Elementals/claude_s{1..10}_gi*.json`: `26933ae30` on `viewer/redelem` (pushed to origin) and
+cherry-picked onto `redelem-analysis` as `ae3eca75f`. The viewer autosave branch holds them too.
+* **`scripts/ref_bench.py --deck red_elementals`** (fold binary, shipped d5 b20; log
+  `logs/redelem/refbench-2026-11-15.log`): human avg **4.400**, search avg **4.400**. 8 equal, 1 search faster
+  (s8 gi7: 6 -> 5), and **1 SHORTFALL (s1 gi0: human T4, search T5)**.
+* **s1 gi0 does NOT recover with budget or depth:** T5 at d5 b20, d5 b2000 and **d8 b0**. It stays T5 at d8 b0
+  with each of `MTG_REDELEM_TRICK_FOLD=0`, `MTG_REDELEM_OPAQUE_ORDER=0`, `MTG_CHAMPION_DOOMED_PRUNE=0`,
+  `MTG_REDELEM_NOVA_MAIN2=0` and `MTG_UNPRUNED=1`. Under that bar it is a **search-completeness defect**, not a
+  budget or prune effect, and it is the top Codex item (do it before the 5d sweep, since a fix changes play).
+  * **Human line:** T1 Mountain + Spark (17). T2 Mountain + Bladewhirl. T3 Mountain + **Incandescent Soulstoke**,
+    Bladewhirl attacks for 3 (14). T4 Mountain; **Soulstoke {1}{R},T: put Ball Lightning** (7/1 haste with the
+    lord); **Legion Leadership on Ball Lightning** (14 first strike); attack 14 + 3 = 17 >= 14.
+  * **Search line (d8 b0):** T1 Fiery Islet + Spark (17). T2 Bladewhirl. T3 Ball Lightning, attack 8 (9). T4
+    Ball Lightning, attack 8 (1). T5 wins.
+  * **Lead to check first:** the viewer's T4 plan label reads `cast: Legion Leadership -> Flamekin Bladewhirl,
+    put Ball Lightning onto battlefield (Soulstoke ...)`. The plan names the Leadership target BEFORE the put.
+    The human then got a separate target prompt (`heuristic_default` = Ball Lightning) after the put. So the
+    search's plan may bind or execute the Leadership target (Bladewhirl: 6 + 7 = 13 < 14) before the
+    Soulstoke put lands, and never branch on "put first, then Leadership on the put creature". Verify the
+    enumeration of Soulstoke-put + trick ORDER inside one main phase, and whether d8 even values the T3
+    Soulstoke cast.
+  * **Repro:** `MTG_PGO=0 build/Release/mtg --batch logs/redelem/s1d8.json --threads 1 --game-trace-dir <dir>`
+    (`logs/redelem/s1.json` = d5 b20 / d5 b2000 / d8 b0). Human line: `references/Red_Elementals/claude_s1_gi0.json`.
+  * Fix it as a searched capability (no greedy pick). Then re-run `ref_bench.py --deck red_elementals`, A/B the
+    play change on redelem, re-accept redelem GT, and only then run the 5d sweep.
+* `test/ref_bench.json` (the viewer's GREEN cache) was NOT updated. The primary checkout has an uncommitted
+  edit to it from another session, so leave that file alone.
 
 **Stage 5 results** (ledger section "Stage 5 runtime verification (agents H/H2)";
 `docs/design/red-elementals-search-cost.md`):
