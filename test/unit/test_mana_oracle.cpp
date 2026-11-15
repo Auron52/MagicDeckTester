@@ -531,6 +531,39 @@ TEST_CASE("mana oracle: Lake's on-demand crack is distinct from its ordinary bla
         for (const TurnSolver::PreTap& t : o.taps) { CHECK_FALSE(t.sac_crack); }
 }
 
+TEST_CASE("mana oracle: a Lake crack may sacrifice one Swamp while its twin taps")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Lake of the Dead", "Lake of the Dead", "Swamp", "Swamp" });
+    s.deck_has_ondemand_sac = true;
+    s.scripted_early_ondemand_crack = true;
+    // Reaper from the Abyss costs {3}{B}{B}{B}. The crack taps Swamp #3
+    // before sacrificing it; Swamp #4 remains available for the sixth mana.
+    const auto opts = manaoracle::MinimalPayments(s, Cost(3, 0, 0, 3), true, nullptr);
+    bool found = false;
+    for (const manaoracle::PayOption& o : opts)
+    {
+        bool crack = false, survivor = false;
+        for (const TurnSolver::PreTap& t : o.taps)
+        {
+            if (t.num == 1 && t.sac_crack) { crack = true; }
+            if (t.num == 4 && t.name == "Swamp") { survivor = true; }
+        }
+        if (!crack || !survivor) { continue; }
+        GameState paid = s;
+        REQUIRE(manaoracle::PerformPayTaps(paid, o));
+        CHECK(std::none_of(paid.battlefield.begin(), paid.battlefield.end(),
+                           [](const Permanent& p) { return p.card.m_number == 3; }));
+        const auto it = std::find_if(paid.battlefield.begin(), paid.battlefield.end(),
+                                     [](const Permanent& p) { return p.card.m_number == 4; });
+        REQUIRE(it != paid.battlefield.end());
+        CHECK(it->tapped);
+        found = true;
+        break;
+    }
+    CHECK(found);
+}
+
 // EDF seed 3101 T4 (an ORACLE-GAP): a multi-unit source may pay part of a bill and float the rest when one
 // more tap covers what that rest would have paid. Forest {G} + Plains/Fertile Ground {W}+any pays {2}{G}
 // exactly, so the minimal search never taps Mariposa beside them; with Mariposa's {C} as well the Fertile

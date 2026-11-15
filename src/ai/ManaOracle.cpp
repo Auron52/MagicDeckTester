@@ -1387,6 +1387,30 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
     std::vector<SrcClass> out;
     std::map<std::string, std::size_t> by_key;
     const int a = state.active_player_index;
+    // A Lake crack taps and sacrifices one Swamp while paying the bill. Two
+    // otherwise identical Swamps are therefore not interchangeable payment
+    // sources: the first may be the crack's victim while the second can still
+    // tap. Keeping their numbers separate lets the table enumerate that
+    // survivor (Shadowborn seed 30077370, Reaper's six-mana payment).
+    std::set<int> crack_victims;
+    if (state.deck_has_ondemand_sac)
+    {
+        for (const Permanent& source : state.battlefield)
+        {
+            if (source.controller_index != a || source.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(source.card);
+            if (d == nullptr || !IsOnDemandSacDef(*d)
+                || d->params.sac_for_mana_victim_land_subtype.empty()
+                || !OnDemandSacCrackableNow(state, source, *d)) { continue; }
+            for (const Permanent& victim : state.battlefield)
+            {
+                if (victim.controller_index == a && victim.card.IsLand()
+                    && victim.card.m_number != source.card.m_number
+                    && LandHasSubtypeNow(state, victim, d->params.sac_for_mana_victim_land_subtype))
+                { crack_victims.insert(victim.card.m_number); }
+            }
+        }
+    }
     for (const Permanent& p : state.battlefield)
     {
         if (p.controller_index != a || p.tapped) { continue; }
@@ -1462,7 +1486,8 @@ std::vector<SrcClass> BuildSources(const GameState& state, bool for_creature, st
         key += "|" + p.counters.KeyFragment() + "|" + std::to_string(p.storage_counters) + ","
              + std::to_string(p.charge_counters) + "|" + std::to_string(n_auras)
              + (p.entered_this_turn ? "|new" : "|old");
-        if (KeyedApart(state, p)) { key += "|plan#" + std::to_string(p.card.m_number); }
+        if (KeyedApart(state, p) || crack_victims.count(p.card.m_number) != 0)
+        { key += "|plan#" + std::to_string(p.card.m_number); }
         auto it = by_key.find(key);
         if (it != by_key.end()) { out[it->second].nums.push_back(p.card.m_number); continue; }
         SrcClass sc;
