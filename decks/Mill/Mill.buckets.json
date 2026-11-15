@@ -1,0 +1,8 @@
+{
+  "merge": [
+    {
+      "cards": ["Counterspell", "Drown in the Loch", "Fatal Push"],
+      "why": "The passive Mill opponent casts no spells and presents no creatures. Mill's autonomous provider excludes all three casts, so all three cards are equally inert in opening hands and bottoming decisions."
+    }
+  ]
+}
