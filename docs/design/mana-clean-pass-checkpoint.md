@@ -1712,3 +1712,44 @@ fungus 1,880, gods 4,300 (first run).
   beta; next block 52,000–56,999. Details:
   `docs/design/prevent-damage-floated-pain-line-codex-2026-11-15.md` and
   `logs/mana_clean/pd-float-line-20261115/report.md`.
+
+* **Gods Loam plan clarification (Codex, 2026-11-15):** The user correctly
+  pointed out that Loam chooses its graveyard targets when it is cast, after
+  Careful Study has resolved, and that an original `Study -> Loam` plan should
+  survive a Study breakpoint. The solver already implements live target
+  selection; the missing line is the original plan's land position. In seed
+  30005620 turn 8, the two available lands and a Tendo in hand cause the
+  singleton Gods rule to dredge Grave-Troll during Study, milling Loam's
+  target lands. `land=Tendo -> Study -> Loam` sees three lands before Study;
+  with three graveyard Gods and no Replenish, rule 4 chooses a natural draw
+  instead, so it does not create the same targets. The old `no land -> Study
+  -> Loam` plan cannot pay Loam and has no pending Loam when the breakpoint
+  starts. The user then clarified the intended Gods policy: dredge toward
+  Mystic Retrieval (which can recover Replenish) instead of drawing randomly
+  for Replenish, and cast Life from the Loam to recover lands when payable.
+  The focused `MTG_GODS_RETRIEVAL_DREDGE` prototype on
+  `wip/codex-gods-retrieval` (`a199c98c7`) makes the land-first repro clean
+  without a post-Study land axis. It also has a large measured play cost:
+  650 fresh paired games averaged 5.3862 turns with the old rule and 5.5692
+  with strict dredging (+119 turn-games; 112 slower, 26 faster). The Gods
+  searched smoke and regression cells likewise worsen, while depth-zero is
+  unchanged. Seed 7900011 shows the cause: the old rule draws Replenish on
+  turn three and wins turn four; strict dredging mills it, then reaches Mystic
+  Retrieval and wins turn seven. This conflicts with the handoff's
+  net-nonworsening adoption bar, so the tradeoff is pending a user answer.
+  No ground truth or mana-clean gate was changed on that branch. Detailed
+  evidence: `docs/design/gods-retrieval-dredge-codex-2026-11-15.md`.
+
+* **Prevent Damage fresh follow-up (Codex, 2026-11-15):** PGO source
+  `a895662511ea`, game indices 52,000–56,999, reports **532 issues**:
+  APPLY-DROP 201, ORACLE-GAP 121, UNMODELED 18, CAPPED 192. Oracle-on/off
+  play is byte-identical. Of 201 drops, 197 are depth-one `need_in_plan`:
+  the later-hand Earthquake red reserve conflicts with a named multi-cast
+  plan. A narrower `MTG_PD_NAMED_LINE_PRIORITY` default-on rule gives the
+  named plan priority over that speculative reserve. The same rebuilt
+  binary reports eight drops on seed 30052809 T4 with the broad hold and
+  zero with named priority; the earlier seed 30050876 T5 fix remains clear.
+  The current-binary unit suite passed 3,304 cases and 3,612,554 assertions.
+  In 5,000 fresh paired games, broad and narrow both averaged 5.4604 win
+  turns, with zero faster or slower games and seven changed play digests.
+  Fresh PGO re-gate is pending.
