@@ -1,0 +1,814 @@
+{
+  "seed": 8, "game_index": 7, "win_turn": 6, "won": true,
+  "mulligan": { "count": 2, "bottom": [21, 42] }, "karoo_float": 1, "fetch_activation": 1, "combat_damage_steps": 1, "pain_defer": 1, "gsz_copy_id": 1, "spell_copy_id": 1, "magus_upkeep_prompt": 1,
+  "decisions": [
+    { "chosen": 0, "decision": {
+  "decision_index": 0,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 0,
+  "on_the_play": true,
+  "to_bottom": 0,
+  "hand": [{ "num": 31, "name": "Rishadan Dockhand" }, { "num": 50, "name": "Svyelun of Sea and Sky" }, { "num": 57, "name": "Wanderwine Prophets" }, { "num": 27, "name": "Merfolk Sovereign" }, { "num": 38, "name": "Seahunter" }, { "num": 39, "name": "Seahunter" }, { "num": 58, "name": "Wanderwine Prophets" }],
+  "ai_choice": 0,
+  "note": "reply 1 to KEEP this hand (then bottom 0 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 1,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 1,
+  "on_the_play": true,
+  "to_bottom": 1,
+  "hand": [{ "num": 6, "name": "Deeproot Pilgrimage" }, { "num": 35, "name": "Rogue's Passage" }, { "num": 3, "name": "Cavern of Souls" }, { "num": 15, "name": "Island" }, { "num": 7, "name": "Deeproot Pilgrimage" }, { "num": 25, "name": "Island" }, { "num": 59, "name": "Wanderwine Prophets" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 1 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 2,
+  "type": "mulligan",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "mulligan_count": 2,
+  "on_the_play": true,
+  "to_bottom": 2,
+  "hand": [{ "num": 21, "name": "Island" }, { "num": 47, "name": "Stonybrook Banneret" }, { "num": 18, "name": "Island" }, { "num": 42, "name": "Silvergill Douser" }, { "num": 19, "name": "Island" }, { "num": 41, "name": "Seahunter" }, { "num": 23, "name": "Island" }],
+  "ai_choice": 1,
+  "note": "reply 1 to KEEP this hand (then bottom 2 card(s)), or 0 to mulligan again"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 3,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 0,
+  "bottom_total": 2,
+  "hand": [{ "num": 21, "name": "Island", "win_optimal": true }, { "num": 47, "name": "Stonybrook Banneret", "win_optimal": true }, { "num": 18, "name": "Island", "win_optimal": true }, { "num": 42, "name": "Silvergill Douser", "win_optimal": true }, { "num": 19, "name": "Island", "win_optimal": true }, { "num": 41, "name": "Seahunter", "win_optimal": true }, { "num": 23, "name": "Island", "win_optimal": true }],
+  "ai_choice": { "index": 0, "num": 21, "name": "Island" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 1 of 2)"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 4,
+  "type": "bottom",
+  "turn": 0,
+  "me": { "life": 20, "battlefield": [] },
+  "opponent": { "life": 20, "battlefield": [] },
+  "bottom_step": 1,
+  "bottom_total": 2,
+  "hand": [{ "num": 47, "name": "Stonybrook Banneret", "win_optimal": true }, { "num": 18, "name": "Island", "win_optimal": true }, { "num": 42, "name": "Silvergill Douser", "win_optimal": true }, { "num": 19, "name": "Island", "win_optimal": true }, { "num": 41, "name": "Seahunter", "win_optimal": true }, { "num": 23, "name": "Island", "win_optimal": true }],
+  "ai_choice": { "index": 1, "num": 18, "name": "Island" },
+  "ai_set": [],
+  "note": "reply the hand INDEX (0-based) of the card to put on the bottom (step 2 of 2)"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 5,
+  "main_ordinal": 0,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [], "vial_counters": [], "hand": [{ "num": 18, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stonybrook Banneret", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 6,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stonybrook Banneret", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 7,
+  "type": "main_phase",
+  "turn": 1,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stonybrook Banneret", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 55, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "cast_order": ["**", "land=Island", "cast=Stonybrook Banneret"], "decision": {
+  "decision_index": 8,
+  "main_ordinal": 1,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 2, "card": "Island" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }], "vial_counters": [], "hand": [{ "num": 19, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 47, "name": "Stonybrook Banneret", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Stonybrook Banneret", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Stonybrook Banneret"], "actions": [{ "card": "Stonybrook Banneret" }] },
+    { "index": 1, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 9,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 10,
+  "type": "main_phase",
+  "turn": 2,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "sick": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 54, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 11,
+  "main_ordinal": 2,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 3, "card": "Three Tree City" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 23, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 1 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Three Tree City; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 12,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 20, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 13,
+  "type": "main_phase",
+  "turn": 3,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 3, "kind": "combat", "text": "⚔ attacked: Stonybrook Banneret (1) — 1 to opponent (20→19)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 53, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "cast_order": ["**", "land=Three Tree City", "cast=Seahunter"], "decision": {
+  "decision_index": 14,
+  "main_ordinal": 3,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 4, "card": "Merfolk Sovereign" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Seahunter", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter" }] },
+    { "index": 1, "summary": "land=Island; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 2, "summary": "land=Three Tree City; cast: Seahunter", "declared_order_payability": "not_verified", "land": "Three Tree City", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter" }] },
+    { "index": 3, "summary": "land=Three Tree City; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": "Three Tree City", "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 4, "summary": "land=none; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": null, "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 5, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 6, "summary": "land=Three Tree City; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Three Tree City", "casts": [], "actions": [] },
+    { "index": 7, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 194, "decision": {
+  "decision_index": 15,
+  "type": "choose_creature_type",
+  "source": "Three Tree City",
+  "turn": 4,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 8, "num": 52, "is_land": true, "taps": "C" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 41, "name": "Seahunter", "cost": "{2}{U}{U}", "mv": 4, "kind": "permanent", "is_creature": true }, { "num": 52, "name": "Three Tree City", "cost": "", "mv": 0, "kind": "land" }], "graveyard": [], "library_size": 52, "land_drops_left": 1 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "heuristic_default": 194,
+  "options": [{ "index": 0, "name": "Advisor" }, { "index": 1, "name": "Aenar" }, { "index": 2, "name": "Aetherborn" }, { "index": 3, "name": "Alien" }, { "index": 4, "name": "Ally" }, { "index": 5, "name": "Andorian" }, { "index": 6, "name": "Android" }, { "index": 7, "name": "Angel" }, { "index": 8, "name": "Antelope" }, { "index": 9, "name": "Ape" }, { "index": 10, "name": "Archer" }, { "index": 11, "name": "Archon" }, { "index": 12, "name": "Armadillo" }, { "index": 13, "name": "Army" }, { "index": 14, "name": "Artificer" }, { "index": 15, "name": "Assassin" }, { "index": 16, "name": "Assembly-Worker" }, { "index": 17, "name": "Astartes" }, { "index": 18, "name": "Atog" }, { "index": 19, "name": "Aurochs" }, { "index": 20, "name": "Automaton" }, { "index": 21, "name": "Avatar" }, { "index": 22, "name": "Azra" }, { "index": 23, "name": "Badger" }, { "index": 24, "name": "Bajoran" }, { "index": 25, "name": "Balloon" }, { "index": 26, "name": "Barbarian" }, { "index": 27, "name": "Bard" }, { "index": 28, "name": "Basilisk" }, { "index": 29, "name": "Bat" }, { "index": 30, "name": "Bear" }, { "index": 31, "name": "Beast" }, { "index": 32, "name": "Beaver" }, { "index": 33, "name": "Beeble" }, { "index": 34, "name": "Beholder" }, { "index": 35, "name": "Berserker" }, { "index": 36, "name": "Betazoid" }, { "index": 37, "name": "Bird" }, { "index": 38, "name": "Bison" }, { "index": 39, "name": "Blinkmoth" }, { "index": 40, "name": "Boar" }, { "index": 41, "name": "Bolian" }, { "index": 42, "name": "Borg" }, { "index": 43, "name": "Brainiac" }, { "index": 44, "name": "Brikar" }, { "index": 45, "name": "Bringer" }, { "index": 46, "name": "Brushwagg" }, { "index": 47, "name": "C'tan" }, { "index": 48, "name": "Caitian" }, { "index": 49, "name": "Camarid" }, { "index": 50, "name": "Camel" }, { "index": 51, "name": "Capybara" }, { "index": 52, "name": "Cardassian" }, { "index": 53, "name": "Caribou" }, { "index": 54, "name": "Carrier" }, { "index": 55, "name": "Cat" }, { "index": 56, "name": "Centaur" }, { "index": 57, "name": "Chicken" }, { "index": 58, "name": "Child" }, { "index": 59, "name": "Chimera" }, { "index": 60, "name": "Citizen" }, { "index": 61, "name": "Cleric" }, { "index": 62, "name": "Clown" }, { "index": 63, "name": "Cockatrice" }, { "index": 64, "name": "Construct" }, { "index": 65, "name": "Coward" }, { "index": 66, "name": "Coyote" }, { "index": 67, "name": "Crab" }, { "index": 68, "name": "Crocodile" }, { "index": 69, "name": "Custodes" }, { "index": 70, "name": "Cyberman" }, { "index": 71, "name": "Cyclops" }, { "index": 72, "name": "Dalek" }, { "index": 73, "name": "Dauthi" }, { "index": 74, "name": "Demigod" }, { "index": 75, "name": "Demon" }, { "index": 76, "name": "Denobulan" }, { "index": 77, "name": "Deserter" }, { "index": 78, "name": "Detective" }, { "index": 79, "name": "Devil" }, { "index": 80, "name": "Dinosaur" }, { "index": 81, "name": "Djinn" }, { "index": 82, "name": "Doctor" }, { "index": 83, "name": "Dog" }, { "index": 84, "name": "Dragon" }, { "index": 85, "name": "Drake" }, { "index": 86, "name": "Dreadnought" }, { "index": 87, "name": "Drix" }, { "index": 88, "name": "Drone" }, { "index": 89, "name": "Druid" }, { "index": 90, "name": "Dryad" }, { "index": 91, "name": "Dwarf" }, { "index": 92, "name": "Echidna" }, { "index": 93, "name": "Edosian" }, { "index": 94, "name": "Efreet" }, { "index": 95, "name": "Egg" }, { "index": 96, "name": "El-Aurian" }, { "index": 97, "name": "Elder" }, { "index": 98, "name": "Eldrazi" }, { "index": 99, "name": "Elemental" }, { "index": 100, "name": "Elephant" }, { "index": 101, "name": "Elf" }, { "index": 102, "name": "Elk" }, { "index": 103, "name": "Employee" }, { "index": 104, "name": "Eternal" }, { "index": 105, "name": "Excalbian" }, { "index": 106, "name": "Eye" }, { "index": 107, "name": "Faerie" }, { "index": 108, "name": "Ferengi" }, { "index": 109, "name": "Ferret" }, { "index": 110, "name": "Fish" }, { "index": 111, "name": "Flagbearer" }, { "index": 112, "name": "Fox" }, { "index": 113, "name": "Fractal" }, { "index": 114, "name": "Frog" }, { "index": 115, "name": "Fungus" }, { "index": 116, "name": "Gamer" }, { "index": 117, "name": "Gamma" }, { "index": 118, "name": "Gargoyle" }, { "index": 119, "name": "Germ" }, { "index": 120, "name": "Giant" }, { "index": 121, "name": "Giraffe" }, { "index": 122, "name": "Gith" }, { "index": 123, "name": "Glimmer" }, { "index": 124, "name": "Gnoll" }, { "index": 125, "name": "Gnome" }, { "index": 126, "name": "Goat" }, { "index": 127, "name": "Goblin" }, { "index": 128, "name": "God" }, { "index": 129, "name": "Golem" }, { "index": 130, "name": "Gorgon" }, { "index": 131, "name": "Gorn" }, { "index": 132, "name": "Graveborn" }, { "index": 133, "name": "Gremlin" }, { "index": 134, "name": "Griffin" }, { "index": 135, "name": "Guest" }, { "index": 136, "name": "Hag" }, { "index": 137, "name": "Halfling" }, { "index": 138, "name": "Hamster" }, { "index": 139, "name": "Harpy" }, { "index": 140, "name": "Head" }, { "index": 141, "name": "Hedgehog" }, { "index": 142, "name": "Hellion" }, { "index": 143, "name": "Hero" }, { "index": 144, "name": "Hippo" }, { "index": 145, "name": "Hippogriff" }, { "index": 146, "name": "Hirogen" }, { "index": 147, "name": "Homarid" }, { "index": 148, "name": "Homunculus" }, { "index": 149, "name": "Horror" }, { "index": 150, "name": "Horse" }, { "index": 151, "name": "Human" }, { "index": 152, "name": "Hydra" }, { "index": 153, "name": "Hyena" }, { "index": 154, "name": "Illusion" }, { "index": 155, "name": "Illyrian" }, { "index": 156, "name": "Imp" }, { "index": 157, "name": "Incarnation" }, { "index": 158, "name": "Inhuman" }, { "index": 159, "name": "Inkling" }, { "index": 160, "name": "Inquisitor" }, { "index": 161, "name": "Insect" }, { "index": 162, "name": "Jackal" }, { "index": 163, "name": "Jellyfish" }, { "index": 164, "name": "Jem'Hadar" }, { "index": 165, "name": "Juggernaut" }, { "index": 166, "name": "Kangaroo" }, { "index": 167, "name": "Kavu" }, { "index": 168, "name": "Kelpien" }, { "index": 169, "name": "Kirin" }, { "index": 170, "name": "Kithkin" }, { "index": 171, "name": "Klingon" }, { "index": 172, "name": "Knight" }, { "index": 173, "name": "Kobold" }, { "index": 174, "name": "Kor" }, { "index": 175, "name": "Kraken" }, { "index": 176, "name": "Kree" }, { "index": 177, "name": "Kwejian" }, { "index": 178, "name": "Lamia" }, { "index": 179, "name": "Lammasu" }, { "index": 180, "name": "Lanthanite" }, { "index": 181, "name": "Leech" }, { "index": 182, "name": "Lemur" }, { "index": 183, "name": "Leviathan" }, { "index": 184, "name": "Lhurgoyf" }, { "index": 185, "name": "Licid" }, { "index": 186, "name": "Lizard" }, { "index": 187, "name": "Llama" }, { "index": 188, "name": "Lobster" }, { "index": 189, "name": "Manticore" }, { "index": 190, "name": "Masticore" }, { "index": 191, "name": "Medusan" }, { "index": 192, "name": "Melkotian" }, { "index": 193, "name": "Mercenary" }, { "index": 194, "name": "Merfolk" }, { "index": 195, "name": "Metathran" }, { "index": 196, "name": "Mindless-One" }, { "index": 197, "name": "Minion" }, { "index": 198, "name": "Minotaur" }, { "index": 199, "name": "Mite" }, { "index": 200, "name": "Mole" }, { "index": 201, "name": "Monger" }, { "index": 202, "name": "Mongoose" }, { "index": 203, "name": "Monk" }, { "index": 204, "name": "Monkey" }, { "index": 205, "name": "Moogle" }, { "index": 206, "name": "Moonfolk" }, { "index": 207, "name": "Mount" }, { "index": 208, "name": "Mouse" }, { "index": 209, "name": "Mutant" }, { "index": 210, "name": "Myr" }, { "index": 211, "name": "Mystic" }, { "index": 212, "name": "Na'kuhl" }, { "index": 213, "name": "Naga" }, { "index": 214, "name": "Nautilus" }, { "index": 215, "name": "Necron" }, { "index": 216, "name": "Nephilim" }, { "index": 217, "name": "Nightmare" }, { "index": 218, "name": "Nightstalker" }, { "index": 219, "name": "Ninja" }, { "index": 220, "name": "Noble" }, { "index": 221, "name": "Noggle" }, { "index": 222, "name": "Nomad" }, { "index": 223, "name": "Nymph" }, { "index": 224, "name": "Ocampa" }, { "index": 225, "name": "Octopus" }, { "index": 226, "name": "Officer" }, { "index": 227, "name": "Ogre" }, { "index": 228, "name": "Ooze" }, { "index": 229, "name": "Orb" }, { "index": 230, "name": "Orc" }, { "index": 231, "name": "Orgg" }, { "index": 232, "name": "Orion" }, { "index": 233, "name": "Otter" }, { "index": 234, "name": "Ouphe" }, { "index": 235, "name": "Ox" }, { "index": 236, "name": "Oyster" }, { "index": 237, "name": "Pangolin" }, { "index": 238, "name": "Peasant" }, { "index": 239, "name": "Pegasus" }, { "index": 240, "name": "Pentavite" }, { "index": 241, "name": "Performer" }, { "index": 242, "name": "Pest" }, { "index": 243, "name": "Phelddagrif" }, { "index": 244, "name": "Phoenix" }, { "index": 245, "name": "Phyrexian" }, { "index": 246, "name": "Pilot" }, { "index": 247, "name": "Pincher" }, { "index": 248, "name": "Pirate" }, { "index": 249, "name": "Plant" }, { "index": 250, "name": "Platypus" }, { "index": 251, "name": "Porcupine" }, { "index": 252, "name": "Possum" }, { "index": 253, "name": "Praetor" }, { "index": 254, "name": "Primarch" }, { "index": 255, "name": "Prism" }, { "index": 256, "name": "Processor" }, { "index": 257, "name": "Q" }, { "index": 258, "name": "Qu" }, { "index": 259, "name": "Rabbit" }, { "index": 260, "name": "Raccoon" }, { "index": 261, "name": "Ranger" }, { "index": 262, "name": "Rat" }, { "index": 263, "name": "Rebel" }, { "index": 264, "name": "Reflection" }, { "index": 265, "name": "Reveler" }, { "index": 266, "name": "Rhino" }, { "index": 267, "name": "Rigger" }, { "index": 268, "name": "Robot" }, { "index": 269, "name": "Rogue" }, { "index": 270, "name": "Romulan" }, { "index": 271, "name": "Rukh" }, { "index": 272, "name": "Sable" }, { "index": 273, "name": "Salamander" }, { "index": 274, "name": "Samurai" }, { "index": 275, "name": "Sand" }, { "index": 276, "name": "Saproling" }, { "index": 277, "name": "Satyr" }, { "index": 278, "name": "Scarecrow" }, { "index": 279, "name": "Scientist" }, { "index": 280, "name": "Scion" }, { "index": 281, "name": "Scorpion" }, { "index": 282, "name": "Scout" }, { "index": 283, "name": "Sculpture" }, { "index": 284, "name": "Seal" }, { "index": 285, "name": "Serf" }, { "index": 286, "name": "Serpent" }, { "index": 287, "name": "Servo" }, { "index": 288, "name": "Shade" }, { "index": 289, "name": "Shaman" }, { "index": 290, "name": "Shapeshifter" }, { "index": 291, "name": "Shark" }, { "index": 292, "name": "Sheep" }, { "index": 293, "name": "Shi'ar" }, { "index": 294, "name": "Siren" }, { "index": 295, "name": "Skeleton" }, { "index": 296, "name": "Skrull" }, { "index": 297, "name": "Skunk" }, { "index": 298, "name": "Slith" }, { "index": 299, "name": "Sliver" }, { "index": 300, "name": "Sloth" }, { "index": 301, "name": "Slug" }, { "index": 302, "name": "Snail" }, { "index": 303, "name": "Snake" }, { "index": 304, "name": "Soldier" }, { "index": 305, "name": "Soltari" }, { "index": 306, "name": "Sorcerer" }, { "index": 307, "name": "Spawn" }, { "index": 308, "name": "Specter" }, { "index": 309, "name": "Spellshaper" }, { "index": 310, "name": "Sphinx" }, { "index": 311, "name": "Spider" }, { "index": 312, "name": "Spike" }, { "index": 313, "name": "Spirit" }, { "index": 314, "name": "Splinter" }, { "index": 315, "name": "Sponge" }, { "index": 316, "name": "Spy" }, { "index": 317, "name": "Squid" }, { "index": 318, "name": "Squirrel" }, { "index": 319, "name": "Starfish" }, { "index": 320, "name": "Surrakar" }, { "index": 321, "name": "Survivor" }, { "index": 322, "name": "Symbiote" }, { "index": 323, "name": "Synth" }, { "index": 324, "name": "Talaxian" }, { "index": 325, "name": "Talosian" }, { "index": 326, "name": "Tamarian" }, { "index": 327, "name": "Teddy" }, { "index": 328, "name": "Tellarite" }, { "index": 329, "name": "Tentacle" }, { "index": 330, "name": "Tetravite" }, { "index": 331, "name": "Thalakos" }, { "index": 332, "name": "Tholian" }, { "index": 333, "name": "Thopter" }, { "index": 334, "name": "Thrull" }, { "index": 335, "name": "Tiefling" }, { "index": 336, "name": "Time Lord" }, { "index": 337, "name": "Tosk" }, { "index": 338, "name": "Toy" }, { "index": 339, "name": "Treefolk" }, { "index": 340, "name": "Tribble" }, { "index": 341, "name": "Trill" }, { "index": 342, "name": "Trilobite" }, { "index": 343, "name": "Triskelavite" }, { "index": 344, "name": "Troll" }, { "index": 345, "name": "Turtle" }, { "index": 346, "name": "Tyranid" }, { "index": 347, "name": "Unicorn" }, { "index": 348, "name": "Urzan" }, { "index": 349, "name": "Utrom" }, { "index": 350, "name": "Vampire" }, { "index": 351, "name": "Varmint" }, { "index": 352, "name": "Vau-N'Akat" }, { "index": 353, "name": "Vedalken" }, { "index": 354, "name": "Villain" }, { "index": 355, "name": "Volver" }, { "index": 356, "name": "Vorta" }, { "index": 357, "name": "Vulcan" }, { "index": 358, "name": "Wall" }, { "index": 359, "name": "Walrus" }, { "index": 360, "name": "Warlock" }, { "index": 361, "name": "Warrior" }, { "index": 362, "name": "Weasel" }, { "index": 363, "name": "Weird" }, { "index": 364, "name": "Werewolf" }, { "index": 365, "name": "Whale" }, { "index": 366, "name": "Wizard" }, { "index": 367, "name": "Wolf" }, { "index": 368, "name": "Wolverine" }, { "index": 369, "name": "Wombat" }, { "index": 370, "name": "Worm" }, { "index": 371, "name": "Wraith" }, { "index": 372, "name": "Wurm" }, { "index": 373, "name": "Xindi" }, { "index": 374, "name": "Yeti" }, { "index": 375, "name": "Zombie" }, { "index": 376, "name": "Zubera" }],
+  "note": "Reply with the index of any creature type. The chosen type is locked to this permanent."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 16,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 23, "tapped": true, "is_land": true }, { "name": "Seahunter", "idx": 9, "num": 41, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 8, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 19, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 17,
+  "type": "main_phase",
+  "turn": 4,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 4, "kind": "combat", "text": "⚔ attacked: Stonybrook Banneret (1) — 1 to opponent (19→18)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 23, "tapped": true, "is_land": true }, { "name": "Seahunter", "idx": 9, "num": 41, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "tapped": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 8, "num": 52, "tapped": true, "is_land": true }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 52, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 18, "cast_order": ["**", "land=Island", "act=Seahunter#41"], "decision": {
+  "decision_index": 18,
+  "main_ordinal": 4,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 5, "card": "Wanderwine Prophets" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 9, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 8, "num": 52, "is_land": true, "taps": "C", "tap_fed": ["W", "U", "B", "R", "G"], "tap_feed": "{2}", "tap_note": "its fed mode pays {2} from your floating mana and adds 1 mana of one colour you pick" }], "vial_counters": [], "hand": [{ "num": 13, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 51, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: Wanderwine Prophets", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Wanderwine Prophets"], "actions": [{ "card": "Wanderwine Prophets" }] },
+    { "index": 1, "summary": "land=Island; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 2, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 3, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 4, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 5, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 6, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 7, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 8, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 9, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 10, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 11, "summary": "land=none; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": null, "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 12, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 13, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 14, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 15, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 16, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 17, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 18, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 19, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 20, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 21, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 22, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 23, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 24, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 25, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 26, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 27, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 28, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 29, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 30, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 31, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 0, "decision": {
+  "decision_index": 19,
+  "type": "champion",
+  "source": "Wanderwine Prophets champion",
+  "turn": 5,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 7, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 10, "num": 13, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 9, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Stonybrook Banneret", "idx": 5, "num": 47, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 8, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 11, "num": 59, "sick": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 6, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "heuristic_default": 0,
+  "options": [{ "index": 0, "perm_index": 5, "tapped": false, "name": "Stonybrook Banneret", "label": "Stonybrook Banneret" }],
+  "note": "reply a Merfolk option index to exile under this Prophets until it leaves, or -1 to sacrifice Prophets instead. A token ceases to exist on exile."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 20,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 5, "kind": "tutor", "text": "🐉 Wanderwine Prophets -- put onto the battlefield (Seahunter)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "sick": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 21,
+  "type": "main_phase",
+  "turn": 5,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "sick": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 50, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "cast_order": ["**", "land=Island", "cast=Merfolk Sovereign"], "decision": {
+  "decision_index": 22,
+  "main_ordinal": 5,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Island" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "is_land": true, "taps": "C", "tap_fed": ["W", "U", "B", "R", "G"], "tap_feed": "{2}", "tap_note": "its fed mode pays {2} from your floating mana and adds 1 mana of one colour you pick" }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 20, "name": "Island", "cost": "", "mv": 0, "kind": "land" }, { "num": 29, "name": "Merfolk Sovereign", "cost": "{1}{U}{U}", "mv": 3, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 1 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=Island; cast: (nothing)", "declared_order_payability": "not_verified", "land": "Island", "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=Island; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 2, "summary": "land=Island; cast: Wanderwine Prophets", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Wanderwine Prophets"], "actions": [{ "card": "Wanderwine Prophets" }] },
+    { "index": 3, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 4, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 5, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 6, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 7, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 8, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 9, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 10, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 11, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 12, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 13, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 14, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 15, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 16, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 17, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 18, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 19, "summary": "land=Island; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 20, "summary": "land=Island; cast: Merfolk Sovereign, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": "Island", "casts": ["Merfolk Sovereign", "Seahunter"], "actions": [{ "card": "Merfolk Sovereign" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 21, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 22, "summary": "land=none; cast: Merfolk Sovereign", "declared_order_payability": "not_verified", "land": null, "casts": ["Merfolk Sovereign"], "actions": [{ "card": "Merfolk Sovereign" }] },
+    { "index": 23, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 24, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 25, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 26, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 27, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 28, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 29, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 30, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 31, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 23,
+  "main_ordinal": 6,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Merfolk Sovereign", "idx": 12, "num": 29, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 5, "toughness": 5 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 18, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 1, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 2, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 3, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 4, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 5, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 6, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 7, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 8, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 24,
+  "type": "sacrifice",
+  "source": "Wanderwine Prophets",
+  "turn": 6,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Merfolk Sovereign", "idx": 12, "num": 29, "sick": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 5, "toughness": 5 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": [], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "heuristic_default": 1,
+  "allow_decline": true,
+  "options": [{ "index": 0, "perm_index": 10, "tapped": true, "name": "Wanderwine Prophets", "label": "Wanderwine Prophets" }, { "index": 1, "perm_index": 12, "tapped": false, "name": "Merfolk Sovereign", "label": "Merfolk Sovereign" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick. This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to DECLINE and keep the creature."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 25,
+  "type": "main_phase",
+  "turn": 6,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "text": "⚔ attacked: Seahunter (2), Wanderwine Prophets (5) — 7 to opponent (18→11)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign"], "library_size": 49, "land_drops_left": 0 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 2, "decision": {
+  "decision_index": 26,
+  "main_ordinal": 7,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 1,
+  "turn_seq": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Silvergill Douser" }],
+  "events": [{ "turn": 6, "kind": "extra_turn", "turn_seq": 7, "text": "⏳ Extra turn begins (turn 6, extra 1)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "is_land": true, "taps": "C", "tap_fed": ["W", "U", "B", "R", "G"], "tap_feed": "{2}", "tap_note": "its fed mode pays {2} from your floating mana and adds 1 mana of one colour you pick" }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 43, "name": "Silvergill Douser", "cost": "{1}{U}", "mv": 2, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Wanderwine Prophets", "declared_order_payability": "not_verified", "land": null, "casts": ["Wanderwine Prophets"], "actions": [{ "card": "Wanderwine Prophets" }] },
+    { "index": 2, "summary": "land=none; cast: Silvergill Douser", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser"], "actions": [{ "card": "Silvergill Douser" }] },
+    { "index": 3, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 4, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 5, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 6, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 7, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 8, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 9, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 10, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 11, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 12, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 13, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 14, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 15, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 16, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 17, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 18, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 19, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 20, "summary": "land=none; cast: Silvergill Douser, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Silvergill Douser", "Seahunter"], "actions": [{ "card": "Silvergill Douser" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 27,
+  "main_ordinal": 8,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 1,
+  "turn_seq": 7,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Silvergill Douser", "idx": 12, "num": 43, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 11, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 1, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 2, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 3, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 4, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 5, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 6, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 7, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 8, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 9, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 28,
+  "type": "sacrifice",
+  "source": "Wanderwine Prophets",
+  "turn": 6,
+  "extra_turn": 1,
+  "turn_seq": 7,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Silvergill Douser", "idx": 12, "num": 43, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "heuristic_default": 1,
+  "allow_decline": true,
+  "options": [{ "index": 0, "perm_index": 10, "tapped": true, "name": "Wanderwine Prophets", "label": "Wanderwine Prophets" }, { "index": 1, "perm_index": 12, "tapped": false, "name": "Silvergill Douser", "label": "Silvergill Douser" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick. This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to DECLINE and keep the creature."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 29,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 1,
+  "turn_seq": 7,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "turn_seq": 7, "text": "⚔ attacked: Seahunter (2), Wanderwine Prophets (4) — 6 to opponent (11→5)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser"], "library_size": 48, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 6, "cast_order": ["**", "cast=Tidal Warrior", "act=Seahunter#41"], "decision": {
+  "decision_index": 30,
+  "main_ordinal": 9,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 2,
+  "turn_seq": 8,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Tidal Warrior" }],
+  "events": [{ "turn": 6, "kind": "extra_turn", "turn_seq": 8, "text": "⏳ Extra turn begins (turn 6, extra 2)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "is_land": true, "taps": "C", "tap_fed": ["W", "U", "B", "R", "G"], "tap_feed": "{2}", "tap_note": "its fed mode pays {2} from your floating mana and adds 1 mana of one colour you pick" }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 53, "name": "Tidal Warrior", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser"], "library_size": 47, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Wanderwine Prophets", "declared_order_payability": "not_verified", "land": null, "casts": ["Wanderwine Prophets"], "actions": [{ "card": "Wanderwine Prophets" }] },
+    { "index": 1, "summary": "land=none; cast: Tidal Warrior", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior"], "actions": [{ "card": "Tidal Warrior" }] },
+    { "index": 2, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] },
+    { "index": 3, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 4, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 5, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 6, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 7, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 8, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 9, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 10, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 11, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 12, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 13, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 14, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 15, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 16, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 17, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 18, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 19, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 20, "summary": "land=none; cast: Tidal Warrior, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior", "Seahunter"], "actions": [{ "card": "Tidal Warrior" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 31,
+  "main_ordinal": 10,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 2,
+  "turn_seq": 8,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "tutor", "turn_seq": 8, "text": "🐉 Tidal Warrior -- put onto the battlefield (Seahunter)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "tapped": true, "is_land": true }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Tidal Warrior", "idx": 12, "num": 53, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Tidal Warrior", "idx": 13, "num": 55, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 5, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 1, "decision": {
+  "decision_index": 32,
+  "type": "sacrifice",
+  "source": "Wanderwine Prophets",
+  "turn": 6,
+  "extra_turn": 2,
+  "turn_seq": 8,
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "tapped": true, "is_land": true }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Tidal Warrior", "idx": 12, "num": 53, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Tidal Warrior", "idx": 13, "num": 55, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "heuristic_default": 1,
+  "allow_decline": true,
+  "options": [{ "index": 0, "perm_index": 10, "tapped": true, "name": "Wanderwine Prophets", "label": "Wanderwine Prophets" }, { "index": 1, "perm_index": 12, "tapped": false, "name": "Tidal Warrior", "label": "Tidal Warrior" }, { "index": 2, "perm_index": 13, "tapped": false, "name": "Tidal Warrior", "label": "Tidal Warrior" }],
+  "note": "reply an option index -- the creature to sacrifice. Default = the AI's pick. This one is OPTIONAL (\"you MAY sacrifice another creature\") -- reply -1 to DECLINE and keep the creature."
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 33,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 2,
+  "turn_seq": 8,
+  "phase": "post_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "combat", "turn_seq": 8, "text": "⚔ attacked: Wanderwine Prophets (4) — 4 to opponent (5→1)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "tapped": true, "is_land": true }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Tidal Warrior", "idx": 12, "num": 55, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "tapped": true, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser", "Tidal Warrior"], "library_size": 46, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": 3, "cast_order": ["**", "cast=Rishadan Dockhand", "act=Seahunter#41"], "decision": {
+  "decision_index": 34,
+  "main_ordinal": 11,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 3,
+  "turn_seq": 9,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "drew": [{ "turn": 6, "card": "Rishadan Dockhand" }],
+  "events": [{ "turn": 6, "kind": "extra_turn", "turn_seq": 9, "text": "⏳ Extra turn begins (turn 6, extra 3)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 4, "num": 19, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 6, "num": 23, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Seahunter", "idx": 8, "num": 41, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Three Tree City", "idx": 7, "num": 52, "is_land": true, "taps": "C", "tap_fed": ["W", "U", "B", "R", "G"], "tap_feed": "{2}", "tap_note": "its fed mode pays {2} from your floating mana and adds 2 mana of one colour you pick" }, { "name": "Tidal Warrior", "idx": 12, "num": 55, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 31, "name": "Rishadan Dockhand", "cost": "{U}", "mv": 1, "kind": "permanent", "is_creature": true }, { "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser", "Tidal Warrior"], "library_size": 45, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Wanderwine Prophets", "declared_order_payability": "not_verified", "land": null, "casts": ["Wanderwine Prophets"], "actions": [{ "card": "Wanderwine Prophets" }] },
+    { "index": 1, "summary": "land=none; cast: Rishadan Dockhand", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand"], "actions": [{ "card": "Rishadan Dockhand" }] },
+    { "index": 2, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 3, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }] },
+    { "index": 4, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 5, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }] },
+    { "index": 6, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 7, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }] },
+    { "index": 8, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 9, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }] },
+    { "index": 10, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 11, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }] },
+    { "index": 12, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 13, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }] },
+    { "index": 14, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 15, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }] },
+    { "index": 16, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 17, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }] },
+    { "index": 18, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 19, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }] },
+    { "index": 20, "summary": "land=none; cast: Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior"], "actions": [{ "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 21, "summary": "land=none; cast: Wanderwine Prophets, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Wanderwine Prophets", "Tidal Warrior"], "actions": [{ "card": "Wanderwine Prophets" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 22, "summary": "land=none; cast: Rishadan Dockhand, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 23, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 24, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Silvergill Douser" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 25, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 26, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Rishadan Dockhand" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 27, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 28, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Tidal Warrior" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 29, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 30, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Stonybrook Banneret" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 31, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 32, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Merfolk Sovereign" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 33, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 34, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Emperor Mihail II" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 35, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 36, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Wanderwine Prophets" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 37, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 38, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "Svyelun of Sea and Sky" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 39, "summary": "land=none; cast: Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Seahunter", "Tidal Warrior"], "actions": [{ "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 40, "summary": "land=none; cast: Rishadan Dockhand, Seahunter: search for a Merfolk permanent and put it onto the battlefield, Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Rishadan Dockhand", "Seahunter", "Tidal Warrior"], "actions": [{ "card": "Rishadan Dockhand" }, { "card": "Seahunter", "src_num": 41, "activate": true, "activation_cost": "{3}", "act_label": "search for a Merfolk permanent and put it onto the battlefield", "tutor_target": "(decline search)" }, { "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 41, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+},
+    { "chosen": -1, "decision": {
+  "decision_index": 35,
+  "main_ordinal": 12,
+  "type": "main_phase",
+  "turn": 6,
+  "extra_turn": 3,
+  "turn_seq": 9,
+  "phase": "pre_main",
+  "on_the_play": true,
+  "plan_contract": "enumerated_proposals",
+  "events": [{ "turn": 6, "kind": "tutor", "turn_seq": 9, "text": "🐉 Silvergill Douser -- put onto the battlefield (Seahunter)" }],
+  "mdfc_backs": [],
+  "me": { "life": 20, "battlefield": [{ "name": "Island", "idx": 3, "num": 18, "tapped": true, "is_land": true }, { "name": "Island", "idx": 4, "num": 19, "tapped": true, "is_land": true }, { "name": "Island", "idx": 6, "num": 23, "tapped": true, "is_land": true }, { "name": "Island", "idx": 9, "num": 13, "is_land": true, "taps": "U" }, { "name": "Island", "idx": 11, "num": 20, "is_land": true, "taps": "U" }, { "name": "Rishadan Dockhand", "idx": 13, "num": 31, "sick": true, "is_land": false, "power": 1, "toughness": 2 }, { "name": "Seahunter", "idx": 8, "num": 41, "tapped": true, "is_land": false, "power": 2, "toughness": 2 }, { "name": "Silvergill Douser", "idx": 14, "num": 44, "sick": true, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Three Tree City", "idx": 7, "num": 52, "tapped": true, "is_land": true }, { "name": "Tidal Warrior", "idx": 12, "num": 55, "is_land": false, "power": 1, "toughness": 1 }, { "name": "Wanderwine Prophets", "idx": 10, "num": 59, "is_land": false, "power": 4, "toughness": 4 }], "vial_counters": [], "hand": [{ "num": 57, "name": "Wanderwine Prophets", "cost": "{4}{U}{U}", "mv": 6, "kind": "permanent", "is_creature": true }], "graveyard": ["Merfolk Sovereign", "Silvergill Douser", "Tidal Warrior"], "library_size": 44, "land_drops_left": 1 },
+  "opponent": { "life": 1, "battlefield": [{ "name": "4/4 Creature", "idx": 5, "num": 500000, "is_land": false, "power": 4, "toughness": 4 }, { "name": "Opponent Basic Land", "idx": 1, "num": 600001, "is_land": true }, { "name": "Opponent Basic Land", "idx": 2, "num": 600002, "is_land": true }, { "name": "Opponent Nonbasic Land", "idx": 0, "num": 600000, "is_land": true }] },
+  "plans": [
+    { "index": 0, "summary": "land=none; cast: Tidal Warrior: target land becomes an Island until end of turn -- X=0 → Opponent Nonbasic Land", "declared_order_payability": "not_verified", "land": null, "casts": ["Tidal Warrior"], "actions": [{ "card": "Tidal Warrior", "src_num": 55, "activate": true, "act_label": "target land becomes an Island until end of turn", "pump_target": 600000, "pump_target_name": "Opponent Nonbasic Land", "pump_x": 0 }] },
+    { "index": 1, "summary": "land=none; cast: (nothing)", "declared_order_payability": "not_verified", "land": null, "casts": [], "actions": [] }
+  ],
+  "pass": { "index": -1, "summary": "pass -- cast nothing this phase" },
+  "note": "reply with the chosen plan's \"index\" field -- NOT its position in the plans array, which lists a capped/collapsed subset with gaps -- or -1 (the pass entry) to cast nothing; plans are proposals and may drop unpayable steps; drops lists known losses only, while not_verified makes no payability claim; validate an exact queued line with --validate-line"
+}
+}
+  ],
+  "final_events": [
+    { "turn": 6, "kind": "combat", "turn_seq": 9, "text": "⚔ attacked: Wanderwine Prophets (4), Tidal Warrior (1) — 5 to opponent (1→-4)" }
+  ]
+}
