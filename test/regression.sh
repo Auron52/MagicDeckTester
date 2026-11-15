@@ -475,10 +475,10 @@ MANIFEST="$BDIR/manifest.json"
 _all_jobs=""
 for _mode in "${MODES[@]}"; do
   select_mode "$_mode"
-  # Play rows test what SHIPS (USER 2026-10-27): warn when one's budget drifted from the deck's value_play budget.
+  # Play rows test what ships; reject an enabled depth below the USER's d5 floor.
   if command -v python3 >/dev/null 2>&1; then
     _profs=(); for _k in "${!DECK_PROF[@]}"; do _profs+=("$_k=${DECK_PROF[$_k]}"); done
-    printf '%s\n' "${CASES[@]}" | python3 "$HERE/lib/play_rows_check.py" "${_profs[@]}"
+    printf '%s\n' "${CASES[@]}" | python3 "$HERE/lib/play_rows_check.py" "${_profs[@]}" || exit 1
   fi
   _jobs=$(emit_jobs)
   printf '{ "jobs": [\n%s\n] }\n' "$_jobs" > "$LOGDIR/manifest.json"

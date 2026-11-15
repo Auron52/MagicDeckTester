@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""WARN when a suite PLAY row's budget is not the deck's shipped play budget, or it has fewer games than Hinata's.
+"""Check play depth and warn when suite PLAY rows drift from shipped settings.
 
 A searched depth-5 row in test/regression_cases.sh is the deck's PLAY row: regression.sh drops its depth so the
 deck's enabled value_play block picks it, but the row's budget_ms still overrides the block's. The rows are
 meant to test what ships (USER 2026-10-27), so a play setting re-tuned in a sidecar must re-tune its rows too;
 this prints the rows that drifted. Reads specs as "<key> <depth> <seed> <games> <budget>" lines on stdin and
-the key -> profile map as "<key>=<profile path>" arguments. Exit status is always 0 (a warning, not a gate).
+the key -> profile map as "<key>=<profile path>" arguments. An enabled play depth below 5 fails the check
+(USER 2026-10-29); budget and row-size drift remain warnings.
 """
 import json
 import os
 import sys
 
 DEFAULT_BUDGET = 20   # MulliganProfile::BuiltinDefaultPlay(): d5/20 when no value_play block is enabled
+MIN_PLAY_DEPTH = 5    # USER 2026-10-29: "It should be depth 5 minimum for play settings."
 
 
-def shipped_budget(profile):
+def shipped_setting(profile):
     stem = profile[:-len(".profile.json")] if profile.endswith(".profile.json") else os.path.splitext(profile)[0]
     for path in (stem + ".value.json", profile):
         try:
@@ -22,8 +24,8 @@ def shipped_budget(profile):
         except (OSError, ValueError):
             continue
         if vp.get("enabled") and vp.get("target_depth"):
-            return int(vp.get("budget_ms") or 0)
-    return DEFAULT_BUDGET
+            return int(vp["target_depth"]), int(vp.get("budget_ms") or 0)
+    return MIN_PLAY_DEPTH, DEFAULT_BUDGET
 
 
 def has_keep_table(profile):
@@ -38,6 +40,12 @@ def main():
     bad = []
     specs = [l.split() for l in sys.stdin]
     specs = [f for f in specs if len(f) == 5]
+    bases = {f[0][:-3] if f[0].endswith("2hg") else f[0] for f in specs}
+    for base in sorted(bases & profs.keys()):
+        depth, _ = shipped_setting(profs[base])
+        if depth < MIN_PLAY_DEPTH:
+            print(f"ERROR: {base} ships play depth {depth}; minimum is {MIN_PLAY_DEPTH}", file=sys.stderr)
+            return 1
     # FLOOR (USER 2026-10-27): no play row of a deck WITH A KEEP TABLE has fewer games than Hinata's play rows in
     # this tier. A deck still in progress (no keep table) keeps its small ENTRY set until the adoption expands it.
     floor = {}
@@ -57,7 +65,7 @@ def main():
         if base not in profs:
             continue
         if base not in seen:
-            seen[base] = shipped_budget(profs[base])
+            seen[base] = shipped_setting(profs[base])[1]
         if budget != seen[base]:
             bad.append(f"{key} s{seed}: row b{budget}, ships b{seen[base]}")
     if bad:
@@ -65,7 +73,8 @@ def main():
               f"test/regression_cases.sh):", file=sys.stderr)
         for b in bad:
             print(f"  {b}", file=sys.stderr)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

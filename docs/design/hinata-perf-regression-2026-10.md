@@ -158,3 +158,15 @@ run at the sidecar's depth 4. On these seeds, forcing a real depth 5 costs
 That distinction matters when comparing a manual `--depth 5 --ignore-play-profile`
 run with a suite `d5` row. The older, large regression remains the one bisected
 above to `d1832b52` on 2026-10-05.
+
+### Correction: restore the depth-5 play setting
+
+The November 11 depth-4 adoption was invalid: the user had already set a
+minimum play depth of 5 on October 29 and confirmed on November 15 that they
+have never accepted a lower depth and do not intend to. The table above records
+historical measurements, not a recommendation to keep depth 4. Keep the
+automatically adopted November evaluation model, but restore the previously
+approved depth-5 / 30 ms play block (including its search shape) from before
+`e55b07bd6`. The 30 ms budget had been explicitly approved on September 8.
+The regression play rows again resolve to depth 5. The play-row check now fails
+an enabled sidecar below depth 5, even if a stale artifact worker proposes one.

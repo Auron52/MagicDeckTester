@@ -1,4 +1,4 @@
-# Regression ground truth -- commit 61cad140c  date 2026-11-15
+# Regression ground truth -- commit 3913426d1  date 2026-11-15
 # Promoted from accepted runs by 'regression.sh --accept' -- do not hand-edit.
 # accepted-with-regressions (overnight, 2026-11-14): periodic overnight 2026-11-14 (since fec16d7d2): 277 searched-slower unrecoverable at d8 b0, all attributed -- martyr 168/morph 91 keep-table artifacts, morph 3 keep table+MORPH_FETCH_RULE, spirits 8 USER fetch-hold drop (horizon variant pending USER), niv 3/dragons 1/edf 1 item-A wild-mana + bruna 1 PAY_HAND_GENERIC -> docs/design/handoff-mana-overnight-2026-11-14.md; held-out 2000 pairs: only niv +0.003 (item A)
 # accepted-with-regressions (smoke, 2026-11-14): gi832: d0 T5 to T6 already reproduces with pre-Mill heuristic binary; searched rows unchanged
@@ -13,6 +13,8 @@
 # accepted-with-regressions (smoke, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
 # accepted-with-regressions (regression, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: searched scores flat; d0 slower by 0.007 smoke and 0.001 regression turns
 # accepted-with-regressions (overnight, 2026-11-15): Merfolk second Emperor cast and Three Tree City payment: one searched game faster and none slower; d0 four seeds slower by 0.0030 to 0.0115 turns
+# accepted-with-regressions (smoke, 2026-11-15): USER 2026-11-15 depth>=5: restore Hinata d5/b30 after invalid Nov11 d4 artifact; 500 matched play games +17 turns vs former d4 GT; 36/41 searched slower games recover at 4x/16x, 5 persist; retain adopted model, overnight left to periodic run
+# accepted-with-regressions (regression, 2026-11-15): USER 2026-11-15 depth>=5: restore Hinata d5/b30 after invalid Nov11 d4 artifact; 500 matched play games +17 turns vs former d4 GT; 36/41 searched slower games recover at 4x/16x, 5 persist; retain adopted model, overnight left to periodic run
 # Key: <deck>_<mode>_d<depth>_s<seed> = <avg>[/<play_digest>]   (avg = mean turn-to-win, unwon = max_turns+1)
 # Modes: smoke (<15m), regression (<45m), overnight (<8h); seeds disjoint.
 
@@ -75,8 +77,8 @@ antilife_smoke_d0_s1001=4.9000/607c0e5d81f6a61c
 antilife_smoke_d3_s1001=4.0533/27f0d4944fbefc06
 antilife_smoke_d5_s1001=4.2154/222f61fa58175c02
 hinata_smoke_d0_s1001=6.7420/c93fb8c65738f78f
-hinata_smoke_d3_s1001=5.5200/d2d9adf5e86f1f9f
-hinata_smoke_d5_s1001=5.4300/ad430d0c8da7e0dc
+hinata_smoke_d3_s1001=5.5400/1cb4d932aaaeb578
+hinata_smoke_d5_s1001=5.4800/8304deb09041cb20
 cyclone_smoke_d0_s1001=8.3610/801db26870908ec5
 cyclone_smoke_d3_s1001=4.9200/b5d107728a2dc138
 cyclone_smoke_d5_s1001=4.7300/ad86b9b5c94815b7
@@ -133,7 +135,7 @@ melira_smoke_d5_s1001=4.6200/0bb099f0f0ccbe82
 angels_smoke_d0_s1001=5.2600/7b9b092ba94cc19d
 angels_smoke_d3_s1001=4.5333/574a72470c6e2377
 angels_smoke_d5_s1001=4.6154/cf79088888e49a66
-hinata2hg_smoke_d5_s1001=5.2800/d7963c57925bc92a
+hinata2hg_smoke_d5_s1001=5.3200/1eed74be3e2133e5
 antilife2hg_smoke_d5_s1001=3.9500/cca6a4dbd63380de
 minotaur2hg_smoke_d5_s1001=5.3300/e4cd44da8730235a
 goblins2hg_smoke_d5_s1001=4.0133/835d639e125e00ad
@@ -301,7 +303,7 @@ giants_regression_d5_s30001=6.0000/bd7f00c0ffc0b7e9
 goblins_regression_d3_s30001=3.7500/91809def39c75fce
 goblins_regression_d5_s30001=3.7500/91809def39c75fce
 hinata_regression_d3_s30001=5.2500/ce9c505b3c5b7b98
-hinata_regression_d5_s30001=5.2000/df4813558020b6a5
+hinata_regression_d5_s30001=5.2000/c3a0091c7ed1c70e
 jumbo_regression_d3_s30001=4.2500/093712beec5968b7
 jumbo_regression_d5_s30001=4.2500/4e11ac11d1db0ede
 kittyv3_regression_d3_s30301=3.4000/20266003fb5e888b
@@ -377,9 +379,9 @@ antilife_regression_d3_s2002=4.2200/27787b129bc8fb5e
 antilife_regression_d5_s2002=4.2580/56d7579d625f44e3
 antilife_regression_d5_s3003=4.1960/1fc0e711597a121e
 hinata_regression_d0_s2002=6.7970/e1c11e7c526d2f5b
-hinata_regression_d3_s2002=5.6000/db1cfb4f08bf131e
-hinata_regression_d5_s2002=5.4133/f6772fef20807719
-hinata_regression_d5_s3003=5.6800/be703ae2ab8504c4
+hinata_regression_d3_s2002=5.6000/20c7dd8bcaa98a93
+hinata_regression_d5_s2002=5.4267/84de43f242a07a82
+hinata_regression_d5_s3003=5.7200/49618b73f57b488f
 gods_regression_d0_s2002=8.7510/e33c8d399b371c42
 gods_regression_d3_s2002=5.4200/6cf6bc0fc84f8f3f
 gods_regression_d5_s2002=5.1800/5934d79288118522
@@ -458,7 +460,7 @@ angels_regression_d0_s2002=5.2530/c75747feb668552f
 angels_regression_d3_s2002=4.6600/fbeb83c79a683f84
 angels_regression_d5_s2002=4.6040/22c5f344d4cc2621
 angels_regression_d5_s3003=4.6200/1ce983e8b3eefe1f
-hinata2hg_regression_d5_s2002=5.3733/7dbb6fcdce3c6bb7
+hinata2hg_regression_d5_s2002=5.4133/d7f0c5a915fadf00
 antilife2hg_regression_d5_s2002=4.2667/95674c7904df2834
 minotaur2hg_regression_d5_s2002=5.3733/adb92c8ebcfdf734
 goblins2hg_regression_d5_s2002=4.0267/7dc943690102b7e8
