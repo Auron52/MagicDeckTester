@@ -16,6 +16,14 @@
 #include <utility>
 #include <vector>
 
+// Merfolk Turns' autonomous Prophets victim policy is shared by the real
+// combat resolver and the searched plan fan. =0 restores the full victim fan.
+inline bool MerfolkProphetsSacPruneOn()
+{
+    static const bool on = EnvOn("MTG_MERFOLK_PROPHETS_SAC_PRUNE", true); // DEFAULT ON; =0 restores full victim fan
+    return on;
+}
+
 // Main2DropEnabled -- ALWAYS TRUE since 2026-09-30 (MTG_MAIN2_DROP deleted; USER HARD RULE,
 // docs/design/no-greedy-in-search-window.md). The turn's still-unused land drop is offered in the
 // POST-combat main to the autonomous search and executor alike, as the rules allow (CR: a land may

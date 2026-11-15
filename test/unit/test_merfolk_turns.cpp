@@ -147,6 +147,28 @@ TEST_CASE("Seahunter searches Merfolk permanents and rejects Merfolk spells")
     if (prophets != nullptr) { CHECK(SeahunterLibraryCandidate(prophets->card)); }
 }
 
+TEST_CASE("Merfolk Seahunter fetches a champion victim before Prophets")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    std::vector<std::string> names{"Wanderwine Prophets", "Svyelun of Sea and Sky",
+                                   "Tidal Warrior"};
+    CHECK(provider.SeahunterCandidates(state, names));
+    CHECK(names == std::vector<std::string>{"Svyelun of Sea and Sky"});
+
+    AddPermanent(state, "Tidal Warrior", 200);
+    names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
+    CHECK(provider.SeahunterCandidates(state, names));
+    CHECK(names == std::vector<std::string>{"Wanderwine Prophets"});
+
+    AddPermanent(state, "Wanderwine Prophets", 201);
+    names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
+    CHECK(provider.SeahunterCandidates(state, names));
+    CHECK(names == std::vector<std::string>{"Tidal Warrior"});
+}
+
 TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefield path")
 {
     LoadMerfolkCards();
@@ -897,6 +919,37 @@ TEST_CASE("Wanderwine Prophets without fodder sacrifices itself and may sacrific
     ResolveProphetsCombatDamage(combat, 0, {542});
     CHECK(combat.pending_extra_turns == 1);
     CHECK(combat.battlefield.empty());
+
+    GameState default_choice;
+    default_choice.active_player_index = 0;
+    AddPermanent(default_choice, "Wanderwine Prophets", 543);
+    ResolveProphetsCombatDamage(default_choice, 0, {543});
+    CHECK(default_choice.pending_extra_turns == 0);
+    CHECK(HasPermanent(default_choice, 543));
+}
+
+TEST_CASE("Wanderwine Prophets sacrifice priority keeps its engines")
+{
+    LoadMerfolkCards();
+    GameState state;
+    state.active_player_index = 0;
+    for (const char* name : {"Wanderwine Prophets", "Emperor Mihail II",
+                             "Svyelun of Sea and Sky", "Merfolk Sovereign",
+                             "Silvergill Douser", "Rishadan Dockhand"})
+    { AddPermanent(state, name, 560 + static_cast<int>(state.battlefield.size())); }
+    AddPermanent(state, "Tidal Warrior", 566);
+    state.battlefield.back().is_token = true;
+    int previous = INT_MAX;
+    for (const Permanent& p : state.battlefield)
+    {
+        const int rank = ProphetsSacrificePriority(p);
+        CHECK(rank < previous);
+        previous = rank;
+    }
+    ResolveProphetsCombatDamage(state, 0, {560});
+    CHECK(state.pending_extra_turns == 1);
+    CHECK_FALSE(HasPermanent(state, 566));
+    CHECK(HasPermanent(state, 560));
 }
 
 TEST_CASE("Merfolk Turns counts a fresh Prophets combat event only with Greaves on that card")

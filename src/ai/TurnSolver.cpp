@@ -47754,14 +47754,20 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.is_noncreature = true;
                         actions.push_back(std::move(a));
                     };
+                    std::vector<std::string> targets;
                     for (const Card& lc : state.players[state.active_player_index].library)
                     {
                         const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
                         const Card& card = ld ? ld->card : lc;
                         if (SeahunterLibraryCandidate(card) && seen.insert(lc.m_name.str()).second)
-                        { emit(lc.m_name.str()); }
+                        { targets.push_back(lc.m_name.str()); }
                     }
-                    emit(kTutorDeclineTarget);  // hidden-zone search may fail even with a match
+                    bool narrowed = false;
+                    if (!HumanPlayActive() && !DecisionUnpruned())
+                    { narrowed = ResolveProvider(state).SeahunterCandidates(state, targets); }
+                    for (const std::string& name : targets) { emit(name); }
+                    if (!narrowed || targets.empty())
+                    { emit(kTutorDeclineTarget); }  // hidden-zone search may fail even with a match
                 }
             }
 
@@ -95772,7 +95778,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         if (pb_lazy != nullptr) { pb_lazy->CloseBlock(); }
     }
     AxisTrace("post-prophets-champion", state, all);
-    if (state.deck_has_prophets && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive())
+    if (state.deck_has_prophets && is_pre_combat && g_bp_enum_depth == 0 && !HumanPlayActive()
+        && !(ResolveProvider(state).ProphetsSacrificeHeuristicEnabled() && !DecisionUnpruned()))
     {
         // The combat axis also visits champion variants. Restore those bases in
         // their original order before building the later, much wider combat fan.
@@ -102333,7 +102340,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
             if (t_rollout_narrow) { Fold(bk, kRolloutNarrowTag); }
             sfxprobe::t_pending.push_back(bk);
         }
-        if (chain_only && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
+        if (g_et_chain_trial_active && (g_et_chain_trial_aborted || EtChainTrialBudgetExceeded()))
         { leafeval::Publish(leafeval::kInvalid); return max_turns + 1; }
         // Branch-and-bound: a line that hasn't won by cutoff_turn cannot beat the
         // incumbent best win turn, so abandon it (win turn only grows from here).
@@ -102778,9 +102785,45 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
                                 TurnSolver::SearchLine& out)
 {
     static const bool on = EnvOn("MTG_ET_CHAIN_WALK", true); // DEFAULT ON; =0 disables the verified trial
-    if (!on || !ResolveProvider(start).ExtraTurnChainWalkEnabled()
+    static const bool merfolk_on = EnvOn("MTG_MERFOLK_TURN_WIN_WALK"); // experimental; default OFF
+    const bool merfolk = merfolk_on && ResolveProvider(start).MerfolkTurnWinWalkEnabled();
+    if ((!on && !merfolk) || (!merfolk && !ResolveProvider(start).ExtraTurnChainWalkEnabled())
         || start.TurnSeqCapped(max_turns)) { return false; }
-    if (start.pending_extra_turns <= 0)
+    if (merfolk)
+    {
+        if (HumanPlayActive() || DecisionUnpruned()) { return false; }
+        // Seahunter can put Prophets into play this turn. Include that setup
+        // only when a champion victim is already present and the activation is
+        // payable; otherwise the trial cannot plausibly win in this round.
+        bool prophets = false, fodder = false, seahunter_ready = false;
+        const int me = start.active_player_index;
+        for (const Permanent& p : start.battlefield)
+        {
+            if (p.controller_index != me) { continue; }
+            if (p.card.m_name == "Wanderwine Prophets") { prophets = true; }
+            else if (p.card.IsCreature() && CardHasSubtype(p.card, "Merfolk"))
+            { fodder = true; }
+            if (p.card.m_name != "Seahunter" || p.tapped
+                || !CanTapNow(p, start.battlefield)) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.tap_tutor_put_cost) { continue; }
+            ManaPool have = AvailableManaPool(start);
+            have.AddPool(start.floating_mana);
+            const ManaCost cost = EffectiveActivationCost(
+                start, me, p.card, *d->params.tap_tutor_put_cost);
+            if (have.CanPay(cost)) { seahunter_ready = true; }
+        }
+        if (!prophets && start.pending_extra_turns == 0 && !start.in_extra_turn)
+        {
+            if (start.turn_number < 3 || !fodder || !seahunter_ready)
+            { return false; }
+            bool library_prophets = false;
+            for (const Card& c : start.ActivePlayer().library)
+            { if (c.m_name == "Wanderwine Prophets") { library_prophets = true; break; } }
+            if (!library_prophets) { return false; }
+        }
+    }
+    if (!merfolk && start.pending_extra_turns <= 0)
     {
         // A failed depth-zero trial can warm per-decision caches before the
         // complete search begins. Do not run one on setup turns that cannot
@@ -102904,7 +102947,7 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
     const int taken_before = start.extra_turns_taken;
     const int win = SimulateToEndImpl(trial, /*depth=*/0, max_turns, nullptr,
                                       start.turn_number, second_main, nullptr,
-                                      &steps, /*chain_only=*/true);
+                                      &steps, /*chain_only=*/!merfolk);
     if (trace_attempt)
     {
         const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -102917,7 +102960,7 @@ static bool ExtraTurnChainTrial(const GameState& start, int max_turns, bool seco
                      static_cast<long long>(elapsed), workctr::t_priced - priced_start);
     }
     if (g_et_chain_trial_aborted || win != start.turn_number
-        || trial.extra_turns_taken <= taken_before || steps.empty())
+        || (!merfolk && trial.extra_turns_taken <= taken_before) || steps.empty())
     { return false; }
     ++wins;
     if (engines >= 2) { ++two_engine_wins; }

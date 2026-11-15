@@ -612,7 +612,13 @@ if [ ${#MODES[@]} -gt 1 ]; then
   # below; clear what an interrupted earlier combined run may have left, so nothing stale is moved.
   mkdir -p "$BDIR/wins"; find "$BDIR/wins" -maxdepth 1 -type f -delete
 fi
-( echo $BASHPID > "$SIDE_DIR/batch.pid"; MTG_JOBSERVER="$JS_FIFO" exec "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" ) \
+BATCH_RESUME=()
+if [ ${#MODES[@]} -eq 1 ] && [ "${MODES[0]}" = overnight ]; then
+  # Overnight rows can outlive a host or a memory-capped batch. Persist each
+  # completed game so a restart only recomputes the interrupted game.
+  BATCH_RESUME=(--resume)
+fi
+( echo $BASHPID > "$SIDE_DIR/batch.pid"; MTG_JOBSERVER="$JS_FIFO" exec "$BIN" --batch "$MANIFEST" --threads "$THREADS" --game-log-dir "$BDIR/wins" "${BATCH_RESUME[@]}" ) \
     2>"$BDIR/batch.err" | tee "$BDIR/batch.log" "$BATCH_BACKUP"
 if ! cmp -s "$BDIR/batch.log" "$BATCH_BACKUP"; then
   cp "$BATCH_BACKUP" "$BDIR/batch.log"

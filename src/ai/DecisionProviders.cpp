@@ -139,7 +139,57 @@ uint16_t MerfolkTurnsProvider::ChosenCreatureSubtypeId(const GameState& state, i
     return DeckProvider::ChosenCreatureSubtypeId(state, controller, entering);
 }
 
-void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState&, const Permanent& source,
+bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
+                                               std::vector<std::string>& names) const
+{
+    static const bool on = EnvOn("MTG_MERFOLK_SEAHUNTER_PICK", true); // DEFAULT ON; =0 restores full tutor choice
+    if (!on || names.empty()) { return false; }
+    bool prophets_out = false;
+    bool champion_fodder = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != state.active_player_index || !p.card.IsCreature()) { continue; }
+        if (p.card.m_name == "Wanderwine Prophets") { prophets_out = true; }
+        else if (CardHasSubtype(p.card, "Merfolk")) { champion_fodder = true; }
+    }
+    auto has = [&](const char* name)
+    { return std::find(names.begin(), names.end(), name) != names.end(); };
+    const char* pick = nullptr;
+    if (!prophets_out && !champion_fodder)
+    {
+        // Prophets would fail its mandatory champion trigger on an empty
+        // Merfolk board. Establish a durable victim before tutoring it.
+        for (const char* name : {"Svyelun of Sea and Sky", "Emperor Mihail II",
+                                 "Tidal Warrior", "Rishadan Dockhand", "Stonybrook Banneret",
+                                 "Silvergill Douser", "Merfolk Sovereign"})
+        { if (has(name)) { pick = name; break; } }
+    }
+    else if (!prophets_out && has("Wanderwine Prophets")) { pick = "Wanderwine Prophets"; }
+    else
+    {
+        // Once Prophets is present, a small Merfolk is cheap champion/sacrifice
+        // fodder. Seahunter puts it directly onto the battlefield.
+        for (const char* name : {"Tidal Warrior", "Rishadan Dockhand", "Stonybrook Banneret",
+                                 "Silvergill Douser", "Merfolk Sovereign", "Svyelun of Sea and Sky",
+                                 "Emperor Mihail II", "Wanderwine Prophets"})
+        { if (has(name)) { pick = name; break; } }
+    }
+    if (pick == nullptr)
+    {
+        if (!prophets_out && !champion_fodder)
+        { names.clear(); return true; } // a lone new Prophets dies to its champion trigger
+        return false;
+    }
+    names.assign(1, pick);
+    return true;
+}
+
+bool MerfolkTurnsProvider::ProphetsSacrificeHeuristicEnabled() const
+{
+    return MerfolkProphetsSacPruneOn();
+}
+
+void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Permanent& source,
                                                 bool, std::vector<int>& targets) const
 {
     // The passive opponent never blocks, so Passage's unblockable rider is inert.
@@ -147,6 +197,65 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState&, const Permanen
     // Spending {4} and tapping that land cannot improve this deck's goldfish state.
     if (!DecisionUnpruned(UnprunedGate::XSpell)
         && source.card.m_name == "Rogue's Passage") { targets.clear(); }
+    static const bool control_on = EnvOn("MTG_MERFOLK_CONTROL_ABILITY_PRUNE", true); // DEFAULT ON; =0 restores full choice
+    if (!control_on || DecisionUnpruned() || targets.empty()) { return; }
+    const std::string& name = source.card.m_name.str();
+    if (name != "Rishadan Dockhand" && name != "Tidal Warrior"
+        && name != "Silvergill Douser") { return; }
+    bool pilgrimage = false;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index == state.active_player_index
+            && p.card.m_name == "Deeproot Pilgrimage")
+        { pilgrimage = true; break; }
+    }
+    if (name == "Silvergill Douser")
+    {
+        if (!pilgrimage) { targets.clear(); return; }
+        // The source taps as the cost, so shrinking its own power does not
+        // reduce this combat's attacker. Its tap still makes a Pilgrimage token.
+        for (int i : targets)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == source.card.m_number)
+            { targets.assign(1, i); return; }
+        }
+        targets.clear();
+        return;
+    }
+    if (name == "Tidal Warrior")
+    {
+        int blue_need = 0;
+        for (const Card& c : state.ActivePlayer().hand)
+        {
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+            if (d != nullptr)
+            { blue_need = std::max(blue_need, static_cast<int>(d->card.m_mana_cost.blue)); }
+        }
+        const ManaPool pool = AvailableManaPool(state);
+        if (blue_need > pool.blue)
+        {
+            for (int i : targets)
+            {
+                const Permanent& land = state.battlefield[static_cast<std::size_t>(i)];
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(land.card);
+                if (land.tapped || LandTypeChangedToIsland(state, land)
+                    || d == nullptr || IsBasicLandCard(*d)
+                    || std::find(d->params.produces.begin(), d->params.produces.end(), Color::Blue)
+                       != d->params.produces.end()) { continue; }
+                targets.assign(1, i);
+                return;
+            }
+        }
+    }
+    if (!pilgrimage) { targets.clear(); return; }
+    // The target is otherwise inert in this passive-opponent game. A tapped
+    // land preserves mana; keep one legal target to obtain the token trigger.
+    for (int i : targets)
+    {
+        if (state.battlefield[static_cast<std::size_t>(i)].tapped)
+        { targets.assign(1, i); return; }
+    }
+    targets.resize(1);
 }
 
 bool KithkinProvider::ArchetypeCardValue(const GameState& state, const CardDefinition& def,

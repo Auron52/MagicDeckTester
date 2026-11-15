@@ -17682,6 +17682,20 @@ inline void ResolveMerfolkChampion(GameState& state, int controller, int entered
     FireLeavesBattlefieldTriggers(state, victim.controller_index, victim.card);
 }
 
+inline int ProphetsSacrificePriority(const Permanent& p)
+{
+    if (p.is_token) { return 0; }
+    const std::string& name = p.card.m_name.str();
+    if (name == "Rishadan Dockhand" || name == "Tidal Warrior") { return 10; }
+    if (name == "Silvergill Douser") { return 20; }
+    if (name == "Stonybrook Banneret") { return 30; }
+    if (name == "Merfolk Sovereign") { return 40; }
+    if (name == "Svyelun of Sea and Sky") { return 50; }
+    if (name == "Emperor Mihail II") { return 60; }
+    if (name == "Wanderwine Prophets") { return 100; }
+    return 35;
+}
+
 // One trigger for each Prophets combat-damage event, including each strike of
 // double strike. The connector IDs are captured at damage assignment, so a
 // sacrifice made by an earlier trigger cannot erase a later trigger already
@@ -17701,6 +17715,23 @@ inline void ResolveProphetsCombatDamage(GameState& state, int controller,
             { legal.push_back(i); }
         }
         int pick = legal.empty() ? -2 : 0;
+        // Without another Merfolk, the default policy keeps Prophets for a
+        // later attack. An explicit searched pin or human pick may still
+        // sacrifice it when that extra turn is the winning line.
+        if (legal.size() == 1
+            && state.battlefield[static_cast<std::size_t>(legal.front())].card.m_name
+               == "Wanderwine Prophets")
+        { pick = -2; }
+        else if (MerfolkProphetsSacPruneOn() && !legal.empty())
+        {
+            int best = INT_MAX;
+            for (int n = 0; n < static_cast<int>(legal.size()); ++n)
+            {
+                const int rank = ProphetsSacrificePriority(
+                    state.battlefield[static_cast<std::size_t>(legal[n])]);
+                if (rank < best) { best = rank; pick = n; }
+            }
+        }
         if (state.scripted_prophets_sac_cursor < static_cast<int>(state.scripted_prophets_sac.size()))
         {
             const int pin = state.scripted_prophets_sac[

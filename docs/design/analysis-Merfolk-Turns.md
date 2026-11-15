@@ -743,10 +743,53 @@ scores, a one-to-five-land static keep window, and no hand-score threshold.
 Its pooled cost-aggregate reframe A/B returned `COST_NEUTRAL`; the discard
 evidence stage is still running. The first pooled suite-cost gate, which began
 with the provisional scores, passed at 10,126.843 core-ms/game against
-Hinata's 5,236.733, or 1.93× versus the 3× ceiling. The gate is being repeated
-with the final scores before adoption. A live 100-game viewer sweep on seeds
+Hinata's 5,236.733, or 1.93× versus the 3× ceiling. The repeat pooled gate
+with the final profile passed at 14,819.533 core-ms/game versus Hinata's
+6,314.483, or 2.35× under the same 3× ceiling. A live 100-game viewer sweep on seeds
 777000–777099 surfaced every expected decision type and passed. The static
 verifier passed coverage, live Scryfall mana costs, card fields, and viewer
 wiring; its sole blocking result is the expected absence of accepted GT for
-the new three-tier rows. The reference safety scan found no unprotected games
+the new three-tier rows at the time of that check. The reference safety scan found no unprotected games
 across 93 checkouts and worktrees.
+
+The sized smoke tier completed in 8m45s and its four GT keys were accepted:
+d0 averaged 6.1280 over 1,000 games, d3/b10 5.7000 over 10, play d5/b20
+5.6667 over 30, and 2HG d3/b10 6.2000 over 10. In the first ten paired
+one-player games, d5 improved one over d3 and worsened none. An initial
+50/100/50 searched-row smoke probe took 30m41s, so those rows were reduced
+before acceptance to respect the tier's 15-minute wall budget.
+
+The turn-three heuristic miner covered 50 games on each of seeds 987467 and
+990467, with search-order expansion. It found no supported cast-order rule.
+Deeproot Pilgrimage had a small inclusion benefit (six help, two hurt, 33
+neutral among 41 applicable decisions), and Greaves/Vial were often slower
+in sparse turn-three comparisons. These are contextual search observations,
+not a safe basis for a new heuristic. In particular, the miner's continuation
+oracle failed to recover the known Codex-play turn-four seed 987467 line, so
+no rule was adopted from that report.
+
+The Merfolk-specific action A/B used identical held-out openings with all
+three proposed choices disabled versus enabled. On 200 d0 games (seed 9009),
+the package improved eleven results and worsened none, lowering average win
+turn from 6.1450 to 6.0850; one formerly unwon game won on turn 7. At d5/b20,
+seed 2002 (40 games) improved two games and average 5.4000 to 5.3500 while
+priced work fell from 8,024,750 to 3,659,287 units. Seed 5005 (40 games)
+improved one game and average 5.7250 to 5.7000 while work fell from 12,162,651
+to 3,195,275 units. No paired game became slower. A search-shuffle-salted
+seed-5005 repeat improved the same game, with work falling from 11,669,674
+to 3,178,464 units. Reproductions of all three searched improvements show
+legal Seahunter, Greaves, Pilgrimage, or Prophets lines.
+
+Isolating the choices attributed most of the search-cost reduction to pruning
+Dockhand, Tidal Warrior, and Douser's opponent-control targets. That choice
+alone saved 51.5% and 71.7% of priced work on the two searched sets without
+changing a searched win turn. Prophets victim ranking alone saved 6.5% and
+15.2% without a searched win-turn change. Seahunter's forced target alone
+improved one game in seed 2002 but used 5.1% more work there. The three choices
+together had the best measured quality and cost. The original narrowly gated
+extra-turn walk changed no win turns and consumed negligible extra work; a
+broader same-round walk is being tested separately before adoption.
+
+The 40-game discard-shed census recorded 4,796 rollout decisions and zero
+real-game decisions. It supplies no direct evidence for a new discard rule,
+so the existing discard policy remains in place.
