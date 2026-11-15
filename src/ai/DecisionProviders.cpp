@@ -154,6 +154,13 @@ bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
     }
     auto has = [&](const char* name)
     { return std::find(names.begin(), names.end(), name) != names.end(); };
+    if (prophets_out)
+    {
+        // With the loop established, the next tutor can change this combat's
+        // damage, champion victim, or next turn's mana. Keep those choices in
+        // search; a fixed small-body pick lost a held-out turn-four win.
+        return false;
+    }
     if (!prophets_out && has("Merfolk Sovereign"))
     {
         // A lord fetched before combat can win immediately without starting
@@ -183,8 +190,7 @@ bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
     else if (!prophets_out && has("Wanderwine Prophets")) { pick = "Wanderwine Prophets"; }
     else
     {
-        // Once Prophets is present, a small Merfolk is cheap champion/sacrifice
-        // fodder. Seahunter puts it directly onto the battlefield.
+        // If Prophets is unavailable, put a cheap Merfolk on the battlefield.
         for (const char* name : {"Tidal Warrior", "Rishadan Dockhand", "Stonybrook Banneret",
                                  "Silvergill Douser", "Merfolk Sovereign", "Svyelun of Sea and Sky",
                                  "Emperor Mihail II", "Wanderwine Prophets"})
@@ -247,8 +253,10 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
             if (d != nullptr)
             { blue_need = std::max(blue_need, static_cast<int>(d->card.m_mana_cost.blue)); }
         }
-        const ManaPool pool = AvailableManaPool(state);
-        if (blue_need > pool.blue)
+        // The action menu is built before the plan pays any spells. Existing
+        // Islands may be spent first, leaving a later blue spell dependent on
+        // converting a nonbasic. Keep one such target whenever blue is needed.
+        if (blue_need > 0)
         {
             for (int i : targets)
             {

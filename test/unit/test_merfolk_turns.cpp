@@ -165,8 +165,8 @@ TEST_CASE("Merfolk Seahunter fetches a champion victim before Prophets")
 
     AddPermanent(state, "Wanderwine Prophets", 201);
     names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
-    CHECK(provider.SeahunterCandidates(state, names));
-    CHECK(names == std::vector<std::string>{"Tidal Warrior"});
+    CHECK_FALSE(provider.SeahunterCandidates(state, names));
+    CHECK(names.size() == 3);
 
     state.battlefield.clear();
     state.turn_number = 5;
@@ -176,6 +176,24 @@ TEST_CASE("Merfolk Seahunter fetches a champion victim before Prophets")
     names = {"Wanderwine Prophets", "Merfolk Sovereign"};
     CHECK_FALSE(provider.SeahunterCandidates(state, names));
     CHECK(names.size() == 2);
+}
+
+TEST_CASE("Tidal Warrior keeps nonbasic blue conversion after planned blue spends")
+{
+    LoadMerfolkCards();
+    MerfolkTurnsProvider provider;
+    GameState state;
+    state.active_player_index = 0;
+    AddPermanent(state, "Island", 220);
+    AddPermanent(state, "Island", 221);
+    AddPermanent(state, "Rogue's Passage", 222);
+    AddPermanent(state, "Tidal Warrior", 223);
+    const CardDefinition* banneret = CardDatabase::Instance().Lookup("Stonybrook Banneret");
+    REQUIRE(banneret != nullptr);
+    state.ActivePlayer().hand.push_back(banneret->card);
+    std::vector<int> targets{2};
+    provider.TapTargetPumpTargets(state, state.battlefield[3], true, targets);
+    CHECK(targets == std::vector<int>{2});
 }
 
 TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefield path")
