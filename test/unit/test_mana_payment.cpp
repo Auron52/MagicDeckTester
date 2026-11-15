@@ -1233,6 +1233,24 @@ TEST_CASE("counter lands spend only their limited mana mode")
     }
 }
 
+TEST_CASE("Reflecting Pools spend before their sole last-counter mana anchor")
+{
+    EnsureCards();
+    GameState s = MakeBoard({"Gemstone Mine", "Reflecting Pool", "Reflecting Pool"});
+    s.battlefield[0].card.m_number = 17;
+    s.battlefield[1].card.m_number = 41;
+    s.battlefield[2].card.m_number = 42;
+    s.battlefield[0].charge_counters = 1;
+
+    // Life from the Loam ({1}{G}) followed by Careful Study ({U}).
+    // Spending Mine on Loam sacrifices the only land the two Pools reflect.
+    REQUIRE(TapForCostDirect(s, Cost(1, 0, 0, 0, 0, 1), false));
+    const bool anchor_first = !EnvOn("MTG_LEGACY_RP_ANCHOR_ORDER");
+    CHECK(s.battlefield[0].charge_counters == (anchor_first ? 1 : 0));
+    SacrificeDepletedLands(s);
+    CHECK(TapForCostDirect(s, Cost(0, 0, 1), false) == anchor_first);
+}
+
 TEST_CASE("plan cache: a free warm entry cannot skip canon-wave enumeration billing")
 {
     EnsureCards();

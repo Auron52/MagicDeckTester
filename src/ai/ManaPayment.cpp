@@ -2394,6 +2394,47 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             // at most once per payment, since dh_ready is then true. Flag off -> never taken.
         dh_reselect:
             const int bn = static_cast<int>(state.battlefield.size());
+            // A Reflecting Pool has only the colours of another land. When its ONLY
+            // non-reflecting land is about to sacrifice itself for the last mana
+            // counter, paying with that land first can turn every untapped Pool
+            // off before the line's next cast. The Pools have the same available
+            // colours while the anchor is present and no counter to spend, so
+            // use one first when both can pay this pip. This is an order bias;
+            // the anchor remains available if a Pool cannot pay.
+            static const bool s_rp_anchor_first = !EnvOn("MTG_LEGACY_RP_ANCHOR_ORDER"); // DEFAULT ON; =1 old order
+            int rp_anchor = -1;
+            // Most payments have no last-counter land. Check that cheap fact
+            // before looking up every land's definition in the full scan.
+            bool possible_anchor = false;
+            if (s_rp_anchor_first && bn >= 2)
+            {
+                for (int ri = 0; ri < bn; ++ri)
+                {
+                    const Permanent& q = state.battlefield[ri];
+                    if (q.controller_index != active || !q.card.IsLand() || q.tapped
+                        || q.charge_counters != 1) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (qd != nullptr && qd->params.sacrifice_when_mana_counters_empty)
+                    { possible_anchor = true; break; }
+                }
+            }
+            if (possible_anchor)
+            {
+                int non_reflecting = 0;
+                bool live_pool = false;
+                for (int ri = 0; ri < bn; ++ri)
+                {
+                    const Permanent& q = state.battlefield[ri];
+                    if (q.controller_index != active || !q.card.IsLand()) { continue; }
+                    const CardDefinition* qd = CardDatabase::Instance().LookupCached(q.card);
+                    if (qd == nullptr) { continue; }
+                    if (qd->params.reflecting) { live_pool |= !q.tapped; continue; }
+                    ++non_reflecting;
+                    if (!q.tapped && qd->params.sacrifice_when_mana_counters_empty
+                        && q.charge_counters == 1) { rp_anchor = ri; }
+                }
+                if (!live_pool || non_reflecting != 1) { rp_anchor = -1; }
+            }
             int best_i = -1, best_rank = 1 << 30, best_kind = 0;  // 1 direct, 2 filter-colour, 3 filter-{C}
             int best_dep = -1;   // depletion tiebreak: more counters tap FIRST (DepletionTapOrderEnabled)
             int best_hold = 1 << 30;   // provider hold value: LOWER taps first (ManaSourceHoldValue)
@@ -2662,6 +2703,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 // tap-order rank rather than as a rule anyone has to enforce.
                 int rank = (kind == 5) ? SacPayFodderRank(state, p, sac_outlet, &pay_doomed)
                                        : ResolveProvider(state).ManaSourceRank(state, *def);
+                if (kind == 1 && i == rp_anchor) { rank = std::max(rank, 51); }
                 // An awakened land is still a land in the card database, so its normal land
                 // rank spends it before ordinary Islands. Once it can attack, tapping it for
                 // mana costs the whole attack. Keep it behind non-attacking mana sources, but
