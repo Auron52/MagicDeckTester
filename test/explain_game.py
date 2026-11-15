@@ -113,7 +113,7 @@ def single_game_job(r, gi):
 
 
 # ---- run one game under a binary, parse its per-turn line ------------------------------------
-def run_game(binary, r, gi):
+def run_game(binary, r, gi, baseline=False):
     tmp = tempfile.mkdtemp(prefix="explain_")
     try:
         manifest = os.path.join(tmp, "manifest.json")
@@ -122,6 +122,24 @@ def run_game(binary, r, gi):
             json.dump({"jobs": [single_game_job(r, gi)]}, f)
         cmd = [binary, "--batch", manifest, "--threads", "1",
                "--game-log-dir", os.path.join(tmp, "wins"), "--game-trace-dir", traces]
+        # A saved baseline binary can predate additions to cards.json. Feeding it the
+        # current file makes its parser fail before the old game can be explained
+        # (e.g. the pre-Merfolk binary rejects today's Islandwalk keyword). The
+        # snapshot's commit identifies the card data it was built against.
+        if baseline:
+            meta = binary + ".meta"
+            if os.path.isfile(meta):
+                with open(meta) as f:
+                    match = re.search(r"^git_hash=([0-9a-f]+)$", f.read(), re.M)
+                if match:
+                    cards = subprocess.run(
+                        ["git", "show", f"{match.group(1)}:src/cards/data/cards.json"],
+                        cwd=ROOT, capture_output=True)
+                    if cards.returncode == 0:
+                        old_cards = os.path.join(tmp, "cards.json")
+                        with open(old_cards, "wb") as f:
+                            f.write(cards.stdout)
+                        cmd.extend(["--cards-json", old_cards])
         env = os.environ.copy()
         # This replay is explanatory, after the batch has already recorded the
         # score. A pathological single game must not hold the entire tier's
@@ -214,7 +232,7 @@ def diff_game(mode, key, gi, old_bin=None, new_bin=None, budget_ms=None):
     depth_label = f"d{r['depth']}" if r["depth"] is not None else "depth from play profile"
     seedline = f"    explain {key} gi{gi}  (seed {actual_seed}, {depth_label}, {r['budget']}ms)"
     new = run_game(new_bin, r, gi) if new_bin and os.path.exists(new_bin) else None
-    old = run_game(old_bin, r, gi) if old_bin and os.path.exists(old_bin) else None
+    old = run_game(old_bin, r, gi, baseline=True) if old_bin and os.path.exists(old_bin) else None
 
     out = [seedline]
     if new is None:
