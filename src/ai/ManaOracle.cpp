@@ -4493,6 +4493,31 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         std::vector<std::vector<TurnSolver::Plan>> folded;
         const std::vector<TurnSolver::Plan> alts = OtherOrders(plan, /*with_acts=*/true, &all_tried, kPhantomOrderBound,
                                                                /*fold=*/true, OrderFoldCheck() ? &folded : nullptr);
+        // A sibling order is a hit-only search, but a partial NO cannot prove
+        // PHANTOM. Give it the same on-demand cap retry as the plan's own
+        // complete-side search. The hit-only path does not save a cursor, so
+        // its rare retry starts from the root; ordinary orders still stop at
+        // the initial 2,000-apply ceiling. Gods seed 30034901 reaches a full
+        // sibling verdict below 20,000 and otherwise reports UNMODELED.
+        const auto realize_order = [&](const TurnSolver::Plan& candidate)
+            -> std::pair<Realization, int>
+        {
+            int cap = NodeCap();
+            Realization got = Realize(root, candidate, pre, /*stop_at_full=*/true, {}, false,
+                                      &e_want, nullptr, nullptr, /*hit_only=*/true);
+            if (got.capped && t_node_cap == 0 && s_retry > cap && !DecisionOut())
+            {
+                const int saved = t_node_cap;
+                t_node_cap = s_retry;
+                got = Realize(root, candidate, pre, /*stop_at_full=*/true, {}, false,
+                              &e_want, nullptr, nullptr, /*hit_only=*/true);
+                t_node_cap = saved;
+                cap = s_retry;
+                g_cap_retry.fetch_add(1, std::memory_order_relaxed);
+                if (!got.capped) { g_cap_retry_ok.fetch_add(1, std::memory_order_relaxed); }
+            }
+            return { std::move(got), cap };
+        };
         for (std::size_t ai = 0; ai < alts.size(); ++ai)
         {
             const TurnSolver::Plan& alt = alts[ai];
@@ -4507,8 +4532,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             // fail-free script is still applied, in the same order, with the same Pareto prune (fail frontiers are
             // keyed apart). So the YES verdict (APPLY-DROP-ORDER) is unchanged, and the NO claim (PHANTOM) still
             // needs every fail-free payment of every order searched in full.
-            Realization ra = Realize(root, alt, pre, /*stop_at_full=*/true, {}, false, &e_want, nullptr, nullptr,
-                                     /*hit_only=*/true);
+            auto [ra, alt_cap] = realize_order(alt);
             if (OrderFoldCheck() && ai < folded.size())
             {
                 // MTG_ORACLE_ORDER_FOLD_CHECK: every order the fold skipped must realise exactly as its class's order.
@@ -4527,8 +4551,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 const std::string want_txt = print(ra);
                 for (const TurnSolver::Plan& dup : folded[ai])
                 {
-                    const Realization rd = Realize(root, dup, pre, /*stop_at_full=*/true, {}, false, &e_want, nullptr,
-                                                   nullptr, /*hit_only=*/true);
+                    const Realization rd = realize_order(dup).first;
                     const std::string got = print(rd);
                     if (got != want_txt && !DecisionOut())
                     {
@@ -4544,7 +4567,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
                 other_partial = true;
                 if (other_why.empty())
                 {
-                    other_why = ra.capped ? "an order's payment search hit its cap (" + std::to_string(NodeCap()) + " applies)"
+                    other_why = ra.capped ? "an order's payment search hit its cap (" + std::to_string(alt_cap) + " applies)"
                                           : ra.unmodeled.front();
                 }
             }
