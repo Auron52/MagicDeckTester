@@ -154,6 +154,22 @@ bool MerfolkTurnsProvider::SeahunterCandidates(const GameState& state,
     }
     auto has = [&](const char* name)
     { return std::find(names.begin(), names.end(), name) != names.end(); };
+    if (!prophets_out && has("Merfolk Sovereign"))
+    {
+        // A lord fetched before combat can win immediately without starting
+        // the Prophets loop. Seahunter taps to activate, so exclude it from
+        // the attackers and leave the full tutor menu to the searched player.
+        int lord_damage = 0;
+        for (const Permanent& p : state.battlefield)
+        {
+            if (p.controller_index != state.active_player_index || !p.card.IsCreature()
+                || p.card.m_name == "Seahunter" || p.tapped
+                || !CanAttackFull(p, state.battlefield, state.active_player_index)) { continue; }
+            lord_damage += std::max(0, CombatPowerOf(p, state));
+            if (CardHasSubtype(p.card, "Merfolk")) { ++lord_damage; }
+        }
+        if (lord_damage >= state.Opponent().life) { return false; }
+    }
     const char* pick = nullptr;
     if (!prophets_out && !champion_fodder)
     {

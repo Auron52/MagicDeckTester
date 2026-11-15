@@ -167,6 +167,15 @@ TEST_CASE("Merfolk Seahunter fetches a champion victim before Prophets")
     names = {"Wanderwine Prophets", "Svyelun of Sea and Sky", "Tidal Warrior"};
     CHECK(provider.SeahunterCandidates(state, names));
     CHECK(names == std::vector<std::string>{"Tidal Warrior"});
+
+    state.battlefield.clear();
+    state.turn_number = 5;
+    state.Opponent().life = 2;
+    AddPermanent(state, "Tidal Warrior", 202);
+    AddPermanent(state, "Seahunter", 203);
+    names = {"Wanderwine Prophets", "Merfolk Sovereign"};
+    CHECK_FALSE(provider.SeahunterCandidates(state, names));
+    CHECK(names.size() == 2);
 }
 
 TEST_CASE("Seahunter puts the pinned library Merfolk through the shared battlefield path")
