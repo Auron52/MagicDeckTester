@@ -198,7 +198,7 @@ void MerfolkTurnsProvider::TapTargetPumpTargets(const GameState& state, const Pe
     if (!DecisionUnpruned(UnprunedGate::XSpell)
         && source.card.m_name == "Rogue's Passage") { targets.clear(); }
     static const bool control_on = EnvOn("MTG_MERFOLK_CONTROL_ABILITY_PRUNE", true); // DEFAULT ON; =0 restores full choice
-    if (!control_on || DecisionUnpruned() || targets.empty()) { return; }
+    if (!control_on || HumanPlayActive() || DecisionUnpruned() || targets.empty()) { return; }
     const std::string& name = source.card.m_name.str();
     if (name != "Rishadan Dockhand" && name != "Tidal Warrior"
         && name != "Silvergill Douser") { return; }
