@@ -3408,6 +3408,11 @@ public:
     // given, the first the board can keep winning. Default: nothing held.
     virtual std::vector<ManaCost> PaymentHoldUp(const GameState&, int /*controller*/) const { return {}; }
 
+    // Enable the plan's held-first scarce-colour payment only for a deck whose
+    // paired play and mana-oracle checks support it. The global diagnostic lever
+    // remains available; the default provider stays on the old payment path.
+    virtual bool ScarceColorLineHold(const GameState&) const { return false; }
+
     // ManaSourceHoldValue -- the WITHIN-RANK tap-order key: among sources ManaSourceRank ties, the
     // one with the LOWER hold value pays first. What it prices is the body, not the mana: on a
     // pre-combat main with an eligible attacker (PlanTraits::attack_matters) a mana creature's

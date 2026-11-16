@@ -6,6 +6,18 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Spirits' Souls flashback before White Orchid Phantom spent the only flexible
+white source on Souls' generic pip and dropped Phantom. The existing
+held-first scarce-colour mask clears all nine drops in the first 500 Spirits
+games, but its global setting loses games elsewhere. Spirits now opts into
+that mask through its provider; `MTG_SPIRITS_SCARCE_COLOR_MASK=0` restores the
+old payer. Fresh 5,000-game paired Spirits play changed one digest and zero
+win turns with flat work. The scoped build clears the focused seed, full
+3,365-case units pass, Spirits/2HG smoke and Spirits regression are
+byte-identical, and strict viewer replay passes 864 references. See
+`docs/design/spirits-scarce-colour-line-hold-2026-11-16.md`. Fresh Spirits
+games 5,000–9,999 remain the next mana-clean gate.
+
 Spirits' same-main Souls hand cast → Vialed Geist → Souls flashback was
 rejected by the aggregate mana gate because its pending graveyard-cast
 candidate had no definition pointer and received no Geist discount. Resolving

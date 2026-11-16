@@ -320,6 +320,30 @@ TEST_CASE("Patrician Geist Vial put discounts a Souls cast and flashed back in t
     }
 }
 
+TEST_CASE("Spirits keeps two white sources for White Orchid after Souls flashback")
+{
+    static const SpiritsProvider spirits;
+    GameState s = GwBoard({ "Hallowed Fountain", "Godless Shrine", "Watery Grave", "Island" });
+    s.m_provider = &spirits;
+    s.players[0].hand.push_back(GwZone("White Orchid Phantom", 60));
+    s.players[0].graveyard.push_back(GwZone(kSouls, 40));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* line = GwFindPlan(plans, {{Action::Kind::CastFromGraveyard, kSouls},
+                                                     {Action::Kind::CastFromHand, "White Orchid Phantom"}});
+    REQUIRE(line != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, true);
+    const GameState exec = GwRunExecutor(s, *line);
+    for (const GameState* g : { static_cast<const GameState*>(&roll), &exec })
+    {
+        INFO("world: " << (g == &roll ? "rollout" : "executor"));
+        CHECK(GwFind(*g, "White Orchid Phantom") != nullptr);
+        CHECK(GwSpiritTokens(*g) == 2);
+        CHECK(GwZoneCount(g->players[0].graveyard, kSouls) == 0);
+        CHECK(g->spells_cast_this_turn == s.spells_cast_this_turn + 2);
+    }
+}
+
 // ---- Mausoleum Wanderer --------------------------------------------------------------------------------
 
 TEST_CASE("Mausoleum Wanderer: the card -- {U} 1/1 Spirit; an enter watcher (DefHasCreatureEnterWatcher)")

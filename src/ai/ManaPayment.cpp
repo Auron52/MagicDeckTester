@@ -8966,7 +8966,13 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     // Growth onto Mariposa Military Base} off Mariposa, Yavimaya Coast and a fresh Brushland. Wild Growth's {G} took
     // the Coast -- the board's only {U}, battlefield order breaking a tie with Brushland's {G} -- and Cloud of
     // Faeries was dropped. Behind heurarm SCARCE_COLOR_MASK so the A/B runs both arms in one batch.
-    const bool broad = ScarceColorMaskOn();
+    // Spirits' Souls flashback ({1}{B}) before White Orchid Phantom ({W}{W})
+    // needs its two white lands held while the generic pip pays. The global
+    // mask loses games elsewhere; the provider enables the same held-first,
+    // unrestricted-retry path for Spirits alone. DEFAULT ON; =0 restores.
+    static const bool s_spirits = EnvOn("MTG_SPIRITS_SCARCE_COLOR_MASK", true);
+    const bool broad = ScarceColorMaskOn()
+                    || (s_spirits && ResolveProvider(state).ScarceColorLineHold(state));
     const bool counter_only = ScarceCounterMaskOn();
     if (!broad && !counter_only) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();

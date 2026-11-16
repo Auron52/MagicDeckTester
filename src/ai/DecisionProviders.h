@@ -4563,6 +4563,7 @@ public:
 class SpiritsProvider : public DeckProvider
 {
 public:
+    bool ScarceColorLineHold(const GameState&) const override { return true; }
     // The reviewed W/U/B Strand priority owns both fetch routes; generic pip ranking
     // must not reorder its held-crack picks when the measurement flag is enabled.
     bool FetchLineRankEnabled(const GameState&) const override { return false; }
