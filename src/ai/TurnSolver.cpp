@@ -71501,6 +71501,10 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         const int cast_zone_number = cast_card->m_number;
         const CardDefinition* opt = CardDatabase::Instance().LookupCached(*cast_card);
         if (!opt) { return; }
+        // Executor twin: the copies a splice reveals must still be in the
+        // actual hand when this base cast begins.
+        if (splice_count > 0 && opt->params.splice_onto_arcane
+            && !SpliceHandHasReveals(state, *cast_card, splice_count)) { return; }
         // BESTOW: the card leaves the hand exactly as it would for a normal cast, but everything
         // downstream -- the cost paid, the permanent that enters, its params -- comes from the DB's
         // synthesized "<name> (Bestowed)" AURA face instead of the creature. Swapping the def here,

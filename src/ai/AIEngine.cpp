@@ -10258,6 +10258,10 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     Player& ap = state.ActivePlayer();
     auto def = CardDatabase::Instance().LookupCached((*hand_card_p));
     if (!def) { return; }
+    // A spliced copy is revealed from the hand when the base spell is cast.
+    // Earlier casts have already left it, so recheck this live hand before payment.
+    if (splice_count > 0 && def->params.splice_onto_arcane
+        && !SpliceHandHasReveals(state, *hand_card_p, splice_count)) { return; }
     // ADVENTURE (Brightcap Badger // Fungus Frolic, CR 715): swap in the adventure face's def for
     // the whole cast -- its cost is paid and its text resolves. The hand card is still `hand_card`
     // (removed below by number, never by def name), and entry.source keeps that number, so

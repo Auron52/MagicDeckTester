@@ -56,6 +56,9 @@ inline std::uint64_t SelfTapSourceHoldBit(const GameState& state, int card_numbe
 // {X} spells apply the discount where the chosen X is known). Was a byte-identical twin pair
 // (AIEngine::EffectiveCost / TurnSolver's file-static EffectiveCost); both now delegate here.
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies = 1);
+// Splice reveals other cards still in the actual hand at cast time. Staged exile
+// cards can be cast, but are not in hand and cannot be revealed for splice.
+bool SpliceHandHasReveals(const GameState& state, const Card& base, int splice_count);
 ManaCost EffectiveSpellCostWithBase(const CardDefinition& def, const GameState& state,
                                     const ManaCost& alternate_base);
 // THE GRAVEYARD-CAST PRICE (Spirits integrator B, 2026-11-13): what a spell cast FROM THE GRAVEYARD costs --

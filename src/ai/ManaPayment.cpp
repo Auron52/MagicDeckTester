@@ -4780,6 +4780,18 @@ static ManaCost EffectiveSpellCostImpl(const CardDefinition& def, const GameStat
     return cost;
 }
 
+bool SpliceHandHasReveals(const GameState& state, const Card& base, int splice_count)
+{
+    if (splice_count <= 0) { return true; }
+    int reveals = 0;
+    for (const Card& c : state.ActivePlayer().hand)
+    {
+        if (c.m_number == base.m_number || c.m_is_staged || c.m_name != base.m_name) { continue; }
+        if (++reveals >= splice_count) { return true; }
+    }
+    return false;
+}
+
 ManaCost EffectiveSpellCost(const CardDefinition& def, const GameState& state, int copies)
 { return EffectiveSpellCostImpl(def, state, copies, nullptr); }
 

@@ -265,6 +265,42 @@ TEST_CASE("Dragonstorm USER order: a plain Desperate keeps its slot before Seeth
           == std::vector<std::string>{ kRite, kSeeth, "Desperate Ritual+s1", kDesp });
 }
 
+TEST_CASE("Dragonstorm splice checks the live hand before each cast")
+{
+    UoArms arms(true);
+    const GameState start = BoardUo(8, { kDesp, kDesp });
+    CHECK(SpliceHandHasReveals(start, start.players[0].hand[0], 1));
+
+    // A set with one spliced and one plain cast is legal only in this order:
+    // the first cast reveals the other copy, which may then be cast plainly.
+    GameState legal = start;
+    TurnSolver::Plan first_spliced;
+    first_spliced.actions = { CastUo(legal, kDesp, 1), CastUo(legal, kDesp, 0) };
+    first_spliced.land_decided = first_spliced.searched_order = true;
+    TurnSolver::ApplyPlan(legal, first_spliced, true);
+    CHECK(InHandUo(legal, kDesp) == 0);
+    CHECK(legal.spells_cast_this_turn == 2);
+
+    // Reversing those actions leaves no other card in hand to reveal for the
+    // second cast. It must stay in hand, even if enough mana is available.
+    GameState illegal = start;
+    TurnSolver::Plan plain_first;
+    plain_first.actions = { CastUo(illegal, kDesp, 0), CastUo(illegal, kDesp, 1) };
+    plain_first.land_decided = plain_first.searched_order = true;
+    TurnSolver::ApplyPlan(illegal, plain_first, true);
+    CHECK(InHandUo(illegal, kDesp) == 1);
+    CHECK(illegal.spells_cast_this_turn == 1);
+    CHECK_FALSE(SpliceHandHasReveals(illegal, illegal.players[0].hand[0], 1));
+
+    // Apex stages exiled cards in the hand vector. They may be cast, but
+    // cannot be revealed from hand to pay another spell's splice cost.
+    GameState staged = start;
+    staged.players[0].hand[1].m_is_staged = true;
+    staged.players[0].hand[1].m_staged_expiry = staged.TurnSeq();
+    CHECK_FALSE(SpliceHandHasReveals(staged, staged.players[0].hand[0], 1));
+    CHECK(SpliceHandHasReveals(staged, staged.players[0].hand[1], 1));
+}
+
 TEST_CASE("Dragonstorm USER order: Ruby Medallion at its EARLIEST PAYABLE slot -- unpayable first, payable after one ritual")
 {
     // Two Mountains. Medallion first spends both and Rite of Flame cannot be paid. Rite first floats RR:
