@@ -66,4 +66,21 @@ Millicent pays; casting Millicent before the Vial put pays the entire line.
 The two report signatures are alternative fetchland outcomes. There are no
 enum gaps, oracle gaps, or caps, and oracle-on/off play is byte-identical.
 See `logs/mana_clean/codex-spirits-souls-hand-20261116/report.md` and
-`test/mana_clean.json`. This ordering defect remains the next fix.
+`test/mana_clean.json`.
+
+`MTG_SPIRITS_OWN_LAND_ORDER` is default on (`=0` restores the ranked
+order). When the planned Vial put pins White Orchid Phantom to an untapped
+own land and Millicent follows it, the Spirits provider moves Millicent
+immediately before the put only if the sequential mana probe confirms the
+new order pays. This keeps Phantom first when its Spirit affinity is needed.
+The exact seed 30,021,365 now has zero issues; the off control restores all
+twelve `APPLY-DROP-ORDER` flags. A focused test covers the order. In 2,000
+fresh paired Spirits games (seeds 30,030,000–30,031,999), both arms average
+4.6490 loss-penalized turns, with identical win turns and play digests in
+every game; the on arm uses 12 more work units out of 77.9 million. Logs are
+under `build/scratch/spirits_own_land_order_ab/`. The combined Spirits/2HG
+smoke and regression batch passes all ten cells with no per-game change.
+All 561 scenarios pass. Strict viewer replay reports zero play drift,
+board divergence, or enumeration gaps across 864 references; both
+suboptimal references remain beaten. The full Release unit suite passes
+3,370 cases and 3,614,735 assertions. A fresh PGO gate remains.

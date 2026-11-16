@@ -392,6 +392,32 @@ TEST_CASE("Spirits spends Chancery blue on Vial before a two-white Phantom")
     }
 }
 
+TEST_CASE("Spirits casts Millicent before Vialed Phantom destroys its own Chancery")
+{
+    static const SpiritsProvider spirits;
+    GameState s = GwBoard({ "Azorius Chancery", "Unclaimed Territory", "Godless Shrine" });
+    s.m_provider = &spirits;
+    s.battlefield[1].chosen_subtype_id = SubtypeRegistry::Instance().Id("Spirit");
+    GwPut(s, "Usher of the Fallen", 201);
+    GwPut(s, "Mausoleum Wanderer", 202);
+    GwPut(s, "Supreme Phantom", 203);
+
+    Action vial;
+    vial.kind = Action::Kind::ActivateVial;
+    vial.card_name = "White Orchid Phantom";
+    vial.def = &GwDef("White Orchid Phantom");
+    vial.tutor_target = "Azorius Chancery";
+    Action millicent;
+    millicent.kind = Action::Kind::CastFromHand;
+    millicent.card_name = "Millicent, Restless Revenant";
+    millicent.def = &GwDef("Millicent, Restless Revenant");
+    millicent.cost = millicent.def->card.m_mana_cost;
+    const std::vector<Action> actions{ vial, millicent };
+    std::vector<int> order{ 0, 1 };
+    spirits.ArrangeCastOrder(s, actions, order);
+    CHECK(order == std::vector<int>{ 1, 0 });
+}
+
 // ---- Mausoleum Wanderer --------------------------------------------------------------------------------
 
 TEST_CASE("Mausoleum Wanderer: the card -- {U} 1/1 Spirit; an enter watcher (DefHasCreatureEnterWatcher)")

@@ -4602,6 +4602,8 @@ public:
     // Souls -> White Orchid -> Millicent. One spot per card (no ranges).
     int CastOrderRank(const GameState& s, const CardDefinition& def) const override;
     const char* CastOrderTierName(int rank) const override;
+    void ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                          std::vector<int>& order) const override;
     // The USER's cleanup-discard buckets (2026-11-14, MTG_SPIRITS_BUCKET_DISCARD; SpiritsShed in the .cpp). The
     // quotas move after every shed, so the order is re-asked per shed (ShedStable false while on).
     std::vector<int> CleanupDiscardCandidates(const GameState& s,

@@ -24012,6 +24012,42 @@ const char* SpiritsProvider::CastOrderTierName(int rank) const
     return nullptr;
 }
 
+void SpiritsProvider::ArrangeCastOrder(const GameState& s, const std::vector<Action>& actions,
+                                       std::vector<int>& order) const
+{
+    // A Vialed White Orchid Phantom can destroy one of our own nonbasic lands before Millicent
+    // pays. The preferred Phantom-first order is then not the payable order: Spirits mana-clean
+    // seed 30021365, T4, loses Azorius Chancery. Move only the already-planned Millicent before
+    // that Vial put, and only if the exact sequential payment probe accepts the new order. This
+    // leaves Phantom first when its Spirit arrival is needed for Millicent's affinity.
+    static const bool enabled = EnvOn("MTG_SPIRITS_OWN_LAND_ORDER", true); // DEFAULT ON; =0 restores rank order
+    if (!enabled || order.size() < 2) { return; }
+    for (std::size_t p = 0; p < order.size(); ++p)
+    {
+        const Action& vial = actions[static_cast<std::size_t>(order[p])];
+        if (vial.kind != Action::Kind::ActivateVial || vial.card_name != "White Orchid Phantom"
+            || vial.tutor_target.empty()) { continue; }
+        const bool live_land = std::any_of(s.battlefield.begin(), s.battlefield.end(), [&](const Permanent& q)
+        {
+            return q.controller_index == s.active_player_index && q.card.IsLand() && !q.tapped
+                && q.card.m_name == vial.tutor_target;
+        });
+        if (!live_land) { continue; }
+        for (std::size_t m = p + 1; m < order.size(); ++m)
+        {
+            const Action& cast = actions[static_cast<std::size_t>(order[m])];
+            if (cast.kind != Action::Kind::CastFromHand || cast.card_name != "Millicent, Restless Revenant")
+            { continue; }
+            std::vector<int> trial = order;
+            const int moved = trial[m];
+            trial.erase(trial.begin() + static_cast<std::ptrdiff_t>(m));
+            trial.insert(trial.begin() + static_cast<std::ptrdiff_t>(p), moved);
+            if (TurnSolver::OrderPaysSequentially(s, actions, trial)) { order.swap(trial); }
+            return;
+        }
+    }
+}
+
 // ---- SpiritsProvider: the USER's cleanup-discard buckets (2026-11-14) ---------------------------------------
 // USER: "For the Discard order we should have actual buckets. i.e. We should hold at least 3-4 threats of varying
 // costs and at most 3 lands and an Aether Vial for deployment. Most of the time we are probably okay with 3 lands
