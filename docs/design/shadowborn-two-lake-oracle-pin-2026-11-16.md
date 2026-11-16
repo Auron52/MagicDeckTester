@@ -20,3 +20,9 @@ the new assertion covers two Lake cracks. The exact seed now reports zero
 mana-clean issues. The full Release suite passed 3,360 cases and 3,614,325
 assertions. This is an oracle-script correction; it does not change normal
 payment or search play. The next fresh Shadowborn block is 90,000–94,999.
+
+Combined Shadowborn/Shadowborn2HG smoke and regression passed all 11 jobs with
+zero per-game win or play-digest changes. All 561 scenarios passed. The strict
+viewer replay had zero drift, dead shuffles, board divergence, enum gaps,
+mulligan drift, or contract failures across 864 references; both suboptimal
+games remained strictly beaten. No ground-truth promotion was needed.
