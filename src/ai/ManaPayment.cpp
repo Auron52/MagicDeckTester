@@ -1430,6 +1430,20 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
             && heurarm::Flag(heurarm::PD_LATER_HAND_HOLD, s_later_hand_hold);
         std::vector<ManaCost> hand_holds = later_hand_hold
             ? ResolveProvider(state).PaymentHoldUp(state, state.active_player_index) : std::vector<ManaCost>{};
+        // Spellshock's red hold is needed when a breakpoint continuation pays
+        // Dina's {B}{G} first. Keep the existing Earthquake hold on every bill;
+        // confine the Spellshock-only trial to that Dina payment so earlier
+        // casts do not reshuffle otherwise useful red sources.
+        static const bool s_spellshock_dina_only = EnvOn("MTG_PD_SPELLSHOCK_HOLD", true);
+        if (s_spellshock_dina_only && !hand_holds.empty()
+            && !(cost_in.black == 1 && cost_in.green == 1 && cost_in.ManaValue() == 2))
+        {
+            static const InternedName k_quake("Rolling Earthquake");
+            bool quake_in_hand = false;
+            for (const Card& c : state.players[state.active_player_index].hand)
+            { if (c.m_name == k_quake) { quake_in_hand = true; break; } }
+            if (!quake_in_hand) { hand_holds.clear(); }
+        }
         if (s_multi_quake && cost_in.red > 0)
         {
             for (ManaCost& hold : hand_holds)

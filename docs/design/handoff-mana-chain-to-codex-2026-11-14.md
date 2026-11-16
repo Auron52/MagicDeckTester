@@ -96,6 +96,16 @@ continuation payment drops, 24 oracle gaps, 18 payment-table caps, ten
 plan caps, and 243 unaudited-plan flags from one Pyrohemia decision. The
 next block is 87,000–91,999. See
 `docs/design/prevent-damage-batch-float-oracle-2026-11-16.md`.
+The next Prevent Damage payment fix keeps a red source when a breakpoint
+continuation pays Dina before a visible Spellshock. The broad hold worsened
+two of 5,000 paired games; the narrowed Dina-only hold clears the focused
+three drops and changed no play digests or win turns on those 5,000 games.
+It is default on with `MTG_PD_SPELLSHOCK_HOLD=0` rollback. A fresh PGO
+gate on 87,000–91,999 is owed. The 3,355-case unit suite passed; strict
+viewer replay found zero drift in 864 references; a same-binary off control
+reproduced all nine deck regression-row `.wins` despite three existing
+ground-truth mismatches. See
+`docs/design/prevent-damage-spellshock-continuation-hold-2026-11-16.md`.
 
 ## Codex update (2026-11-15)
 

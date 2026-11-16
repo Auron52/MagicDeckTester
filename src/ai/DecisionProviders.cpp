@@ -25355,6 +25355,7 @@ std::vector<ManaCost> PreventDamageProvider::PaymentHoldUp(const GameState& s, i
 {
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
     static const InternedName k_quake("Rolling Earthquake");
+    static const InternedName k_spellshock("Spellshock");
     // A nonred payment may precede two Earthquakes after a breakpoint. Hold
     // one visible red pip per copy (at most two); the armed payer still accepts
     // a costlier assignment only when it survives and leaves those pips payable.
@@ -25366,6 +25367,20 @@ std::vector<ManaCost> PreventDamageProvider::PaymentHoldUp(const GameState& s, i
         if (c.m_name == k_quake && ++quakes == (s_multi_quake ? 2 : 1)) { break; }
     }
     if (quakes > 0) { ManaCost red; red.red = quakes; return {red}; }
+    // A breakpoint continuation can cast a nonred creature before the visible
+    // Spellshock. Keep one red source for that later cast when another payment
+    // can leave it; PainAwarePay still falls back to the original assignment
+    // when no such payment exists. The payer applies this hold only to Dina's
+    // {B}{G} bill. =0 restores the earlier policy.
+    static const bool s_spellshock = EnvOn("MTG_PD_SPELLSHOCK_HOLD", true);
+    if (s_spellshock)
+    {
+        for (const Card& c : s.players[controller].hand)
+        {
+            if (c.m_name != k_spellshock) { continue; }
+            ManaCost red; red.red = 1; return {red};
+        }
+    }
     return {};
 }
 
