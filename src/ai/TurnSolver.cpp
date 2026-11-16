@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8, hxd = 3, mid = INT_MAX; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8, hxd = 3, mid = INT_MAX; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102337,6 +102337,13 @@ namespace p18
         // _pb2 (screen only): run pass 2 on rollouts, so its true cost and cache warm pass 3's price.
         o.b2 = k.find("_pb2") != std::string::npos;
         if (o.b2) { o.b1 = true; }
+        // _paf<pct> (screen only, with _pb2): when the exact depth-two pass spends too little of its work in
+        // rollouts, a leafless walk at the next depth is unlikely to save enough to pay for itself. Continue the
+        // ordinary ladder from depth three, using the two exact costs already measured; no sampled pass was run.
+        { const std::size_t p = k.find("_paf"); if (p != std::string::npos) { o.af = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pa1<pct> (screen only): the exact first pass can show that rollout work is a small fraction of its
+        // cost. In that case evaluating every leaf is cheaper than walking the tree again to sample a subset.
+        { const std::size_t p = k.find("_pa1"); if (p != std::string::npos) { o.a1 = std::atof(k.c_str() + p + 4) / 100.0; } }
         { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.actual_rem = k.find("_pact") != std::string::npos;
         o.noasp = k.find("_pnoasp") != std::string::npos;
@@ -111177,6 +111184,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (k == 1 && kn.b1 && !unl && !kn.verify)
             {
                 const long long r0 = budget->Used();
+                const long long leaf0 = p16::t_leaf_units;
                 // The heuristic ladder's OVERRUN guard for its pass 1, armed exactly as the ladder below arms it.
                 if (s_overrun_prop)
                 { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
@@ -111205,6 +111213,15 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; p18_done = true; break;
                 }
                 p18_force2 = true; priced = static_cast<double>(c1); p18_est[1] = priced;
+                const double leaf_share = c1 > 0 ? static_cast<double>(p16::t_leaf_units - leaf0) / static_cast<double>(c1) : 0.0;
+                if (kn.a1 > 0.0 && leaf_share < kn.a1)
+                {
+                    // The exact pass-one bootstrap admitted depth two. Continue with exact leaves: in this
+                    // part of the tree they cost less than the leafless traversal and sample bookkeeping.
+                    line = p1; committed_depth = 1; prev_line = line; prev_committed = 1;
+                    p18_K = 2; p18_rx = true; p18_c2 = static_cast<double>(c1); p18_wb = 0;
+                    break;
+                }
                 if (kn.b2) { line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; }
                 if (p1.win_turn <= max_turns) { wb_prev = p1.win_turn; p18_wb = p1.win_turn; }
                 continue;
@@ -111212,6 +111229,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (k == 2 && kn.b2 && p18_force2 && !unl && !kn.verify)
             {
                 const long long r0 = budget->Used();
+                const long long leaf0 = p16::t_leaf_units;
                 if (s_overrun_prop)
                 { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
                 else
@@ -111238,6 +111256,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                 const double rem = static_cast<double>(budget->Remaining());
                 const bool adm3 = depth >= 3 && (g_reserve_value_pass ? e3 + e3 <= gate_alpha * rem : e3 <= gate_alpha * rem);
                 if (p2.win_turn <= state.turn_number + 1 || !adm3) { p18_done = true; break; }
+                const double leaf_share = c2 > 0 ? static_cast<double>(p16::t_leaf_units - leaf0) / static_cast<double>(c2) : 0.0;
+                if (kn.af > 0.0 && leaf_share < kn.af)
+                {
+                    // The depth-three pass is already admitted by the exact c2^2/c1 check above. Resume the
+                    // ordinary ladder there; after that pass, c2 is its true predecessor cost for the next gate.
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    break;
+                }
                 priced += static_cast<double>(c2); p18_est[2] = static_cast<double>(c2);
                 if (p2.win_turn <= max_turns) { wb_prev = p2.win_turn; p18_wb = p2.win_turn; }
                 continue;

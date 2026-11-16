@@ -509,3 +509,30 @@ identical to S17. All three variants still fail the cost-and-quality bar:
 The useful warm-up is at depth three: limiting the quota to depth two loses the Landfall gain, while extending it to
 depth three retains that gain at most of the original cost. Depth-five pre-refusal still trades the gain away. The
 latest screen rules out a simple sample-quota adjustment as the general solution.
+
+### Adaptive rollout share (P18h, 2026-11-16)
+
+The mode now has a screen-only `_pa1<pct>` route. Pass one is already exact under `_pb1`. Its measured ratio of
+rollout units to total units tells us whether a leafless traversal is likely to cost more than the leaves it would
+avoid. If that ratio is below the threshold, the mode evaluates every leaf from pass two onward, carrying forward
+pass one's real cost. This is an exact continuation of the ordinary ladder; it does not pay for a sampled pass and
+then fall back. `_paf<pct>` makes the same decision after exact pass two under `_pb2`, for a later route.
+
+The `_pa1101` all-exact control matched the heuristic ladder's **work units and win turns exactly** on 20 paired
+games from each of seven decks (`build/scratch/p18f/T5`, 280 games). S22 then compared the prior P18d candidate
+`g_pb1_plc_prr_prx2_pfr20` with `_pa193`, `_pa195`, and `_pa197` on the seven P18 train decks, 5,000 games total,
+32 weighted workers, same seeds (`build/scratch/p18f/S22`, binary `mtg_adaptive1`). Results vs heur:
+
+| arm | pooled CPU | Hydras | Alchemist | EDF | Snow | Midrange Burn | Landfall | Melira |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| old | 0.891x | 0.961x / -0.005 | 0.728x / 0 | 0.806x / 0 | 0.994x / 0 | 0.950x / 0 | 0.991x / +0.025 | 0.909x / +0.005 |
+| `_pa193` | 0.925x | 0.956x / 0 | 0.815x / 0 | 0.867x / 0 | 0.990x / 0 | 0.931x / 0 | 0.954x / +0.005 | 0.989x / 0 |
+| `_pa195` | **0.936x** | 0.963x / 0 | 0.823x / 0 | 0.871x / 0 | 0.994x / 0 | 0.950x / 0 | 0.988x / 0 | 1.002x / 0 |
+| `_pa197` | 0.933x | 0.958x / 0 | 0.823x / 0 | 0.875x / 0 | 0.986x / 0 | 0.930x / 0 | 0.991x / 0 | 0.997x / 0 |
+
+Each deck cell is thread-CPU ratio / mean win-turn delta. `_pa195` and `_pa197` have no quality loss on any train
+deck. Landfall and Melira's work units are exactly the ordinary ladder's at both thresholds, which removes the
+known losing branch but yields no work saving there. The small CPU differences on those two are measurement noise.
+`_pa195` retains more sampled work on Hydras and has 0.970x pooled work units (vs heur), so it is the first held-out
+candidate. H2 is running 33,600 games on fresh seeds 1,000,000+, across the same 17 decks as H1; the threshold is
+fixed before H2's results are read (`build/scratch/p18f/H2`). No adoption decision is justified from S22 alone.
