@@ -4030,6 +4030,7 @@ public:
     CertStance Certificate() const override
     { return { CertState::Implemented, "Own land-only board with fewer than four possible mana and more than three opposing library cards cannot win this turn." }; }
     const char* Name() const override { return "Gods"; }
+    std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
     bool ProvenWinlessThisTurn(const GameState& s, int controller) const override;
     std::vector<std::string> TutorCandidates(
         const GameState& s, int controller, const CardParams& pp) const override;

@@ -24502,6 +24502,24 @@ static int GodsDredgeRule(bool ignore_unpruned = false)
     return !ignore_unpruned && DecisionUnpruned() ? 0 : variant;
 }
 
+std::vector<ManaCost> GodsProvider::PaymentHoldUp(const GameState& s, int controller) const
+{
+    // DEFAULT ON; =0 disables. A Study paid with a countered green land can
+    // strand a named Loam continuation. Loam's land targets may arrive from
+    // that Study, so the named line's green bill is the relevant hold here.
+    // The shared payer changes its source only when the later bill stays payable.
+    static const bool s_hold = EnvOn("MTG_GODS_LOAM_GREEN_HOLD", true);
+    if (!s_hold || controller < 0 || controller >= static_cast<int>(s.players.size())
+        || g_line_unpaid_cost.green == 0) { return {}; }
+    const Player& p = s.players[controller];
+    bool loam = false;
+    for (const Card& c : p.hand) { loam |= c.m_name == "Life from the Loam"; }
+    if (!loam) { return {}; }
+    ManaCost green;
+    green.green = 1;
+    return {green};
+}
+
 // In this deck the only same-turn kill from an empty nonland board is a
 // four-mana Replenish. The three-mana Klothys has already missed its
 // beginning-of-main-phase trigger when cast, and Magus cannot tap on entry.
