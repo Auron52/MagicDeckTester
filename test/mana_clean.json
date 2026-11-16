@@ -9304,6 +9304,49 @@
      "seed": 30080000,
      "src": "0a64719fbc30f7a7c62da7870ece50fdeb545ebc",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 7,
+      "APPLY-DROP-ORDER": 2,
+      "CONTINUATION-DIFFERS": 48,
+      "DOMINATED-LAND": 10332,
+      "DROP-COVERED": 667,
+      "HIDDEN-INFO": 16,
+      "ORACLE-GAP": 1,
+      "PHANTOM": 17910
+     },
+     "commit": "c46afd025c39dd55fc597b65b2090c3fc2582574",
+     "date": "2026-11-16T12:55:11Z",
+     "decisions": 42656,
+     "deck": "decks/Shadowborn Apostle/Shadowborn Apostle.cod",
+     "deck_sha": "a23edb97dcaeb1e61888de6616f4f35299abf43d",
+     "game_index": 85000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 10,
+     "life_breakpoints": [],
+     "ms_off": 3487574,
+     "ms_on": 3878498,
+     "report": "logs/mana_clean/codex-shadowborn-residual-20261116/report.md",
+     "run": "codex-shadowborn-residual-20261116",
+     "seed": 30085000,
+     "src": "8f3e6e2bc6379e01e35107781f4cd0d5de83f49f",
+     "verdict": "issues"
     }
    ]
   },

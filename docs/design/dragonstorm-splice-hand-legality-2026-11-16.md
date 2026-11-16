@@ -51,3 +51,23 @@ Apex of Power while black or green mana must be reserved through an earlier
 generic payment. The report is
 `logs/mana_clean/codex-dragonstorm-splice-20261116/report.md`; the next fresh
 block is 62,000–66,999.
+
+Two default-off follow-up trials were dropped after focused replays. Ranking
+Lotus Bloom's crack color by a uniquely needed hand color did not affect seed
+30,060,428: the first Seething Song pays without a crack, so that color
+ranking is never reached at the point where the oracle cracks Bloom for
+black. The remaining group needs a payment-timing answer, not a different
+color tie-break. A second trial checked Dragonstorm's Ruby Medallion cast
+order against a real sequential payment at both the generic order fallback
+and the provider's earliest-Medallion-slot calculation. Seeds 30,057,377 and
+30,057,607 retained their order-drop flags. Both trial code changes were
+removed; no unvalidated behavior remains in source.
+
+The payment trace for seed 30,060,428 shows the deeper timing issue. The real
+payer casts the first Seething Song from Mountain plus Sandstone Needle, so
+its on-demand rule leaves Lotus Bloom uncracked. The oracle's payable line
+cracks Bloom for black during that Song, keeps black through the next red
+casts, and uses the newly played Territory for Karrthus's green pip. The
+oracle line is legal, but it asks for an early crack that the current
+user-directed on-demand policy declines. A user choice on whether visible
+later-cast need counts as on-demand is pending; no timing change is shipped.

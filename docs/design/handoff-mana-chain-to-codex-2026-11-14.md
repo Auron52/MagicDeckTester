@@ -27,6 +27,14 @@ drop-order flags / 12 oracle gaps. None is clean. Source and exact next
 blocks are in `logs/mana_clean/codex-mana-queue-20261115/report.md` and
 `test/mana_clean.json` (record commit `2422ffc27`).
 
+The fresh Shadowborn block 85,000–89,999 found seven payment drops, two
+order drops, and one oracle gap, with byte-identical oracle-on/off play. The
+oracle gap was a two-Lake Abhorrent Overlord payment: the engine's ordinary
+two-crack path kept the early-crack pin while the oracle cleared it. A
+script-only correction and focused unit assertion clear seed 30,089,424; the
+3,360-case Release unit suite passes. See
+`docs/design/shadowborn-two-lake-oracle-pin-2026-11-16.md`.
+
 The Gods Study → Loam green hold fixes the two focused payment drops, but
 failed the 5,000-game adoption bar: two slower games, none faster, and
 12.1% more recorded game time. It remains default off; the USER tradeoff

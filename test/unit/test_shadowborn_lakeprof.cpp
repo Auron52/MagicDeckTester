@@ -234,15 +234,18 @@ TEST_CASE("Mana oracle: a scripted Lake crack consumes the early-crack pin as th
     // payment option must leave the same pin (gate sb-victimclaim-20261110 ORACLE-GAP "a field not listed here").
     GameState s = BaseLp();
     s.battlefield.push_back(PermLp("Lake of the Dead", 60));
+    s.battlefield.push_back(PermLp("Lake of the Dead", 61));
     s.battlefield.push_back(PermLp("Lotus Bloom", 70));
     s.battlefield.push_back(PermLp("Swamp", 71));
     TurnSolver::PreTap crack; crack.name = "Lake of the Dead"; crack.num = 60; crack.sac_crack = true;
+    TurnSolver::PreTap crack2 = crack; crack2.num = 61;
     TurnSolver::PreTap lotus; lotus.name = "Lotus Bloom"; lotus.num = 70;
     TurnSolver::PreTap swamp; swamp.name = "Swamp"; swamp.num = 71;
     CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { crack }));          // no pin: nothing to consume
     s.scripted_early_ondemand_crack = true;
     CHECK(OracleOptionConsumesEarlyCrackPin(s, { crack }));
     CHECK(OracleOptionConsumesEarlyCrackPin(s, { swamp, crack }));
+    CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { crack, crack2 }));   // two Lakes use the ordinary loop
     CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { crack, lotus }));   // the ordinary crack: the pin stays
     CHECK_FALSE(OracleOptionConsumesEarlyCrackPin(s, { swamp }));          // no crack at all
 }

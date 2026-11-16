@@ -12080,10 +12080,10 @@ static std::string ApplyPreTapImpl(GameState& state, const TurnSolver::PreTap& t
 bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector<TurnSolver::PreTap>& taps)
 {
     if (!state.scripted_early_ondemand_crack) { return false; }
-    bool land_crack = false;
+    int land_cracks = 0;
     for (const TurnSolver::PreTap& t : taps)
     {
-        if (t.sac_crack) { land_crack = true; continue; }
+        if (t.sac_crack) { ++land_cracks; continue; }
         for (const Permanent& p : state.battlefield)
         {
             if (p.card.m_number != t.num || p.controller_index != state.active_player_index) { continue; }
@@ -12093,7 +12093,10 @@ bool OracleOptionConsumesEarlyCrackPin(const GameState& state, const std::vector
             break;
         }
     }
-    return land_crack;
+    // The pinned branch can commit only ONE land crack. A payment that needs
+    // two Lakes falls through to the ordinary crack loop, which leaves the
+    // pin standing (Shadowborn 30089424, two Lakes for Abhorrent Overlord).
+    return land_cracks == 1;
 }
 
 std::string ApplyHumanPreTap(GameState& state, const TurnSolver::PreTap& t)  { return ApplyPreTapImpl(state, t, true); }
