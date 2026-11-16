@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <deckname></deckname>
+    <comments></comments>
+    <zone name="main">
+        <card number="2" name="Island"/>
+        <card number="1" name="Trench Gorger"/>
+        <card number="4" name="Summon: Leviathan"/>
+        <card number="1" name="Sol Ring"/>
+        <card number="4" name="Utopia Sprawl"/>
+        <card number="4" name="Wild Growth"/>
+        <card number="4" name="Overgrowth"/>
+        <card number="4" name="Breeding Pool"/>
+        <card number="4" name="Misty Rainforest"/>
+        <card number="5" name="Forest"/>
+        <card number="1" name="Sin, Unending Cataclysm"/>
+        <card number="3" name="Worn Powerstone"/>
+        <card number="1" name="Lorthos, the Tidemaker"/>
+        <card number="3" name="Serpent of Yawning Depths"/>
+        <card number="2" name="Koma, World-Eater"/>
+        <card number="4" name="Spawning Kraken"/>
+        <card number="2" name="Hullbreaker Horror"/>
+        <card number="2" name="Brinelin, the Moon Kraken"/>
+        <card number="2" name="Kiora Bests the Sea God"/>
+        <card number="2" name="Whelming Wave"/>
+        <card number="2" name="Windswept Heath"/>
+        <card number="1" name="Flooded Grove"/>
+        <card number="1" name="Hedge Maze"/>
+        <card number="1" name="Flooded Strand"/>
+    </zone>
+</cockatrice_deck>
