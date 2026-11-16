@@ -449,3 +449,47 @@ is back above heur, and Alchemist (+0.0075, 0/3 at every F, +0.0050 under `_pnr`
   cold (heur's real pass k reuses pass k-1's rollouts through the rollout table) and that `rem0 - priced` charges
   those cold prices against the room. Test: in the same decisions, compare `p18_est[k]` with heur's real `c_k`
   (`_pverify` prices on a scratch meter and then runs heur, pairing each price with the real cost).
+
+## P18g restart (2026-11-16): cold prices confirmed; three further train screens fail
+
+The restart used the existing `p18-ladder` worktree and the same held train seeds as S15/S16. All arms were paired in
+one weighted, 32-worker batch per screen. The baseline's per-game `.wins` matched the earlier trace on every shared
+chunk; no shipped deck was changed. Artifacts are `build/scratch/p18f/S17` through `S19` in the primary checkout.
+These are small diagnostic screens (Hydras/Landfall/Melira 200 games each; Alchemist/EDF/Snow/Midrange Burn 100 each),
+not adoption samples. All CPU ratios below are pooled thread CPU for each arm, against heur on the same games.
+
+**Cold-price evidence.** In T3's paired first-turn traces, the gate's price exceeds heur's measured pass cost on
+177/185 Landfall depth-four decisions (median 1.35x, p90 1.99x); Hydras depth three: 80/99 (median 1.70x).
+The price is the cold pass this shape would pay, while heur's pass reads earlier rollouts from its cache. Thus
+`_phx` can refuse a pass heur would start even when the sample's own statistical error is small.
+
+| screen / arm | Landfall: delta, CPU | Hydras: delta, CPU | other failure |
+|---|---:|---:|---|
+| S17 no pre-refusal (`_pnr`) | +0.000, 1.423x | +0.000, 1.120x | Alchemist +0.010, Melira +0.005 |
+| S17 `_phx` from depth 3 | +0.010, 1.007x | +0.010, 0.884x | Alchemist/Melira/MB +0.010 |
+| S17 `_phx_phd4` | +0.010, 1.011x | +0.005, 0.952x | Alchemist +0.010 |
+| S17 `_phx_phd5` | +0.005, 1.168x | +0.000, 1.122x | Alchemist +0.010, Melira +0.005 |
+| S18 exact pass 2 (`_pb2`, no pre-refusal) | +0.015, 1.356x | +0.000, 0.941x | Alchemist +0.010, Melira +0.005 |
+| S18 `_pb2_phx_phd4` | +0.030, 0.931x | +0.005, 0.879x | Alchemist +0.010 |
+| S18 `_pb2_phx_phd5` | +0.030, 1.076x | +0.000, 0.949x | Alchemist +0.010 |
+| S19 minimum 10% samples (`_pmi10`) | +0.000, 1.472x | +0.000, 1.131x | Alchemist +0.010, Melira +0.005 |
+| S19 minimum 20% (`_pmi20`) | -0.005, 1.573x | +0.000, 1.160x | Alchemist +0.010, Melira +0.005 |
+| S19 `_pmi10_phx_phd5` | +0.005, 1.193x | +0.000, 1.139x | Alchemist +0.010, Melira +0.005 |
+
+S17 varied the earliest pass at which the free pre-refusal can fire. S18 ran pass two on rollouts exactly, using its
+measured cost to gate pass three and warm the cache before sampling deeper passes. S19 required 10% or 20% of an
+admitted pass's leaves to be sampled before the confidence test could stop; refusals still stop early. `_phd`, `_pb2`
+and `_pmi` are default-off experimental arm-key selectors. None clears the fleet bar; no held-out adoption A/B was
+started.
+
+**Four Landfall loss traces (S18 T4).** At seed 727123, heur's pass four cost 15,556 units and found T5. The gate's
+leafless pass four cost 8,040; its sampled price was 22,668 against a 17,556-unit admit line, so it committed pass
+three and won T6. Seed 727004: heur admitted pass five and won T6; the gate's leafless pass five alone cost 10,917
+against a 10,875-unit admit line and was refused, then it won T7. Seed 727039: `_phx_phd4` refused pass five before
+walking it and won T7; heur ran pass five and won T6. Seed 727144: `_phx_phd4` refused pass five, while heur's pass
+four found T5 and the gate's pass four found T6. All four reproduce the batch outcomes in single-game traces.
+
+The exact second pass and minimum sample share improved the cache context, but they did not fix the later cold-price
+and duplicated-interior cost at an acceptable price. The next candidate must avoid paying both the leafless walk and
+the rollout walk of the committing pass, or derive a warm-cost decision without refusing the depths heur actually
+enters. A further threshold sweep of `_phx` on the same cold prices is unlikely to fix both quality and cost.
