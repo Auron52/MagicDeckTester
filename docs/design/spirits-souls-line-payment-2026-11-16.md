@@ -41,5 +41,19 @@ all in seed 30,015,009 on a different cost: Souls cast from hand
 `{2}{W}` before Phantom `{W}{W}`. Oracle-on/off play was byte-identical;
 there were no enum gaps, oracle gaps, or caps. The gate record is
 `logs/mana_clean/codex-spirits-souls-line-20261116/report.md` and
-`test/mana_clean.json`. The hand-cast route needs a follow-up fix and a
-new fresh block.
+`test/mana_clean.json`. The hand-cast route has a follow-up held payment:
+with exactly three white providers (Chancery, one ordinary white land,
+and one white creature-only land), plus a nonwhite generic land, it
+reserves the latter two white providers for Phantom. Chancery's W/U bundle
+and the nonwhite land pay Souls. The new focused rollout/executor fixture
+fails with `MTG_SPIRITS_SOULS_LINE_HOLD=0` and passes with it on. Seed
+30,015,009 falls from ten drops to zero. The full Release unit suite
+passes 3,369 cases. On 2,000 new paired Spirits games (seeds
+30,020,000–30,021,999), both arms averaged 4.6220 loss-penalized turns;
+all win turns and play digests matched, with +0.01% work units. Logs are
+under `build/scratch/spirits_souls_hand_ab/`. The three earlier flashback
+gate repros still have zero misses. Spirits and two-headed Spirits combined
+smoke/regression pass all ten cells with no changed game or digest; all
+561 scenarios pass. Strict viewer replay has zero drift, divergence, or
+enumeration gaps across 864 references, and both suboptimal references
+remain beaten. A new fresh block is pending.

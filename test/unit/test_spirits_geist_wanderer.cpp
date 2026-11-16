@@ -344,6 +344,32 @@ TEST_CASE("Spirits keeps two white sources for White Orchid after Souls flashbac
     }
 }
 
+TEST_CASE("Spirits keeps Plains and Courtyard white after a Souls hand cast")
+{
+    static const SpiritsProvider spirits;
+    GameState s = GwBoard({ "Plains", "Azorius Chancery", "Watery Grave", "Secluded Courtyard" });
+    s.m_provider = &spirits;
+    s.battlefield.back().chosen_subtype_id = SubtypeRegistry::Instance().Id("Spirit");
+    s.players[0].hand.push_back(GwZone(kSouls, 40));
+    s.players[0].hand.push_back(GwZone("White Orchid Phantom", 60));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* line = GwFindPlan(plans, {{Action::Kind::CastFromHand, kSouls},
+                                                     {Action::Kind::CastFromHand, "White Orchid Phantom"}});
+    REQUIRE(line != nullptr);
+    REQUIRE(line->actions.size() == 2);
+    REQUIRE(line->actions[0].card_name.str() == kSouls);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, true);
+    const GameState exec = GwRunExecutor(s, *line);
+    for (const GameState* g : { static_cast<const GameState*>(&roll), &exec })
+    {
+        INFO("world: " << (g == &roll ? "rollout" : "executor"));
+        CHECK(GwFind(*g, "White Orchid Phantom") != nullptr);
+        CHECK(GwSpiritTokens(*g) == 2);
+        CHECK(g->spells_cast_this_turn == s.spells_cast_this_turn + 2);
+    }
+}
+
 TEST_CASE("Spirits spends Chancery blue on Vial before a two-white Phantom")
 {
     static const SpiritsProvider spirits;

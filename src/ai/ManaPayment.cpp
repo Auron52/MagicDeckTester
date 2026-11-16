@@ -9116,6 +9116,36 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
                  && black_white && other_generic)
         { mask |= 1ull << karoo_wu; }
     }
+    // The hand-cast Souls {2}{W} before Phantom {W}{W} has three white
+    // providers: Chancery, an ordinary white land, and one creature-only
+    // white land. This payment needs Chancery's W/U bundle plus a nonwhite
+    // generic source, leaving the other two white lands for Phantom. The
+    // ordinary scarce count sees three providers for two later pips and holds
+    // none; preserve both in a held-first attempt instead.
+    if (SpiritsSoulsLineHoldOn() && spirits_line && !for_creature && line_live
+        && cost.generic == 2 && cost.white == 1 && cost.ManaValue() == 3
+        && need[0] >= 2 && cnt[0] == 3)
+    {
+        int karoo_wu = -1, creature_white = 0;
+        bool nonwhite_generic = false;
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            bool w = false, u = false;
+            for (Color c : EffectiveProducesFor(state, active, *d, &p))
+            { w |= c == Color::White; u |= c == Color::Blue; }
+            if (d->params.etb_bounce_land && d->params.produces_amount == 2 && w && u)
+            { karoo_wu = i; }
+            if (d->params.colored_creature_only && w) { ++creature_white; }
+            if (p.card.IsLand() && !d->params.etb_bounce_land && !w)
+            { nonwhite_generic = true; }
+        }
+        if (karoo_wu >= 0 && creature_white == 1 && nonwhite_generic)
+        { mask |= prov[0] & ~(1ull << karoo_wu); }
+    }
     return mask;
 }
 

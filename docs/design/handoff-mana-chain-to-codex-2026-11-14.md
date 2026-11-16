@@ -11,8 +11,14 @@ flashback hold (`codex-spirits-souls-line-20261116`) found ten payment
 drops in one signature: hand-cast Lingering Souls `{2}{W}` before White
 Orchid Phantom `{W}{W}` on seed 30,015,009. Oracle-on/off play is
 byte-identical; there are no other issues. The record is in the gate
-report and `test/mana_clean.json`. This route needs a follow-up held
-payment and another fresh block.
+report and `test/mana_clean.json`. The follow-up held route clears exact
+seed 30,015,009 (ten drops to zero); its focused rollout/executor test
+fails with the switch off and passes with it on, and all 3,369 Release
+unit cases pass. Another 2,000 paired Spirits games change no win turn
+or play digest (+0.01% work). The three old flashback repros remain clear;
+Spirits/2HG combined smoke/regression pass all ten cells, 561 scenarios
+pass, and strict viewer replay has no gap or drift across 864 references.
+A fresh block remains.
 
 The 61 Spirits payment drops on games 10,000–14,999 now clear in all
 three exact repro games. Souls flashback's generic pip needed a different
