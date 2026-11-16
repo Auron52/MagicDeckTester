@@ -26351,6 +26351,51 @@ int PreventDamageProvider::CastOrderRank(const GameState& s, const CardDefinitio
     return GenericProvider::CastOrderRank(s, def);
 }
 
+void PreventDamageProvider::ArrangeCastOrder(const GameState& s,
+                                             const std::vector<Action>& actions,
+                                             std::vector<int>& order) const
+{
+    static const bool s_fallback = EnvOn("MTG_PD_PAYABLE_QUAKE_ORDER", true); // DEFAULT ON; =0 restores the ranked order
+    // The verified misses all start at two life. Bound the exact walk to the
+    // fragile states: the unrestricted 5,000-game trial changed the same three
+    // plays but spent 4.6% more recorded time than the off arm.
+    if (!s_fallback || order.size() < 2 || order.size() > 3
+        || s.ActivePlayer().life > 4) { return; }
+    auto quake = [&](int i)
+    {
+        const Action& a = actions[static_cast<std::size_t>(i)];
+        return a.kind == Action::Kind::CastFromHand && a.card_name == "Rolling Earthquake";
+    };
+    if (std::none_of(order.begin(), order.end(), quake)
+        || TurnSolver::OrderPaysSequentially(s, actions, order)) { return; }
+
+    // Keep every other cast in the user's preferred relative order. Among
+    // reachable placements, choose the fewest adjacent moves of a Quake.
+    std::vector<int> keys = order;
+    std::sort(keys.begin(), keys.end());
+    std::vector<int> best;
+    int best_moves = 100;
+    do
+    {
+        if (keys == order) { continue; }
+        std::vector<int> old_other, new_other, old_quakes, new_quakes;
+        for (int i : order) { (quake(i) ? old_quakes : old_other).push_back(i); }
+        for (int i : keys)  { (quake(i) ? new_quakes : new_other).push_back(i); }
+        if (old_other != new_other || old_quakes != new_quakes) { continue; }
+        int moves = 0;
+        for (std::size_t j = 0; j < keys.size(); ++j)
+        {
+            const auto it = std::find(order.begin(), order.end(), keys[j]);
+            for (std::size_t k = j + 1; k < keys.size(); ++k)
+            { moves += it > std::find(order.begin(), order.end(), keys[k]); }
+        }
+        if (moves >= best_moves || !TurnSolver::OrderPaysSequentially(s, actions, keys)) { continue; }
+        best = keys;
+        best_moves = moves;
+    } while (std::next_permutation(keys.begin(), keys.end()));
+    if (!best.empty()) { order.swap(best); }
+}
+
 // ---- PreventDamageProvider::PutTargetPolicy / PutTargetOk ------------------
 // Green Sun's Zenith (the Chord-class put-tutor enumerator, SEARCH ONLY -- human play un-narrows):
 // USER 2026-09-29, "we can also skip getting Dina with Green Sun's Zenith when one is out already
