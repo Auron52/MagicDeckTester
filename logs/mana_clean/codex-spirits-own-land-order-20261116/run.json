@@ -1,0 +1,23 @@
+{
+ "name": "codex-spirits-own-land-order-20261116",
+ "src": "811757cbf48938da54591a925ca7c84ec1fc121a",
+ "commit": "64ca82693b5e87d1c045fd27d0ac9fe8a317b21e",
+ "minutes": 30,
+ "started": "2026-11-16T22:58:44Z",
+ "decks": [
+  {
+   "key": "spirits",
+   "deck": "decks/Spirits/Spirits.cod",
+   "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+   "profile": "decks/Spirits/Spirits.profile.json",
+   "game_index": 25000,
+   "seed": 30025000,
+   "games": 5000,
+   "chunk": 105,
+   "est_ms_per_game": [
+    1099.5,
+    967.0
+   ]
+  }
+ ]
+}

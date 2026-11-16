@@ -83,4 +83,14 @@ smoke and regression batch passes all ten cells with no per-game change.
 All 561 scenarios pass. Strict viewer replay reports zero play drift,
 board divergence, or enumeration gaps across 864 references; both
 suboptimal references remain beaten. The full Release unit suite passes
-3,370 cases and 3,614,735 assertions. A fresh PGO gate remains.
+3,370 cases and 3,614,735 assertions.
+
+The fresh PGO gate on games 25,000–29,999 has zero missed plans, order
+drops, enum gaps, or caps. It reports three `ORACLE-GAP` flags, all in
+seed 30,025,459, and oracle-on/off play is byte-identical. The engine
+pays a Millicent → White Orchid Phantom line by tapping Hallowed Fountain
+and leaving Secluded Courtyard untapped. The nearest oracle outcome taps
+Courtyard and leaves Fountain untapped; neither board covers the other
+under the oracle's resource key. The issue is now confined to that
+payment branch. See
+`logs/mana_clean/codex-spirits-own-land-order-20261116/report.md`.
