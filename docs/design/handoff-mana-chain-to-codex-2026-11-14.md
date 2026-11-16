@@ -68,6 +68,19 @@ oracle-on/off play-identical with zero APPLY-DROP, 12 APPLY-DROP-ORDER, and
 59 ORACLE-GAP flags. The next block is 72,000–76,999. See
 `docs/design/prevent-damage-multi-earthquake-hold-2026-11-16.md`.
 
+Prevent Damage's low-life Earthquake cast-order fallback now moves only
+visible Earthquakes earlier when the preferred order cannot pay a two- or
+three-cast set. It clears all three focused order-drop signatures. A
+5,000-pair Release A/B changed three plays and no win turns; the narrowed
+default-on form has effectively flat work and recorded time. All 3,355
+unit cases passed, strict viewer replay had zero drift across 864 references,
+and a same-binary `=0` regression control showed zero win-turn differences.
+The fresh PGO gate 72,000–76,999 was oracle-on/off play-identical with zero
+APPLY-DROP, APPLY-DROP-ORDER, or ENUM-GAP flags. It found 135 ORACLE-GAP
+and five UNMODELED flags, so the deck remains beta. The next block is
+77,000–81,999. See
+`docs/design/prevent-damage-payable-quake-order-2026-11-16.md`.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

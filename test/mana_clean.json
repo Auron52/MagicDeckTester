@@ -8170,6 +8170,48 @@
      "seed": 30067000,
      "src": "b9ef82fc48d019ffe3c83fb1f73f5d15cd7e680c",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 88,
+      "DOMINATED-LAND": 9463,
+      "DOMINATED-LIFE": 17517,
+      "DROP-COVERED": 6,
+      "ORACLE-GAP": 135,
+      "PHANTOM": 276,
+      "UNMODELED": 5
+     },
+     "commit": "8367465c1d5803147699dff6f12d377a714bcdb3",
+     "date": "2026-11-16T07:27:26Z",
+     "decisions": 49471,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 72000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 140,
+     "life_breakpoints": [],
+     "ms_off": 4106579,
+     "ms_on": 13849939,
+     "report": "logs/mana_clean/codex-pd-payablequake-20261116/report.md",
+     "run": "codex-pd-payablequake-20261116",
+     "seed": 30072000,
+     "src": "aca06d7b86da2e53a4dd5f52395041a904dd2c54",
+     "verdict": "issues"
     }
    ]
   },

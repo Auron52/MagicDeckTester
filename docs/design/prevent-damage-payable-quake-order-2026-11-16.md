@@ -48,4 +48,10 @@ committed ground-truth mismatch in `pd_regression_d5_s2002` (game 14 turns
 **zero win-turn differences** from the default-on arm, including that game;
 only three depth-zero play digests changed. No ground truth was accepted.
 
-A fresh 5,000-game mana-clean gate is still owed after this source commit.
+The fresh PGO mana-clean gate `codex-pd-payablequake-20261116` on game
+indices 72,000–76,999 was oracle-on/off play-identical. It found **zero
+`APPLY-DROP`, `APPLY-DROP-ORDER`, and `ENUM-GAP`** flags. The remaining
+140 issues are 135 `ORACLE-GAP` flags across 30 signatures and five
+`UNMODELED` flags in one payment-enumeration-cap signature. The next fresh
+Prevent Damage block is 77,000–81,999. Its report is
+`logs/mana_clean/codex-pd-payablequake-20261116/report.md`.
