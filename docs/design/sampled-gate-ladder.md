@@ -845,3 +845,14 @@ but had 0 earlier / 1 later, so it stays on its current ladder. The later game w
 gate pre-refused pass five, while the bare ladder's pass five cost only 11 units after a
 turn-five result at pass four. This is a concrete example of the quality risk in a cold
 final-pass cost prediction.
+
+### Shared-tip smoke audit with Boars adoption
+
+The final P18 option plus `Boars.value.json` was built at shared parent `8cd0bbf23` and run
+through `test/regression.sh --smoke`: 219 jobs / 69,615 games, 180 ground-truth passes and
+39 mismatches. All Boars smoke rows passed, including their play digests. A separate binary
+built from the exact `8cd0bbf23` parent replayed the 39 mismatched jobs and two passing
+canaries from the P18 checkout with identical deck/profile inputs. All 41 jobs matched the
+P18 binary in every per-game win file, job digest, and charged-unit total. The 39 mismatches
+were already present on the shared parent; P18 caused no additional smoke drift, and no
+ground truth was rebaselined.
