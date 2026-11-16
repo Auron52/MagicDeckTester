@@ -79,7 +79,9 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    (W/B/R have no consumer: sound fold), plus a default-ON one-option prune to BLUE (=0 restores {U, G}
    as searched branches). Viewer keeps the full choose_color list. **Confirmed (USER 2026-11-16):** *"In
    fact, we should try a prune to always use blue."* No state exceptions; Stage 5 A/Bs always-blue vs
-   searched {U, G} and reports the result to the USER.
+   searched {U, G} and reports the result to the USER. **USER 2026-11-16:** *"(and to be fair, if we need
+   to build an exception for a specific case we probably can just do that rather than dropping the
+   prune)"* — a measured problem case gets a narrow exception; the prune stays.
 
 ## Approved deferrals
 
