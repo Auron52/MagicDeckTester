@@ -1949,17 +1949,39 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
     // A CREATURE spell spends the creature-only reserve FIRST (it can pay nothing else, so using it
     // first is never worse); a noncreature payment never touches it. Empty for every deck without a
     // multi-yield creature_mana_only source -> byte-identical.
-    // {C} before `wild` on a generic pip (GenericCFirstScope, SpellEffects.h): a sound fold unless the deck can
-    // spend {C} on a {C} pip (deck_spends_c_pip, EDF) or the {C} is Generator Servant's haste-tagged unit
-    // (the tag rides the GENERAL float only, so the creature-only reserve is uncapped).
-    // In a {C}-pip deck (EDF) only the PREPAY'S KEPT {C} goes first (GameState::floating_prepay_c: the units the
-    // historical booking put in `wild`, so they drain exactly where they used to); every other {C} keeps the
-    // wild-first order there.
+    // {C} before `wild` on a generic pip (GenericCFirstScope, SpellEffects.h) saves flexible mana. Generator
+    // Servant's haste-tagged {C} is excluded (the tag rides the GENERAL float only). In EDF, a visible hand,
+    // board, or Wish finisher that needs a {C} activation keeps the wild-first order; otherwise ordinary {C}
+    // goes first as it does in every other deck. The prepay's kept {C} always goes first, as historically.
     const bool cpip_deck = state.deck_spends_c_pip;
     int prepay_c = cpip_deck ? PrepayKeptC(state) : 0;
+    // DEFAULT ON; =1 restores EDF's old wild-first generic payment even with no visible {C} sink.
+    static const bool s_edf_visible_c_first = !EnvOn("MTG_LEGACY_EDF_WILD_FIRST");
+    bool hold_visible_c = cpip_deck;
+    const bool c_first_relevant = cost.generic > 0
+        && ((state.floating_mana.colorless > HasteFloatUnits(state) && state.floating_mana.wild > 0)
+            || (for_creature && state.floating_creature_mana.colorless > 0
+                && state.floating_creature_mana.wild > 0));
+    if (cpip_deck && s_edf_visible_c_first && c_first_relevant)
+    {
+        hold_visible_c = BoardHasColorlessPipSink(state, active);
+        if (!hold_visible_c)
+        {
+            for (const Card& h : state.players[static_cast<std::size_t>(active)].hand)
+            {
+                if (CardHasColorlessPipActivation(state, active, h)) { hold_visible_c = true; break; }
+            }
+        }
+        if (!hold_visible_c)
+        {
+            ManaCost finisher_cost;
+            hold_visible_c = PendingComboFinishCost(state, active, &finisher_cost)
+                          || ColorlessPipSinkReachable(state, active);
+        }
+    }
     if (for_creature && state.floating_creature_mana.Total() > 0)
     {
-        const int cap = cpip_deck ? std::min(prepay_c, state.floating_creature_mana.colorless)
+        const int cap = hold_visible_c ? std::min(prepay_c, state.floating_creature_mana.colorless)
                                   : state.floating_creature_mana.colorless;
         GenericCFirstScope _gcf(cap);
         {
@@ -1967,7 +1989,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
             SpendFloatingTowardCost(state.floating_creature_mana, cost);
         }
         if (pwt_cre_live) { PrepayWildTrueStore(state, 1, pwt_cre); }
-        prepay_c -= cap - t_generic_c_first;
+        prepay_c = std::max(0, prepay_c - (cap - t_generic_c_first));
     }
     // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
     // {X}) spends it before the general float -- it can pay nothing else. Empty for every deck
@@ -1990,7 +2012,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         const int fgh = std::min(t_float_generic_hold, cost.generic);
         cost.generic -= fgh;
         const int untagged_c = state.floating_mana.colorless - HasteFloatUnits(state);
-        const int cap = cpip_deck ? std::min(prepay_c, untagged_c) : untagged_c;
+        const int cap = hold_visible_c ? std::min(prepay_c, untagged_c) : untagged_c;
         {
             GenericCFirstScope _gcf(cap);
             {
@@ -2002,7 +2024,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                 SpendFloatingTowardCost(state.floating_mana, cost);
             }
             if (pwt_gen_live) { PrepayWildTrueStore(state, 0, pwt_gen); }
-            prepay_c -= cap - t_generic_c_first;
+            prepay_c = std::max(0, prepay_c - (cap - t_generic_c_first));
         }
         // MTG_PREPAY_WILD_AUDIT=2: one line per payment that met a wrong-colour unit (violation or refusal).
         if (PrepayWildAuditLevel() >= 2 && g_real_resolution && (pwt_gen_live || pwt_cre_live))

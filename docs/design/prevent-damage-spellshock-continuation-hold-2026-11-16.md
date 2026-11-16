@@ -46,3 +46,14 @@ or `CAPPED-DECISION` flags. Eight `ORACLE-GAP` flags remain in four signatures
 `CAPPED` flags in three late-game signatures. The deck remains beta; the next
 untouched block is 92,000–96,999. The full report is
 `logs/mana_clean/codex-pd-spellshock-20261116/report.md`.
+
+The two capped seeds were replayed separately with the audit-only
+`MTG_MANA_ORACLE_NODES_RETRY=400000`. Seed 30,090,056 finished all ten retried
+plans with zero caps or gaps (1,196,772 applies, 53,592 recorded oracle ms).
+Seed 30,090,194 finished all 52 retried plans with zero caps or gaps
+(2,080,406 applies, 95,933 recorded oracle ms). The seven gate flags are
+finite audit breadth; there is no evidence from these replays for changing
+the engine's payment rule. Logs are `cap400k_90056.*` and `cap400k_90194.*`
+under `build/scratch/pd_spellshock_ab/`. The audit's default retry ceiling
+remains 200,000 applies because increasing it for every late-game plan would
+raise the cost of routine gates.

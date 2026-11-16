@@ -1661,10 +1661,11 @@ struct HoldColorlessScope
 //   * a deck that can spend {C} on a {C} pip (GameState::deck_spends_c_pip: Eldrazi Displacer's {2}{C},
 //     Essence Depleter, Dimensional Infiltrator -- EldraziDisplacerFlicker). USER 2026-11-04: "Pay generic
 //     with Colourless is good EXCEPT for EDF. In that deck you need to be very careful with that." There
-//     the {C} may be the bank for a later activation, so the old wild-first order stays for every {C} EXCEPT
-//     the prepay's kept {C} (GameState::floating_prepay_c): those units used to be booked `wild` and drained
-//     first, so draining them first is the old order exactly (EDF smoke d0 gi316/gi486: a Brushland {C} left
-//     as `colorless` refused Emiel's {W}{W}).
+//     the {C} may be the bank for a visible later activation, so EDF keeps wild-first while a {C} sink is
+//     on the board, in hand, or reachable as a Wish finisher. With no such visible sink, {C} goes first.
+//     The prepay's kept {C} (GameState::floating_prepay_c) always goes first: those units used to be booked
+//     `wild` and drained first, so this preserves the old order (EDF smoke d0 gi316/gi486: a Brushland {C}
+//     left as `colorless` refused Emiel's {W}{W}).
 //   * a Generator Servant HASTE-TAGGED {C} (HasteFloatUnits): it carries "the creature gains haste", so it
 //     is not interchangeable with wild for a later creature spell (Niv smoke d0 gi436: draining it first
 //     cast the second Generator Servant without haste). Only the UNTAGGED {C} goes first.

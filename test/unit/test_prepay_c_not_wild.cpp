@@ -158,8 +158,8 @@ TEST_CASE("prepay: a {C} from a source that could make the colour still pays the
 // GENERIC PAYS {C} BEFORE `wild` (GenericCFirstScope; Slivers smoke d0 gi190). With the physical {C} now
 // booked `colorless`, the old wild-first generic order spent the FLEXIBLE unit on a generic and stranded the
 // {C}, refusing a later colour pip (Predatory Sliver's replicate {G}) the board pays. In a deck that cannot
-// spend {C} on a {C} pip, generic takes the untagged {C} first; EDF (deck_spends_c_pip) and Generator
-// Servant's haste-tagged {C} keep the old order.
+// spend {C} on a {C} pip, generic takes the untagged {C} first; EDF holds it for a visible {C}
+// sink, and Generator Servant's haste-tagged {C} keeps its old order.
 namespace
 {
 GameState FloatOnlyCw(bool deck_spends_c_pip)
@@ -188,9 +188,39 @@ TEST_CASE("payer: a generic pip spends the {C} before the wild, so a later {G} i
     CHECK(TapForCostDirect(s, GreenCw(), /*for_creature=*/true));
 }
 
-TEST_CASE("payer: a deck that spends {C} on a {C} pip (EDF) keeps the wild-first generic order")
+TEST_CASE("payer: EDF spends {C} first only with no visible activation sink")
 {
     GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    const bool legacy = EnvOn("MTG_LEGACY_EDF_WILD_FIRST");
+    CHECK(s.floating_mana.colorless == (legacy ? 1 : 0));
+    CHECK(s.floating_mana.wild == (legacy ? 0 : 1));
+}
+
+TEST_CASE("payer: EDF preserves {C} for a visible Eldrazi Displacer loop")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    PutCw(s, "Eldrazi Displacer", 400);
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_mana.wild == 0);
+}
+
+TEST_CASE("payer: EDF preserves {C} for a visible opponent finisher")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    s.players[0].hand.push_back(CardCw("Essence Depleter", 401));
+    REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_mana.wild == 0);
+}
+
+TEST_CASE("payer: EDF preserves {C} for a Living Wish finisher")
+{
+    GameState s = FloatOnlyCw(/*deck_spends_c_pip=*/true);
+    PutCw(s, "City of Brass", 402);
+    s.players[0].hand.push_back(CardCw("Living Wish", 403));
+    s.players[0].sideboard.push_back(CardCw("Essence Depleter", 404));
     REQUIRE(TapForCostDirect(s, GenericCw(1), /*for_creature=*/false));
     CHECK(s.floating_mana.colorless == 1);
     CHECK(s.floating_mana.wild == 0);
