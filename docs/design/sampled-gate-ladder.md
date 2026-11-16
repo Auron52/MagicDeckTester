@@ -536,3 +536,88 @@ known losing branch but yields no work saving there. The small CPU differences o
 `_pa195` retains more sampled work on Hydras and has 0.970x pooled work units (vs heur), so it is the first held-out
 candidate. H2 is running 33,600 games on fresh seeds 1,000,000+, across the same 17 decks as H1; the threshold is
 fixed before H2's results are read (`build/scratch/p18f/H2`). No adoption decision is justified from S22 alone.
+
+### H2 held-out: adaptive pass-one route is insufficient
+
+H2 completed on the planned 33,600 games. `_pa195` has lower CPU on most decks, but fails the per-deck quality bar:
+Alchemist +0.0020 (1 better / 3 worse), EDF +0.0030 (0/3), Hydras +0.0004 (3/6). EDF's CPU is also 1.056x even though
+its work units are 0.969x. Landfall and Melira are exact parity in work units and win turns, as intended; the broad
+decks have no quality loss (Angels improves by one game). Exact figures: `python3 build/scratch/p18d/s9sum.py
+build/scratch/p18f/H2 heur g_pb1_plc_prr_prx2_pfr20_pa195`.
+
+The twelve H2 worse games were replayed one game per job with `MTG_P16_TRACE=1` (`build/scratch/p18f/T6`). The
+causes differ: Alchemist 480/563 and EDF 25 search deeper than heur on T1, while Hydras 1338/2570/7557 stop
+shallower than heur after a cold sampled price. A deeper pass is not automatically better here: it changes the
+line chosen under the finite budget and can lose a turn. T7 replayed those same seeds with an exact pass two:
+`_pb2` recovers all three EDF losses, Alchemist 818, and Hydras 7953, but five Hydras losses remain. Adding
+`_phx` recovers Alchemist 480/563 and Hydras 7487 but makes Hydras 7953 worse again. The next test makes pass three
+exact as well (`_pb3`, screen-only), then samples deeper passes; T8 runs those twelve diagnostic games first.
+
+T8 (`_pb3`) recovers ten of the twelve H2 losses without `_phx`; adding `_phx` reintroduces Hydras 7953. The two
+remaining losses are Hydras 2570 and 7487. T9's decision traces show different causes. In 2570, depth four's sampled
+price is 22,988 +/- 3,996 against a 14,931 admit line: its two-standard-error lower bound misses by only 65 units,
+so a slightly wider interval may force more samples and admit. In 7487, depth five's leafless walk costs 8,378 with
+no leaf reached, then the rollout pass at the same depth consumes additional work and aborts to the previous line;
+the ordinary ladder runs that pass once and commits it. `_pfd` runs the final depth directly on rollouts, without the
+extra leafless walk. T10 tests `_pb3_pfd` with z=2,3,4 on the twelve losing seeds before a broader screen.
+
+T10: `_pfd` alone does not recover 7487; the first-wave final-depth pass completes, but the second compound-wave
+search commits only depth four. With the ordinary ladder it reaches depth five and verifies the T5 line. The first
+wave's skipped depth-four rollouts are useful cache warming for that second wave. Increasing z from 2 to 4 still
+refuses Hydras 2570 after all 64 available sample leaves: its point price is 21,476 against a 14,931 line, but
+the 4-SE interval includes the line. `_pua` leans admit at the sample ceiling only when that interval overlaps;
+T13 recovers 2570 at z=4. With `_pb3_pfd_pua_pz40`, eleven of twelve H2 worse seeds now match heur; 7487 remains.
+
+S23 (the seven-deck train screen, same 4,000 games as S22) is a cost failure despite zero net quality delta on all
+seven. Unconditional exact pass three plus `_pfd` costs 1.027x CPU on Alchemist, 1.004x on EDF and 0.969x on Hydras;
+adding `_pua_pz40` costs 1.030x, 0.991x and 1.057x respectively. The exact warm-up needs to be conditional.
+`_pb3r20` runs pass three exactly only when the exact c2/c1 cost ratio is at most 2.0; otherwise it samples at that
+depth. This is measured within the decision (not a deck label): Hydras' shallow-refusal losses have ratios 0.7-1.8,
+while Alchemist's over-deep losses have ratios about 4. `_phx` prevents those over-deep continuations using the
+priced start gate. T14 and S24 test that combination, with `_pfd` retained.
+
+S24: conditional pass-three at c2/c1 <= 2.0 saves 4-5% CPU on Hydras and 3% on EDF, but Alchemist seed 15 still
+wins one turn later (Alchemist +0.010 on 100 games). `_phx` adds a Hydras loss without fixing seed 15. T15 shows
+why seed 15 is subtle: both arms search depth three and choose the same T1 plan, but sampling before the exact
+fallback changes the rollout cache. On T2, the sampled arm's exact depth-two pass costs 1,178 vs heur's 251, so
+its cost-ratio gate refuses depth three; heur's depth-three pass finds the T5 line. This is an across-turn cache
+effect, not simply a T1 depth mismatch.
+
+S25 widened the exact-pass-three band to c2/c1 <= 3.0 or 3.5. Both restore parity on all seven train decks, and
+Hydras remains below heur CPU (0.971x at 3.0); Alchemist rises to 1.032x CPU and 1.039x work units. The extra
+Alchemist work is concentrated in a few chunks, some with high c2/c1 where an exact terminal pass should be
+cheaper than a leafless walk plus sampling. `_pag<10R>` continues the ordinary ladder after exact pass two when
+c2/c1 >= R, before any sampled pass. S26 screens R=3.0/3.5/4.0 with the exact-pass-three band at 3.0.
+
+S26's high-growth exact route is a cost failure: Alchemist stays 1.046-1.052x CPU and 1.040-1.041x work units at
+R=3.0/3.5/4.0, with no quality loss. The excess therefore comes after an exact pass three in the lower-growth
+decisions. T17 traced the 100 Alchemist train games with `_pb3r30_pfd`: the largest extra decision is seed 720044
+T1, 44,043 units vs heur's 3,998. Heur's H4 costs 752 with no rollout leaf and warms H5 to 135; the sampled mode's
+W4 also costs 752 but uses a separate leafless line cache, so its H5 runs cold for 40,180 units. This repeats in
+several Alchemist seeds. `_pzn` handles exactly this zero-leaf case: after W4 offers no sample, it runs H4 exactly
+and lets the real cost gate H5. In T18, seed 720044 falls to 4,031 units: W4 752, H4 only 33 with the warmed
+interior, H5 135. Same win turn as heur.
+
+S27: `_pb3r30_pfd_pzn` cuts Alchemist to 1.015x work units / 1.022x CPU from 1.039x / 1.031x; EDF is 0.994x
+units / 0.968x CPU, Hydras 0.963x / 0.950x. Quality is level on all seven train decks (Midrange Burn improves
+one game). At `_pb3r20`, Alchemist CPU is 0.998x but seed 15 loses a turn again. The remaining Alchemist overhead
+usually has an exact depth-three rollout predicting a win only two turns beyond its horizon. `_pwn<N>` routes such
+near wins to exact depth four BEFORE the leafless walk; S28 tests N=1/2/3 with `_pb3r30_pfd_pzn`.
+
+S28: near-win exact continuation keeps all seven decks quality-neutral (Midrange Burn one better) and cuts
+Alchemist's 1.015x work units to 1.003x at `_pwn3`, but Hydras' saving falls from 0.963x to 0.996x units. At
+`_pwn1` Hydras remains 0.961x but Alchemist is 1.015x. The remaining Alchemist cost includes over-deep pass five
+when exact pass three predicted a win far beyond its horizon (seed 720032: p3 predicts T9, p18 prices pass four
+5,743 units, then pays 19,656 for H5; heur commits H4 at 6,923). `_phx` can refuse that depth-five pass before
+walking it. Its earlier Hydras loss at seed 710163 was a FALSE depth-four pre-refusal on a cold pass-three price
+(15,920 vs 12,166 line, while heur's actual pass-three cost admits depth four). `_phw<N>` retains `_phx`'s free
+refusal after an exact pass three only when that pass predicted a win more than N turns beyond its horizon; a
+near-win decision skips the risky pre-refusal at depth five. S29 screens `_phx_phw3` with `_pwn1/2/3`.
+
+S29 is quality-neutral on all seven train decks (Midrange Burn improves one game). At `_pwn2`, CPU/work units vs
+heur are: Hydras 0.950/0.958x, Alchemist 1.014/1.015x, EDF 0.985/0.994x, Snow 1.002/0.997x, Midrange Burn
+0.999/0.992x; Landfall/Melira remain exact parity in units. `_pwn3` moves Alchemist to 1.008/1.004x but gives back
+most Hydras savings (0.991/0.994x). These are near parity on the troublesome decks, so no adoption is justified
+from the 100-200-game train counts. H3 runs both `_pwn2` and `_pwn3` against one heur baseline on fresh seeds
+1,400,000+ across 17 decks (50,400 games total); the decision will use per-deck quality and paired CPU, not the
+individual diagnostic seed outcomes.

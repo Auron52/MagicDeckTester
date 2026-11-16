@@ -102242,8 +102242,8 @@ namespace p18
     };
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
-                         nocredit = false, asym = false, rx = false, b1 = false, b2 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8, hxd = 3, mid = INT_MAX; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0; };
+                         nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102334,9 +102334,39 @@ namespace p18
           if (p != std::string::npos) { o.hx = true; const double f = std::atof(k.c_str() + p + 4) / 10.0; o.hxf = f > 0.0 ? f : 1.0; } }
         // _phd<N> (screen only): leave shallow passes to the sampled price before pre-refusing deeper ones.
         { const std::size_t p = k.find("_phd"); if (p != std::string::npos) { o.hxd = std::max(3, std::atoi(k.c_str() + p + 4)); } }
+        // _phw<N> (screen only): after an exact pass three, do not let a cold price pre-refuse the final pass
+        // when that exact line already predicts a win within N turns past its horizon. Farther wins retain the
+        // free pre-refusal, which avoids an expensive fifth pass on interior-heavy decks.
+        { const std::size_t p = k.find("_phw"); if (p != std::string::npos) { o.hw = std::max(0, std::atoi(k.c_str() + p + 4)); } }
         // _pb2 (screen only): run pass 2 on rollouts, so its true cost and cache warm pass 3's price.
         o.b2 = k.find("_pb2") != std::string::npos;
+        o.b3 = k.find("_pb3") != std::string::npos;
+        if (o.b3) { o.b2 = true; }
         if (o.b2) { o.b1 = true; }
+        // _pb3r<10R> (screen only): exact pass three only when the measured pass-two/pass-one cost growth is
+        // small. A fast-growing tree is likely to commit at three, where sampling it adds a duplicate walk;
+        // a slow-growing tree is likely to supersede three and benefits from its rollout cache at depth four.
+        num("_pb3r", o.b3r);
+        // _pag<10R> (screen only, with _pb2): a high measured c2/c1 ratio makes pass three likely to be
+        // terminal. Evaluate it exactly and continue the ordinary ladder; there is little superseded rollout
+        // work to save, and a leafless pass would repeat its tree before committing it.
+        num("_pag", o.ag);
+        // _pfd (screen only): a final pass has no successor to price. Run it once with rollouts instead of
+        // walking its interior leafless, sampling, and then walking the same interior again to commit.
+        o.fd = k.find("_pfd") != std::string::npos;
+        // _pua (screen only): at the reservoir ceiling, an unresolved refusal admits the pass. The sampled
+        // price is a biased cold estimate; a wrong refusal loses a searched depth, while an admit remains bounded
+        // by the ordinary pass overrun guard. Fully enumerated leaf sets still use their exact price.
+        o.ua = k.find("_pua") != std::string::npos;
+        // _pzn (screen only): after an exact pass three, a leafless pass four with no offered leaf has no
+        // sample to price. Run pass four on rollouts so its ordinary line cache can warm pass five, then let
+        // its exact cost decide the final depth. The leafless walk was already paid but often costs far less
+        // than a cold final pass (Alchemist seed 720044: H5 40k cold vs 135 after exact H4).
+        o.zn = k.find("_pzn") != std::string::npos;
+        // _pwn<N> (screen only, with exact pass three): if its rollout predicts a win N turns or less beyond
+        // its horizon, continue exactly at depth four. Such nearby wins often make the next pass terminal or
+        // leave it with no fresh leaf, so pricing it leafless repeats work and starves the following pass's cache.
+        { const std::size_t p = k.find("_pwn"); if (p != std::string::npos) { o.wn = std::max(0, std::atoi(k.c_str() + p + 4)); } }
         // _paf<pct> (screen only, with _pb2): when the exact depth-two pass spends too little of its work in
         // rollouts, a leafless walk at the next depth is unlikely to save enough to pay for itself. Continue the
         // ordinary ladder from depth three, using the two exact costs already measured; no sampled pass was run.
@@ -111178,6 +111208,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool p18_free_rx = false;       // _pfx: a free refusal at pass k >= 3 hands the decision to the heuristic ladder
         bool p18_force2 = false;        // _pb1: the heuristic ladder's bootstrap admitted pass 2
         bool p18_k2_complete = false;   // _pb2: pass 2 can commit directly if a later price refuses
+        bool p18_k3_complete = false;   // _pb3: same for pass 3
+        int p18_k3_gap = INT_MAX;        // exact pass-three rollout win minus its searched horizon
         long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
         for (int k = 1; k <= depth; ++k)
         {
@@ -111264,8 +111296,53 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
                     break;
                 }
+                if (kn.ag > 0.0 && c1 > 0.0 && static_cast<double>(c2) >= kn.ag * c1)
+                {
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    break;
+                }
                 priced += static_cast<double>(c2); p18_est[2] = static_cast<double>(c2);
                 if (p2.win_turn <= max_turns) { wb_prev = p2.win_turn; p18_wb = p2.win_turn; }
+                continue;
+            }
+            if (k == 3 && kn.b3 && p18_k2_complete && !unl && !kn.verify
+                && (kn.b3r <= 0.0 || p18_est[1] <= 0.0 || p18_est[2] <= kn.b3r * p18_est[1]))
+            {
+                const long long r0 = budget->Used();
+                if (s_overrun_prop)
+                { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
+                else
+                { budget->SetOverrunLimit(r0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor)); }
+                SearchLine p3 = FSLineWin(state, 3, max_turns, root_cut, second_main, tt, &line_cache, budget);
+                const bool ab3 = budget->Overrun();
+                budget->SetOverrunLimit(0);
+                const long long c3 = budget->Used() - r0;
+                if (ab3)
+                {
+                    const bool rescued = s_id_anytime && p3.win_turn < prev_line.win_turn;
+                    p16::Rec('H', 3, c3, 0, rescued ? 2 : 1, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    if (rescued) { line = p3; committed_depth = 3; escstats::t_esc_rescued_main = true; }
+                    else { line = prev_line; committed_depth = prev_committed; }
+                    p18_done = true; break;
+                }
+                p16::Rec('H', 3, c3, 0, 0, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p18_K = 3;
+                if (p3.truncated) { p18_stop = 3; break; }
+                line = p3; committed_depth = 3; prev_line = line; prev_committed = 3;
+                p18_k3_complete = true;
+                p18_k3_gap = p3.win_turn - (state.turn_number + 2);
+                const double c2 = p18_est[2];
+                const double e4 = c2 > 0.0 ? static_cast<double>(c3) * c3 / c2 : static_cast<double>(c3) * kDefaultGrowth;
+                const double rem = static_cast<double>(budget->Remaining());
+                const bool adm4 = depth >= 4 && (g_reserve_value_pass ? e4 + e4 <= gate_alpha * rem : e4 <= gate_alpha * rem);
+                if (p3.win_turn <= state.turn_number + 2 || !adm4) { p18_done = true; break; }
+                if (kn.wn > 0 && p3.win_turn <= state.turn_number + 2 + kn.wn)
+                {
+                    p18_K = 4; p18_rx = true; p18_c2 = static_cast<double>(c3); p18_wb = 0;
+                    break;
+                }
+                priced += static_cast<double>(c3); p18_est[3] = static_cast<double>(c3);
+                if (p3.win_turn <= max_turns) { wb_prev = p3.win_turn; p18_wb = p3.win_turn; }
                 continue;
             }
             if (kn.fr > 0.0 && kn.rx2 && !unl && !kn.verify && k == 2 && p18_force2 && depth >= 3 && p18_est[1] > 0.0)
@@ -111306,7 +111383,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     p18_stop = k; break;
                 }
             }
-            if (kn.hx && !unl && !kn.verify && k >= kn.hxd && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
+            if (kn.hx && !unl && !kn.verify && k >= kn.hxd && p18_est[static_cast<std::size_t>(k - 2)] > 0.0
+                && !(kn.hw > 0 && p18_k3_complete && k >= 5 && p18_k3_gap <= kn.hw))
             {
                 const double pe = p18_est[static_cast<std::size_t>(k - 1)];
                 const double e = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
@@ -111317,6 +111395,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remh, e, 0.0, 0, 0, 0, 0, std::string("phx")}); }
                     p18_stop = k; break;
                 }
+            }
+            if (kn.fd && k == depth && !kn.verify)
+            {
+                p18_K = k; p18_wb = 0;   // no priced verdict at the terminal depth; use the root's ordinary cut
+                break;
             }
             // (1) LEAFLESS pass k, cut where the rollout pass's incumbent would cut it (never inside the window).
             const int window_end = state.turn_number + k - 1;
@@ -111390,6 +111473,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             {
                 // A proven in-window win: the heuristic ladder's rollout pass k finds it and stops here too.
                 if (!kn.verify) { line = pr; committed_depth = k; prev_line = line; prev_committed = k; p18_done = true; } break;
+            }
+            if (kn.zn && k == 4 && p18_k3_complete && smp.n == 0 && !pr.truncated && !kn.verify)
+            {
+                // No leaf was available to sample, but the leafless cache cannot substitute for the rollout
+                // line cache. Continue exactly from pass four; its real c4 gates the final pass.
+                p18_K = 4; p18_rx = true; p18_c2 = p18_est[3]; p18_wb = 0;
+                break;
             }
             if (unl) { p18_K = k; continue; }   // nothing to price: every pass fits an unlimited budget
             if (pr.truncated) { if (k == 2 && p18_force2) { p18_K = 2; } p18_stop = k; break; }   // the budget ran out inside the leafless pass: pass k cannot fit
@@ -111562,6 +111652,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest) && decided))
                     {
                         fit = (thr > 0.0 && est <= thr) ? 1 : 0;
+                        if (fit == 0 && kn.ua && all && static_cast<double>(m) < rest && thr > 0.0 && lo <= thr)
+                        { fit = 1; }   // unresolved at the sample ceiling: keep the deeper pass available
                         if (kn.f > 0.0 && thr > 0.0 && est * (kn.asym ? 1.0 : kn.f) > thr && est <= thr * kn.f) { fit = 2; }
                         break;
                     }
@@ -111587,6 +111679,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (kn.noasp) { p18_wb = 0; }
         if (kn.b2 && p18_K == 2 && p18_k2_complete && !p18_fb && !kn.rx && !kn.rx2 && !kn.fx)
         { p18_done = true; }   // a deeper pass was refused: the completed rollout pass 2 is already the answer
+        if (kn.b3 && p18_K == 3 && p18_k3_complete && !p18_fb && !kn.rx && !kn.fx)
+        { p18_done = true; }   // same for an exact third pass
         if (kn.verify) { p18_K = 0; p18_wb = 0; }
         if (p18_fb)
         {
