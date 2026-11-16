@@ -711,3 +711,11 @@ Critter 0.939x / 0.950x, Minotaur 0.979x / 0.982x. Giants was 0.903x / 0.927x wi
 single-pass setting in H12's 1,000 fresh paired games (one faster game). The wider H11 mode lost one game each
 on Alchemist, Dragons, and Midrange Burn. No deck sidecar is enabled for mode 2; the result remains an opt-in
 alternative for a deck whose live shape is still the bare heuristic ladder.
+
+The rebased branch passed all 3,365 unit tests / 3,614,308 assertions. Its smoke run completed 211 jobs /
+67,265 games and reported 55 ground-truth mismatches. An exact `de7aa49fc` parent binary replayed all 55
+changed smoke jobs plus two unchanged canaries using the integrated branch's deck and profile inputs. With the
+same working directory, all 57 jobs matched the integrated binary byte-for-byte in per-game logs, job digests,
+and charged units. (Three deck families needed their replay launched from the same directory; otherwise
+relative-path inputs differed even at greedy depth zero.) Thus P18 adds no smoke drift; the 55 mismatches are
+already present on its parent with those deck inputs. The branch does not rebaseline ground truth.
