@@ -43,6 +43,17 @@ identical and found 115 issues: 6 enum gaps, 79 drops, 26 order drops, and
 4 oracle gaps. The next block is 57,000–61,999. See
 `docs/design/dragonstorm-storage-before-territory-2026-11-16.md`.
 
+Prevent Damage's harmful nonexact pain-floor payer now retains the initial
+payment when the cheaper payment strands a declared line and the initial
+payment survives. The focused five drops at seed 30,058,249 are gone; a
+5,000-pair held-out screen was play-identical, all 3,354 unit cases passed,
+and strict viewer replay had no drift across 864 references. The fresh PGO
+gate 62,000–66,999 was oracle-on/off identical with 404 issues: four drops
+in one new post-breakpoint Dina → Earthquake seed, 26 order drops, 171 oracle
+gaps, ten unmodeled, 15 capped, and 178 decision-budget flags from one
+decision. The next block is 67,000–71,999. See
+`docs/design/prevent-damage-nonexact-pain-line-2026-11-16.md`.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

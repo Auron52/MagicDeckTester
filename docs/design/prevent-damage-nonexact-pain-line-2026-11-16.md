@@ -27,8 +27,18 @@ zero changed win turns, and all 200 job digests matched. Search units were
 155,497,085 off and 155,497,005 on. Recorded game milliseconds were
 2,873,987 off and 2,921,349 on (+1.6%).
 
-Raw paired data: `build/scratch/pd_nonexact_*.{out,err}`. The next fresh
-mana-clean block for Prevent Damage is 62,000–66,999.
+Raw paired data: `build/scratch/pd_nonexact_*.{out,err}`.
+
+The fresh PGO mana-clean block 62,000–66,999 (`codex-pd-nonexact-20261116`,
+source tree `7596aacef2f9`) was oracle-on/off play-identical. It found 404
+issues: four APPLY-DROP, 26 APPLY-DROP-ORDER, 171 ORACLE-GAP, ten UNMODELED,
+15 CAPPED, and 178 CAPPED-DECISION. The four drops are two signatures in one
+new seed, 30,064,758, where a Rolling Earthquake continuation after Dina was
+not declared by the outer plan. The earlier five flags at seed 30,058,249
+remain cleared. The 26 order drops are different lines, mainly a Quake cast
+before Dina when Dina first is payable. The 178 decision flags come from one
+budget-exhausted decision. The next fresh Prevent Damage block is
+67,000–71,999. Full report: `logs/mana_clean/codex-pd-nonexact-20261116/report.md`.
 
 The recorded-board unit fixture pays both Earthquakes and passed with the
 full Release suite: 3,354 cases and 3,614,066 assertions. A deck-scoped
