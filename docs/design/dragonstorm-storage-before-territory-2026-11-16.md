@@ -43,3 +43,11 @@ default off and tested on enum-gap seeds 30,053,057, 30,042,074, and
 30,044,871. All three still reported `ENUM-GAP`; the rejected subsets
 still had `ef-walk-fail`. The walk's payment choice remains the obstacle,
 so the extra order was removed before any paired game run.
+
+A second default-off trial coupled that order to promoting Lotus Bloom
+ahead of ordinary lands while the declared line still owed an Apex-sized
+bill. Seed 30,053,057 still had the same two enum gaps. The debug walk
+tried Desperate → Apex → Pyretic, but paid Desperate from Mountains and
+failed at Apex. The normal source-rank hook did not change that Lotus
+sacrifice choice, so this coupled trial was removed as well. The remaining
+problem is in the sacrifice source payment path.
