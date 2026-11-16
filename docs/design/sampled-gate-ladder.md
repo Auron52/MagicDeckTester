@@ -702,3 +702,12 @@ Hinata canary, were rerun using the parent commit's binary with the exact same d
 per-game log, job digest, and charged-unit count matched the mode-2 binary. The smoke mismatches are already
 present on the shared parent (which carries Sunday play changes pending ground-truth review). No smoke
 ground truth was rebaselined for P18.
+
+After rebasing onto remote `de7aa49fc` (123 intervening commits), H11 reran the production mode against bare
+heuristic on 17 decks, 400 fresh paired games per deck and 1,000 each for Angels, Critter, and Minotaur, seeds
+3,600,000+. The three confirmed decks again matched every win turn: CPU / units Angels 0.954x / 0.958x,
+Critter 0.939x / 0.950x, Minotaur 0.979x / 0.982x. Giants was 0.903x / 0.927x with 0/0 changed games in
+400, but mode 2 at Giants' shipped depth six / 20 ms cost 1.394x CPU and 1.294x units against its live
+single-pass setting in H12's 1,000 fresh paired games (one faster game). The wider H11 mode lost one game each
+on Alchemist, Dragons, and Midrange Burn. No deck sidecar is enabled for mode 2; the result remains an opt-in
+alternative for a deck whose live shape is still the bare heuristic ladder.
