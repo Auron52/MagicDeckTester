@@ -97,9 +97,12 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    shows up if real; a measured case gets a narrow exception, not a dropped prune.
 7. Hullbreaker post-combat bounce-and-recast: covered by the deck's second main (Summon draws turn it on).
 8. Tap-Sol-Ring-in-response-then-bounce: not expressible today; follow-up, not built now.
-10. Trench Gorger exile menu: the N>=3 "which lands" set is provider-chosen, a lossy restriction (all
-    21,600 subsets cannot be branched). Agent default: ship the ~54-entry menu, measure which entries
-    win, then propose a heuristic prune to the USER. PROVISIONAL.
+10. Trench Gorger exile menu — **USER 2026-11-16:** *"Trench Gorger is likely a "take all lands" type of
+    effect since it is at the top of the curve, but we'll have to do some testing."* Plan: the engine
+    implements the full menu (~54 entries incl. decline); the provider adds a one-option prune to
+    EXILE ALL LANDS (default ON, `MTG_SEA_GORGER_ALL`-style flag, =0 restores the searched menu; viewer
+    keeps the full choice). Stage 5 A/Bs exile-all vs the searched menu and reports which menu entries
+    the searched arm actually picks, before anything is settled.
 11. Figure of Destiny latent bug (bounced card keeps its base-P/T override in hand). Fixing it moves
     GT for decks with Figure. Agent default: fix for Gorger now; Figure as a separate USER-approved change.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
