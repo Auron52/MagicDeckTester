@@ -7172,6 +7172,50 @@
     }
    ]
   },
+  "morph": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 162,
+      "CONTINUATION-DIFFERS": 86,
+      "DOMINATED-CREATURE": 424,
+      "DOMINATED-LAND": 2111,
+      "ORACLE-GAP": 3061
+     },
+     "commit": "8ffec435d44c8bc2198046d3d3a1ae82cff6d29c",
+     "date": "2026-11-16T19:00:48Z",
+     "decisions": 35322,
+     "deck": "decks/Morph/Morph.cod",
+     "deck_sha": "45a0d4187f8d129e0ebd62b8ee1411f092a86d05",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 3647,
+     "life_breakpoints": [],
+     "ms_off": 417125,
+     "ms_on": 1379998,
+     "report": "logs/mana_clean/codex-morph-spirits-first-20261116/report.md",
+     "run": "codex-morph-spirits-first-20261116",
+     "seed": 30000000,
+     "src": "07b1dbe0cfc7e159c491a465fae76e21f583604d",
+     "verdict": "issues"
+    }
+   ]
+  },
   "nivmizzetcombo": {
    "runs": [
     {
@@ -10253,6 +10297,52 @@
      "seed": 30191000,
      "src": "ab70b55063d8590842503c3532e40aed88ee831e",
      "verdict": "clean"
+    }
+   ]
+  },
+  "spirits": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 27,
+      "CONTINUATION-DIFFERS": 679,
+      "DOMINATED-LAND": 3336,
+      "DROP-COVERED": 588,
+      "ENUM-GAP": 31,
+      "ORACLE-GAP": 28,
+      "PHANTOM": 3122
+     },
+     "commit": "8ffec435d44c8bc2198046d3d3a1ae82cff6d29c",
+     "date": "2026-11-16T19:00:48Z",
+     "decisions": 41315,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 86,
+     "life_breakpoints": [],
+     "ms_off": 2574699,
+     "ms_on": 3065226,
+     "report": "logs/mana_clean/codex-morph-spirits-first-20261116/report.md",
+     "run": "codex-morph-spirits-first-20261116",
+     "seed": 30000000,
+     "src": "07b1dbe0cfc7e159c491a465fae76e21f583604d",
+     "verdict": "issues"
     }
    ]
   },

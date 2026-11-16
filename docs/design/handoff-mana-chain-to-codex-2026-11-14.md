@@ -6,6 +6,17 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The first fresh PGO mana gate for Morph and Spirits is complete on games
+0–4,999 for each deck (`codex-morph-spirits-first-20261116`). Oracle-on and
+oracle-off play is byte-identical. Morph has 3,647 issues: 162 payment drops,
+424 creature-dominance flags, and 3,061 oracle gaps; it has no enum gaps.
+Spirits has 86 issues: 31 enum gaps, 27 payment drops, and 28 oracle gaps.
+Spirits' enum gaps concentrate on same-turn Lingering Souls hand cast,
+Patrician Geist Vial put, and discounted flashback; its payment drops include
+White Orchid Phantom followed by Souls flashback. Both remain beta. Exact
+repros and counts are in `logs/mana_clean/codex-morph-spirits-first-20261116/report.md`
+and the tracked `test/mana_clean.json` record.
+
 Boars' Greaves-in-hand order now moves a fresh mana creature ahead of Herald
 when Greaves can haste it in the same visible line. Exact seed 30,005,044
 clears 23 order drops; on the first 500 fresh-block games, order drops fall
