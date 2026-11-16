@@ -1878,6 +1878,7 @@ public:
     // See docs/design/horizon-honest-leaf.md.
 
     const char* Name() const override { return "Dragonstorm"; }
+    int ManaSourceRank(const GameState& s, const CardDefinition& def) const override;
     std::vector<std::string>
     TutorToBattlefieldPutOrder(const GameState&, int, const CardParams&, int) const override;
 

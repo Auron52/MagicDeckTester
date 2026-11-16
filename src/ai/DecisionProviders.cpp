@@ -17217,6 +17217,26 @@ HinataProvider::ScaledCastVariants(const GameState& s, const CardDefinition& def
 
 // ---- DragonstormProvider ----------------------------------------------------
 
+int DragonstormProvider::ManaSourceRank(const GameState& s, const CardDefinition& def) const
+{
+    const int rank = GenericProvider::ManaSourceRank(s, def);
+    // DEFAULT ON; =0 disables. A named Dragon black/green pip can require the sole
+    // creature-only Territory after a ritual's generic payment. Storage lands
+    // normally sit beyond the land band (rank 62), so the existing Territory
+    // line reserve cannot put them first. Bring only a live storage source
+    // into the last land rung while that specific line demand is present.
+    static const bool s_before_cco = EnvOn("MTG_DRAGONSTORM_STORAGE_BEFORE_CCO", true);
+    if (!s_before_cco || !def.params.storage_land || rank < 60
+        || (g_line_unpaid_cost.black == 0 && g_line_unpaid_cost.green == 0)) { return rank; }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != s.active_player_index || p.tapped || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.colored_creature_only) { return 58; }
+    }
+    return rank;
+}
+
 // ===================================================================================================
 // Payoff / ETB-value ordering -- the shared "trigger ordering" primitive (kind 3 of the three
 // within-turn ordering kinds; see docs/design/sequential-plan-evaluation.md). DECK-AGNOSTIC and
