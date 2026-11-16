@@ -4,6 +4,35 @@ The Claude owner session (24b9e9dc) is out of usage and hands the USER's standin
 Detailed per-item history is in `docs/design/mana-clean-pass-checkpoint.md` (newest bullets at the end of each
 round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-chain/<item>-handoff.md`.
 
+## Codex continuation (2026-11-16)
+
+The pooled fresh PGO gate `codex-mana-queue-20261115` is complete on all
+four decks, with byte-identical oracle-on/off play. It found Gods 4
+`APPLY-DROP` plus 10,483 unaudited-plan `CAPPED-DECISION` flags,
+Prevent Damage 5 drops / 73 oracle gaps / 26 capped-decision flags,
+Shadowborn 4 drops, and Dragonstorm 3 enum gaps / 147 drops / 136
+drop-order flags / 12 oracle gaps. None is clean. Source and exact next
+blocks are in `logs/mana_clean/codex-mana-queue-20261115/report.md` and
+`test/mana_clean.json` (record commit `2422ffc27`).
+
+The Gods Study → Loam green hold fixes the two focused payment drops, but
+failed the 5,000-game adoption bar: two slower games, none faster, and
+12.1% more recorded game time. It remains default off; the USER tradeoff
+question is pending. See `docs/design/gods-loam-line-green-hold-2026-11-16.md`.
+
+The Dragonstorm Lotus black + surplus-generic fix clears all four drops
+in seed 30,042,142. The 5,000-game Dragonstorm A/B had three faster and
+none slower; ten mana-sensitive decks were play-identical in a 500-game
+cross-deck screen. Combined smoke/regression showed the existing 71
+ground-truth drift cells; only one of 15 off-control rows differed, the
+Dragonstorm depth-zero smoke improvement. The strict viewer had zero drift
+and zero enum gaps in 864 references. Source `732437b0c` is committed,
+default on. The fresh PGO gate 47,000–51,999 completed: oracle-on/off play
+is identical; 287 issues remain (3 enum gaps, 126 drops, 121 drop-order,
+37 oracle gaps), so Dragonstorm remains beta. The next block is
+52,000–56,999. Most drops are Kolaghan/Karrthus lines using creature-only
+Unclaimed Territory. See `docs/design/dragonstorm-lotus-black-generic-2026-11-16.md`.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

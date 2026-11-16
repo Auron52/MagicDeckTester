@@ -43,6 +43,14 @@ same Release binary. Fourteen of those 15 matched exactly. The sole change
 was Dragonstorm's depth-zero smoke row: 4.9620 off to 4.9610 on. No
 ground truth was accepted for the unrelated baseline drift.
 
-Raw data: `build/scratch/dragonstorm_lump_*.{out,err}`. PGO build and a
-fresh 5,000-game mana-clean gate remain before Dragonstorm can be marked
-clean; the other Unclaimed Territory and cast-order misses also remain.
+The fresh PGO mana-clean gate `codex-dragonstorm-lotus-20261116` completed
+on indices 47,000–51,999. Oracle-on/off play was byte-identical. It found
+287 issues: 3 `ENUM-GAP`, 126 `APPLY-DROP`, 121 `APPLY-DROP-ORDER`, and
+37 `ORACLE-GAP`; there were no unmodeled or capped decisions. Of the 126
+payment drops, 64 drop Kolaghan, 54 Karrthus, and 8 Scourge of Valkas.
+Many legal payments use Unclaimed Territory's creature-only black or
+green after an earlier ritual. Dragonstorm remains beta; its next fresh
+block is 52,000–56,999. The exact report is
+`logs/mana_clean/codex-dragonstorm-lotus-20261116/report.md`.
+
+Raw paired data: `build/scratch/dragonstorm_lump_*.{out,err}`.
