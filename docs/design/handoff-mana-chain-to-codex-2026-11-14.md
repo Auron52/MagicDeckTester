@@ -6,6 +6,16 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Spirits is now clean. The fresh PGO gate on games 30,000–34,999 after the
+two-mana oracle advance-tap repair reports zero issues and byte-identical
+oracle-on/off play; `test/mana_clean.json` records the clean verdict. The
+preceding gate on games 25,000–29,999 had three oracle gaps in one Millicent
+→ White Orchid Phantom line. Its legal advance `{U}` tap was omitted because
+the oracle offered extra one-unit taps only after one-mana openers. The
+audit-only `MTG_ORACLE_LINE_SURPLUS2` rule covers that case; focused, 500-game
+A/B, full units, combined Spirits/2HG regression, and strict viewer checks
+passed. See `docs/design/spirits-souls-line-payment-2026-11-16.md`.
+
 The fresh Spirits PGO gate on games 20,000–24,999
 (`codex-spirits-souls-hand-20261116`) has twelve
 `APPLY-DROP-ORDER` flags in seed 30,021,365: a Vialed White Orchid

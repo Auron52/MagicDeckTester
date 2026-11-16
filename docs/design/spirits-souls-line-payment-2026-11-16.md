@@ -111,5 +111,8 @@ versus 106,461 ms (+1.3%). The full Release suite passes 3,371 unit
 cases and 3,614,741 assertions. Combined Spirits/2HG smoke and regression pass all ten
 cells, with zero per-game play changes. All 561 scenarios pass. Strict
 viewer replay has zero drift, divergence, or enumeration gaps across
-864 references, and both suboptimal references remain beaten. A fresh
-PGO mana-clean gate remains.
+864 references, and both suboptimal references remain beaten. The fresh
+PGO mana-clean gate on games 30,000–34,999 is clean: zero issues, zero
+misses, zero oracle gaps, and byte-identical oracle-on/off play. Spirits
+is recorded clean in `test/mana_clean.json`; the report is
+`logs/mana_clean/codex-spirits-line-surplus2-20261116/report.md`.

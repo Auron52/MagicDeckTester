@@ -1,0 +1,23 @@
+{
+ "name": "codex-spirits-line-surplus2-20261116",
+ "src": "d2733ac68ff4002fecc21dc8640a52e6dce136db",
+ "commit": "9541539954e393f219f7e3925c8dcd48d1a84e38",
+ "minutes": 30,
+ "started": "2026-11-16T23:24:36Z",
+ "decks": [
+  {
+   "key": "spirits",
+   "deck": "decks/Spirits/Spirits.cod",
+   "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+   "profile": "decks/Spirits/Spirits.profile.json",
+   "game_index": 30000,
+   "seed": 30030000,
+   "games": 5000,
+   "chunk": 108,
+   "est_ms_per_game": [
+    1108.8,
+    925.1
+   ]
+  }
+ ]
+}

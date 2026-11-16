@@ -10586,6 +10586,45 @@
      "seed": 30025000,
      "src": "811757cbf48938da54591a925ca7c84ec1fc121a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 658,
+      "DOMINATED-LAND": 3446,
+      "DROP-COVERED": 533,
+      "PHANTOM": 3334
+     },
+     "commit": "9541539954e393f219f7e3925c8dcd48d1a84e38",
+     "date": "2026-11-16T23:29:59Z",
+     "decisions": 41473,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 30000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4639960,
+     "ms_on": 5580463,
+     "report": "logs/mana_clean/codex-spirits-line-surplus2-20261116/report.md",
+     "run": "codex-spirits-line-surplus2-20261116",
+     "seed": 30030000,
+     "src": "d2733ac68ff4002fecc21dc8640a52e6dce136db",
+     "verdict": "clean"
     }
    ]
   },
