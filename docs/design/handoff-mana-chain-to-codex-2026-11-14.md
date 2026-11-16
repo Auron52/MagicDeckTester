@@ -6,6 +6,17 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The 61 Spirits payment drops on games 10,000–14,999 now clear in all
+three exact repro games. Souls flashback's generic pip needed a different
+held-first route before Phantom or Millicent, including a line with
+already-floating W/U. `MTG_SPIRITS_SOULS_LINE_HOLD=0` restores all 61
+original drops; full Release units pass. A 2,000-game paired Spirits check
+changed no win turn, play digest, or total work. Spirits/2HG combined
+smoke/regression passed all ten cells, 561 scenarios passed, and strict
+viewer replay had no drift or gap across 864 references. A fresh gate
+is next. See
+`docs/design/spirits-souls-line-payment-2026-11-16.md`.
+
 The fresh Spirits PGO gate on games 10,000–14,999
 (`codex-spirits-karoo-spare-20261116`) is complete with byte-identical
 oracle-on/off play. It has 61 `APPLY-DROP` flags in seven signatures,

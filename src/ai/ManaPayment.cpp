@@ -8955,7 +8955,13 @@ static std::uint64_t PayloadReserveMask(const GameState& state)
 // whole-turn prepay this also protects the shapes the prepay DECLINES -- mw326's joint cost is only
 // payable via the mid-turn mint, so the prepay fails up front and only this per-cast hold can keep
 // the greedy from burning the lone {R} land on a colour-flexible cost.
-static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost& cost)
+static bool SpiritsSoulsLineHoldOn()
+{
+    static const bool on = EnvOn("MTG_SPIRITS_SOULS_LINE_HOLD", true); // DEFAULT ON; =0 restores
+    return on;
+}
+
+static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost& cost, bool for_creature)
 {
     // SPLIT LEVER (2026-08-26): the mask half sits behind its own opt-in, SEPARATE from the rank
     // half (MTG_SCARCE_COLOR_HOLD). The rank half is the measured mw326 fix; this mask targets
@@ -8971,8 +8977,9 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     // mask loses games elsewhere; the provider enables the same held-first,
     // unrestricted-retry path for Spirits alone. DEFAULT ON; =0 restores.
     static const bool s_spirits = EnvOn("MTG_SPIRITS_SCARCE_COLOR_MASK", true);
+    const bool spirits_line = s_spirits && ResolveProvider(state).ScarceColorLineHold(state);
     const bool broad = ScarceColorMaskOn()
-                    || (s_spirits && ResolveProvider(state).ScarceColorLineHold(state));
+                    || spirits_line;
     const bool counter_only = ScarceCounterMaskOn();
     if (!broad && !counter_only) { return 0; }
     const PlanTraits* pt = CurrentPlanTraits();
@@ -9065,6 +9072,49 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
                                   || (need[b] > 0 && need[a] <= 0)))
             { mask &= ~bit; }
         }
+    }
+    // Souls flashback's {1}{B} has two named-line routes the ordinary scarce
+    // source count misses. Before Phantom {W}{W}, hold the only creature-only
+    // W land and use Chancery's spare U for generic. Before Millicent {W}{U},
+    // hold Chancery instead and use an ordinary land for generic. In both
+    // cases a B/W source must pay Souls' B, so its W cannot supply the later
+    // cast. The held-first payer retries unrestricted if the route fails.
+    if (SpiritsSoulsLineHoldOn() && spirits_line && !for_creature && line_live && need[0] >= 1
+        && cost.generic == 1 && cost.black == 1 && cost.ManaValue() == 2)
+    {
+        int cco_white = -1, cco_count = 0, karoo_wu = -1;
+        bool black_source = false, black_white = false, other_generic = false;
+        for (int i = 0; i < n; ++i)
+        {
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            if (p.controller_index != active || p.tapped) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr) { continue; }
+            bool w = false, u = false, b = false;
+            for (Color c : EffectiveProducesFor(state, active, *d, &p))
+            {
+                w |= c == Color::White;
+                u |= c == Color::Blue;
+                b |= c == Color::Black;
+            }
+            if (d->params.colored_creature_only && w)
+            { cco_white = i; ++cco_count; }
+            if (d->params.etb_bounce_land && d->params.produces_amount == 2 && w && u)
+            { karoo_wu = i; }
+            if (!d->params.colored_creature_only && b)
+            { black_source = true; black_white |= w; }
+            if (p.card.IsLand() && !d->params.etb_bounce_land
+                && !d->params.colored_creature_only && !w)
+            { other_generic = true; }
+        }
+        if (need[0] >= 2 && cco_count == 1 && karoo_wu >= 0 && black_source)
+        {
+            mask |= 1ull << cco_white;
+            mask &= ~(1ull << karoo_wu);
+        }
+        else if (need[0] == 1 && need[1] >= 1 && karoo_wu >= 0
+                 && black_white && other_generic)
+        { mask |= 1ull << karoo_wu; }
     }
     return mask;
 }
@@ -11380,7 +11430,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
     // question, and attributing it needs to know whether this mask was rmask's sole contributor.
     // The value folded in is identical, and with the audit off nothing below it executes.
     const std::uint64_t act_hold = ActLineHoldMask(state, cost_in);
-    const std::uint64_t scarce   = ScarceColorHoldMask(state, cost_in);
+    const std::uint64_t scarce   = ScarceColorHoldMask(state, cost_in, for_creature);
     // Every mask but the activation hold (kept apart for the surplus rung below; same value folded in).
     const std::uint64_t rmask_rest = ReservableSpecialMask(state) | PlanReserveMask(state)
                                    | OneShotHoldMask(state) | PayloadReserveMask(state)
@@ -11450,6 +11500,23 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             FloatGenericHoldScope _fgh(fk);
             if (held_attempt(rmask | fmask, "impl.floattap")) { return true; }
         }
+    }
+    // A joint prepay may have already tapped Chancery before Souls flashback.
+    // After a Wanderer {U}, the float can hold exactly the {W}{U} Millicent
+    // still owes; Souls' generic must come from an untapped source instead.
+    // Try that one held payment only on the named Spirits line. A failed try
+    // restores the board and follows the ordinary payer below.
+    if (SpiritsSoulsLineHoldOn() && !for_creature && cost_in.generic == 1
+        && cost_in.black == 1 && cost_in.ManaValue() == 2
+        && g_line_unpaid_cost.white >= 1 && g_line_unpaid_cost.blue >= 1
+        && state.floating_mana.white >= 1 && state.floating_mana.blue >= 1
+        && ResolveProvider(state).ScarceColorLineHold(state))
+    {
+        FloatGenericHoldScope _fgh(1);
+        // The scarce-source mask sees the untapped U/B land as the last U
+        // provider, but the already-floating U pays that later pip. Release
+        // this mask for this one try so the land can make Souls' B.
+        if (held_attempt(rmask & ~scarce, "spirits.souls.float")) { return true; }
     }
     if (rmask != 0)
     {
