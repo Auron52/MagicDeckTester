@@ -695,3 +695,10 @@ paired games per deck on seeds 3,500,000+. Mode 2 is slower: CPU 2.457x Angels, 
 Minotaur; Minotaur also loses two games. This does not merit changing the shipped sidecars. The general
 17-deck conservative shape R36 is CPU-neutral (H6); the three-deck result establishes a useful opt-in mode,
 not a fleet-wide replacement for the heuristic ladder or for already tuned play settings.
+
+Integration verification on the 2026-11-16 shared parent `e4f2b7c71`: all 3,181 unit tests pass. The smoke
+batch ran 211 jobs / 67,265 games and reported 17 ground-truth mismatches. Those 17 jobs, plus an unchanged
+Hinata canary, were rerun using the parent commit's binary with the exact same deck/profile inputs; every
+per-game log, job digest, and charged-unit count matched the mode-2 binary. The smoke mismatches are already
+present on the shared parent (which carries Sunday play changes pending ground-truth review). No smoke
+ground truth was rebaselined for P18.
