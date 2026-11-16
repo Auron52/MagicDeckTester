@@ -74,6 +74,11 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    (the USER said "might").
 2. Hedge Maze (Forest Island, enters tapped, surveil 1) as a fetch target: where in the pruned order?
    Agent default (PROVISIONAL): after Island and Forest.
+3. ~~Utopia Sprawl colour~~ — **USER 2026-11-16:** *"Utopia sprawl should prioritize blue as well. Green
+   is a minor colour in the deck."* Implemented as: the provider's ETB colour axis restricted to {U, G}
+   (W/B/R have no consumer: sound fold), plus a default-ON one-option prune to BLUE (=0 restores {U, G}
+   as searched branches). Viewer keeps the full choose_color list. Taken as a PRUNE by analogy with the
+   fetch ruling; if the USER meant "search U first but keep G", say so.
 
 ## Approved deferrals
 
