@@ -1979,6 +1979,39 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
                           || ColorlessPipSinkReachable(state, active);
         }
     }
+    // A pre-paid creature line can put its green in the restricted reserve while leaving a red
+    // generic unit in the general reserve. Drain that generic unit before spending green needed
+    // by the next cast: Boars seed 30000049 T4, double Decimator, otherwise spends six green on
+    // the first {3}{G}{G}{G} and strands the second {G}{G}{G}. Only a known later coloured pip
+    // qualifies, and only typed general mana with no pip of its own anywhere in this line.
+    // DEFAULT ON; =0 restores the old restricted-reserve-first generic drain.
+    static const bool s_line_cre_float = EnvOn("MTG_CREATURE_FLOAT_LATER_COLOR", true);
+    int cre_generic_hold = 0;
+    if (s_line_cre_float && for_creature && cost.generic > 0
+        && state.floating_creature_mana.Total() > 0 && state.floating_mana.Total() > 0
+        && state.floating_bigspell_mana.Total() == 0 && !g_line_opens_unseen)
+    {
+        const int own[5] = { cost.white, cost.blue, cost.black, cost.red, cost.green };
+        const ManaCost& lu = g_line_unpaid_cost;
+        const int owed[5] = { lu.white, lu.blue, lu.black, lu.red, lu.green };
+        int later[5];
+        for (int c = 0; c < 5; ++c) { later[c] = std::max(0, owed[c] - own[c]); }
+        const int cre[5] = { state.floating_creature_mana.white, state.floating_creature_mana.blue,
+                             state.floating_creature_mana.black, state.floating_creature_mana.red,
+                             state.floating_creature_mana.green };
+        const int gen[5] = { state.floating_mana.white, state.floating_mana.blue,
+                             state.floating_mana.black, state.floating_mana.red,
+                             state.floating_mana.green };
+        bool protects_later = false;
+        int general_spare = 0;
+        for (int c = 0; c < 5; ++c)
+        {
+            if (later[c] > 0 && cre[c] >= own[c] + later[c]) { protects_later = true; }
+            if (own[c] == 0 && later[c] == 0) { general_spare += gen[c]; }
+        }
+        if (lu.ManaValue() > cost_in.ManaValue() && protects_later)
+        { cre_generic_hold = std::min(cost.generic, general_spare); cost.generic -= cre_generic_hold; }
+    }
     if (for_creature && state.floating_creature_mana.Total() > 0)
     {
         const int cap = hold_visible_c ? std::min(prepay_c, state.floating_creature_mana.colorless)
@@ -1991,6 +2024,7 @@ static bool TapForCostSharedOnceImpl(GameState& state, const ManaCost& cost_in, 
         if (pwt_cre_live) { PrepayWildTrueStore(state, 1, pwt_cre); }
         prepay_c = std::max(0, prepay_c - (cap - t_generic_c_first));
     }
+    cost.generic += cre_generic_hold;
     // Same for the BIG-SPELL-ONLY reserve (Troyan's floated {G}{U}): a qualifying spell (MV 5+ or
     // {X}) spends it before the general float -- it can pay nothing else. Empty for every deck
     // without such a source -> byte-identical.

@@ -6,6 +6,16 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Boars' double-Decimator `APPLY-DROP` cluster came from spending restricted
+green on the first spell's generic pips while leaving a general red unit
+unused. A visible-line payer rule reserves that green for the second spell:
+the exact seed clears and first-500 Boars drops fall 139 -> 36. A fresh
+2,000-game paired solo A/B changed seven play lines and no win turns. The
+selected cross-deck regression gained 23 searched games, with one Soldiers
+budget-churn slowdown that recovers at 4× budget; ground truth is accepted.
+See `docs/design/boars-creature-float-later-color-2026-11-16.md`. Boars
+still requires fresh 5,000-game gates and repairs for its other flags.
+
 Boars' approved Greaves exception now ranks a freshly cast Sage or Zhur-Taa
 ahead of Flinthoof only while Greaves is already on the battlefield. This
 reduces the first 500 Boars order flags 99 -> 69, clears 22/23 on seed
