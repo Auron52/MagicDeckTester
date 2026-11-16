@@ -47782,6 +47782,16 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
                 while (cost.generic > 0 && spare > 0) { --cost.generic; --*x.res; --spare; }
             }
         }
+        // DEFAULT ON; =0 restores the prior order. When the float cannot preserve every later pip
+        // before a mana-producing cast resolves, spend the more abundant
+        // current colour first. Song can replace its red after payment, while
+        // a Lotus Bloom's sole black cannot be replaced.
+        static const bool s_abundant_fallback = EnvOn("MTG_LINE_DEMAND_FALLBACK_ABUNDANT", true);
+        if (s_abundant_fallback)
+        {
+            std::stable_sort(std::begin(e), std::end(e),
+                             [](const Ent& a, const Ent& b) { return *a.res > *b.res; });
+        }
         for (Ent& x : e) { drain(cost.generic, *x.res); }
         if (hold_c) { drain(cost.generic, reserve.colorless); }
         return;

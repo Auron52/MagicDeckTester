@@ -9916,6 +9916,10 @@ static int LineRestAfter(const ManaCost& cost_in, int rest_pips[5])
 // can pay a generic-only shortfall in any of them; the order only picks which colour floats on).
 static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int out[5])
 {
+    // DEFAULT ON; =0 restores the prior order. A Mountain can pay the
+    // current ritual's red pip while the later Dragonlord still needs black
+    // from Lotus Bloom.
+    static const bool s_later_short_first = EnvOn("MTG_LUMP_LATER_SHORT_FIRST", true);
     const ManaPool pool = AvailableManaPool(state);
     const int pip[5]  = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
     const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
@@ -9927,14 +9931,23 @@ static void LumpColourOrder(const GameState& state, const ManaCost& cost_in, int
         const ManaCost& m = c.m_mana_cost;
         hand[0] += m.white; hand[1] += m.blue; hand[2] += m.black; hand[3] += m.red; hand[4] += m.green;
     }
-    long long key[5];
+    std::uint64_t key[5];
     for (int c = 0; c < 5; ++c)
     {
         const int short_by = std::max(0, pip[c] - have[c]);
-        key[c] = (static_cast<long long>(std::min(short_by, 0x7FFF)) << 48)
-               | (static_cast<long long>(std::min(pip[c], 0xFFFF)) << 32)
-               | (static_cast<long long>(std::min(rest[c], 0xFFFF)) << 16)
-               | (static_cast<long long>(std::min(hand[c], 0x1FFF)) << 3) | (4 - c);
+        const int later_short = std::max(0, rest[c] - have[c]);
+        const bool later_has_no_source = rest[c] > 0 && have[c] == 0;
+        key[c] = s_later_short_first
+            ? (static_cast<std::uint64_t>(std::min(short_by, 0xFF)) << 56)
+              | (static_cast<std::uint64_t>(later_has_no_source) << 55)
+              | (static_cast<std::uint64_t>(std::min(later_short, 0x7F)) << 48)
+              | (static_cast<std::uint64_t>(std::min(pip[c], 0xFF)) << 40)
+              | (static_cast<std::uint64_t>(std::min(rest[c], 0xFF)) << 32)
+              | (static_cast<std::uint64_t>(std::min(hand[c], 0xFFFF)) << 8) | (4 - c)
+            : (static_cast<std::uint64_t>(std::min(short_by, 0x7FFF)) << 48)
+              | (static_cast<std::uint64_t>(std::min(pip[c], 0xFFFF)) << 32)
+              | (static_cast<std::uint64_t>(std::min(rest[c], 0xFFFF)) << 16)
+              | (static_cast<std::uint64_t>(std::min(hand[c], 0x1FFF)) << 3) | (4 - c);
         out[c] = c;
     }
     std::sort(out, out + 5, [&](int a, int b) { return key[a] > key[b]; });
