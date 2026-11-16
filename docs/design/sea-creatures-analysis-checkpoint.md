@@ -6,7 +6,7 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
 ## Where things live
 
 * Worktree `/workspaces/MagicDeckTester/.claude/worktrees/sea-creatures`, branch
-  `sea-creatures-analysis` (local commits only; NOT pushed; base `f92bb3b7c`). The primary checkout's
+  `sea-creatures-analysis` (local commits only; NOT pushed; base `8cd0bbf23` (rebased 2026-11-16 from f92bb3b7c)). The primary checkout's
   `decks/Sea Creatures/` is untracked there (the user's drop); the worktree copy is committed.
 * Scryfall JSON: `/workspaces/MagicDeckTester/build/scratch/sea/scry/`.
 * Research drafts (gitignored): `logs/sea-research/*.md` in the worktree.
