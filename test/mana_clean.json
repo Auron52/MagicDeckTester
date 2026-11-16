@@ -2146,6 +2146,50 @@
      "seed": 30047000,
      "src": "f983d9d40ee3dbff8663546545f70761f5388932",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 79,
+      "APPLY-DROP-ORDER": 26,
+      "CONTINUATION-DIFFERS": 4,
+      "DOMINATED-LAND": 15345,
+      "DROP-COVERED": 1108,
+      "ENUM-GAP": 6,
+      "HIDDEN-INFO": 313,
+      "ORACLE-GAP": 4,
+      "PHANTOM": 10283
+     },
+     "commit": "3490ea4d77cf9adde1dd3d92679d543ca1cf2e48",
+     "date": "2026-11-16T03:56:48Z",
+     "decisions": 38361,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 52000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 115,
+     "life_breakpoints": [],
+     "ms_off": 244570,
+     "ms_on": 1913574,
+     "report": "logs/mana_clean/codex-dragonstorm-storage-20261116/report.md",
+     "run": "codex-dragonstorm-storage-20261116",
+     "seed": 30052000,
+     "src": "ad438b9a8737cb674486b3667a166550ae9ccdd9",
+     "verdict": "issues"
     }
    ]
   },
