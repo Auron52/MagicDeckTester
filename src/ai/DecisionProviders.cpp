@@ -25355,10 +25355,17 @@ std::vector<ManaCost> PreventDamageProvider::PaymentHoldUp(const GameState& s, i
 {
     if (controller < 0 || controller >= static_cast<int>(s.players.size())) { return {}; }
     static const InternedName k_quake("Rolling Earthquake");
+    // A nonred payment may precede two Earthquakes after a breakpoint. Hold
+    // one visible red pip per copy (at most two); the armed payer still accepts
+    // a costlier assignment only when it survives and leaves those pips payable.
+    // =0 restores the one-Quake hold.
+    static const bool s_multi_quake = EnvOn("MTG_PD_MULTI_QUAKE_HOLD", true);
+    int quakes = 0;
     for (const Card& c : s.players[controller].hand)
     {
-        if (c.m_name == k_quake) { ManaCost red; red.red = 1; return {red}; }
+        if (c.m_name == k_quake && ++quakes == (s_multi_quake ? 2 : 1)) { break; }
     }
+    if (quakes > 0) { ManaCost red; red.red = quakes; return {red}; }
     return {};
 }
 

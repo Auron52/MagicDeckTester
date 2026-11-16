@@ -1583,6 +1583,39 @@ TEST_CASE("Prevent Damage holds red for a known later Earthquake after Living Wi
     }
 }
 
+TEST_CASE("Prevent Damage holds two visible Earthquake reds across a Dina breakpoint (seed 30064758 T5)")
+{
+    PainPayArm pay(true);
+    PlanTraits t;
+    t.mana_casts = 1;   // The Earthquakes are hand cards, not casts in this outer plan.
+    PlanTraitsScope traits(&t);
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 10;
+    Put(s, "Reflecting Pool");
+    Put(s, "Tarnished Citadel");
+    Put(s, "Ancient Tomb");
+    Put(s, "Battlefield Forge");
+    Put(s, "Vito, Thorn of the Dusk Rose");
+    Put(s, "Karplusan Forest");
+    const CardDefinition* quake = CardDatabase::Instance().Lookup("Rolling Earthquake");
+    REQUIRE(quake != nullptr);
+    s.players[0].hand.push_back(quake->card);
+    s.players[0].hand.push_back(quake->card);
+    const dmgev::PayFloor floor = PaymentDamageFloor(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1),
+                                                     ManaPool{}, false, 0);
+    INFO("floor exact=", floor.exact, " value=", floor.floor);
+    REQUIRE(TapForCostShared(s, Cost(0, 0, /*b=*/1, 0, /*g=*/1),
+                             /*for_creature=*/true, nullptr, true)); // Dina
+    INFO("post Dina taps: pool=", s.battlefield[0].tapped, " citadel=", s.battlefield[1].tapped,
+         " tomb=", s.battlefield[2].tapped, " forge=", s.battlefield[3].tapped,
+         " karplusan=", s.battlefield[5].tapped, " life=", s.players[0].life);
+    REQUIRE(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+    CHECK(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+    CHECK_FALSE(SelfHasLost(s));
+}
+
 TEST_CASE("Prevent Damage line repair: a deeper hold set when every single hold strands (useful, seed 30029561 T6)")
 {
     // Citadel, Forge, Brushland, Vito, Citadel, Brushland, Tamanoa, Reflecting Pool; 8 life. Line: Tamanoa

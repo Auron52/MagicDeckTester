@@ -54,6 +54,18 @@ gaps, ten unmodeled, 15 capped, and 178 decision-budget flags from one
 decision. The next block is 67,000–71,999. See
 `docs/design/prevent-damage-nonexact-pain-line-2026-11-16.md`.
 
+The next Prevent Damage drop cluster, seed 30,064,758, has two visible
+Earthquakes after a Dina breakpoint. `MTG_PD_MULTI_QUAKE_HOLD` now preserves
+two red pips for Dina, then subtracts the current spell's red pip when paying
+the first Earthquake. The recorded-board test pays all three spells. On
+5,000 paired Release games, nine play traces changed and no win turn moved;
+the optimized trial has the same play as the first trial with 2.0% extra
+recorded game time and 0.06% fewer work units than the off arm. All 3,355
+unit cases passed. Strict viewer replay had zero drift across 864 references;
+the one changed regression row has zero paired win-turn changes. The default
+is on and `=0` rolls back. The fresh PGO gate 67,000–71,999 is next. See
+`docs/design/prevent-damage-multi-earthquake-hold-2026-11-16.md`.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

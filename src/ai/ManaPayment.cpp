@@ -1419,16 +1419,24 @@ bool TapForCostSharedOnce(GameState& state, const ManaCost& cost_in, bool for_cr
         const PlanTraits* pt = CurrentPlanTraits();
         const bool named_line = pt != nullptr && pt->mana_casts >= 2;
         static const bool s_later_hand_hold = EnvOn("MTG_PD_LATER_HAND_HOLD", true);
+        static const bool s_multi_quake = EnvOn("MTG_PD_MULTI_QUAKE_HOLD", true);
         // A cast already named beside this one in the plan has first claim on
         // the remaining sources. The hand-only Earthquake is an unseen
         // continuation, so do not reserve its red over that named cast.
         static const bool s_named_priority = EnvOn("MTG_PD_NAMED_LINE_PRIORITY", true);
         const bool named_priority = heurarm::Flag(heurarm::PD_NAMED_LINE_PRIORITY, s_named_priority);
         const bool later_hand_hold = state.dmg_events_armed && (!named_line || !named_priority)
-            && cost_in.red == 0
+            && (cost_in.red == 0 || s_multi_quake)
             && heurarm::Flag(heurarm::PD_LATER_HAND_HOLD, s_later_hand_hold);
-        const std::vector<ManaCost> hand_holds = later_hand_hold
+        std::vector<ManaCost> hand_holds = later_hand_hold
             ? ResolveProvider(state).PaymentHoldUp(state, state.active_player_index) : std::vector<ManaCost>{};
+        if (s_multi_quake && cost_in.red > 0)
+        {
+            for (ManaCost& hold : hand_holds)
+            { hold.red = std::max(0, hold.red - cost_in.red); }
+            hand_holds.erase(std::remove_if(hand_holds.begin(), hand_holds.end(), [](const ManaCost& hold)
+            { return hold.ManaValue() == 0; }), hand_holds.end());
+        }
         if (!named_line && hand_holds.empty()) { return -1; }
         if (probe) { return 1; }
         const int cur[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };

@@ -740,7 +740,7 @@ public:
                "reach, and our own death, before it can be sound." }; }
     const char* Name() const override { return "PreventDamage"; }
     bool SelfDamageUseful(const GameState& s, int controller) const override;
-    // Keep a red pip available for a Rolling Earthquake already in hand when another
+    // Keep a red pip per Rolling Earthquake already in hand (up to two) when another
     // payment has a proven alternative. The armed payer checks this target against
     // the same line-repair survival and mana-feasibility rules as a named cast.
     std::vector<ManaCost> PaymentHoldUp(const GameState& s, int controller) const override;
