@@ -80,7 +80,14 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 4. Hullbreaker Flash / Brinelin Partner deferrals (inert: main-phase cast dominates; Commander-only).
    PROVISIONAL.
 5. Serpent of Yawning Depths evasion + Lorthos {8} tap (always declined, dominance) deferrals. PROVISIONAL.
-6. Whelming Wave cast-skip fold unless Hullbreaker is on board/in hand (default ON). Agent default: adopt.
+6. ~~Whelming Wave cast-skip~~ — **ANSWERED (USER 2026-11-16):** *"Yes, I would heuristically skip
+   Whelming Wave. Neither of Hullbreaker's abilities are useful in Goldfish, so we can opt out
+   heuristically as well."* So: (a) the Sea Creatures provider never casts Whelming Wave (unconditional
+   prune, no Hullbreaker exception); (b) the provider always DECLINES Hullbreaker Horror's cast trigger
+   (both modes). Both default ON, each with an =0 flag restoring the searched option. The engine still
+   implements both cards faithfully and the viewer still surfaces them to a human.
+   Follow-up Q (agent default PROVISIONAL): Brinelin's bounce is the same ability but the USER named only
+   Hullbreaker, so Brinelin's trigger stays SEARCHED until the USER says otherwise.
 7. Hullbreaker post-combat bounce-and-recast: covered by the deck's second main (Summon draws turn it on).
 8. Tap-Sol-Ring-in-response-then-bounce: not expressible today; follow-up, not built now.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
