@@ -295,7 +295,21 @@ int BoarsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) 
     if (p.cast_trigger_team_pump_power > 0)        { return kBoarsCastPump; }
     if (p.etb_other_creatures_pump_power > 0)      { return kBoarsEtbPump; }
     const int mv = def.card.m_mana_cost.ManaValue();
-    if (mv <= 4) { return kBoarsSmall + std::max(mv, 0); }
+    if (mv <= 4)
+    {
+        // E1 of the approved order: a Greaves already on the battlefield can haste
+        // a fresh Sage or Druid before a later Boar. Rank those mana creatures with
+        // Birds/Hierarch, ahead of Flinthoof, only on a board that can equip them.
+        // This is one visible order, never an additional searched permutation.
+        static const bool haste_dork_first = EnvOn("MTG_BOARS_HASTE_DORK_RANK", true); // DEFAULT ON; =0 restores MV order
+        if (haste_dork_first && def.tmpl == CardTemplate::ManaDork && mv > 1)
+        {
+            const bool greaves = std::any_of(s.battlefield.begin(), s.battlefield.end(), [&](const Permanent& q)
+            { return q.controller_index == s.active_player_index && q.card.m_name == "Lightning Greaves"; });
+            if (greaves) { return kBoarsSmall + 1; }
+        }
+        return kBoarsSmall + std::max(mv, 0);
+    }
     return kBoarsBig + std::min(mv, 19);
 }
 

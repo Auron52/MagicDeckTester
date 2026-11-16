@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Boars' approved Greaves exception now ranks a freshly cast Sage or Zhur-Taa
+ahead of Flinthoof only while Greaves is already on the battlefield. This
+reduces the first 500 Boars order flags 99 -> 69, clears 22/23 on seed
+30,000,239, and changes no win turn in a fresh 2,000-game paired solo check.
+Boars/2HG smoke and regression have no slower games and one faster two-headed
+game; the changed ground truth is accepted after audit. See
+`docs/design/boars-haste-dork-order-2026-11-16.md`.
+
 The first complete Boars/Mill/Red Elementals gate (5,000 games each) found
 Boars 3,542 issues, Mill 360 issues, and Red Elementals clean; oracle-on/off
 play was byte-identical. Mill's Surgical life-only cast was incorrectly

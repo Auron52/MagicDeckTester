@@ -71,6 +71,26 @@ bool OffersSelfHaste(const GameState& s, int src, bool pre_combat)
 }
 }   // namespace
 
+TEST_CASE("Boars haste order advances mana creatures only with our Greaves in play")
+{
+    GameState s = BBase();
+    BoarsProvider provider;
+    s.m_provider = &provider;
+    const CardDefinition& sage = BDef("Somberwald Sage");
+    const CardDefinition& druid = BDef("Zhur-Taa Druid");
+    const CardDefinition& boar = BDef("Flinthoof Boar");
+    const CardDefinition& horn = BDef("Herald's Horn");
+    CHECK(provider.CastOrderRank(s, sage) > provider.CastOrderRank(s, boar));
+    CHECK(provider.CastOrderRank(s, druid) == provider.CastOrderRank(s, boar));
+    Permanent& greaves = BPut(s, "Lightning Greaves", 37);
+    greaves.controller_index = 1;
+    CHECK(provider.CastOrderRank(s, sage) > provider.CastOrderRank(s, boar));
+    greaves.controller_index = 0;
+    CHECK(provider.CastOrderRank(s, horn) < provider.CastOrderRank(s, sage));
+    CHECK(provider.CastOrderRank(s, sage) < provider.CastOrderRank(s, boar));
+    CHECK(provider.CastOrderRank(s, druid) < provider.CastOrderRank(s, boar));
+}
+
 TEST_CASE("Windswept Heath is a real battlefield fetchland (the Wooded Foothills shape)")
 {
     const CardDefinition& h = BDef("Windswept Heath");
