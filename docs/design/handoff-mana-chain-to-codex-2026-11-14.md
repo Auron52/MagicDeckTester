@@ -6,6 +6,18 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Spirits' same-main Souls hand cast → Vialed Geist → Souls flashback was
+rejected by the aggregate mana gate because its pending graveyard-cast
+candidate had no definition pointer and received no Geist discount. Resolving
+the definition by interned name clears the exact repro and all five enum gaps
+in the first 500 gate games. A fresh 5,000-game paired A/B changed 12 play
+digests and zero win turns; full units, 561 scenarios, strict viewer replay,
+and Spirits/2HG smoke passed. One searched regression game gained a turn and
+one lost a turn through budget churn that recovers at 4×. Ground truth is
+accepted with the audit note. See
+`docs/design/spirits-pending-flashback-geist-credit-2026-11-16.md`. The next
+fresh Spirits block is 5,000–9,999 after this source commit.
+
 The first fresh PGO mana gate for Morph and Spirits is complete on games
 0–4,999 for each deck (`codex-morph-spirits-first-20261116`). Oracle-on and
 oracle-off play is byte-identical. Morph has 3,647 issues: 162 payment drops,

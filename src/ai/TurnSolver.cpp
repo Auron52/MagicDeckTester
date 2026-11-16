@@ -8684,6 +8684,13 @@ static int SameTurnReducerDiscountFor(const GameState& state, const SameTurnRedu
                                       const std::vector<Action>& cands, int j)
 {
     const CardDefinition* dj = cands[j].def;
+    // Pending same-main flashback and cards already in the graveyard carry a name but no def.
+    // Resolve it here so a Vialed Patrician Geist's generic reduction is credited to the
+    // subset's aggregate bill. Otherwise the mana gate rejects Souls -> Geist -> flashback
+    // even though the live per-cast cost is {B} after Geist enters. DEFAULT ON; =0 restores.
+    static const bool s_gy_reducer_def = EnvOn("MTG_GY_REDUCER_DEF", true);
+    if (dj == nullptr && s_gy_reducer_def && cands[j].kind == Action::Kind::CastFromGraveyard)
+    { dj = CardDatabase::Instance().LookupInterned(cands[j].card_name); }
     if (!dj || cands[j].cost.generic <= 0) { return 0; }   // nothing to discount
     const ManaCost& mc = dj->card.m_mana_cost;             // printed pips (colour set by the card)
     int reducers = 0;

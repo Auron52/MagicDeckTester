@@ -293,6 +293,33 @@ TEST_CASE("Patrician Geist PUT by Aether Vial this main discounts the flashback:
     }
 }
 
+TEST_CASE("Patrician Geist Vial put discounts a Souls cast and flashed back in the same main")
+{
+    // The flashback candidate starts in hand, so it has no CardDefinition pointer. Its printed
+    // {1}{B} must still receive Geist's {1} discount in the subset mana gate: 3 + 1 = 4.
+    GameState s = GwBoard({ "Azorius Chancery", "Hallowed Fountain", "Godless Shrine" });
+    Permanent& vial = GwPut(s, "Aether Vial", 7);
+    vial.charge_counters = 3;
+    s.players[0].hand.push_back(GwZone(kSouls, 40));
+    s.players[0].hand.push_back(GwZone(kGeist, 30));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* line = GwFindPlan(plans, {{Action::Kind::CastFromHand, kSouls},
+                                                     {Action::Kind::ActivateVial, kGeist},
+                                                     {Action::Kind::CastFromGraveyard, kSouls}});
+    REQUIRE(line != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, true);
+    const GameState exec = GwRunExecutor(s, *line);
+    for (const GameState* g : { static_cast<const GameState*>(&roll), &exec })
+    {
+        INFO("world: " << (g == &roll ? "rollout" : "executor"));
+        CHECK(GwFind(*g, kGeist) != nullptr);
+        CHECK(GwSpiritTokens(*g) == 4);
+        CHECK(GwZoneCount(g->players[0].graveyard, kSouls) == 0);
+        CHECK(g->spells_cast_this_turn == s.spells_cast_this_turn + 2);
+    }
+}
+
 // ---- Mausoleum Wanderer --------------------------------------------------------------------------------
 
 TEST_CASE("Mausoleum Wanderer: the card -- {U} 1/1 Spirit; an enter watcher (DefHasCreatureEnterWatcher)")
