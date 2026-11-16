@@ -21,6 +21,7 @@
 
 #include "ai/DecisionProviders.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaOracle.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -108,6 +109,65 @@ int Me2(const GameState& s)  { return s.players[0].life; }
 int Opp2(const GameState& s) { return s.players[1].life; }
 
 }   // namespace
+
+TEST_CASE("Prevent Damage: scripted Pyrohemia payment preserves damage-trigger state")
+{
+    GameState root = Board2();
+    root.players[0].life = 15;
+    root.players[1].life = 20;
+    Put2(root, "Brushland");
+    const int city = Put2(root, "City of Brass");
+    Put2(root, "Dina, Soul Steeper");
+    const int forge = Put2(root, "Battlefield Forge");
+    Put2(root, "Tamanoa");
+    const int tomb = Put2(root, "Ancient Tomb");
+    Put2(root, "Vito, Thorn of the Dusk Rose");
+    Put2(root, "Reflecting Pool");
+
+    manaoracle::PayOption option;
+    option.what = D("Pyrohemia").card.m_mana_cost.ToString();
+    option.taps.push_back(TurnSolver::PreTap{ "Battlefield Forge", forge, static_cast<int>(Color::Red) });
+    option.taps.push_back(TurnSolver::PreTap{ "City of Brass", city, static_cast<int>(Color::Red) });
+    option.taps.push_back(TurnSolver::PreTap{ "Ancient Tomb", tomb, static_cast<int>(Color::Colorless) });
+    for (int opponent_life : { 1, 2, 3, 20 })
+    {
+        root.players[1].life = opponent_life;
+        GameState direct = root;
+        REQUIRE(TapForCostDirect(direct, D("Pyrohemia").card.m_mana_cost, false));
+
+        GameState scripted = root;
+        {
+            manaoracle::RealPayScope scope(scripted, { option });
+            REQUIRE(TapForCostDirect(scripted, D("Pyrohemia").card.m_mana_cost, false));
+        }
+        CHECK(scripted.players[0].life == direct.players[0].life);
+        CHECK(scripted.players[1].life == direct.players[1].life);
+        CHECK(scripted.floating_mana == direct.floating_mana);
+        for (std::size_t i = 0; i < root.battlefield.size(); ++i)
+        {
+            CHECK(scripted.battlefield[i].tapped == direct.battlefield[i].tapped);
+            CHECK(scripted.battlefield[i].mana_tap_mark == direct.battlefield[i].mana_tap_mark);
+        }
+
+        GameState audited = root;
+        manaoracle::Hook hook;
+        hook.target = &audited;
+        hook.script.push_back(option);
+        manaoracle::Hook* const saved = manaoracle::t_hook;
+        manaoracle::t_hook = &hook;
+        const bool audit_paid = TapForCostDirect(audited, D("Pyrohemia").card.m_mana_cost, false);
+        manaoracle::t_hook = saved;
+        REQUIRE(audit_paid);
+        CHECK(audited.players[0].life == direct.players[0].life);
+        CHECK(audited.players[1].life == direct.players[1].life);
+        CHECK(audited.floating_mana == direct.floating_mana);
+        for (std::size_t i = 0; i < root.battlefield.size(); ++i)
+        {
+            CHECK(audited.battlefield[i].tapped == direct.battlefield[i].tapped);
+            CHECK(audited.battlefield[i].mana_tap_mark == direct.battlefield[i].mana_tap_mark);
+        }
+    }
+}
 
 TEST_CASE("Spellshock: the cast trigger is a damage event -> Tamanoa gains it, Vito drains it")
 {

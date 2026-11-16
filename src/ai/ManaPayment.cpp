@@ -10347,7 +10347,15 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
             }
         }
         if (s_rpt) { std::fprintf(stderr, "[rp-pay]   scripted ok=%d bf=%zu->%zu\n", ok ? 1 : 0, n0, state.battlefield.size()); }
-        if (ok) { return true; }
+        // The scripted taps recorded armed damage marks, but the float-only drain made no tap of
+        // its own. Flush at the same payment boundary as the ordinary payer (the audit hook below
+        // already does this); otherwise real-play scripted payments leave pain unrefunded and
+        // Tamanoa / Dina / Vito triggers missing until an unrelated later flush.
+        if (ok)
+        {
+            if (state.dmg_events_armed) { dmgev::FlushDamageEvents(state); }
+            return true;
+        }
         if (state.battlefield.size() == n0) { before.Restore(state, available); }
         else                                { state = whole; before.RestoreAvailable(available); }
         h.abandoned = true;
