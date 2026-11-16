@@ -35,4 +35,10 @@ two-headed regression row has the same average as ground truth and a changed
 play digest. Strict viewer replay found zero play drift, board divergence or
 enumeration gaps among 864 references, and the require-beat checks passed.
 
-Fresh mana-clean gate results: pending.
+The fresh PGO mana-clean gate `codex-pd-scripted-20261116` completed games
+92,000–96,999 with byte-identical oracle-on/off play. It found no lost actions,
+order drops, enumeration gaps or plan caps. It flagged 26 oracle gaps (24 on
+lines where the engine is already dead and two live Pyrohemia outcomes) and
+seven payment-enumeration caps in one Beseech the Queen decision. The next
+untouched Prevent Damage block is 97,000–101,999. See
+`logs/mana_clean/codex-pd-scripted-20261116/report.md`.
