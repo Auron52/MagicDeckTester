@@ -4,7 +4,7 @@ Per-deck ledger for `decks/Sea Creatures/Sea Creatures.cod`, per the `analyze-de
 continuously. Resume point: `docs/design/sea-creatures-analysis-checkpoint.md`.
 
 **Run started:** 2026-11-16 (Claude orchestrator session). Worktree `.claude/worktrees/sea-creatures`,
-branch `sea-creatures-analysis`, base commit `f92bb3b7c` (shared branch `phase-1-2-deck-analyzer`).
+branch `sea-creatures-analysis`, base commit `8cd0bbf23` (rebased 2026-11-16 from f92bb3b7c) (shared branch `phase-1-2-deck-analyzer`).
 Subagents never push the shared branch. Scryfall JSON for the new cards:
 `/workspaces/MagicDeckTester/build/scratch/sea/scry/`.
 
@@ -53,6 +53,7 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 
 | draft | cards | file | status |
 |---|---|---|---|
+| bounce | Hullbreaker Horror, Brinelin | logs/sea-research/bounce.md | DONE: Tier 3. Shared `ReturnPermanentToOwnersHand` (also Whelming Wave / Summon I); cast triggers in `FireOnCastTriggers`; Brinelin ETB deferred past the enter cascade; per-instance searched target digit (Raggadragga machinery, ordinal renamed/shared), decline included; viewer `target` with min_targets 0. RISK: width (~20k combos late) -> measure at 5f, waves not caps. PROVISIONAL deferrals: Hullbreaker Flash (main-phase cast dominates), Brinelin Partner. Open: tap-in-response Sol Ring float; DeckUsesSecondMain for Hullbreaker post-combat re-buy. |
 
 ## Integration (serial)
 
