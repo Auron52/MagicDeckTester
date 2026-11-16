@@ -2301,11 +2301,13 @@ std::vector<PayOption> MinimalPayments(const GameState& state, const ManaCost& c
         pe.line_surplus_taps = line_surplus_taps;
         pe.want        = max_opts;
         pe.memo_on = memo;
-        // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 65536; it was 4096). With the tap memo a probe is a
+        // MTG_ORACLE_PAY_PROBES: the table's probe ceiling (default 131072; it was 4096). With the tap memo a probe is a
         // DISTINCT post-tap board, so what is left past 4096 is real breadth -- Prevent Damage seed 30020166 T8 paid
         // {2}{R} into 1,666 distinct results. The gate's 326 flagged games (play byte-identical in every arm): ceiling
-        // 4096 -> UNMODELED 430, 16384 -> 56, 65536 -> 20; oracle CPU +13% / +16%. A pre-tap memo hit is not a probe.
-        { static const int s_pc = std::max(1, EnvInt("MTG_ORACLE_PAY_PROBES", 65536)); pe.cap = static_cast<std::size_t>(s_pc); }
+        // 4096 -> UNMODELED 430, 16384 -> 56, 65536 -> 20; oracle CPU +13% / +16%. Prevent Damage
+        // seed 30094874 T8 needs more than 65536: 131072 clears all seven flags at that one
+        // decision (12.98 oracle seconds for the game). A pre-tap memo hit is not a probe.
+        { static const int s_pc = std::max(1, EnvInt("MTG_ORACLE_PAY_PROBES", 131072)); pe.cap = static_cast<std::size_t>(s_pc); }
         // MTG_ORACLE_SCALED_AHEAD (DEFAULT ON; =0 the one-extra-tap table alone): audit-only, see ExtendScaledAhead.
         static const bool s_ahead = EnvOn("MTG_ORACLE_SCALED_AHEAD", true);
         if (!whole_float && s_ahead) { pe.ahead = ScaledAheadClasses(state, srcs, sac_victim); }
@@ -2968,6 +2970,8 @@ struct FrontierRec
     bool                   has_ability_src = false;   // the ability's source (Hook::f_ability_src)
     Card                   ability_src;
     int                    sac_victim = 0;      // Hook::f_sac_victim
+    int                    sac_spare_source = 0;   // Hook::f_sac_spare_source
+    int                    sac_spare_victim = 0;   // Hook::f_sac_spare_victim
     bool                   batch = false;      // joint pre-cast float
 };
 
@@ -3165,6 +3169,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.has_ability_src = h.f_has_ability_src;
                     if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
                     fr.sac_victim   = h.f_sac_victim;
+                    fr.sac_spare_source = h.f_sac_spare_source;
+                    fr.sac_spare_victim = h.f_sac_spare_victim;
                     fr.batch        = h.f_batch;
                     fronts.push_back(std::move(fr));
                     continue;
@@ -3248,6 +3254,16 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     failures = (failures ^ (step + 1)) * 0x100000001b3ULL;
                 }
                 if (failures != 0) { keys[i] ^= failures; }
+                // A continuation can choose a different sacrifice victim even when its earlier
+                // payments reach the same board and bill. That pending action lives in the
+                // payment scope, not the board: keep its source/victim in the frontier key.
+                if (fronts[i].sac_spare_source != 0 || fronts[i].sac_spare_victim != 0)
+                {
+                    keys[i] ^= (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_source))
+                                * 0x9E37'79B9'7F4A'7C15ULL)
+                             ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_victim))
+                                * 0xD1A5'AC51'B11D'AB1EULL);
+                }
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
             keep = ParetoKeep(keys, res);
@@ -3291,6 +3307,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 for (const Action& a : plan.actions) { line_surplus += a.cost.ManaValue(); }
                 line_surplus = std::min(2, std::max(0, line_surplus - f.cost.ManaValue()));
             }
+            std::optional<PaySacSpareScope> _spare;
+            if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
+            { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
                 : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
@@ -4796,6 +4815,21 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
         {
             covered = true;
             if (strict && (best == nullptr || Covers(orr, best_res, nullptr))) { best = &o; best_res = orr; }
+        }
+    }
+    // Once the active player has lost, later life totals, shuffle order and permanents cannot
+    // improve that outcome. In an armed damage line one replay may pay one more pain land after
+    // the sticky-loss sentinel, producing kLostLife-1 while the engine has kLostLife. A loss
+    // and a draw are different outcomes, so compare the opponent's raw loss as well. Keep the
+    // ordinary resource comparison above first: it still reports a surviving improvement.
+    if (!covered && SelfHasLost(e))
+    {
+        const bool engine_draw = dmgev::OpponentLostRaw(e);
+        for (const Outcome& o : r.outcomes)
+        {
+            if (o.Full() && o.line == e_line && SelfHasLost(o.st)
+                && dmgev::OpponentLostRaw(o.st) == engine_draw)
+            { covered = true; break; }
         }
     }
     if (!covered)

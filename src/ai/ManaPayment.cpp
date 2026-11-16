@@ -10398,6 +10398,8 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.f_has_ability_src = PayingAbilitySource() != nullptr;
         if (h.f_has_ability_src) { h.f_ability_src = *PayingAbilitySource(); }
         h.f_sac_victim = g_pay_sac_victim;
+        h.f_sac_spare_source = g_pay_sac_spare[0];
+        h.f_sac_spare_victim = g_pay_sac_spare[1];
         return false;
     }
     const PayOption& opt = h.script[h.next++];
