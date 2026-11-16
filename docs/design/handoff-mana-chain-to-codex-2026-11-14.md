@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The fresh Spirits PGO gate on games 15,000–19,999 after the Souls
+flashback hold (`codex-spirits-souls-line-20261116`) found ten payment
+drops in one signature: hand-cast Lingering Souls `{2}{W}` before White
+Orchid Phantom `{W}{W}` on seed 30,015,009. Oracle-on/off play is
+byte-identical; there are no other issues. The record is in the gate
+report and `test/mana_clean.json`. This route needs a follow-up held
+payment and another fresh block.
+
 The 61 Spirits payment drops on games 10,000–14,999 now clear in all
 three exact repro games. Souls flashback's generic pip needed a different
 held-first route before Phantom or Millicent, including a line with

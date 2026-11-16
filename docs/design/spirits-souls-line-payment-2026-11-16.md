@@ -34,4 +34,12 @@ digest matched, and total work units were equal. The paired logs are under
 combined smoke/regression passed all ten cells with no changed game or
 digest. All 561 scenarios passed. Strict viewer replay of 864 references
 reported zero play drift, board divergence, or enumeration gaps; both
-suboptimal references remained beaten. The next fresh gate is pending.
+suboptimal references remained beaten.
+
+The fresh PGO gate on games 15,000–19,999 found ten `APPLY-DROP` flags,
+all in seed 30,015,009 on a different cost: Souls cast from hand
+`{2}{W}` before Phantom `{W}{W}`. Oracle-on/off play was byte-identical;
+there were no enum gaps, oracle gaps, or caps. The gate record is
+`logs/mana_clean/codex-spirits-souls-line-20261116/report.md` and
+`test/mana_clean.json`. The hand-cast route needs a follow-up fix and a
+new fresh block.
