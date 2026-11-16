@@ -87,8 +87,14 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    prune, no Hullbreaker exception); (b) the provider always DECLINES Hullbreaker Horror's cast trigger
    (both modes). Both default ON, each with an =0 flag restoring the searched option. The engine still
    implements both cards faithfully and the viewer still surfaces them to a human.
-   Follow-up Q (agent default PROVISIONAL): Brinelin's bounce is the same ability but the USER named only
-   Hullbreaker, so Brinelin's trigger stays SEARCHED until the USER says otherwise.
+   **Brinelin (USER 2026-11-16):** *"Brinelin is the same deal. Unless you can come up with a
+   counterexample I would prune it."* Agent's candidate counterexamples, both judged WEAK and surfaced:
+   (i) re-buy a tapped Sol Ring (recast {1}, tap for {C}{C}: net +1 mana that turn); (ii) bounce a Kiora
+   Bests the Sea God / Summon: Leviathan that already resolved chapter I and recast it (another 8/8, or
+   another Summon cycle) -- costs 6-7 more mana, i.e. no better than casting another threat from hand.
+   Both apply to Hullbreaker too. So: Brinelin's ETB + cast trigger ALSO always declined by the provider
+   (default ON, own =0 flag). Stage 5 A/Bs the bounce prunes (=0 vs default) so either counterexample
+   shows up if real; a measured case gets a narrow exception, not a dropped prune.
 7. Hullbreaker post-combat bounce-and-recast: covered by the deck's second main (Summon draws turn it on).
 8. Tap-Sol-Ring-in-response-then-bounce: not expressible today; follow-up, not built now.
 10. Trench Gorger exile menu: the N>=3 "which lands" set is provider-chosen, a lossy restriction (all
