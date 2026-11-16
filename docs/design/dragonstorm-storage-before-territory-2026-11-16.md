@@ -36,3 +36,10 @@ is `logs/mana_clean/codex-dragonstorm-storage-20261116/report.md`; the next
 fresh block is 57,000–61,999.
 
 Raw paired data: `build/scratch/dragonstorm_storage_*.{out,err}`.
+
+An unshipped fixed-order trial moved the cheapest ritual just after Apex
+in both the Dragonstorm menu and the sequential feasibility walk. It was
+default off and tested on enum-gap seeds 30,053,057, 30,042,074, and
+30,044,871. All three still reported `ENUM-GAP`; the rejected subsets
+still had `ef-walk-fail`. The walk's payment choice remains the obstacle,
+so the extra order was removed before any paired game run.
