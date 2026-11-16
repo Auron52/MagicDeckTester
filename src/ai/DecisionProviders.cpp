@@ -24504,11 +24504,11 @@ static int GodsDredgeRule(bool ignore_unpruned = false)
 
 std::vector<ManaCost> GodsProvider::PaymentHoldUp(const GameState& s, int controller) const
 {
-    // DEFAULT ON; =0 disables. A Study paid with a countered green land can
+    // DEFAULT OFF trial; =1 enables. A Study paid with a countered green land can
     // strand a named Loam continuation. Loam's land targets may arrive from
     // that Study, so the named line's green bill is the relevant hold here.
     // The shared payer changes its source only when the later bill stays payable.
-    static const bool s_hold = EnvOn("MTG_GODS_LOAM_GREEN_HOLD", true);
+    static const bool s_hold = EnvOn("MTG_GODS_LOAM_GREEN_HOLD");
     if (!s_hold || controller < 0 || controller >= static_cast<int>(s.players.size())
         || g_line_unpaid_cost.green == 0) { return {}; }
     const Player& p = s.players[controller];
