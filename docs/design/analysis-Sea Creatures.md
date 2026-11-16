@@ -66,6 +66,14 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
    Ground."* So: migrate Misty to the battlefield model, and the Sea Creatures provider ranks Breeding
    Pool first on the fetch target list while it remains in the library (the Boars shock-first shape,
    commit 910e1959f, `MTG_BOARS_SHOCK_FIRST`), default ON with an =0 off switch.
+   **Refined (USER 2026-11-16):** *"These should be heuristically pruned. Though we might want to
+   prioritize Island over forest once the breeding pools are gone because of the composition of the
+   deck."* So the rule is a PROVIDER ONE-OPTION PRUNE (not a reorder): Breeding Pool while one remains,
+   else Island over Forest. Applies to Misty / Windswept Heath / Flooded Strand. Human play still offers
+   every target; =0 restores the full searched set. Island-vs-Forest stays switchable for a Stage 5 A/B
+   (the USER said "might").
+2. Hedge Maze (Forest Island, enters tapped, surveil 1) as a fetch target: where in the pruned order?
+   Agent default (PROVISIONAL): after Island and Forest.
 
 ## Approved deferrals
 
