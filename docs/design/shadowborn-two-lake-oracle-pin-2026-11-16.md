@@ -69,3 +69,36 @@ ground-truth mismatches (48 smoke, 75 regression), mostly the already
 documented baseline drift; its strict viewer replay passed all 864
 references, both suboptimal games stayed beaten, and the Shadowborn-only
 11-job regression was fully green. No broad GT rebaseline was made.
+
+The next fresh PGO block, indices 95,000–99,999, was again oracle-on/off
+play-identical. It found 51 flags: 48 `APPLY-DROP-ORDER` in one game
+(seed 30,097,662, turn-six main two) and three `APPLY-DROP` in one other
+game (seed 30,096,442). The latter is the pending payable-Intent Lotus timing
+question. In the order case, Thrumming Stone is already on the battlefield,
+the hand has an Apostle, Dark Ritual, and multiple Diabolic Intents, and the
+ranked order casts Ritual before the Apostle. A payable oracle order casts
+the Apostle first, providing a creature for the Intents after Ripple. The
+report is `logs/mana_clean/codex-shadowborn-unique-later-20261116/report.md`.
+
+A per-job rule `MTG_SB_APOSTLE_BEFORE_RITUAL_INTENT` (default on, `=0` control) moves one
+Apostle before the first plain Ritual only when Stone is on the visible board,
+the line contains at least two Intents, and the resulting order passes the
+exact sequential payability check without Ripple credit. It adds no searched
+order. The exact seed drops from 48 order flags to zero. On 5,000 fresh paired
+games before adding the payability guard, two play digests changed but all
+5,000 win turns stayed equal. The guarded same-seed A/B changed only one play
+digest and no win turns. In that game (index 2866), the trial casts two Dark
+Rituals and Thrumming Stone on turn one whereas the baseline waits; both win
+on turn five. The traced actions are legal. The full Release unit suite passes
+3,362 cases and 3,614,418 assertions. Paired inputs and traces are in
+`build/scratch/shadowborn_apostle_order_ab/`.
+
+With the rule enabled, all seven Shadowborn regression cells and the three
+other smoke cells matched ground truth. The depth-zero Shadowborn smoke cell
+changed one play digest, game 445, with the same turn-seven win. Its trace
+shows the intended visible order: Lake of the Dead, Apostle, Dark Ritual,
+two Diabolic Intents, and an Apostle activation on turn six, in place of
+Ritual before Apostle. The four smoke results were accepted after that
+per-game audit. All 561 scenarios passed; the strict viewer replay had zero
+drift or enum gaps across 864 references, and both require-beat games remained
+strictly beaten. The overnight tier is left to the periodic run.

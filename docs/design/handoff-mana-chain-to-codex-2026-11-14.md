@@ -6,6 +6,16 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Shadowborn's fresh gate on indices 95,000–99,999 found 48 order drops in one
+Stone/Apostle/Ritual/multiple-Intent game and three Lotus-timing payment drops
+in another. A visible, sequentially payable Apostle-before-Ritual arrangement
+clears the 48 exact flags without adding a searched order. Its 5,000-game
+paired A/B changed one play digest and zero win turns. Full units, all
+Shadowborn/2HG regression cells except one depth-zero smoke digest, scenarios,
+and strict viewer passed; the single changed game was traced and its smoke
+ground truth accepted. The remaining Lotus-timing question still awaits the
+user's policy answer. See `docs/design/shadowborn-two-lake-oracle-pin-2026-11-16.md`.
+
 Dragonstorm's splice-reveal repair (`1086ba6c7`) checks that a Desperate
 Ritual being spliced has another physical copy still in hand; Apex-staged
 copies cannot serve as reveals. Seed 30,054,701 now has zero flags. The

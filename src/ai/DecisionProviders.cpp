@@ -64620,6 +64620,12 @@ static bool SbRitualAfterStoneOn()
     static const bool on = EnvOn("MTG_SB_RITUAL_AFTER_STONE", true);
     return heurarm::Flag(heurarm::SB_RITUAL_AFTER_STONE, on);
 }
+static bool SbApostleBeforeRitualIntentOn()
+{
+    // Trial: a visible Stone and several Intents need Ripple fodder before the tutors consume it.
+    static const bool on = EnvOn("MTG_SB_APOSTLE_BEFORE_RITUAL_INTENT", true);
+    return heurarm::Flag(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, on);
+}
 // A plain-ritual cast (rank 1: Dark Ritual -- a mana ritual with no creature-sacrifice cost) / a ripple granter cast.
 static const CardDefinition* SbCastDef(const Action& a)
 {
@@ -64656,6 +64662,37 @@ void ShadowbornProvider::ArrangeCastOrder(const GameState& s, const std::vector<
                                           std::vector<int>& order) const
 {
     if (!SbCastOrderOn() || order.size() < 2) { return; }
+    if (SbApostleBeforeRitualIntentOn())
+    {
+        bool stone = false;
+        for (const Permanent& p : s.battlefield)
+        {
+            if (p.controller_index != s.active_player_index || p.def_absent) { continue; }
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d != nullptr && d->params.grants_ripple > 0) { stone = true; break; }
+        }
+        if (stone)
+        {
+            int ritual = -1, apostle = -1, intents = 0;
+            for (int pos = 0; pos < static_cast<int>(order.size()); ++pos)
+            {
+                const CardDefinition* d = SbCastDef(actions[static_cast<std::size_t>(order[static_cast<std::size_t>(pos)])]);
+                if (d == nullptr) { continue; }
+                if (d->params.ritual_floating_mana > 0 && !d->params.sac_additional_creature && ritual < 0)
+                { ritual = pos; }
+                if (SbIsSacNamedCreature(d) && apostle < 0) { apostle = pos; }
+                if (d->params.tutor_to_hand && d->params.sac_additional_creature) { ++intents; }
+            }
+            if (intents >= 2 && ritual >= 0 && apostle > ritual)
+            {
+                std::vector<int> trial = order;
+                const int moved = trial[static_cast<std::size_t>(apostle)];
+                trial.erase(trial.begin() + apostle);
+                trial.insert(trial.begin() + ritual, moved);
+                if (TurnSolver::OrderPaysSequentially(s, actions, trial)) { order.swap(trial); }
+            }
+        }
+    }
     // "Dark Ritual, <shadowborn sacrifice for culling if needed>, Culling, Thrumming stone": a creature-sacrifice
     // spell whose victim is a SAME-PLAN hand creature (Action::trick_hand_target, the SAC-ANY-CREATURE post-pass)
     // takes that creature's first cast to just BEFORE itself, so the spell keeps its rank (Culling ahead of the

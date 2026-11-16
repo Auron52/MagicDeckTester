@@ -588,6 +588,30 @@ std::vector<std::string> SbArranged(GameState& s, const std::vector<Action>& act
 }
 }
 
+TEST_CASE("SB order: Apostle precedes Ritual with Stone and two Intents when payable")
+{
+    ArmM arm;
+    arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 1);
+    GameState s = BaseM(5);
+    s.battlefield.push_back(PermM(kStoneM, 50));
+    const std::vector<Action> acts = { SbCastA(s, kIntentM, 60), SbCastA(s, kRitM, 61),
+                                       SbCastA(s, kApM, 62), SbCastA(s, kIntentM, 63) };
+    CHECK(SbArranged(s, acts) == std::vector<std::string>{ kApM, kRitM, kIntentM, kIntentM });
+    {
+        ArmM off; off.Set(heurarm::SB_APOSTLE_BEFORE_RITUAL_INTENT, 0);
+        CHECK(SbArranged(s, acts) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
+    }
+    GameState without_stone = BaseM(5);
+    const std::vector<Action> plain = { SbCastA(without_stone, kIntentM, 60), SbCastA(without_stone, kRitM, 61),
+                                        SbCastA(without_stone, kApM, 62), SbCastA(without_stone, kIntentM, 63) };
+    CHECK(SbArranged(without_stone, plain) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
+    GameState short_mana = BaseM(1);
+    short_mana.battlefield.push_back(PermM(kStoneM, 50));
+    const std::vector<Action> short_line = { SbCastA(short_mana, kIntentM, 60), SbCastA(short_mana, kRitM, 61),
+                                             SbCastA(short_mana, kApM, 62), SbCastA(short_mana, kIntentM, 63) };
+    CHECK(SbArranged(short_mana, short_line) == std::vector<std::string>{ kRitM, kApM, kIntentM, kIntentM });
+}
+
 TEST_CASE("SB order: Ritual goes after the Stone when that order pays, else before it")
 {
     ArmM arm; arm.Set(heurarm::SB_CAST_ORDER, 1).Set(heurarm::SB_RITUAL_AFTER_STONE, 1);
