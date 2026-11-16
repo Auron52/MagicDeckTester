@@ -237,6 +237,9 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
         h.frontier      = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
         h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
+        h.f_line_unpaid = g_line_unpaid_cost;
+        h.f_line_opens_unseen = g_line_opens_unseen;
+        h.f_line_has_acts = g_line_hold_has_acts;
         h.f_dropped     = h.DroppedSoFar();
         h.f_cost        = ManaCost{};
         h.f_tapahead    = count;
@@ -2170,6 +2173,9 @@ void ScriptedBatchPrepay(GameState& state, const ManaCost& combined, bool for_cr
         h.ended = true;
         h.frontier = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_line_unpaid = g_line_unpaid_cost;
+        h.f_line_opens_unseen = g_line_opens_unseen;
+        h.f_line_has_acts = g_line_hold_has_acts;
         h.f_dropped = h.DroppedSoFar();
         h.f_cost = combined;
         h.f_for_creature = for_creature;
@@ -2974,6 +2980,9 @@ struct FrontierRec
     int                    sac_spare_source = 0;   // Hook::f_sac_spare_source
     int                    sac_spare_victim = 0;   // Hook::f_sac_spare_victim
     std::int32_t           dbl_combat_hold = 0; // temporarily held attacker during this payment
+    ManaCost               line_unpaid;       // the apply scope has ended before enumeration
+    bool                   line_opens_unseen = false;
+    bool                   line_has_acts = false;
     bool                   batch = false;      // joint pre-cast float
 };
 
@@ -3017,6 +3026,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     RealizeCursor* cursor = nullptr, bool hit_only = false)
 {
     Realization r;
+    // DEFAULT ON; =0 restores the old audit table for a focused A/B.
+    static const bool s_line_context = EnvOn("MTG_ORACLE_LINE_CONTEXT", true);
     std::vector<std::vector<PayOption>> layer(1, prefix);
     int nodes = 0;
     // Battlefield permanents the plan itself uses (a {T}-cost activation, a sacrifice): an engine tap
@@ -3174,6 +3185,9 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.sac_spare_source = h.f_sac_spare_source;
                     fr.sac_spare_victim = h.f_sac_spare_victim;
                     fr.dbl_combat_hold = h.f_dbl_combat_hold;
+                    fr.line_unpaid = h.f_line_unpaid;
+                    fr.line_opens_unseen = h.f_line_opens_unseen;
+                    fr.line_has_acts = h.f_line_has_acts;
                     fr.batch        = h.f_batch;
                     fronts.push_back(std::move(fr));
                     continue;
@@ -3273,6 +3287,14 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 {
                     keys[i] ^= std::hash<std::string>{}("combat-hold#" + std::to_string(fronts[i].dbl_combat_hold));
                 }
+                // Identical boards with different remaining-line bills can spend the same
+                // float differently. Keep those payment frontiers distinct.
+                if (s_line_context)
+                {
+                    keys[i] ^= std::hash<std::string>{}("line#" + fronts[i].line_unpaid.ToString()
+                        + (fronts[i].line_opens_unseen ? "u" : "k")
+                        + (fronts[i].line_has_acts ? "a" : "c"));
+                }
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
             keep = ParetoKeep(keys, res);
@@ -3306,6 +3328,17 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             if (next.size() >= room) { note_cut(); break; }
             const std::size_t want = room - next.size() + 1;
             FrontierRec& f = fronts[i];
+            // Verification must spend floating generic mana under the same remaining-line
+            // bill as the scripted apply. Otherwise a Karoo's natural leftover can be
+            // mistaken for the opposite colour and its missing set-aside is never offered.
+            std::optional<LineUnpaidCostScope> _line_cost;
+            std::optional<LineOpensUnseenScope> _line_unseen;
+            if (s_line_context)
+            {
+                _line_cost.emplace(f.line_unpaid);
+                g_line_hold_has_acts = f.line_has_acts;
+                _line_unseen.emplace(f.line_opens_unseen);
+            }
             // DEFAULT ON; =0 disables. The audit may prepay ordinary lands for the line's later
             // named mana bill after a one-mana first payment (Gods Study -> Magus).
             // Play is untouched; an unspecified continuation is not charged here.

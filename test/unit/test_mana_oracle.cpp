@@ -770,6 +770,29 @@ TurnSolver::Plan PlanOf(std::vector<Action> actions)
 }
 } // namespace
 
+// The replay of Supreme Phantom then Usher spends the Chancery's blue unit on
+// Phantom's generic pip and leaves its white unit for Usher. The oracle must
+// verify the first payment under that same remaining-line bill; otherwise its
+// table assumes the white unit was spent and omits the engine's outcome.
+TEST_CASE("Spirits: oracle keeps Chancery white floating for a later Usher")
+{
+    EnsureOracleCards();
+    GameState s = Board({ "Island", "Azorius Chancery" });
+    static const SpiritsProvider prov;
+    s.m_provider = &prov;
+    s.players[0].life = 20;
+    s.players[1].life = 20;
+    for (const char* name : { "Supreme Phantom", "Usher of the Fallen" })
+    {
+        Card c = CardDatabase::Instance().Lookup(name)->card;
+        c.m_number = 100 + static_cast<int>(s.players[0].hand.size());
+        s.players[0].hand.push_back(c);
+    }
+    const TurnSolver::Plan plan = PlanOf({ CastAction(s, "Supreme Phantom"),
+                                           CastAction(s, "Usher of the Fallen") });
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
+}
+
 // Giada, Font of Hope: "{T}: Add {W}. Spend this mana only to cast an Angel spell." The oracle's restricted route once
 // offered it to ANY creature spell, and paid Bishop of Wings (a Human Cleric) with it -- Angels eg1, two ENUM-GAPs no
 // legal payment realises. The paying spell (the frontier's PayingSpellCard) now rides into the table.

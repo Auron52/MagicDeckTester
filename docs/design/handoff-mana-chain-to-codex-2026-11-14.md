@@ -6,6 +6,18 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The fresh Spirits PGO gate on games 10,000–14,999
+(`codex-spirits-karoo-spare-20261116`) is complete with byte-identical
+oracle-on/off play. It has 61 `APPLY-DROP` flags in seven signatures,
+mostly Lingering Souls flashback followed by White Orchid Phantom; there
+are no oracle gaps, enum gaps, or caps. Its source record is in
+`logs/mana_clean/codex-spirits-karoo-spare-20261116/report.md` and
+`test/mana_clean.json`. The older Chancery/Island Supreme Phantom → Usher
+oracle gap is separately fixed in the audit's line-context replay; all
+three exact gate repros clear with that fix, and the off-control restores
+the original gap. Spirits still needs the remaining flashback payment
+drops repaired and another fresh gate.
+
 Spirits' remaining Vial → White Orchid Phantom payment drops used a
 creature-only white land for Vial's generic pip while Chancery sat untapped.
 The scoped scarce-color mask had held the whole Chancery even though its blue
@@ -15,8 +27,8 @@ one-generic bill. The focused rollout/executor test and all three exact gate
 repros pass; a 2,000-game paired Spirits check changes no win turns or play
 digests. Combined smoke/regression had no searched changes and one faster
 depth-zero game; viewer and scenario checks passed. See
-`docs/design/spirits-karoo-spare-generic-2026-11-16.md`. A fresh PGO gate is
-owed.
+`docs/design/spirits-karoo-spare-generic-2026-11-16.md`. Its fresh PGO gate
+is recorded above.
 
 The fresh Morph PGO gate on games 5,000–9,999 completed after the combat-hold
 frontier fix (`codex-morph-combat-hold-20261116`). Oracle-on/off play is
@@ -32,8 +44,8 @@ was permanently tapped for mana, losing the legal two-land route. The held
 attacker now separates those frontiers; a focused test fails before and
 passes after, full units pass, and seed 30,000,074 drops 22 oracle gaps to
 zero. The first 500 Morph games fall from 290 to 99 oracle gaps. See
-`docs/design/morph-combat-hold-frontier-2026-11-16.md`; a fresh PGO gate
-is owed.
+`docs/design/morph-combat-hold-frontier-2026-11-16.md`; its fresh PGO gate
+is recorded above.
 
 The fresh Spirits PGO gate on games 5,000–9,999 is complete
 (`codex-spirits-post-holds-20261116`), with byte-identical oracle-on/off

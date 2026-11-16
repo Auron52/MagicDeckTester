@@ -10426,6 +10426,46 @@
      "seed": 30005000,
      "src": "d0826a3fc3a973af0450e7e4da7c935df64a1938",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 61,
+      "CONTINUATION-DIFFERS": 586,
+      "DOMINATED-LAND": 3422,
+      "DROP-COVERED": 639,
+      "PHANTOM": 2763
+     },
+     "commit": "914c43fb080b4d41e4c2c2728abcd316df5df617",
+     "date": "2026-11-16T21:13:18Z",
+     "decisions": 41363,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 10000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 61,
+     "life_breakpoints": [],
+     "ms_off": 3135503,
+     "ms_on": 3857953,
+     "report": "logs/mana_clean/codex-spirits-karoo-spare-20261116/report.md",
+     "run": "codex-spirits-karoo-spare-20261116",
+     "seed": 30010000,
+     "src": "55dfe5aeeaa8e87b7f477c50543abde76a9157a3",
+     "verdict": "issues"
     }
    ]
   },

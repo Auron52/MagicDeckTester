@@ -92,6 +92,9 @@ namespace manaoracle
         bool                   frontier = false;
         GameState*             f_state  = nullptr;   // owned by the caller (copied into at the frontier)
         std::int32_t           f_dbl_combat_hold = 0; // attacker tapped only during a combat-step payment
+        ManaCost               f_line_unpaid;        // the applying line's remaining bill at this frontier
+        bool                   f_line_opens_unseen = false;
+        bool                   f_line_has_acts = false;
         ManaCost               f_cost;
         bool                   f_for_creature = false;
         bool                   f_creature_ability = false;  // paying a creature's activated ability

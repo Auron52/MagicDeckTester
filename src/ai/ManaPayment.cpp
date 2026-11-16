@@ -10466,6 +10466,9 @@ bool manaoracle::ScriptedPay(GameState& state, const ManaCost& cost_in, bool for
         h.frontier       = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
         h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
+        h.f_line_unpaid = g_line_unpaid_cost;
+        h.f_line_opens_unseen = g_line_opens_unseen;
+        h.f_line_has_acts = g_line_hold_has_acts;
         h.f_dropped      = h.DroppedSoFar();
         h.f_cost         = cost_in;
         h.f_for_creature = for_creature;
