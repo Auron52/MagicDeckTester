@@ -71,6 +71,7 @@ namespace manaoracle
         // heuristic, exactly as an unhooked apply makes it -- so a script of k engine steps and then the
         // oracle's options is "keep the engine's first k mana decisions, redo everything after".
         bool     engine = false;
+        bool     batch_skip = false; // leave a possible joint prepay to the ordered cast payments
         std::string what;        // display only: the bill this option paid ("{1}{U}", "tap-ahead")
     };
 
@@ -130,6 +131,7 @@ namespace manaoracle
         const std::vector<std::string>* drops_cast = nullptr;
         const std::vector<std::string>* drops_act  = nullptr;
         bool                   f_dropped = false;
+        bool                   f_batch = false; // joint pre-cast float, before any cast resolves
         bool DroppedSoFar() const
         { return (drops_cast != nullptr && !drops_cast->empty()) || (drops_act != nullptr && !drops_act->empty()); }
     };
@@ -255,6 +257,10 @@ namespace manaoracle
     // False only for a SAFE hook (RealPayScope) whose entry did not fit: the board is put back, the hook
     // gives up its script, and the caller runs the engine's own tap-ahead -- as it does for every later step.
     bool ScriptedTapAhead(GameState& state, int count, bool lands_only);
+
+    // The oracle's joint pre-cast mana choice on a damage-triggered board. The
+    // taps float for later casts; the caller flushes their damage triggers.
+    void ScriptedBatchPrepay(GameState& state, const ManaCost& combined, bool for_creature);
 
     // TapForCostShared's oracle branch (ManaPayment.cpp). Returns the payment's result.
     bool ScriptedPay(GameState& state, const ManaCost& cost, bool for_creature, ManaPool* available,

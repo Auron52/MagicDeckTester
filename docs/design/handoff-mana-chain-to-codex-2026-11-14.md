@@ -83,7 +83,15 @@ and five UNMODELED flags, so the deck remains beta. The next block is
 The next local oracle repair distinguishes old/new copies of a pain land during
 scripted payments. Focused replays clear the 32 two-Vito flags in seed 30073845
 and 11 Beseech/Vito flags in seed 30073663. Seed 30076504 remains a separate
-batch-prepay self-lethal mismatch. The repair awaits a fresh gate.
+batch-prepay self-lethal mismatch. The fresh PGO gate 77,000–81,999 was
+oracle-on/off play-identical, with zero APPLY-DROP, APPLY-DROP-ORDER, or
+ENUM-GAP, but 64 ORACLE-GAP, six UNMODELED, and five CAPPED flags. The next
+block is 82,000–86,999. Most remaining gaps are joint prepay before
+Manabarbs versus per-cast oracle timing. Windows CI run 43826425327 for the
+old/new pain-land identity fix passed. The default-on audit-only batch-float
+repair clears five focused seeds and changed no play output in a 100-game
+paired cost check (+0.8% oracle time). A fresh 5,000-game gate is owed. See
+`docs/design/prevent-damage-batch-float-oracle-2026-11-16.md`.
 
 ## Codex update (2026-11-15)
 

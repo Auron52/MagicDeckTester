@@ -65194,19 +65194,21 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                                       bool mint_prefix, bool hand_demand, bool allow_partial)
 {
     static const bool s_enabled = !EnvOn("MTG_NO_BATCH_PAY");
+    static const bool s_oracle_batch_float = EnvOn("MTG_ORACLE_BATCH_FLOAT", true); // DEFAULT ON; =0 disables
     if (!s_enabled) { return false; }
-    // MANA ORACLE (ManaOracle.h): on the oracle's own copy every payment comes from its script, one per
-    // cast -- a joint solve here would tap through the backtracker, outside the script. Null elsewhere.
     // An ENGINE step (the rollback census) makes the joint prepay as an unhooked apply does: the hook
     // stands down for the span, and a declined prepay decided nothing, so it hands its step back.
     if (manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target)
     {
-        if (!manaoracle::NextIsEngineStep(state)) { return false; }
-        manaoracle::EngineStepSpan span(state, true);
-        t_prepay_partial_made = false;
-        const bool ok = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand, allow_partial);
-        span.End(true, /*made=*/ok || t_prepay_partial_made);
-        return ok;
+        if (manaoracle::NextIsEngineStep(state))
+        {
+            manaoracle::EngineStepSpan span(state, true);
+            t_prepay_partial_made = false;
+            const bool ok = BatchPrepayMainCasts(state, acts, mint_prefix, hand_demand, allow_partial);
+            span.End(true, /*made=*/ok || t_prepay_partial_made);
+            return ok;
+        }
+        if (!s_oracle_batch_float || !state.dmg_events_armed) { return false; }
     }
     // This line chose to crack an on-demand land at the first bill. A joint prepay would
     // tap the Lake for one before that bill exists and bypass the searched payer choice.
@@ -65869,6 +65871,18 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
         }
     }
     dmgev::PendingCastsScope _pd_pending_scope(state.dmg_events_armed ? &_pd_pending : nullptr);
+
+    // On a damage-triggered board, floating the joint bill before the first cast changes when
+    // Manabarbs and pain-land triggers fire. Offer that legal tap choice to the oracle at the
+    // actual batch site; the ordered casts then spend the resulting float one at a time.
+    // Audit-only trial; it leaves the engine's own joint solve and play untouched.
+    if (s_oracle_batch_float && state.dmg_events_armed && manaoracle::t_hook != nullptr
+        && &state == manaoracle::t_hook->target)
+    {
+        manaoracle::ScriptedBatchPrepay(state, combined, all_creatures);
+        dmgev::FlushDamageEvents(state);
+        return false;
+    }
 
     // BIG-SPELL-ONLY MANA (Troyan, Gutsy Explorer: spend only on spells of MV 5+ or with {X}). The
     // joint solve pays the whole batch out of ONE pool, so it can honour a per-spell restriction only

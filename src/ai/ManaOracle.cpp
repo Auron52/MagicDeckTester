@@ -1882,6 +1882,11 @@ struct PayEnum
             return false;
         };
         if (!PerformTaps(sc, o)) { return why("a tap was refused"); }
+        // A batch option leaves this pool FLOATING before the first cast. Two colour
+        // choices can pay the same aggregate bill and leave the same post-payment
+        // board, yet differ in which ordered cast can spend the float. Keep those
+        // choices apart by the post-TAP state, before the verification payment.
+        const std::uint64_t batch_key = whole_float ? TurnSolver::MidTurnStateKeyOfPayment(sc) : 0;
         bool verify_hit = false;
         if (want_tap_key && offered != nullptr)
         {
@@ -1918,7 +1923,7 @@ struct PayEnum
         // One option per distinct RESULT: two set-asides the payment never touched are one payment. The
         // engine's key does not say which copy of identical permanents is tapped, so a plan source's tapped
         // flag is folded in (see t_plan_srcs): tapping it is not the same result as tapping its twin.
-        std::uint64_t rkey = TurnSolver::MidTurnStateKeyOfPayment(sc);
+        std::uint64_t rkey = whole_float ? batch_key : TurnSolver::MidTurnStateKeyOfPayment(sc);
         if ((t_plan_srcs != nullptr && !t_plan_srcs->empty()) || t_key_twin_taps)
         {
             for (const Permanent& p : sc.battlefield)
@@ -2153,6 +2158,43 @@ std::vector<PayOption> StashChoices(const GameState& s, std::vector<std::string>
 }
 
 } // namespace
+
+void ScriptedBatchPrepay(GameState& state, const ManaCost& combined, bool for_creature)
+{
+    Hook& h = *t_hook;
+    if (h.ended || (h.safe && h.abandoned)) { return; }
+    if (h.next >= h.script.size())
+    {
+        if (h.safe) { h.abandoned = true; return; }
+        h.ended = true;
+        h.frontier = true;
+        if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_dropped = h.DroppedSoFar();
+        h.f_cost = combined;
+        h.f_for_creature = for_creature;
+        h.f_batch = true;
+        return;
+    }
+    const PayOption& opt = h.script[h.next];
+    if (opt.what != "batch " + combined.ToString())
+    {
+        if (h.safe) { h.abandoned = true; }
+        else { h.tap_error = "joint prepay script entry is not a batch choice"; h.ended = true; }
+        return;
+    }
+    ++h.next;
+    h.pay_steps.push_back(t_seq_step);
+    if (opt.batch_skip) { return; }
+    std::optional<GameState> before;
+    if (h.safe) { before.emplace(state); }
+    if (!PerformTaps(state, opt))
+    {
+        if (h.safe) { state = *before; h.abandoned = true; }
+        else { h.tap_error = "joint prepay tap refused"; h.ended = true; }
+        return;
+    }
+    for (const TurnSolver::PreTap& t : opt.taps) { h.tapped_by_script.push_back(t.num); }
+}
 
 // The `ahead` classes of PayEnum::ExtendScaledAhead: every source class whose copies are untapped scaled dorks
 // (Priest of Titania, Elvish Archdruid) counting `victim` -- the creature (Card::m_number) the paid-for cast
@@ -2926,6 +2968,7 @@ struct FrontierRec
     bool                   has_ability_src = false;   // the ability's source (Hook::f_ability_src)
     Card                   ability_src;
     int                    sac_victim = 0;      // Hook::f_sac_victim
+    bool                   batch = false;      // joint pre-cast float
 };
 
 // Where a realisation's next layer was first cut by the apply ceiling, and what the capped pass had there, so a
@@ -3122,6 +3165,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.has_ability_src = h.f_has_ability_src;
                     if (h.f_has_ability_src) { fr.ability_src = h.f_ability_src; }
                     fr.sac_victim   = h.f_sac_victim;
+                    fr.batch        = h.f_batch;
                     fronts.push_back(std::move(fr));
                     continue;
                 }
@@ -3189,6 +3233,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 keys[i] = CoreKey(fronts[i].st, /*canonical=*/false) ^ (0x9e3779b97f4a7c15ULL * (fronts[i].index + 1))
                         ^ std::hash<std::string>{}(fronts[i].cost.ToString() + (fronts[i].for_creature ? "c" : "n")
                                                    + (fronts[i].creature_ability ? "a" : "s")
+                                                   + (fronts[i].batch ? "b" : "p")
                                                    + "t" + std::to_string(fronts[i].tapahead)
                                                    + (fronts[i].has_spell ? "|" + fronts[i].spell.m_name.str() : "")
                                                    + "v" + std::to_string(fronts[i].sac_victim));
@@ -3248,9 +3293,16 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             }
             std::vector<PayOption> opts = f.tapahead > 0
                 ? TapAheadOptions(f.st, f.tapahead, f.lands_only, &r.unmodeled)
-                : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability, /*whole_float=*/false,
+                : MinimalPayments(f.st, f.cost, f.for_creature, &r.unmodeled, f.creature_ability,
+                                  /*whole_float=*/f.batch,
                                   f.has_spell ? &f.spell : nullptr, f.has_ability_src ? &f.ability_src : nullptr,
-                                  f.sac_victim, want, line_surplus);
+                                  f.sac_victim, want, f.batch ? 0 : line_surplus);
+            if (f.batch)
+            {
+                PayOption skip;
+                skip.batch_skip = true;
+                opts.insert(opts.begin(), std::move(skip));
+            }
             g_options.fetch_add(static_cast<long long>(opts.size()), std::memory_order_relaxed);
             if (Level() >= 3 && (TraceTurn() == 0 || TraceTurn() == root.turn_number))
             {
@@ -3285,7 +3337,8 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
             {
                 if (next.size() >= room) { note_cut(); break; }
                 std::vector<PayOption> s = f.script;
-                o.what = f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString();
+                o.what = f.batch ? std::string("batch ") + f.cost.ToString()
+                    : (f.tapahead > 0 ? std::string("tap-ahead") : f.cost.ToString());
                 s.push_back(std::move(o));
                 next.push_back(std::move(s));
             }
