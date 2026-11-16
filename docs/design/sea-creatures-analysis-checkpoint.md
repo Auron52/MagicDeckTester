@@ -14,7 +14,12 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
 ## Stage status
 
 * Stage 1 coverage: DONE.
-* Stage 2 research fan-out: IN FLIGHT.
+* Stage 2 research fan-out: DONE (6 drafts: mana, combat, sagas, bounce, sin, gorger; see ledger).
+* Integration plan (serial, one Opus agent each, brief `logs/sea-research/INTEGRATOR-BRIEF.md`):
+  I1 mana + SeaCreaturesProvider (IN FLIGHT 2026-11-16) -> I2 combat (Koma, Kraken, Serpent, Lorthos,
+  Wave + shared bounce helper + Wave-skip prune) -> I3 sagas (Summon uses the bounce helper) -> I4
+  bounce (Hullbreaker, Brinelin + decline prunes) -> I5 Sin -> I6 Gorger (exile-all >=6 lands prune).
+* Expected GT movers from I1: Creature Giving, Five Colour (Misty migration) -- accept at the end.
 
 ## Next steps
 
