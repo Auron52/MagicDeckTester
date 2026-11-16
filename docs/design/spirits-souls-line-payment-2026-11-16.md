@@ -56,4 +56,14 @@ gate repros still have zero misses. Spirits and two-headed Spirits combined
 smoke/regression pass all ten cells with no changed game or digest; all
 561 scenarios pass. Strict viewer replay has zero drift, divergence, or
 enumeration gaps across 864 references, and both suboptimal references
-remain beaten. A new fresh block is pending.
+remain beaten.
+
+The next fresh PGO gate, games 20,000–24,999, reports twelve
+`APPLY-DROP-ORDER` flags, all in seed 30,021,365. Its single plan drops
+Flooded Strand and Vials White Orchid Phantom before casting Millicent.
+The Phantom's pinned own-land destruction removes Azorius Chancery before
+Millicent pays; casting Millicent before the Vial put pays the entire line.
+The two report signatures are alternative fetchland outcomes. There are no
+enum gaps, oracle gaps, or caps, and oracle-on/off play is byte-identical.
+See `logs/mana_clean/codex-spirits-souls-hand-20261116/report.md` and
+`test/mana_clean.json`. This ordering defect remains the next fix.

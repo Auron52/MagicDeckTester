@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The fresh Spirits PGO gate on games 20,000–24,999
+(`codex-spirits-souls-hand-20261116`) has twelve
+`APPLY-DROP-ORDER` flags in seed 30,021,365: a Vialed White Orchid
+Phantom destroys our Azorius Chancery before Millicent pays. The same
+actions pay with Millicent before the Vial put. No other issue class
+appears, and oracle-on/off play is byte-identical. The record is in the
+gate report and `test/mana_clean.json`; ordering is the next fix.
+
 The fresh Spirits PGO gate on games 15,000–19,999 after the Souls
 flashback hold (`codex-spirits-souls-line-20261116`) found ten payment
 drops in one signature: hand-cast Lingering Souls `{2}{W}` before White

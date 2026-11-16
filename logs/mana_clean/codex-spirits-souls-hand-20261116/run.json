@@ -1,0 +1,23 @@
+{
+ "name": "codex-spirits-souls-hand-20261116",
+ "src": "fff330d1eee7a50f8b863a02fafd09954a5af102",
+ "commit": "1cac22d6e9966ec3f9d5c2a21fb3a59b2115fee1",
+ "minutes": 30,
+ "started": "2026-11-16T22:20:15Z",
+ "decks": [
+  {
+   "key": "spirits",
+   "deck": "decks/Spirits/Spirits.cod",
+   "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+   "profile": "decks/Spirits/Spirits.profile.json",
+   "game_index": 20000,
+   "seed": 30020000,
+   "games": 5000,
+   "chunk": 113,
+   "est_ms_per_game": [
+    1044.5,
+    894.9
+   ]
+  }
+ ]
+}

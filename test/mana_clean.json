@@ -10506,6 +10506,46 @@
      "seed": 30015000,
      "src": "f954c9fc68dbbd742d5a9437070a1781ae8c5111",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP-ORDER": 12,
+      "CONTINUATION-DIFFERS": 522,
+      "DOMINATED-LAND": 3607,
+      "DROP-COVERED": 626,
+      "PHANTOM": 2836
+     },
+     "commit": "1cac22d6e9966ec3f9d5c2a21fb3a59b2115fee1",
+     "date": "2026-11-16T22:25:45Z",
+     "decisions": 41226,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 20000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 12,
+     "life_breakpoints": [],
+     "ms_off": 4835176,
+     "ms_on": 5497361,
+     "report": "logs/mana_clean/codex-spirits-souls-hand-20261116/report.md",
+     "run": "codex-spirits-souls-hand-20261116",
+     "seed": 30020000,
+     "src": "fff330d1eee7a50f8b863a02fafd09954a5af102",
+     "verdict": "issues"
     }
    ]
   },
