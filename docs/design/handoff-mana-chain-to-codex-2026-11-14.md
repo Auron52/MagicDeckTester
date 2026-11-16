@@ -6,6 +6,16 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Fresh PGO mana gate `codex-boars-mill-red-fresh-20261116` on indices
+5,000–9,999 is complete with byte-identical oracle-on/off play. Red Elementals
+is clean (zero issues). Mill has 113 `ENUM-GAP` flags, all involving Visions of
+Beyond plus Surgical Extraction; it has zero oracle gaps or payment drops.
+Boars has 3,258 issues: 19 enum, 215 payment drops, 667 order drops, 1,810
+creature dominance, 193 haste dominance, 44 oracle gaps, one unmodeled tap,
+and 309 decision caps. Both remain unclean. The exact record is
+`logs/mana_clean/codex-boars-mill-red-fresh-20261116/report.md` and
+`test/mana_clean.json`.
+
 Boars' double-Decimator `APPLY-DROP` cluster came from spending restricted
 green on the first spell's generic pips while leaving a general red unit
 unused. A visible-line payer rule reserves that green for the second spell:
