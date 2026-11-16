@@ -44,6 +44,7 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 * `fetch_hold_review`: Misty Rainforest `hold_modelled: false` (old immediate-on-play model);
   Windswept Heath / Flooded Strand already the battlefield model. **Agent default (SURFACED, PROVISIONAL):**
   migrate Misty Rainforest to the battlefield fetchland model, as Boars did for Windswept Heath.
+  **USER APPROVED 2026-11-16, with Breeding Pool fetched first (see Open USER questions #1).**
 * Every creature in the list is a Kraken / Leviathan / Octopus / Serpent, so the "except sea creatures"
   bounces (Whelming Wave, Summon: Leviathan I) only ever hit the opponent's spawned creatures, which
   never block or attack: faithful but payoff ~0 in goldfish.
@@ -60,7 +61,11 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 
 ## Open USER questions (surfaced, not blocking)
 
-1. Misty Rainforest: migrate to the battlefield fetchland model (agent default: yes, PROVISIONAL).
+1. ~~Misty Rainforest: migrate to the battlefield fetchland model~~ — **ANSWERED (USER 2026-11-16):**
+   *"Yes, misty rainforest should automatically get Breeding Pool, kind of like how Boars gets Stomping
+   Ground."* So: migrate Misty to the battlefield model, and the Sea Creatures provider ranks Breeding
+   Pool first on the fetch target list while it remains in the library (the Boars shock-first shape,
+   commit 910e1959f, `MTG_BOARS_SHOCK_FIRST`), default ON with an =0 off switch.
 
 ## Approved deferrals
 
