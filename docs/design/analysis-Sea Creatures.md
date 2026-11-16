@@ -44,8 +44,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 * `fetch_hold_review`: Misty Rainforest `hold_modelled: false` (old immediate-on-play model);
   Windswept Heath / Flooded Strand already the battlefield model. **Agent default (SURFACED, PROVISIONAL):**
   migrate Misty Rainforest to the battlefield fetchland model, as Boars did for Windswept Heath.
-  **USER 2026-11-16: NOT migrated after all ("We don't need the hold option for those decks or for this
-  deck"), see Open USER questions #0. Breeding Pool fetched first (#1).**
+  **USER 2026-11-16: migrated for the VIEWER's hold only; searched play never holds (Open USER
+  questions #0). Breeding Pool fetched first (#1).**
 * Every creature in the list is a Kraken / Leviathan / Octopus / Serpent, so the "except sea creatures"
   bounces (Whelming Wave, Summon: Leviathan I) only ever hit the opponent's spawned creatures, which
   never block or attack: faithful but payoff ~0 in goldfish.
@@ -68,11 +68,12 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 
 ## Open USER questions (surfaced, not blocking)
 
-0. **Misty Rainforest is NOT migrated (USER 2026-11-16, supersedes the migration half of #1):** *"We
-   don't need the hold option for those decks or for this deck."* Misty keeps its legacy immediate
-   model everywhere; Creature Giving / Five Colour are expected byte-identical. The fetch_hold_review
-   answer for this deck is "no hold", USER-signed. The Breeding Pool-first prune (below) still applies,
-   on Misty's legacy route and on Heath/Strand's battlefield route.
+0. **Misty Rainforest hold (USER 2026-11-16, three messages in order):** *"We don't need the hold option
+   for those decks or for this deck."* / *"(in searched)"* / *"The viewer can keep it."* So: Misty IS
+   migrated to the battlefield model so a HUMAN can hold it in the viewer; SEARCHED play never holds it
+   (crack on play, no new <=3-life autonomous hold) in Creature Giving, Five Colour or Sea Creatures;
+   their autonomous play is to stay byte-identical where sound, and any remaining mover is reported to the
+   USER with its mechanism. Heath/Strand/Foothills behaviour unchanged.
 1. ~~Misty Rainforest: migrate to the battlefield fetchland model~~ — **ANSWERED (USER 2026-11-16):**
    *"Yes, misty rainforest should automatically get Breeding Pool, kind of like how Boars gets Stomping
    Ground."* So: migrate Misty to the battlefield model, and the Sea Creatures provider ranks Breeding
