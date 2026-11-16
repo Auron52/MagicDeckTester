@@ -54,6 +54,7 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 | draft | cards | file | status |
 |---|---|---|---|
 | combat | Koma, Spawning Kraken, Serpent, Lorthos, Whelming Wave | logs/sea-research/combat.md | DONE: Spawning Kraken Tier 1 (Millicent per-creature `FireCombatDamageTokens`, shared executor/rollout); Koma Tier 2 (`combat_damage_watch_self` + optional token-name param "Koma's Coil"); Serpent Tier 1 + inert-evasion note; Lorthos Tier 1 + dominance fold (always decline {8}); Whelming Wave Tier 2 (bounce helper shared with Summon I, + Merfolk). No second-main need. Proposed provider fold: skip casting Wave unless Hullbreaker on battlefield/in hand (default ON, `MTG_UNPRUNE=seawave`) -> USER Q. PROVISIONAL deferrals: Serpent evasion (Master of the Pearl Trident precedent, USER-approved 2026-11-01), Lorthos tap/freeze. Cross-notes: Kiora token subtype Kraken; stolen creature keeps opponent owner. |
+| sin | Sin, Unending Cataclysm | logs/sea-research/sin.md | DONE: Tier 3 medium-small, no new struct fields (`Permanent::lore_counters` exists). Shared removal helper at `FireEtbWatchers` (every entry route), 2x as +1/+1. Choice = live-probe subset pin (`@H?` -> `@H<n>,<n>`, the Life-from-the-Loam probe), fold identical copies to k-of-m, no lossy prune; rollout default harvest every Saga. Viewer bucket A (`dragon` multi-pick). Risk: pin read only by Sin's own entry; probe kept out of the TT. Constraint for sagas: never assume lore>=1; a reset Saga re-fires chapter I. PROVISIONAL deferral: dies trigger (Sin cannot die in this list). |
 | bounce | Hullbreaker Horror, Brinelin | logs/sea-research/bounce.md | DONE: Tier 3. Shared `ReturnPermanentToOwnersHand` (also Whelming Wave / Summon I); cast triggers in `FireOnCastTriggers`; Brinelin ETB deferred past the enter cascade; per-instance searched target digit (Raggadragga machinery, ordinal renamed/shared), decline included; viewer `target` with min_targets 0. RISK: width (~20k combos late) -> measure at 5f, waves not caps. PROVISIONAL deferrals: Hullbreaker Flash (main-phase cast dominates), Brinelin Partner. Open: tap-in-response Sol Ring float; DeckUsesSecondMain for Hullbreaker post-combat re-buy. |
 
 ## Integration (serial)
@@ -82,6 +83,8 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 6. Whelming Wave cast-skip fold unless Hullbreaker is on board/in hand (default ON). Agent default: adopt.
 7. Hullbreaker post-combat bounce-and-recast: covered by the deck's second main (Summon draws turn it on).
 8. Tap-Sol-Ring-in-response-then-bounce: not expressible today; follow-up, not built now.
+9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
+   this list. PROVISIONAL.
 3. ~~Utopia Sprawl colour~~ — **USER 2026-11-16:** *"Utopia sprawl should prioritize blue as well. Green
    is a minor colour in the deck."* Implemented as: the provider's ETB colour axis restricted to {U, G}
    (W/B/R have no consumer: sound fold), plus a default-ON one-option prune to BLUE (=0 restores {U, G}
