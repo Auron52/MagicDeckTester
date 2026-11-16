@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The first complete Boars/Mill/Red Elementals gate (5,000 games each) found
+Boars 3,542 issues, Mill 360 issues, and Red Elementals clean; oracle-on/off
+play was byte-identical. Mill's Surgical life-only cast was incorrectly
+removed by a dominance rule assuming a mana-paid twin. A narrow guard fixes
+that precondition, reducing the first 500 Mill games from 18 to 12 enum gaps.
+The separate Surgical mana-cost trial leaves eight gaps and has no measured
+speed gain. See `docs/design/mill-surgical-mana-clean-2026-11-16.md`.
+
 The first pooled gate for never-checked decks stopped at the 40 GB RSS guard.
 Boars seed 30,000,301 alone allocated over 40 GB while the oracle observed
 mana-gate-rejected plans. The Raggadragga per-instance target fan expanded

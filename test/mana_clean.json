@@ -644,6 +644,57 @@
     }
    ]
   },
+  "boars": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 735,
+      "APPLY-DROP-ORDER": 751,
+      "CAPPED-DECISION": 195,
+      "CONTINUATION-DIFFERS": 186,
+      "DOMINATED-CREATURE": 1604,
+      "DOMINATED-HASTE": 131,
+      "DOMINATED-LAND": 5764,
+      "DROP-COVERED": 1537,
+      "ENUM-GAP": 20,
+      "HIDDEN-INFO": 2,
+      "ORACLE-GAP": 106,
+      "PHANTOM": 1554
+     },
+     "commit": "5ec370e808522affcd716a44a868d46b72e77156",
+     "date": "2026-11-16T16:22:06Z",
+     "decisions": 43226,
+     "deck": "decks/Boars/Boars.cod",
+     "deck_sha": "07ec2c4afed2e8b399db42bfd3a63d3f6599f750",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 3542,
+     "life_breakpoints": [],
+     "ms_off": 5392709,
+     "ms_on": 11258950,
+     "report": "logs/mana_clean/codex-boars-mill-red-20261116/report.md",
+     "run": "codex-boars-mill-red-20261116",
+     "seed": 30000000,
+     "src": "614a7febc1f32c93ceb5d18aee952d7706ad5f4c",
+     "verdict": "issues"
+    }
+   ]
+  },
   "breaching_dragonstorm": {
    "runs": [
     {
@@ -6299,6 +6350,52 @@
     }
    ]
   },
+  "mill": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 1138,
+      "DOMINATED-LAND": 83614,
+      "DROP-COVERED": 337123,
+      "ENUM-GAP": 208,
+      "HIDDEN-INFO": 1,
+      "ORACLE-GAP": 152,
+      "PHANTOM": 102
+     },
+     "commit": "5ec370e808522affcd716a44a868d46b72e77156",
+     "date": "2026-11-16T16:22:06Z",
+     "decisions": 46766,
+     "deck": "decks/Mill/Mill.cod",
+     "deck_sha": "470d27a576f82fa68f57fc4d0eba5f836bbe1676",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 360,
+     "life_breakpoints": [],
+     "ms_off": 12837863,
+     "ms_on": 15349223,
+     "report": "logs/mana_clean/codex-boars-mill-red-20261116/report.md",
+     "run": "codex-boars-mill-red-20261116",
+     "seed": 30000000,
+     "src": "614a7febc1f32c93ceb5d18aee952d7706ad5f4c",
+     "verdict": "issues"
+    }
+   ]
+  },
   "minotaur": {
    "runs": [
     {
@@ -8461,6 +8558,44 @@
      "run": "codex-pd-terminal-spare-20261116",
      "seed": 30097000,
      "src": "23aa72bcc9697326b9f9742b74edb5485fa6ff2c",
+     "verdict": "clean"
+    }
+   ]
+  },
+  "red_elementals": {
+   "runs": [
+    {
+     "binary": "PGO",
+     "by_class": {},
+     "commit": "5ec370e808522affcd716a44a868d46b72e77156",
+     "date": "2026-11-16T16:22:06Z",
+     "decisions": 38036,
+     "deck": "decks/Red Elementals/Red Elementals.cod",
+     "deck_sha": "cb7e9b32cbdb8d904fff4f5dd13a78370725634e",
+     "game_index": 0,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 620879,
+     "ms_on": 928715,
+     "report": "logs/mana_clean/codex-boars-mill-red-20261116/report.md",
+     "run": "codex-boars-mill-red-20261116",
+     "seed": 30000000,
+     "src": "614a7febc1f32c93ceb5d18aee952d7706ad5f4c",
      "verdict": "clean"
     }
    ]

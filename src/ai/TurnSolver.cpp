@@ -22355,6 +22355,16 @@ static bool SubsetPhyrexianDominated(const GameState& state,
     bool any_phy = false;
     for (int j : sel) { if (cands[j].phyrexian_life > 0) { any_phy = true; break; } }
     if (!any_phy) { return false; }
+    // The dominance proof requires a mana-paid twin in the same candidate group.
+    // Mill deliberately offers Surgical Extraction only as a life-paid cast when
+    // life is available. Without that twin, pruning this selection removes the
+    // cast outright (Mill seed 30000033: Visions + Surgical).
+    for (int j : sel)
+    {
+        const Action& a = cands[j];
+        if (a.phyrexian_life > 0 && a.def != nullptr
+            && ResolveProvider(state).LifeOnlyPhyrexianCast(state, *a.def)) { return false; }
+    }
     // THE DOMINANCE HAS A HOLE THE POD CAST FALLS THROUGH (USER 2026-09-05, seed 1 T3). The
     // claim below is that every use of the life twin's extra leftover mana is expressible as
     // another subset of this same enumeration -- true for casts and for activations of
