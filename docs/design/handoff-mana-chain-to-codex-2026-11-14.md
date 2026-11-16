@@ -6,6 +6,16 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The fresh Spirits PGO gate on games 5,000–9,999 is complete
+(`codex-spirits-post-holds-20261116`), with byte-identical oracle-on/off
+play. It has 56 issues: 35 `APPLY-DROP` flags, all an Aether Vial/White
+Orchid Phantom order paying the Vial with a white source that Phantom needs;
+and 21 `ORACLE-GAP` flags, all Supreme Phantom/Usher of the Fallen lines where
+the oracle loses the engine's payment using Azorius Chancery and Island.
+There are zero enum gaps, unmodeled flags, or caps. Exact counts and repros
+are in `logs/mana_clean/codex-spirits-post-holds-20261116/report.md` and
+`test/mana_clean.json`. Spirits remains unclean; both signatures need fixes.
+
 Spirits' Souls flashback before White Orchid Phantom spent the only flexible
 white source on Souls' generic pip and dropped Phantom. The existing
 held-first scarce-colour mask clears all nine drops in the first 500 Spirits
@@ -15,8 +25,7 @@ old payer. Fresh 5,000-game paired Spirits play changed one digest and zero
 win turns with flat work. The scoped build clears the focused seed, full
 3,365-case units pass, Spirits/2HG smoke and Spirits regression are
 byte-identical, and strict viewer replay passes 864 references. See
-`docs/design/spirits-scarce-colour-line-hold-2026-11-16.md`. Fresh Spirits
-games 5,000–9,999 remain the next mana-clean gate.
+`docs/design/spirits-scarce-colour-line-hold-2026-11-16.md`.
 
 Spirits' same-main Souls hand cast → Vialed Geist → Souls flashback was
 rejected by the aggregate mana gate because its pending graveyard-cast
@@ -27,8 +36,7 @@ digests and zero win turns; full units, 561 scenarios, strict viewer replay,
 and Spirits/2HG smoke passed. One searched regression game gained a turn and
 one lost a turn through budget churn that recovers at 4×. Ground truth is
 accepted with the audit note. See
-`docs/design/spirits-pending-flashback-geist-credit-2026-11-16.md`. The next
-fresh Spirits block is 5,000–9,999 after this source commit.
+`docs/design/spirits-pending-flashback-geist-credit-2026-11-16.md`.
 
 The first fresh PGO mana gate for Morph and Spirits is complete on games
 0–4,999 for each deck (`codex-morph-spirits-first-20261116`). Oracle-on and

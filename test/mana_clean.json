@@ -10343,6 +10343,47 @@
      "seed": 30000000,
      "src": "07b1dbe0cfc7e159c491a465fae76e21f583604d",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 35,
+      "CONTINUATION-DIFFERS": 750,
+      "DOMINATED-LAND": 3589,
+      "DROP-COVERED": 595,
+      "ORACLE-GAP": 21,
+      "PHANTOM": 2755
+     },
+     "commit": "aad50566010a125af028dee11b68a8f392b106bf",
+     "date": "2026-11-16T20:06:19Z",
+     "decisions": 41349,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 5000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 56,
+     "life_breakpoints": [],
+     "ms_off": 2808805,
+     "ms_on": 3195312,
+     "report": "logs/mana_clean/codex-spirits-post-holds-20261116/report.md",
+     "run": "codex-spirits-post-holds-20261116",
+     "seed": 30005000,
+     "src": "d0826a3fc3a973af0450e7e4da7c935df64a1938",
+     "verdict": "issues"
     }
    ]
   },
