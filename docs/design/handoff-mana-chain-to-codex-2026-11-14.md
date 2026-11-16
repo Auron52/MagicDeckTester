@@ -109,6 +109,17 @@ reproduced all nine deck regression-row `.wins` despite three existing
 ground-truth mismatches. See
 `docs/design/prevent-damage-spellshock-continuation-hold-2026-11-16.md`.
 
+The scripted-payment boundary fix and subsequent terminal-outcome,
+sacrifice-context, and payment-table oracle fixes are committed as
+`059cec44f` and `5a7a4a9a1`. Their focused reproductions and full unit/viewer
+checks passed. The fresh PGO gate on Prevent Damage games 97,000–101,999
+passed all 5,000 games with zero mana-clean issues and byte-identical
+oracle-on/off play. Prevent Damage is clean on this source. See
+`docs/design/prevent-damage-scripted-payment-trigger-2026-11-16.md` and
+`docs/design/prevent-damage-terminal-oracle-payment-cap-2026-11-16.md`.
+Dragonstorm's 115-issue gate at 52,000–56,999 is the next active cluster;
+the first order-drop repro is seed 30,054,701, turn four.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

@@ -44,4 +44,10 @@ rebuilt and rechecked: seeds `30095610`, `30089526`, and `30094874` still have
 zero oracle gaps, unmodeled flags, and caps; all 3,359 unit cases pass on that
 exact build.
 
-Fresh PGO mana-clean gate results: pending.
+The fresh PGO gate `codex-pd-terminal-spare-20261116` covered games
+97,000–101,999 on source `23aa72bcc969`. All 5,000 games passed with zero
+mana-clean issues, zero oracle gaps, zero lost actions, zero unmodeled or capped
+decisions, and byte-identical oracle-on/off play. The gate audited 49,597
+decisions and 803,917 plans. Its full report is
+`logs/mana_clean/codex-pd-terminal-spare-20261116/report.md`. Prevent Damage
+is clean on this source; future shared-source changes need another fresh gate.

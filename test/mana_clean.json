@@ -8382,6 +8382,45 @@
      "seed": 30092000,
      "src": "b3e3e10d3341a02eee534403695839594f44217a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 16,
+      "DOMINATED-LAND": 9895,
+      "DOMINATED-LIFE": 16123,
+      "PHANTOM": 34
+     },
+     "commit": "5a7a4a9a13660e77b91236a1c0b15db2a9ce24a5",
+     "date": "2026-11-16T11:55:44Z",
+     "decisions": 49597,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 97000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4514959,
+     "ms_on": 14726545,
+     "report": "logs/mana_clean/codex-pd-terminal-spare-20261116/report.md",
+     "run": "codex-pd-terminal-spare-20261116",
+     "seed": 30097000,
+     "src": "23aa72bcc9697326b9f9742b74edb5485fa6ff2c",
+     "verdict": "clean"
     }
    ]
   },
