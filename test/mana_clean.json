@@ -2102,6 +2102,50 @@
      "seed": 30042000,
      "src": "0a64719fbc30f7a7c62da7870ece50fdeb545ebc",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 126,
+      "APPLY-DROP-ORDER": 121,
+      "CONTINUATION-DIFFERS": 5,
+      "DOMINATED-LAND": 14031,
+      "DROP-COVERED": 966,
+      "ENUM-GAP": 3,
+      "HIDDEN-INFO": 303,
+      "ORACLE-GAP": 37,
+      "PHANTOM": 9809
+     },
+     "commit": "a3532b094e82bbd9fe8ae1930bbcc99d78eb21c5",
+     "date": "2026-11-16T03:15:35Z",
+     "decisions": 38596,
+     "deck": "decks/Dragonstorm/Dragonstorm.cod",
+     "deck_sha": "17f46a90e1cd37244694f59e77e16fc1fba93e4f",
+     "game_index": 47000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 287,
+     "life_breakpoints": [],
+     "ms_off": 340898,
+     "ms_on": 2424990,
+     "report": "logs/mana_clean/codex-dragonstorm-lotus-20261116/report.md",
+     "run": "codex-dragonstorm-lotus-20261116",
+     "seed": 30047000,
+     "src": "f983d9d40ee3dbff8663546545f70761f5388932",
+     "verdict": "issues"
     }
    ]
   },
