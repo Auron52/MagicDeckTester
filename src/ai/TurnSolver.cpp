@@ -6120,6 +6120,22 @@ static void AppendRaggaInstanceVariants(const GameState& state, const TurnSolver
     int b = 1;
     while ((1LL << b) < w) { ++b; }
     const int m = std::max(1, std::min(instances, kUntapPumpPayloadBits / b));
+    // The oracle's mana-gate observation can admit tens of thousands of otherwise rejected base plans.
+    // A per-instance target product over those plans is unbounded before the oracle's decision-work poll.
+    // Stop the OBSERVATION explicitly; AuditDecision reports CAPPED-DECISION, never a clean verdict.
+    if (manaoracle::t_gate_observe)
+    {
+        constexpr std::size_t kObservedAxisMax = 50000;
+        std::size_t fan = 1;
+        for (int j = 0; j < m; ++j)
+        {
+            if (extra.size() >= kObservedAxisMax || fan > (kObservedAxisMax - extra.size() + 1) / static_cast<std::size_t>(w))
+            { throw manaoracle::ObservedAxisCap{}; }
+            fan *= static_cast<std::size_t>(w);
+        }
+        if (fan - 1 > kObservedAxisMax - extra.size())
+        { throw manaoracle::ObservedAxisCap{}; }
+    }
     std::vector<int> inh(static_cast<std::size_t>(m), 0);
     for (int j = 0; j < m; ++j)
     { inh[static_cast<std::size_t>(j)] = std::min<int>(std::max(0, UntapPumpRankFor(state, j)), static_cast<int>(w - 1)); }

@@ -6,6 +6,15 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The first pooled gate for never-checked decks stopped at the 40 GB RSS guard.
+Boars seed 30,000,301 alone allocated over 40 GB while the oracle observed
+mana-gate-rejected plans. The Raggadragga per-instance target fan expanded
+roughly 20,000 observed base plans before the priced cap could poll. An
+observer-only 50,000-variant safety bound now emits `CAPPED-DECISION` and
+lets that seed finish under a 10 GB guard; the gate remains failed. The
+Merfolk Turns off arm has a separate long-game memory problem. See
+`docs/design/boars-observed-axis-memory-cap-2026-11-16.md`.
+
 Shadowborn's fresh gate on indices 95,000–99,999 found 48 order drops in one
 Stone/Apostle/Ritual/multiple-Intent game and three Lotus-timing payment drops
 in another. A visible, sequentially payable Apostle-before-Ritual arrangement

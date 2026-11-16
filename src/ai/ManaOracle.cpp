@@ -5466,10 +5466,18 @@ void AuditDecision(const GameState& state, bool is_pre_combat)
     // allow"; what it holds that the menu does not was refused on mana. Each is realised (every order,
     // every payment): one that pays in full is an option the search never had (EnumGapPlan).
     std::vector<TurnSolver::Plan> observed;
+    bool observed_axis_capped = false;
     {
         t_gate_observe = true;
-        observed = TurnSolver::EnumerateMainPlans(state, is_pre_combat);
+        try { observed = TurnSolver::EnumerateMainPlans(state, is_pre_combat); }
+        catch (const ObservedAxisCap&) { observed_axis_capped = true; }
         t_gate_observe = false;
+    }
+    if (observed_axis_capped)
+    {
+        const TurnSolver::Plan empty;
+        Emit(C_CAPPED_DECISION, state, is_pre_combat, plans.empty() ? empty : plans.front(),
+             "observed cast-target axis exceeded 50000 variants before the mana-gate audit; rejected plans unverified");
     }
     // The OPTIONS the menu really offers are outcomes, not action lists: a gate-rejected plan whose
     // payable outcome is a board some menu entry already reaches (Ghalta, Stampede Tyrant cast alone

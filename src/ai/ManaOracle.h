@@ -39,6 +39,9 @@ struct GameState;
 
 namespace manaoracle
 {
+    // Raised only while building the oracle's mana-gate observation. AuditDecision
+    // converts it to a failing CAPPED-DECISION verdict; normal search never sees it.
+    struct ObservedAxisCap {};
     // 0 = off; 1 = summary + the first few flags per class; 2 = every flag; 3 = + per-plan trace.
     int  Level();
     // Empty the payment-refine memo; once per game from TurnSolver::ClearPerGameCaches.
