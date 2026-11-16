@@ -43281,9 +43281,9 @@ inline bool IsPaySacSource(const CardDefinition& def)
 // and *"Yes, it should be on-demand and only done that way."* Design: docs/design/sac-for-mana-on-demand.md.
 //
 // Such a source is NOT a plan action: CollectActions emits no SacForMana for it, and the shared payer
-// (TapForCostShared, ManaPayment.cpp) cracks it only when the cost in hand cannot be paid without it -- the
-// dominance rule: an uncracked source leaves a superset of the board, so cracking only on need loses
-// nothing in goldfish. The crack itself is the unchanged ApplySacForMana, so the executor, the rollout and
+// (TapForCostShared, ManaPayment.cpp) cracks it when the current cost needs it or when a named later
+// cast needs its colour and spending the lump on this bill preserves another required colour's source.
+// The crack itself is the unchanged ApplySacForMana, so the executor, the rollout and
 // the human's automatic payment run one path. The capacity is supply to every gate that may PRUNE a line
 // (AvailableManaPool and its twins, BuildColorFeasibility, ComputeAvailableColors, UntappedManaUpperBound)
 // through OnDemandSacSupplyNow below, the same over-count licence the gates already take: crediting the

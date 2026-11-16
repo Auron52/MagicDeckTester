@@ -10074,10 +10074,11 @@ static bool TapForCostSharedCore(GameState& state, const ManaCost& cost_in, bool
 // activation."*, on Lake of the Dead *"it should not be sacrificing the land unless we need it"*, and *"Yes, it
 // should be on-demand and only done that way."* (docs/design/sac-for-mana-on-demand.md; IsOnDemandSacDef.)
 //
-// THE RULE IS DOMINANCE, NOT A HEURISTIC: crack only when the cost cannot be paid without the crack. An
-// uncracked source leaves the board a superset of the cracked one, so in goldfish the payer loses nothing by
-// trying the ordinary payment first. Which crack, which colour and the Lake's plain-tap-or-crack are PAYMENT
-// choices, under the standing mana-payment exemption of the no-greedy rule. The steps:
+// The payer ordinarily cracks only when the current cost needs it. A named later cast can also need a
+// lump's colour while the current generic bill is payable without the crack: spending the lump now can
+// preserve another colour's source for that later cast (Dragonstorm s30060428). That visible line need is
+// checked on payment trials below. Which crack, which colour and the Lake's plain-tap-or-crack are PAYMENT
+// choices, under the standing mana-payment exemption of the no-greedy rule. The usual steps:
 //   1. Pay ordinarily, holding every crackable land (Lake) untapped: its plain {T}: {B} is the last resort,
 //      because tapping it forfeits the crack a later cost of the same line may need.
 //   2. Failing that, a crackable land's PLAIN tap pays this cost if the REST of the applying line
@@ -10326,6 +10327,64 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             ManaPool held_avail;
             held_strands = OnDemandTrial(state, {}, true, cost_in, for_creature, available, held_avail,
                                          honor_legacy_cco, *held_board) && strands(*held_board);
+        }
+    }
+    // A lump can be needed by a VISIBLE later cast even when this bill pays without it.
+    // Dragonstorm s30060428: Seething Song's {2}{R} uses a Needle after Mountain;
+    // Karrthus later needs Bloom's black, while the next red casts need that Needle.
+    // Crack for the later pip now only when the current generic bill can absorb the
+    // surplus, the later pip remains in float, and another named later colour gains
+    // supply compared with the ordinary payment. Both candidate payments are tried
+    // through the same payer before either is committed.
+    static const bool s_visible_lump = EnvOn("MTG_ONDEMAND_VISIBLE_LUMP", true);
+    if (s_visible_lump && cost_in.generic > 0 && lands.empty() && !lumps.empty())
+    {
+        int later_pips[5];
+        if (LineRestAfter(cost_in, later_pips) > 0)
+        {
+            const ManaPool before = AvailableManaPool(state);
+            const int have[5] = { before.white, before.blue, before.black, before.red, before.green };
+            const int non_lump_wild = std::max(0, before.wild - OnDemandSacSupplyNow(state).any);
+            static const char* kCol[5] = { "W", "U", "B", "R", "G" };
+            std::unique_ptr<GameState> ordinary;
+            ManaPool trial_avail;
+            for (int c = 0; c < 5; ++c)
+            {
+                if (later_pips[c] <= 0 || have[c] + non_lump_wild >= later_pips[c]) { continue; }
+                bool other_colour_owed = false;
+                for (int d = 0; d < 5; ++d)
+                { if (d != c && later_pips[d] > 0) { other_colour_owed = true; } }
+                if (!other_colour_owed) { continue; }
+                if (!ordinary)
+                {
+                    ordinary = std::make_unique<GameState>();
+                    if (!OnDemandTrial(state, {}, true, cost_in, for_creature, available, trial_avail,
+                                       honor_legacy_cco, *ordinary)) { break; }
+                }
+                const ManaPool ordinary_pool = AvailableManaPool(*ordinary);
+                for (const OnDemandCrack& lump : lumps)
+                {
+                    OnDemandCrack k = lump;
+                    k.color = kCol[c];
+                    const std::unique_ptr<GameState> early = std::make_unique<GameState>();
+                    if (!OnDemandTrial(state, { k }, true, cost_in, for_creature, available, trial_avail,
+                                       honor_legacy_cco, *early)) { continue; }
+                    const int floated[5] = { early->floating_mana.white, early->floating_mana.blue,
+                                              early->floating_mana.black, early->floating_mana.red,
+                                              early->floating_mana.green };
+                    if (floated[c] < later_pips[c]) { continue; }
+                    const ManaPool early_pool = AvailableManaPool(*early);
+                    const int old_col[5] = { ordinary_pool.white, ordinary_pool.blue, ordinary_pool.black,
+                                             ordinary_pool.red, ordinary_pool.green };
+                    const int new_col[5] = { early_pool.white, early_pool.blue, early_pool.black,
+                                             early_pool.red, early_pool.green };
+                    bool saves_later_source = false;
+                    for (int d = 0; d < 5; ++d)
+                    { if (d != c && later_pips[d] > 0 && new_col[d] > old_col[d]) { saves_later_source = true; } }
+                    if (saves_later_source)
+                    { return OnDemandPayWith(state, { k }, true, cost_in, for_creature, available, honor_legacy_cco); }
+                }
+            }
         }
     }
     // 1. Ordinary payment, the crackable lands held. (A failed payment leaves the board as it found it.)

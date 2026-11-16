@@ -1,5 +1,13 @@
 # Sacrifice-for-mana ON DEMAND (Lotus Bloom, Lake of the Dead)
 
+2026-11-16 amendment: the user clarified that a visible later cast's mana need
+also counts as on demand. A Dragonstorm line can pay the current Seething Song
+without Lotus Bloom yet still need to crack Bloom for black during that Song:
+the black surplus pays its generic part and preserves red lands for later
+casts. The payer may make that early crack after checking the named line's
+colored need and comparing the legal payments. See
+`docs/design/dragonstorm-lotus-visible-line-2026-11-16.md`.
+
 Status: implemented and validated 2026-11-06 on branch `sb-sacpayer`. See the implementation and
 validation notes below. Was deferred on 2026-11-04 until the main-phase/cast-order work landed.
 

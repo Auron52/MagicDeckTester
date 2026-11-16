@@ -227,6 +227,27 @@ TEST_CASE("On-demand Lotus Bloom: kept when the lands pay; pays a colour no land
     CHECK(t.floating_mana.Total() == 1);
 }
 
+TEST_CASE("On-demand Lotus Bloom: named later black cast cracks during an earlier generic Song")
+{
+    GameState s = BaseLp();
+    s.battlefield.push_back(PermLp("Lotus Bloom", 70));
+    for (int i = 0; i < 3; ++i) { s.battlefield.push_back(PermLp("Mountain", 71 + i)); }
+
+    ManaCost song; song.generic = 2; song.red = 1;
+    ManaCost karrthus; karrthus.generic = 4; karrthus.black = 1;
+    karrthus.red = 1; karrthus.green = 1;
+    ManaCost line = song;
+    AddManaCost(line, karrthus);
+    {
+        LineUnpaidCostScope hold(line);
+        REQUIRE(TapForCostShared(s, song, false, nullptr, true));
+    }
+    CHECK(CountPerm(s, "Lotus Bloom") == 0);
+    CHECK(s.floating_mana.black == 1);
+    CHECK(std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+    { return p.card.m_name == "Mountain" && !p.tapped; }) == 2);
+}
+
 TEST_CASE("Mana oracle: a scripted Lake crack consumes the early-crack pin as the payer does (no lump beside it)")
 {
     // The payer consumes scripted_early_ondemand_crack only on its pinned branch (one land crack, no Lotus Bloom);
