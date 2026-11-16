@@ -701,6 +701,39 @@ TEST_CASE("mana oracle: an enchanted land is not its bare twin's equal in the fr
     CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan));
 }
 
+// A combat-step Berserk holds the chosen attacker tapped only while its mana is paid, then
+// releases it. At that payment frontier the board can look like a main-phase payment that
+// tapped the same creature permanently. The latter's extra float must not prune the former:
+// Morph seed 30000074 T2 pays Might with Forest and Berserk with Stomping Ground, keeping
+// Ignoble Hierarch ready to attack.
+TEST_CASE("mana oracle: a combat payment's temporary attacker hold survives frontier pruning")
+{
+    EnsureOracleCards();
+    static const MorphProvider prov;
+    GameState s = Board({ "Stomping Ground", "Ignoble Hierarch" });
+    s.m_provider = &prov;
+    s.turn_number = 2;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 18;
+    s.players[1].life = 20;
+    int n = 100;
+    for (const char* name : { "Might of Old Krosa", "Berserk", "Forest", "Rootbound Crag", "Legion Leadership" })
+    {
+        Card c = CardDatabase::Instance().Lookup(name)->card;
+        c.m_number = n++;
+        s.players[0].hand.push_back(c);
+    }
+    Action might = CastAction(s, "Might of Old Krosa");
+    Action berserk = CastAction(s, "Berserk");
+    might.enchant_target = 2;
+    berserk.enchant_target = 2;
+    TurnSolver::Plan plan;
+    plan.actions = { might, berserk };
+    plan.land_decided = true;
+    plan.land_to_play = "Forest";
+    CHECK(manaoracle::CoversEngineOutcome(s, /*pre=*/true, plan, /*scripted_only=*/true));
+}
+
 // ---- THE ENUM-GAP PASS'S FALSE POSITIVES (eg1 triage, 2026-10-29; docs/design/mana-completeness-oracle.md 13.5) ------
 namespace
 {

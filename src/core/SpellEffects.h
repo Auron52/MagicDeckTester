@@ -30304,6 +30304,9 @@ struct DblCombatFloatSwap
 // Pay `rec`'s bill as a combat-step payment through `pay` (the caller's own payer, run on the swapped float).
 // Records what it tapped and whether untapping that restores the board (only plain taps: no permanent left,
 // no life paid). False = not payable that way; a failed payment leaves the board as it found it.
+// The mana oracle records this temporary hold at a payment frontier. A tapped attacker here will be
+// released after `pay`, unlike a creature already tapped for mana before this payment began.
+inline thread_local std::int32_t g_dbl_combat_held_attacker = 0;
 template <class PayFn>
 inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameState::DblCombatRec& rec, PayFn&& pay)
 {
@@ -30332,7 +30335,10 @@ inline bool DblCombatPayInto(GameState& s, GameState::DblCombatPay& cp, GameStat
     const int life0 = s.players[static_cast<std::size_t>(me)].life;
     const std::size_t bf0 = s.battlefield.size();
     DblCombatFloatSwap swap(s, cp.pool);
+    const std::int32_t prior_hold = g_dbl_combat_held_attacker;
+    g_dbl_combat_held_attacker = hold_atk ? atk_num : 0;
     const bool ok = pay();
+    g_dbl_combat_held_attacker = prior_hold;
     const ManaPool left = swap.Restore();
     if (!ok) { release_atk(); return false; }
     rec.pool_before = cp.pool;

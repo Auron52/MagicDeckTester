@@ -6,6 +6,15 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Morph's combat-step Berserk payment temporarily holds its attacker tapped.
+The audit's frontier prune had merged that board with one where the creature
+was permanently tapped for mana, losing the legal two-land route. The held
+attacker now separates those frontiers; a focused test fails before and
+passes after, full units pass, and seed 30,000,074 drops 22 oracle gaps to
+zero. The first 500 Morph games fall from 290 to 99 oracle gaps. See
+`docs/design/morph-combat-hold-frontier-2026-11-16.md`; a fresh PGO gate
+is owed.
+
 The fresh Spirits PGO gate on games 5,000–9,999 is complete
 (`codex-spirits-post-holds-20261116`), with byte-identical oracle-on/off
 play. It has 56 issues: 35 `APPLY-DROP` flags, all an Aether Vial/White

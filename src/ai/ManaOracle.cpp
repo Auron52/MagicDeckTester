@@ -236,6 +236,7 @@ bool ScriptedTapAhead(GameState& state, int count, bool lands_only)
         h.ended         = true;
         h.frontier      = true;
         if (h.f_state != nullptr) { *h.f_state = state; }
+        h.f_dbl_combat_hold = g_dbl_combat_held_attacker;
         h.f_dropped     = h.DroppedSoFar();
         h.f_cost        = ManaCost{};
         h.f_tapahead    = count;
@@ -2972,6 +2973,7 @@ struct FrontierRec
     int                    sac_victim = 0;      // Hook::f_sac_victim
     int                    sac_spare_source = 0;   // Hook::f_sac_spare_source
     int                    sac_spare_victim = 0;   // Hook::f_sac_spare_victim
+    std::int32_t           dbl_combat_hold = 0; // temporarily held attacker during this payment
     bool                   batch = false;      // joint pre-cast float
 };
 
@@ -3171,6 +3173,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.sac_victim   = h.f_sac_victim;
                     fr.sac_spare_source = h.f_sac_spare_source;
                     fr.sac_spare_victim = h.f_sac_spare_victim;
+                    fr.dbl_combat_hold = h.f_dbl_combat_hold;
                     fr.batch        = h.f_batch;
                     fronts.push_back(std::move(fr));
                     continue;
@@ -3263,6 +3266,12 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                                 * 0x9E37'79B9'7F4A'7C15ULL)
                              ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_victim))
                                 * 0xD1A5'AC51'B11D'AB1EULL);
+                }
+                // The attacker is tapped only DURING a combat-step payment and released after it.
+                // Do not let a permanently tapped creature with extra float prune that frontier.
+                if (fronts[i].dbl_combat_hold != 0)
+                {
+                    keys[i] ^= std::hash<std::string>{}("combat-hold#" + std::to_string(fronts[i].dbl_combat_hold));
                 }
                 res[i]  = Resources(fronts[i].st, /*with_float=*/true);
             }
