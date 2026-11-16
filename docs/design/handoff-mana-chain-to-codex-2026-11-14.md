@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Boars' Greaves-in-hand order now moves a fresh mana creature ahead of Herald
+when Greaves can haste it in the same visible line. Exact seed 30,005,044
+clears 23 order drops; on the first 500 fresh-block games, order drops fall
+107→41 and enum gaps 12→2. A fresh 2,000-game paired solo A/B gains one
+turn and loses none. Boars/2HG searched smoke and regression have no slower
+games; three depth-zero games lose one turn through fewer Herald counters.
+See `docs/design/boars-greaves-hand-order-2026-11-16.md`.
+
 Fresh PGO mana gate `codex-boars-mill-red-fresh-20261116` on indices
 5,000–9,999 is complete with byte-identical oracle-on/off play. Red Elementals
 is clean (zero issues). Mill has 113 `ENUM-GAP` flags, all involving Visions of

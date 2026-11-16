@@ -297,6 +297,22 @@ int BoarsProvider::CastOrderRank(const GameState& s, const CardDefinition& def) 
     const int mv = def.card.m_mana_cost.ManaValue();
     if (mv <= 4)
     {
+        // When Greaves can haste a freshly cast mana creature in this visible
+        // hand/board, put that creature just after Greaves and before Herald.
+        // The early equip pass then lets its mana pay later casts in the same
+        // line (Boars seed 30005044 T4). One deterministic order, with no
+        // additional cast permutation in the search. The d0 counter cost is
+        // measured in docs/design/boars-greaves-hand-order-2026-11-16.md.
+        static const bool greaves_hand_dork = EnvOn("MTG_BOARS_GREAVES_HAND_DORK_RANK", true); // DEFAULT ON; =0 restores old order
+        if (greaves_hand_dork && def.tmpl == CardTemplate::ManaDork && mv > 1)
+        {
+            const bool greaves_board = std::any_of(s.battlefield.begin(), s.battlefield.end(), [&](const Permanent& q)
+            { return q.controller_index == s.active_player_index && q.card.m_name == "Lightning Greaves"; });
+            const bool greaves_hand = std::any_of(s.players[s.active_player_index].hand.begin(),
+                                                  s.players[s.active_player_index].hand.end(), [&](const Card& c)
+            { return c.m_name == "Lightning Greaves"; });
+            if (greaves_board || greaves_hand) { return kBoarsEquip; }
+        }
         // E1 of the approved order: a Greaves already on the battlefield can haste
         // a fresh Sage or Druid before a later Boar. Rank those mana creatures with
         // Birds/Hierarch, ahead of Flinthoof, only on a board that can equip them.
