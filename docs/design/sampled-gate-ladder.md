@@ -719,3 +719,118 @@ same working directory, all 57 jobs matched the integrated binary byte-for-byte 
 and charged units. (Three deck families needed their replay launched from the same directory; otherwise
 relative-path inputs differed even at greedy depth zero.) Thus P18 adds no smoke drift; the 55 mismatches are
 already present on its parent with those deck inputs. The branch does not rebaseline ground truth.
+
+
+## Full repository deck screen on the 2026-11-16 shared engine
+
+At shared parent `8cd0bbf23` plus the P18 option, F2 compared `sampled_gate=2` with the bare heuristic
+ladder at depth 5 / 20 ms / max turn 8. It used 400 paired games per top-level deck, seeds
+5,000,000 + 10,000 × deck index (44,800 simulated games total), one pooled 32-worker batch. Both arms
+used the same deck and mulligan profile; the diagnostic directories omitted each deck's existing
+`.value.json` on both arms. Therefore these numbers measure the option against the bare ladder,
+not against each deck's shipped value leaf or play shape. CPU ratio is charged thread CPU; work ratio
+is deterministic charged units. A ratio below 1 is faster. Earlier/later is the number of games whose
+win turn changed. An unwon game scores turn 9 in the delta.
+
+| Deck | Paired games | CPU ratio | Work ratio | Earlier / later | Mean turn delta |
+|---|---:|---:|---:|---:|---:|
+| Accomplished Alchemist | 400 | 0.993x | 0.998x | 0 / 0 | +0.0000 |
+| Angels | 400 | 0.932x | 0.951x | 0 / 0 | +0.0000 |
+| Anti-Lifegain | 400 | 1.011x | 1.050x | 0 / 0 | +0.0000 |
+| Auras | 400 | 1.007x | 1.018x | 0 / 0 | +0.0000 |
+| Boars | 400 | 0.980x | 0.984x | 0 / 0 | +0.0000 |
+| Breaching Dragonstorm | 400 | 0.947x | 1.000x | 0 / 0 | +0.0000 |
+| Bruna | 400 | 0.994x | 0.997x | 0 / 0 | +0.0000 |
+| Burn | 400 | 0.985x | 1.006x | 0 / 0 | +0.0000 |
+| Colossus Hammer | 400 | 0.955x | 0.969x | 0 / 0 | +0.0000 |
+| Creature Giving | 400 | 0.984x | 0.988x | 0 / 0 | +0.0000 |
+| Critter Lifegain | 400 | 0.917x | 0.932x | 0 / 0 | +0.0000 |
+| Dragons | 400 | 0.990x | 0.985x | 0 / 0 | +0.0000 |
+| Dragonstorm | 400 | 0.937x | 0.937x | 0 / 1 | +0.0025 |
+| Eldrazi Displacer Flicker | 400 | 1.001x | 1.010x | 0 / 0 | +0.0000 |
+| Extra Turns | 400 | 0.999x | 1.000x | 0 / 0 | +0.0000 |
+| Five Colour | 400 | 0.981x | 1.005x | 0 / 0 | +0.0000 |
+| Fluctuator | 400 | 0.991x | 1.006x | 0 / 0 | +0.0000 |
+| Fungus | 400 | 1.004x | 1.030x | 0 / 0 | +0.0000 |
+| Galadriel | 400 | 0.990x | 0.985x | 0 / 0 | +0.0000 |
+| Giants | 400 | 0.963x | 0.960x | 0 / 0 | +0.0000 |
+| Goblins | 400 | 0.990x | 0.996x | 0 / 0 | +0.0000 |
+| Gods | 400 | 0.988x | 0.956x | 1 / 6 | +0.0125 |
+| Hinata | 400 | 0.989x | 1.000x | 0 / 0 | +0.0000 |
+| Hydras | 400 | 0.988x | 0.999x | 0 / 0 | +0.0000 |
+| Jumbo Cactuar | 400 | 1.002x | 0.986x | 0 / 0 | +0.0000 |
+| Kithkin | 400 | 0.981x | 0.993x | 0 / 1 | +0.0025 |
+| Kitty Equipment | 400 | 0.991x | 0.989x | 0 / 0 | +0.0000 |
+| Knights | 400 | 0.946x | 0.977x | 0 / 0 | +0.0000 |
+| Landfall | 400 | 1.002x | 1.000x | 0 / 0 | +0.0000 |
+| Landfall Elementals | 400 | 0.992x | 0.996x | 0 / 0 | +0.0000 |
+| Lifegain Heliod Combo | 400 | 0.964x | 0.977x | 0 / 0 | +0.0000 |
+| Martyr Lifegain | 400 | 0.995x | 0.996x | 0 / 0 | +0.0000 |
+| Melira Pod | 400 | 1.001x | 1.000x | 0 / 0 | +0.0000 |
+| Merfolk | 400 | 0.990x | 0.999x | 0 / 0 | +0.0000 |
+| Merfolk Turns | 400 | 1.011x | 0.995x | 0 / 1 | +0.0025 |
+| Midrange Burn | 400 | 0.984x | 0.992x | 0 / 0 | +0.0000 |
+| Mill | 400 | 0.983x | 0.987x | 0 / 0 | +0.0000 |
+| Minotaur | 400 | 0.969x | 0.981x | 0 / 0 | +0.0000 |
+| Mirrorwing Dragon | 400 | 0.999x | 1.008x | 0 / 0 | +0.0000 |
+| Modern RW Burn | 400 | 0.990x | 1.003x | 0 / 0 | +0.0000 |
+| Morph | 400 | 0.991x | 1.006x | 0 / 0 | +0.0000 |
+| NivMizzetCombo | 400 | 0.999x | 0.999x | 0 / 0 | +0.0000 |
+| Pirates | 400 | 0.981x | 0.988x | 0 / 0 | +0.0000 |
+| Prevent Damage | 400 | 0.997x | 0.997x | 0 / 0 | +0.0000 |
+| Red Elementals | 400 | 0.997x | 1.017x | 0 / 0 | +0.0000 |
+| Selesnya Lifegain | 400 | 0.983x | 0.983x | 0 / 0 | +0.0000 |
+| Shadowborn Apostle | 400 | 0.981x | 0.983x | 0 / 0 | +0.0000 |
+| Slivers | 400 | 0.980x | 0.985x | 0 / 0 | +0.0000 |
+| Snow | 400 | 0.999x | 1.001x | 0 / 0 | +0.0000 |
+| Soldiers | 400 | 0.971x | 0.986x | 0 / 0 | +0.0000 |
+| Spirits | 400 | 0.992x | 0.992x | 0 / 0 | +0.0000 |
+| Stompy Surprise | 400 | 0.980x | 1.001x | 0 / 0 | +0.0000 |
+| Treasure Hunt | 400 | 0.994x | 0.996x | 0 / 0 | +0.0000 |
+| Unpredictable Cyclone | 400 | 0.998x | 0.998x | 0 / 0 | +0.0000 |
+| Vampires | 400 | 0.989x | 1.001x | 0 / 0 | +0.0000 |
+| White Knights | 400 | 0.947x | 0.974x | 0 / 0 | +0.0000 |
+
+The default-on mode is not suitable as a fleet replacement: Dragonstorm 1 later; Gods 1 earlier,
+6 later; Kithkin 1 later; Merfolk Turns 1 later. All other decks had identical win turns in F2.
+Only nine top-level decks lack a value sidecar: Boars, Hydras, Martyr Lifegain, Merfolk Turns, Mill,
+Morph, Red Elementals, Shadowborn Apostle, and Spirits. The best deterministic work savings among
+these were Boars 1.6% and Mill 1.3%, too small to adopt from 400 games alone. The 100-game F1
+screen at seeds 4,000,000 + 10,000 × deck index was used only to identify candidates.
+
+### Conservative repair screen and Minotaur cost
+
+F3 tested a stricter diagnostic gate (`_pb3r36_pne_pwn5_paf97`) at the same depth 5 / 20 ms / turn 8
+settings on all 56 decks, using 100 fresh paired games per deck, seeds 6,000,000 + 10,000 × deck
+index. It changed no win turns, including Gods and Kithkin, but generally erased the useful work
+savings: Angels used 0.989x bare-ladder work, Critter Lifegain 0.995x, Gods 0.999x, and Mill 1.001x.
+Minotaur used 0.957x. This remains a diagnostic variant, not a production default or proof of
+win-turn equivalence beyond the sampled games.
+
+A separate 100-game Minotaur trace of the production gate found 181 decisions. Only 26 reached
+leafless walks, 43 reached priced walks, and 46 sampled rollouts cost 1,737 charged units out of
+705,688 total (0.25%). Leafless walks cost 17,109 units (2.4%). Bare ladder cost 718,168 units
+on those games. Reducing the rollout count alone cannot materially improve Minotaur runtime;
+few decisions enter the priced part of the gate at all.
+
+### Comparison with configured play shapes
+
+F4 used 400 fresh paired games per deck, seeds 7,000,000 + 10,000 × deck index, at depth 5 /
+20 ms / turn 8. The baseline loaded the deck's actual sidecar, if present; mode 2 and the
+conservative diagnostic variant replaced that sidecar. These ratios therefore answer the
+adoption question for the selected decks. CPU and deterministic work ratios are relative to
+the configured baseline; lower is better.
+
+| Deck | Mode 2 CPU | Mode 2 work | Mode 2 earlier / later | Conservative work |
+|---|---:|---:|---:|---:|
+| Boars | 0.973x | 0.983x | 0 / 0 | 1.000x |
+| Mill | 0.984x | 0.990x | 0 / 0 | 1.000x |
+| White Knights | 2.812x | 3.741x | 0 / 0 | 3.847x |
+| Colossus Hammer | 1.339x | 1.450x | 0 / 1 | 1.497x |
+| Galadriel | 1.530x | 1.518x | 0 / 0 | 1.547x |
+| Pirates | 1.781x | 1.908x | 0 / 0 | 1.924x |
+| Hydras | 0.984x | 0.986x | 0 / 0 | 1.003x |
+
+The sidecar-backed decks do not benefit from replacing their configured play shape. Boars,
+Mill, and Hydras still run the bare ladder, and mode 2 saves only 1–2% deterministic work.
+A larger fresh paired sample is needed before considering adoption on the bare-ladder decks.
