@@ -100,8 +100,10 @@ The next Prevent Damage payment fix keeps a red source when a breakpoint
 continuation pays Dina before a visible Spellshock. The broad hold worsened
 two of 5,000 paired games; the narrowed Dina-only hold clears the focused
 three drops and changed no play digests or win turns on those 5,000 games.
-It is default on with `MTG_PD_SPELLSHOCK_HOLD=0` rollback. A fresh PGO
-gate on 87,000–91,999 is owed. The 3,355-case unit suite passed; strict
+It is default on with `MTG_PD_SPELLSHOCK_HOLD=0` rollback. The fresh PGO
+gate on 87,000–91,999 was play-identical and found zero lost actions or
+enumeration gaps; eight oracle gaps and seven plan caps remain. The next
+block is 92,000–96,999. The 3,355-case unit suite passed; strict
 viewer replay found zero drift in 864 references; a same-binary off control
 reproduced all nine deck regression-row `.wins` despite three existing
 ground-truth mismatches. See

@@ -8299,6 +8299,48 @@
      "seed": 30082000,
      "src": "dbe1bccd088b54ab9e4f2f5136452d22138ba5c1",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CAPPED": 7,
+      "CONTINUATION-DIFFERS": 111,
+      "DOMINATED-LAND": 9335,
+      "DOMINATED-LIFE": 15983,
+      "DROP-COVERED": 4,
+      "ORACLE-GAP": 8,
+      "PHANTOM": 48
+     },
+     "commit": "9a5a8c005de29b958c74aa48b80fc9f036bc540b",
+     "date": "2026-11-16T09:51:00Z",
+     "decisions": 49594,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 87000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 15,
+     "life_breakpoints": [],
+     "ms_off": 3973495,
+     "ms_on": 14578841,
+     "report": "logs/mana_clean/codex-pd-spellshock-20261116/report.md",
+     "run": "codex-pd-spellshock-20261116",
+     "seed": 30087000,
+     "src": "0c77be51dd7add61bc9a46c63bce9312c6e94fd7",
+     "verdict": "issues"
     }
    ]
   },

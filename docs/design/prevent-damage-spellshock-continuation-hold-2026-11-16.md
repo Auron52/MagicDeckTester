@@ -38,4 +38,11 @@ including that searched slowdown. These ground-truth differences are not
 caused by this hold; no ground truth was accepted. Logs are under
 `build/scratch/pd_spellshock_ab/`.
 
-A fresh PGO mana-clean gate is still owed on games 87,000–91,999.
+The fresh PGO mana-clean gate `codex-pd-spellshock-20261116` completed games
+87,000–91,999 on source `0c77be51dd7a` with byte-identical oracle-on/off
+play. It found zero `APPLY-DROP`, `APPLY-DROP-ORDER`, `ENUM-GAP`, `UNMODELED`,
+or `CAPPED-DECISION` flags. Eight `ORACLE-GAP` flags remain in four signatures
+(three Pyrohemia variants and one Rolling Earthquake variant), plus seven
+`CAPPED` flags in three late-game signatures. The deck remains beta; the next
+untouched block is 92,000–96,999. The full report is
+`logs/mana_clean/codex-pd-spellshock-20261116/report.md`.
