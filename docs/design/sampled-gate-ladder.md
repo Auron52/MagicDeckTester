@@ -493,3 +493,19 @@ The exact second pass and minimum sample share improved the cache context, but t
 and duplicated-interior cost at an acceptable price. The next candidate must avoid paying both the leafless walk and
 the rollout walk of the committing pass, or derive a warm-cost decision without refusing the depths heur actually
 enters. A further threshold sweep of `_phx` on the same cold prices is unlikely to fix both quality and cost.
+
+### S20: spend the warm-up quota only on shallow passes (2026-11-16)
+
+`_pmd<N>` limits `_pmi20` to passes at or below N; the default remains unlimited, so all earlier arms are unchanged.
+Same seven decks, seeds, 4,000 paired games, 32-worker weighted batch. The heur baseline's completed `.wins` were
+identical to S17. All three variants still fail the cost-and-quality bar:
+
+| arm | Landfall delta / CPU | Hydras delta / CPU | other loss |
+|---|---:|---:|---|
+| `_pmi20_pmd2` | +0.000 / 1.423x | +0.000 / 1.145x | Alchemist +0.010, Melira +0.005 |
+| `_pmi20_pmd3` | -0.005 / 1.515x | +0.000 / 1.153x | Alchemist +0.010, Melira +0.005 |
+| `_pmi20_pmd3_phx_phd5` | +0.005 / 1.186x | +0.000 / 1.174x | Alchemist +0.010, Melira +0.005 |
+
+The useful warm-up is at depth three: limiting the quota to depth two loses the Landfall gain, while extending it to
+depth three retains that gain at most of the original cost. Depth-five pre-refusal still trades the gain away. The
+latest screen rules out a simple sample-quota adjustment as the general solution.

@@ -102243,7 +102243,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8, hxd = 3; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false; int bk = 8, hxd = 3, mid = INT_MAX; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0; };
     // Measurement knobs from the arm's deck key (screening only; the shipped constants are the k* above).
     inline Knob Knobs()
     {
@@ -102312,6 +102312,8 @@ namespace p18
         { const std::size_t p = k.find("_pus"); if (p != std::string::npos) { o.us = std::atof(k.c_str() + p + 4) / 100.0; } }
         // _pmi<pct> (screen only): warm an admitted pass's rollout cache before pricing its successor.
         { const std::size_t p = k.find("_pmi"); if (p != std::string::npos) { o.mi = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pmd<N> (screen only): stop paying the warm-up quota above depth N.
+        { const std::size_t p = k.find("_pmd"); if (p != std::string::npos) { o.mid = std::max(1, std::atoi(k.c_str() + p + 4)); } }
         o.ul = k.find("_pul") != std::string::npos;
         // _pnr (P18e): the admit line and the leafless cap read the heuristic ladder's remaining (rem0 less the priced
         // passes below) with no clamp to the decision's REAL remaining. The gate's leafless walks are real spend the
@@ -111481,7 +111483,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     if (static_cast<double>(lu) + E0 > thr) { fit = 0; break; }   // the tree and its exact leaves already exceed it
                     if (nbk >= 2)
                     {
-                        if (P + kn.z * se <= thr && static_cast<long long>(m) >= static_cast<long long>(std::ceil(kn.mi * rest)))
+                        if (P + kn.z * se <= thr && (k > kn.mid || static_cast<long long>(m) >= static_cast<long long>(std::ceil(kn.mi * rest))))
                         { fit = 1; break; }
                         if (B >= std::min(kn.mr, nbt) && P - kn.z * se > thr) { fit = 0; break; }
                     }
