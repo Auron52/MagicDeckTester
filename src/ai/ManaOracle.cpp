@@ -3349,6 +3349,24 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 for (const Action& a : plan.actions) { line_surplus += a.cost.ManaValue(); }
                 line_surplus = std::min(2, std::max(0, line_surplus - f.cost.ManaValue()));
             }
+            // A two-mana opener can also need ONE advance tap when the named
+            // continuation owes a colour this bill does not. Spirits s30025459:
+            // Millicent's {W}{W} prepays Watery Grave's {U}; the other two taps
+            // pay Millicent, and the floated {U} pays White Orchid Phantom.
+            // The minimal-payment table omitted that three-tap line because
+            // every source is one unit. The extra tap is audit-only; it is not
+            // offered as a searched play choice.
+            static const bool s_two_mana_line_surplus = EnvOn("MTG_ORACLE_LINE_SURPLUS2", true);
+            if (s_line_surplus && s_two_mana_line_surplus && f.index == 0 && f.cost.ManaValue() == 2
+                && f.line_unpaid.ManaValue() > f.cost.ManaValue())
+            {
+                ManaCost later = f.line_unpaid;
+                SubManaCost(later, f.cost);
+                const int cur[5] = { f.cost.white, f.cost.blue, f.cost.black, f.cost.red, f.cost.green };
+                const int next[5] = { later.white, later.blue, later.black, later.red, later.green };
+                for (int c = 0; c < 5; ++c)
+                { if (next[c] > 0 && cur[c] == 0) { line_surplus = 1; break; } }
+            }
             std::optional<PaySacSpareScope> _spare;
             if (f.sac_spare_source != 0 || f.sac_spare_victim != 0)
             { _spare.emplace(f.sac_spare_source, f.sac_spare_victim); }

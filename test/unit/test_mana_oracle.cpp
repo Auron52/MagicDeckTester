@@ -99,6 +99,21 @@ TEST_CASE("mana oracle: a painland pays a {G} land Aura cast painlessly through 
     CHECK(HasOption(opts, { "Brushland:C" }));
 }
 
+TEST_CASE("mana oracle: an advance blue tap can fund the next creature after a two-white opener")
+{
+    EnsureOracleCards();
+    // Spirits s30025459: the engine prepays Watery Grave's {U} beside the two
+    // white taps for Millicent, then spends that float on White Orchid Phantom.
+    // Every source yields one unit, so this is outside the minimal payment set.
+    const GameState s = Board({ "Godless Shrine", "Hallowed Fountain", "Watery Grave" });
+    const auto bare = manaoracle::MinimalPayments(s, Cost(0, 2), true, nullptr);
+    CHECK_FALSE(HasOption(bare, { "Godless Shrine:W", "Hallowed Fountain:W", "Watery Grave:U" }));
+    const auto ahead = manaoracle::MinimalPayments(s, Cost(0, 2), true, nullptr,
+                                                    false, false, nullptr, nullptr, 0,
+                                                    static_cast<std::size_t>(-1), 1);
+    CHECK(HasOption(ahead, { "Godless Shrine:W", "Hallowed Fountain:W", "Watery Grave:U" }));
+}
+
 TEST_CASE("mana oracle: a fed filter whose feeder also pays is offered (the converter cannot be fed later)")
 {
     EnsureOracleCards();

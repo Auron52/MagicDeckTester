@@ -94,3 +94,22 @@ Courtyard and leaves Fountain untapped; neither board covers the other
 under the oracle's resource key. The issue is now confined to that
 payment branch. See
 `logs/mana_clean/codex-spirits-own-land-order-20261116/report.md`.
+
+The oracle's first-payment table omitted a legal advance tap: Millicent
+costs {W}{W}, but the engine taps Watery Grave for {U} alongside its two
+white sources and carries that blue into White Orchid Phantom. The table's
+existing `MTG_ORACLE_LINE_SURPLUS` route opened such extra one-unit taps
+only for a one-mana first bill. `MTG_ORACLE_LINE_SURPLUS2` (default on,
+`=0` control) opens one extra tap after a two-mana first bill only when
+the named line later owes a color absent from that first bill. It changes
+oracle coverage, not the searched candidate menu. The exact seed has zero
+gaps with the flag on; `=0` restores all three. On 500 fresh Spirits
+games at seed 30,050,000, both arms average 4.6220 turns, with zero
+mana-clean issues. The on arm explores 2,123,000 oracle payment options
+versus 2,038,107 off (+4.2%); recorded oracle work time is 107,866 ms
+versus 106,461 ms (+1.3%). The full Release suite passes 3,371 unit
+cases and 3,614,741 assertions. Combined Spirits/2HG smoke and regression pass all ten
+cells, with zero per-game play changes. All 561 scenarios pass. Strict
+viewer replay has zero drift, divergence, or enumeration gaps across
+864 references, and both suboptimal references remain beaten. A fresh
+PGO mana-clean gate remains.
