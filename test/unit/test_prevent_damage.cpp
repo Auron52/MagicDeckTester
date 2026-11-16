@@ -1508,6 +1508,38 @@ TEST_CASE("Prevent Damage harmful-mode payment: the rest of the line stays payab
     CHECK(control_strands);   // the control arm reproduces the drop (else this test has no power)
 }
 
+TEST_CASE("Prevent Damage nonexact pain floor preserves red for a second Earthquake (seed 30058249 T5)")
+{
+    PainPayArm pay(true);
+    GameState s = Board();
+    s.turn_number = 5;
+    s.phase = Phase::PreCombatMain;
+    s.players[0].life = 17;
+    Put(s, "Grand Coliseum");
+    Put(s, "Brushland");
+    Put(s, "Reflecting Pool");
+    Put(s, "Vito, Thorn of the Dusk Rose");
+    Put(s, "Ancient Tomb");
+    Put(s, "Ancient Tomb");
+    // Living Wish has just used Brushland {G} and the first Tomb {C}{C}.
+    s.battlefield[1].tapped = true;
+    s.battlefield[4].tapped = true;
+    s.floating_mana.colorless = 1;
+    PlanTraits t;
+    t.mana_casts = 3;
+    t.cast_mv_total = 7;     // Wish {1}{G}, then Earthquakes {2}{R} and {1}{R}
+    t.cast_pips[3] = 2;
+    t.cast_pips[4] = 1;
+    PlanTraitsScope traits(&t);
+    LineUnpaidCostScope line(Cost(3, 0, 0, /*r=*/2));
+    const ManaCost first = Cost(2, 0, 0, /*r=*/1);
+    REQUIRE(Pay(s, first));
+    CHECK_FALSE(s.battlefield[0].tapped); // Coliseum's red mode remains for the second cast
+    SubManaCost(g_line_unpaid_cost, first);
+    CHECK(Pay(s, Cost(1, 0, 0, /*r=*/1)));
+    CHECK_FALSE(SelfHasLost(s));
+}
+
 TEST_CASE("Prevent Damage holds red for a known later Earthquake after Living Wish (seed 30050876 T5)")
 {
     PainPayArm pay(true);

@@ -1486,6 +1486,15 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
     int best = PaymentDamage(s, ctrl, barbs) - base;
     paystats::Inc(paystats::kHarmFirstOk);
     if (best <= floor_lb) { paystats::Inc(paystats::kHarmAtFloor); return true; }
+    const int first_damage = best;
+    // DEFAULT ON; =0 disables. This nonexact-floor path previously returned its
+    // least-damage payment without checking whether it stranded a named line.
+    // Keep the initial unrestricted payment as a fallback only when the
+    // minimum strands and that initial payment leaves the line payable.
+    static const bool s_nonexact_line = EnvOn("MTG_PD_NONEXACT_LINE_FALLBACK", true);
+    const bool line_chk = s_nonexact_line && line_ok(/*probe=*/true) != -1;
+    PayAttemptSnap first_post;
+    if (line_chk) { first_post.Take(s, available); }
     PayAttemptSnap best_post;
     best_post.Take(s, available);
     while (best > floor_lb)
@@ -1498,6 +1507,12 @@ inline bool PainAwarePay(GameState& s, ManaPool* available, bool allow_lethal, A
         best_post.Take(s, available);
     }
     best_post.Restore(s, available);
+    if (line_chk && best < first_damage && line_ok(false) == 0)
+    {
+        first_post.Restore(s, available);
+        if (line_ok(false) == 1 && pre.life_a - first_damage > 0) { return true; }
+        best_post.Restore(s, available);
+    }
     return true;
 }
 }   // namespace dmgev
