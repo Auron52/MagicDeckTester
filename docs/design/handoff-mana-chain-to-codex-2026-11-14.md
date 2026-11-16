@@ -6,6 +6,18 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Dragonstorm's splice-reveal repair (`1086ba6c7`) checks that a Desperate
+Ritual being spliced has another physical copy still in hand; Apex-staged
+copies cannot serve as reveals. Seed 30,054,701 now has zero flags. The
+5,000-game paired A/B had two one-turn slowdowns, both removing illegal old
+win lines, and no faster games. The 3,360-case unit suite, 561 scenarios,
+and strict 864-reference viewer replay passed. Dragonstorm-only smoke and
+regression ground truth was accepted after a per-game audit found no slower
+searched win. The fresh PGO gate on indices 57,000–61,999 found 63 issues:
+61 payment drops and two order drops, with zero enum or oracle gaps and
+byte-identical oracle-on/off play. The next block is 62,000–66,999; see
+`docs/design/dragonstorm-splice-hand-legality-2026-11-16.md`.
+
 The pooled fresh PGO gate `codex-mana-queue-20261115` is complete on all
 four decks, with byte-identical oracle-on/off play. It found Gods 4
 `APPLY-DROP` plus 10,483 unaudited-plan `CAPPED-DECISION` flags,

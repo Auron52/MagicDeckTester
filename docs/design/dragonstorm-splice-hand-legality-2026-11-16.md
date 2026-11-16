@@ -32,6 +32,22 @@ while the cast-time guard alone left that game unchanged. The final source
 retains the broad candidate menu and checks the chosen physical copy at cast
 time.
 
-Full regression, viewer and fresh mana-clean gates remain to be recorded.
 The final Release build passes all 3,360 unit cases and 3,614,324
-assertions; the focused seed still has zero issues on that build.
+assertions; the focused seed still has zero issues on that build. Combined
+Dragonstorm smoke and regression on the fresh PGO build passed 561 scenarios.
+The per-game audit found zero slower searched games and one faster depth-zero
+game. Ten searched games changed their play line at the same win turn; each
+was reviewed before accepting the six changed Dragonstorm ground-truth rows.
+The strict viewer replay recorded 329 ok, 534 repaired, one beaten, and zero
+play drift, dead shuffles, board divergence, enum gaps, mulligan drift, or
+contract failures across 864 references. Both suboptimal games were still
+strictly beaten. `test/check_gt_logs.py` reports all 1,252 rows consistent.
+
+The fresh PGO mana-clean block on indices 57,000–61,999 completed with
+byte-identical oracle-on/off play. It found 63 issues: 61 `APPLY-DROP` and
+two `APPLY-DROP-ORDER`, with zero enum gaps, oracle gaps, unmodeled, or caps.
+The largest remaining group loses a Karrthus cast after Seething Song and
+Apex of Power while black or green mana must be reserved through an earlier
+generic payment. The report is
+`logs/mana_clean/codex-dragonstorm-splice-20261116/report.md`; the next fresh
+block is 62,000–66,999.
