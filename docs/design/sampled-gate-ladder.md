@@ -834,3 +834,14 @@ the configured baseline; lower is better.
 The sidecar-backed decks do not benefit from replacing their configured play shape. Boars,
 Mill, and Hydras still run the bare ladder, and mode 2 saves only 1–2% deterministic work.
 A larger fresh paired sample is needed before considering adoption on the bare-ladder decks.
+
+F5 supplied that sample for Boars and Mill: 1,000 fresh paired games each, seeds 8,000,000
+and 8,010,000 respectively, with the same depth 5 / 20 ms / turn 8 settings. Boars used
+0.984x CPU and 0.987x work with 0 earlier / 0 later win turns. Across F2, F4, and F5 it had
+1,800 paired games, no changed win turn, and a reproducible 1.3–1.7% work reduction.
+`Boars.value.json` therefore opts into mode 2. Mill used 0.988x CPU and 0.988x work in F5,
+but had 0 earlier / 1 later, so it stays on its current ladder. The later game was seed
+8,010,197: baseline won on turn 5, mode 2 on turn 6. At its first decision, mode 2's priced
+gate pre-refused pass five, while the bare ladder's pass five cost only 11 units after a
+turn-five result at pass four. This is a concrete example of the quality risk in a cold
+final-pass cost prediction.
