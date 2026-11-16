@@ -90,7 +90,11 @@ block is 82,000–86,999. Most remaining gaps are joint prepay before
 Manabarbs versus per-cast oracle timing. Windows CI run 43826425327 for the
 old/new pain-land identity fix passed. The default-on audit-only batch-float
 repair clears five focused seeds and changed no play output in a 100-game
-paired cost check (+0.8% oracle time). A fresh 5,000-game gate is owed. See
+paired cost check (+0.8% oracle time). The fresh 5,000-game PGO gate on
+82,000–86,999 was oracle-on/off play-identical. It found 298 issues: three
+continuation payment drops, 24 oracle gaps, 18 payment-table caps, ten
+plan caps, and 243 unaudited-plan flags from one Pyrohemia decision. The
+next block is 87,000–91,999. See
 `docs/design/prevent-damage-batch-float-oracle-2026-11-16.md`.
 
 ## Codex update (2026-11-15)

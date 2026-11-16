@@ -37,4 +37,13 @@ and recorded oracle time from 103,426 to 104,253 ms (+0.80%). Both arms
 reported zero issues on that small block. Logs are in
 `build/scratch/pd_quakeorder_ab/batch_float_*`.
 
-A fresh 5,000-game PGO mana-clean gate is still owed after this adoption.
+The fresh PGO gate `codex-pd-batch-float-20261116` completed games
+82,000–86,999 on source `dbe1bccd088b`; oracle-on/off play was byte-identical.
+It found 298 issues: three `APPLY-DROP` flags from one Vito → Dina → Spellshock
+breakpoint continuation, 24 `ORACLE-GAP` flags in eight signatures, 18
+`UNMODELED` payment-table caps, ten `CAPPED` plan searches, and 243
+`CAPPED-DECISION` flags from one T8 Pyrohemia decision. Zero `ENUM-GAP` or
+`APPLY-DROP-ORDER` flags appeared. The 24 gaps are twelve self-dead
+Earthquake/Zenith outcomes and twelve Pyrohemia outcomes; none is the earlier
+Manabarbs joint-payment signature. The next unused block is 87,000–91,999.
+The exact report is `logs/mana_clean/codex-pd-batch-float-20261116/report.md`.
