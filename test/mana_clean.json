@@ -7213,6 +7213,48 @@
      "seed": 30000000,
      "src": "07b1dbe0cfc7e159c491a465fae76e21f583604d",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 150,
+      "CAPPED": 2,
+      "CONTINUATION-DIFFERS": 62,
+      "DOMINATED-CREATURE": 429,
+      "DOMINATED-LAND": 2118,
+      "DROP-COVERED": 3,
+      "ORACLE-GAP": 1046
+     },
+     "commit": "8cd0bbf2331c910c22522cd02aaf81c3330460c7",
+     "date": "2026-11-16T20:35:11Z",
+     "decisions": 35249,
+     "deck": "decks/Morph/Morph.cod",
+     "deck_sha": "45a0d4187f8d129e0ebd62b8ee1411f092a86d05",
+     "game_index": 5000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 1627,
+     "life_breakpoints": [],
+     "ms_off": 404837,
+     "ms_on": 1805662,
+     "report": "logs/mana_clean/codex-morph-combat-hold-20261116/report.md",
+     "run": "codex-morph-combat-hold-20261116",
+     "seed": 30005000,
+     "src": "88414781260a940347ad673adbcb14d6049e9cde",
+     "verdict": "issues"
     }
    ]
   },

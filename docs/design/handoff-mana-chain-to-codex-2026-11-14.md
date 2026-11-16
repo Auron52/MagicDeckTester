@@ -6,6 +6,14 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+The fresh Morph PGO gate on games 5,000–9,999 completed after the combat-hold
+frontier fix (`codex-morph-combat-hold-20261116`). Oracle-on/off play is
+byte-identical. The gate still reports 1,627 issues: 150 `APPLY-DROP`, 429
+`DOMINATED-CREATURE`, 1,046 `ORACLE-GAP`, and two `CAPPED`. The remaining
+payment and frontier clusters require follow-up; the exact report and source
+record are in `logs/mana_clean/codex-morph-combat-hold-20261116/report.md`
+and `test/mana_clean.json`.
+
 Morph's combat-step Berserk payment temporarily holds its attacker tapped.
 The audit's frontier prune had merged that board with one where the creature
 was permanently tapped for mana, losing the legal two-land route. The held
