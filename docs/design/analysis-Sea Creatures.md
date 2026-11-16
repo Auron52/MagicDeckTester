@@ -102,7 +102,9 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
     implements the full menu (~54 entries incl. decline); the provider adds a one-option prune to
     EXILE ALL LANDS (default ON, `MTG_SEA_GORGER_ALL`-style flag, =0 restores the searched menu; viewer
     keeps the full choice). Stage 5 A/Bs exile-all vs the searched menu and reports which menu entries
-    the searched arm actually picks, before anything is settled.
+    the searched arm actually picks, before anything is settled. USER rationale: *"The idea is to increase
+    its size and also increase the chance of drawing gas."* (Both are modelled: base P/T = lands exiled,
+    and the per-card reshuffle means the search sees the thinned library's real draws.)
 11. Figure of Destiny latent bug (bounced card keeps its base-P/T override in hand). Fixing it moves
     GT for decks with Figure. Agent default: fix for Gorger now; Figure as a separate USER-approved change.
 9. Sin's dies trigger (counters to target creature, shuffle into library) deferral: Sin cannot die in
