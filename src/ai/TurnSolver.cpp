@@ -35,6 +35,7 @@
 #include <bit>                      // std::countr_zero -- portable; MSVC has no __builtin_ctz
 #include <charconv>                 // std::to_chars (PlanSignatureFast)
 #include <chrono>
+#include <ctime>                    // MTG_P17_LEDGER: clock_gettime (POSIX)
 #include <deque>
 #include <cstdio>
 #include <cstdint>
@@ -1529,6 +1530,21 @@ static const char* kNames[kSiteCount] = {
 };
 static std::atomic<long long> g_units[kSiteCount];
 }   // namespace unitsite
+// MTG_P17_LEDGER (P17 diagnostic, print-only, default OFF; needs MTG_P16_TRACE): thread-local mirrors of the per-site
+// unit census and of the search's cache traffic, snapshotted per pass into the [p17] decision line so a work ledger
+// can be reconciled pass by pass and site by site between two shapes. Never read by play.
+namespace p17
+{
+    inline bool On() { static const bool v = EnvOn("MTG_P17_LEDGER"); return v; }
+    inline thread_local long long t_site[unitsite::kSiteCount] = {};
+    inline thread_local long long t_nodes = 0, t_glc_w = 0, t_glc_n = 0, t_iw_w = 0, t_iw_n = 0;
+    inline thread_local long long t_idh_look = 0, t_idh_cur = 0, t_idh_prev = 0, t_idh_rot = 0;
+    inline thread_local long long t_rgc_look = 0, t_rgc_hit = 0;
+    // P18 (print-only, MTG_P16_TRACE): units charged by site AFTER a sampled-gate leafless pass's ceiling tripped
+    // (the overshoot of a capped pass: work the recursion did not unwind from).
+    inline thread_local bool t_capwatch = false;
+    inline thread_local long long t_after[unitsite::kSiteCount] = {};
+}
 
 // Defined below; needed by the MTG_IRENCRAG_WASTE gate, which is only sound for a deck whose
 // PLAY order IS the rank order (see the gate's note).
@@ -2067,6 +2083,8 @@ static inline void ConsumeAt(SearchBudget* budget, unitsite::Site site)
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (p17::On()) { p17::t_site[site] += u; }
+    if (p17::t_capwatch && budget->OverrunQuiet()) { p17::t_after[site] += u; }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, 1); }
 }
@@ -2108,6 +2126,8 @@ static inline void ConsumeAtN(SearchBudget* budget, unitsite::Site site, long lo
     budget->Consume(u);
     PricedTraceAt(static_cast<int>(site), u);
     if (s_rollout_stats) { unitsite::g_units[site].fetch_add(u, std::memory_order_relaxed); }
+    if (p17::On()) { p17::t_site[site] += u; }
+    if (p17::t_capwatch && budget->OverrunQuiet()) { p17::t_after[site] += u; }
     if (g_dvs_in_p2 > 0) { g_dvs_p2_site[site].fetch_add(u, std::memory_order_relaxed); }
     if (cachecharge::t_rec != nullptr) { CacheChargeNote(budget, n); }
 }
@@ -104902,6 +104922,10 @@ namespace sfxprobe
 }
 static void RolloutSuffixProbeClear() { sfxprobe::Clear(); rgc::t_map.clear(); }   // + E3's map (same lifetime)
 
+// SAMPLED-GATE cost profile (P18e, `_pus` arms; see p18::Sampler): when set, the OUTERMOST rollout records the units
+// it had spent at the head of each simulated turn, so the sampled-gate price can re-cost that rollout under a tighter
+// cutoff (an incumbent found earlier in the pass's visit order) without running it again. Print/price only.
+namespace p18 { inline thread_local std::vector<std::pair<int, long long>>* t_prof = nullptr; }
 static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
                              SearchBudget* budget, int cutoff_turn,
                              bool second_main, TranspositionTable* tt,
@@ -104943,6 +104967,7 @@ static int SimulateToEndImpl(GameState& state, int depth, int max_turns,
     if (s_rollout_stats) { g_rollout_calls.fetch_add(1, std::memory_order_relaxed); }   // deterministic telemetry
     while (state.turn_number <= max_turns)
     {
+        if (p18::t_prof != nullptr && g_rollout_nest == 1) { p18::t_prof->emplace_back(state.turn_number, budget ? budget->Used() : 0); }
         if (sfxprobe::t_collect && g_rollout_nest == 1 && state.turn_number > roll_start && first_turn_depth < 0)
         {
             // MUTED: BuildSimKeyBase bills workctr::kSimKey to the PRICED meter the decision ceiling reads
@@ -105981,6 +106006,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
     if (rgc_on)
     {
         rgc::g_lookups.fetch_add(1, std::memory_order_relaxed);
+        if (p17::On()) { ++p17::t_rgc_look; }
         const auto it = rgc::t_map.find(rgc::Key(key, sfx_ctx));
         if (it != rgc::t_map.end())
         {
@@ -105988,6 +106014,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             if (e.win)
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed); rgc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_rgc_hit; }
                 if (e.result <= cutoff_turn) { return e.result; }
                 leafeval::Publish(leafeval::kInvalid);   // what a fresh run publishes when it aborts at the cutoff
                 return max_turns + 1;
@@ -105995,6 +106022,7 @@ static int SimulateToEnd(GameState&& state, int depth, int max_turns,
             if (nowin_armed && cutoff_turn <= e.bound)
             {
                 rgc::g_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_rgc_hit; }
                 if (cutoff_turn >= max_turns) { leafeval::Publish(e.tb); leafeval::PublishLife(e.life); }
                 else                          { leafeval::Publish(leafeval::kInvalid); }
                 return max_turns + 1;
@@ -108084,6 +108112,317 @@ unsigned long long TurnSolver::TruncEvents() { return g_fs_trunc_events; }
 // current decision's search (deterministic). g_fs_leaf_evals is a running counter; per-pass deltas are the
 // per-depth leaf counts, snapshotted by FullSearchLine into g_probe_leaves while g_probe_recording is set.
 inline thread_local long long g_fs_leaf_evals   = 0;
+// MTG_P16_TRACE (P16 diagnostic, print-only, default OFF): per-decision split of the hybrid's units into its
+// passes, and of each pass into horizon-rollout units (FSLineWin's depth-0 SimulateToEnd) vs the rest (tree).
+// One stderr line per top-level FullSearchLineHybrid call. Never read by play.
+namespace p16
+{
+    inline bool On() { static const bool v = EnvOn("MTG_P16_TRACE"); return v; }
+    inline thread_local long long t_leaf_units = 0;   // running: units charged inside horizon rollouts
+    inline thread_local int t_hyb_nest = 0;           // FullSearchLineHybrid nesting (record at 1 only)
+    struct Pass { char kind; int depth; long long units; long long leaf; int status; int dvs; int win; };
+    inline thread_local std::vector<Pass> t_passes;
+    // kind: H rollout ladder pass | P leafless ladder pass | C calibration | F FIT pass | L FIT climb pass
+    // status: 0 completed | 1 overrun, rolled back | 2 overrun, anytime-rescued
+    // MTG_P16_ORACLE=<file> (MEASUREMENT ONLY, default unset): "seed ord T sm K" per top-level decision, from a
+    // heuristic-ladder trace. The ladder then runs passes 1..K-1 LEAFLESS and only pass K on rollouts -- the
+    // "skip every superseded rollout, knowing K" upper bound. Never a play shape: it reads another run's answers.
+    struct OKey { unsigned long long s; int ord; bool operator<(const OKey& o) const { return s != o.s ? s < o.s : ord < o.ord; } };
+    struct OVal { int T, sm, K, W; };
+    inline const std::map<OKey, OVal>& Oracle()
+    {
+        static const std::map<OKey, OVal> m = []{
+            std::map<OKey, OVal> r; const char* f = std::getenv("MTG_P16_ORACLE");
+            if (f == nullptr || *f == '\0') { return r; }
+            std::ifstream in(f); std::string ln;
+            while (std::getline(in, ln))
+            {
+                unsigned long long sd; int ord, T, sm, K, W = 0;
+                if (std::sscanf(ln.c_str(), "%llu %d %d %d %d %d", &sd, &ord, &T, &sm, &K, &W) >= 5) { r[OKey{sd, ord}] = OVal{T, sm, K, W}; }
+            }
+            return r; }();
+        return m;
+    }
+    inline thread_local unsigned long long t_o_seed = 0;
+    inline thread_local int  t_o_ord = 0;
+    inline thread_local bool t_o_dead = false;   // this game diverged from the record: stop applying it
+    inline thread_local int  t_oracle_K = 0;     // the current decision's recorded committing depth (0 = none)
+    inline thread_local int  t_oracle_W = 0;     // P17 aspiration oracle: the recorded committing pass's win turn (0 = none)
+    inline void OracleBegin(unsigned long long seed, int T, bool sm)
+    {
+        t_oracle_K = 0;
+        const std::map<OKey, OVal>& m = Oracle();
+        if (m.empty()) { return; }
+        // MTG_P16_ORACLE_ARM=<substring>: apply only to jobs whose deck key contains it (an oracle arm pooled with its
+        // own heuristic-ladder control in ONE batch, so core-s is compared under the same contention).
+        static const std::string s_arm = []{ const char* e = std::getenv("MTG_P16_ORACLE_ARM"); return std::string(e ? e : ""); }();
+        if (!s_arm.empty() && valuearm::t_deck_key.find(s_arm) == std::string::npos) { return; }
+        if (seed != t_o_seed) { t_o_seed = seed; t_o_ord = 0; t_o_dead = false; }
+        const int ord = t_o_ord++;
+        if (t_o_dead) { return; }
+        auto it = m.find(OKey{seed, ord});
+        if (it == m.end() || it->second.T != T || it->second.sm != (sm ? 1 : 0)) { t_o_dead = true; return; }
+        t_oracle_K = it->second.K;
+        t_oracle_W = (valuearm::t_deck_key.find("asp") != std::string::npos) ? it->second.W : 0;   // arm dir holds "asp"
+    }
+    // MTG_P17_LEDGER (print-only): each recorded pass also carries the delta of the p17 snapshot since the previous
+    // record (or the decision's start), so a decision's passes plus its residual sum to the decision exactly.
+    inline thread_local std::vector<std::vector<long long>> t_px;
+    inline thread_local std::vector<long long> t_p17_last;
+    static void P17Delta(std::vector<long long>& out);   // defined after the counters it reads
+    inline void Rec(char kind, int depth, long long units, long long leaf, int status, int win, int dvs)
+    {
+        if (!On() || t_hyb_nest != 1) { return; }
+        t_passes.push_back({kind, depth, units, leaf, status, dvs, win});
+        if (p17::On()) { t_px.emplace_back(); P17Delta(t_px.back()); }
+    }
+}
+// SAMPLED-GATE LADDER (value_play.sampled_gate, P18; default off). The heuristic ladder runs rollout passes 1, 2, ...
+// and admits pass k+1 when its EXTRAPOLATED cost c_k * (c_k / c_{k-1}) fits kStartGateAlpha x what is left; every
+// pass but the last is superseded, so its rollouts buy nothing but that extrapolation. Here each pass k first runs
+// LEAFLESS (a proven in-window win commits there, exactly where the rollout pass would have stopped), which yields
+// the pass's tree cost l_k, its leaf count n_k and a uniform sample of its leaves. The rollout pass's cost is then
+// PRICED, not run: c_k ~ l_k + r_pv + (n_k - 1) * mean(sampled rollouts), the first (principal-variation) leaf rolled
+// out with the pass's own cut and the rest with the incumbent cut the rollout pass would hand them. Rollouts are
+// drawn one at a time until the price is decided against the gate (k fits / k does not fit) at kZ standard errors,
+// and no more (USER 2026-11-13: "the number of rollouts that is required to get things quite accurate ... and no
+// more"). The ladder commits the deepest pass whose price fits what the heuristic ladder would have left (its
+// remaining budget less the priced costs of the passes below), and runs ONLY that pass on rollouts, starting at the
+// best win the samples proved reachable. The samples' rollouts go through the rollout table, so the committing pass
+// reads its own sampled leaves back. Constants are engine-wide; the sample size is per decision.
+namespace p18
+{
+    constexpr double kZ = 2.0;          // decide at this many standard errors of the priced cost
+    constexpr double kCvFloor = 0.5;    // per-leaf rollout cost is heavy-tailed: never assume a CV below this
+    constexpr int    kMaxSamples = 64;  // the reservoir: a pass with more leaves is priced from at most this many
+    constexpr int    kUsMaxRes = 256;   // _pus: the reservoir's MEMORY bound (GameState copies); the statistical
+                                        // ceiling is the general fraction _pus<pct> of the pass's leaves
+    struct Sampler
+    {
+        long long n = 0;                       // leaves visited
+        bool have_first = false;
+        GameState first; int first_cut = 0;    // the first leaf the pass reaches (its principal variation)
+        std::vector<GameState> res; std::vector<int> cuts;
+        std::vector<long long> pos;            // _pus: each sampled leaf's visit position (1 .. n-1; the first is 0)
+        unsigned long long rng = 0;
+        int cap = kMaxSamples;
+        // _prr2: the real-remaining cap tightens only once the pass shows its first leaf (a pass with no leaf IS its
+        // tree, so its cap is the admit line itself); tb/tlim arm that, 0 = off.
+        SearchBudget* tb = nullptr; long long tlim = 0;
+        // _pus: CLUSTER sampling in VISIT ORDER. Leaves after the first are cut into consecutive blocks of `blk`;
+        // block 0 (the principal variation's neighbourhood) is always kept, later blocks are reservoir-sampled whole,
+        // so every sampled leaf is priced with the leaves that precede it in the real pass (siblings share rollout paths
+        // through the rollout table, and an incumbent found early cuts the rest). blk 0 = the single-leaf reservoir.
+        struct Blk { std::vector<GameState> s; std::vector<int> cut; std::vector<long long> pos; };
+        int blk = 0;
+        std::vector<Blk> blocks;               // [0] = block 0, then the reservoir slots
+        long long nb_seen = 0;                 // blocks >= 1 seen so far
+        int cur = -1;                          // the slot receiving the current block (-1 = not kept)
+        unsigned long long Next() { rng += 0x9E3779B97F4A7C15ULL; unsigned long long z = rng;
+                                    z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ULL; z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+                                    return z ^ (z >> 31); }
+        void Offer(const GameState& s, int cut)
+        {
+            ++n;
+            if (!have_first)
+            {
+                have_first = true; first = s; first_cut = cut;
+                if (tb != nullptr && tlim > 0)
+                { const long long cur = tb->OverrunLimit(); tb->SetOverrunLimit(cur > 0 ? std::min(cur, tlim) : tlim); }
+                return;
+            }
+            const long long seen = n - 1;      // leaves after the first
+            if (blk > 0)
+            {
+                const long long off = seen - 1;
+                if (off == 0) { blocks.emplace_back(); cur = 0; }
+                else if (off >= blk && off % blk == 0)
+                {
+                    ++nb_seen;
+                    const long long capb = std::max(1, cap / blk);
+                    if (static_cast<long long>(blocks.size()) - 1 < capb) { blocks.emplace_back(); cur = static_cast<int>(blocks.size()) - 1; }
+                    else
+                    {
+                        const unsigned long long j = Next() % static_cast<unsigned long long>(nb_seen);
+                        if (j < static_cast<unsigned long long>(capb))
+                        { cur = 1 + static_cast<int>(j); Blk& b = blocks[static_cast<std::size_t>(cur)]; b.s.clear(); b.cut.clear(); b.pos.clear(); }
+                        else { cur = -1; }
+                    }
+                }
+                if (cur >= 0)
+                { Blk& b = blocks[static_cast<std::size_t>(cur)]; b.s.push_back(s); b.cut.push_back(cut); b.pos.push_back(seen); }
+                return;
+            }
+            if (static_cast<long long>(res.size()) < cap) { res.push_back(s); cuts.push_back(cut); pos.push_back(seen); return; }
+            const unsigned long long j = Next() % static_cast<unsigned long long>(seen);
+            if (j < static_cast<unsigned long long>(cap)) { res[j] = s; cuts[j] = cut; pos[j] = seen; }
+        }
+    };
+    inline thread_local Sampler* t_smp = nullptr;
+    struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
+                         nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+    // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
+    // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
+    inline Knob Knobs()
+    {
+        Knob o; const std::string& k = valuearm::t_deck_key;
+        if (valuearm::t_deck_sampled_gate >= 2)
+        {
+            o.z = 0.0;   // the measured H7 shape; earlier `_pzn` arm names accidentally parsed as `_pz0`
+            o.b1 = o.b2 = o.b3 = true;
+            o.b3r = 3.0;
+            o.lcap = o.rr = o.rx2 = true;
+            o.fr = 2.0;
+            o.a1 = 0.95;
+            o.fd = o.zn = o.hx = true;
+            o.hw = o.wn = 3;
+        }
+        auto num = [&](const char* tag, double& out) {
+            const std::size_t p = k.find(tag);
+            if (p != std::string::npos)
+            {
+                const char c = k[p + std::strlen(tag)];
+                if ((c >= '0' && c <= '9') || c == '-' || c == '.')
+                { out = std::atof(k.c_str() + p + std::strlen(tag)) / 10.0; }
+            } };
+        num("_pz", o.z); num("_pcv", o.cvf);
+        num("_pf", o.f);                                      // ROBUST-OR-EXACT margin F (0 = off)
+        o.nocredit = k.find("_pfnc") != std::string::npos;   // the fallback ladder gates on the real remaining budget
+        // _pfa<10F>: ASYMMETRIC band (thr, thr*F] -- a price that fits admits as is (a deeper commit measured harmless), only
+        // a refusal must clear the margin. _pd<10F>: lean deeper -- admit at F x the threshold, no fallback.
+        if (k.find("_pfa") != std::string::npos) { o.asym = true; num("_pfa", o.f); }
+        num("_pd", o.lean);
+        // _prx: REFUSE-EXACT -- the ladder stops pricing at the first pass that does not fit, runs the pass below on
+        // rollouts (it commits there anyway) and from there on the heuristic ladder's own gate decides, on real costs.
+        o.rx = k.find("_prx") != std::string::npos;
+        num("_pmr", o.mr);
+        // _pb1: BOOTSTRAP-EXACT -- pass 1 runs on rollouts (as the heuristic ladder runs it; it is the cheapest pass) and
+        // the heuristic ladder's own bootstrap check (c1 x growth vs alpha x remaining) decides pass 2 on that real cost;
+        // pricing starts at pass 2, and only passes 3+ are admitted on their prices.
+        o.b1 = o.b1 || k.find("_pb1") != std::string::npos;
+        // _plc: LEAFLESS CAP -- a pass whose leafless tree alone outgrows the admit threshold cannot fit (its price is at
+        // least that tree), so its leafless pass stops there and the pass is refused. Re-prices only: the cap is the
+        // budget's own threshold, absent at an unlimited budget.
+        o.lcap = o.lcap || k.find("_plc") != std::string::npos;   // _pmr<10m>: a REFUSAL (a shallower commit, the side that measured lossy) needs m samples
+        // _prr: REAL-REMAINING CAP -- the committing pass is paid in real units after the pricing, and its price is at least
+        // the leafless tree l, so a pass with l > lean x alpha x (R - l) is refused by the gate's own rule whatever its
+        // leaves cost: the leafless pass stops at l = lean x alpha x R / (1 + lean x alpha). Exact w.r.t. the verdict.
+        o.rr = o.rr || k.find("_prr") != std::string::npos;
+        // _prx2: REFUSE-EXACT AT PASS 3 ONLY (with _pb1). When the priced ladder commits pass 2 because pass 3 did not
+        // fit, pass 2 runs on rollouts anyway (it is the commit), so the heuristic ladder's own check c2^2/c1 costs
+        // nothing: it decides pass 3 on REAL costs (c1 exact, c2 = the rollout pass plus the samples that warmed it),
+        // and from there the heuristic ladder's gate continues. Every pass-3 refusal becomes the ladder's own.
+        o.rx2 = o.rx2 || k.find("_prx2") != std::string::npos;
+        if (o.rx2) { o.rx = false; }
+        // _ppr<10F>: PRE-REFUSAL -- before pass k >= 3 is priced, the heuristic ladder's own extrapolation on the prices
+        // below (est_{k-1}^2 / est_{k-2}, est_1 = the real pass-1 cost) refuses it outright when it exceeds F x the admit
+        // threshold, so a pass the ladder would never start costs no leafless tree. Inert at an unlimited budget.
+        num("_ppr", o.ppr);
+        // _pfr<10F>: FREE REFUSAL (with _pb1 + _prx2). Pricing pass 2 serves only pass 3's check, so before pass 2's
+        // leafless tree is built the heuristic ladder's own extrapolation on the one real cost known (c1; c2 ~ c1 x
+        // growth, c3 ~ c2^2/c1) is asked whether pass 3 could fit what pass 2 leaves: when the prediction exceeds F x
+        // the ladder's own admit line the gate prices nothing and hands the decision to the heuristic ladder from pass 2
+        // (pass 2 on rollouts, its real c2^2/c1 check decides pass 3). The refusal costs nothing, and its verdict is
+        // the ladder's own on real costs, so it can only remove pricing. Inert at an unlimited budget.
+        num("_pfr", o.fr);
+        // _pfx (with _pfr): the same free refusal at EVERY pass k >= 3, on the costs known (c1 real, the priced est_2..):
+        // when est_{k-1}^2 / est_{k-2} exceeds F x the admit line, pass k is not priced, pass k-1 runs on rollouts (the
+        // commit unless the ladder's own check admits more) and the heuristic ladder decides pass k on real costs.
+        o.fx = k.find("_pfx") != std::string::npos;
+        // _prr2 (P18e, implies _prr): the real-remaining cap l <= a R / (1 + a) assumes the commit re-walks the tree and
+        // pays leaves on top; a pass with NO leaf is its tree, so the leafless pass runs to a R and tightens to
+        // a R / (1 + a) at its first leaf, and a leafless pass that completes with no leaf at the ladder's own root cut
+        // is committed directly (the rollout pass would walk the same tree with nothing to roll out, as would every
+        // deeper pass).
+        o.rr2 = k.find("_prr2") != std::string::npos;
+        if (o.rr2) { o.rr = true; }
+        // _pus<pct> (P18e): UNCERTAINTY-SCALED SAMPLING. The price models the incumbent effect (each sampled rollout is
+        // re-costed at the cut the real pass would hand it, from the sampled wins EARLIER in the pass's visit order,
+        // via its per-turn cost profile) and states the uncertainty honestly: the refusal side assumes an unseen
+        // improving leaf at the expected first position of an unobserved event, (n-1)/(m+1), that cuts every later
+        // leaf one turn earlier. Samples are drawn until the verdict clears that interval, never past pct% of the
+        // pass's leaves (the hard ceiling), and at the ceiling the gate decides anyway: _pul admits unless even the
+        // improver-assumed price refuses (lean admit), otherwise the point price decides.
+        { const std::size_t p = k.find("_pus"); if (p != std::string::npos) { o.us = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pmi<pct> (screen only): warm an admitted pass's rollout cache before pricing its successor.
+        { const std::size_t p = k.find("_pmi"); if (p != std::string::npos) { o.mi = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pmd<N> (screen only): stop paying the warm-up quota above depth N.
+        { const std::size_t p = k.find("_pmd"); if (p != std::string::npos) { o.mid = std::max(1, std::atoi(k.c_str() + p + 4)); } }
+        o.ul = k.find("_pul") != std::string::npos;
+        // _pnr (P18e): the admit line and the leafless cap read the heuristic ladder's remaining (rem0 less the priced
+        // passes below) with no clamp to the decision's REAL remaining. The gate's leafless walks are real spend the
+        // heuristic ladder never makes; clamping on them refuses interior-heavy passes the ladder admits (Landfall T1).
+        o.nr = k.find("_pnr") != std::string::npos;
+        // _pcr (P18e): the real-remaining clamp credits back THIS pass's own leafless walk -- the one cost the gate pays
+        // twice (its commit re-walks the interior). A decision may overspend by at most that duplicated interior, which
+        // the heuristic ladder pays once; bounded between the clamp (_prr-free) and _pnr.
+        o.cr = k.find("_pcr") != std::string::npos;
+        // _phx (P18f): the heuristic ladder's OWN free refusal, on prices. Before pass k >= 3 is walked, its estimate
+        // c_{k-1}^2 / c_{k-2} (the priced costs below) is checked against gate_alpha x (rem0 - priced), exactly the
+        // heuristic ladder's start gate with prices standing in for its real superseded costs. A pass heur would not
+        // start is refused at no cost (heur pays nothing for it either); only passes heur would start are walked and
+        // priced. Measured 2026-11-13 (T3): refused passes' leafless walks were Landfall's and Melira's largest
+        // overhead (1.64M / 1.43M units, vs 0.76M / 0.86M for the double walk).
+        // _phx<10F>: refuse only when the extrapolation exceeds F x the admit line (no digits: F = 1).
+        { const std::size_t p = k.find("_phx");
+          if (p != std::string::npos) { o.hx = true; const double f = std::atof(k.c_str() + p + 4) / 10.0; o.hxf = f > 0.0 ? f : 1.0; } }
+        // _phd<N> (screen only): leave shallow passes to the sampled price before pre-refusing deeper ones.
+        { const std::size_t p = k.find("_phd"); if (p != std::string::npos) { o.hxd = std::max(3, std::atoi(k.c_str() + p + 4)); } }
+        // _phw<N> (screen only): after an exact pass three, do not let a cold price pre-refuse the final pass
+        // when that exact line already predicts a win within N turns past its horizon. Farther wins retain the
+        // free pre-refusal, which avoids an expensive fifth pass on interior-heavy decks.
+        { const std::size_t p = k.find("_phw"); if (p != std::string::npos) { o.hw = std::max(0, std::atoi(k.c_str() + p + 4)); } }
+        // _pb2 (screen only): run pass 2 on rollouts, so its true cost and cache warm pass 3's price.
+        o.b2 = o.b2 || k.find("_pb2") != std::string::npos;
+        o.b3 = o.b3 || k.find("_pb3") != std::string::npos;
+        if (o.b3) { o.b2 = true; }
+        if (o.b2) { o.b1 = true; }
+        // _pb3r<10R> (screen only): exact pass three only when the measured pass-two/pass-one cost growth is
+        // small. A fast-growing tree is likely to commit at three, where sampling it adds a duplicate walk;
+        // a slow-growing tree is likely to supersede three and benefits from its rollout cache at depth four.
+        num("_pb3r", o.b3r);
+        // _pag<10R> (screen only, with _pb2): a high measured c2/c1 ratio makes pass three likely to be
+        // terminal. Evaluate it exactly and continue the ordinary ladder; there is little superseded rollout
+        // work to save, and a leafless pass would repeat its tree before committing it.
+        num("_pag", o.ag);
+        // _pfd (screen only): a final pass has no successor to price. Run it once with rollouts instead of
+        // walking its interior leafless, sampling, and then walking the same interior again to commit.
+        o.fd = o.fd || k.find("_pfd") != std::string::npos;
+        // _pua (screen only): at the reservoir ceiling, an unresolved refusal admits the pass. The sampled
+        // price is a biased cold estimate; a wrong refusal loses a searched depth, while an admit remains bounded
+        // by the ordinary pass overrun guard. Fully enumerated leaf sets still use their exact price.
+        o.ua = k.find("_pua") != std::string::npos;
+        // _pzn (screen only): after an exact pass three, a leafless pass four with no offered leaf has no
+        // sample to price. Run pass four on rollouts so its ordinary line cache can warm pass five, then let
+        // its exact cost decide the final depth. The leafless walk was already paid but often costs far less
+        // than a cold final pass (Alchemist seed 720044: H5 40k cold vs 135 after exact H4).
+        o.zn = o.zn || k.find("_pzn") != std::string::npos;
+        // _pwn<N> (screen only, with exact pass three): if its rollout predicts a win N turns or less beyond
+        // its horizon, continue exactly at depth four. Such nearby wins often make the next pass terminal or
+        // leave it with no fresh leaf, so pricing it leafless repeats work and starves the following pass's cache.
+        { const std::size_t p = k.find("_pwn"); if (p != std::string::npos) { o.wn = std::max(0, std::atoi(k.c_str() + p + 4)); } }
+        // _pne (screen only, with exact pass three): a no-win result gives no useful incumbent to bound a
+        // leafless fourth pass. Continue the exact ladder so its later passes retain the ordinary rollout cache.
+        o.ne = k.find("_pne") != std::string::npos;
+        // _paf<pct> (screen only, with _pb2): when the exact depth-two pass spends too little of its work in
+        // rollouts, a leafless walk at the next depth is unlikely to save enough to pay for itself. Continue the
+        // ordinary ladder from depth three, using the two exact costs already measured; no sampled pass was run.
+        { const std::size_t p = k.find("_paf"); if (p != std::string::npos) { o.af = std::atof(k.c_str() + p + 4) / 100.0; } }
+        // _pa1<pct> (screen only): the exact first pass can show that rollout work is a small fraction of its
+        // cost. In that case evaluating every leaf is cheaper than walking the tree again to sample a subset.
+        { const std::size_t p = k.find("_pa1"); if (p != std::string::npos) { o.a1 = std::atof(k.c_str() + p + 4) / 100.0; } }
+        { const std::size_t p = k.find("_pbk"); if (p != std::string::npos) { o.bk = std::max(1, std::atoi(k.c_str() + p + 4)); } }
+        o.actual_rem = k.find("_pact") != std::string::npos;
+        o.noasp = k.find("_pnoasp") != std::string::npos;
+        o.nobound = k.find("_pnobound") != std::string::npos;
+        o.verify = k.find("_pverify") != std::string::npos;   // price every pass on a scratch meter, then run the heuristic ladder
+        return o;
+    }
+    // MTG_P16_TRACE (print-only): one record per priced pass, printed as the decision's [p18] line.
+    struct PassRec { int d; long long n; long long l; double thr; double est; double se; int m; long long su; int fit; int wb; std::string ck; };
+    inline thread_local std::vector<PassRec> t_rec;
+}
 // Tree-shape diagnostics (same running-counter convention): branch-and-bound prunes at FSLineWin's
 // entry, in-horizon early exits, and the sum of leaf win turns -- what the leaf VALUE feeds back into
 // the tree's shape. Per-pass deltas, read by the emulated ladder's same-depth comparison.
@@ -108091,6 +108430,33 @@ inline thread_local long long g_fs_cut_prunes   = 0;
 inline thread_local long long g_fs_hexits       = 0;
 inline thread_local long long g_fs_leaf_wt_sum  = 0;
 inline thread_local long long g_fs_memo_win_hits = 0, g_fs_memo_nowin_hits = 0, g_fs_memo_order_miss = 0, g_fs_memo_stale = 0;
+namespace p16
+{
+    // MTG_P17_LEDGER snapshot, in print order: cpu_ns nodes leaf_evals tt_look tt_hit memo_win memo_nowin glc_w glc_n
+    // iw_w iw_n idh_look idh_cur idh_prev idh_rot cut_prunes rgc_look rgc_hit, then units by site (unitsite order).
+    static void P17Take(std::vector<long long>& v)
+    {
+#if defined(_WIN32)
+        const long long cpu_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();   // wall, not thread CPU, on Windows
+#else
+        timespec ts{}; clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
+        const long long cpu_ns = static_cast<long long>(ts.tv_sec) * 1000000000LL + ts.tv_nsec;
+#endif
+        v.assign({ cpu_ns, p17::t_nodes, g_fs_leaf_evals,
+                   g_tt_look_n, g_tt_hit_n, g_fs_memo_win_hits, g_fs_memo_nowin_hits, p17::t_glc_w, p17::t_glc_n,
+                   p17::t_iw_w, p17::t_iw_n, p17::t_idh_look, p17::t_idh_cur, p17::t_idh_prev, p17::t_idh_rot,
+                   g_fs_cut_prunes, p17::t_rgc_look, p17::t_rgc_hit });
+        for (int i = 0; i < unitsite::kSiteCount; ++i) { v.push_back(p17::t_site[i]); }
+    }
+    static void P17Delta(std::vector<long long>& out)
+    {
+        P17Take(out);
+        std::vector<long long> now = out;
+        for (std::size_t i = 0; i < out.size() && i < t_p17_last.size(); ++i) { out[i] -= t_p17_last[i]; }
+        t_p17_last.swap(now);
+    }
+}
 // ORDER-FREE WAVE OPPORTUNITY PROBE (MTG_OF_WAVE_PROBE, default off -- counters only, no behaviour).
 // Under SPLIT KEYS a WIN is stored order-exactly, so a permuted twin's win is simply not found and the
 // node re-searches from scratch. That silent miss is the whole residual the split-keys adoption gave up
@@ -108231,6 +108597,12 @@ static inline bool IdOrderHintOn()
     static const bool env = EnvOn("MTG_ID_ORDER_HINT", true);   // DEFAULT ON (interior nodes only); =0 -> the static order
     return heurarm::Flag(heurarm::ID_ORDER_HINT, env);
 }
+// MTG_P17_LEAFLESS_NOHINT (heurarm P17_LEAFLESS_NOHINT, default OFF): a leafless pass leaves no hint at a no-win node.
+static inline bool IdhLeaflessKeep(int win, int max_turns)
+{
+    static const bool env = EnvOn("MTG_P17_LEAFLESS_NOHINT");
+    return !(g_force_constant_leaf && win > max_turns && heurarm::Flag(heurarm::P17_LEAFLESS_NOHINT, env));
+}
 static inline void IdHintRecord(const TranspositionTable::Key& k, int idx, int n, int win, bool model)
 {
     static const std::size_t cap = static_cast<std::size_t>(std::max(0, EnvInt("MTG_ID_HINT_CAP", 262144)));
@@ -108269,9 +108641,11 @@ static inline const IdHint* IdHintFind(const TranspositionTable::Key& k)
 {
     const bool game = IdHintGameOn();
     if (game) { idhgame::g_lookups.fetch_add(1, std::memory_order_relaxed); }
+    if (p17::On()) { ++p17::t_idh_look; }
     IdHintMap::const_iterator it = g_idh_map->find(k);
     if (it != g_idh_map->end())
     {
+        if (p17::On()) { ++p17::t_idh_cur; }
         if (game) { idhgame::g_cur_hits.fetch_add(1, std::memory_order_relaxed); }
         return &it->second;
     }
@@ -108279,6 +108653,7 @@ static inline const IdHint* IdHintFind(const TranspositionTable::Key& k)
     IdHintMap::const_iterator pt = idhgame::t_prev.find(k);
     if (pt == idhgame::t_prev.end()) { return nullptr; }
     idhgame::g_prev_hits.fetch_add(1, std::memory_order_relaxed);
+    if (p17::On()) { ++p17::t_idh_prev; }
     return &pt->second;
 }
 struct IdHintScope   // installs this decision's hint map unless an enclosing decision root already did
@@ -108332,6 +108707,16 @@ struct Printer
 }
 inline thread_local long long g_probe_leaves[16] = {0};   // probe leaf count at each pass depth (0 = unmeasured)
 inline thread_local long long g_probe_cost[16]   = {0};   // probe budget-work at each pass depth
+// value_play.fit_gate "ladder" / MTG_FIT_GATE_LADDER (P12 prototype; see FIT GATE = THE LADDER'S RULE).
+// value_play.fit_gate "ladder_rem" / MTG_FIT_GATE_LADDER_REM (P14): the same, with the climb charged against the
+// decision's true Remaining. FitGateCode() = 0 off | 1 ladder | 2 ladder_rem (valuearm::FitGateResolve).
+inline int FitGateCode()
+{
+    static const bool env_l = EnvOn("MTG_FIT_GATE_LADDER");
+    static const bool env_r = EnvOn("MTG_FIT_GATE_LADDER_REM");
+    return valuearm::FitGateResolve(valuearm::t_deck_fit_gate_ladder, env_l, env_r);
+}
+inline bool FitGateLadderOn() { return FitGateCode() != 0; }
 inline thread_local bool       g_probe_recording = false; // set while the probe's FullSearchLine ladders
 // AUDIT-only: the HEURISTIC ladder's per-pass INCREMENTAL cost (what the start-gate actually consumes -- the
 // memo makes this much less than a cold pass). Recorded around the audit shadow ladder to reveal the true
@@ -112261,6 +112646,28 @@ namespace gamelc
         static const bool env = EnvOn("MTG_LEAFLESS_READS_LEAFED", true);
         return heurarm::Flag(heurarm::LEAFLESS_READS_LEAFED, env);
     }
+    // P18f LEAF-FREE ANSWERS (MTG_P18_LEAFFREE, or the arm-key substring "_plf"; default OFF). ENGINE IDENTITY FOLD.
+    // A node whose COMPLETE search under cutoff c reached no depth-0 leaf and read no memo answer (the taint below is
+    // unchanged across its subtree) proved "no win at or before c" without scoring a single leaf, so the proof holds for
+    // EVERY leaf kind: a leafed search of the same (state, depth, beam/label context) under a cutoff c' <= c explores a
+    // subset of those lines (cuts only tighten), none of which reaches depth 0, and finds the same no in-window win.
+    // Stored under the leaf code kLeafFree, read by any node (rollout, value or no leaf) with cutoff <= the bound; a
+    // hit is itself leaf-free, so it does not taint its ancestors. This is what lets the sampled gate's committing
+    // rollout pass skip the dead interior its leafless walk already refuted (the P18e double walk).
+    // Budget-independent (it reads only completed proofs), so it applies at every budget.
+    inline constexpr unsigned kLeafFree = 0x1EAFF3EEu;
+    inline std::atomic<long long> g_lf_stores{0}, g_lf_hits{0}, g_lf_ver_n{0}, g_lf_ver_bad{0};
+    inline bool LeafFreeOn()
+    {
+        static const bool env = EnvOn("MTG_P18_LEAFFREE");
+        thread_local std::string last; thread_local bool v = false, init = false;
+        const std::string& k = valuearm::t_deck_key;
+        if (!init || k != last) { last = k; v = env || k.find("_plf") != std::string::npos; init = true; }
+        return v;
+    }
+    // Everything that answers part of a subtree without searching it (a leaf, a memo read, a truncation).
+    inline long long LfTaint()
+    { return g_fs_leaf_evals + g_fs_memo_win_hits + g_fs_memo_nowin_hits + static_cast<long long>(g_fs_trunc_events); }
     // MTG_BP_DEV_SEQ's first pass (see TurnSolver::FullSearchLine): a node whose walk met a latent occurrence answered
     // for the one-deviation tree only. It is kept under this second tag, which only a first pass reads, and a hit on it
     // counts as meeting a latent occurrence -- its subtree holds one -- so the second pass still runs. Every other
@@ -112274,6 +112681,9 @@ namespace gamelc
             std::cerr << "[game-line-cache] win_hits=" << g_win_hits.load() << " nowin_hits=" << g_nowin_hits.load()
                       << " stores=" << g_stores.load() << " full_refusals=" << g_full.load()
                       << " leafless_reads=" << g_lr_hits.load();
+            if (g_lf_stores.load() + g_lf_hits.load() > 0)
+            { std::cerr << " leaffree_stores=" << g_lf_stores.load() << " leaffree_hits=" << g_lf_hits.load()
+                        << " leaffree_verified=" << g_lf_ver_n.load() << " leaffree_MATERIAL=" << g_lf_ver_bad.load(); }
             if (Verify())
             {
                 std::cerr << " verified=" << g_ver_n.load() << " DISAGREE=" << g_ver_bad.load()
@@ -112368,6 +112778,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     const heavyfangate::Frame _hfg(state);
     if (state.turn_number > max_turns) { return { max_turns + 1, {} }; }
     if (state.turn_number > cutoff)    { ++g_fs_cut_prunes; return { max_turns + 1, {} }; }  // can't beat incumbent
+    if (p17::On()) { ++p17::t_nodes; }   // MTG_P17_LEDGER (print-only)
     const pastcut::CutFrame _pcf(cutoff);   // MTG_FSL_PASTCUT_PROBE: this node's cutoff, for FSLineStoreWin
     if (state.TurnSeqCapped(max_turns)) { return { max_turns + 1, {} }; }   // extra-turn chain backstop (inert elsewhere)
     const unsigned long long dvs_latent_at_entry = g_devseq_latent_n;   // MTG_BP_DEV_SEQ: see DvsDirty below
@@ -112438,6 +112849,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         if (g_force_constant_leaf || (vm && vm->constant))
         {
             // NO-LEAF: never a win here; the search commits only what it proves inside the horizon.
+            if (p18::t_smp != nullptr && g_rollout_nest == 0) { p18::t_smp->Offer(state, cutoff); }   // sampled gate: the pass's leaves
             g_fs_leaf_wt_sum += max_turns + 1;
             return { max_turns + 1, {} };
         }
@@ -112498,7 +112910,9 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         int w;
         {
             const RolloutNarrowScope _narrow;   // the tail rollout beyond the horizon: see MTG_ROLLOUT_FAN_NARROW
+            const long long p16u0 = budget ? budget->Used() : 0;   // MTG_P16_TRACE (print-only)
             w = SimulateToEnd(std::move(leaf), EffectiveFdLeafDepth(), max_turns, budget, cutoff, second_main, tt);
+            if (budget) { p16::t_leaf_units += budget->Used() - p16u0; }
         }
         g_fs_leaf_wt_sum += w;
         return { w, {} };
@@ -112540,6 +112954,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     TranspositionTable::Key key, key_win, key_base;
     int dvs_read_mlt = INT_MAX;   // precise dirty-memo provenance when the carry has it
     bool gamelc_hit = false; int gamelc_hit_win = 0;   // MTG_GAME_LINE_CACHE_VERIFY: the cached answer to check
+    bool lf_hit = false;                               // ...and it was a P18f leaf-free answer
     bool inwin_hit = false; int inwin_hit_win = 0;     // MTG_INWIN_CACHE_VERIFY: the cached answer to check
     int pastcut_cached = 0;                            // MTG_FSL_PASTCUT_VERIFY: the memo win being re-searched
     struct GamelcUnreached { const bool& hit; bool done = false; ~GamelcUnreached()
@@ -112567,6 +112982,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             }
             if (dvs_read_dirty && DvsDirtyReadOn()) { g_devseq_latent_hit = true; ++g_devseq_latent_n; }
         }
+        // P18f LEAF-FREE ANSWERS (see gamelc::LeafFreeOn): a completed no-leaf refutation answers any leaf kind.
+        if (gamelc::On() && g_fsline_nest > 0 && g_devseq_suppress == 0 && gamelc::LeafFreeOn())
+        {
+            auto lf = gamelc::t_map.find(gamelc::TagLeaf(key, gamelc::kLeafFree));
+            if (lf != gamelc::t_map.end() && cutoff <= lf->second.nowin_bound)
+            {
+                gamelc::g_lf_hits.fetch_add(1, std::memory_order_relaxed);
+                if (!gamelc::Verify()) { return lf->second.line; }
+                gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = lf->first; lf_hit = true;
+            }
+        }
         // MTG_GAME_LINE_CACHE: an answer an earlier decision of this game computed (see gamelc).
         if (gamelc::On() && g_fsline_nest > 0)
         {
@@ -112581,6 +113007,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 && (gw->second.order_sig == 0 || gw->second.order_sig == gsig))
             {
                 gamelc::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_glc_w; }
                 if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                 if (!gamelc::Verify()) { ++g_fs_memo_win_hits; return gw->second.line; }
                 gamelc_hit = true; gamelc_hit_win = gw->second.line.win_turn; gamelc::t_hit_key = gw->first;
@@ -112592,6 +113019,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                     && cutoff <= gn->second.nowin_bound)
                 {
                     gamelc::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (p17::On()) { ++p17::t_glc_n; }
                     if (gt == 1) { g_devseq_latent_hit = true; ++g_devseq_latent_n; g_devseq_latent_min_turn = std::min(g_devseq_latent_min_turn, state.turn_number); }
                     if (!gamelc::Verify()) { ++g_fs_memo_nowin_hits; return gn->second.line; }
                     gamelc_hit = true; gamelc_hit_win = max_turns + 1; gamelc::t_hit_key = gn->first;
@@ -112647,6 +113075,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             if (iw != inwin::t_map.end() && iw->second.win <= we && (iw->second.order_sig == 0 || iw->second.order_sig == osig))
             {
                 inwin::g_win_hits.fetch_add(1, std::memory_order_relaxed);
+                if (p17::On()) { ++p17::t_iw_w; }
                 if (!inwin::Verify()) { ++g_fs_memo_win_hits; return iw->second.line; }
                 inwin_hit = true; inwin_hit_win = iw->second.win;
             }
@@ -112663,6 +113092,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 if (in != inwin::t_map.end() && q_cut <= std::min(in->second.nowin_bound, we))
                 {
                     inwin::g_nowin_hits.fetch_add(1, std::memory_order_relaxed);
+                    if (p17::On()) { ++p17::t_iw_n; }
                     if (!inwin::Verify()) { ++g_fs_memo_nowin_hits; return TurnSolver::SearchLine{ max_turns + 1, {} }; }
                     inwin_hit = true; inwin_hit_win = max_turns + 1;
                 }
@@ -113155,6 +113585,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // watermark for the budget cuts that never book a truncation (see SearchBudget.h).
     const unsigned long long trunc_at_entry = g_fs_trunc_events;
     const unsigned long long binds_at_entry = budgetbind::t_binds;
+    const long long lf_taint_at_entry = gamelc::LfTaint();   // P18f: leaf-free iff unchanged at the store
     // What this node's search COSTS, in the same deterministic work units the budget is denominated
     // in. Stored beside its answer in the wave index so a permuted twin can price the re-search it
     // is deciding whether to skip -- a measured cost, not a guess at one. Subtree-inclusive, which
@@ -113494,6 +113925,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 order_perturbed = true;
                 idh_rot = idx;
+                if (p17::On()) { ++p17::t_idh_rot; }
                 if (g_oo_mode != 0) { ooprobe::h_rotated.fetch_add(1, std::memory_order_relaxed); }
                 if (pre_lazy.active) { PbLazyRotateFs(pre, pre_ord, idx); }
                 else
@@ -114554,7 +114986,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                             }
                             if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+                            if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
                             if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: the winning slot is this one
                             {
                                 node_vals.push_back(tail.win_turn);
@@ -114997,7 +115429,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
                 // instead of returning so this node's own deferred ranks get a chance to beat it.
                 if (BpWaveCompleteNodes() && BpWavesHere(budget)) { deferred_win = true; break; }
                 FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-                if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+                if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
                 if (g_oo_mode == 1 && rec_vals)   // ORDER ORACLE: node_vals already ends at this win
                 {
                     (*rec_map)[key] = node_vals;
@@ -115016,7 +115448,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
         else
         {
             FSLineStoreWin(lc, key_win, best, state, &key, OF_UNITS());
-            if (idh_rec) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+            if (idh_rec && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
             if (g_oo_mode == 1 && rec_vals) { (*rec_map)[key] = node_vals; ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
             return best;
         }
@@ -115024,7 +115456,7 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
     // Store the probe's per-plan value ranks for this fully-evaluated node (loop completed = every plan
     // scored), so the escalation's beam can reorder by them. Win-node early-returns above skip this (they
     // don't need reordering). Overwrites are harmless (depth is folded into the key, so no cross-pass clash).
-    if (idh_rec && oo_best_idx >= 0 && !deferred_win) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
+    if (idh_rec && oo_best_idx >= 0 && !deferred_win && IdhLeaflessKeep(best.win_turn, max_turns)) { IdHintRecord(key, idh_static_idx(oo_best_idx), static_cast<int>(pre_view.size()), best.win_turn, idh_model_pass); }
     if (rec_vals && !node_vals.empty() && !deferred_win)
     {
         if (g_oo_mode == 1) { ooprobe::recorded.fetch_add(1, std::memory_order_relaxed); }
@@ -115570,6 +116002,17 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             {
                 gamelc::g_ver_n.fetch_add(1, std::memory_order_relaxed);
                 const bool fresh_win = best.win_turn <= max_turns, cached_win = gamelc_hit_win <= max_turns;
+                if (lf_hit)
+                {
+                    gamelc::g_lf_ver_n.fetch_add(1, std::memory_order_relaxed);
+                    if (best.win_turn <= cutoff)
+                    {
+                        if (gamelc::g_lf_ver_bad.fetch_add(1, std::memory_order_relaxed) < 12)
+                        { std::cerr << "[leaffree] DISAGREE job=" << (heurarm::t_job_name ? heurarm::t_job_name : "-") << " turn=" << state.turn_number
+                                    << " depth=" << depth << " cutoff=" << cutoff << " fresh=" << best.win_turn
+                                    << " leaf=" << gamelc::LeafCode(state) << "\n"; }
+                    }
+                }
                 if (fresh_win != cached_win || (fresh_win && best.win_turn != gamelc_hit_win))
                 {
                     gamelc::g_ver_bad.fetch_add(1, std::memory_order_relaxed);
@@ -115633,6 +116076,28 @@ static TurnSolver::SearchLine FSLineWin(const GameState& state, int depth, int m
             else if (!win && it->second.nowin_bound != std::numeric_limits<int>::max()
                      && it->second.nowin_bound < std::min(cutoff, max_turns + 1))
             { it->second.nowin_bound = std::min(cutoff, max_turns + 1); }   // a wider refutation supersedes
+            // P18f: the same refutation, leaf-free, for every leaf kind (see gamelc::LeafFreeOn).
+            if (!win && !dvs_sup && g_devseq_suppress == 0 && !gamelc_hit && gamelc::LeafFreeOn()
+                && gamelc::LfTaint() == lf_taint_at_entry)
+            {
+                const TranspositionTable::Key fk = gamelc::TagLeaf(key, gamelc::kLeafFree);
+                const int b = std::min(cutoff, max_turns + 1);
+                auto fi = gamelc::t_map.find(fk);
+                if (fi == gamelc::t_map.end())
+                {
+                    const std::size_t nb = tier1::On() ? static_cast<std::size_t>(tier1::kFslEntryB + tier1::kMapNodeB)
+                                                       : sizeof(FSLineEntry) + 64;
+                    if (gamelc::t_bytes + nb > gamelc::CapBytes()) { gamelc::g_full.fetch_add(1, std::memory_order_relaxed); }
+                    else
+                    {
+                        gamelc::t_bytes += nb;
+                        tier1::Set(tier1::kGameLc, static_cast<long long>(gamelc::t_bytes));
+                        gamelc::g_lf_stores.fetch_add(1, std::memory_order_relaxed);
+                        gamelc::t_map.emplace(fk, FSLineEntry{ best.win_turn <= max_turns ? TurnSolver::SearchLine{ max_turns + 1, {} } : best, b });
+                    }
+                }
+                else if (fi->second.nowin_bound < b) { fi->second.nowin_bound = b; }
+            }
         }
     }
     // MTG_INWIN_CACHE: keep this node's in-window proofs for any depth (see inwin).
@@ -115816,6 +116281,21 @@ namespace
     // Bootstrap growth ratio used for pass 1's estimate, before two completed
     // passes exist to measure a real C_{k-1}/C_{k-2} branching ratio.
     constexpr double kDefaultGrowth = 6.0;
+    // PRICED START GATE, the one rule (FullSearchLine's ladder AND FIT's climb under fit_gate "ladder" call this, so the
+    // climb is admitted by exactly the ladder's priced test): true = the next pass may START. pr_prev / pr_prev2 = the
+    // priced work (workctr::t_priced) of the last two completed passes. Only consulted while the priced ceiling is armed
+    // and the gate is on (decisionwork::PricedGateOn, default OFF); counts its refusals like the inline original did.
+    inline bool PricedStartGateFits(long long pr_prev, long long pr_prev2, bool have_prev2)
+    {
+        if (!(decisionwork::t_pr_limit > 0 && decisionwork::PricedGateOn() && pr_prev > 0)) { return true; }
+        const double pratio = (have_prev2 && pr_prev2 > 0)
+                            ? static_cast<double>(pr_prev) / static_cast<double>(pr_prev2) : kDefaultGrowth;
+        const double pest = static_cast<double>(pr_prev) * pratio;
+        const double prem = static_cast<double>(decisionwork::t_pr_limit
+                                                - (workctr::t_priced - decisionwork::t_pr_start));
+        if (pest > kStartGateAlpha * std::max(0.0, prem)) { ++decisionwork::t_pr_gate_refusals; return false; }
+        return true;
+    }
     // Overrun guard: once a pass is running past budget, abort + roll back only
     // when it has spent more than the ceiling below. "Almost done" passes always finish.
     // The ceiling is max(beta*budget, FLOOR): for small per-decision budgets beta*budget
@@ -116690,6 +117170,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             const long long cuts0 = g_fs_cut_prunes, hex0 = g_fs_hexits, wt0 = g_fs_leaf_wt_sum;
             const long long mw0 = g_fs_memo_win_hits, mn0 = g_fs_memo_nowin_hits, mo0 = g_fs_memo_order_miss, ms0 = g_fs_memo_stale;
             const long long tl0 = g_tt_look_n, th0 = g_tt_hit_n;
+            const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
             if (bounded)
             {
                 const long long beta_ceiling = static_cast<long long>(kOverrunBeta * limit);
@@ -116717,6 +117198,9 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             if (budget != nullptr) { budget->SetOverrunLimit(0); }
             cost   = (budget ? budget->Used() : 0) - used_before;
             leaves = g_fs_leaf_evals - leaves_before;
+            if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only): X rollout / W warm-up pass
+            { p16::Rec(heuristic ? 'X' : 'W', d, cost, p16::t_leaf_units - p16_l0, over ? 1 : 0, out.win_turn,
+                       g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
             if (!over && d >= 0 && d < 17)
             {
                 PassShape& ps = heuristic ? shape_h[d] : shape_v[d];
@@ -116996,24 +117480,581 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
     }
 
+    FSLineCache p16_leafless_cache;   // MTG_P16_ORACLE's leafless passes (measurement only)
+    // SAMPLED-GATE LADDER (value_play.sampled_gate; see p18::Sampler). The top-level decision of a deck with no value
+    // model, at every budget (an unlimited budget prices nothing: every pass fits, so only pass `depth` rolls out).
+    // Decides the committing depth p18_K and the bound p18_wb BEFORE the ladder below, which then runs pass p18_K only.
+    const bool p18_on = valuearm::t_deck_sampled_gate > 0 && p16::t_hyb_nest == 1 && g_fsline_nest == 0
+                     && g_rollout_nest == 0 && !vl_active && !g_force_heuristic_leaf && !emul_done && !lazy_done
+                     && depth >= 1;
+    int  p18_K = 0;                     // the pass the ladder below runs on rollouts (0 = off)
+    double p18_credit = 0.0;            // ROBUST-OR-EXACT fallback: the pricing spend the heuristic ladder's gate gives back
+    bool p18_rx = false;                // REFUSE-EXACT: the ladder below continues past p18_K on its own gate
+    double p18_c2 = 0.0;                // REFUSE-EXACT: the priced cost of pass p18_K-1 (the heuristic gate's c_{k-1})
+    double p18_cK_add = 0.0;            // _prx2: units the committing pass's own samples spent (added to its real cost)
+    int  p18_stop = 0;                  // the pass whose refusal (price, cap, truncation) ended the pricing (0 = none)
+    int  p18_wb = 0;                    // the best win a sampled rollout of pass p18_K reached (0 = none)
+    bool p18_done = false;              // a leafless pass proved an in-window win: committed, no rollout pass at all
+    if (p18_on)
+    {
+        const p18::Knob kn = p18::Knobs();
+        const bool unl = (budget == nullptr || budget->Unlimited());
+        const double rem0 = unl ? 0.0 : static_cast<double>(budget->Remaining());
+        double priced = 0.0;            // the heuristic ladder's spend so far: the priced costs of passes 1..k-1
+        int wb_prev = 0;                // the best sampled win of the pass below (the leafless pass's incumbent cut)
+        FSLineCache p18_leafless_cache; // keys fold the remaining depth: pass k+1 reuses pass k
+        // _pverify (measurement only): the pricing runs on a scratch meter and table, and the heuristic ladder then runs
+        // as if it had not, so each priced pass pairs with the exact cost of the same pass in the same decision.
+        SearchBudget p18_vb; TranspositionTable p18_vtt;
+        SearchBudget* const pb = kn.verify ? &p18_vb : budget;
+        TranspositionTable* const ptt = kn.verify ? &p18_vtt : tt;
+        p18_K = 1;
+        const long long p18_u0 = pb ? pb->Used() : 0;
+        bool p18_fb = false;            // ROBUST-OR-EXACT: a verdict inside the margin band -> the heuristic ladder decides
+        std::vector<double> p18_est(static_cast<std::size_t>(depth) + 2, 0.0);   // priced cost by pass
+        std::vector<double> p18_su(static_cast<std::size_t>(depth) + 2, 0.0);    // sampled-rollout units by pass
+        bool p18_free_rx = false;       // _pfx: a free refusal at pass k >= 3 hands the decision to the heuristic ladder
+        bool p18_force2 = false;        // _pb1: the heuristic ladder's bootstrap admitted pass 2
+        bool p18_k2_complete = false;   // _pb2: pass 2 can commit directly if a later price refuses
+        bool p18_k3_complete = false;   // _pb3: same for pass 3
+        int p18_k3_gap = INT_MAX;        // exact pass-three rollout win minus its searched horizon
+        long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
+        for (int k = 1; k <= depth; ++k)
+        {
+            if (k == 1 && kn.b1 && !unl && !kn.verify)
+            {
+                const long long r0 = budget->Used();
+                const long long leaf0 = p16::t_leaf_units;
+                // The heuristic ladder's OVERRUN guard for its pass 1, armed exactly as the ladder below arms it.
+                if (s_overrun_prop)
+                { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
+                else
+                { budget->SetOverrunLimit(r0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor)); }
+                SearchLine p1 = FSLineWin(state, 1, max_turns, root_cut, second_main, tt, &line_cache, budget);
+                const bool ab1 = budget->Overrun();
+                budget->SetOverrunLimit(0);
+                const long long c1 = budget->Used() - r0;
+                if (ab1)
+                {
+                    // ANYTIME COMMIT, as the ladder below: a strictly better proven win is kept, else the prior line.
+                    const bool rescued = s_id_anytime && p1.win_turn < prev_line.win_turn;
+                    p16::Rec('H', 1, c1, 0, rescued ? 2 : 1, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    if (rescued) { line = p1; committed_depth = 1; escstats::t_esc_rescued_main = true; }
+                    else         { line = prev_line; committed_depth = prev_committed; }
+                    p18_done = true; break;
+                }
+                p16::Rec('H', 1, c1, 0, 0, p1.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                if (p1.truncated) { p18_K = 1; break; }   // the ladder below runs pass 1 its own way (order-free re-search)
+                const double rem = static_cast<double>(budget->Remaining());
+                const double e2 = static_cast<double>(c1) * kDefaultGrowth;
+                const bool adm2 = depth >= 2 && (g_reserve_value_pass ? (e2 + e2 <= gate_alpha * rem) : (e2 <= gate_alpha * rem));
+                if (p1.win_turn <= state.turn_number || !adm2)
+                {
+                    line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; p18_done = true; break;
+                }
+                p18_force2 = true; priced = static_cast<double>(c1); p18_est[1] = priced;
+                const double leaf_share = c1 > 0 ? static_cast<double>(p16::t_leaf_units - leaf0) / static_cast<double>(c1) : 0.0;
+                if (kn.a1 > 0.0 && leaf_share < kn.a1)
+                {
+                    // The exact pass-one bootstrap admitted depth two. Continue with exact leaves: in this
+                    // part of the tree they cost less than the leafless traversal and sample bookkeeping.
+                    line = p1; committed_depth = 1; prev_line = line; prev_committed = 1;
+                    p18_K = 2; p18_rx = true; p18_c2 = static_cast<double>(c1); p18_wb = 0;
+                    break;
+                }
+                if (kn.b2) { line = p1; committed_depth = 1; prev_line = line; prev_committed = 1; }
+                if (p1.win_turn <= max_turns) { wb_prev = p1.win_turn; p18_wb = p1.win_turn; }
+                continue;
+            }
+            if (k == 2 && kn.b2 && p18_force2 && !unl && !kn.verify)
+            {
+                const long long r0 = budget->Used();
+                const long long leaf0 = p16::t_leaf_units;
+                if (s_overrun_prop)
+                { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
+                else
+                { budget->SetOverrunLimit(r0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor)); }
+                SearchLine p2 = FSLineWin(state, 2, max_turns, root_cut, second_main, tt, &line_cache, budget);
+                const bool ab2 = budget->Overrun();
+                budget->SetOverrunLimit(0);
+                const long long c2 = budget->Used() - r0;
+                if (ab2)
+                {
+                    const bool rescued = s_id_anytime && p2.win_turn < prev_line.win_turn;
+                    p16::Rec('H', 2, c2, 0, rescued ? 2 : 1, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    if (rescued) { line = p2; committed_depth = 2; escstats::t_esc_rescued_main = true; }
+                    else { line = prev_line; committed_depth = prev_committed; }
+                    p18_done = true; break;
+                }
+                p16::Rec('H', 2, c2, 0, 0, p2.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p18_K = 2;
+                if (p2.truncated) { p18_stop = 2; break; }
+                line = p2; committed_depth = 2; prev_line = line; prev_committed = 2;
+                p18_k2_complete = true;
+                const double c1 = p18_est[1];
+                const double e3 = c1 > 0.0 ? static_cast<double>(c2) * c2 / c1 : static_cast<double>(c2) * kDefaultGrowth;
+                const double rem = static_cast<double>(budget->Remaining());
+                const bool adm3 = depth >= 3 && (g_reserve_value_pass ? e3 + e3 <= gate_alpha * rem : e3 <= gate_alpha * rem);
+                if (p2.win_turn <= state.turn_number + 1 || !adm3) { p18_done = true; break; }
+                const double leaf_share = c2 > 0 ? static_cast<double>(p16::t_leaf_units - leaf0) / static_cast<double>(c2) : 0.0;
+                if (kn.af > 0.0 && leaf_share < kn.af)
+                {
+                    // The depth-three pass is already admitted by the exact c2^2/c1 check above. Resume the
+                    // ordinary ladder there; after that pass, c2 is its true predecessor cost for the next gate.
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    break;
+                }
+                if (kn.ag > 0.0 && c1 > 0.0 && static_cast<double>(c2) >= kn.ag * c1)
+                {
+                    p18_K = 3; p18_rx = true; p18_c2 = static_cast<double>(c2); p18_wb = 0;
+                    break;
+                }
+                priced += static_cast<double>(c2); p18_est[2] = static_cast<double>(c2);
+                if (p2.win_turn <= max_turns) { wb_prev = p2.win_turn; p18_wb = p2.win_turn; }
+                continue;
+            }
+            if (k == 3 && kn.b3 && p18_k2_complete && !unl && !kn.verify
+                && (kn.b3r <= 0.0 || p18_est[1] <= 0.0 || p18_est[2] <= kn.b3r * p18_est[1]))
+            {
+                const long long r0 = budget->Used();
+                if (s_overrun_prop)
+                { budget->SetOverrunLimit(SearchBudget::SatAdd(r0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))); }
+                else
+                { budget->SetOverrunLimit(r0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor)); }
+                SearchLine p3 = FSLineWin(state, 3, max_turns, root_cut, second_main, tt, &line_cache, budget);
+                const bool ab3 = budget->Overrun();
+                budget->SetOverrunLimit(0);
+                const long long c3 = budget->Used() - r0;
+                if (ab3)
+                {
+                    const bool rescued = s_id_anytime && p3.win_turn < prev_line.win_turn;
+                    p16::Rec('H', 3, c3, 0, rescued ? 2 : 1, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                    if (rescued) { line = p3; committed_depth = 3; escstats::t_esc_rescued_main = true; }
+                    else { line = prev_line; committed_depth = prev_committed; }
+                    p18_done = true; break;
+                }
+                p16::Rec('H', 3, c3, 0, 0, p3.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+                p18_K = 3;
+                if (p3.truncated) { p18_stop = 3; break; }
+                line = p3; committed_depth = 3; prev_line = line; prev_committed = 3;
+                p18_k3_complete = true;
+                p18_k3_gap = p3.win_turn - (state.turn_number + 2);
+                const double c2 = p18_est[2];
+                const double e4 = c2 > 0.0 ? static_cast<double>(c3) * c3 / c2 : static_cast<double>(c3) * kDefaultGrowth;
+                const double rem = static_cast<double>(budget->Remaining());
+                const bool adm4 = depth >= 4 && (g_reserve_value_pass ? e4 + e4 <= gate_alpha * rem : e4 <= gate_alpha * rem);
+                if (p3.win_turn <= state.turn_number + 2 || !adm4) { p18_done = true; break; }
+                if ((kn.ne && p3.win_turn > max_turns)
+                    || (kn.wn > 0 && p3.win_turn <= state.turn_number + 2 + kn.wn))
+                {
+                    p18_K = 4; p18_rx = true; p18_c2 = static_cast<double>(c3); p18_wb = 0;
+                    break;
+                }
+                priced += static_cast<double>(c3); p18_est[3] = static_cast<double>(c3);
+                if (p3.win_turn <= max_turns) { wb_prev = p3.win_turn; p18_wb = p3.win_turn; }
+                continue;
+            }
+            if (kn.fr > 0.0 && kn.rx2 && !unl && !kn.verify && k == 2 && p18_force2 && depth >= 3 && p18_est[1] > 0.0)
+            {
+                const double e2 = p18_est[1] * kDefaultGrowth;          // the ladder's bootstrap guess at c2
+                const double e3 = e2 * e2 / p18_est[1];                 // its c3 = c2^2 / c1
+                const double rem3 = std::max(0.0, static_cast<double>(budget->Remaining()) - e2);
+                const bool fits3 = g_reserve_value_pass ? (e3 + e3 <= kn.fr * gate_alpha * rem3) : (e3 <= kn.fr * gate_alpha * rem3);
+                if (!fits3)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({3, 0, 0, gate_alpha * rem3, e3, 0.0, 0, 0, 0, 0, std::string("pfr")}); }
+                    p18_K = 2; p18_stop = 3; break;               // the heuristic ladder decides pass 3 on real costs
+                }
+            }
+            if (kn.fx && kn.fr > 0.0 && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
+            {
+                const double pe = p18_est[static_cast<std::size_t>(k - 1)];
+                const double e3 = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double remk = static_cast<double>(budget->Remaining()) + static_cast<double>(pb->Used() - p18_u0)
+                                    - [&]{ double b = 0.0; for (int j = 1; j < k; ++j) { b += p18_est[static_cast<std::size_t>(j)]; } return b; }();
+                                    // = what the ladder would have left after running passes 1..k-1 on rollouts
+                const bool fitsk = g_reserve_value_pass ? (e3 + e3 <= kn.fr * gate_alpha * std::max(0.0, remk))
+                                                        : (e3 <= kn.fr * gate_alpha * std::max(0.0, remk));
+                if (!fitsk)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remk, e3, 0.0, 0, 0, 0, 0, std::string("pfx")}); }
+                    p18_free_rx = true; p18_stop = k; break;   // p18_K stays k-1: the heuristic ladder continues from it
+                }
+            }
+            if (kn.ppr > 0.0 && !unl && !kn.verify && k >= 3 && p18_est[static_cast<std::size_t>(k - 2)] > 0.0)
+            {
+                const double pe = p18_est[static_cast<std::size_t>(k - 1)];
+                const double pred = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double thr_pre = kn.lean * kStartGateAlpha * std::max(0.0, std::min(rem0 - priced, static_cast<double>(budget->Remaining())));
+                if (pred > kn.ppr * thr_pre)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({k, 0, 0, thr_pre, pred, 0.0, 0, 0, 0, 0, std::string("ppr")}); }
+                    p18_stop = k; break;
+                }
+            }
+            if (kn.hx && !unl && !kn.verify && k >= kn.hxd && p18_est[static_cast<std::size_t>(k - 2)] > 0.0
+                && !(kn.hw > 0 && p18_k3_complete && k >= 5 && p18_k3_gap <= kn.hw))
+            {
+                const double pe = p18_est[static_cast<std::size_t>(k - 1)];
+                const double e = pe * pe / p18_est[static_cast<std::size_t>(k - 2)];
+                const double remh = std::max(0.0, rem0 - priced);
+                const bool fitsh = g_reserve_value_pass ? (e + e <= kn.hxf * gate_alpha * remh) : (e <= kn.hxf * gate_alpha * remh);
+                if (!fitsh)
+                {
+                    if (p16::On()) { p18::t_rec.push_back({k, 0, 0, gate_alpha * remh, e, 0.0, 0, 0, 0, 0, std::string("phx")}); }
+                    p18_stop = k; break;
+                }
+            }
+            if (kn.fd && k == depth && !kn.verify)
+            {
+                p18_K = k; p18_wb = 0;   // no priced verdict at the terminal depth; use the root's ordinary cut
+                break;
+            }
+            // (1) LEAFLESS pass k, cut where the rollout pass's incumbent would cut it (never inside the window).
+            const int window_end = state.turn_number + k - 1;
+            const int lcut = (wb_prev > 0 && !kn.nobound) ? std::min(root_cut, std::max(wb_prev - 1, window_end)) : root_cut;
+            p18::Sampler smp;
+            if (kn.us > 0.0)
+            {
+                // _pus block size: about 1/64 of the pass's expected leaves (the leaf-count growth of the passes below),
+                // at most _pbk<N> (default 8), at least 1 -- a small pass is sampled leaf by leaf.
+                const double ne = (p18_n1 > 0 && p18_n2 > 0) ? static_cast<double>(p18_n1) * p18_n1 / p18_n2
+                                : (p18_n1 > 0 ? static_cast<double>(p18_n1) * kDefaultGrowth : 0.0);
+                smp.blk = std::max(1, std::min(kn.bk, static_cast<int>(ne / 64.0)));
+                smp.cap = p18::kUsMaxRes;
+            }
+            smp.rng = state.game_seed ^ (0xA24BAED4963EE407ULL * static_cast<unsigned long long>(state.TurnSeq() * 16 + k));
+            const long long u0 = pb ? pb->Used() : 0;
+            // _plc: the threshold before the pass bounds the one after it (the remaining only falls), so the cap is sound.
+            const bool capk = kn.lcap && !unl && !kn.verify && k >= 2 && !(k == 2 && p18_force2);
+            const double la = kn.lean * kStartGateAlpha;
+            const double rnow = capk ? static_cast<double>(budget->Remaining()) : 0.0;
+            const long long cap_abs = capk ? u0 + 1 + static_cast<long long>(la * std::max(0.0, (kn.nr ? rem0 - priced : std::min(rem0 - priced, (kn.rr && !kn.rr2) ? rnow / (1.0 + la) : rnow)))) : 0;
+            // _prr2: the tight real-remaining cap, armed at the pass's first leaf (Sampler::Offer).
+            const long long tight_abs = (capk && kn.rr2) ? u0 + 1 + static_cast<long long>(la * std::max(0.0, std::min(rem0 - priced, rnow / (1.0 + la)))) : 0;
+            if (tight_abs > 0) { smp.tb = pb; smp.tlim = tight_abs; }
+            // Every leafless pass also carries the ladder's own OVERRUN ceiling (a pass past it is pathological).
+            const bool guard = !unl && !kn.verify && pb != nullptr;
+            const long long ceil_abs = guard ? (s_overrun_prop ? SearchBudget::SatAdd(u0, SearchBudget::SatMulD(kOverrunBudgetMult, pb->EffectiveLimit()))
+                                                               : u0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(pb->Limit())), kOverrunFloor)) : 0;
+            const long long ol_saved = guard ? pb->OverrunLimit() : 0;
+            if (guard)
+            {
+                long long lim = capk ? std::min(cap_abs, ceil_abs) : ceil_abs;
+                if (ol_saved > 0) { lim = std::min(lim, ol_saved); }
+                pb->SetOverrunLimit(lim);
+            }
+            SearchLine pr;
+            {
+                ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
+                p18::Sampler* const prev = p18::t_smp; p18::t_smp = unl ? prev : &smp;
+                const bool watch = guard && p16::On();
+                if (watch) { p17::t_capwatch = true; std::fill(std::begin(p17::t_after), std::end(p17::t_after), 0LL); }
+                pr = FSLineWin(state, k, max_turns, lcut, second_main, ptt, &p18_leafless_cache, pb);
+                p18::t_smp = prev;
+                if (watch)
+                {
+                    p17::t_capwatch = false;
+                    long long tot = 0; for (long long x : p17::t_after) { tot += x; }
+                    if (tot > 0)
+                    {
+                        std::fprintf(stderr, "[p18cap] j=%s s=%llu T%d k=%d lu=%lld over=%lld |", valuearm::t_deck_key.c_str(),
+                                     static_cast<unsigned long long>(state.game_seed), state.turn_number, k, pb->Used() - u0, tot);
+                        for (int i = 0; i < unitsite::kSiteCount; ++i)
+                        { if (p17::t_after[i] > 0) { std::fprintf(stderr, " %d:%lld", i, p17::t_after[i]); } }
+                        std::fprintf(stderr, "\n");
+                    }
+                }
+            }
+            if (guard) { pb->SetOverrunLimit(ol_saved); }
+            const long long lu = (pb ? pb->Used() : 0) - u0;
+            p18_n2 = p18_n1; p18_n1 = smp.n;   // _pus: the leaf-count history that sizes the next pass's blocks
+            if (guard && pb->Used() >= ceil_abs && !(capk && cap_abs <= ceil_abs))
+            { p16::Rec('W', k, lu, smp.n, 4, pr.win_turn, 0); if (k == 2 && p18_force2) { p18_K = 2; } p18_stop = k; break; }   // overrun
+            if (capk && pb->Used() >= ((tight_abs > 0 && smp.n > 0) ? tight_abs : cap_abs))
+            {
+                p16::Rec('W', k, lu, smp.n, 3, pr.win_turn, 0);   // capped: the tree alone does not fit
+                if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, static_cast<double>(cap_abs - u0), static_cast<double>(lu), 0.0, 0, 0, 0, 0, std::string()}); }
+                p18_stop = k; break;
+            }
+            p16::Rec('W', k, lu, smp.n, 0, pr.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+            if (!pr.truncated && pr.win_turn <= window_end)
+            {
+                // A proven in-window win: the heuristic ladder's rollout pass k finds it and stops here too.
+                if (!kn.verify) { line = pr; committed_depth = k; prev_line = line; prev_committed = k; p18_done = true; } break;
+            }
+            if (kn.zn && k == 4 && p18_k3_complete && smp.n == 0 && !pr.truncated && !kn.verify)
+            {
+                // No leaf was available to sample, but the leafless cache cannot substitute for the rollout
+                // line cache. Continue exactly from pass four; its real c4 gates the final pass.
+                p18_K = 4; p18_rx = true; p18_c2 = p18_est[3]; p18_wb = 0;
+                break;
+            }
+            if (unl) { p18_K = k; continue; }   // nothing to price: every pass fits an unlimited budget
+            if (pr.truncated) { if (k == 2 && p18_force2) { p18_K = 2; } p18_stop = k; break; }   // the budget ran out inside the leafless pass: pass k cannot fit
+            // (2) PRICE rollout pass k from sampled rollouts, one at a time, until the gate's question is decided.
+            // The heuristic ladder's admit line: alpha x its remaining budget (less the priced passes below) -- and never
+            // more than what this decision really has left, since the committing pass is paid in real units.
+            // _pnr: no real-remaining clamp -- the heuristic ladder's own admit line (its budget less its estimated spend),
+            // the committing pass's real overspend bounded by its overrun ceiling as the heuristic ladder's is.
+            const double thr = kn.lean * kStartGateAlpha * std::max(0.0, kn.nr ? rem0 - priced : std::min(rem0 - priced, static_cast<double>(budget->Remaining()) + (kn.cr ? static_cast<double>(lu) : 0.0)));
+            const long long su0 = pb->Used();
+            double x_pv = 0.0, sx = 0.0, sxx = 0.0; int m = 0; int best = 0;
+            double est = static_cast<double>(lu), se = 0.0; int fit = -1; std::string ck;
+            auto roll = [&](GameState g, int cut) -> double
+            {
+                const long long r0 = pb->Used();
+                int w;
+                {
+                    FsLineNestGuard _nest; const greedywindow::Frame _gw(0);
+                    const int saved_pd = t_fs_pass_depth; t_fs_pass_depth = k;
+                    const RolloutNarrowScope _narrow;
+                    w = SimulateToEnd(std::move(g), EffectiveFdLeafDepth(), max_turns, pb, cut, second_main, ptt);
+                    t_fs_pass_depth = saved_pd;
+                }
+                if (w <= max_turns && (best == 0 || w < best)) { best = w; }
+                return static_cast<double>(pb->Used() - r0);
+            };
+            if (smp.have_first && kn.us > 0.0)
+            {
+                // _pus: UNCERTAINTY-SCALED CLUSTER SAMPLING (see Knobs and Sampler::blk). Every rolled leaf keeps its
+                // visit position, the cut it was entered with, its result and its per-turn cost profile, so the price
+                // is taken in VISIT order: the real pass hands each leaf the incumbent its earlier leaves found, and a
+                // rollout's cost at a tighter cut is read off its profile. A leaf is rolled at the cut it would get from
+                // the leaves rolled so far (later ones can only tighten it, so its profile covers the cut it is priced at).
+                struct UsRoll { long long pos = 0; int slot = 0; int cut0 = 0; int run_cut = 0; int w = 0; double x = 0.0;
+                                std::vector<std::pair<int, long long>> prof; };
+                std::vector<UsRoll> rs;
+                auto fc = [](const UsRoll& r, int c) -> double
+                {
+                    if (c >= r.run_cut) { return r.x; }
+                    for (const std::pair<int, long long>& pm : r.prof) { if (pm.first > c) { return static_cast<double>(pm.second); } }
+                    return r.x;
+                };
+                std::vector<std::size_t> ord;
+                auto sweep = [&](long long upto, auto&& visit) -> int   // visit order; returns the incumbent before `upto`
+                {
+                    ord.resize(rs.size());
+                    for (std::size_t q = 0; q < ord.size(); ++q) { ord[q] = q; }
+                    std::sort(ord.begin(), ord.end(), [&](std::size_t a, std::size_t b2) { return rs[a].pos < rs[b2].pos; });
+                    int b = INT_MAX;
+                    for (const std::size_t q : ord)
+                    {
+                        const UsRoll& r = rs[q];
+                        if (r.pos >= upto) { break; }
+                        const int e = (b == INT_MAX) ? r.cut0 : std::min(r.cut0, b - 1);
+                        visit(r, e);
+                        if (r.w <= max_turns && r.w <= e) { b = std::min(b, r.w); }
+                    }
+                    return b;
+                };
+                auto roll2 = [&](GameState g, long long pos, int slot, int cut0)
+                {
+                    UsRoll r; r.pos = pos; r.slot = slot; r.cut0 = cut0;
+                    const int bi = sweep(pos, [](const UsRoll&, int) {});
+                    const int cut = (bi == INT_MAX) ? cut0 : std::min(cut0, bi - 1);
+                    const long long r0 = pb->Used();
+                    std::vector<std::pair<int, long long>>* const pp = p18::t_prof; p18::t_prof = &r.prof;
+                    int w;
+                    {
+                        FsLineNestGuard _nest; const greedywindow::Frame _gw(0);
+                        const int saved_pd = t_fs_pass_depth; t_fs_pass_depth = k;
+                        const RolloutNarrowScope _narrow;
+                        w = SimulateToEnd(std::move(g), EffectiveFdLeafDepth(), max_turns, pb, cut, second_main, ptt);
+                        t_fs_pass_depth = saved_pd;
+                    }
+                    p18::t_prof = pp;
+                    for (std::pair<int, long long>& pm : r.prof) { pm.second -= r0; }
+                    r.run_cut = cut; r.w = w; r.x = static_cast<double>(pb->Used() - r0);
+                    if (w <= max_turns && (best == 0 || w < best)) { best = w; }
+                    rs.push_back(std::move(r));
+                };
+                // The exact part: the first leaf and block 0, in visit order.
+                roll2(smp.first, 0, 0, smp.first_cut);
+                const long long bsz = std::max(1, smp.blk);
+                if (!smp.blocks.empty())
+                {
+                    p18::Sampler::Blk& b0 = smp.blocks[0];
+                    for (std::size_t q = 0; q < b0.s.size(); ++q) { roll2(std::move(b0.s[q]), b0.pos[q], 0, b0.cut[q]); }
+                }
+                std::vector<std::size_t> slots;
+                for (std::size_t q = 1; q < smp.blocks.size(); ++q) { slots.push_back(q); }
+                for (std::size_t i = slots.size(); i > 1; --i) { const std::size_t j = smp.Next() % i; std::swap(slots[i - 1], slots[j]); }
+                const double rest = static_cast<double>(smp.n - 1);
+                const double nbt = std::max(0.0, (rest - static_cast<double>(bsz)) / static_cast<double>(bsz));   // blocks >= 1
+                const long long mmax = std::max(static_cast<long long>(std::ceil(kn.us * rest)), 3 * bsz);
+                double P = static_cast<double>(lu); bool ceil_hit = false; int nbk = 0;
+                std::vector<double> Y;
+                for (std::size_t i = 0; ; ++i)
+                {
+                    m = static_cast<int>(rs.size()) - 1;
+                    Y.assign(smp.blocks.size() + 1, 0.0);
+                    double E0 = 0.0;
+                    sweep(LLONG_MAX, [&](const UsRoll& r, int e)
+                    { const double y = fc(r, e); if (r.slot == 0) { E0 += y; } else { Y[static_cast<std::size_t>(r.slot)] += y; } });
+                    double sy = 0.0, syy = 0.0;
+                    for (std::size_t q = 0; q < static_cast<std::size_t>(nbk); ++q) { const double y = Y[slots[q]]; sy += y; syy += y * y; }
+                    const double B = static_cast<double>(nbk);
+                    if (nbk > 0)
+                    {
+                        const double mean = sy / B;
+                        P = static_cast<double>(lu) + E0 + nbt * mean;
+                        const double sd = std::max(std::sqrt(std::max(0.0, syy / B - mean * mean)), kn.cvf * mean);
+                        const double fpc = nbt > 1.0 ? std::sqrt(std::max(0.0, 1.0 - (B - 1.0) / (nbt - 1.0))) : 0.0;
+                        se = nbt * sd / std::sqrt(B) * fpc;
+                    }
+                    else { P = static_cast<double>(lu) + E0; se = 0.0; }
+                    if (nbt <= 0.0 || B >= nbt) { fit = (thr > 0.0 && P <= thr) ? 1 : 0; break; }      // exact
+                    if (static_cast<double>(lu) + E0 > thr) { fit = 0; break; }   // the tree and its exact leaves already exceed it
+                    if (nbk >= 2)
+                    {
+                        if (P + kn.z * se <= thr && (k > kn.mid || static_cast<long long>(m) >= static_cast<long long>(std::ceil(kn.mi * rest))))
+                        { fit = 1; break; }
+                        if (B >= std::min(kn.mr, nbt) && P - kn.z * se > thr) { fit = 0; break; }
+                    }
+                    if (static_cast<long long>(m) >= mmax || i >= slots.size())
+                    {
+                        // THE CEILING: decide anyway. _pul leans ADMIT (a wrong refusal costs quality; a wrong admit is
+                        // bounded by the committing pass's overrun ceiling), else the point price decides.
+                        ceil_hit = true;
+                        fit = (thr > 0.0 && (kn.ul || P <= thr)) ? 1 : 0;
+                        break;
+                    }
+                    p18::Sampler::Blk& bl = smp.blocks[slots[i]];
+                    for (std::size_t q = 0; q < bl.s.size(); ++q) { roll2(std::move(bl.s[q]), bl.pos[q], static_cast<int>(slots[i]), bl.cut[q]); }
+                    ++nbk;
+                }
+                est = P;
+                if (p16::On())
+                { char cb[96]; std::snprintf(cb, sizeof cb, "u%d/%lld:b%lld:B%d%s", m, mmax, bsz, nbk, ceil_hit ? ":C" : ""); ck = cb; }
+            }
+            else if (smp.have_first)
+            {
+                x_pv = roll(smp.first, smp.first_cut);
+                // shuffle the reservoir (it holds the first `cap` leaves in visit order when n <= cap)
+                for (std::size_t i = smp.res.size(); i > 1; --i)
+                { const std::size_t j = smp.Next() % i; std::swap(smp.res[i - 1], smp.res[j]); std::swap(smp.cuts[i - 1], smp.cuts[j]); }
+                const double rest = static_cast<double>(smp.n - 1);
+                const std::size_t avail = smp.res.size();
+                for (std::size_t i = 0; ; ++i)
+                {
+                    const double mm = static_cast<double>(m);
+                    const double mean = m > 0 ? sx / mm : 0.0;
+                    est = static_cast<double>(lu) + x_pv + rest * mean;
+                    if (m > 0)
+                    {
+                        const double sd = std::max(std::sqrt(std::max(0.0, sxx / mm - mean * mean)), kn.cvf * std::max(mean, x_pv));
+                        const double fpc = rest > 1.0 ? std::sqrt(std::max(0.0, 1.0 - (mm - 1.0) / (rest - 1.0))) : 0.0;
+                        se = rest * sd / std::sqrt(mm) * fpc;
+                    }
+                    const bool all = (i >= avail);
+                    if (kn.verify && p16::On() && (m == 0 || (m & (m - 1)) == 0 || all))
+                    { char cb[64]; std::snprintf(cb, sizeof cb, "%s%d=%.0f", ck.empty() ? "" : ",", m, est); ck += cb; }
+                    const double hi = est + kn.z * se, lo = est - kn.z * se;
+                    // ROBUST-OR-EXACT (_pf<10F>): decided once the price clears the threshold by the factor F either way,
+                    // or sits wholly inside the band (thr/F, thr*F]; at the end of the sample the point price decides.
+                    const double fa = kn.asym ? 1.0 : kn.f;   // admit-side margin
+                    const bool mref = static_cast<double>(m) >= std::min(kn.mr, rest);   // enough samples to refuse
+                    const bool decided = (kn.f > 0.0)
+                        ? (hi * fa <= thr || (mref && lo > thr * kn.f) || (lo * fa > thr && hi <= thr * kn.f))
+                        : (hi <= thr || (mref && lo > thr));
+                    if (rest <= 0.0 || all || (!kn.verify && (m >= 2 || static_cast<double>(m) >= rest) && decided))
+                    {
+                        fit = (thr > 0.0 && est <= thr) ? 1 : 0;
+                        if (fit == 0 && kn.ua && all && static_cast<double>(m) < rest && thr > 0.0 && lo <= thr)
+                        { fit = 1; }   // unresolved at the sample ceiling: keep the deeper pass available
+                        if (kn.f > 0.0 && thr > 0.0 && est * (kn.asym ? 1.0 : kn.f) > thr && est <= thr * kn.f) { fit = 2; }
+                        break;
+                    }
+                    const int cutoff = std::min(smp.cuts[i], best > 0 ? best - 1 : smp.cuts[i]);   // the incumbent's cut
+                    const double x = roll(std::move(smp.res[i]), cutoff);
+                    sx += x; sxx += x * x; ++m;
+                }
+            }
+            else { est = static_cast<double>(lu); fit = (thr > 0.0 && est <= thr) ? 1 : 0; }   // no leaf reached: the tree is the pass (exact)
+            const long long su = pb->Used() - su0;
+            if (p16::On()) { p18::t_rec.push_back({k, smp.n, lu, thr, est, se, m, su, fit, best, std::move(ck)}); }
+            // (3) Pass k is admitted iff its price fits. Pass 1 always runs (the heuristic ladder never gates it), and
+            // a pass 1 that does not fit leaves nothing deeper that could.
+            if (k == 2 && p18_force2) { fit = 1; }   // _pb1: admitted on the real pass-1 cost; priced only for pass 3's check
+            p18_su[static_cast<std::size_t>(k)] = static_cast<double>(su);
+            if (fit == 0 && !kn.verify) { p18_stop = k; break; }
+            if (fit == 2 && !kn.verify) { p18_fb = true; break; }
+            p18_K = k;
+            if (best > 0) { p18_wb = best; wb_prev = best; }   // the best sampled win so far: a real line reaches it
+            priced += kn.actual_rem ? static_cast<double>(lu + su) : est;
+            p18_est[static_cast<std::size_t>(k)] = kn.actual_rem ? static_cast<double>(lu + su) : est;
+        }
+        if (kn.noasp) { p18_wb = 0; }
+        if (kn.b2 && p18_K == 2 && p18_k2_complete && !p18_fb && !kn.rx && !kn.rx2 && !kn.fx)
+        { p18_done = true; }   // a deeper pass was refused: the completed rollout pass 2 is already the answer
+        if (kn.b3 && p18_K == 3 && p18_k3_complete && !p18_fb && !kn.rx && !kn.fx)
+        { p18_done = true; }   // same for an exact third pass
+        if (kn.verify) { p18_K = 0; p18_wb = 0; }
+        if (p18_fb)
+        {
+            // ROBUST-OR-EXACT fallback: the heuristic ladder runs this decision from pass 1 on rollouts (its own K),
+            // its start gate credited with the pricing spend unless _pfnc, so its depth matches the ladder's own.
+            p18_K = 0; p18_wb = 0;
+            if (!kn.nocredit && pb) { p18_credit = static_cast<double>(pb->Used() - p18_u0); }
+        }
+        else if ((kn.rx || p18_free_rx || (kn.rx2 && p18_K == 2 && p18_stop == 3)) && !kn.verify && !unl && !p18_done && p18_K >= 1)
+        {
+            // REFUSE-EXACT: the heuristic ladder's remaining at its next check is the decision's budget less ITS spend
+            // (the priced passes below p18_K stand in for its superseded rollout passes) -- not less the pricing spend.
+            p18_rx = true;
+            double below = 0.0;
+            for (int j = 1; j < p18_K; ++j) { below += p18_est[static_cast<std::size_t>(j)]; }
+            p18_credit = static_cast<double>(pb->Used() - p18_u0) - below;
+            p18_c2 = p18_K >= 2 ? p18_est[static_cast<std::size_t>(p18_K - 1)] : 0.0;
+            if (kn.rx2) { p18_cK_add = p18_su[static_cast<std::size_t>(p18_K)]; }
+        }
+    }
     long long lad_sum_units = 0, lad_last_units = 0;   // accounting: warm-up vs committing pass
     long long lad_ttlook_sum = 0, lad_tthit_sum = 0, lad_ttlook_last = 0, lad_tthit_last = 0;
-    for (int pass_depth = (depth >= 1 ? 1 : depth);
-         !emul_done && !lazy_done && pass_depth <= depth; ++pass_depth)
+    for (int pass_depth = (p18_K > 0 ? p18_K : (depth >= 1 ? 1 : depth));
+         !emul_done && !lazy_done && !p18_done && pass_depth <= depth; ++pass_depth)
     {
         // Cheap leaf for every pass but the one that commits.
         ForceValueLeafGuard _lvl(s_ladder_value_leaf && pass_depth < depth);
         ConstantLeafPassGuard _clp(vl_constant);   // the no-leaf stand-in / forced constant leaf: stop at exhaustion
+        // MTG_P16_ORACLE (measurement only; see p16::Oracle): passes below the recorded K run leafless.
+        const int p16K = (p16::t_hyb_nest == 1 && g_fsline_nest == 0 && g_rollout_nest == 0 && !vl_active) ? p16::t_oracle_K : 0;
+        // MTG_P16_ORACLE_KEEP=n (default 1): the last n passes below and at K keep their rollouts.
+        // (P17: an arm whose deck key holds "oraclek<n>" keeps n, so keep-1 and keep-2 arms pool in ONE batch.)
+        static const int s_p16_keep_env = std::max(1, EnvInt("MTG_P16_ORACLE_KEEP", 1));
+        const std::size_t p17_kp = valuearm::t_deck_key.find("oraclek");
+        const int s_p16_keep = (p16K > 0 && p17_kp != std::string::npos && p17_kp + 7 < valuearm::t_deck_key.size())
+                             ? std::max(1, valuearm::t_deck_key[p17_kp + 7] - '0') : s_p16_keep_env;
+        // SKIP-LEAVES LADDER (value_play.rollout_from = s; P16, default off). A pass the ladder will supersede
+        // needs no leaf estimate: below s the pass runs leafless (it can still PROVE a win, which commits exactly
+        // where the rollout pass would have stopped on it), and the rollout ladder starts at s -- pass s admitted
+        // as the ladder admits its first pass, s+1 on the bootstrap growth, then the measured ratio. At every
+        // budget (an unlimited ladder reaches `depth` on rollouts either way, so nothing becomes unfindable).
+        const int sl_from = (!vl_active && !g_force_heuristic_leaf && g_fsline_nest == 0 && g_rollout_nest == 0
+                             && valuearm::t_deck_rollout_from > 1) ? std::min(valuearm::t_deck_rollout_from, depth) : 0;
+        if ((p16K > 0 && pass_depth <= p16K - s_p16_keep) || (sl_from > 0 && pass_depth < sl_from))
+        {
+            ForceConstantLeafGuard _oc(true); ConstantLeafPassGuard _op(true);
+            const long long ou0 = budget ? budget->Used() : 0;
+            SearchLine pr = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &p16_leafless_cache, budget);
+            p16::Rec('W', pass_depth, (budget ? budget->Used() : 0) - ou0, 0, 0, pr.win_turn,
+                     g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0));
+            if (!pr.truncated && pr.win_turn <= max_turns)
+            { line = pr; committed_depth = pass_depth; prev_line = line; prev_committed = pass_depth; break; }
+            continue;
+        }
         // Start gate: skip (and commit the prior pass) when the next pass clearly
         // won't fit. Keyed on the running work-unit count, never the clock, so a
         // deeper search makes the same skip decision and can never come out worse.
-        if (budget != nullptr && have_prev)
+        // (MTG_P16_ORACLE, measurement only: the recorded K replaces the gate.)
+        if (budget != nullptr && have_prev && p16K == 0)
         {
             double ratio    = (have_prev2 && c_prev2 > 0)
                             ? static_cast<double>(c_prev) / static_cast<double>(c_prev2)
                             : kDefaultGrowth;
             double estimate = static_cast<double>(c_prev) * ratio;
-            const double remaining = static_cast<double>(budget->Remaining());
+            const double remaining = static_cast<double>(budget->Remaining()) + p18_credit;
             bool fits = g_reserve_value_pass ? (estimate + estimate <= gate_alpha * remaining)
                                              : (estimate <= gate_alpha * remaining);
             // PATH-TO-TRUST override (see kTrustPathSlack). Only when the value leaf is driving, a
@@ -117052,21 +118093,16 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // the decision's priced allowance is not STARTED -- the prior pass commits now -- instead of being started,
             // tripping the ceiling near its end and rolling back (measured: goblins 2hg gi30 X=10 spent the full 23.6 s
             // priced and then discarded a 69k-unit pass). Turn-complete: it never cuts a pass, it declines to begin one.
-            if (fits && decisionwork::t_pr_limit > 0 && decisionwork::PricedGateOn() && pr_prev > 0)
-            {
-                const double pratio = (have_prev2 && pr_prev2 > 0)
-                                    ? static_cast<double>(pr_prev) / static_cast<double>(pr_prev2) : kDefaultGrowth;
-                const double pest = static_cast<double>(pr_prev) * pratio;
-                const double prem = static_cast<double>(decisionwork::t_pr_limit
-                                                        - (workctr::t_priced - decisionwork::t_pr_start));
-                if (pest > kStartGateAlpha * std::max(0.0, prem)) { fits = false; ++decisionwork::t_pr_gate_refusals; }
-            }
+            if (fits && !PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { fits = false; }
             if (!fits) { break; }
         }
 
+        // SAMPLED GATE: the committing pass starts at the best win its sampled rollouts reached (a real line reaches it).
+        const int p18_cut = (p18_K > 0 && p18_wb > 0) ? std::min(root_cut, p18_wb) : root_cut;
         long long used_before = budget ? budget->Used() : 0;
         const long long pr_before = workctr::t_priced;   // priced start gate (see above)
         long long leaves_before = g_fs_leaf_evals;   // K-predictor: per-pass leaf-count delta (probe recording)
+        const long long p16_leaf0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
         const long long lad_tl0 = g_tt_look_n, lad_th0 = g_tt_hit_n;
         // Arm the OVERRUN guard: this pass may exceed its estimate, but if its real cost blows past
         // the ceiling it is pathological -- abort and keep the best line we hold (see the anytime
@@ -117092,11 +118128,21 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         if (s_rollout_stats) { g_idpass_starts.fetch_add(1, std::memory_order_relaxed); }
         OrderOracleProbe _oop;   // MTG_ORDER_ORACLE (diagnostic; see g_oo_vals)
         _oop.Begin(tt, budget);
-        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt,
-                                       &line_cache, budget);
+        // P17 aspiration oracle (measurement only): the committing pass starts at the recorded final win turn.
+        const int pass_cut = (p16K > 0 && pass_depth == p16K && p16::t_oracle_W > 0)
+                           ? std::min(root_cut, p16::t_oracle_W) : p18_cut;
+        SearchLine attempt = FSLineWin(state, pass_depth, max_turns, pass_cut, second_main, tt, &line_cache, budget);
+        bool p18_asp_fail = false;
+        if (pass_cut < root_cut && p16K == 0 && !(budget != nullptr && budget->Overrun()) && attempt.win_turn > pass_cut)
+        {
+            // The bound was too tight (no line wins by it): search the pass again from the ladder's own root cut.
+            p18_asp_fail = true;
+            attempt = FSLineWin(state, pass_depth, max_turns, root_cut, second_main, tt, &line_cache, budget);
+        }
         _oop.End(state, pass_depth, max_turns, second_main, attempt, budget);
         bool aborted = (budget != nullptr && budget->Overrun());
         if (budget != nullptr) { budget->SetOverrunLimit(0); }   // disarm
+        if (p18_on && p18_asp_fail) { p16::Rec('A', pass_depth, 0, 0, 0, pass_cut, 0); }
 
         if (aborted)
         {
@@ -117118,8 +118164,12 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                   state.turn_number, pass_depth,
                   budget ? budget->Used() : 0, budget ? budget->Limit() : 0,
                   rescued ? pass_depth : prev_committed, rescued ? " (anytime rescue)" : "");
+            if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
+            { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, budget->Used() - used_before, p16::t_leaf_units - p16_leaf0,
+                       rescued ? 2 : 1, attempt.win_turn, g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
             if (rescued) { line = attempt;    committed_depth = pass_depth; escstats::t_esc_rescued_main = true; }
             else         { line = prev_line;  committed_depth = prev_committed; }
+            if (p18_K > 0) { p16::Rec('X', pass_depth, 0, 0, rescued ? 2 : 1, line.win_turn, 0); }   // sampled gate: nothing below to roll back to
             break;
         }
 
@@ -117147,8 +118197,17 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         lad_ttlook_last = g_tt_look_n - lad_tl0; lad_tthit_last = g_tt_hit_n - lad_th0; lad_ttlook_sum += lad_ttlook_last; lad_tthit_sum += lad_tthit_last;
         if (g_probe_recording && pass_depth >= 0 && pass_depth < 16)
         {
-            g_probe_leaves[pass_depth] = g_fs_leaf_evals - leaves_before;
-            g_probe_cost[pass_depth]   = cost;
+            // Under fit_gate "ladder" keep the LARGEST record per depth: MTG_BP_DEV_SEQ's second pass re-runs
+            // this ladder from the first pass's line memo, so its d1..D-1 passes cost ~0 and its pass D only
+            // the compound-wave increment -- overwriting would hand FIT a probe record of zeros (measured:
+            // 7 of 21 traced Hydras FIT decisions, each forced to dpass 1).
+            const long long lv = g_fs_leaf_evals - leaves_before;
+            if (FitGateLadderOn())
+            {
+                g_probe_leaves[pass_depth] = std::max(g_probe_leaves[pass_depth], lv);
+                g_probe_cost[pass_depth]   = std::max(g_probe_cost[pass_depth], cost);
+            }
+            else { g_probe_leaves[pass_depth] = lv; g_probe_cost[pass_depth] = cost; }
         }
         if (g_hlad_recording && pass_depth >= 0 && pass_depth < 16)
         {
@@ -117164,9 +118223,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         }
         TRACE("search", "T%d pass=%d done win=%d cost=%lld used=%lld",
               state.turn_number, pass_depth, line.win_turn, cost, budget ? budget->Used() : 0);
+        if (g_fsline_nest == 0 && g_rollout_nest == 0)   // MTG_P16_TRACE (print-only)
+        { p16::Rec(vl_constant ? 'P' : 'H', pass_depth, cost, p16::t_leaf_units - p16_leaf0, 0, line.win_turn,
+                   g_devseq_suppress > 0 ? 1 : (g_devseq_two_pass > 0 ? 2 : 0)); }
 
         c_prev2 = c_prev;   have_prev2 = have_prev;
         c_prev  = cost;     have_prev  = true;
+        if (p18_rx && pass_depth == p18_K && p18_c2 > 0.0) { c_prev2 = static_cast<long long>(p18_c2); have_prev2 = true; }
+        if (p18_rx && pass_depth == p18_K) { c_prev += static_cast<long long>(p18_cK_add); }   // _prx2: the samples that warmed it
         pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before;
 
         // Jump-ladder: with a measured growth ratio, extrapolate to the deepest affordable K and skip the
@@ -117200,6 +118264,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         // order line). A win turn BEYOND the horizon is a greedy-tail estimate, so we
         // keep deepening to verify or beat it (until the start gate / `depth` stops).
         if (line.win_turn <= state.turn_number + pass_depth - 1) { break; }
+        if (p16K > 0 && pass_depth >= p16K) { break; }   // MTG_P16_ORACLE: the recorded committing pass
+        if (p18_K > 0 && !p18_rx) { break; }              // sampled gate: the priced committing pass is the only one
     }
     if (vl_constant && !emul_done && !lazy_done && depth >= 1 && (budget == nullptr || budget->Unlimited())
         && committed_depth == depth && !line.truncated && line.win_turn > state.turn_number + depth - 1)
@@ -117663,6 +118729,88 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                                                         bool allow_chain_tape)
 {
     const treereuse::Decision _treereuse_decision(state.turn_number);   // MTG_TREE_REUSE_PROBE (read-only)
+    // MTG_P16_TRACE (print-only): one line per top-level decision, its passes and their rollout units.
+    struct P16Decision
+    {
+        const GameState& st; SearchBudget* b; int* ocd; long long u0; int lc0; bool sm; int mt;
+        P16Decision(const GameState& s_, SearchBudget* b_, int* o_, bool sm_, int mt_)
+            : st(s_), b(b_), ocd(o_), u0(b_ ? b_->Used() : 0), lc0(0), sm(sm_), mt(mt_)
+        {
+            ++p16::t_hyb_nest;
+            if (p16::t_hyb_nest == 1)
+            {
+                p16::t_passes.clear(); p18::t_rec.clear(); p16::OracleBegin(s_.game_seed, s_.turn_number, sm_);
+                if (p17::On()) { p16::t_px.clear(); p16::P17Take(p16::t_p17_last); }   // MTG_P17_LEDGER (print-only)
+                // MTG_P17_ISOLATE (measurement only): this decision sees nothing an earlier decision searched.
+                static const bool s_iso = EnvOn("MTG_P17_ISOLATE");
+                if (heurarm::Flag(heurarm::P17_ISOLATE, s_iso))
+                { IdHintGameClear(); InWinCacheClear(); RolloutSuffixProbeClear(); GameLineCacheClear(); }
+            }
+        }
+        ~P16Decision()
+        {
+            if (p16::On() && p16::t_hyb_nest == 1)
+            {
+                // ONE write per line: a batch's workers share stderr.
+                std::string ln(512, '\0');
+                int w = std::snprintf(ln.data(), ln.size(), "[p16] k=%s s=%llu T%d sm=%d used=%lld limit=%lld cd=%d n=%zu |",
+                             valuearm::t_deck_key.c_str(), static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0,
+                             (b ? b->Used() : 0) - u0, b ? b->Limit() : 0LL, ocd ? *ocd : -1, p16::t_passes.size());
+                ln.resize(w > 0 ? static_cast<std::size_t>(std::min<int>(w, 511)) : 0);
+                for (const p16::Pass& q : p16::t_passes)
+                {
+                    char buf[96];
+                    std::snprintf(buf, sizeof buf, " %c%d:%lld/%lld/%d/%d/%d", q.kind, q.depth, q.units, q.leaf, q.status, q.dvs, q.win);
+                    ln += buf;
+                }
+                ln += '\n';
+                if (p17::On())
+                {
+                    // MTG_P17_LEDGER: the same decision, each pass's counter delta (see p16::P17Take for the field
+                    // order), then Z = the residual after the last pass. h = the decision state's BuildSimKey.h1, so
+                    // two shapes' decisions pair only at the identical state.
+                    std::vector<long long> z; p16::P17Delta(z);
+                    const TranspositionTable::Key hk = BuildSimKey(st, 0, mt, sm);
+                    char hb[512];
+                    std::snprintf(hb, sizeof hb, "[p17] j=%s s=%llu T%d sm=%d h=%016llx |", heurarm::t_job_name ? heurarm::t_job_name : "-",
+                                  static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0,
+                                  static_cast<unsigned long long>(hk.h1));
+                    ln += hb;
+                    auto put = [&](char kind, int d, const std::vector<long long>& v)
+                    {
+                        char b2[32]; std::snprintf(b2, sizeof b2, " %c%d:", kind, d); ln += b2;
+                        for (std::size_t i = 0; i < v.size(); ++i)
+                        { std::snprintf(b2, sizeof b2, i ? ",%lld" : "%lld", v[i]); ln += b2; }
+                    };
+                    for (std::size_t i = 0; i < p16::t_passes.size() && i < p16::t_px.size(); ++i)
+                    { put(p16::t_passes[i].kind, p16::t_passes[i].depth, p16::t_px[i]); }
+                    put('Z', 0, z);
+                    ln += '\n';
+                    p16::t_px.clear();
+                }
+                if (!p18::t_rec.empty())
+                {
+                    // [p18] per priced pass: d:n:l:thr:est:se:m:sample_units:fit:best
+                    char hb[256];
+                    std::snprintf(hb, sizeof hb, "[p18] j=%s s=%llu T%d sm=%d |", heurarm::t_job_name ? heurarm::t_job_name : "-",
+                                  static_cast<unsigned long long>(st.game_seed), st.turn_number, sm ? 1 : 0);
+                    ln += hb;
+                    for (const p18::PassRec& r : p18::t_rec)
+                    {
+                        char b2[192];
+                        std::snprintf(b2, sizeof b2, " %d:%lld:%lld:%.0f:%.0f:%.0f:%d:%lld:%d:%d", r.d, r.n, r.l, r.thr, r.est, r.se, r.m, r.su, r.fit, r.wb);
+                        ln += b2;
+                        if (!r.ck.empty()) { ln += '{'; ln += r.ck; ln += '}'; }
+                    }
+                    ln += '\n';
+                }
+                std::fwrite(ln.data(), 1, ln.size(), stderr);
+                p16::t_passes.clear();
+            }
+            if (p16::t_hyb_nest == 1) { p16::t_oracle_K = 0; p16::t_oracle_W = 0; }
+            --p16::t_hyb_nest;
+        }
+    } _p16dec(state, budget, out_committed_depth, second_main, max_turns);
     // This whole function is planning on state COPIES, but it is called straight from
     // AIEngine::TakeTurn (real-play context) and its single-pass escalation invokes FSLineWin
     // DIRECTLY -- so until 2026-08-25 this was the one planning entry point with NO enclosing
@@ -117941,6 +119089,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
             (void)FSLineWin(state, 1, max_turns, max_turns + 1, second_main, tt, &c2, budget);
             h1 = (budget ? budget->Used() : 0) - u0;
         }
+        p16::Rec('C', 1, t1 + h1, 0, 0, 0, 0);   // MTG_P16_TRACE (print-only); its rollout half = h1 - t1 approx
         if (l1 > 0 && h1 > t1) { g_single_R = static_cast<double>(h1 - t1) / static_cast<double>(l1); g_single_R_n = 1; }
         else { g_single_R = (escalation_r > 0.0) ? escalation_r : 120.0; g_single_R_n = 1; }
         // Telemetry (MTG_HYBRID_STATS): this calibration is per GAME and runs BEFORE the probe, so it
@@ -118158,6 +119307,11 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         const int d1_uncapped = std::max(1, committed);
         const int d1 = (fit_depth_cap > 0) ? std::min(d1_uncapped, fit_depth_cap) : d1_uncapped;
         SearchLine hl;
+        bool fit_gate_ladder = false;   // FIT GATE = THE LADDER'S RULE (set below)
+        int  fit_gate_code   = 0;       // 0 off | 1 "ladder" | 2 "ladder_rem" (valuearm::FitGateCode)
+        int  fit_pass_depth  = 0;       // the depth the FIT pass actually completed at (reported under fit_gate_ladder)
+        long long fit_pass_units = 0;   // that pass's units
+        long long fit_roll_units = 0;   // every FIT rollout attempt's units this decision (overruns included)
         if (single_mode >= 1 && budget != nullptr && !budget->Unlimited())
         {
             // RESERVED variant: the pass runs on the REMAINING shared budget (the probe's gate kept room for
@@ -118185,6 +119339,8 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;
             }
             if (s_fit_lazy_r && single_mode == 2) { calibrate_single_R(); }
+            fit_gate_code   = (single_mode == 2) ? FitGateCode() : 0;
+            fit_gate_ladder = fit_gate_code != 0;   // see FIT GATE = THE LADDER'S RULE
             int dpass = d1;
             if (single_mode == 2)
             {
@@ -118239,6 +119395,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                     const double est_h = ecost[d] + R * eleaf[d];
                     if (ecost[d] > 0.0 && est_h <= gate) { dpass = d; break; }
                 }
+                static const bool s_p12_fit_trace = EnvOn("MTG_P12_FIT_TRACE");   // P12 diagnostic, print-only
+                if (s_p12_fit_trace)
+                {
+                    std::fprintf(stderr, "[p12fit] T%d committed=%d dpass=%d R=%.1f rem=%.0f used=%lld limit=%lld gate=%.0f ladder=%d est:",
+                                 state.turn_number, committed, dpass, R, rem, budget->Used(), budget->Limit(), gate, fit_gate_ladder ? 1 : 0);
+                    for (int d = 1; d <= dtop; ++d) { std::fprintf(stderr, " d%d=%.0f(c%.0f,l%.0f)", d, ecost[d] + R * eleaf[d], ecost[d], eleaf[d]); }
+                    std::fprintf(stderr, "\n");
+                }
             }
             // TIGHTER GATE, now that dpass is known: the affordable depth may be shallower than d1, so a
             // pass that passed the R-free gate can still be unacceptable. Faithful to `taken == false` --
@@ -118254,17 +119418,28 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                 return line;
             }
             static const bool s_sres_anytime = EnvOn("MTG_ID_ANYTIME", true);
+            // P12b parity lever MTG_FIT_CLIMB_CACHE (default OFF; only read under fit_gate "ladder"): the climb keeps the
+            // completed FIT pass's line memo, as FullSearchLine's ladder keeps one line_cache across all its passes.
+            static const bool s_fit_climb_cache = EnvOn("MTG_FIT_CLIMB_CACHE");
+            FSLineCache fit_kept_cache;
+            long long fit_pr_prev = 0;   // priced work of the completed FIT pass (the ladder's priced start gate)
             for (;;)
             {
                 FSLineCache attempt_cache;
+                const long long pr_before_fit = workctr::t_priced;
                 const long long used_before = budget->Used();
                 budget->SetOverrunLimit(SearchBudget::SatAdd(used_before, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
                 hl = FSLineWinComplete(state, dpass, max_turns, max_turns + 1, second_main, single_tt1, &attempt_cache, budget);
                 const bool over = budget->Overrun();
                 budget->SetOverrunLimit(0);
+                p16::Rec('F', dpass, budget->Used() - used_before, p16::t_leaf_units - p16_l0, over ? 1 : 0, hl.win_turn, 0);
                 g_sres_units.fetch_add(budget->Used() - used_before, std::memory_order_relaxed);
+                fit_roll_units += budget->Used() - used_before;
                 if (!over)
                 {
+                    fit_pass_units = budget->Used() - used_before;
+                    if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   PASS dpass=%d units=%lld win=%d\n", dpass, budget->Used() - used_before, hl.win_turn); }
                     g_sres_passes.fetch_add(1, std::memory_order_relaxed);
                     // Refine this game's R from the pass just measured against the probe's tree at that depth.
                     if (dpass < 16 && g_probe_leaves[dpass] > 0 && g_probe_cost[dpass] > 0)
@@ -118276,12 +119451,68 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
                             g_single_R = 0.6 * g_single_R + 0.4 * sample; ++g_single_R_n;
                         }
                     }
+                    fit_pass_depth = dpass;
+                    fit_pr_prev = workctr::t_priced - pr_before_fit;
+                    if (fit_gate_ladder && s_fit_climb_cache) { fit_kept_cache = std::move(attempt_cache); }
                     break;
                 }
                 g_sres_overruns.fetch_add(1, std::memory_order_relaxed);
+                if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   OVERRUN dpass=%d units=%lld win=%d\n", dpass, budget->Used() - used_before, hl.win_turn); }
                 if (s_sres_anytime && hl.win_turn <= max_turns && hl.win_turn < line.win_turn) { g_sres_partial.fetch_add(1, std::memory_order_relaxed); break; }
                 if (single_mode == 2 && dpass > 1) { --dpass; continue; }   // FIT: one shallower, as a ladder would
                 single_failed = true; g_sres_escalated.fetch_add(1, std::memory_order_relaxed); break;
+            }
+            // FIT GATE = THE LADDER'S RULE (value_play.fit_gate "ladder" / MTG_FIT_GATE_LADDER; P12 prototype,
+            // default OFF). The affordability walk above is a FLOOR, not the answer: it prices a rollout pass at
+            // probe cost + R x probe leaves against what the leafless probe LEFT, and on Hydras (d5 b20) that
+            // estimate is 2.4-20x the pass's real cost (R is calibrated on d1, whose rollouts play the whole game
+            // out; the rollout pass also cuts leaves the leafless probe cannot), while the probe has already
+            // spent ~60% of the budget -- so the pass ran shallower than the rollout ladder's committed depth on
+            // 21 of 21 traced decisions. From the pass that ran, CLIMB exactly as FullSearchLine's ladder does:
+            // pass k is admitted iff c_{k-1} x ratio <= kStartGateAlpha x (Limit - the rollout passes spent),
+            // ratio = c_{k-1}/c_{k-2} (kDefaultGrowth with one pass), on the passes' MEASURED costs, stopping at
+            // a verified win, with the same 25x overrun ceiling and anytime rule. The probe and the R calibration
+            // are NOT charged against that gate: the ladder never runs them, so this lands the pass at (at least)
+            // the ladder's depth and saves only the ladder's shallow rollout passes below the floor.
+            if (fit_gate_ladder && !single_failed && fit_pass_depth > 0)
+            {
+                const double lim = static_cast<double>(budget->EffectiveLimit());
+                double c_prev = static_cast<double>(fit_pass_units), c_prev2 = 0.0; bool have_prev2 = false;
+                long long pr_prev = fit_pr_prev, pr_prev2 = 0;
+                FSLineCache climb_cache_own;
+                FSLineCache& climb_cache = s_fit_climb_cache ? fit_kept_cache : climb_cache_own;
+                for (int d = fit_pass_depth + 1; d <= depth; ++d)
+                {
+                    if (hl.win_turn <= state.turn_number + fit_pass_depth - 1) { break; }   // verified: the ladder stops
+                    const double ratio = (have_prev2 && c_prev2 > 0.0) ? c_prev / c_prev2 : kDefaultGrowth;
+                    // "ladder": Limit - FIT's own rollout units. "ladder_rem": the true Remaining (probe, calibration and
+                    // FIT passes all charged), the very quantity FullSearchLine's start gate reads.
+                    const double allow = valuearm::FitClimbAllowance(fit_gate_code, lim, static_cast<double>(fit_roll_units),
+                                                                     static_cast<double>(budget->Remaining()));
+                    if (c_prev * ratio > kStartGateAlpha * allow) { break; }
+                    if (!PricedStartGateFits(pr_prev, pr_prev2, have_prev2)) { break; }   // the ladder's priced gate, same code
+                    const long long pr_before_climb = workctr::t_priced;
+                    const long long ub = budget->Used();
+                    budget->SetOverrunLimit(SearchBudget::SatAdd(ub, SearchBudget::SatMulD(s_sres_mult, budget->EffectiveLimit())));
+                    const long long p16_l0 = p16::t_leaf_units;   // MTG_P16_TRACE (print-only)
+                    SearchLine att = FSLineWinComplete(state, d, max_turns, max_turns + 1, second_main, single_tt1, &climb_cache, budget);
+                    const bool over = budget->Overrun();
+                    budget->SetOverrunLimit(0);
+                    const long long cost = budget->Used() - ub;
+                    p16::Rec('L', d, cost, p16::t_leaf_units - p16_l0, over ? 1 : 0, att.win_turn, 0);
+                    fit_roll_units += cost;
+                    g_sres_units.fetch_add(cost, std::memory_order_relaxed);
+                    if (EnvOn("MTG_P12_FIT_TRACE")) { std::fprintf(stderr, "[p12fit]   CLIMB d=%d units=%lld win=%d over=%d\n", d, cost, att.win_turn, over ? 1 : 0); }
+                    if (over)
+                    {
+                        // The ladder's anytime rule: an aborted pass is kept only for a strictly earlier win.
+                        if (s_sres_anytime && att.win_turn <= max_turns && att.win_turn < hl.win_turn) { hl = att; }
+                        break;
+                    }
+                    hl = att; fit_pass_depth = d;
+                    c_prev2 = c_prev; have_prev2 = true; c_prev = static_cast<double>(cost);
+                    pr_prev2 = pr_prev; pr_prev = workctr::t_priced - pr_before_climb;
+                }
             }
         }
         else
@@ -118301,8 +119532,13 @@ TurnSolver::SearchLine TurnSolver::FullSearchLineHybrid(const GameState& state, 
         if (!single_failed)
         {
             line = hl;   // committed depth unchanged: the heuristic played the probe's depth
-            if (out_committed_depth) { *out_committed_depth = committed; }
-            RecordIdDepth(committed);
+            // Under fit_gate "ladder" the reported depth is the rollout pass's, as the ladder reports its
+            // committing pass: AIEngine's verified-win test (win_turn <= turn + depth - 1) then means "won
+            // inside the searched tree" for this line exactly as for the ladder's, instead of crediting a
+            // rollout-estimated win beyond a shallow pass's horizon with the leafless probe's depth.
+            const int rep = (fit_gate_ladder && fit_pass_depth > 0) ? fit_pass_depth : committed;
+            if (out_committed_depth) { *out_committed_depth = rep; }
+            RecordIdDepth(rep);
             return line;
         }
     }

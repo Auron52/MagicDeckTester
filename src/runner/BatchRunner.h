@@ -52,6 +52,9 @@ struct BatchJobResult
     // measure the pool, not the job. The sum is the same quantity a serial per-chunk subprocess used
     // to report as its wall clock, which is what a cost/tractability model consumes.
     long long             elapsed_ms  = 0;
+    // SUM of this job's per-game THREAD CPU, in ms (Linux CLOCK_THREAD_CPUTIME_ID; 0 elsewhere). Unlike elapsed_ms it
+    // does not move with the pool's contention mix. Not restored from a partials file (a resumed game adds 0).
+    long long             cpu_ms      = 0;
 };
 
 // Runs a whole manifest of goldfish jobs (different decks / seeds / depths /

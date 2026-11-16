@@ -80,6 +80,23 @@ struct ValuePlay
     // Multiplier on FIT's affordability gate (see ValueArm.h t_deck_fit_alpha). 0 = unset => 1.0 = the
     // strict 1.10x-remaining gate. Melira ships 4.0.
     double fit_alpha = 0.0;
+    // FIT's admission rule for its single rollout pass (P12 prototype, 2026-11-12). "" / "fit" = the
+    // affordability walk against what the probe LEFT (1.10 x Remaining); "ladder" = replay the rollout
+    // ladder's own start gate (FullSearchLine) against the WHOLE decision budget, pricing each earlier
+    // pass at its rollout-twin estimate, so the pass lands at the depth the ladder would commit;
+    // "ladder_rem" (P14) = the same climb gated on the decision's true Remaining (valuearm::FitGateCode).
+    std::string fit_gate;
+    // SKIP-LEAVES LADDER (P16, 2026-11-13; default 0 = off): the rollout ladder's passes below depth s run LEAFLESS
+    // (a proven win there commits, as the ladder's verified-win stop would), and the rollout ladder starts at s with
+    // the heuristic ladder's own start gate, overrun ceiling and anytime rule. Only for decks with no value model.
+    int rollout_from = 0;
+    // SAMPLED-GATE LADDER (P18, 2026-11-13; default 0 = off): the heuristic rollout ladder, its start gate fed by
+    // per-decision samples instead of superseded rollout passes. Each pass below `depth` first runs LEAFLESS (a
+    // proven in-window win commits there; its leaf count prices the pass), then its rollout pass runs in the
+    // ladder's own order and STOPS as soon as the rollouts done so far bound the pass's full cost below the
+    // threshold at which the ladder's gate admits the next pass. The final pass starts at the best bound found.
+    // Only for decks with no value model. See docs/design/sampled-gate-ladder.md.
+    int sampled_gate = 0;   // 0 off, 1 raw research sampler, 2 measured fast shape (see TurnSolver.cpp)
     // Defer FIT's per-game R calibration to first use. -1 unset => the engine default (ON). Melira ships
     // false: it is the one deck where deferring measures worse.
     int    fit_lazy_r = -1;
