@@ -10751,10 +10751,32 @@ std::uint64_t ActLineHoldMask(const GameState& state, const ManaCost& cost)
                           | (g_line_unpaid_cost.black > 0 ? 4 : 0)
                           | (g_line_unpaid_cost.red   > 0 ? 8 : 0)
                           | (g_line_unpaid_cost.green > 0 ? 16 : 0);
+    // If a later named cast needs a colour that only one activation-eligible source can make,
+    // hold that source for now when this payment does not need the colour. Otherwise the
+    // activation hold may keep a narrow land and force the current cast to tap the sole later
+    // colour (Shadowborn seed 30092453: Ritual's {B} took Blood Crypt over Swamp, losing Sire's {R}).
+    static const bool unique_later_on = EnvOn("MTG_ACT_HOLD_UNIQUE_LATER", true); // DEFAULT ON; =0 disables
+    const bool unique_later_enabled = heurarm::Flag(heurarm::ACT_HOLD_UNIQUE_LATER, unique_later_on);
+    int later[5] = {};
+    if (unique_later_enabled) { LineOwedAfterOwnPips(later); }
+    const int float_col[5] = { state.floating_mana.white, state.floating_mana.blue,
+                               state.floating_mana.black, state.floating_mana.red,
+                               state.floating_mana.green };
+    int unique_later = 0;
+    for (int c = 0; c < 5; ++c)
+    {
+        if (later[c] <= float_col[c] || cur[c] != 0) { continue; }
+        int providers = 0;
+        for (int k = 0; k < np; ++k) { providers += (prov[k].colors & (1 << c)) != 0; }
+        if (providers == 1) { unique_later |= 1 << c; }
+    }
     auto preferred = [&](const Prov& a, const Prov& b, int colour) -> bool
     {
         if (s_cast_demand && cast_demand != 0)
         {
+            const int a_unique = std::popcount(static_cast<unsigned>(a.colors & unique_later));
+            const int b_unique = std::popcount(static_cast<unsigned>(b.colors & unique_later));
+            if (a_unique != b_unique) { return a_unique > b_unique; }
             const int competing = cast_demand & ~(1 << colour);
             const int a_comp = std::popcount(static_cast<unsigned>(a.colors & competing));
             const int b_comp = std::popcount(static_cast<unsigned>(b.colors & competing));

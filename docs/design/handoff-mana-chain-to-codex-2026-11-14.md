@@ -34,6 +34,28 @@ two-crack path kept the early-crack pin while the oracle cleared it. A
 script-only correction and focused unit assertion clear seed 30,089,424; the
 3,360-case Release unit suite passes. See
 `docs/design/shadowborn-two-lake-oracle-pin-2026-11-16.md`.
+The Shadowborn/Shadowborn2HG smoke and regression rerun passed all 11 jobs,
+561 scenarios, and 864 strict viewer references with zero play changes. The
+two-Lake oracle fix is committed as `b0c9fbfd0`; the next fresh Shadowborn
+block is 90,000–94,999. Shadowborn seed 30,085,008 and Dragonstorm seed
+30,060,428 both need an early Lotus crack to preserve a later cast, even
+though the immediate spell is payable without it. A user question asks
+whether this counts as on-demand; no payment-policy change is shipped.
+
+The next fresh Shadowborn PGO block, 90,000–94,999, was oracle-on/off
+play-identical and reduced to seven payment drops in two signatures; it had
+zero oracle, enumeration, and order gaps. One drop names Ritual, Culling,
+and Sire in the original plan. The activation reserve keeps a Swamp for a
+later Apostle activation and forces Ritual to use the only red land,
+stranding Sire. A visible same-plan unique-colour hold clears focused seed
+30,092,453. All 3,361 unit cases and Shadowborn/2HG combined regression
+pass. In a 20,900-game pooled paired A/B, 5,000 fresh Shadowborn games and
+the searched cells were play and win identical; three Selesnya depth-zero
+play digests changed with no win-turn change. The full cross-deck suite
+replayed 864 strict viewer references cleanly, but did not rebaseline its
+123 broad ground-truth mismatches, mostly previously documented drift.
+Six remaining drops are the post-Intent Lotus timing tradeoff. A fresh
+PGO Shadowborn gate is next. See the updated Shadowborn two-Lake document.
 
 The Gods Study → Loam green hold fixes the two focused payment drops, but
 failed the 5,000-game adoption bar: two slower games, none faster, and

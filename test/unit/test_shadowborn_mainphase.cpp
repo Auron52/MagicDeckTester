@@ -136,6 +136,27 @@ int CastCountM(const GameState& s, const std::string& name, bool pre_combat)
 }
 }   // namespace
 
+TEST_CASE("SB activation hold leaves the unique red source for a named later Sire cast")
+{
+    GameState s = BaseM(1);
+    s.battlefield.push_back(PermM("Blood Crypt", 2));
+    PlanTraits t;
+    t.act_pips[2] = 1; // Apostle activation after the named casts
+    PlanTraitsScope plan(&t);
+    ManaCost line;
+    line.black = 3; // Ritual, Culling, and Sire
+    line.red = 1;   // Sire's only red source is Blood Crypt
+    LineUnpaidCostScope unpaid(line);
+    ManaCost ritual;
+    ritual.black = 1;
+    ArmM arm;
+    arm.Set(heurarm::ACT_LINE_HOLD, 1).Set(heurarm::ACT_HOLD_CAST_DEMAND, 1)
+       .Set(heurarm::ACT_HOLD_UNIQUE_LATER, 1);
+    CHECK(ActLineHoldMask(s, ritual) == (1ull << 1));
+    arm.Set(heurarm::ACT_HOLD_UNIQUE_LATER, 0);
+    CHECK(ActLineHoldMask(s, ritual) == (1ull << 0));
+}
+
 // ---- the main-1 rule ----------------------------------------------------------------------------------------------
 TEST_CASE("SB main-1 rule: no attack-ready creature -> main 1 is the land drop alone")
 {
