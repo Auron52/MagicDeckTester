@@ -48,4 +48,11 @@ beat references passed. Its one searched row with a changed digest,
 `pd_regression_d5_s2002`, was compared on the same binary with the switch
 off: one of 150 games changed play, but no win turn changed. The combined
 harness exit remains a committed ground-truth mismatch seen in both arms;
-no ground truth was accepted. The fresh mana-clean gate result follows.
+no ground truth was accepted.
+
+The fresh PGO mana-clean gate `codex-pd-multiquake-20261116` on game indices
+67,000–71,999 was oracle-on/off play-identical. It found **zero APPLY-DROP**
+flags, 12 APPLY-DROP-ORDER flags in three signatures, and 59 ORACLE-GAP flags;
+no UNMODELED or CAPPED flags. The next fresh Prevent Damage block is
+72,000–76,999. The full report is
+`logs/mana_clean/codex-pd-multiquake-20261116/report.md`.

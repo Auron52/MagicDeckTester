@@ -63,7 +63,9 @@ the optimized trial has the same play as the first trial with 2.0% extra
 recorded game time and 0.06% fewer work units than the off arm. All 3,355
 unit cases passed. Strict viewer replay had zero drift across 864 references;
 the one changed regression row has zero paired win-turn changes. The default
-is on and `=0` rolls back. The fresh PGO gate 67,000–71,999 is next. See
+is on and `=0` rolls back. The fresh PGO gate 67,000–71,999 was
+oracle-on/off play-identical with zero APPLY-DROP, 12 APPLY-DROP-ORDER, and
+59 ORACLE-GAP flags. The next block is 72,000–76,999. See
 `docs/design/prevent-damage-multi-earthquake-hold-2026-11-16.md`.
 
 ## Codex update (2026-11-15)
