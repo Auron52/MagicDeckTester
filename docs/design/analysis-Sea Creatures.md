@@ -77,8 +77,9 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
 3. ~~Utopia Sprawl colour~~ — **USER 2026-11-16:** *"Utopia sprawl should prioritize blue as well. Green
    is a minor colour in the deck."* Implemented as: the provider's ETB colour axis restricted to {U, G}
    (W/B/R have no consumer: sound fold), plus a default-ON one-option prune to BLUE (=0 restores {U, G}
-   as searched branches). Viewer keeps the full choose_color list. Taken as a PRUNE by analogy with the
-   fetch ruling; if the USER meant "search U first but keep G", say so.
+   as searched branches). Viewer keeps the full choose_color list. **Confirmed (USER 2026-11-16):** *"In
+   fact, we should try a prune to always use blue."* No state exceptions; Stage 5 A/Bs always-blue vs
+   searched {U, G} and reports the result to the USER.
 
 ## Approved deferrals
 
