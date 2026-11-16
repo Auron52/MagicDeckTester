@@ -80,6 +80,10 @@ APPLY-DROP, APPLY-DROP-ORDER, or ENUM-GAP flags. It found 135 ORACLE-GAP
 and five UNMODELED flags, so the deck remains beta. The next block is
 77,000–81,999. See
 `docs/design/prevent-damage-payable-quake-order-2026-11-16.md`.
+The next local oracle repair distinguishes old/new copies of a pain land during
+scripted payments. Focused replays clear the 32 two-Vito flags in seed 30073845
+and 11 Beseech/Vito flags in seed 30073663. Seed 30076504 remains a separate
+batch-prepay self-lethal mismatch. The repair awaits a fresh gate.
 
 ## Codex update (2026-11-15)
 

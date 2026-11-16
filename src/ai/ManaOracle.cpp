@@ -838,6 +838,19 @@ bool KeyedApart(const GameState& s, const Permanent& p)
     if (t_plan_srcs != nullptr && t_plan_srcs->count(p.card.m_number) != 0) { return true; }
     if (t_key_karoo_lands && p.card.IsLand()) { return true; }
     if (!t_key_twin_taps || s.battlefield.empty()) { return false; }
+    // Damage-event decks can distinguish WHEN otherwise identical lands pay: a second Vito can
+    // turn a later Ancient Tomb's pain into the winning drain. The usual land-age fold merges an
+    // old Tomb with this turn's land drop after the first payment, even though the later payment
+    // then runs through a different source order. Keep those two copies apart mid-line.
+    if (s.dmg_events_armed && p.card.IsLand())
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            if (q.card.m_number != p.card.m_number && q.controller_index == p.controller_index
+                && q.card.m_name == p.card.m_name && q.entered_this_turn != p.entered_this_turn)
+            { return true; }
+        }
+    }
     const std::ptrdiff_t i = &p - s.battlefield.data();
     return i >= 0 && static_cast<std::size_t>(i) < s.battlefield.size()
         && TurnSolver::IsTwinnedNumberedTapSource(s, static_cast<std::size_t>(i));

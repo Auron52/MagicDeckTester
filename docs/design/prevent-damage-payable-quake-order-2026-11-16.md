@@ -55,3 +55,17 @@ indices 72,000–76,999 was oracle-on/off play-identical. It found **zero
 `UNMODELED` flags in one payment-enumeration-cap signature. The next fresh
 Prevent Damage block is 77,000–81,999. Its report is
 `logs/mana_clean/codex-pd-payablequake-20261116/report.md`.
+
+## Oracle old/new pain-land identity follow-up
+
+Seed 30073845 (turn six) exposed an oracle-only fold across two Vito casts.
+The engine pays the first Vito with the old Ancient Tomb and the second with
+the newly played Tomb. The oracle's first-payment result key and mid-line
+resource key treated those lands as interchangeable, leaving only the reverse
+timing. With Tamanoa and Vito, the order of the pain events changes life and
+drain after the second cast. `KeyedApart` now keeps old/new copies of the same
+land distinct on damage-event-armed boards during a payment script. The focused
+Release replay clears all 32 two-Vito `ORACLE-GAP` flags on seed 30073845 and
+all 11 Beseech/Vito flags on seed 30073663. It leaves seed 30076504's separate
+batch-prepay self-lethal mismatch intact. This is an oracle coverage repair;
+normal play never calls this keying scope.
