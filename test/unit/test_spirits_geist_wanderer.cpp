@@ -344,6 +344,28 @@ TEST_CASE("Spirits keeps two white sources for White Orchid after Souls flashbac
     }
 }
 
+TEST_CASE("Spirits spends Chancery blue on Vial before a two-white Phantom")
+{
+    static const SpiritsProvider spirits;
+    GameState s = GwBoard({ "Azorius Chancery", "Secluded Courtyard" });
+    s.m_provider = &spirits;
+    s.battlefield.back().chosen_subtype_id = SubtypeRegistry::Instance().Id("Spirit");
+    s.players[0].hand.push_back(GwZone("Aether Vial", 1));
+    s.players[0].hand.push_back(GwZone("White Orchid Phantom", 60));
+    const std::vector<TurnSolver::Plan> plans = TurnSolver::EnumerateMainPlans(s, true);
+    const TurnSolver::Plan* line = GwFindPlan(plans, {{Action::Kind::CastFromHand, "Aether Vial"},
+                                                     {Action::Kind::CastFromHand, "White Orchid Phantom"}});
+    REQUIRE(line != nullptr);
+    GameState roll = s;
+    TurnSolver::ApplyPlan(roll, *line, true);
+    const GameState exec = GwRunExecutor(s, *line);
+    for (const GameState* g : { static_cast<const GameState*>(&roll), &exec })
+    {
+        CHECK(GwFind(*g, "Aether Vial") != nullptr);
+        CHECK(GwFind(*g, "White Orchid Phantom") != nullptr);
+    }
+}
+
 // ---- Mausoleum Wanderer --------------------------------------------------------------------------------
 
 TEST_CASE("Mausoleum Wanderer: the card -- {U} 1/1 Spirit; an enter watcher (DefHasCreatureEnterWatcher)")

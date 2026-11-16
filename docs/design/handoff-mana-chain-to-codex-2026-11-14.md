@@ -6,6 +6,18 @@ round). Per-item handoff files (gitignored, local only) are in `logs/mana-clean-
 
 ## Codex continuation (2026-11-16)
 
+Spirits' remaining Vial → White Orchid Phantom payment drops used a
+creature-only white land for Vial's generic pip while Chancery sat untapped.
+The scoped scarce-color mask had held the whole Chancery even though its blue
+unit could pay Vial and its white unit could float for Phantom. The payer now
+releases a held fixed two-color Karoo only when one color is spare for a
+one-generic bill. The focused rollout/executor test and all three exact gate
+repros pass; a 2,000-game paired Spirits check changes no win turns or play
+digests. Combined smoke/regression had no searched changes and one faster
+depth-zero game; viewer and scenario checks passed. See
+`docs/design/spirits-karoo-spare-generic-2026-11-16.md`. A fresh PGO gate is
+owed.
+
 The fresh Morph PGO gate on games 5,000–9,999 completed after the combat-hold
 frontier fix (`codex-morph-combat-hold-20261116`). Oracle-on/off play is
 byte-identical. The gate still reports 1,627 issues: 150 `APPLY-DROP`, 429

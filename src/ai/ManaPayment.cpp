@@ -9041,6 +9041,31 @@ static std::uint64_t ScarceColorHoldMask(const GameState& state, const ManaCost&
     {
         if (need[c] > 0 && cnt[c] > 0 && cnt[c] <= need[c]) { mask |= prov[c]; }
     }
+    // A Karoo's two fixed units can serve different casts. If this bill is one generic
+    // mana and only one of its two colours is owed later, tapping it now can spend
+    // the other colour and float the owed one. Holding the whole land instead forces
+    // the fallback to spend a creature-only source that the later cast needs
+    // (Spirits: Vial, then White Orchid Phantom off Chancery + Courtyard).
+    static const bool s_bundle_spare = EnvOn("MTG_SCARCE_BUNDLE_SPARE", true); // DEFAULT ON; =0 restores whole-source hold
+    if (s_bundle_spare && mask != 0 && line_live && cost.generic == 1
+        && cost.ManaValue() == 1 && LineGenericOrderLive())
+    {
+        for (int i = 0; i < n; ++i)
+        {
+            const std::uint64_t bit = 1ull << i;
+            if ((mask & bit) == 0) { continue; }
+            const Permanent& p = state.battlefield[static_cast<std::size_t>(i)];
+            const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+            if (d == nullptr || !d->params.etb_bounce_land || d->params.produces_amount != 2)
+            { continue; }
+            const auto& colors = EffectiveProducesFor(state, active, *d, &p);
+            if (colors.size() != 2 || colors[0] == colors[1]) { continue; }
+            const int a = static_cast<int>(colors[0]), b = static_cast<int>(colors[1]);
+            if (a < 5 && b < 5 && ((need[a] > 0 && need[b] <= 0)
+                                  || (need[b] > 0 && need[a] <= 0)))
+            { mask &= ~bit; }
+        }
+    }
     return mask;
 }
 
