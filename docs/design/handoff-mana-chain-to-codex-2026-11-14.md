@@ -33,6 +33,16 @@ is identical; 287 issues remain (3 enum gaps, 126 drops, 121 drop-order,
 52,000–56,999. Most drops are Kolaghan/Karrthus lines using creature-only
 Unclaimed Territory. See `docs/design/dragonstorm-lotus-black-generic-2026-11-16.md`.
 
+Dragonstorm's next payment fix puts Mercadian Bazaar ahead of a reserved
+creature-only Territory when a later black or green Dragon pip needs the
+Territory. The focused Song → Karrthus drop and another Kolaghan drop are
+repaired. A 6,000-game paired Release screen was play-identical and the
+3,353-case unit suite passed. Source `e875cfffd` is default on with a `=0`
+rollback lever. The fresh PGO gate 52,000–56,999 was oracle-on/off
+identical and found 115 issues: 6 enum gaps, 79 drops, 26 order drops, and
+4 oracle gaps. The next block is 57,000–61,999. See
+`docs/design/dragonstorm-storage-before-territory-2026-11-16.md`.
+
 ## Codex update (2026-11-15)
 
 The Gods Loam/dredge question below is resolved. The user clarified that Gods

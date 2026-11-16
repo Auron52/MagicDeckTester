@@ -27,5 +27,12 @@ Paired Release games were play-identical: 1,000 pilot games on seeds
 arms won 4,957 games; search units were 8,661,651 off and 8,660,817 on.
 The Release unit suite passed 3,353 cases and 3,614,055 assertions.
 
-Raw paired data: `build/scratch/dragonstorm_storage_*.{out,err}`. The next
-fresh mana-clean block for Dragonstorm is 52,000–56,999.
+The fresh PGO mana-clean gate `codex-dragonstorm-storage-20261116` then ran
+indices 52,000–56,999. Oracle-on/off play was byte-identical. It found 115
+issues: 79 `APPLY-DROP`, 26 `APPLY-DROP-ORDER`, 6 `ENUM-GAP`, and 4
+`ORACLE-GAP`; no unmodeled or capped decisions. The largest remaining
+payment group is Apex of Power into Karrthus or Kolaghan. The exact report
+is `logs/mana_clean/codex-dragonstorm-storage-20261116/report.md`; the next
+fresh block is 57,000–61,999.
+
+Raw paired data: `build/scratch/dragonstorm_storage_*.{out,err}`.
