@@ -53,13 +53,24 @@ The rule is gated on the Dragonstorm provider, so no other deck can move. Paired
 both arms per job via the heurarm flag, Dragonstorm games 540,000–549,999 (10,000 pairs;
 `build/scratch/claude_visible_contrib_ab/`):
 
+**CORRECTION (19:25 UTC): the table below is INVALID.** The lever's reader was cached in a function-local
+`static const`, so in a pooled batch every job took the FIRST job's value (ON), and both arms ran with the lever on.
+That is why they were byte-identical. The read is now per call; the re-measure is below the struck table.
+
 | deck | earlier | later | digest-only | work units |
 |---|---|---|---|---|
-| Dragonstorm (10,000) | 0 | 0 | 0 | +0.00% (identical) |
+| ~~Dragonstorm (10,000)~~ | ~~0~~ | ~~0~~ | ~~0~~ | ~~+0.00% (identical)~~ |
 
-Every one of the 10,000 games is byte-identical, work units included: the shape is rare in play and never decided
-a game in this sample. It is adopted as a payment correctness fix (the oracle's line is legal and keeps the
-closer), not for a measured turn gain. Unit suite 3,394/3,394.
+Re-measure, games 575,000-584,999, read per call (`build/scratch/claude_castdig_ab/`, jobs `dsvc`):
+
+| deck | earlier | later | digest-only | work units |
+|---|---|---|---|---|
+| Dragonstorm (10,000) | 1 (gi 576932, T6 -> T5) | 0 | 5 | -0.02% |
+
+No game is slower; Dragonstorm is net -1. The lever stays adopted, now on a real measurement.
+
+(The struck sentence that followed the invalid table, "byte-identical ... never decided a game", was an artefact
+of the caching bug.) Unit suite 3,464/3,464.
 
 Tests: `test_dragonstorm_followups.cpp`, "a red-only creature beside Karrthus does not hide Karrthus's Bloom
 colour". It covers the lever-on outcome for both plan shapes. On that reduced direct-payment board, the old code

@@ -10650,7 +10650,7 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         // competes for nothing: only a creature that ADDS a pip counts toward "sole". And the line that stops
         // at Apex owes nothing after it, so the rule must also run on a zero rest when a visible
         // contributor is the only later need.
-        static const bool s_visible_contrib = OnDemandVisibleContribOn();
+        const bool s_visible_contrib = OnDemandVisibleContribOn();   // per call: the heurarm arm is per job
         const int rest_mv = LineRestAfter(cost_in, later_pips);
         const ManaCost& lu_now = g_line_unpaid_cost;    // a zero rest counts only when the hold IS this cost
         const bool holds_last = lu_now.ManaValue() > 0 && lu_now.ManaValue() == cost_in.ManaValue()

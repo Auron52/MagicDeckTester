@@ -475,6 +475,39 @@ TEST_CASE("CCO prepay: Vial dig declines a bill that would spend Bolt's Mountain
     CHECK(run(0));
 }
 
+// MTG_PREPAY_CCO_CAST_DIG: the same decline when Staunch Crewmate is HARD-CAST (its ETB dig opens the same
+// continuation). Pirates mana-clean s30108757 T4: {Goblin Tomb Raider, Staunch Crewmate} jointly tapped every
+// unrestricted red source and left Secluded Courtyard, so the Bolt the dig's continuation casts was dropped.
+TEST_CASE("CCO prepay: a hard-cast dig declines a bill that would spend Bolt's Mountain (MTG_PREPAY_CCO_CAST_DIG)")
+{
+    auto run = [](int lever)
+    {
+        ArmHD arm(heurarm::PREPAY_CCO_CAST_DIG, lever);
+        GameState s;
+        s.active_player_index = 0;
+        s.turn_number = 4;
+        PutHD(s, "Spirebluff Canal", 49);
+        PutHD(s, "Fiery Islet", 22);
+        PutHD(s, "Secluded Courtyard", 43);
+        PutHD(s, "Fiery Islet", 23);
+        HandHD(s, "Lightning Bolt", 32);
+        HandHD(s, "Goblin Tomb Raider", 26);
+        HandHD(s, "Staunch Crewmate", 54);
+        HandHD(s, "Siren Stormtamer", 47);
+        Action goblin_cast;
+        goblin_cast.kind = Action::Kind::CastFromHand;
+        goblin_cast.card_name = DefHD("Goblin Tomb Raider").card.m_name;
+        goblin_cast.hand_index = 1;
+        Action crew_cast;
+        crew_cast.kind = Action::Kind::CastFromHand;
+        crew_cast.card_name = DefHD("Staunch Crewmate").card.m_name;
+        crew_cast.hand_index = 2;
+        return TurnSolver::BatchPrepayMainCasts(s, { goblin_cast, crew_cast });
+    };
+    CHECK_FALSE(run(1));
+    CHECK(run(0));
+}
+
 // Item C2 round 2 (MTG_CCO_RESERVE_OTHER): the CCO LINE RESERVE must not hold a creature-only land for a colour the
 // OTHER untapped creature-only lands still make. Pirates s30070533 T3/T4: the line owes one creature {U} beyond a
 // Mountain-only unrestricted supply plus the Bolt's {R}; with both Territories held, the creature's {1} took the

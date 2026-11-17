@@ -976,6 +976,7 @@ enum Slot : int
     LEFTOVER_LINE_SWAP,       // MTG_LEFTOVER_LINE_SWAP  after a payment, a floating colour the payment drained into its generic is swapped back for an over-produced unit of another colour when the rest of the line is provably short as left and is not after the swap (same taps, same float total; TapForCostShared, ManaPayment.cpp). Dragonstorm mana-clean s30072155 T5: Seething Song's {1} spent Lotus Bloom's floating {B} while Sandstone Needle's second {R} floated, and Karrthus lost its {B}. Default ON; =0 -> no swap
     SEA_FETCH_MAZE,           // MTG_SEA_FETCH_MAZE  Sea Creatures (USER 2026-11-17 "Hedge maze is a maybe if we absolutely do not need it for mana." / "(if we do not need it for mana this turn it is possible, otherwise not)"): under the one-option fetch prune, Hedge Maze is admitted as a SECOND searched target, right after the untapped pick, exactly when one more mana of that pick's colours casts nothing more this turn (SeaFetchManaNeeded, the FiveColour RULE 6 solo + sequence test). Default OFF pending the USER; =1 -> admit
     UNSEEN_KEEP_SCARCE,       // MTG_UNSEEN_KEEP_SCARCE  a line that opens a breakpoint (g_line_opens_unseen) keeps the historical generic order, except that a floating colour the NAMED line still owes and no untapped source can make again pays generic last (SpendFloatingTowardCost, SpellEffects.h; UnseenScarceNamedMask, ManaPayment.cpp). Dragonstorm gate claude-dragonstorm-swap-20261117 s30083167 T7: Seething Song's {2} drained Lotus Bloom's {B}{B} before the red and the plan's Dragonlord Kolaghan lost its {B}. Default OFF pending the USER (Cyclone net +1 in the A/B); =1 enables
+    PREPAY_CCO_CAST_DIG,      // MTG_PREPAY_CCO_CAST_DIG  the PREPAY_CCO_VIAL_DIG decline also covers a HARD-CAST ETB-dig creature (BatchPrepayMainCasts, TurnSolver.cpp). Pirates mana-clean claude-nearclean-20261117 s30108757 T4: the joint prepay of {Goblin Tomb Raider, Staunch Crewmate} tapped Spirebluff Canal and both Fiery Islets, left Secluded Courtyard's creature-only red, and the Bolt the dig's continuation casts was dropped. Default ON; =0 -> Vial puts only
     COUNT
 };
 
@@ -1896,6 +1897,7 @@ inline const char* Name(int slot)
         "MTG_LEFTOVER_LINE_SWAP",
         "MTG_SEA_FETCH_MAZE",
         "MTG_UNSEEN_KEEP_SCARCE",
+        "MTG_PREPAY_CCO_CAST_DIG",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

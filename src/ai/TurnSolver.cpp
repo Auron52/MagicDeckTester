@@ -65946,9 +65946,13 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
     if (PrepayCcoVialDigOn())
     {
         bool vial_dig = false;
+        // MTG_PREPAY_CCO_CAST_DIG: a hard-cast ETB-dig creature opens the same continuation (Pirates s30108757 T4,
+        // {Goblin Tomb Raider, Staunch Crewmate} with Bolt in hand and Secluded Courtyard up).
+        const bool s_cast_dig = PrepayCcoCastDigOn();   // per call: the heurarm arm is per job
         for (const Action& a : acts)
         {
-            if (a.kind != Action::Kind::ActivateVial) { continue; }
+            if (a.kind != Action::Kind::ActivateVial
+                && !(s_cast_dig && a.kind == Action::Kind::CastFromHand)) { continue; }
             const CardDefinition* d = PrepayCastFace(a);
             if (d != nullptr && d->params.etb_dig_count > 0) { vial_dig = true; break; }
         }

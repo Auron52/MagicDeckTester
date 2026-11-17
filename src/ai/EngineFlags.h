@@ -901,6 +901,14 @@ inline bool PrepayCcoVialDigOn()
     return heurarm::Flag(heurarm::PREPAY_CCO_VIAL_DIG, env_on);
 }
 
+// MTG_PREPAY_CCO_CAST_DIG -- DEFAULT ON; =0 -> the decline above covers Vial puts only. A HARD-CAST ETB-dig creature
+// (Staunch Crewmate) opens the same continuation as a Vial put of it. Pirates s30108757 T4.
+inline bool PrepayCcoCastDigOn()
+{
+    static const bool env_on = EnvOn("MTG_PREPAY_CCO_CAST_DIG", true);
+    return heurarm::Flag(heurarm::PREPAY_CCO_CAST_DIG, env_on);
+}
+
 // MTG_CCO_RESERVE_OTHER -- DEFAULT ON; =0 restores the historical reserve (item C2 round 2, mana-clean). The CCO LINE
 // RESERVE holds a colored_creature_only land (tapped after every other land) while the rest of the line owes a colour
 // beyond the unrestricted supply -- and it held EVERY such land for that colour, however many there were. Pirates
