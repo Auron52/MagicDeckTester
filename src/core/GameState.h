@@ -430,16 +430,23 @@ struct GameState
     bool                     combat_damage_prevented_this_turn = false;
     // Was the opponent DEALT a library (and an opening hand)? See core/OpponentDeck.h. Stamped by
     // opponentdeck::Deal during setup, for a deck that touches the opponent's zones or observes
-    // its land development. Other decks retain an undealt opponent library.
+    // its land development -- every deck since 2026-11-17 except on a legacy replay.
     //
     // THIS FLAG IS THE DECK-OUT GATE, and it is not optional. `players[1].library` is EMPTY, not
     // absent, on an ungated deck -- so the obvious test `Opponent().library.empty()` is TRUE on turn
     // 0 and would hand out a spurious instant win in every game of every deck. Never test emptiness
     // without this flag; use OpponentHasLost() below, which does it for you.
     bool                     opponent_library_dealt       = false;
-    // The passive opponent plays the first land in hand on its simplified turns
-    // when the deck needs to observe that development (Mill, Price, Hinata).
+    // The passive opponent plays the first land in hand on its simplified turns. Every deck since
+    // 2026-11-17 (USER); false only on a --legacy-passive-opponent-lands replay.
     bool                     opponent_plays_lands         = false;
+    // The OPPONENT's own shuffle ordinal (ShuffleAfterSearch with controller 1), kept apart from
+    // search_count so the opponent cracking a fetch cannot shift the ordinal of OUR later
+    // reshuffles -- the same independence opponentdeck::Deal's salted seed buys for the opening.
+    // Used only while opponent_plays_lands (a legacy replay keeps the shared ordinal it was
+    // recorded under). Future-determining for the opponent's library order: folded in
+    // dominance::Build() and RouteSig, value-gated (nonzero only after an opponent shuffle).
+    std::uint8_t             opponent_search_count        = 0;
     // The opponent was asked to draw from an empty library (CR 104.3c). Set by the simulated
     // opponent draw at the END of our turn -- which is also WHY the win turn for a deck-out is OUR
     // turn number and not the next one: their simplified turn has no player-controlled main phase,

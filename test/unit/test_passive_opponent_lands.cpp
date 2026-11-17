@@ -154,3 +154,43 @@ TEST_CASE("every deck's passive opponent plays a seeded real deck's lands (USER 
     CHECK_FALSE(legacy.opponent_plays_lands);
     CHECK(legacy.battlefield.size() == 3u);
 }
+
+TEST_CASE("an opponent fetch shuffles on its own ordinal and never moves our reshuffles")
+{
+    static const bool loaded = [] {
+        CardDatabase::Instance().LoadFromJson(ResolveHeuristicDefaultsPath("src/cards/data/cards.json"));
+        return true;
+    }();
+    REQUIRE(loaded);
+
+    Decklist plain;
+    const CardDefinition* forest = CardDatabase::Instance().Lookup("Forest");
+    REQUIRE(forest != nullptr);
+    for (int i = 0; i < 40; ++i) { plain.mainboard.push_back(forest->card); }
+
+    GameState with_fetch = GoldFishRunner::SetupGame(plain, 7, 6);
+    GameState without = with_fetch;
+    // The opponent plays a fetch with a basic to find: it cracks and shuffles THEIR library.
+    with_fetch.players[1].hand.clear();
+    with_fetch.players[1].hand.push_back(CardDatabase::Instance().Lookup("Windswept Heath")->card);
+    with_fetch.players[1].library.push_back(forest->card);
+    without.players[1].library.push_back(forest->card);
+    ResolvePassiveOpponentLandTurn(with_fetch);
+    REQUIRE(with_fetch.opponent_searched_library_this_turn);
+    CHECK(with_fetch.opponent_search_count == 1);
+    CHECK(with_fetch.search_count == without.search_count);
+
+    // Our next reshuffle realises the same library order either way.
+    ShuffleAfterSearch(with_fetch, 0);
+    ShuffleAfterSearch(without, 0);
+    REQUIRE(with_fetch.players[0].library.size() == without.players[0].library.size());
+    for (size_t i = 0; i < with_fetch.players[0].library.size(); ++i)
+    { CHECK(with_fetch.players[0].library[i].m_number == without.players[0].library[i].m_number); }
+
+    // A legacy replay keeps the shared ordinal it was recorded under.
+    GameState legacy = GoldFishRunner::SetupGame(plain, 7, 6, true);
+    const uint64_t before = legacy.search_count;
+    ShuffleAfterSearch(legacy, 1);
+    CHECK(legacy.search_count == before + 1);
+    CHECK(legacy.opponent_search_count == 0);
+}

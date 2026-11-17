@@ -981,6 +981,7 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     fold(static_cast<std::uint64_t>(s.vial_target_mv));
     fold(s.deck_feeds_combat ? 1u : 0u);
     fold(s.search_count);
+    if (s.opponent_search_count != 0) { fold(0x0990ull ^ s.opponent_search_count); }
     // Turn-scoped counters that are legitimately nonzero at a clean boundary (see AtCleanBoundary):
     // storm from a Lotus Bloom arriving off suspend, and the per-turn pins. Exact-match rather than
     // asserted, so two siblings sharing the same value still compare.

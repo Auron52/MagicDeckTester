@@ -46023,6 +46023,7 @@ static void RouteSig(const GameState& s, std::vector<long long>& v)
     v.push_back(s.m1start_hand_turn); v.push_back(s.m2_stage_turn);
     v.push_back(static_cast<long long>(s.m2_prestaged_mask[0])); v.push_back(static_cast<long long>(s.m2_prestaged_mask[1]));
     v.push_back(static_cast<long long>(s.game_seed)); v.push_back(static_cast<long long>(s.search_count));
+    v.push_back(s.opponent_search_count);
     v.push_back(static_cast<long long>(s.shuffle_salt)); v.push_back(static_cast<long long>(s.shuffle_salt_opening));
     v.push_back(static_cast<long long>(s.shuffle_salt_search));
     v.push_back(s.m1_hand_n); for (int x : s.m1_hand) { v.push_back(x); } v.push_back(s.m1_hand_turn);
