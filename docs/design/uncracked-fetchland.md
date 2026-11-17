@@ -24,7 +24,11 @@ mana now)."
   earlier forced human hold (`fetch_activation` without `fetch_on_play`) replays with `--legacy-human-fetch-hold`.
 
 Arid Mesa and Wooded Foothills have a battlefield activation model (Windswept Heath joined them on 2026-11-13,
-Boars I1, used by Anti-Lifegain, Creature Giving and Five Colour). Most other fetchlands in current decklists still
+Boars I1, used by Anti-Lifegain, Creature Giving and Five Colour). Misty Rainforest joined them on 2026-11-16 (Sea
+Creatures I1) for a HUMAN only: `fetch_hold_human_only` keeps autonomous play on the immediate route in every deck
+(USER: *"We don't need the hold option for those decks or for this deck."* / *"(in searched)"* / *"The viewer can keep
+it."*), so Creature Giving and Five Colour play is unchanged; it keeps its W/U/B/R/G `produces` hand proxy (the Scalding
+Tarn shape -- a battlefield fetchland has no mana ability, `EffectiveProducesFor`). Most other fetchlands in current decklists still
 use the older immediate-on-play card data; the deck analyzer reports both cases in `fetch_hold_review`, so a new
 deck review decides whether its provider should opt in to the hold. The Modern RW Burn provider resolves on play
 (`MTG_RW_BURN_FETCH_AUTOCRACK`, default on, predates the 2026-11-14 default); Burn's two-Searing-Blaze landfall

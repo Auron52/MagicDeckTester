@@ -51584,7 +51584,9 @@ inline void PerformFetch(GameState& state, int controller_index,
         // (LandSearchPicksMemo; OnPlayFetchCandidates in DecisionProviders.cpp is the land drop's reader);
         // a legacy immediate-model fetchland keeps FetchCandidates.
         std::vector<std::string> cands;
-        if (fetch_pp.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn())
+        // A fetch_hold_human_only fetchland (Misty Rainforest) keeps the legacy list in autonomous play.
+        if (fetch_pp.land_search_activation_cost.has_value() && !LegacyFetchImmediateOn()
+            && !(fetch_pp.fetch_hold_human_only && !HumanPlayActive()))
         {
             for (const std::vector<std::string>& pick : LandSearchPicksMemo(state, controller_index, LandSearchSpecOf(fetch_pp)))
             { if (!pick.empty()) { cands.push_back(pick.front()); break; } }
