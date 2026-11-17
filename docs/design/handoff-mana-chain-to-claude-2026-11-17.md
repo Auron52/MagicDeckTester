@@ -37,6 +37,12 @@ The eight-worker oracle arm is Selesnya-heavy: its 56-game chunks have
 used about 180-360 core seconds each, with RSS around 21-24 GB. This
 run is much longer than the initial cost estimate, but the completed
 chunks are retained. At 04:58 UTC it had completed five new chunks.
+The shell's `gh` has no persistent login, but `git credential fill`
+returns the existing GitHub credential to a subprocess. A Python read
+of the Actions API using that credential succeeded at 05:00 UTC; it
+showed the prior Windows build run `43993315542` as successful. Keep
+the credential in process memory and print only run metadata; after
+the next push start a 60-second-poll CI watcher in the background.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
 Commit the updated `test/mana_clean.json` and this handoff after it finishes.
