@@ -17,7 +17,7 @@ previous clean verdict does not imply a regression. Commit the updated
 `test/mana_clean.json` with this handoff, then refresh the remaining
 stale-clean decks. Windows CI watch remains active separately.
 
-**Next active gate:** nine more previously clean decks, 5,000 games
+**Active gate, exec session `76552`:** nine more previously clean decks, 5,000 games
 each: Colossus Hammer, Critter Lifegain, Kithkin, Knights, Lifegain
 Heliod Combo, Merfolk, Modern RW Burn, Soldiers, White Knights. Command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run colossus_hammer critter_lifegain kithkin knights lifegain_heliod_combo merfolk modern_rw_burn soldiers white_knights --games 5000 --name codex-clean-refresh-newsrc-b-20261117`.
