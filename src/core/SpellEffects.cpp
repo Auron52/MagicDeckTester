@@ -3379,7 +3379,7 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         }
 
         // STORAGE LANDS (Dwarven Hold, Mercadian Bazaar) are modelled EXACTLY, not bailed. The worker
-        // bursts `min(storage_counters, shortfall)` mana of its `produces` colour in one tap, so the
+        // bursts all `storage_counters` mana of its `produces` colour in one tap, so the
         // counter count is a tight cap on what this source can ever contribute -- and StorageSourceLive
         // above has already excluded an uncharged or held land, so the count is positive here. The
         // "{T}: put a storage counter" mode makes no mana and is dominated. This is a per-PERMANENT
@@ -4776,7 +4776,7 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         // false for a Grove-style drip land's painless "{T}: Add {C}" branch (a generic pip absent
         // a Remedy) so it does not pay the opponent life; its {R}/{G} branches leave it true.
         // `storage_burn` (> 0 only for a storage-counter land) is how many counters this tap removes:
-        // the PARTIAL shortfall, not all of them, so the rest persist (mirrors the greedy tap_source).
+        // all live counters, matching TapSourceIntoFloat and the card's burst ability.
         // ENERGY is paid as part of the ACTIVATION cost (Aether Hub's "{T}, Pay {E}"), so it is
         // spent here and restored on failure like the life/counter snapshots above. `energy_spend`
         // is nonzero only on a COLOURED branch of an energy-gated source -- its free "{T}: Add {C}"
@@ -5156,12 +5156,14 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         }
         else
         {
-            // Storage-counter land: burst only the PARTIAL shortfall (cost minus what this branch has
-            // already floated), removing that many counters; the rest persist. Every other source uses
+            // Storage-counter land: one tap releases all its counters. The unused mana remains
+            // floating for later casts, exactly as in the greedy payer. Every other source uses
             // its static per-tap yield. `storage_burn` tells activate how many counters to remove.
+            static const bool s_storage_full_burst = EnvOn("MTG_STORAGE_BACKTRACK_FULL_BURST", true);
             const int storage_burn = def->params.storage_land
-                ? std::min(state.battlefield[i].storage_counters,
-                           std::max(1, cost.ManaValue() - floating.Total()))
+                ? (s_storage_full_burst ? state.battlefield[i].storage_counters
+                                        : std::min(state.battlefield[i].storage_counters,
+                                                   std::max(1, cost.ManaValue() - floating.Total())))
                 : 0;
             // Domain source (Faeburrow / Bloom Tender): one tap yields one mana of EACH colour
             // among controlled permanents -- handled as its own branch (the single-colour loop
@@ -6077,7 +6079,7 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
                 const bool elig = (dork_elig >= 0) ? (dork_elig != 0) : CanTapNow(p, state.battlefield);
                 smix(elig ? 0xE119'01ull : 0xE119'02ull, elig ? 0xE119'03ull : 0xE119'05ull);
             }
-            // Storage battery: burst amount = min(counters, shortfall) and StorageSourceLive gates on
+            // Storage battery: burst amount = all counters, and StorageSourceLive gates on
             // counters>0 + the hold flag, so a charged vs uncharged (or held) Bazaar must key apart --
             // otherwise a stored negative goes stale when the battery charges.
             if (d->params.storage_land)
@@ -6868,9 +6870,8 @@ static bool TapForCostBacktrackTop(GameState& state, const ManaCost& cost,
                 // so the counter value never needs to be part of the key -- production is
                 // counter-independent and a 0-count no-op replays as a no-op.
                 if (td->params.enters_tapped_with_depletion > 0) { DecrementDepletionOnTap(p); }
-                // Storage battery: the DFS burns only the PARTIAL shortfall, so the remainder persists.
-                // Replayed as the recorded DELTA (not "set to X"), which keeps that partiality exact on
-                // a board whose counter total differs -- and the key hashes the count, so it cannot.
+                // Storage battery: replay the recorded full burst. The key hashes the counter
+                // count, so the cached tap can only match a board with the same live yield.
                 if (td->params.storage_land && t.storage_burn > 0) { p.storage_counters -= t.storage_burn; }
                 // Deathrite Shaman: re-run the SHARED first-match exile rather than replaying a stored
                 // index. The key hashes the graveyard-land COUNT, not its contents, so this board may

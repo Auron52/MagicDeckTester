@@ -773,6 +773,28 @@ TEST_CASE("mana cache: attaching a land aura splits the key (no stale unpayable 
                               nullptr, nullptr, &leftover));
 }
 
+TEST_CASE("storage land backtracker releases every counter and caches the full burst")
+{
+    EnsureCards();
+    ManaCacheClearPerGame();
+    for (const std::string& name : { "Dwarven Hold", "Mercadian Bazaar" })
+    {
+        CAPTURE(name);
+        for (int pass = 0; pass < 2; ++pass) // second payment may replay the cached tap
+        {
+            GameState s = MakeBoard({ name });
+            s.battlefield[0].storage_counters = 3;
+            ManaPool leftover;
+            REQUIRE(TapForCostBacktrack(s, Cost(2), false, ManaPool{},
+                                        nullptr, nullptr, &leftover));
+            CHECK(s.battlefield[0].tapped);
+            CHECK(s.battlefield[0].storage_counters == 0);
+            CHECK(leftover.red == 1);
+        }
+    }
+    ManaCacheClearPerGame();
+}
+
 // A MUTED RECOMPUTE LEAVES NO TRACE (Hydras P5). Under workctr::t_mute the plan caches' priced ledger recomputes
 // what its virtual cache served (or replayed); whether that recompute runs at all depends on the real plan cache's
 // residency, so an entry it stored would let later COUNTED payments count less, and units would follow the byte pool.
