@@ -20,8 +20,8 @@ Zenith X=3 → Tamanoa → Rolling Earthquake line. The oracle has 120
 outcomes, and many pay1 frontiers **do put Tamanoa into play with
 positive life**; the report's nearest terminal-loss outcome is only the
 nearest key, not evidence that all scripts die. The exact mismatch among
-those surviving scripts still needs isolation. No source edits or
-top-level simulation batch are active.
+those surviving scripts still needs isolation. No source was edited for
+these exact replays.
 The second signature, seed `30111507` T5, was also replayed at level 3:
 `build/scratch/spirits_shock_pair_5k/pd_30111507_t5.out`. It has two
 ORACLE-GAP flags, no caps/unmodeled. The engine ends with Pyrohemia,
