@@ -3362,7 +3362,8 @@ static bool ExtraCombatMain2Exempt(const GameState& s) { return ExtraCombatSecon
 static bool HeldLandBarredFromMain2(const GameState& s, const Card& c)
 {
     return !HumanPlayActive() && s.HeldSinceMain1(c) && !GyLandfallHeldLandExempt(s)
-        && !ExtraCombatMain2Exempt(s);
+        && !ExtraCombatMain2Exempt(s)
+        && !ResolveProvider(s).Main1LandDropFolded(s);   // the provider moved the main-1 drop to main 2
 }
 static bool M2DropLive(const GameState& s)
 {
@@ -100107,10 +100108,12 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncached(const GameSt
             if (pb_lazy != nullptr) { PbLazyMaterialize(all, *pb_lazy); }
             std::vector<char> admit(all.size(), 0);
             std::size_t n_admit = 0;
+            const bool fold_land = mprov.Main1LandDropFolded(state);   // land-only plans go to the provider too
             for (std::size_t i = 0; i < all.size(); ++i)
             {
                 const TurnSolver::Plan& p = all[i];
-                if (p.actions.empty() || mprov.Main1PlanAdmitted(state, p.actions, p.land_to_play))
+                if ((p.actions.empty() && (p.land_to_play.empty() || !fold_land))
+                    || mprov.Main1PlanAdmitted(state, p.actions, p.land_to_play))
                 { admit[i] = 1; ++n_admit; }
             }
             if (sbmain1::On()) { sbmain1::Note(all.size(), n_admit); }

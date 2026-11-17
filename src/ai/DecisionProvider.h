@@ -3332,6 +3332,11 @@ public:
     // and may cache per-state facts for the Main1PlanAdmitted calls that immediately follow it (same thread, no
     // enumeration in between). A plan with no actions (the land drop alone) must always be admitted. Defaults
     // false / true -> byte-identical.
+    // Main1LandDropFolded -- with the fold live, may the root main-1 LAND-ONLY plan be dropped too (its twin is the
+    // same land played in main 2)? true also lifts HeldLandBarredFromMain2, so main 2 offers a land held since main 1.
+    // First user: Sea Creatures (MTG_SEA_MAIN1_KRAKEN_ONLY, USER 2026-11-17: "land drop also included main 1 if
+    // spawning kraken is cast"). The no-land do-nothing plan is always kept. Default false -> byte-identical.
+    virtual bool Main1LandDropFolded(const GameState& s) const { (void)s; return false; }
     virtual bool Main1PlanFoldLive(const GameState& s) const { (void)s; return false; }
     virtual bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
                                    const std::string& land_to_play) const

@@ -360,6 +360,130 @@ bool SeaCreaturesProvider::RestrictedSecondMainLive(const GameState& s) const
     return s.eot_attack_draw_n != 0;
 }
 
+// MTG_SEA_MAIN1_KRAKEN_ONLY -- the USER's main-phase shape (2026-11-17, verbatim, in order): "Another option could be
+// to cast everything main 2 except for Spawning Kraken which goes in main 1?" / "There is no haste in the deck and only
+// Spawning Kraken gives an attacking benefit that I can see." / "(and Leviathan, but that happens automatically in
+// upkeep)" / "Ah, I guess we should allow the mana spells that pay back immediately (enchantments) in main 1." / "Or
+// maybe we should do the opposite here. Conditional Main 1 on having Spawning Kraken and everything in Main 2
+// otherwise. Only mana spells that pay this turn and Spawning Kraken are allowed in main 1."
+// The deck then plays a full searched main 2 every turn (GoldFishRunner::DeckUsesSecondMain), and a ROOT main-1 plan
+// that casts anything is admitted only when it casts Spawning Kraken (combat_damage_tokens_per_trigger with a
+// subtype watch) and every other cast is a mana spell that pays back this turn: a land Aura with extra mana, or a
+// rock that enters untapped and makes at least its mana value (Sol Ring; NOT Worn Powerstone, which enters tapped).
+// Non-cast actions ride along only inside a Kraken plan. Everything refused has its main-2 twin (land-only main 1,
+// the same casts after combat): no haste in the list, every body cast this turn is summoning sick, lands and rocks
+// keep their mana through combat, Leviathan's chapters advance at the precombat main whatever the cast timing.
+// MTG_SEA_MAIN1_KRAKEN_ATTACKER (agent refinement, measured for the USER): the Kraken plan is admitted only when a
+// creature of a watched subtype can attack this turn -- without one, the main-2 Kraken is the same.
+bool SeaMain1KrakenOnlyOn()
+{
+    static const bool e = EnvOn("MTG_SEA_MAIN1_KRAKEN_ONLY", false);   // DEFAULT OFF pending the USER
+    return heurarm::Flag(heurarm::SEA_MAIN1_KRAKEN_ONLY, e);
+}
+static bool SeaMain1KrakenAttackerOn()
+{
+    static const bool e = EnvOn("MTG_SEA_MAIN1_KRAKEN_ATTACKER", false);  // DEFAULT OFF (agent refinement)
+    return heurarm::Flag(heurarm::SEA_MAIN1_KRAKEN_ATTACKER, e);
+}
+static bool SeaIsPaybackMana(const CardDefinition& d)
+{
+    if (d.params.is_land_aura && d.params.land_aura_extra_mana > 0) { return true; }
+    return d.params.mana_rock && !d.params.enters_tapped
+        && d.params.produces_amount >= d.card.m_mana_cost.ManaValue();
+}
+static bool SeaIsSpawningKraken(const CardDefinition& d)
+{
+    return d.card.IsCreature() && d.params.combat_damage_tokens_per_trigger > 0
+        && !d.params.combat_damage_watch_subtypes.empty();
+}
+// A creature of the Kraken's watched subtypes (Kraken / Leviathan / Octopus / Serpent) that can attack this turn.
+static bool SeaKrakenAttackerReady(const GameState& s, const CardDefinition& kraken)
+{
+    const int me = s.active_player_index;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != me || (!p.card.IsCreature() && !p.is_animated)) { continue; }
+        if (p.card.HasKeyword(Keyword::Defender)) { continue; }
+        if (!(p.is_animated || p.card.HasKeyword(Keyword::Haste)) && (p.entered_this_turn || p.gained_control_this_turn))
+        { continue; }
+        for (const std::string& st : kraken.params.combat_damage_watch_subtypes)
+        { if (CardHasSubtype(p.card, st)) { return true; } }
+    }
+    return false;
+}
+bool SeaCreaturesProvider::Main1PlanFoldLive(const GameState& /*s*/) const
+{
+    return SeaMain1KrakenOnlyOn() && !HumanPlayActive();
+}
+// The land drop follows the Kraken: main 1 only in a Kraken plan, main 2 otherwise (USER 2026-11-17: "land drop also
+// included main 1 if spawning kraken is cast"; "We should only consider them in one of the two to avoid unnecessary
+// branches."). Lifts HeldLandBarredFromMain2 while the rule is on.
+bool SeaCreaturesProvider::Main1LandDropFolded(const GameState& s) const { return Main1PlanFoldLive(s); }
+bool SeaCreaturesProvider::Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                                             const std::string& land_to_play) const
+{
+    if (actions.empty()) { return land_to_play.empty(); }      // a land-only main 1: its drop is main 2's
+    const CardDefinition* kraken = nullptr;
+    for (const Action& a : actions)
+    {
+        if (a.kind != Action::Kind::CastFromHand) { continue; }
+        const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+        if (d == nullptr) { return true; }                       // a cast we cannot read: never fold blind
+        if (SeaIsSpawningKraken(*d)) { kraken = d; continue; }
+        if (!SeaIsPaybackMana(*d)) { return false; }             // its main-2 twin carries it
+    }
+    if (kraken == nullptr) { return false; }                     // no Kraken: the whole plan goes to main 2
+    // One place for the drop (the USER's dedup): a Kraken plan that leaves an open drop unused while a land is in hand
+    // is the twin of the same plan with that land, so only the with-land plans stay.
+    if (land_to_play.empty())
+    {
+        const Player& ap = s.ActivePlayer();
+        if (ap.lands_played_this_turn < ap.LandDropsAvailable())
+        {
+            for (const Card& c : ap.hand)
+            {
+                const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+                if (d != nullptr && d->card.IsLand()) { return false; }
+            }
+        }
+    }
+    return !SeaMain1KrakenAttackerOn() || SeaKrakenAttackerReady(s, *kraken);
+}
+// MAIN 2 under the rule (USER 2026-11-17, verbatim: "I guess it's true that whatever we draw off Summon: Leviathan
+// still has to be considered main 2. My ideal split there doesn't work perfectly because mana things need to be
+// reconsidered. However, we don't need to reconsider lands we didn't draw." / "(or any other mana card)" / "This is
+// just for new card types or additional copies of things we already played."). On a KRAKEN TURN -- a Spawning Kraken
+// held since main 1 entered this turn BEFORE combat (its battlefield slot is below battlefield_at_combat) -- a Kraken
+// or payback-mana card held since main 1 was main 1's to cast, so main 2 does not offer it again; a card that arrived
+// after main 1 (a Leviathan draw: a new card or another copy) is always offered. On every other turn main 1 cast
+// nothing, so main 2 keeps the full menu. Lands need nothing here: a Kraken plan takes the open drop with it.
+bool SeaCreaturesProvider::RestrictsMain2Casts() const { return SeaMain1KrakenOnlyOn(); }
+bool SeaCreaturesProvider::Main2CastAllowed(const GameState& s, const Action& a) const
+{
+    if (!SeaMain1KrakenOnlyOn() || HumanPlayActive()) { return true; }
+    const Player& ap = s.ActivePlayer();
+    if (a.hand_index < 0 || a.hand_index >= static_cast<int>(ap.hand.size())) { return true; }
+    const Card& hc = ap.hand[static_cast<std::size_t>(a.hand_index)];
+    if (!s.HeldSinceMain1(hc)) { return true; }                   // arrived after main 1: reconsidered
+    const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+    if (d == nullptr || !(SeaIsSpawningKraken(*d) || SeaIsPaybackMana(*d))) { return true; }
+    const int me = s.active_player_index;
+    const int at_combat = s.battlefield_at_combat;
+    for (int i = 0; i < static_cast<int>(s.battlefield.size()) && (at_combat < 0 || i < at_combat); ++i)
+    {
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(i)];
+        if (p.controller_index != me || !p.entered_this_turn || p.def_absent || !s.HeldSinceMain1(p.card)) { continue; }
+        const CardDefinition* pd = CardDatabase::Instance().LookupCached(p.card);
+        if (pd == nullptr || !SeaIsSpawningKraken(*pd)) { continue; }
+        // A Kraken turn: main 1 had this card -- unless an identical copy arrived after main 1 (an identity fold
+        // may have kept the held copy's hand slot for both), which main 2 must still offer.
+        for (const Card& c : ap.hand)
+        { if (c.m_name == hc.m_name && !s.HeldSinceMain1(c)) { return true; } }
+        return false;
+    }
+    return true;
+}
+
 // The fetch rule's rank: Breeding Pool, then Island / Forest (MTG_SEA_FETCH_ISLAND_FIRST), then Hedge Maze (Q2,
 // agent default), then anything else. Each fetch's legal set does the rest: Windswept Heath has no Island and
 // Flooded Strand no Forest, so the same rank serves all three.

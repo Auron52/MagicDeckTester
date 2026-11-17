@@ -719,6 +719,16 @@ public:
     // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }
+    // MTG_SEA_MAIN1_KRAKEN_ONLY (USER 2026-11-17): main 1 casts only for Spawning Kraken (+ mana that pays back this
+    // turn); everything else is folded to main 2, which the deck then plays every turn (DeckUsesSecondMain).
+    bool Main1PlanFoldLive(const GameState& s) const override;
+    bool Main1LandDropFolded(const GameState& s) const override;
+    // ...and main 2 does not reconsider, on a Kraken turn, the Kraken / payback mana held since main 1 (USER 2026-11-17:
+    // "we don't need to reconsider lands we didn't draw (or any other mana card)").
+    bool RestrictsMain2Casts() const override;
+    bool Main2CastAllowed(const GameState& s, const Action& a) const override;
+    bool Main1PlanAdmitted(const GameState& s, const std::vector<Action>& actions,
+                           const std::string& land_to_play) const override;
     CertStance Certificate() const override
     { return { CertState::NotAssessed,
                "NOT ASSESSED. A sound winless-turn bound must price every sea creature that can still swing this "
@@ -2806,6 +2816,8 @@ public:
 // restriction AND GoldFishRunner::DeckUsesSecondMain's whitelist entry: a per-job flag that reached only one
 // half would refuse the casts in main 1 with no second main to catch them -- DELETING them, not moving them.
 bool MartyrMainSplitOn();
+// MTG_SEA_MAIN1_KRAKEN_ONLY (env + heurarm slot): read by GoldFishRunner::DeckUsesSecondMain for Sea Creatures.
+bool SeaMain1KrakenOnlyOn();
 
 // The new Jumbo Cactuar and Surrak mechanics identify this deck without
 // inheriting another archetype's judgement hooks.

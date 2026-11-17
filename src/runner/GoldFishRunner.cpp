@@ -66,6 +66,11 @@ bool GoldFishRunner::DeckUsesSecondMain(const Decklist& deck)
     // the per-item loop CLAUDE.md forbids. As a per-job override both arms ride ONE pooled batch.
     static const bool s_force_m2 = EnvOn("MTG_FORCE_USES_M2");
     if (heurarm::Flag(heurarm::FORCE_USES_M2, s_force_m2)) { return true; }
+    // SEA CREATURES main-phase shape (MTG_SEA_MAIN1_KRAKEN_ONLY, USER 2026-11-17; SeaCreaturesProvider::
+    // Main1PlanAdmitted): main 1 casts only for Spawning Kraken, so every other cast lives in a main 2 the deck must
+    // play every turn. Provider-scoped (the MartyrLifegain shape below), so no other deck's main phases move.
+    if (SeaMain1KrakenOnlyOn() && dynamic_cast<const SeaCreaturesProvider*>(&SelectDecisionProvider(deck)) != nullptr)
+    { return true; }
     for (const Card& c : deck.mainboard)
     {
         const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
