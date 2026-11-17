@@ -75,6 +75,7 @@ implementer agent per step, serial.
 | 8 | Nomads en-Kor shields (sweeper rider) | DONE a4f820e2a (unit 3441, scen 573/573, smoke 0/219 moved vs 7; shield allocation = pins chosen at sweep resolution (dmgrx::AddShieldRider/PinnedChoice), shields live on the damage Batch (no GameState list); tie fold narrower than §4.2 (face-only reflectors folded; Reckoner/Nemesis/GC'd/Doll-chose-us kept apart); autonomous play never redirects onto a live non-reflector (viewer `divide` still offers all); Nomads+Act+Doll = 26 kills T4, control fixture leaves opp at 8; Q-R1 default: shield to a departed target not spent (CR 614.9)) |
 | 9 | Shaman en-Kor {1}{W} pull | DONE 268e96f4a (unit 3447, scen 576/576, smoke 0/219 moved vs 8; pulls on the damage Batch applied before shields (CR 616.1); count/targets searched with folds P0-P3; {1}{W} paid at sweep resolution via TapForCostDirect, offered only while affordable; Shaman pull Spirit kill from 39 T4, Nomads control no win by T6) |
 | 10 | StuffyDollProvider + ExtraLethalDamage | IN PROGRESS (~20:15 UTC) |
+| 9b | Shaman pull from ANY damage source in the engine; provider prunes to our sweeper + P0-P3 (USER 20:30) | pending (after 10) |
 | 11 | second main (Q-U4) | pending |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
@@ -87,6 +88,11 @@ deferrals provisional.
   and folds P0-P3 (P1 argued against the full shield allocation). These leave PROVISIONAL status. The rest of Q-U1
   (Reckoner first strike, Loran's hexproof, planeswalker targets, Nemesis lock, Nomads shields only as a sweeper
   rider, canonical trigger order) is still open.
+- USER RULING 2026-11-17 ~20:30 UTC (verbatim, refines the one above): "My take on the pull is that it should be
+  possible to pull from any source that is damaged, but we should heuristically prune it to what you said."
+  => ENGINE models the pull for ANY damage source (sweepers, reflection triggers, GC, Doll self-ping, combat);
+  the StuffyDollProvider RESTRICTS it to our-sweeper source + P0-P3 (restrict-only heuristic; lifted by
+  MTG_UNPRUNE / human play; the viewer offers every source). Scheduled as step 9b, right after step 10.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
