@@ -163,6 +163,11 @@ deferrals provisional.
 - USER (~21:14, verbatim): "Yes, that sounds good regarding Loran's Escape." => Loran's Escape target is a PRUNE:
   when a creature carrying Guilty Conscience exists, the provider RESTRICTS the Escape's targets to it (restrict-only;
   lifted by MTG_UNPRUNE / human play; with none, the engine's folded target list stands).
+- USER (~21:35, verbatim): "I would prune Loran's Escape even when we have no guilty conscience to one creature or
+  perhaps even not castable. It is essentially a Scry 1." => with no GC'd creature, the provider RESTRICTS the
+  Escape to ONE target (it is cast as a {W} scry 1: prefer the engine's no-effect/scry-only fold target, else a single
+  reflector). Kept castable (default) rather than pruned outright, since the scry digs for combo pieces; "not
+  castable" is the USER's alternative if the measurement shows the scry line wastes budget.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
