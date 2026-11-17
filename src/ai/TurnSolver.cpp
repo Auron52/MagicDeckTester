@@ -8110,6 +8110,10 @@ inline long long Quantity(const GameState& state)
         const int mine = std::clamp(state.players[state.active_player_index].life, 0, 999);
         q -= static_cast<long long>(mine) * 1000LL;
     }
+    // ALTERNATE-WIN PROGRESS (DecisionProvider::NoWinLeafProgress; default 0, so every other deck is
+    // byte-identical): the deck's non-damage progress, stated LIFE-EQUIVALENT in this quantity's own units.
+    // Maze's End P1b: ten Gate names are its twenty life, and without this every no-win leaf tied.
+    q -= ResolveProvider(state).NoWinLeafProgress(state);
     // Secondary terms sit strictly UNDER the life term (a board count cannot reach 1000), so life
     // always outranks development -- these only order positions the life term ties.
     if (TbBoard() || TbPerms() || TbNonland())
@@ -48696,6 +48700,9 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.tutor_target = target;
                         a.cost = cost;
                         a.is_noncreature = true;
+                        // The fetch's plan-scoring value (DecisionProvider::TapTutorPutEval; default 0, so
+                        // Seahunter and every other deck are byte-identical). Maze's End P1b: a new Gate name.
+                        a.eval = ResolveProvider(state).TapTutorPutEval(state, *sd, target);
                         if (entry_pin >= 0) { a.chosen_x = entry_pin + 1; }
                         actions.push_back(std::move(a));
                     };
@@ -59677,9 +59684,11 @@ static int DropGreedyDominatedUntapCounts(const std::vector<Action>& cands, std:
 // LOWER candidate index -- the FIRST-emitted target, which is the provider's order (MazesEndProvider::
 // TapTutorPutCandidates: a new Gate name first). The later variants can never be the walk's choice; walking
 // them multiplies every subset of the turn by the group's width for nothing. They are dropped from the walk's
-// GROUPS only (`cands` untouched), so the walk returns what it returned before byte for byte while the
-// candidates fit its 31-bit tie-break mask; past it the old tie was resolved by an aliased bit pattern and
-// the fold resolves it to the first target -- another member of a set the greedy scores as exactly equal.
+// GROUPS only (`cands` untouched), and the kept member is the one the walk's tie-break prefers, so the walk
+// returns exactly what the unfolded walk returns. That needed the tie-break to be CANONICAL: past 32
+// candidates the int mask aliased and the winner among exact ties depended on visit order (P1b: 75,881 of
+// 186,698 walks differed, all past 31 candidates). CanonSubsetMaskLess fixes the order; MTG_GREEDY_FOLD_VERIFY
+// then reads 0 of 99,174 walks differing (seed 91005 gi4 d3 b10).
 // The SEARCHED walk (EnumeratePlans) keeps every target: in the window, which Gate is fetched is a real
 // choice the rollout scores. Scoped to the return-self form (Maze's End): Seahunter's TapTutorPut feeds
 // Merfolk projections that read the target, so it keeps its full family. Stands down with a learned d0
@@ -59704,15 +59713,44 @@ struct Dumper
 };
 inline Dumper g_dumper;
 }
+// CANONICAL "SMALLEST MASK" TIE-BREAK past 32 candidates (Maze's End P1b, 2026-11-17). The greedy walk breaks an
+// exact (wins, rank) tie by the smaller int subset mask, but `1 << j` wraps once j reaches 32, so two different
+// subsets can alias to one mask (or compare in a different order than their real bits) and the winner then
+// depends on which was VISITED first -- any fold that changes the visit order changes the pick among exactly
+// tied subsets (MTG_GREEDY_FOLD_VERIFY: 75,881 of 186,698 Maze's End walks differed, every one past 31
+// candidates, 0 at or under). This compares the two sorted index sets as their UN-ALIASED masks would compare
+// as a signed int: the highest index in exactly one set decides, the set holding it is LARGER, except index 31
+// (the sign bit), whose holder is SMALLER. For sets inside 0..31 that is exactly `mask < best_mask`, so a walk
+// with no index >= 32 is byte-identical; past it the order is a strict total order, independent of visit order.
+// `best_mask == INT_MAX` with an empty best is the attack-only sentinel (any real subset replaces it).
+static bool CanonSubsetMaskLess(const std::vector<int>& a, const std::vector<int>& b, int b_mask)
+{
+    if (b.empty() && b_mask == std::numeric_limits<int>::max()) { return true; }
+    std::size_t i = a.size(), k = b.size();
+    while (i > 0 && k > 0)
+    {
+        const int x = a[i - 1], y = b[k - 1];
+        if (x == y) { --i; --k; continue; }
+        const int hi = x > y ? x : y;           // the highest index in exactly one set
+        const bool hi_in_a = (hi == x);
+        return hi == 31 ? hi_in_a : !hi_in_a;
+    }
+    if (k > 0) { return b[k - 1] == 31 ? false : true; }   // b has the extra (highest remaining) index
+    if (i > 0) { return a[i - 1] == 31; }
+    return false;
+}
+
 static int DropGreedyTutorTargetTies(const std::vector<Action>& cands, std::vector<std::vector<int>>& groups)
 {
     int dropped = 0;
     static thread_local std::vector<std::uint64_t> seen;
     static thread_local std::vector<int> kept;
+    static thread_local std::vector<std::size_t> seen_pos;
     for (std::vector<int>& gp : groups)
     {
         if (gp.size() < 2) { continue; }
         seen.clear();
+        seen_pos.clear();
         kept.clear();
         for (int j : gp)
         {
@@ -59723,8 +59761,18 @@ static int DropGreedyTutorTargetTies(const std::vector<Action>& cands, std::vect
                 std::uint64_t k = UntapKDomKey(a);
                 FoldMix(k, 0x7E70ull + static_cast<std::uint64_t>(a.ability_mode));
                 FoldMix(k, static_cast<std::uint64_t>(static_cast<std::int64_t>(a.eval)));
-                if (std::find(seen.begin(), seen.end(), k) != seen.end()) { ++dropped; continue; }
+                const auto it = std::find(seen.begin(), seen.end(), k);
+                if (it != seen.end())
+                {
+                    // Keep the member the walk's tie-break prefers (CanonSubsetMaskLess): the lowest index,
+                    // except that index 31 (the mask's sign bit) beats every other.
+                    int& rep = kept[seen_pos[static_cast<std::size_t>(it - seen.begin())]];
+                    if (j == 31 || (rep != 31 && j < rep)) { rep = j; }
+                    ++dropped;
+                    continue;
+                }
                 seen.push_back(k);
+                seen_pos.push_back(kept.size());
             }
             kept.push_back(j);
         }
@@ -61133,6 +61181,7 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
         if (shape != nullptr) { shapestats::Bump(shape->passed); ++callf.passed; }
         int mask = 0;
         for (int j : sel) { mask |= (1 << j); }
+        const bool sel_wide = !sel.empty() && sel.back() >= 32;   // `sel` is sorted: the int mask aliases
 
         ManaCost combined;
         ManaCost noncreature_combined;
@@ -62177,6 +62226,8 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                  && verified_win != std::binary_search(best_sel.begin(), best_sel.end(), route_win_j))
         { better = verified_win; }                                               // a VERIFIED win dominates a projected one
         else if (rank_value != best.value) { better = rank_value > best.value; } // then higher (learned) value
+        else if (sel_wide || (!best_sel.empty() && best_sel.back() >= 32))   // either mask aliases
+        { better = CanonSubsetMaskLess(sel, best_sel, best_mask); }
         else                               { better = mask < best_mask; }        // tie -> smallest mask
         if (!better) { return; }
         // The deferred land-Aura payer (MTG_SOLVE_AURA_PAYER_DEFER): asked only now, of a subset that
@@ -63210,7 +63261,10 @@ TurnSolver::Plan TurnSolver::SolveUncachedBody(const GameState& state, bool is_p
                                 && independent[b] < 31;
                 if (inert) { inert_mask |= 1u << independent[b]; }
             }
-            if (call_ok && inert_mask != 0)
+            // The cache key is the int subset mask, which ALIASES once a candidate index reaches 32 (1 << j
+            // wraps): two different subsets visited back to back could share a key and the second would inherit
+            // the first's verdict. Armed only while every index has its own bit (Maze's End P1b, 2026-11-17).
+            if (call_ok && inert_mask != 0 && cands.size() <= 32)
             {
                 mana_inert_ind_mask = inert_mask;
                 mana_cache_on       = true;

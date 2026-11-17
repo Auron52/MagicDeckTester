@@ -985,6 +985,8 @@ enum Slot : int
     SEA_MAIN1_KRAKEN_ATTACKER,// MTG_SEA_MAIN1_KRAKEN_ATTACKER  refinement of SEA_MAIN1_KRAKEN_ONLY (agent-proposed, measured for the USER): the main-1 Kraken plan is admitted only when a creature of a watched subtype (Kraken / Leviathan / Octopus / Serpent) can attack this turn -- otherwise its main-2 twin is identical. Default OFF; only read under SEA_MAIN1_KRAKEN_ONLY
     SEA_STEAL_CREATURE,       // MTG_SEA_STEAL_CREATURE  Sea Creatures, Kiora Bests the Sea God III (USER 2026-11-17: "The steal should be used on a creature if the opponent has one." / "I mean a land is better than nothing as well, but probably less useful than a creature. I guess a 1/1 is arguable." / "Maybe take a land if we don't yet have 8 mana." / "(or consider it)"): with 8+ mana available and an opposing creature of power >= 2 among the targets, the searched steal list keeps only the creatures (the search still chooses among them); below 8 mana, or with only <= 1-power creatures, lands stay searched beside them. Default ON (USER ruling); =0 -> the root list (sound folds only); MTG_UNPRUNE=sagasteal lifts both
     LINE_SPARE_STORAGE,       // MTG_LINE_SPARE_STORAGE  USER 2026-11-18 ("For Dragonstorm it should spend the counters if they are required for the line."): the LINE_FLOAT_TAP_FIRST rung pays its held generic pips off a charged STORAGE land (Mercadian Bazaar) when the drain would otherwise eat a floating colour the named line owes that no other untapped source makes and the plain spares cannot keep it (LineFloatTapFirstPlan, ManaPayment.cpp). Dragonstorm s30086338 T6: Apex of Power's {7} ate Lotus Bloom's {B} and Dragonlord Kolaghan was dropped. Default ON; =0 -> storage never spare
+    MAZE_LEAF_PROGRESS,       // MTG_MAZE_LEAF_PROGRESS    Maze's End P1b: the graded no-win leaf subtracts the deck's alternate-win PROGRESS (distinct Gate names controlled, life-equivalent 2 per name, plus Maze's End held and new-name Gates in hand under it) -- MazesEndProvider::NoWinLeafProgress. Evaluation, not a prune. Default ON; =0 -> opponent life alone (every no-win leaf ties)
+    MAZE_FETCH_EVAL,          // MTG_MAZE_FETCH_EVAL       Maze's End P1b: a Maze's End activation that fetches a NEW Gate name carries plan eval 200 (MazesEndProvider::TapTutorPutEval), so the greedy walk (beyond-horizon playout / d0 runner) prefers making progress over leaving the {3} idle; a duplicate name or the fail-to-find stays 0. Default ON; =0 -> every fetch 0
     COUNT
 };
 
@@ -1914,6 +1916,8 @@ inline const char* Name(int slot)
         "MTG_SEA_MAIN1_KRAKEN_ATTACKER",
         "MTG_SEA_STEAL_CREATURE",
         "MTG_LINE_SPARE_STORAGE",
+        "MTG_MAZE_LEAF_PROGRESS",
+        "MTG_MAZE_FETCH_EVAL",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

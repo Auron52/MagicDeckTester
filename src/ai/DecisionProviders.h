@@ -4879,6 +4879,9 @@ public:
     // P1: ProjectsAlternateWin reads the board only (`casting` is ignored -- see its body), so the walks ask it
     // once per call (a pure per-node fix; byte-identical).
     bool AlternateWinProjectionIgnoresCasting() const override { return true; }
+    // P1b: alternate-win progress (Gate names) in the no-win leaf, and a new-name fetch scored in the plan walk.
+    long long NoWinLeafProgress(const GameState& s) const override;
+    int TapTutorPutEval(const GameState& s, const CardDefinition& source, const std::string& target) const override;
     // I4: the Gate tap ORDER (Guild Summit, Heap Gate's cost): pure-mana Gates first, Baldur's Gate next, a Gate
     // with a live non-mana {T} ability last; ManaSourceRank inside each tier (ledger decisions 10 / 30).
     void EtbTapSubtypeOrder(const GameState& s, int controller, std::vector<int>& idx) const override;
