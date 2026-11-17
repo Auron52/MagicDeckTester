@@ -4,6 +4,19 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 04:01 UTC
 
+The final three stale-clean decks are in one pooled PGO gate as the only
+active simulation batch, exec session 4701:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run martyr_lifegain prevent_damage spirits --games 5000 --name codex-clean-refresh-heavy-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_heavy_gate.out`.
+Read `logs/mana_clean/codex-clean-refresh-heavy-20261117/report.md` on
+completion, update this handoff, and commit `test/mana_clean.json`.
+Their prior combined measured cost is about 10 seconds per paired game;
+this batch may take considerably longer than the earlier refreshes.
+
 **Second pooled fresh PGO gate complete:** 5,000 games each for 13
 decks at source `fcb9352608ea`, oracle-on/off play byte-identical.
 Auras, Colossus Hammer, Critter Lifegain, Kithkin, Knights, Lifegain
