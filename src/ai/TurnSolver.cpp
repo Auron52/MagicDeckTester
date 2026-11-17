@@ -122777,6 +122777,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         for (int k = kfrom; k <= kto; ++k)
         {
             double est_k = 0.0;
+            long long beyond = 0;   // > 0: this pass is past the predicted reach, with this allowance
             if (!unl && k >= 2)
             {
                 const double ratio = cm2 > 0.0 ? cm1 / cm2 : kDefaultGrowth;
@@ -122787,9 +122788,14 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
                     const double lk1 = k - 1 < 16 ? static_cast<double>(p18_wl[k - 1]) : 0.0;
                     const double lk2 = k - 2 >= 1 && k - 2 < 16 ? static_cast<double>(p18_wl[k - 2]) : 0.0;
                     const double lest = lk2 > 0.0 ? lk1 * lk1 / lk2 : lk1 * kDefaultGrowth;
-                    const bool ext = (p18_pkt && k == kto) || (p18_plx && k < kto && lest <= cm1);
+                    // Past the reach a pass gets a SMALL allowance: a tenth of the decision budget (_pkt's target pass is
+                    // usually cheap because its first in-window win exits it, but on Five Colour a target pass ran to the
+                    // whole remaining budget, 17 times in 100 games, with no win).
+                    const double allow = 0.1 * static_cast<double>(budget->Limit());
+                    const bool ext = (p18_pkt && k == kto) || (p18_plx && k < kto && lest <= cm1 && lest <= allow);
                     if (!ext) { p16::Rec('W', k, 0, 0, 4, max_turns + 1, 0); break; }
                     est_k = 0.0;   // no per-pass cap (_pwc) from a rollout estimate past the reach
+                    beyond = static_cast<long long>(allow);
                 }
                 if (p18_pfp)
                 {
@@ -122806,6 +122812,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             long long cap_k = cap_abs;
             if (cap_k > 0 && p18_pwc > 0.0 && est_k > 0.0)
             { cap_k = std::min(cap_k, w0 + std::max(1LL, static_cast<long long>(p18_pwc * est_k))); }
+            if (cap_k > 0 && beyond > 0) { cap_k = std::min(cap_k, w0 + std::max(1LL, beyond)); }
             if (cap_k > 0) { budget->SetOverrunLimit(cap_k); }
             SearchLine pr;
             {
@@ -122893,16 +122900,18 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
             // leaves the ladder's own K (Hinata 13220014 T1: pass 1 9125 -> 246 units after the root rollout; Gods
             // 13210007 T1: a pass 3 the ladder refuses). Under their own epoch the lookahead's entries can never hit
             // after it, so a miss hands the ladder exactly the memo state it would have had.
+            static const int s_p18_iso = EnvInt("MTG_P18_ISO", 0);   // DIAGNOSTIC bits: 1 no epoch isolation, 2 no store block
             struct EpochIsolate
             {
-                uint64_t saved;
-                EpochIsolate() : saved(g_decision_epoch)
-                { static thread_local uint64_t n = 0; g_decision_epoch = (1ULL << 63) | ++n; }
-                ~EpochIsolate() { g_decision_epoch = saved; }
-            } _p18_epoch;
+                uint64_t saved; bool on;
+                explicit EpochIsolate(bool o) : saved(g_decision_epoch), on(o)
+                { static thread_local uint64_t n = 0; if (on) { g_decision_epoch = (1ULL << 63) | ++n; } }
+                ~EpochIsolate() { if (on) { g_decision_epoch = saved; } }
+            } _p18_epoch((s_p18_iso & 1) == 0);
             // ...and no store into the game-level caches or the content-pure plan/mana caches (workctr mute: their
             // stores consult StoresAllowed). The lookahead still READS them.
-            struct NoStore { NoStore() { ++p18::t_nostore; ++workctr::t_mute; } ~NoStore() { --p18::t_nostore; --workctr::t_mute; } } _p18_nostore;
+            struct NoStore { bool on; explicit NoStore(bool o) : on(o) { if (on) { ++p18::t_nostore; ++workctr::t_mute; } }
+                             ~NoStore() { if (on) { --p18::t_nostore; --workctr::t_mute; } } } _p18_nostore((s_p18_iso & 2) == 0);
             // One rollout of the root: if it already wins inside the window, walk leafless to the depth that win
             // needs before any rollout pass; else (or on a miss) the heuristic ladder from pass 1, trigger armed.
             const long long u0 = budget ? budget->Used() : 0;

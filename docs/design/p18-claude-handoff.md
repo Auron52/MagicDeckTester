@@ -135,3 +135,17 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   kill the fast-deck savings. P13 (16 decks x 20, seeds 13,000,000+): m4_pnm 1.0097x heur CPU, 0 earlier / 0 later;
   fast decks 0.43-0.89x, budget-bound decks 0.99-1.05x except Melira 1.115x (one 65k leafless pass-3 bet lost).
 - Running: P14 `_paw` (walk to depth when the root rollout shows no in-window win, mode 3's reach, still priced + refunded).
+- P15 (16 decks x 20): `_pnm_pkt_plx` 1.0016x CPU / 0.992x units, 0/0 -- fast-deck savings back near mode 3 (Angels 0.44,
+  Critter 0.43, TH 0.57, WK 0.41). A cached root rollout (0 units) walked pass 1 only: 7 hits in 333 walks -> no walk.
+  Mode 4 now = llw+lrf+llr+nmw+pkt+plx (committed WIP).
+- S2 (56 decks x 100, seeds 14,000,000+, shipped settings, binary mtg_j19; `build/scratch/p18g/S2/summary.txt`):
+  m4 vs heur 2 earlier / 0 later, units 0.960x, CPU 1.036x. Rollout-heavy decks 0.35-0.83x; budget-bound 1.00-1.04x.
+  Two outliers: Gods 1.64x CPU at 1.00x units = ONE game (gi=35, seed 14210035, digest differs from heur, 316 s CPU
+  for 299k units -- repro manifest /tmp/g35.json; profile it); Five Colour 1.22x units = 17 walks past the reach that
+  ran to the whole remaining budget (`_plx` admitted an over-priced pass; W4 33k).
+- UNCOMMITTED at compaction: past-reach passes (`_pkt` target / `_plx`) get an allowance of 0.1 x Limit (cap) and
+  `_plx` also needs lest <= that allowance (fixes Five Colour). Diagnostic env MTG_P18_ISO (bits 1 no epoch iso,
+  2 no store block) and MTG_P18_ZX (1 root rollout only, 2 none) must be REMOVED before shipping. Build in flight.
+- NEXT: rebuild; repro Gods gi35 (MTG_P18_ISO variants, then perf on build/Profile); re-run S2-style 56-deck screen;
+  if clean (no later game, CPU <= heur on every deck), held-out confirm, then unit tests + smoke/regression GT and
+  decide default vs opt-in. Strip dead knobs (_pfp, _pwc, _paw, _pllt-with-llw, mid-walk if unused).
