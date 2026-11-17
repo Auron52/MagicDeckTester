@@ -19,6 +19,10 @@
 * *"(die or put yourself at an easy life breakpoint like 3 life vs burn)"* -- the breakpoint case needs an
   opponent that can punish low life, so it is a Phase-2 (real opponent) concern; against the passive
   goldfish opponent only the lethal case can arise.
+* *"But yeah, in those cases we need to hold, but essentially the land becomes useless and only becomes
+  useful again if we can change the situation."* -- so the life-forced hold is not a searched timing
+  branch: the fetch is simply uncrackable (a land that makes no mana) until the life situation changes,
+  and should be modelled that way rather than as a hold decision.
 
 ## What this means
 
