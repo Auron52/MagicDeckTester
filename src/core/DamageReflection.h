@@ -1271,11 +1271,14 @@ inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent&
 // Human play: one `target` prompt per puller (any number of creatures up to what the mana affords, either side,
 // every creature but the puller itself and those an earlier puller took; default = the engine's picks).
 // Option ids on the pin stream: kPullPinBase - from (from = the target's m_number; 0 = stop). Disjoint from the
-// shield codes (above kPullPinBase - 2^17 > kCombatPinMark, below every shield code) and from every player/card id.
+// shield codes (above kPullPinBase - 2^28 = -0x30000000 > kCombatPinMark, below every shield code, the lowest of
+// which is -0x18000000) and from every player/card id. The range is 2^28, not 2^17: the passive opponent's
+// scheduled spawns are numbered from GameState::kFirstOppSpawnNumber (500000), and a pull on one aborted (found
+// by step 10's d0 sanity batch).
 inline constexpr int kPullPinBase = -0x20000000;
 inline int PullCode(int from)
 {
-    if (from < 0 || from >= (1 << 17))
+    if (from < 0 || from >= (1 << 28))
     {
         std::fprintf(stderr, "[rfx] FATAL: Shaman en-Kor pull target %d cannot be encoded\n", from);
         std::abort();

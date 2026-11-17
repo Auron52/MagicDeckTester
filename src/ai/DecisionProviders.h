@@ -4173,6 +4173,36 @@ public:
     const char* Name() const override { return "RedElementals"; }
 };
 
+// STUFFY DOLL (damage reflection into a sweeper; docs/design/damage-reflection-pipeline.md section 8,
+// step 10). The deck rode ModernRwBurnProvider BY ACCIDENT (Arid Mesa's fetch_land_types sets `anti`, the
+// NAME "Inspiring Vantage" sets `modern_rw_burn`). DeckProvider (== Generic) plus three things:
+//   * ReflectTargetCandidates: the SOUND folds F2 / F3 of design 4.1 (stated at the definition), the
+//     opponent-creature restriction behind MTG_STUFFY_OPP_CREATURE_PRUNE (a HEURISTIC narrowing, default
+//     OFF until measured -- design 4.1's PROVISIONAL Stage 5e item), and the ORDER "indestructible Guilty
+//     Conscience host first" (the infinite amplifier; only the FRONT is read, and only where a one-shot
+//     policy is permitted -- beyond the horizon and in the depth-0 runner). MTG_UNPRUNE=reflecttarget and
+//     human play (the engine does not consult the hook there) see every legal target.
+//   * ExtraLethalDamage (design section 5): a sweeper deals 0 to the face directly, so the greedy picker's
+//     lethal sum could not see that an Act into a reflector wins. Optimistic by contract; execution decides.
+//   * Certificate() = NotAssessed (design section 8's bound is a later, separately measured step).
+// Cast order is the GENERIC default (USER-OWNED, Q-U5: no ranking is authored here).
+class StuffyDollProvider : public DeckProvider
+{
+public:
+    void ReflectTargetCandidates(const GameState& s, int src_number, int controller, int amount, int kind,
+                                 std::vector<int>& io) const override;
+    bool HasExtraLethalModel() const override { return true; }
+    int  ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed,
+               "NOT ASSESSED. A sweeper (Blasphemous Act 13, Chain Reaction = creatures at resolution) is multiplied "
+               "by every reflector it hits (Spiteful Sliver instances stack), every en-Kor shield forwards its own "
+               "share, every affordable Shaman pull adds a creature's share, and a Guilty Conscience on an "
+               "indestructible reflector (Stuffy Doll, a Loran's Escape target) is an unbounded loop. Design "
+               "section 8 gives a one-sided bound; it is a separate, measured step (12)." }; }
+    const char* Name() const override { return "StuffyDoll"; }
+};
+
 // UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). The deck rode
 // AntiLifegainProvider BY ACCIDENT: Scalding Tarn's fetch_land_types sets `anti` alone (pinned from a
 // probe in test_pirates_provider.cpp, never decided). EMPTY derivation of DeckProvider (== Generic),

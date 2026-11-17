@@ -356,12 +356,11 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // attack_trigger_reanimate or an Elemental's unearth_cost. It rode MorphProvider by accident
         // (endstep_sacrifice_self / Firecat's morph_cost / Legion Leadership's trick_double_power).
         {"Red Elementals", "RedElementals"},
-        // Stuffy Doll (analysis begun 2026-11-17): a MEASURED MISROUTE, pinned so it cannot change
-        // silently. Arid Mesa's fetch_land_types sets `anti` and the NAME "Inspiring Vantage" sets
-        // `modern_rw_burn`, so `anti && modern_rw_burn` sends the deck to ModernRwBurnProvider. Design
-        // step 10 (docs/design/damage-reflection-pipeline.md section 8) routes it to its own
-        // StuffyDollProvider above this chain; update this pin then.
-        {"Stuffy Doll", "ModernRwBurn"},
+        // Stuffy Doll: it rode ModernRwBurnProvider by accident (Arid Mesa's fetch_land_types sets `anti`
+        // and the NAME "Inspiring Vantage" sets `modern_rw_burn`). Design step 10 routes it to its own
+        // StuffyDollProvider ABOVE that chain (self_ping_damage / aura_host_damage_back / the en-Kor
+        // shield + pull / Spiteful Sliver's grant; docs/design/damage-reflection-pipeline.md section 8).
+        {"Stuffy Doll", "StuffyDoll"},
     };
 
     namespace fs = std::filesystem;

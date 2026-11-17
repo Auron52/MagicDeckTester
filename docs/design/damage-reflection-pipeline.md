@@ -1581,3 +1581,67 @@ Where the code departs from the sections above, and why. Each entry names the sy
   `EnumerateMainPlans` with each plan replayed identically by the executor, lands included; the viewer prompt).
   Scenarios 576/576, incl. `stuffy_shaman_pull_spirit_kill` (T4 kill from 39) + `_control` (a Nomads in the seat: no
   win by T6). Smoke: 219/219 job digests identical to step 8.
+
+### Step 10 (StuffyDollProvider)
+
+* **Routing.** `StuffyDollProvider : DeckProvider`, routed FIRST in `DetectDecisionProvider` (flag `stuffy`), above
+  `redelem` / `morph` and far above `anti && modern_rw_burn`. Signature exactly as section 8: `self_ping_damage > 0 ||
+  aura_host_damage_back || redirect_shield || redirect_pull_cost || grants_reflect_to_subtype` -- params no other card in
+  cards.json carries; it survives cutting any ONE of Stuffy Doll / Guilty Conscience / Nomads / Shaman / Spiteful Sliver
+  (unit test). `test_pirates_provider.cpp`'s pin is now `{"Stuffy Doll", "StuffyDoll"}`. Every other deck's provider
+  is unchanged (the routing table test + smoke digests). The deck has no `.profile.json` yet, so `provider_audit.py`
+  lists it under NOT AUDITED until the analysis writes one.
+* **`ReflectTargetCandidates`: the SOUND folds F2 / F3** (proofs in the definition's block note, DecisionProviders.cpp).
+  With the opponent's face in the list: F2a drops an own creature with NO reflection instance and no GC (nothing reaches
+  anyone); F2b drops an own creature with ONE instance that can hit only the opponent's face (Maniac, a Doll that chose
+  the opponent, a lone Spiteful grant under F1) and no GC -- the same N to the same face, plus its damage; F2c/F3 drops
+  an own creature with ONE "any target" instance (Reckoner, itself included) and no GC on it while NO GC is on the
+  battlefield (without GC every damage event is a pure tree, so routing N through it is a delay plus its damage). Any GC
+  out keeps F2c's candidates searched (a host deals damage back to itself, so routing can change how often it is hit).
+  Kept: the faces, own creatures with >= 2 instances, own GC hosts, opponent creatures. The deck has no death payoff and
+  nothing else triggers on a creature being dealt damage (shields / pulls ride only our sweeper), which F2a/F2b rely on.
+* **The Spirit prune is a HEURISTIC, default OFF** (`MTG_STUFFY_OPP_CREATURE_PRUNE=1` drops opponent creatures). Design
+  4.1 calls it PROVISIONAL / Stage 5e; the COLLAPSE rule puts a heuristic narrowing OFF until a quality A/B. Owed: the
+  held-out A/B and the USER's call.
+* **ORDER:** an own indestructible GC host with a reflection instance (the unbounded loop) moves to the FRONT -- read
+  only beyond the horizon and in the d0 runner. Under `MTG_UNPRUNE=reflecttarget` the hook returns the list untouched
+  (human play never consults it).
+* **`ExtraLethalDamage` (section 5), `HasExtraLethalModel() = true`.** A `casting` def counts as a CAST only while an
+  unconsumed copy of it is in hand; a Doll def beyond that is the plan's self-ping ACTIVATION (TurnSolver's
+  ActivatePermAbility carries the source def), credited up to the settled untapped Dolls(opp) -- the section-5 sketch
+  credited every untapped Doll whether or not the plan pings. kHuge (2^20) for a GC on a Doll(opp) [board or cast]
+  with damage reaching it (the plan's ping or a sweeper); else ping count + for a sweeper `d * (reflection instances of
+  every own creature on board + cast, Spiteful grants included)` + `d` per en-Kor + `d` per affordable Shaman pull
+  (`(AvailableManaPool - cast mana value)/2`, capped by opponent creatures + untapped Orchards). Chain's d = board +
+  cast creatures + untapped Orchards (each tap makes a Spirit); Act's cost at its per-creature discount. Only Solve's
+  lethal sum reads it (EnumeratePlans deliberately does not, as before); HasExtraLethalModel also turns off the early
+  xwaste test (`!has_extra_lethal`) and reaches the EDF / combo-off gates, inert here (no blink, ComboOffPossible
+  false).
+* **ENGINE FIX found by the d0 scenario (step-2 machinery): `AffinityFeedCount` credited an ACTIVATION as a creature
+  entering.** For a `cost_less_per_creature_on_battlefield` spell it counted every selected action whose def is a
+  creature, so the Doll's self-ping (a creature def) lowered the Act's same-turn cost by 1 and "Nemesis + ping + Act"
+  read as payable off five lands; the runner cast Nemesis and could not pay the Act. Now only CastFromHand /
+  CastFromGraveyard / ActivateVial / BronzePut feed the Act. Only the Act carries the param (no other deck runs it).
+* **Hooks NOT added (disclosed):** no `RedirectRiderCandidates` / `ShamanPullCandidates` / Loran's-target / GC-host /
+  F5 hook. Each of those choices is BRANCHED by the search (steps 5, 7-9), and its FRONT -- the only thing an order
+  changes outside a budget -- is already the section-5 playout policy (shields: the F4 / engine allocation; pulls: stop;
+  Loran / GC host: the greedy picker's own subset choice). "Spirits first" / landmark ORDER would only change the
+  exploration order under a binding budget; adding a provider surface for that is left for a measured need. F5 stays
+  OPEN to the search (both ping twins searched) -- no tested argument for the prune exists yet.
+* **Cast order: the GENERIC default** (DeckProvider inherits GenericProvider::CastOrderRank). ModernRwBurnProvider's
+  ranking, which the deck rode by accident, is gone. USER question Q-U5 (the deck's cast order) stands.
+* **Certificate() = NotAssessed** (the section-8 bound is step 12).
+* **ENGINE FIX (step-9 machinery): a Shaman pull on a passive-opponent spawn ABORTED.** `dmgrx::PullCode` refused
+  `from >= 2^17`, but the opponent's scheduled spawns are numbered from `GameState::kFirstOppSpawnNumber` (500000), and
+  they are pull targets. Found by step 10's d0 control batch (`[rfx] FATAL: Shaman en-Kor pull target 500000 cannot be
+  encoded`). The range is now 2^28 (codes down to -0x30000000: still below every shield code, -0x18000000 at the
+  lowest, and above `kCombatPinMark`). Shield codes keep 2^17 (their dest is our own creature: cards 1..N, our tokens
+  from 1000). Inert for every other deck (no pull source).
+* **Verification.** New unit cases (routing + cut-one-card robustness; F2/F3 folds; GC lifts F2c and fronts the GC'd
+  Doll; no face -> no fold; ExtraLethalDamage incl. the ping-activation rule; the pull-code range). New scenario
+  `stuffy_d0_runner_finds_act_kill` (depth 0: Doll + 4 Spirits, Act vs Nemesis in hand, wins T4; control with the old
+  ModernRwBurn routing pinned via MTG_PROVIDER_DECK: no win by T4). Unit 3453/3453, scenarios 577/577. Smoke 219/219 job
+  digests identical to step 9 (run before the PullCode range fix, which is inert without a pull source).
+  `provider_audit.py --check` rc 0 (Stuffy Doll NOT AUDITED: no profile yet); static viewer audit rc 0. d0 sanity,
+  50 games seed 1: 44 won, avg win turn 5.386 (metric avg 5.82), no abort / tripwire; the same games on the old
+  ModernRwBurn routing: 44 won, 5.591 (6.00).

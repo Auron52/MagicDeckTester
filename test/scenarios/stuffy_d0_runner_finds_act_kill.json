@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Stuffy Doll, design step 10 (StuffyDollProvider::ExtraLethalDamage). The DEPTH-0 RUNNER (the greedy",
+    "policy, TurnSolver::Solve) must find the Act kill. Doll (chose the opponent) + four opponent Spirits = 5",
+    "creatures, so Blasphemous Act costs {3}{R} off four lands; its 13 reflects off the indestructible Doll",
+    "and kills the opponent at 13. Screaming Nemesis ({2}{R}) competes for the same mana (five lands after the drawn Plains): the Act deals",
+    "0 to the face directly, so without the provider's lethal projection the greedy picker ranks the",
+    "Nemesis subset higher (control: MTG_PROVIDER_DECK pinned to the old ModernRwBurn routing -> no win by",
+    "turn 4). With it the Act subset is projected lethal and the runner casts it on turn 4. Also guards the",
+    "step-10 AffinityFeedCount fix: the Doll's ping activation must not price 'Nemesis + ping + Act' as",
+    "payable off five lands (it did, and the runner cast Nemesis and then could not pay the Act)."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 13,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "name": "Plains" },
+    { "name": "Stuffy Doll" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act", "Screaming Nemesis" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 0, "budget_ms": 50, "max_turns": 4,
+  "expect_win_turn": 4
+}

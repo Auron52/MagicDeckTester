@@ -8594,8 +8594,14 @@ static int AffinityFeedCount(const GameState& state, const Action& a, const Card
     // and a token-making hand cast's tokens (cast_creates_tokens makes creature tokens). No subtype test.
     if (aff.params.cost_less_per_creature_on_battlefield)
     {
+        // Only an action that PUTS the creature onto the battlefield feeds the Act. An activation of a creature
+        // already there (Stuffy Doll's self-ping carries the Doll's def) is counted on the board already; crediting
+        // it again priced "Nemesis + ping + Act" off five lands as payable (step 10's d0 scenario: the runner cast
+        // Nemesis, then could not pay the Act).
+        const bool enters = a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard
+                         || a.kind == Action::Kind::ActivateVial || a.kind == Action::Kind::BronzePut;
         int c = 0;
-        if (dk->card.IsCreature())
+        if (enters && dk->card.IsCreature())
         { c += 1 + (a.kind == Action::Kind::ActivateVial ? 0 : std::max(0, a.replicate_count)); }
         if ((a.kind == Action::Kind::CastFromHand || a.kind == Action::Kind::CastFromGraveyard)
             && dk->params.cast_creates_tokens > 0)

@@ -2525,6 +2525,213 @@ bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Act
     return TrickHandRecipientCanAttackThisTurn(s, *d);
 }
 
+// ---- StuffyDollProvider (design damage-reflection-pipeline.md sections 4.1, 5, 8; step 10) ---------------
+// The reflection-target RESTRICTION and ORDER. `io` arrives as the engine's legal set after F1 (opponent's
+// face first); ids: player p = -1 - p, a permanent its m_number. Only ever removes or reorders.
+//
+// SOUND folds (dominance proofs; the opponent's face stays, so the list can never empty):
+//   F2a  an own creature T with NO reflection instance and no Guilty Conscience on it: N dealt to T reaches
+//        nobody (in this deck nothing else triggers on a creature being dealt damage: en-Kor shields and
+//        Shaman pulls ride only our own sweeper, dmgrx::Sweep), and T keeps N marked or dies. The face takes
+//        N. A death never helps here: it raises a later Act's cost and lowers a later Chain's X, and the
+//        deck has no death payoff.
+//   F2b  an own creature T with exactly ONE instance that can hit only the opponent's face (Mogg Maniac, a
+//        Doll that chose the opponent, a Spiteful-granted "target player" under F1) and no GC on it: the
+//        same N reaches the same face either way, plus T's marked damage / death. (Corollary: the Doll
+//        without GC == the face.) A Nemesis-dealt "can't gain life" lock is the face line's bonus only.
+//   F2c/F3  an own creature T with exactly ONE instance whose target is a choice (Boros Reckoner "any
+//        target", including itself = F3), no GC on it, while NO Guilty Conscience is on the battlefield:
+//        without GC every damage event is a pure tree, so routing N through T yields T's one reflection of
+//        the same N, whose every option the current trigger can take directly, plus T's damage. The one
+//        target T can reach that the source cannot (a Nemesis source itself, "any OTHER target") only
+//        re-triggers that source with the same N: a delay. Any GC on the board breaks the tree (a host
+//        deals damage back to itself), so then every such T stays searched.
+// Kept: the faces, every own creature with >= 2 instances (Spiteful k), every own GC host, opponent
+// creatures (unless MTG_STUFFY_OPP_CREATURE_PRUNE), and every F2c candidate while a GC is out.
+//
+// HEURISTIC restriction (default OFF, PROVISIONAL, design 4.1 / Stage 5e): MTG_STUFFY_OPP_CREATURE_PRUNE=1
+// drops opponent creatures (Forbidden Orchard Spirits). Killing one never adds damage now; it can only lower
+// a later same-turn Chain's X / raise a later Act's cost, but "fewer creatures" can keep one of ours alive
+// in contrived lines, so it is not a proof. Off until a held-out A/B (a USER decision).
+//
+// ORDER: an indestructible own GC host with a reflection instance (the unbounded loop) moves to the FRONT.
+// The front is read only where a one-shot pick is permitted (beyond the horizon, the depth-0 runner);
+// inside the window every admitted option is branched by the fan.
+void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_number*/, int controller,
+                                                 int /*amount*/, int /*kind*/, std::vector<int>& io) const
+{
+    if (DecisionUnpruned(UnprunedGate::ReflectTarget)) { return; }
+    static const bool s_opp_prune = EnvOn("MTG_STUFFY_OPP_CREATURE_PRUNE");
+    const int opp_face = dmgrx::PlayerId(1 - controller);
+    const bool face_in = std::find(io.begin(), io.end(), opp_face) != io.end();
+    const bool any_gc  = dmgrx::AnyAuraHostDamageBack(s);
+    std::vector<int> front, rest;
+    front.reserve(io.size());
+    rest.reserve(io.size());
+    for (int id : io)
+    {
+        if (id < 0) { rest.push_back(id); continue; }
+        const Permanent* q = nullptr;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == id) { q = &p; break; } }
+        if (q == nullptr) { rest.push_back(id); continue; }
+        if (q->controller_index != controller)
+        {
+            if (s_opp_prune && face_in) { continue; }
+            rest.push_back(id);
+            continue;
+        }
+        const bool gc   = dmgrx::AuraHostDamageBackOn(s, id) > 0;
+        const int  inst = dmgrx::ReflectInstances(s, *q);
+        if (!gc && face_in)
+        {
+            if (inst == 0) { continue; }                                      // F2a
+            if (inst == 1 && dmgrx::ReflectsFaceOnly(s, *q)) { continue; }   // F2b
+            if (inst == 1 && !any_gc) { continue; }                           // F2c / F3
+        }
+        if (gc && inst >= 1 && q->HasKeyword(Keyword::Indestructible)) { front.push_back(id); }
+        else { rest.push_back(id); }
+    }
+    front.insert(front.end(), rest.begin(), rest.end());
+    io.swap(front);
+}
+
+// The lethal projection (design section 5). Optimistic by contract: it only ranks the greedy picker's
+// subsets (TurnSolver::Solve -- the depth-0 runner and the beyond-horizon playout); execution is the arbiter.
+// `casting` lists the defs of every selected action, including activations: a def counts as a CAST only
+// while an unconsumed copy of it is in hand; a Doll def beyond that is the plan's self-ping activation
+// (TurnSolver's ActivatePermAbility carries the source's def), credited up to the settled untapped Dolls.
+int StuffyDollProvider::ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const
+{
+    constexpr int kHuge = 1 << 20;
+    const int me = s.active_player_index, opp = 1 - me;
+    // The plan's real casts.
+    auto is_doll = [](const CardDefinition* d)
+    { return d != nullptr && d->params.self_ping_damage > 0
+             && d->params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer; };
+    std::vector<const CardDefinition*> cast;
+    int ping_acts = 0;   // the plan's self-ping ACTIVATIONS (a Doll def with no hand copy left)
+    {
+        std::vector<const Card*> hand;
+        for (const Card& c : s.players[static_cast<std::size_t>(me)].hand) { hand.push_back(&c); }
+        for (const CardDefinition* d : casting)
+        {
+            if (d == nullptr) { continue; }
+            bool from_hand = false;
+            for (auto& h : hand)
+            {
+                if (h != nullptr && h->m_name == d->card.m_name) { cast.push_back(d); h = nullptr; from_hand = true; break; }
+            }
+            if (!from_hand && is_doll(d)) { ++ping_acts; }
+        }
+    }
+
+    int  sweep_fixed = 0;      // Blasphemous Act's 13
+    bool sweep_count = false;  // Chain Reaction: X = creatures at resolution
+    int  cast_creatures = 0, cast_mv = 0;
+    bool gc_cast = false, doll_cast = false;
+    for (const CardDefinition* d : cast)
+    {
+        const CardParams& p = d->params;
+        if (p.damage_all_creatures > 0) { sweep_fixed = std::max(sweep_fixed, p.damage_all_creatures); }
+        if (p.damage_all_creatures_count_creatures) { sweep_count = true; }
+        if (p.aura_host_damage_back) { gc_cast = true; }
+        if (is_doll(d)) { doll_cast = true; }
+        if (d->card.IsCreature()) { ++cast_creatures; }
+    }
+    int board_creatures = 0, orchards = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.card.IsCreature()) { ++board_creatures; }
+        const CardDefinition* d = dmgrx::Def(q);
+        if (d != nullptr && q.controller_index == me && !q.tapped && d->params.taps_spawn_opp_token) { ++orchards; }
+    }
+    // Every cast's mana value, an Act at its per-creature discount (the same-turn creatures count too).
+    for (const CardDefinition* d : cast)
+    {
+        int mv = d->card.m_mana_cost.ManaValue();
+        if (d->params.cost_less_per_creature_on_battlefield)
+        { mv = std::max(mv - d->card.m_mana_cost.generic, mv - (board_creatures + cast_creatures)); }
+        cast_mv += mv;
+    }
+
+    // Board inventory (ours).
+    bool doll_opp = false, gc_on_doll = false;
+    int  pings = 0;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+        if (!is_doll(dmgrx::Def(q))) { continue; }
+        if (q.chosen_player >= 0 && q.chosen_player != opp) { continue; }
+        doll_opp = true;
+        if (dmgrx::AuraHostDamageBackOn(s, q.card.m_number) > 0) { gc_on_doll = true; }
+        if (!q.tapped && CanTapNow(q, s.battlefield, nullptr)) { ++pings; }
+    }
+    pings = std::min(pings, ping_acts);   // only the pings the plan actually activates
+    const bool sweeper = sweep_fixed > 0 || sweep_count;
+
+    // A Guilty Conscience on a Doll that is dealt damage this turn is an unbounded loop: a win.
+    if ((doll_opp || doll_cast) && (gc_on_doll || gc_cast) && (sweeper || pings > 0)) { return kHuge; }
+
+    long long proj = pings;   // each ping: 1 to the Doll -> 1 to the opponent
+    if (sweeper)
+    {
+        const int d = std::max(sweep_fixed, sweep_count ? board_creatures + cast_creatures + orchards : 0);
+        // Spiteful-type granters on board / being cast (subtypes they cover).
+        std::vector<const CardDefinition*> granters;
+        for (const Permanent& q : s.battlefield)
+        {
+            const CardDefinition* gd = dmgrx::Def(q);
+            if (q.controller_index == me && gd != nullptr
+                && gd->params.grants_reflect_to_subtype != CardParams::ReflectTo::None) { granters.push_back(gd); }
+        }
+        for (const CardDefinition* gd : cast)
+        { if (gd->params.grants_reflect_to_subtype != CardParams::ReflectTo::None) { granters.push_back(gd); } }
+        auto instances = [&](const Card& c, const CardDefinition* cd, int chosen) -> int
+        {
+            int n = 0;
+            if (cd != nullptr && cd->params.reflect_dealt_damage != CardParams::ReflectTo::None
+                && !(cd->params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer && chosen >= 0 && chosen != opp))
+            { n = 1; }
+            for (const CardDefinition* gd : granters)
+            {
+                for (const std::string& sub : gd->params.subtypes_affected)
+                { if (CardHasSubtype(c, sub)) { ++n; break; } }
+            }
+            return n;
+        };
+        int reflect_mult = 0, enkors = 0, pull_targets = 0;
+        bool shaman = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature()) { continue; }
+            if (q.controller_index != me) { ++pull_targets; continue; }
+            const CardDefinition* cd = dmgrx::Def(q);
+            reflect_mult += instances(q.card, cd, q.chosen_player);
+            if (cd != nullptr && cd->params.redirect_shield) { ++enkors; }
+            if (cd != nullptr && cd->params.redirect_pull_cost.has_value()) { shaman = true; }
+        }
+        for (const CardDefinition* cd : cast)
+        {
+            if (!cd->card.IsCreature()) { continue; }
+            reflect_mult += instances(cd->card, cd, -1);
+            if (cd->params.redirect_shield) { ++enkors; }
+            if (cd->params.redirect_pull_cost.has_value()) { shaman = true; }
+        }
+        proj += static_cast<long long>(d) * reflect_mult;
+        if (reflect_mult > 0)
+        {
+            proj += static_cast<long long>(d) * enkors;   // F4: an en-Kor's own share forwarded to a reflector
+            if (shaman)
+            {
+                const int left  = AvailableManaPool(s).Total() - cast_mv;
+                const int pulls = std::min(pull_targets + orchards, std::max(0, left / 2));
+                proj += static_cast<long long>(d) * pulls;
+            }
+        }
+    }
+    return static_cast<int>(std::min<long long>(proj, kHuge));
+}
+
 bool DecisionProvider::OfferDuplicateLegendCast(const GameState& s, int controller,
                                                 const CardDefinition& def) const
 {
@@ -26147,6 +26354,7 @@ namespace
     const BoarsProvider          g_boars;
     const SeaCreaturesProvider   g_sea_creatures;
     const RedElementalsProvider  g_red_elementals;
+    const StuffyDollProvider     g_stuffy_doll;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
     const BrunaProvider          g_bruna;
@@ -28895,6 +29103,13 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // an ELEMENTAL card (unearth alone is a generic mechanic other lists may add). Never Soulstoke / Metallic
     // Mimic (Landfall Elementals), Bladewhirl's reveal_or_pay_subtype (Kithkin, Pirates) or Sunspine Lynx.
     bool redelem = false;
+    // STUFFY DOLL (damage reflection into a sweeper). FIRST of all: it must beat `anti && modern_rw_burn` (Arid
+    // Mesa's fetch_land_types + the name "Inspiring Vantage" sent it to ModernRwBurnProvider) and anything a later
+    // card trips. Signature = params no other card carries, OR-ed across FOUR cards (design section 8): Stuffy
+    // Doll's self_ping_damage, Guilty Conscience's aura_host_damage_back, the en-Kors' redirect_shield /
+    // redirect_pull_cost, Spiteful Sliver's grants_reflect_to_subtype. NOT reflect_dealt_damage alone (Boros
+    // Reckoner is in Minotaur) and NOT Blasphemous Act's per-creature reducer (a generic wrath).
+    bool stuffy = false;
     bool knights = false;    // Knight tribal on Aether Vial -- KnightsProvider DERIVES from Vial
     bool wknights = false;   // WhiteKnights: the OTHER Knight list -- derives from Knights
     bool breaching = false;  // Breaching Dragonstorm cascade/free-cast pile -- rode Generic
@@ -29118,6 +29333,10 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
                              "Kraken") != p.bounce_all_creatures_except_subtypes.end())
             { sea = true; }
         }
+        if (p.self_ping_damage > 0 || p.aura_host_damage_back || p.redirect_shield
+            || p.redirect_pull_cost.has_value()
+            || p.grants_reflect_to_subtype != CardParams::ReflectTo::None)
+        { stuffy = true; }
         if (!p.champion_subtype.empty() || p.attack_trigger_reanimate
             || (p.unearth_cost.has_value() && CardHasSubtype(def->card, "Elemental")))
         { redelem = true; }
@@ -29685,6 +29904,8 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // set alone (see the flag). Its signature is carried by no other deck, so the position is free.
     // Maze's End: FIRST -- its signature is carried by no other deck, so the position is free.
     if (mazes_end)   { return g_mazes_end; }
+    // Stuffy Doll: above everything (see the flag); its signature is carried by no other deck.
+    if (stuffy)      { return g_stuffy_doll; }
     if (redelem)     { return g_red_elementals; }
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).

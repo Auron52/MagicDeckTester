@@ -11,6 +11,7 @@
 
 #include "ai/AIEngine.h"
 #include "ai/Combat.h"
+#include "ai/DecisionProviders.h"
 #include "ai/ManaPayment.h"
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
@@ -19,6 +20,7 @@
 #include "core/GameState.h"
 #include "core/HeuristicDefaults.h"
 #include "core/SpellEffects.h"
+#include "deck/DeckLoader.h"
 #include "mtg_test_seam.h"
 
 #include <algorithm>
@@ -1667,4 +1669,111 @@ TEST_CASE("rfx step 9: human play is ASKED which creatures to pull from (either 
     CHECK(Find(s, 2022) == nullptr);
     CHECK(UntappedLands(s) == 0);
     CHECK(asked_shield == 1);
+}
+
+// ---- Step 10: StuffyDollProvider (design section 8) -------------------------------------------------------------------
+
+TEST_CASE("rfx step 10: Stuffy Doll routes to its own provider; the signature survives cutting any ONE card")
+{
+    EnsureCardsRfx();
+    const Decklist d = DeckLoader::LoadFromFile(ResolveHeuristicDefaultsPath("decks/Stuffy Doll/Stuffy Doll.cod"));
+    CHECK(std::string(DetectDecisionProvider(d).Name()) == "StuffyDoll");
+    for (const char* cut : {"Stuffy Doll", "Guilty Conscience", "Nomads en-Kor", "Shaman en-Kor", "Spiteful Sliver"})
+    {
+        Decklist e = d;
+        e.mainboard.erase(std::remove_if(e.mainboard.begin(), e.mainboard.end(),
+                                         [&](const Card& c) { return c.m_name.str() == cut; }),
+                          e.mainboard.end());
+        CHECK_MESSAGE(std::string(DetectDecisionProvider(e).Name()) == "StuffyDoll", "cutting ", cut);
+    }
+}
+
+namespace
+{
+// Our Doll (chose the opponent), Mogg Maniac, Nomads en-Kor, Boros Reckoner, two Spiteful Slivers; one
+// opponent Spirit. The ids the engine would offer a Reckoner-style "any target" reflection.
+GameState FoldBoard()
+{
+    GameState s = ArmedState();
+    PutRfx(s, "Stuffy Doll", 2101).chosen_player = 1;
+    PutRfx(s, "Mogg Maniac", 2102);
+    PutRfx(s, "Nomads en-Kor", 2103);
+    PutRfx(s, "Boros Reckoner", 2104);
+    PutRfx(s, "Spiteful Sliver", 2105);
+    PutRfx(s, "Spiteful Sliver", 2106);
+    TokenRfx(s, 2107, 1, 1, 1, "Spirit");
+    return s;
+}
+std::vector<int> AllIds() { return { -2, 2101, 2102, 2103, 2104, 2105, 2106, 2107 }; }
+}   // namespace
+
+TEST_CASE("rfx step 10: the provider's SOUND folds F2/F3 drop mult-0 and mult-1 own targets; k >= 2 and the face stay")
+{
+    const GameState s = FoldBoard();
+    const StuffyDollProvider p;
+    std::vector<int> io = AllIds();
+    p.ReflectTargetCandidates(s, 2104, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyTarget), io);
+    // Face first; the Doll (F2b), Maniac (F2b), Nomads (F2a, no instance) and Reckoner (F3, no GC on board)
+    // are folded; the two Slivers (two granted instances each) and the opponent Spirit stay searched.
+    CHECK(io == std::vector<int>{ -2, 2105, 2106, 2107 });
+}
+
+TEST_CASE("rfx step 10: a GC on the board keeps the Reckoner (F2c lifted); a GC'd indestructible Doll moves to the FRONT")
+{
+    GameState s = FoldBoard();
+    AttachGc(s, 2110, 2101);   // Guilty Conscience on the Doll: the unbounded amplifier
+    const StuffyDollProvider p;
+    std::vector<int> io = AllIds();
+    p.ReflectTargetCandidates(s, 2104, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyTarget), io);
+    CHECK(io == std::vector<int>{ 2101, -2, 2104, 2105, 2106, 2107 });
+}
+
+TEST_CASE("rfx step 10: with no opponent face in the list, nothing is dominated and nothing is folded")
+{
+    // Without the opponent's face in the list nothing is dominated by it, so nothing is dropped.
+    const GameState s = FoldBoard();
+    const StuffyDollProvider p;
+    std::vector<int> io = { 2101, 2102, 2103, 2104 };
+    p.ReflectTargetCandidates(s, 2105, 0, 3, static_cast<int>(CardParams::ReflectTo::AnyOtherTarget), io);
+    CHECK(io == std::vector<int>{ 2101, 2102, 2103, 2104 });
+}
+
+TEST_CASE("rfx step 10: ExtraLethalDamage -- the Act's 13 through the Doll, the ping, and GC on a damaged Doll")
+{
+    GameState s = ArmedState();
+    s.players[1].life = 13;
+    for (int i = 0; i < 4; ++i) { PutRfx(s, i < 2 ? "Mountain" : "Plains", 2200 + i); }
+    PutRfx(s, "Stuffy Doll", 2210).chosen_player = 1;
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 2220 + i, 1, 1, 1, "Spirit"); }
+    Card act_c = DefRfx("Blasphemous Act").card; act_c.m_number = 2230; s.players[0].hand.push_back(act_c);
+    Card gc_c = DefRfx("Guilty Conscience").card; gc_c.m_number = 2231; s.players[0].hand.push_back(gc_c);
+    const StuffyDollProvider p;
+    CHECK(p.HasExtraLethalModel());
+    const CardDefinition* act  = &DefRfx("Blasphemous Act");
+    const CardDefinition* doll = &DefRfx("Stuffy Doll");
+    const CardDefinition* gcd  = &DefRfx("Guilty Conscience");
+    CHECK(p.ExtraLethalDamage(s, {}) == 0);
+    // A Doll def with no copy in hand is the plan's self-ping activation: 1 to the Doll -> 1 to the opponent.
+    CHECK(p.ExtraLethalDamage(s, { doll }) == 1);
+    // The Act: 13 reflected by the Doll (plus the ping when the plan also pings).
+    CHECK(p.ExtraLethalDamage(s, { act }) == 13);
+    CHECK(p.ExtraLethalDamage(s, { act, doll }) == 14);
+    // GC onto the Doll plus the ping: the unbounded loop. GC with no damage reaching the Doll: nothing.
+    CHECK(p.ExtraLethalDamage(s, { gcd, doll }) >= 1000000);
+    CHECK(p.ExtraLethalDamage(s, { gcd }) == 0);
+    // GC + the Act: the Act's 13 reaches the GC'd Doll -- the loop again.
+    CHECK(p.ExtraLethalDamage(s, { gcd, act }) >= 1000000);
+    // A tapped Doll cannot ping: the activation is not credited.
+    s.battlefield[4].tapped = true;
+    CHECK(p.ExtraLethalDamage(s, { doll }) == 0);
+}
+
+TEST_CASE("rfx step 10: a Shaman pull on a scheduled opponent spawn (numbered from 500000) encodes and decodes")
+{
+    const int spawn = GameState::kFirstOppSpawnNumber + 7;
+    const int code  = dmgrx::PullCode(spawn);
+    CHECK(dmgrx::PullDecode(code) == spawn);
+    CHECK(code < dmgrx::ShieldCode((1 << 17) - 1, 1023));   // below every shield code
+    CHECK(code > dmgrx::kCombatPinMark);                      // above the combat suffix mark
+    CHECK(code < -2);                                         // never a player id
 }
