@@ -2,30 +2,30 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 05:59 UTC
+## Live status, updated 06:07 UTC
 
-The final stale-clean refresh is still running in exec session `74609`:
-`martyr_lifegain prevent_damage spirits`, 5,000 games each at source
-`f7cce0693b6a`. Console:
-`build/scratch/dragonstorm_visible_lump_ab/clean_newsrc_c.out`;
-per-arm progress:
-`build/scratch/mana_clean/codex-clean-refresh-newsrc-c-20261117/on.0.out`.
-At 05:59 all 205 on-arm chunk output lines had appeared, but the batch
-process was still running (about 3.8 GB RSS); its off arm had not yet
-started. Check its report and commit `test/mana_clean.json` with this
-handoff when both arms finish. Windows CI `44025173062` was still in its
-Release build at the same time; the watcher output is
+The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
+finished, 5,000 games each at source `f7cce0693b6a`:
+**Martyr Lifegain clean; Prevent Damage 30 issues (8 ORACLE-GAP,
+22 CAPPED); Spirits one APPLY-DROP**, rescued by forced payment rollback
+at depth one. Oracle-on/off play was byte-identical. Report:
+`logs/mana_clean/codex-clean-refresh-newsrc-c-20261117/report.md`.
+`test/mana_clean.json` carries all three records. The 56-deck status now
+has **15 clean, 39 issues, two never-run, zero stale-clean**. Extra Turns
+and Merfolk Turns are never-run. No simulation batch is active.
+
+Windows CI `44025173062` was still in its Release build at 06:07 UTC;
+the watcher output is
 `build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
-Keep the CI check asynchronous. Once the mana gate completes, work the
-Dragonstorm seed 30074224 T5 early Bloom payment and the Breaching
-Dragonstorm two ENUM-GAP seeds. The queue remains open.
+Keep the CI check asynchronous. Next run the focused Dragonstorm unit
+test on the current payer, then work seed 30074224 T5 early Bloom payment
+and the Breaching Dragonstorm two ENUM-GAP seeds. The queue remains open.
 
 A focused unit case for seed 30074224's payment shape has been added to
 `test/unit/test_dragonstorm_followups.cpp`, immediately after the existing
 one-Territory visible-Karrthus case. It sets Mountain + two Unclaimed
 Territories + Lotus Bloom, pays Song, then credits five red and checks
-Karrthus payment. **It is not built or validated yet** because the active
-mana-clean batch is still using the machine. First run it against the
+Karrthus payment. **It is not built or validated yet.** First run it against the
 current payer to establish failure, then trial a scoped payer correction.
 
 The paragraphs below are a chronological work log. Older statements
