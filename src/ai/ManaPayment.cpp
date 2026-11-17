@@ -10410,6 +10410,80 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 
 static thread_local int t_pilgrimage_pay_depth = 0;
 
+// SWAP THE LEFTOVER FOR THE LINE (MTG_LEFTOVER_LINE_SWAP, default ON). The payer drains the floating reserve into a
+// cost first and then taps; a source that makes two units (a depletion land, a Lotus crack, a Sol Ring) can then
+// leave one of ITS colour floating while the drain already spent a floating unit of another colour on the generic.
+// Which unit paid that generic pip is the controller's choice inside one payment (CR 601.2h: the player chooses the
+// mana to spend), so re-attributing it changes no tap and no float total. Dragonstorm mana-clean s30072155 T5,
+// {Ruby Medallion, Seething Song, Karrthus}: Ruby's {2} cracked Lotus Bloom for {B} and floated one {B}; Song's
+// {1}{R} spent that {B} on the {1} and tapped Sandstone Needle for {R}{R}, floating the second {R}; Karrthus then
+// had Unclaimed Territory for one of {B}{G} and nothing for the other. The oracle's line keeps the {B}.
+// The swap is made only when the rest of the applying line (g_line_unpaid_cost, when it holds this cost) is
+// provably short as left -- the coloured pips it still owes exceed the board's units of those colours plus its
+// wild units, summed over colours (AvailableManaPool: the float, every untapped source) -- and is not short after
+// the swap. So it only ever replaces a leftover that strands the line by one that does not, never on a guess.
+// General float only (the creature-only and restricted reserves keep their provenance); WUBRG units only.
+static void SwapLeftoverForLine(GameState& state, const ManaCost& cost_in, const ManaPool& before, ManaPool* available)
+{
+    // A line that opens a breakpoint (g_line_opens_unseen) owes more than its hold names, and the visible-closer
+    // lump rule may have produced a colour on purpose for a card beyond the opener (s30073082: Bloom's {B} for
+    // Karrthus past Apex). The board read below cannot see that demand, nor the opener's own mana, so it stands down.
+    if (cost_in.generic <= 0 || g_line_opens_unseen) { return; }
+    int later[5];
+    if (LineRestAfter(cost_in, later) <= 0) { return; }
+    bool owes = false;
+    for (int c = 0; c < 5; ++c) { if (later[c] > 0) { owes = true; } }
+    if (!owes) { return; }
+    const ManaPool& after = state.floating_mana;
+    const int b[5] = { before.white, before.blue, before.black, before.red, before.green };
+    const int a[5] = { after.white, after.blue, after.black, after.red, after.green };
+    const int pip[5] = { cost_in.white, cost_in.blue, cost_in.black, cost_in.red, cost_in.green };
+    auto short_by = [&](const GameState& s) -> int
+    {
+        const ManaPool pool = AvailableManaPool(s);
+        const int have[5] = { pool.white, pool.blue, pool.black, pool.red, pool.green };
+        int units = 0;
+        for (int c = 0; c < 5; ++c) { units += std::max(0, later[c] - have[c]); }
+        return units - pool.wild;
+    };
+    if (short_by(state) <= 0) { return; }
+    static const Color kCol[5] = { Color::White, Color::Blue, Color::Black, Color::Red, Color::Green };
+    // Units of y this payment produced and left floating: the swap's only sources.
+    int gain[5];
+    for (int y = 0; y < 5; ++y) { gain[y] = std::max(0, a[y] - b[y]); }
+    GameState trial = state;
+    int moved[5][5] = {};
+    for (int x = 0; x < 5; ++x)
+    {
+        // Floating x the payment spent beyond its own x pips went to the generic (a lower bound).
+        int x_generic = std::max(0, (b[x] - a[x]) - pip[x]);
+        if (x_generic <= 0 || later[x] <= 0) { continue; }
+        // Several produced colours may stand in for x together (s30074081: Karrthus's generic took the
+        // ritual's {R}{R} while both Blooms' {B} and {G} were left over, and Scourge needs the {R}{R}).
+        for (int y = 0; y < 5 && x_generic > 0; ++y)
+        {
+            if (y == x || gain[y] <= 0) { continue; }
+            const int k = std::min(x_generic, gain[y]);
+            trial.floating_mana.Add(kCol[x], k);
+            trial.floating_mana.Add(kCol[y], -k);
+            moved[x][y] += k;
+            gain[y] -= k;
+            x_generic -= k;
+            if (short_by(trial) > 0) { continue; }
+            state.floating_mana = trial.floating_mana;
+            if (available != nullptr)
+            {
+                for (int i = 0; i < 5; ++i)
+                {
+                    for (int j = 0; j < 5; ++j)
+                    { if (moved[i][j] > 0) { available->Add(kCol[i], moved[i][j]); available->Add(kCol[j], -moved[i][j]); } }
+                }
+            }
+            return;
+        }
+    }
+}
+
 bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creature,
                       ManaPool* available, bool honor_legacy_cco)
 {
@@ -10421,6 +10495,8 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     const int pilgrimage_controller = state.active_player_index;
     const std::vector<int> pilgrimage_before = outer_pilgrimage_pay
         ? PilgrimageUntappedBeforePayment(state, pilgrimage_controller) : std::vector<int>{};
+    // MTG_LEFTOVER_LINE_SWAP: the general float before this payment (read only on an outermost success below).
+    const ManaPool float_before = state.floating_mana;
     const bool paid = [&]() -> bool {
     // Outermost payments only: a nested payment, a refine probe, the oracle's float-only pass and its own
     // scripted copy each pay as they always have (they never see a crack the outer payment did not make).
@@ -10751,6 +10827,10 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
     }
     return false;
     }();
+    if (paid && outer_pilgrimage_pay && t_pay_nest == 0 && !t_pay_refining && !manaoracle::t_float_only
+        && !(manaoracle::t_hook != nullptr && &state == manaoracle::t_hook->target) && !HumanPlayActive()
+        && LeftoverLineSwapOn())
+    { SwapLeftoverForLine(state, cost_in, float_before, available); }
     --t_pilgrimage_pay_depth;
     if (paid && outer_pilgrimage_pay)
     { ResolvePilgrimagePaymentTaps(state, pilgrimage_controller, pilgrimage_before); }

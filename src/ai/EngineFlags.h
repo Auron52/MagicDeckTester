@@ -410,6 +410,15 @@ inline bool OnDemandVisibleContribOn()
     return heurarm::Flag(heurarm::ONDEMAND_VISIBLE_CONTRIB, env_on);
 }
 
+// MTG_LEFTOVER_LINE_SWAP -- DEFAULT ON; =0 -> no swap. After a successful payment, re-attribute a generic pip the
+// payment paid from a floating colour to a unit of another colour the payment over-produced, keeping the drained
+// colour floating, when that turns a provable shortage of the rest of the line into none. See TapForCostShared.
+inline bool LeftoverLineSwapOn()
+{
+    static const bool env_on = EnvOn("MTG_LEFTOVER_LINE_SWAP", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::LEFTOVER_LINE_SWAP, env_on);
+}
+
 // MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
 // LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
 // later pip may need it for that colour. When the reserve left after this payment's own pips already covers

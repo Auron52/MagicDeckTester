@@ -973,6 +973,7 @@ enum Slot : int
     KAROO_FLOAT_PAINLAND_OWED,// MTG_KAROO_FLOAT_PAINLAND_OWED  with KAROO_FLOAT_PAINLAND_C: a floated painland takes the COLOURED mode (and its damage) when the rest of the applying line still owes a colour it makes (FloatLineOwedColour), else the free {C}. Default ON; =0 -> always {C}
     CONT_UNSEEN_PENDING,      // MTG_CONT_UNSEEN_PENDING  a breakpoint continuation inherits the invoking line's opener flag (g_line_opens_unseen) only while an opener of that line is still uncast (ContinuationOpensUnseen, TurnSolver.cpp). Dragonstorm mana-clean s30075408 T4: Apex's continuation paid Ruby Medallion's {2} with Lotus Bloom's {B}s under the WUBRG drain and dropped Dragonlord Kolaghan. Default ON; =0 -> always inherited, byte-identical to before
     ONDEMAND_VISIBLE_CONTRIB, // MTG_ONDEMAND_VISIBLE_CONTRIB  Dragonstorm's visible-closer lump rule (OnDemand payer, ManaPayment.cpp) counts the one hand creature whose pips the line does not already make, and runs when the line owes nothing after this cost. Mana-clean s30073082 T5: Scourge of Valkas beside Karrthus hid Karrthus's {B}{G}, so Apex's {6}{R}{R}{R} spent Unclaimed Territory's {C}. Default ON; =0 -> sole hand creature, owed rest required
+    LEFTOVER_LINE_SWAP,       // MTG_LEFTOVER_LINE_SWAP  after a payment, a floating colour the payment drained into its generic is swapped back for an over-produced unit of another colour when the rest of the line is provably short as left and is not after the swap (same taps, same float total; TapForCostShared, ManaPayment.cpp). Dragonstorm mana-clean s30072155 T5: Seething Song's {1} spent Lotus Bloom's floating {B} while Sandstone Needle's second {R} floated, and Karrthus lost its {B}. Default ON; =0 -> no swap
     COUNT
 };
 
@@ -1890,6 +1891,7 @@ inline const char* Name(int slot)
         "MTG_KAROO_FLOAT_PAINLAND_OWED",
         "MTG_CONT_UNSEEN_PENDING",
         "MTG_ONDEMAND_VISIBLE_CONTRIB",
+        "MTG_LEFTOVER_LINE_SWAP",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

@@ -856,6 +856,88 @@ TEST_CASE("Dragonstorm: a red-only creature beside Karrthus does not hide Karrth
     }
 }
 
+TEST_CASE("Leftover swap: Seething Song keeps the floating {B} Karrthus owes, not the Needle's spare {R} (MTG_LEFTOVER_LINE_SWAP)")
+{
+    // Mana-clean s30072155 T5, {Ruby Medallion, Seething Song, Karrthus}: Ruby's {2} cracked Lotus Bloom for {B} and
+    // floated one {B}. Song's {1}{R} (Ruby out) drains that {B} into its {1} and taps Sandstone Needle for {R}{R},
+    // floating the second {R}; Karrthus ({3}{B}{R}{G} after Ruby) then has Unclaimed Territory for one of {B}{G}.
+    // The same tap pays both of Song's pips, so the {B} can stay floating: the swap makes that re-attribution.
+    ManaCost song;
+    song.generic = 1;
+    song.red = 1;
+    ManaCost karrthus;
+    karrthus.generic = 3;
+    karrthus.black = 1;
+    karrthus.red = 1;
+    karrthus.green = 1;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LEFTOVER_LINE_SWAP, on);
+        // The seed's second Needle stays untapped: the strand test reads the board, not Song's coming {R}s.
+        GameState s = BoardFu({ "Sandstone Needle", "Unclaimed Territory", "Sandstone Needle" },
+                              { "Karrthus, Tyrant of Jund" }, 5);
+        for (Permanent& p : s.battlefield)
+        { if (p.card.m_name.str() == "Sandstone Needle") { PutDepletionCounters(s, p, 2); } }
+        s.floating_mana.black = 1;
+        ManaCost line = song;
+        line.generic += karrthus.generic;
+        line.black += karrthus.black;
+        line.red += karrthus.red;
+        line.green += karrthus.green;
+        {
+            LineCostFu lc(line);
+            REQUIRE(TapForCostDirect(s, song, /*for_creature=*/false));
+        }
+        CHECK(std::count_if(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+        { return p.card.m_name == "Sandstone Needle" && p.tapped; }) == 1);
+        CHECK(s.floating_mana.black == (on ? 1 : 0));
+        CHECK(s.floating_mana.red == (on ? 0 : 1));
+        s.floating_mana.red += 5;   // Song resolves.
+        {
+            LineCostFu lc(karrthus);
+            CHECK(TapForCostDirect(s, karrthus, /*for_creature=*/true) == on);
+        }
+    }
+}
+
+TEST_CASE("Leftover swap: Karrthus leaves the ritual's {R}{R} for Scourge, not two Blooms' spare {B}{G} (MTG_LEFTOVER_LINE_SWAP)")
+{
+    // Mana-clean s30074081 T4, {Desperate Ritual, Karrthus, Scourge of Valkas}, Ruby Medallion out: Desperate floats
+    // {R}{R}{R}; Karrthus's {3}{B}{R}{G} drains that red into its generic and cracks both Lotus Blooms, so the leftover
+    // is Bloom {B}/{G} and Scourge's {1}{R}{R}{R} has one Mountain for three red pips. Two produced colours stand in
+    // for the drained red together.
+    ManaCost karrthus;
+    karrthus.generic = 3;
+    karrthus.black = 1;
+    karrthus.red = 1;
+    karrthus.green = 1;
+    ManaCost scourge;
+    scourge.generic = 1;
+    scourge.red = 3;
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::LEFTOVER_LINE_SWAP, on);
+        GameState s = BoardFu({ "Mountain", "Mountain", "Ruby Medallion", "Lotus Bloom", "Lotus Bloom" },
+                              { "Scourge of Valkas" }, 4);
+        s.battlefield.front().tapped = true;   // the Mountain that paid Desperate Ritual
+        s.floating_mana.red = 3;
+        ManaCost line = karrthus;
+        line.generic += scourge.generic;
+        line.red += scourge.red;
+        {
+            LineCostFu lc(line);
+            REQUIRE(TapForCostDirect(s, karrthus, /*for_creature=*/true));
+        }
+        CHECK((s.floating_mana.red >= 2) == on);
+        {
+            LineCostFu lc(scourge);
+            CHECK(TapForCostDirect(s, scourge, /*for_creature=*/true) == on);
+        }
+    }
+}
+
 TEST_CASE("Line float: a spare source pays the generic before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)")
 {
     // s7100081 T2's shape: an Unclaimed Territory up, {R}{R} floating off Rite of Flame, and Ruby Medallion's {2}

@@ -59,15 +59,26 @@ All-deck A/B (Dragonstorm 5,000 + every suite deck 1,000): 0 later, 1 earlier, e
 **Exact-seed recheck at e720dc68d** of the remaining gate signatures: s30074224 and s30076435 now replay clean;
 s30072155 APPLY-DROP 2, s30074081 1, s30072022 1 remain (outputs `build/scratch/claude_ds/s<seed>.out`).
 
-**IN FLIGHT (14:50 UTC): s30073082 T5 fix, uncommitted** (`MTG_ONDEMAND_VISIBLE_CONTRIB`, ON). At Apex's
-{6}{R}{R}{R} over seven floating {R}, the ordinary payment tapped Unclaimed Territory for {C}; Apex's continuation
-then lacked Karrthus's {G}. The Dragonstorm visible-closer lump rule (ManaPayment.cpp, on-demand payer) stood down
-because Scourge of Valkas sat in hand beside Karrthus, and never ran for the Apex-last plan (nothing owed after).
-Now only a creature that ADDS a pip counts toward "sole", and the rule also runs when the hold equals this cost.
-Exact seed APPLY-DROP 10 -> 0 (lever off 10). Unit test in `test_dragonstorm_followups.cpp`. Next: Dragonstorm-only
-A/B (the rule is provider-gated), 10,000 pairs, games 540,000+, `build/scratch/claude_visible_contrib_ab/`
-(manifest + compare.py ready); adopt by the bar, design note, commit; smoke before the 16:21 push.
-Then s30072155, s30074081, s30072022, then a fresh Dragonstorm gate.
+**DONE 14:53 UTC: s30073082 T5** `0d8f9a4bd` (unpushed; `MTG_ONDEMAND_VISIBLE_CONTRIB`, ON). Exact seed APPLY-DROP
+10 -> 0; Dragonstorm A/B 10,000 pairs byte-identical. `docs/design/ondemand-visible-contrib-2026-11-17.md`.
+
+**Push prep done 15:05 UTC:**
+- origin had not moved since 12:21;
+- smoke 46 failed: the 44 at the 12:21 push, plus Dragonstorm d0 (digest-only) and Melira d0 (6.2590 -> 6.2580);
+  none slower;
+- gt_logs consistent; references safe.
+
+**DONE 16:15 UTC: s30072155 T5 + s30074081 T4** (`MTG_LEFTOVER_LINE_SWAP`, ON; `SwapLeftoverForLine` in
+ManaPayment.cpp). After an outermost payment, a floating colour that the payment drained into its generic is
+swapped back for over-produced units of other colours. It does this only when the line's rest is provably short as
+left and not short after. It stands down for breakpoint-opener lines. Exact seeds 2 -> 0 and 1 -> 0. All-deck A/B
+(1,200 jobs, games 550,000+) is byte-identical everywhere. `docs/design/leftover-line-swap-2026-11-17.md`.
+
+**Remaining gate signature:** s30072022 T5 (APPLY-DROP 1, an Apex line). The engine's continuation casts two
+Scourges (opponent at 9) where the oracle's casts Dragonlord Kolaghan (opponent at 20). That reads as a continuation
+choice, not a lost payment; low priority. **NEXT:** push (>= 16:21) + CI watch, then a fresh Dragonstorm gate
+(`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run dragonstorm --games 5000 --name claude-dragonstorm-<tag>`),
+then the PD CAPPED fold, then the deck queue.
 
 **Queue reorder (13:05 UTC):** after the painland A/B, the Dragonstorm APPLY-DROP clusters go BEFORE the PD CAPPED
 fold. The Dragonstorm flags are real engine drops (gate `codex-dragonstorm-ruby-song-20261117`: 28 APPLY-DROP, 16
