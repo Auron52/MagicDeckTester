@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:47 UTC
 
+A pooled fresh PGO gate for six previously stale-clean decks is active as
+the only simulation batch, exec session 85823:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run angels burn breaching_dragonstorm red_elementals slivers giants --games 5000 --name codex-clean-refresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_gate.out`.
+On completion read `logs/mana_clean/codex-clean-refresh-20261117/report.md`,
+update this handoff, and commit `test/mana_clean.json`.
+
 **Treasure Hunt fresh gate complete:** indices 80,000–84,999 at PGO
 source `fcb9352608ea` yielded 289 issues: 20 ENUM-GAP, 217
 APPLY-DROP, and 52 APPLY-DROP-ORDER. There are 370 disclosed
