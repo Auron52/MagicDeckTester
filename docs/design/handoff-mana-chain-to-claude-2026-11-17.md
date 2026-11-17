@@ -2,21 +2,19 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:04 UTC
+## Current state, updated 03:11 UTC
 
-An **Extra Turns first-ever mana-clean gate** is now running as the only
-top-level simulation batch, exec session 14247. Command:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run extra_turns --games 5000 --name codex-extra-turns-first-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/extra_turns_first_gate.out`.
-Raw batch: `build/scratch/mana_clean/codex-extra-turns-first-20261117/`.
-When it finishes, inspect
-`logs/mana_clean/codex-extra-turns-first-20261117/report.md`, update this
-handoff, and commit its `test/mana_clean.json` record. A nonzero exit is
-expected if issues are found.
+An **Extra Turns first-ever gate attempt** was stopped during its
+64-game sizing probe. After six minutes at 32 threads, only ten one-game
+jobs had finished and the process was at about 21 GB RSS; the enforced
+5,000-game minimum would take many hours and threaten the 40 GB cap.
+No full gate ran, no `test/mana_clean.json` record was written, and Extra
+Turns remains **never-run**. The probe artifacts are in
+`build/scratch/mana_clean/codex-extra-turns-first-20261117/`, and console
+output is `build/scratch/dragonstorm_visible_lump_ab/extra_turns_first_gate.out`.
+The process group was terminated and verified gone. Investigate this
+oracle cost before attempting the full gate; meanwhile continue cheaper
+due decks. Do not mark Extra Turns clean or completed.
 
 **02:47 UTC update:** The scoped Ruby/Seething ordering repair in
 `src/ai/DecisionProviders.cpp` is complete and committed with this
