@@ -4,7 +4,12 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Live status (Claude), updated 16:50 UTC
 
-**PUSHED 16:44 UTC** (`f4ca329c9..8c99d110b`, next shared-branch push not before 20:44 UTC). It is rebased onto
+**LATEST PUSH 21:04 UTC** (`af685ee3e`, rebased onto origin's Sea Creatures Hedge Maze commits, HeuristicArm.h
+appends kept on both sides; units 3,465/3,465, smoke same 46-row failset; next push not before 01:04 UTC 11-18).
+In flight: Cyclone gi 560506 trace (`build/scratch/claude_cyc/tr/run.sh`, prints TRACE-DONE), then the Ponder-first
+A/B. Uncommitted WIP: the three Ponder-first levers + `MTG_UNSEEN_SCARCE_TRACE` print.
+
+Earlier: **PUSHED 16:44 UTC** (`f4ca329c9..8c99d110b`, next shared-branch push not before 20:44 UTC). It is rebased onto
 origin's Sea Creatures integration; the only conflict was HeuristicArm.h appends, with both kept and the order
 verified. After the rebase:
 - unit 3,462/3,462 and gt_logs consistent;
@@ -36,6 +41,18 @@ to the worse play: the search scores T1 Brainstorm ~= Ponder (pre-existing weakn
 with-Ponder-in-hand across a Cyclone sample (game logs), check the d8 b0 choice, then propose to the USER a fix shape
 (provider root ORDER Ponder-first = legal; a hold-Brainstorm prune = lossy, needs A/B + USER). Related open USER
 question B in `docs/design/cyclone-cast-order.md`.
+USER ruling (20:2x UTC), verbatim: "Yeah, it could make sense to reorder them. I wouldn't do that for all turns,
+though. It's important here that Brainstorm be a priority in later turns." Agent default: T1 only (asked the USER
+whether T1-T2). USER follow-up, verbatim: "Yeah, I think 1 and 2 is probably fine, though Brainstorm turn 2 is still
+solid, but given that this is just a reorder it might be fine. we can A/B a few different options." -> A/B arms:
+off, Ponder-first T1 only, Ponder-first T1-T2. USER again, verbatim: "I think it might make sense to do it first in
+both of the 2 turns, since that saves Brainstorm for the later turns. Of course, this does not imply anything about
+the order when you do cast both. On Turn 2, Brainstorm before Ponder is quite possibly better, since you can shuffle
+if you have a fetchland or use ponder to shuffle for Brainstorm." Built (uncommitted): CycloneProvider::
+PlanMoveOrderFront, levers MTG_CYCLONE_PONDER_FIRST_T1 / _T2 (heurarm slots); fronts a plan casting Ponder and NO
+put-back cantrip, so a both-cast plan is untouched. CAUTION: the default search is CLAIRVOYANT (knows library order; `cyclone-discard-buckets.md` lists
+T1 Brainstorm-vs-Ponder as a known (b) clairvoyance divergence, d5 34), so a pure ORDER may not move a fully searched
+choice; check with MTG_NC_SEARCH=1 / MTG_SEARCH_BLIND_UNKNOWN. Trace build: `MTG_UNSEEN_SCARCE_TRACE=1` (uncommitted).
 
 **Found defect (pre-existing, diagnosed, deferred):** Merfolk Turns game 560698 (seed 30560698) drives one process
 past 42 GB RSS on turn 6. Cause: the Wanderwine Prophets CHAMPION axis is still materialised eagerly (540 -> 154,635

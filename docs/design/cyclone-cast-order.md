@@ -72,6 +72,10 @@ Tie rule: by name (`CastOrderTotalByName`), so the order is total.
 A. **Brainstorm before Brainsurge, or the reverse?** Both see five new cards in total either way. I put the
    1-mana one first to keep the 3 mana uncommitted longer. This is close to a coin flip.
 B. **Ponder before Brainstorm by default**, with Brainstorm → Ponder as the shuffle-line fallback. Agree?
+   USER 2026-11-17 (while ruling on which cantrip to cast ALONE on turns 1-2, `MTG_CYCLONE_PONDER_FIRST_T1/_T2`):
+   *"this does not imply anything about the order when you do cast both. On Turn 2, Brainstorm before Ponder is
+   quite possibly better, since you can shuffle if you have a fetchland or use ponder to shuffle for Brainstorm."*
+   So the within-turn default here is NOT settled by that ruling; B stays open.
 C. **Long-Term Plans first**, before the cantrips (its shuffle would erase their setup), with the shuffle line
    as its fallback. Agree?
 D. **Should the order also govern draw turns?** Today any turn holding a draw spell skips the rank, and the
