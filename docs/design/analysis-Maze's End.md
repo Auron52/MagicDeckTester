@@ -45,7 +45,9 @@ Integration phases (serial, one integrator agent each, handoff file between them
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
 | I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | DONE `c71d96361` + `699e1137a` (wip/maze-end); unit suite 3411/3411; smoke byte-identical to I1 (all 219 cases' per-game digests) |
 | I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | DONE `4b416123c` + `ac59aafae` (I3b) (wip/maze-end); unit suite 3418/3418; in-window crossing census 0 searched-frame / 0 overflow over 90 games; smoke byte-identical to I2 (0 of 219 case digests differ; the 44 stale-GT failures are the base's) |
-| I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
+| I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara, the Gate tap order (Guild Summit / Heap's cost) | DONE `f63a6f138` + `61fd80c65` (I4b) (wip/maze-end); unit suite 3425/3425; in-window crossing census 0 searched-frame / 0 overflow over 90 games (after the I4b last-turn overrun guard); smoke byte-identical to I3b (0 of 219 case digests differ; the 44 stale-GT failures are the base's) |
+
+**Stage 2 COMPLETE (2026-11-17).** Every card in the list is implemented (I1-I4; `--coverage-only` 33/33 full, 0 gaps). Open for the next stages: the deck has no `.profile.json` yet (provider routing / `provider_audit` "NOT AUDITED"), it is not in `test/regression_cases.sh`, and its cost (I4b: ~109 s/game d3 b10) must pass `suite_gate.py --cost` before either generator; decisions 2-33 await USER sign-off.
 
 ### I1 cards (2026-11-17)
 
@@ -308,6 +310,73 @@ commentary in each bracket note.
   under the controller, its own pin scope EMPTY so an outer pin cannot leak onto it; not a land play). Main-phase
   timing: decision 32. Trailing order: decision 31. ETB phase-out: not modelled (decision 33).
 * **Guild Summit order (decision 10, now built):** `MazesEndProvider::EtbTapSubtypeOrder` -- decision 30.
+
+**I4b verification (2026-11-17).** The I4 test file compiled as written; one assertion was wrong (the Talon control
+game holds one Gate in its library, so it can never reach ten names and `PlayOutFrom` returns -1, not a win after turn
+5) and now asserts no win on turn 5. I4 tests 7/7; unit suite 3425/3425. `provider_audit.py --check` exit 0 (Maze's End
+still "NOT AUDITED": no profile). `audit_viewer_decisions.py --no-sweep` exit 0 (advisory oracle notes only, every one
+with a note; Talon's phase-out `target` is decision 33).
+
+* **Crossing census found one more host hole (fixed, `61fd80c65`).** `MTG_CROSSING_LAND_STATS=2` over the I3b games
+  (seeds 91001 d3 b10 x60, 92001 d5 b10 x30) read 15 searched-frame decisions, all on seed 91052 gi51 at T8
+  (max_turns 8): Manabond's yes/no and two dumped lands' as-enters values. Root cause (gdb, RelWithDebInfo): the
+  root pass's overrun ceiling (`m_used == m_overrun_limit`) tripped inside a rollout's LAST turn; that turn's nested
+  solve bailed and returned its unsearched front plan (no boundary pin), and `SimulateToEndImpl` crossed anyway --
+  its overrun poll sits at the START of a turn and no later turn exists. Fix: before that crossing, a rollout whose
+  ceiling has tripped (`OverrunQuiet`) on its last turn (`turn_number >= max_turns`, no pending extra turn) returns
+  no-win with an invalid leaf, as the turn-start poll does. Result-identical by construction: the bail already
+  dirtied `g_fs_trunc_events` and the budget binds (no cache stores the result), the ceiling's owner drops the
+  tripped pass, and the anytime rescue needs a STRICTLY earlier proven win, which a crossing out of the horizon
+  cannot produce. Measured: the traced game's log is identical, both census jobs' `.wins` are identical before and
+  after, and the smoke is byte-identical. Census after: **searched-frame 0, overflow 0** (playout 51.3M, outside-window
+  54.8K, edge 0, real-crossing 0). Not covered: the same post-trip crossing on a NON-final turn (the next turn-start
+  poll discards it, so it is wasted work, not a play decision; the census saw none). Stopping there too is not
+  result-identical for a deck that can deck the opponent during the crossing (the loop-top `opponent_decked` win
+  check precedes the poll), so it was left alone.
+* **Cost (90 census games, 32 workers, no profile).** d3 b10: **108.8 s/game** wall, 1.48M units/game (I3b: 43 s,
+  0.67M; 2.2x the units), avg win turn 6.5667 (I3b 7.0667). d5 b10: **54.1 s/game**, 0.71M units/game (I3b: 41 s,
+  0.66M; 1.08x), avg 6.6667 (I3b 6.9667). Tail: seed 91021 gi20 (d3) 1,253 s / 26.1M units; seed 91054 gi53 (d3)
+  1,192 s on only 2.9M units (wall per unit ~40x the median: units under-price that game's work). The I4 cards are
+  not attributed separately (no A/B; the coordinator's performance phase). `suite_gate.py --cost` has NOT been run;
+  at this rate the 3x-Hinata gate is at risk.
+* **Branching check (step 4).** Executed play over the 90 games: Heap Gate's Treasure made 63 times; Talon Gates put
+  from hand 0 times (played as the land drop 14 times). **No fold added** -- none could be proven sound:
+  - *Heap's Treasure.* It turns `{1}` + Heap's `{T}` + another Gate's tap into one mana on a later turn (mana banking:
+    a real line, and a Treasure never spent before the game ends is still not a reason to prune). Two candidate folds,
+    neither built: (a) a Treasure made and sacrificed in the SAME turn is dominated by Heap's own `{1},{T}` filter,
+    which leaves the cost Gate untapped -- but whether the payer sacrifices it is the payment exemption's choice, not
+    a plan branch, so there is nothing at enumeration to cut; (b) making it in a plan's BASE segment when the plan has
+    a breakpoint continuation (Guild Summit / Gateway Plaza draws, Sylvan Scrying) looks dominated by making it in the
+    continuation (same resources, more information; the cost Gate could instead feed Summit's tap-draw) -- but that
+    needs an enumeration-time test for "this plan will reach a continuation" and a written commute proof against every
+    continuation spend. OWED as an investigation, recorded as a **cost driver**: one more searched activation on most
+    mid-game turns (Heap untapped + another untapped Gate + `{1}` spare), roughly doubling those turns' activation
+    subsets. The cost Gate itself is not branched (decision 30), and with one Heap in the list it is one activation
+    per turn at most.
+  - *Talon's put.* Candidate dominance: a put in a plan whose land drop ends unused, where Talon could have been that
+    drop (identical board, `{4}` richer). Not provable at enumeration: the drop can be filled later in the same turn
+    by a land that reaches hand mid-turn (Maze's End's own return, Summit / Plaza draws, Sylvan Scrying). Left
+    searched, **cost driver** (one Channel option while Talon is in hand and `{4}` is open; never adopted in 90
+    games). Identity already holds: a Talon staged as the land drop is skipped by the put emission (`m_is_staged`),
+    so "play it AND put it" is never enumerated.
+
+**I4 rules review** (`.claude/skills/mtg-rules.md`). *Heap Gate:* the Treasure ability is not a mana ability (it
+makes a token: CR 605.1a), so it is activated and resolves like any ability; costs `{1}`, `{T}`, tap another untapped
+Gate may be paid in any order (CR 601.2h via 602.2b) -- the engine taps the source, then the other Gate, then pays the
+`{1}` from what is left (`AvailableManaPool` is read AFTER the cost Gate is tapped, so the `{1}` can never be paid by
+that Gate), and undoes both taps when the `{1}` fails; tapping an untapped Gate as a cost is not a `{T}` cost, so
+summoning sickness is irrelevant (CR 302.6); the source and tapped Gates are excluded. *Baldur's Gate:* X = OTHER
+Gates we control at resolution, tapped or not (mana abilities resolve immediately); Planar Nexus counts (every
+nonbasic land type), an Islandized Gate does not. Gond Gate under CR 106.7 reads what a Gate COULD produce ignoring
+costs and amounts, so Baldur's (any one colour), Heap and Talon (`{1},{T}`: any colour) make Gond rainbow; Gond never
+reads another Gond (the loop rule). Baldur's X is never 0 while Gond is out (Gond is another Gate). *Basilisk Gate:*
+X counts every Gate we control at RESOLUTION, the source included; sorcery speed by construction. *Talon Gates:* the
+`{4}` put is an activated ability from hand that uses the stack and is instant speed (decision 32 folds it to our main
+phases); putting a land onto the battlefield is not playing it (CR 305.4: no land drop spent, not counted by
+`lands_played_this_turn`, no Burgeoning trigger for us); it is a Gate entering, so Guild Summit draws and landfall
+fire; enters untapped (no tapped clause; Amulet inert). Its ETB "up to one target creature phases out" may choose
+zero targets -- with no creature on either side in this goldfish every choice is the same game (decision 33,
+PROVISIONAL). No defect found.
 
 ## Decisions and provisional deferrals (USER sign-off pending)
 
