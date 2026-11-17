@@ -4874,6 +4874,14 @@ public:
     // activate was adopted unsearched and the line's later crossing choices fell to their fronts in the window
     // (Maze's End I3b, MTG_CROSSING_LAND_STATS). The activation plan's win is found by execution. Default false.
     virtual bool AlternateWinNeedsAction() const { return false; }
+
+    // AlternateWinProjectionIgnoresCasting -- does ProjectsAlternateWin read ONLY the board (never its
+    // `casting` argument)? True lets the greedy subset walk (SolveUncachedBody) and the plan enumeration ask it
+    // ONCE per call instead of once per scored subset -- the board is const for the whole walk, so the answer
+    // cannot differ between subsets and the hoist is byte-identical by construction. A pure per-node cost fix
+    // (Maze's End P1: the per-subset call was 10.7% + its Gate-name scans ~12% of a tail game's wall). Default
+    // false: every override that might read `casting` keeps the per-subset call.
+    virtual bool AlternateWinProjectionIgnoresCasting() const { return false; }
 };
 
 // ---------------------------------------------------------------------------------------------------
