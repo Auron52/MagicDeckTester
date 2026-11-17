@@ -14,8 +14,10 @@ Last updated: 2026-11-17 (Claude; value-leaf stage complete).
   (2026-11-17)". The handoff `red-elementals-value-leaf-handoff.md` is closed.
 - USER 2026-11-17: adopt **d6/b30** (1.000x, -0.00062 t -3.42), the near-free trade the driver did not
   take. The sidecar now ships `budget_ms 30` and Red's d5 suite play rows run at b30 (fleet convention);
-  the scoped smoke and regular gate was byte-identical at b30. The staged learned model is still available
-  if wanted (`logs/eval/Red Elementals.value.STAGED.json`).
+  the scoped smoke and regular gate was byte-identical at b30. The learned model is retained, inert, as
+  `decks/Red Elementals/Red Elementals.value.DISABLED.json` (USER 2026-11-17).
+- Owed: Red's overnight GT at the nlfit d6/b30 sidecar, left to the periodic overnight run (a full overnight
+  launched 2026-11-17 10:28 UTC was cancelled by the USER before any game ran).
 
 ## Final mulligan adoption progress (2026-11-15)
 
