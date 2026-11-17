@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:19 UTC
 
+The next due **Mill** PGO mana-clean gate is running as the only active
+simulation batch, exec session 54757:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run mill --games 5000 --name codex-mill-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/mill_fresh_gate.out`.
+Read `logs/mana_clean/codex-mill-fresh-20261117/report.md` on completion,
+update this handoff, and commit the `test/mana_clean.json` record.
+
 **Shadowborn Apostle fresh gate complete:** indices 100,000–104,999 at
 PGO source `fcb9352608ea` yielded three issues: two APPLY-DROP, one
 ORACLE-GAP, no cap/enum/order issue. Oracle-on/off play byte-identical.
