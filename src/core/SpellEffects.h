@@ -1464,6 +1464,21 @@ struct Witness
 // byte-identical. Note the human path could ALREADY decline (TutorAskResult::Declined); this
 // closes the opposite asymmetry -- the SEARCH could not.
 inline constexpr int kTutorDeclineChoice = 1000000;
+// THE FOUND LAND'S AS-ENTERS CHOICE ON THE TUTOR AXIS (Maze's End I2, decision 15). A tutor that PUTS the land
+// it finds (Archdruid's Charm, PerformLandTutorToBattlefield) must also search that land's land-entry pin
+// (a CLB Gate / Thran Portal colour, Gateway Plaza's pay-or-sacrifice; core/SpellEffects.h "THE LAND-ENTRY
+// PIN"), or the provider's default is an unsearched pick inside the window. The pin rides the SAME int as
+// the index -- v = index + kTutorEntryPinStride * (pin + 1) -- so every site that already carries, hashes,
+// dedups, captures or restores Plan::tutor_choice / g_scripted_tutor_choice carries it with no edit. A
+// positive value, so `tutor_choice >= 0` still classifies it as a variant. Only the consumers that INDEX
+// decode it (TutorChoiceIndex); only PerformLandTutorToBattlefield reads the pin. Emitted only for a
+// tutor_land_to_battlefield card whose candidate land has a land-entry choice, so every other value is
+// below the stride (or the decline sentinel) and decodes to itself: byte-identical for every other deck.
+inline constexpr int kTutorEntryPinStride = 4096;
+inline constexpr bool TutorChoiceHasEntryPin(int v) { return v >= kTutorEntryPinStride && v < kTutorDeclineChoice; }
+inline constexpr int  EncodeTutorEntryPin(int index, int pin) { return index + kTutorEntryPinStride * (pin + 1); }
+inline constexpr int  TutorChoiceIndex(int v) { return TutorChoiceHasEntryPin(v) ? v % kTutorEntryPinStride : v; }
+inline constexpr int  TutorChoiceEntryPin(int v) { return TutorChoiceHasEntryPin(v) ? v / kTutorEntryPinStride - 1 : -1; }
 // ...and the NAMED twin of that decline, for HUMAN PLAY. The index axis above is autonomous-only
 // (every tutor fan-out that emits it is gated !HumanPlayActive()), while the human menu carries one
 // cast variant per NAMED target -- and for a PERMANENT whose ETB tutors (Forerunner of the
@@ -4776,7 +4791,7 @@ inline void PerformTutorToBattlefield(GameState& state, int controller, const Ca
         && (tutorpin::NoteRead(), g_scripted_tutor_choice >= 0))
     {
         pinned_single = true;
-        const int pick = g_scripted_tutor_choice;
+        const int pick = TutorChoiceIndex(g_scripted_tutor_choice);
         g_scripted_tutor_choice = -1;
         std::vector<std::string> cands = RankedTutorCandidates(ResolveProvider(state), state, controller, pp);
         std::vector<std::string> uniq;
@@ -54179,6 +54194,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     }
 
     std::string want = target_name;
+    // The found land's searched as-enters choice (decision 15: kTutorEntryPinStride), decoded off the same pin.
+    int entry_pin = -1;
     if (want.empty())
     {
         std::vector<std::string> cands =
@@ -54197,7 +54214,8 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         tutorpin::NoteRead();
         if (g_scripted_tutor_choice >= 0)
         {
-            const int pick = g_scripted_tutor_choice;
+            const int pick = TutorChoiceIndex(g_scripted_tutor_choice);
+            entry_pin      = TutorChoiceEntryPin(g_scripted_tutor_choice);
             g_scripted_tutor_choice = -1;
             std::vector<std::string> uniq;
             for (const std::string& c : cands)
@@ -54237,6 +54255,11 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     {
         // Archdruid's Charm: "onto the battlefield tapped" is the EFFECT's, so the land's own
         // enters-tapped rule is not consulted (LandEntryTap::ForcedTapped). Crop Rotation: Natural.
+        // Install the searched entry pin for THIS put only (an unpinned put keeps whatever stands -- -1 outside
+        // a pinned scope, so every other deck is byte-identical); EnterLand's TakeLandEntryPin consumes it. A pin
+        // off the found land's menu (the resolution-state list drifted from the enumeration's) falls back to
+        // the provider's default -- a duplicate of the base, never a whiff.
+        const LandEntryPinScope _entry_pin(entry_pin >= 0 ? entry_pin : g_land_entry_pin);
         EnterLand(state, *def, lc.m_number, false, true,
                   pp.tutor_land_enters_tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, -1, &looks);
         if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }

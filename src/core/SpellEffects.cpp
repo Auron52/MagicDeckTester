@@ -260,7 +260,7 @@ void PerformTutor(GameState& state, int controller_index, const CardParams& pp,
         return;
     }
     tutorpin::NoteRead();   // MTG_BP_TUTOR_PIN_ALIAS's witness (core/SpellEffects.h)
-    const int scripted_pick = g_scripted_tutor_choice;
+    const int scripted_pick = TutorChoiceIndex(g_scripted_tutor_choice);
     g_scripted_tutor_choice = -1;
     // THE ROUTE TAPE (core/RouteTape.h; MTG_AA_ROUTE_TAPE). RECORD: whatever this resolution fetches -- its
     // final name, or NoneName() on any return that fetches nothing -- is appended by the destructor. PLAY: the

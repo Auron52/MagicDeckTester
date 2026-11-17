@@ -181,14 +181,32 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
    field: its meaning is the land's (a colour; Plaza pay/sacrifice; Mariposa's rad mode) and no land carries two
    such choices, so every land route that already threads the rad pin (deferred land, Karoo, breakpoint
    continuation, executor) carries it unchanged. An implementation choice, recorded for review.
-15. **PROVISIONAL (USER sign-off pending): an effect put that carries no pin takes the provider's choice.**
-   Archdruid's Charm's tapped put of a CLB Gate / Thran Portal locks the provider's colour (`EtbChosenColor`:
-   fewest sources among the colours the hand demands, else the admitted menu's first), and a Charm-fetched
-   Gateway Plaza pays when it can. The Charm's find rides the resolution tutor axis (`Plan::tutor_choice`),
-   which has no slot for the found land's entry choice, so inside the search window this is an UNSEARCHED pick
-   (a no-greedy gap, small: one Charm in the list, and the colour only matters this turn under Amulet / Gond).
-   Proposed fix: fan the tutor axis per (land, admitted pin). Maze's End's fetch and the land drop ARE searched.
-   I3's put routes (Burgeoning, Manabond) must carry a pin of their own or inherit this gap.
+   **Checked (I2b): no plan can need two values in the field.** `Plan::rad_mode` / `LandPlayOptions::rad_mode` is
+   read only by the plan's ONE land drop (`PlayLandCore`, LandPlay.cpp: Mariposa's rad at the tapped-ness step, the
+   colour lock, the Plaza payment); no cast, activation or effect put reads it. Mariposa's post-pass gates on
+   `etb_optional_tapped_rad` and the pin fan on `LandHasEntryPinChoice`, and no land has both. Effect puts carry
+   their pin on their own channel (Maze's End's fetch: `Action::chosen_x`; Archdruid's Charm: `Plan::tutor_choice`,
+   decision 15), so a plan that drops a CLB Gate AND Charms another carries two independent pins. The one future
+   collision is a SECOND land drop in one plan (Exploration, I3): each extra drop must carry its own pin (the
+   per-action `Action::land_rad_mode` already exists for a deferred drop), never the plan field.
+15. **Archdruid's Charm's put is SEARCHED per (land, as-enters choice)** (I2b, on the coordinator's ruling; was
+   PROVISIONAL "the provider picks", an unsearched pick inside the search window). The resolution tutor axis
+   (`Plan::tutor_choice`) now fans, for a `tutor_land_to_battlefield` card whose candidate land has a land-entry
+   choice (a CLB Gate / Thran Portal colour, Gateway Plaza's pay-or-sacrifice), one variant per (candidate index,
+   admitted pin), the front candidate included (the base plan keeps the provider's default, so one base/variant
+   pair is a duplicate -- not a loss). The pin rides the same int: `tutor_choice = index + 4096 * (pin + 1)`
+   (`EncodeTutorEntryPin`, core/SpellEffects.h), so every site that carries, hashes, dedups, captures or restores
+   the tutor pin carries the entry pin with no edit; the indexing consumers decode (`TutorChoiceIndex`) and
+   `PerformLandTutorToBattlefield` installs the pin (`LandEntryPinScope`) for its put only. `LandEntryPinCandidates`
+   RESTRICTS (decision 1/20) and orders; it picks nothing. Byte-identical for every other deck (no other land has
+   a choice: checked over cards.json). Limits, inherited from the tutor axis itself and disclosed: the axis varies
+   ONE tutor per plan (the first in action order), so a plan that casts Sylvan Scrying before the Charm leaves the
+   Charm's find AND its pin at the provider's front; the name-bound axis (`MTG_TUTOR_AXIS_RESOLVE=0`, non-default)
+   is not extended; beyond the horizon / d0 runner the default applies (permitted greedy).
+   **Audit of the deck's other effect-put routes:** Maze's End's fetch -- searched (`chosen_x` = pin + 1, I2);
+   Guild Summit's count -- beyond-horizon only (decision 8); Burgeoning and Manabond (I3) and Talon Gates /
+   any I4 put -- not yet implemented: each MUST carry its own pin (`LandEntryPinScope` per land) or reopen this gap.
+   No other route in the current tree puts a land with a choice.
 16. **Gateway Plaza's pay-or-sacrifice uses the `dig` chooser (Mihail's "pay {1}" shape), not `echo`**
    (supersedes decision 4's wording): the echo chooser is AIEngine's upkeep hook and cannot be reached from the
    shared land-entry code; the dig shape is the existing core-level pay-or-not precedent. Asked only when the

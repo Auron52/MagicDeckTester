@@ -104,12 +104,12 @@ bool Drop(GameState& s, int num, int pin = -1)
 
 bool Has(const std::vector<Color>& v, Color c) { return std::find(v.begin(), v.end(), c) != v.end(); }
 
-// The colours the Maze's End list spends (Guild Summit U, Exploration G, Gates Ablaze R) in the library, so
+// The colours the Maze's End list spends (Guild Summit U, Sylvan Scrying G (Exploration arrives in I3), Gates Ablaze R) in the library, so
 // MazesEndProvider's spendable-colour restriction has its premise.
 void StockSpendLibrary(GameState& s, int base)
 {
     s.players[0].library.push_back(C("Guild Summit", base));
-    s.players[0].library.push_back(C("Exploration", base + 1));
+    s.players[0].library.push_back(C("Sylvan Scrying", base + 1));
     s.players[0].library.push_back(C("Gates Ablaze", base + 2));
 }
 }   // namespace
@@ -334,7 +334,7 @@ TEST_CASE("Maze's End I2: a CLB Gate locks a colour other than its printed one a
     GameState v = Base();
     StockSpendLibrary(v, 70);
     const MazesEndProvider prov;
-    CHECK(DeckProvider().LandEntryPinCandidates(v, 0, sea).size() == 4);
+    CHECK(GenericProvider().LandEntryPinCandidates(v, 0, sea).size() == 4);
     const std::vector<int> sea_m = prov.LandEntryPinCandidates(v, 0, sea);
     CHECK(sea_m == std::vector<int>{ static_cast<int>(Color::Red), static_cast<int>(Color::Green) });
     CHECK(prov.LandEntryPinCandidates(v, 0, D("Manor Gate"))
@@ -477,4 +477,94 @@ TEST_CASE("Maze's End I2: the search is offered every admitted land-entry choice
     }
     REQUIRE(Find(w, 145) != nullptr);
     CHECK(Find(w, 145)->chosen_color == static_cast<int>(Color::Green));
+}
+
+TEST_CASE("Maze's End I2: Archdruid's Charm searches the found land's as-enters choice (decision 15)")
+{
+    LoadI2Cards();
+    static const MazesEndProvider kProv;
+    const CardDefinition& charm = D("Archdruid's Charm");
+    // The encoding: every pre-existing value decodes to itself; a pinned value round-trips.
+    CHECK(TutorChoiceIndex(3) == 3);
+    CHECK(TutorChoiceEntryPin(3) == -1);
+    CHECK(TutorChoiceIndex(kTutorDeclineChoice) == kTutorDeclineChoice);
+    CHECK(TutorChoiceEntryPin(kTutorDeclineChoice) == -1);
+    CHECK(TutorChoiceIndex(EncodeTutorEntryPin(2, 0)) == 2);
+    CHECK(TutorChoiceEntryPin(EncodeTutorEntryPin(2, 0)) == 0);
+    CHECK(TutorChoiceEntryPin(EncodeTutorEntryPin(0, static_cast<int>(Color::Green))) == static_cast<int>(Color::Green));
+    // The enumeration: a Charm whose only land find is a Sea Gate fans one variant per admitted colour (R, G),
+    // index 0 included (the base plan takes the provider's default colour, not a searched one).
+    GameState s = Base();
+    s.m_provider = &kProv;
+    StockSpendLibrary(s, 150);
+    s.players[0].library.push_back(C("Sea Gate", 155));
+    Put(s, "Forest", 156); Put(s, "Forest", 157); Put(s, "Forest", 158);
+    s.players[0].hand.push_back(C("Archdruid's Charm", 159));
+    std::vector<int> pins;
+    bool base = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, /*is_pre_combat=*/true))
+    {
+        bool casts = false;
+        for (const Action& a : p.actions)
+        { if (a.kind == Action::Kind::CastFromHand && a.card_name == "Archdruid's Charm") { casts = true; } }
+        if (!casts) { continue; }
+        if (p.tutor_choice == -1) { base = true; }
+        else if (TutorChoiceHasEntryPin(p.tutor_choice))
+        {
+            CHECK(TutorChoiceIndex(p.tutor_choice) == 0);
+            if (std::find(pins.begin(), pins.end(), TutorChoiceEntryPin(p.tutor_choice)) == pins.end())
+            { pins.push_back(TutorChoiceEntryPin(p.tutor_choice)); }
+        }
+    }
+    std::sort(pins.begin(), pins.end());
+    CHECK(base);
+    CHECK(pins == std::vector<int>{ static_cast<int>(Color::Red), static_cast<int>(Color::Green) });
+    // The resolver: the pinned colour is locked on the found Gate, which enters tapped (the effect's); the pin
+    // is consumed and nothing leaks.
+    GameState w = s;
+    {
+        const ScriptedTutor st(EncodeTutorEntryPin(0, static_cast<int>(Color::Green)));
+        PerformLandTutorToBattlefield(w, 0, charm.params);
+        CHECK(g_scripted_tutor_choice == -1);
+    }
+    REQUIRE(Find(w, 155) != nullptr);
+    CHECK(Find(w, 155)->chosen_color == static_cast<int>(Color::Green));
+    CHECK(Find(w, 155)->tapped);
+    CHECK(g_land_entry_pin == -1);
+    GameState w2 = s;
+    {
+        const ScriptedTutor st(EncodeTutorEntryPin(0, static_cast<int>(Color::Red)));
+        PerformLandTutorToBattlefield(w2, 0, charm.params);
+    }
+    REQUIRE(Find(w2, 155) != nullptr);
+    CHECK(Find(w2, 155)->chosen_color == static_cast<int>(Color::Red));
+    // Gateway Plaza found by the Charm: pay (1) and sacrifice (0) are both variants, and pin 0 sacrifices it.
+    GameState t = Base();
+    t.m_provider = &kProv;
+    StockSpendLibrary(t, 160);
+    t.players[0].library.push_back(C("Gateway Plaza", 165));
+    Put(t, "Forest", 166); Put(t, "Forest", 167); Put(t, "Forest", 168); Put(t, "Forest", 169);
+    t.players[0].hand.push_back(C("Archdruid's Charm", 170));
+    std::vector<int> plaza;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(t, true))
+    {
+        if (!TutorChoiceHasEntryPin(p.tutor_choice)) { continue; }
+        if (std::find(plaza.begin(), plaza.end(), TutorChoiceEntryPin(p.tutor_choice)) == plaza.end())
+        { plaza.push_back(TutorChoiceEntryPin(p.tutor_choice)); }
+    }
+    std::sort(plaza.begin(), plaza.end());
+    CHECK(plaza == std::vector<int>{ 0, 1 });
+    GameState t2 = t;
+    {
+        const ScriptedTutor st(EncodeTutorEntryPin(0, 0));
+        PerformLandTutorToBattlefield(t2, 0, charm.params);
+    }
+    CHECK(Find(t2, 165) == nullptr);
+    CHECK(InGraveyard(t2, 165));
+    GameState t3 = t;
+    {
+        const ScriptedTutor st(EncodeTutorEntryPin(0, 1));
+        PerformLandTutorToBattlefield(t3, 0, charm.params);
+    }
+    CHECK(Find(t3, 165) != nullptr);
 }

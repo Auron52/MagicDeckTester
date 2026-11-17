@@ -93212,10 +93212,15 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         // a temporary, a move into the side vector, its reallocation moves, and a second move into
         // `all` per clone -- ~8% of a continuation-heavy Living Wish game). The sizing loop makes the
         // same RankedTutorCandidates calls in the same order as before.
-        struct TutorEmit { std::size_t i; std::size_t k; bool decline; };
+        struct TutorEmit { std::size_t i; const std::vector<int>* codes; bool decline; };
         std::vector<TutorEmit> emits;
         std::size_t n_extra = 0;
-        std::map<std::string, std::size_t> size_cache;   // tutor card name -> distinct-name count
+        // tutor card name -> the tutor_choice values of its EXTRA variants (the base is -1): the indices
+        // 1..k-1, or -- for a tutor that PUTS a land with an as-enters choice (Archdruid's Charm finding a CLB
+        // Gate / Thran Portal / Gateway Plaza; decision 15) -- one (index, pin) per admitted land-entry pin,
+        // index 0 included because the base takes the provider's default pin, not a searched one.
+        // std::map nodes are stable, so the emit list may hold pointers into it.
+        std::map<std::string, std::vector<int>> size_cache;
         const std::size_t n_tut = all.size();
         for (std::size_t ti = 0; ti < n_tut; ++ti)
         {
@@ -93257,18 +93262,35 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                     std::vector<std::string> uniq;
                     for (const std::string& c : cands)
                     { if (std::find(uniq.begin(), uniq.end(), c) == uniq.end()) { uniq.push_back(c); } }
-                    it = size_cache.emplace(act.card_name, uniq.size()).first;
+                    const std::size_t k = std::min(uniq.size(), TutorAxisWidth(state));
+                    std::vector<int> codes;
+                    for (std::size_t c = 0; c < k; ++c)
+                    {
+                        // The found land's as-enters choice (THE LAND-ENTRY PIN), searched with the find:
+                        // LandEntryPinCandidates RESTRICTS/ORDERS, never picks. Only a put route reads it
+                        // (PerformLandTutorToBattlefield), and only Maze's End's lands carry a choice.
+                        std::vector<int> pins;
+                        if (d->params.tutor_land_to_battlefield)
+                        {
+                            const CardDefinition* ld = CardDatabase::Instance().Lookup(uniq[c]);
+                            if (ld != nullptr && LandHasEntryPinChoice(*ld))
+                            { pins = ResolveProvider(state).LandEntryPinCandidates(state, state.active_player_index, *ld); }
+                        }
+                        if (!pins.empty())
+                        { for (int pin : pins) { codes.push_back(EncodeTutorEntryPin(static_cast<int>(c), pin)); } }
+                        else if (c >= 1) { codes.push_back(static_cast<int>(c)); }
+                    }
+                    it = size_cache.emplace(act.card_name, std::move(codes)).first;
                 }
-                const std::size_t k = std::min(it->second, TutorAxisWidth(state));
                 // "You MAY search": one extra variant that DECLINES. Only for a card whose data
                 // says the search is optional, so every other tutor deck keeps exactly the
                 // variants it had. Declining is a real line for a tutor_to_top -- the fetch costs
                 // the next draw step -- which is why it is not merely a dominated duplicate of
                 // fetching the worst candidate.
                 const bool decline = d->params.tutor_optional;
-                const std::size_t nv = (k > 1 ? k - 1 : 0) + (decline ? 1 : 0);
+                const std::size_t nv = it->second.size() + (decline ? 1 : 0);
                 ripplestats::NoteSite(ripplestats::kSiteTutorAxis, static_cast<long long>(nv + 1));
-                if (nv > 0) { emits.push_back(TutorEmit{ ti, k, decline }); n_extra += nv; }
+                if (nv > 0) { emits.push_back(TutorEmit{ ti, &it->second, decline }); n_extra += nv; }
                 break;   // vary ONE tutor per variant; the first to resolve consumes the pin
             }
         }
@@ -93281,10 +93303,10 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
             if (all.capacity() < n_tut + n_extra) { all.reserve(n_tut + std::max(n_tut, n_extra)); }
             for (const TutorEmit& e : emits)
             {
-                for (std::size_t c = 1; c < e.k; ++c)
+                for (const int code : *e.codes)
                 {
                     all.push_back(all[e.i]);
-                    all.back().tutor_choice = static_cast<int>(c);
+                    all.back().tutor_choice = code;
                 }
                 if (e.decline)
                 {
