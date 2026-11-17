@@ -142,6 +142,10 @@ deferrals provisional.
   this turn (it can tap, or our sweeper reaches it) — indestructible and loops now, nothing beats it; also when only
   one loop-sustaining creature exists. TWO only in the split case: the Doll must wait a turn but another reflector
   can go off now.
+  USER (~21:05): "Hmm... Though I guess in rare cases we would win by combat damage and the conscience could be
+  better on a higher-power creature. That makes a clear order." => host ORDER (and which 1-2 survive the cap):
+  (1) a Stuffy Doll with a starter this turn; (2) a reflector that can go off this turn; (3) ties broken by higher
+  power (an attacking GC'd reflector deals power + reflects power, so the combat-damage win favours the bigger one).
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
