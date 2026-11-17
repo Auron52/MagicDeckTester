@@ -2,7 +2,18 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:35 UTC
+## Current state, updated 05:36 UTC
+
+**Shared branch pushed:** after a final fetch confirmed origin had not
+moved, `git push origin phase-1-2-deck-analyzer` published 57 local
+commits through `a5c156a20` at about 05:35 UTC. Reference safety had
+passed across 210 checkouts. The next ordinary 4-hour push window is
+**09:35 UTC**. Windows CI run `44025173062` was pending at launch;
+background `gh run watch 44025173062 --interval 60 --exit-status` is
+active in exec session `25317`, output
+`build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
+The shell's Git credential helper supplied the token only to the child
+process. Check the watcher asynchronously; if red, pivot to its failure.
 
 **Post-Boars full smoke comparison complete:** the fresh-source smoke
 run ended 180 pass, 39 fail, zero new, exactly the same known GT drift
