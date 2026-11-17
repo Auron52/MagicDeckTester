@@ -160,3 +160,16 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   only rgc/gamelc/inwin (plan/mana caches charge a hit as its recompute). gi35: 8.4 s / 250 MB vs heur 8.2 s / 227 MB.
 - RUNNING: S3 = S2's manifest (same seeds, both arms re-run) on mtg_j23, trace on, `build/scratch/p18g/S3/` (DONE marker).
   Diagnostic adds: walk records carry wall ms in the dvs field (trace only).
+- S3 (mtg_j23, S2's seeds, both arms re-run): m4 0.983x CPU / 0.982x units, 0/0 games; Gods 1.00x, Five Colour 1.00x.
+  Fast-deck savings fell (Kithkin 0.35 -> 0.74): the past-reach allowance edit (0.1 x Limit, unit AND priced) cut
+  intermediate passes that S2 walked to hits (Kithkin 14250017 T1: W4 8.3k units no win, W5 5 units hit).
+  Isolation check (drift.py: heur's own passes on non-hit decisions, m4 vs heur): ~0 on every deck -> mute not needed.
+- S4 (mtg_j24): `_pzb` (no root rollout for the rest of a game after 2 consecutive cuts) Extra Turns 1.036 -> 1.010x,
+  neutral elsewhere; `_pxa` mixed. CPU noise per deck is ~+-1% at 100 games (arms with identical units differ that much).
+- S5 (mtg_j25): `_pal` 30/50/100 -> 0.971 / 0.969 / 0.959x CPU; pal100: Kithkin 0.37, Knights 0.38, Soldiers 0.40,
+  Minotaur 0.49, Angels 0.48, 2 earlier / 0 later. Remaining >= 1.00x on both CPU and units: EDF, Extra Turns, Hinata,
+  Landfall, LFE, Martyr, Melira, Merfolk Turns, Niv (+0.2..2%): Zcut 0.4-2% + walk misses 0.2-3%, few hits.
+  Melira mechanism: leafless pass k costs ~= heur's rollout pass k (heur's later-pass leaves are TT hits from the pass
+  below), so a hit saves little and a miss doubles the passes walked.
+- RUNNING: H1 = held-out 300 games x 14 budget-bound decks, heur vs m4_pzb_pal100 (seeds 15,000,000+), mtg_j25,
+  `build/scratch/p18g/H1/` -- which of the residual losses are real.
