@@ -66,6 +66,20 @@ it; the sequential payment walk already applies the Apex mana after cast.
 The new Ruby/Seething order gaps are fixed in `cf5f44488`; see the update
 above and the design note. The Apex one-copy gaps remain open.
 
+One residual payment lead is especially concrete: seed 30074224 T5,
+`Seething Song → Karrthus`. Oracle pays Song by cracking Lotus Bloom for
+red, leaves both Unclaimed Territories untapped, then pays Karrthus's
+black and green with them. The engine's replay ends with Bloom still on
+the board, both Territories tapped, five red floating, and Karrthus
+dropped. The `MTG_ONDEMAND_VISIBLE_LUMP` branch in `src/ai/ManaPayment.cpp`
+uses `short_with_shared` against the **prepayment** pool before comparing
+the trial payments. Two Territories make black/green look covered before
+Song, even though ordinary Song payment spends them as colorless. This is
+a likely guard mismatch, not yet a proven fix. A scoped trial should
+compare the after-payment pools and preserve the two later colored
+sources when early Bloom:red pays the current generic bill. The user
+already authorized early Bloom cracking for a visible later cast.
+
 1. Inspect `git status --short`, the fresh report and raw `build/scratch/mana_clean/codex-dragonstorm-ruby-apex-storage-20261117/on.0.err`. The Dragonstorm design note and gate record are committed in `e09d0ca2b`; keep this handoff current as work proceeds. Gates return nonzero when flags remain.
 2. Work the new Dragonstorm issue clusters with exact on/off repros, narrow deterministic payment/order fixes, 5,000 paired A/B where material, Release unit/regression/viewer validation, and a fresh PGO 5,000-game gate. Avoid adding searched options or costly broad branches. One top-level simulation batch at a time, `MTG_RSS_CAP_GB=40`, use `nproc` for worker count. Build only via `./build.sh`; PGO+LTO for long runs.
 3. Separate Gods trial worktree `.claude/worktrees/codex-gods-hold-20261117` has only a dirty provider edit adding a `ready >= 3` floor to the default-off `MTG_GODS_LOAM_GREEN_HOLD`. It is unbuilt/untested. The broad green hold cleared exact seeds 30037134 and 30037273 but caused 2 later wins/0 earlier and +12.1% recorded time in 5,000 paired games. User wants a less costly fix and full mana completeness. See `docs/design/gods-loam-line-green-hold-2026-11-16.md`. Do not run its long test concurrently with Dragonstorm gates.
