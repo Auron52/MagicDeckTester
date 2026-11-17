@@ -221,6 +221,15 @@
     "toughness": null,
     "type_line": "Enchantment — Aura"
   },
+  "Amulet of Vigor": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{1}",
+    "oracle_text": "Whenever a permanent you control enters tapped, untap it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
   "Ancestral Anger": {
     "cmc": 1.0,
     "keywords": [],
@@ -343,6 +352,15 @@
     "power": "3",
     "toughness": "4",
     "type_line": "Creature — Angel"
+  },
+  "Archdruid's Charm": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{G}{G}{G}",
+    "oracle_text": "Choose one —\n• Search your library for a creature or land card and reveal it. Put it onto the battlefield tapped if it's a land card. Otherwise, put it into your hand. Then shuffle.\n• Put a +1/+1 counter on target creature you control. It deals damage equal to its power to target creature you don't control.\n• Exile target artifact or enchantment.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Instant"
   },
   "Archive Trap": {
     "cmc": 5.0,
@@ -521,6 +539,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Azorius Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {W} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Balan, Wandering Knight": {
     "cmc": 4.0,
     "keywords": [
@@ -531,6 +558,36 @@
     "power": "3",
     "toughness": "3",
     "type_line": "Legendary Creature — Cat Knight"
+  },
+  "Baldur's Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{2}, {T}: Add X mana of any one color, where X is the number of other Gates you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land — Gate"
+  },
+  "Ball Lightning": {
+    "cmc": 3.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}{R}{R}",
+    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "6",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
+  },
+  "Basilisk Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{2}, {T}: Target creature gets +X/+X until end of turn, where X is the number of Gates you control. Activate only as a sorcery.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Basri, Tomorrow's Champion": {
     "cmc": 1.0,
@@ -626,6 +683,15 @@
     "power": "1",
     "toughness": "4",
     "type_line": "Creature — Human Cleric"
+  },
+  "Black Dragon Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than black.\n{T}: Add {B} or one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Black Lotus": {
     "cmc": 0.0,
@@ -847,6 +913,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Boros Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Boros Reckoner": {
     "cmc": 3.0,
     "keywords": [],
@@ -995,6 +1070,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Creature — Human Soldier Werewolf"
+  },
+  "Burgeoning": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "Whenever an opponent plays a land, you may put a land card from your hand onto the battlefield.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Burning-Fist Minotaur": {
     "cmc": 2.0,
@@ -1225,6 +1309,15 @@
     "toughness": "2",
     "type_line": "Legendary Creature — Human Warrior Pilot"
   },
+  "Citadel Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than white.\n{T}: Add {W} or one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "City of Brass": {
     "cmc": 0.0,
     "keywords": [],
@@ -1233,6 +1326,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Cliffgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than red.\n{T}: Add {R} or one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Clifftop Retreat": {
     "cmc": 0.0,
@@ -1718,6 +1820,15 @@
     "toughness": "1",
     "type_line": "Creature — Eldrazi"
   },
+  "Dimir Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U} or {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Dimir House Guard": {
     "cmc": 4.0,
     "keywords": [
@@ -2149,6 +2260,15 @@
     "toughness": null,
     "type_line": "Instant"
   },
+  "Exploration": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "You may play an additional land on each of your turns.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
   "Explosive Vegetation": {
     "cmc": 4.0,
     "keywords": [],
@@ -2402,6 +2522,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Flamekin Bladewhirl": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{R}",
+    "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}.",
+    "power": "2",
+    "toughness": "1",
+    "type_line": "Creature — Elemental Warrior"
   },
   "Flamekin Harbinger": {
     "cmc": 1.0,
@@ -2691,6 +2820,24 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Creature — Human Wizard"
+  },
+  "Gates Ablaze": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}",
+    "oracle_text": "Gates Ablaze deals X damage to each creature, where X is the number of Gates you control.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
+  },
+  "Gateway Plaza": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nWhen this land enters, sacrifice it unless you pay {1}.\n{T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Gauntlet of Power": {
     "cmc": 5.0,
@@ -3015,6 +3162,24 @@
     "toughness": "0",
     "type_line": "Creature — Troll Skeleton"
   },
+  "Golgari Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {B} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
+  "Gond Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "Gates you control enter untapped.\n{T}: Add {C}.\n{T}: Add one mana of any color that a Gate you control could produce.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Grafted Wargear": {
     "cmc": 3.0,
     "keywords": [
@@ -3062,6 +3227,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Gruul Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {R} or {G}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Gruul Turf": {
     "cmc": 0.0,
     "keywords": [],
@@ -3081,6 +3255,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment — Aura"
+  },
+  "Guild Summit": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}",
+    "oracle_text": "When this enchantment enters, you may tap any number of untapped Gates you control. Draw a card for each Gate tapped this way.\nWhenever a Gate you control enters, draw a card.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
   },
   "Hallowed Fountain": {
     "cmc": 0.0,
@@ -3160,6 +3343,17 @@
     "toughness": "3",
     "type_line": "Legendary Creature — Human Knight"
   },
+  "Heap Gate": {
+    "cmc": 0.0,
+    "keywords": [
+      "Treasure"
+    ],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\n{1}, {T}, Tap an untapped Gate you control: Create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Hedron Crab": {
     "cmc": 1.0,
     "keywords": [
@@ -3182,6 +3376,19 @@
     "power": "5",
     "toughness": "5",
     "type_line": "Legendary Enchantment Creature — God"
+  },
+  "Hellspark Elemental": {
+    "cmc": 2.0,
+    "keywords": [
+      "Haste",
+      "Trample",
+      "Unearth"
+    ],
+    "mana_cost": "{1}{R}",
+    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
   },
   "Herald of Ilharg": {
     "cmc": 4.0,
@@ -3525,6 +3732,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Izzet Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {U} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Izzet Signet": {
     "cmc": 2.0,
@@ -4303,6 +4519,24 @@
     "toughness": null,
     "type_line": "Enchantment"
   },
+  "Manabond": {
+    "cmc": 1.0,
+    "keywords": [],
+    "mana_cost": "{G}",
+    "oracle_text": "At the beginning of your end step, you may reveal your hand and put all land cards from it onto the battlefield. If you do, discard your hand.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment"
+  },
+  "Manor Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than green.\n{T}: Add {G} or one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Mariposa Military Base": {
     "cmc": 0.0,
     "keywords": [],
@@ -4400,6 +4634,15 @@
     "power": "2",
     "toughness": "2",
     "type_line": "Legendary Creature — Vampire Cleric"
+  },
+  "Maze's End": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {C}.\n{3}, {T}, Return this land to its owner's hand: Search your library for a Gate card, put it onto the battlefield, then shuffle. If you control ten or more Gates with different names, you win the game.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Melira, Sylvok Outcast": {
     "cmc": 2.0,
@@ -4945,6 +5188,15 @@
     "toughness": null,
     "type_line": "Land"
   },
+  "Orzhov Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {W} or {B}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Overgrown Tomb": {
     "cmc": 0.0,
     "keywords": [],
@@ -5108,6 +5360,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Basic Land — Plains"
+  },
+  "Planar Nexus": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land is every nonbasic land type. (Nonbasic land types include Cave, Desert, Gate, Lair, Locus, Mine, Power-Plant, Sphere, Tower, and Urza's.)\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
   },
   "Plated Sliver": {
     "cmc": 1.0,
@@ -5375,6 +5636,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Rakdos Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {B} or {R}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Rampaging Baloths": {
     "cmc": 6.0,
@@ -5944,6 +6214,15 @@
     "toughness": "2",
     "type_line": "Creature — Cat"
   },
+  "Sea Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\nAs this land enters, choose a color other than blue.\n{T}: Add {U} or one mana of the chosen color.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
+  },
   "Seahunter": {
     "cmc": 4.0,
     "keywords": [],
@@ -6019,6 +6298,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Instant"
+  },
+  "Selesnya Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {G} or {W}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Selesnya Sanctuary": {
     "cmc": 0.0,
@@ -6236,6 +6524,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Land"
+  },
+  "Simic Guildgate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped.\n{T}: Add {G} or {U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Sinew Sliver": {
     "cmc": 2.0,
@@ -6489,6 +6786,18 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Spark Elemental": {
+    "cmc": 1.0,
+    "keywords": [
+      "Haste",
+      "Trample"
+    ],
+    "mana_cost": "{R}",
+    "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
+    "power": "3",
+    "toughness": "1",
+    "type_line": "Creature — Elemental"
   },
   "Speaker of the Heavens": {
     "cmc": 1.0,
@@ -6838,6 +7147,15 @@
     "toughness": "5",
     "type_line": "Creature — Giant Warrior"
   },
+  "Sunspine Lynx": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{R}{R}",
+    "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls.",
+    "power": "5",
+    "toughness": "4",
+    "type_line": "Creature — Elemental Cat"
+  },
   "Supreme Phantom": {
     "cmc": 2.0,
     "keywords": [
@@ -6953,6 +7271,15 @@
     "power": null,
     "toughness": null,
     "type_line": "Enchantment"
+  },
+  "Talon Gates of Madara": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "When this land enters, up to one target creature phases out.\n{T}: Add {C}.\n{1}, {T}: Add one mana of any color.\n{4}: Put this card from your hand onto the battlefield.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Tamanoa": {
     "cmc": 3.0,
@@ -7216,6 +7543,15 @@
     "toughness": "5",
     "type_line": "Creature — Fungus"
   },
+  "The Black Gate": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "As The Black Gate enters, you may pay 3 life. If you don't, it enters tapped.\n{T}: Add {B}.\n{1}{B}, {T}: Choose a player with the most life or tied for most life. Target creature can't be blocked by creatures that player controls this turn.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Legendary Land — Gate"
+  },
   "The Grey Havens": {
     "cmc": 0.0,
     "keywords": [
@@ -7248,6 +7584,15 @@
     "power": "1",
     "toughness": "2",
     "type_line": "Creature — Human Soldier"
+  },
+  "Thran Portal": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "This land enters tapped unless you control two or fewer other lands.\nAs this land enters, choose a basic land type.\nThis land is the chosen type in addition to its other types.\nMana abilities of this land cost an additional 1 life to activate.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Gate"
   },
   "Three Tree City": {
     "cmc": 0.0,
@@ -8147,60 +8492,5 @@
     "power": "1",
     "toughness": "1",
     "type_line": "Creature — Human Druid"
-  },
-  "Ball Lightning": {
-    "cmc": 3.0,
-    "keywords": [
-      "Haste",
-      "Trample"
-    ],
-    "mana_cost": "{R}{R}{R}",
-    "oracle_text": "Trample (This creature can deal excess combat damage to the player or planeswalker it's attacking.)\nHaste (This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
-    "power": "6",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Flamekin Bladewhirl": {
-    "cmc": 1.0,
-    "keywords": [],
-    "mana_cost": "{R}",
-    "oracle_text": "As an additional cost to cast this spell, reveal an Elemental card from your hand or pay {3}.",
-    "power": "2",
-    "toughness": "1",
-    "type_line": "Creature — Elemental Warrior"
-  },
-  "Hellspark Elemental": {
-    "cmc": 2.0,
-    "keywords": [
-      "Haste",
-      "Trample",
-      "Unearth"
-    ],
-    "mana_cost": "{1}{R}",
-    "oracle_text": "Trample, haste\nAt the beginning of the end step, sacrifice this creature.\nUnearth {1}{R} ({1}{R}: Return this card from your graveyard to the battlefield. It gains haste. Exile it at the beginning of the next end step or if it would leave the battlefield. Unearth only as a sorcery.)",
-    "power": "3",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Spark Elemental": {
-    "cmc": 1.0,
-    "keywords": [
-      "Haste",
-      "Trample"
-    ],
-    "mana_cost": "{R}",
-    "oracle_text": "Trample, haste (This creature can deal excess combat damage to the player or planeswalker it's attacking. This creature can attack and {T} as soon as it comes under your control.)\nAt the beginning of the end step, sacrifice this creature.",
-    "power": "3",
-    "toughness": "1",
-    "type_line": "Creature — Elemental"
-  },
-  "Sunspine Lynx": {
-    "cmc": 4.0,
-    "keywords": [],
-    "mana_cost": "{2}{R}{R}",
-    "oracle_text": "Players can't gain life.\nDamage can't be prevented.\nWhen this creature enters, it deals damage to each player equal to the number of nonbasic lands that player controls.",
-    "power": "5",
-    "toughness": "4",
-    "type_line": "Creature — Elemental Cat"
   }
 }
