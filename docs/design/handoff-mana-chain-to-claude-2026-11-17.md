@@ -2,7 +2,30 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:03 UTC
+## Live status, updated 07:08 UTC
+
+**Spirits 30040647 T4 correction in progress, source and test still uncommitted:**
+The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
+Flooded Strand, Lingering Souls flashback `{1}{B}`, then Millicent `{W}{U}`.
+At Souls payment, Hallowed Fountain, Watery Grave, and two Godless Shrines
+are untapped. The ordinary payer uses a blue land for Souls' generic pip,
+stranding Millicent; two Godless Shrines can pay Souls and leave Fountain
+plus Watery for Millicent. A focused test in
+`test/unit/test_spirits_millicent.cpp` fails on baseline and passes with a
+narrow hold in `src/ai/ManaPayment.cpp` under the existing Spirits Souls
+line conditions. `MTG_SPIRITS_SHOCK_PAIR_HOLD=0` restores the exact failure.
+The exact seed replay with `MTG_MANA_ORACLE=3` now has **zero oracle
+issues**; lever-off still has APPLY-DROP=1. Outputs are
+`build/scratch/dragonstorm_visible_lump_ab/spirits_gap_30040647_shockpair.out`
+and `_legacy.out`. Release `./build.sh` passed; the full Release unit
+suite passed **3,385/3,385**, zero failures, console
+`build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
+Next commit the source/test fix, rebuild PGO (current PGO is on the prior
+source tree), run same-PGO 5,000 paired Spirits games with the lever and
+then a fresh Spirits mana-clean gate. If the measured cost is significant,
+look for a narrower fix. Update this handoff after each milestone.
+
+**Prior completed status (chronological history follows):**
 
 **Smoke + strict viewer validation complete:**
 `VPC_ALWAYS=1 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`
