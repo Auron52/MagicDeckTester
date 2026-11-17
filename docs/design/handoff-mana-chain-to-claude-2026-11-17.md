@@ -27,8 +27,10 @@ and partly s30086717 (12 -> 8). The held-out A/B is byte-identical on every deck
 later game (gi 560506, a T1 butterfly that recovers at d8 b0), net +1. A trade-off, so the USER decides; the
 agent recommends adopting. `docs/design/unseen-keep-scarce-2026-11-17.md`.
 
-**Found defect (pre-existing, not yet investigated):** Merfolk Turns game 560698 (seed 30560698) drives one
-process past 42 GB RSS within a minute, on the current and the pre-rebase binary alike.
+**Found defect (pre-existing, diagnosed, deferred):** Merfolk Turns game 560698 (seed 30560698) drives one process
+past 42 GB RSS on turn 6. Cause: the Wanderwine Prophets CHAMPION axis is still materialised eagerly (540 -> 154,635
+plans). Deferred doc: `docs/design/merfolk-turns-champion-fan-rss-2026-11-17.md`. Avoid Merfolk Turns games
+560,000-560,999 in batches until it is fixed.
 
 **s30086338 T6 diagnosed (not fixed):**
 - The visible-closer rule cracks Bloom for `{B}{B}{B}` at the first Pyretic, so Kolaghan has black later.
@@ -40,8 +42,8 @@ process past 42 GB RSS within a minute, on the current and the pre-rebase binary
 - So this is a float-vs-TAP decision: spend the banked counter when the named line is otherwise short a colour
   that no other source makes. That is a design question about banked lands; not started.
 
-**NEXT:** the Merfolk Turns RSS runaway (game 560698; a run hazard: one game kills a pooled batch). Then s30083522 T6
-(Karrthus beyond two Apexes). Then the Merfolk Turns RSS runaway, the PD CAPPED
+**NEXT:** s30083522 T6 (Karrthus beyond two Apexes), then the PD CAPPED fold, then the deck queue (Pirates, Extra
+Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph, Landfall Elementals, Dragons, stale-clean decks). Then the Merfolk Turns RSS runaway, the PD CAPPED
 fold, and the deck queue. Next push not before 20:44 UTC.
 
 **DONE 16:15 UTC: s30072155 T5 + s30074081 T4** (`MTG_LEFTOVER_LINE_SWAP`, ON; `SwapLeftoverForLine` in
