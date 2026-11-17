@@ -23,9 +23,16 @@ The 16-worker resume (`23177`) was terminated after RSS climbed to
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run --resume codex-due-four-20261117 --threads 8`.
 Resume remains chunk-granular and source-identical. `python3
 scripts/check_references_safe.py` passed at 04:51 UTC after scanning 210
-checkouts/worktrees. The next
-shared-branch push window opens at 05:09 UTC; rerun the safety check if
-new reference work appears before that push.
+checkouts/worktrees. The three upstream Red Elementals sidecar commits
+were fetched and the 42 local commits rebased cleanly at 04:53 UTC. The
+only conflict was the regression GT header; the newer upstream header
+and both decks' rows are preserved. `HEAD:src` remains exactly
+`fcb9352608ea7e19580916d696643bc094d6ef3a`, so the running gate
+still matches the PGO binary. `python3 test/check_gt_logs.py` passed:
+1,252 consistent, zero stale/missing. A shared-branch push is due no
+earlier than 05:09 UTC; rerun the reference check if new reference work
+appears before that push. Because GT changed on rebase, run the smoke
+gate once the current simulation batch finishes, before the push.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
 Commit the updated `test/mana_clean.json` and this handoff after it finishes.
