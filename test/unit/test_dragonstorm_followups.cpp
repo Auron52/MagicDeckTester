@@ -267,6 +267,48 @@ std::vector<std::string> OrderNamesFu(const std::vector<Action>& acts, const std
 }
 }   // namespace
 
+TEST_CASE("Dragonstorm: Ruby-first ritual line fails while a ritual-funded Ruby order pays")
+{
+    GameState s = BoardFu({ "Sandstone Needle", "Unclaimed Territory" },
+                          { "Ruby Medallion", "Rite of Flame", "Pyretic Ritual",
+                            "Seething Song", "Dragonlord Kolaghan" }, 3);
+    const std::vector<Action> acts = { CastFu(s, "Ruby Medallion"), CastFu(s, "Rite of Flame"),
+                                       CastFu(s, "Pyretic Ritual"), CastFu(s, "Seething Song"),
+                                       CastFu(s, "Dragonlord Kolaghan") };
+    const std::vector<int> ruby_first = { 0, 1, 2, 3, 4 };
+    const std::vector<int> funded = { 2, 1, 0, 3, 4 };
+    CHECK_FALSE(TurnSolver::OrderPrepaysWholeTurn(s, acts, ruby_first));
+    CHECK_FALSE(TurnSolver::OrderPaysSequentially(s, acts, ruby_first));
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, funded));
+    std::vector<int> arranged = ruby_first;
+    DsProvFu().ArrangeCastOrder(s, acts, arranged);
+    CHECK(TurnSolver::OrderPaysSequentially(s, acts, arranged));
+}
+
+TEST_CASE("Dragonstorm: hand Apex mana admits a second visible Apex in one line")
+{
+    GameState s = BoardFu({ "Dwarven Hold" },
+                          { "Apex of Power", "Pyretic Ritual", "Apex of Power",
+                            "Rite of Flame", "Seething Song", "Seething Song" }, 4);
+    s.battlefield[0].storage_counters = 2;
+    PutFu(s, "Lotus Bloom", 320);
+    bool found = false;
+    for (const TurnSolver::Plan& p : TurnSolver::EnumerateMainPlans(s, true))
+    {
+        int apex = 0, rite = 0, pyretic = 0, song = 0;
+        for (const Action& a : p.actions)
+        {
+            if (a.kind != Action::Kind::CastFromHand) { continue; }
+            apex += a.card_name.str() == "Apex of Power";
+            rite += a.card_name.str() == "Rite of Flame";
+            pyretic += a.card_name.str() == "Pyretic Ritual";
+            song += a.card_name.str() == "Seething Song";
+        }
+        if (apex == 2 && rite == 1 && pyretic == 1 && song == 2) { found = true; break; }
+    }
+    CHECK(found);
+}
+
 TEST_CASE("Payable order, every deck: the exact walk keeps a cast cap and a later cast's colour (MTG_PAYABLE_ORDER_EXACT)")
 {
     // (a) hinata d0 gi1427's shape, on a provider that does NOT opt into ExactOrderWalk. Four Mountains,

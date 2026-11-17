@@ -11805,6 +11805,29 @@ static bool SeqWalkUnlockEquip(const GameState& state, const Action& a)
 // retry: `ord` is walked as given. `sel` is the subset; the rescue walk grants its Vial Treasures
 // up front, while OrderPaysSequentially uses vial_in_order to grant each at its actual position.
 // `seq_rv_charged` the casts SameSubsetRevealSurcharge debited.
+static bool ApexVisibleLineManaOn()
+{
+    static const bool on = EnvOn("MTG_APEX_VISIBLE_LINE_MANA", true);
+    // The human menu already keeps the full selected-line space; its saved
+    // decisions must keep their existing payment probes and option ordering.
+    return on && !HumanPlayActive();
+}
+
+static int ApexPairGateCredit(const GameState* state, const Action& a)
+{
+    if (state == nullptr || a.kind != Action::Kind::CastFromHand || a.def == nullptr
+        || a.def->params.impulse_float_amount <= 0 || a.hand_index < 0
+        || !ApexVisibleLineManaOn())
+    { return 0; }
+    const auto& hand = state->players[state->active_player_index].hand;
+    if (a.hand_index >= static_cast<int>(hand.size())
+        || hand[static_cast<std::size_t>(a.hand_index)].m_is_staged) { return 0; }
+    int copies = 0;
+    for (const Card& c : hand)
+    { if (!c.m_is_staged && c.m_name == a.card_name && ++copies >= 2) { return a.def->params.impulse_float_amount; } }
+    return 0;
+}
+
 static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>& cands,
                               const std::vector<int>& sel, const std::vector<int>& ord,
                               const std::vector<int>& seq_rv_charged, int* fail_at = nullptr,
@@ -12074,6 +12097,14 @@ static bool SeqWalkFixedOrder(const GameState& state, const std::vector<Action>&
         // Resolve the cast's mana-relevant effects so they fund the NEXT payment. Anything not
         // modelled here simply earns no credit (under-optimistic -> fewer rescues, never unsound).
         if (IsManaRitual(def)) { ApplyRitualFloat(cp, def, a.chosen_x, a.splice_count + 1); }
+        // Apex adds ten mana only when cast from the hand. A second visible hand cast in the
+        // same selected line can spend it even though the first Apex opens a draw breakpoint.
+        // This is a payment walk: the newly exiled cards are still left to the continuation.
+        if (ApexVisibleLineManaOn() && def.params.impulse_float_amount > 0
+            && a.hand_index >= 0
+            && a.hand_index < static_cast<int>(state.players[state.active_player_index].hand.size())
+            && !state.players[state.active_player_index].hand[static_cast<std::size_t>(a.hand_index)].m_is_staged)
+        { AddChosenColorFloat(cp, a.chosen_float_color.str(), def.params.impulse_float_amount); }
         // "When this creature enters, untap up to N lands" -- the RESOLUTION half. Without it this
         // walk performed the tap-ahead (which TAPS lands into float) and then never gave them back,
         // so a Peregrine Drake left the scratch board strictly WORSE off than it found it and every
@@ -55110,6 +55141,10 @@ static int ManaPruneBound(const ManaPool& pool, const std::vector<Action>& cands
         b += LandTapCrossBoundCredit(ltb_sum, a);
         b += a.ritual_float;
         b += a.rock_mana.Total();
+        // Two hand-held Apex copies can be selected together; the first releases mana
+        // after it resolves for the second. This upper credit only opens that proven
+        // pair, while the sequential walk checks its timing and chosen colour.
+        b += ApexPairGateCredit(etb_state, a);
         b += a.mint_gain;                         // MTG_MINT_CREDIT_EXACT: the minted Treasures (0 off)
         if (a.mint_gain > 0)
         {
@@ -55339,6 +55374,10 @@ static bool BuildManaGateIndex(const ManaPool& pool, const std::vector<Action>& 
                + UntapLandActionBoundCredit(etb_state, a)
                + WidenBoundGain(a, w_dom, w_live)
                + LandTapCrossBoundCredit(ltb_sum, a);
+        // The selection-exact gate supersedes ManaPruneBound on ritual hands. Its term
+        // needs the same two-Apex upper credit, or it skips the payable row
+        // before the sequential walk can check the actual order.
+        t.gain += ApexPairGateCredit(etb_state, a);
         t.gy   = (a.def && a.def->params.ritual_float_gy_self_bonus) ? 1 : 0;
         t.block = ((a.def && (a.def->params.affinity_for_subtype
                               || !a.def->params.reduces_spell_color.empty()
