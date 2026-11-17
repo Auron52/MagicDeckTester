@@ -667,31 +667,6 @@ bool GoldFishRunner::DeckUsesDiverseOpponentPool(const Decklist& deck)
     return false;
 }
 
-bool GoldFishRunner::DeckNeedsOpponentLandPlay(const Decklist& deck)
-{
-    bool has_hinata = false;
-    bool targets_permanents = false;
-    for (const std::vector<Card>* zone : { &deck.mainboard, &deck.sideboard })
-    {
-        for (const Card& c : *zone)
-        {
-            const CardDefinition* def = CardDatabase::Instance().LookupCached(c);
-            if (!def) { continue; }
-            const CardParams& p = def->params;
-            // Fetch searches can turn Archive Trap into a free spell; Price of
-            // Progress reads the opponent's live nonbasic count; Tasha reads the
-            // real library from the same fifty-deck opponent pool.
-            if (p.archive_trap_free_if_opponent_searched || p.damage_per_nonbasic_land > 0
-                || p.spell_exile_opponent_until_mv > 0) { return true; }
-            // Burgeoning triggers on the opponent's land PLAY (Maze's End ledger decision 6): the Mill model.
-            if (p.opponent_land_play_put_land_from_hand) { return true; }
-            has_hinata = has_hinata || p.hinata_cost_reducer;
-            targets_permanents = targets_permanents || p.discount_targets_permanents;
-        }
-    }
-    return has_hinata && targets_permanents;
-}
-
 // Card-dependency-map closure (docs/design/card-dependency-map.md, USER design 2026-08-15): a
 // card's main-phase class is a consequence of the deck's dependency graph, not an intrinsic
 // property. Derived mechanically from CardParams -- no per-deck hand code:
@@ -2264,10 +2239,14 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     }
 
     // The passive opponent's own library + opening hand, on a DERIVED seed so player 0's shuffle
-    // above is untouched (core/OpponentDeck.h). Decks that read opponent lands use the same
-    // fifty-deck pool as Mill; other decks retain their historical three-land board.
-    const bool play_opponent_lands = !legacy_passive_opponent_lands
-        && DeckNeedsOpponentLandPlay(deck);
+    // above is untouched (core/OpponentDeck.h). EVERY deck's opponent is a real list from the
+    // fifty-deck pool (seed-selected, as for Mill) and plays the leftmost land from its hand each
+    // turn (USER 2026-11-17: "change it to use the approach that mill does where the decks are
+    // randomized and the left land is played from hand. That way, they all generate something." /
+    // "Ideally, I would like to do that for all decks."). A stolen or targeted opponent land is
+    // then a real land with real mana. Only a reference recorded before that model replays the
+    // historical three-placeholder board (--legacy-passive-opponent-lands).
+    const bool play_opponent_lands = !legacy_passive_opponent_lands;
     opponentdeck::Deal(state, DeckTouchesOpponentZones(deck) || play_opponent_lands, seed,
                        DeckUsesDiverseOpponentPool(deck) || play_opponent_lands);
     if (legacy_passive_opponent_lands) { state.opponent_plays_lands = false; }
@@ -2293,7 +2272,8 @@ GameState GoldFishRunner::SetupGame(const Decklist& deck, uint64_t seed, int gam
     // route are the only bypasses. Reads nothing into the state.
     EnforceRequiredHeuristics(deck, *state.m_provider, "");
 
-    // Every passive opponent starts with three inert lands. Across ten game indices, two have
+    // LEGACY BOARD (--legacy-passive-opponent-lands only): the passive opponent starts with three
+    // inert lands. Across ten game indices, two have
     // 0 nonbasics, two have 1, three have 2, and three have 3. The extra slots go to buckets
     // 2 and 3: the modal counts among three lands for the 40 unique regression-suite lists
     // were 0:10, 1:6, 2:12, 3:12 (one vote per list). Both play/draw parity halves contain

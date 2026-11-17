@@ -10379,11 +10379,8 @@ static int RunScenario(const std::filesystem::path& scenario_path)
     // and overriding it here would throw that away, so this stands down when it fired.
     if (!state.opponent_library_dealt)
     {
-        const bool play_opponent_lands = GoldFishRunner::DeckNeedsOpponentLandPlay(deck);
-        opponentdeck::Deal(state, GoldFishRunner::DeckTouchesOpponentZones(deck)
-                               || play_opponent_lands, state.game_seed,
-                           GoldFishRunner::DeckUsesDiverseOpponentPool(deck)
-                               || play_opponent_lands);
+        // Every deck's passive opponent plays lands from a real pool list (SetupGame).
+        opponentdeck::Deal(state, true, state.game_seed, true);
     }
 
     try
