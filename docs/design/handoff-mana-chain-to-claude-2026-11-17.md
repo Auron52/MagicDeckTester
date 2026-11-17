@@ -2,19 +2,22 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:11 UTC
+## Current state, updated 03:14 UTC
 
-Pirates' stale-clean record is being rechecked on a fresh 5,000-game
-block as the only active simulation batch, exec session 31763. Command:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run pirates --games 5000 --name codex-pirates-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/pirates_fresh_gate.out`.
-When complete, inspect
-`logs/mana_clean/codex-pirates-fresh-20261117/report.md`, record the
-verdict here, and commit the new `test/mana_clean.json` entry.
+**Pirates fresh gate complete:** indices 99,000–103,999 at PGO source
+`fcb9352608ea` yielded two APPLY-DROP flags in one seed, no enum/oracle
+or capped flag, with oracle-on/off play byte-identical. Report:
+`logs/mana_clean/codex-pirates-fresh-20261117/report.md`.
+Both flags are seed 30103196 T3, two variants of Vialed Staunch
+Crewmate followed by Dire Fleet Captain: oracle pays the intervening
+cast with newly played Spirebluff Canal#50:R, retaining Blackcleave
+Cliffs#9:B and older Spirebluff Canal#49:R for Captain. The engine drops
+Captain. Rollback depth one, with the Captain action absent from the
+prefix plan; forced `MTG_PAY_ROLLBACK` rescues both, but that global
+backup remains default off. Investigate a forward color/source hold
+across the Vial breakpoint before enabling rollback broadly. The gate
+record is in `test/mana_clean.json` and committed with this handoff.
+Pirates is now **issues**, not stale-clean.
 
 An **Extra Turns first-ever gate attempt** was stopped during its
 64-game sizing probe. After six minutes at 32 threads, only ten one-game
