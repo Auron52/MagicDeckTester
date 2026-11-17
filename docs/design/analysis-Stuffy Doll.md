@@ -131,6 +131,10 @@ deferrals provisional.
   the chain." => "can loop this turn" = has a STARTER this turn: the Doll's {T} ping or an attack (both need it
   unsick), OR any other damage reaching it this turn (our sweeper in hand and castable, a reflection aimed at it),
   which works on a summoning-sick creature too. The provider's host order uses that starter test.
+  USER (verbatim, ~20:58): "Yes, and if there is a reflector without summoning sickness and a doll we should
+  potentially try both. The doll is better if we need to wait a turn anyway, but the other creature may be able to
+  go off." => with an unsick reflector AND a Doll on board, BOTH stay host candidates (never prune either); the
+  one with a starter this turn is tried first; the Doll is the preferred host for a wait-a-turn line.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
