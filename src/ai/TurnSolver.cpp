@@ -70629,6 +70629,9 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     std::function<void(const Action&)> cycle_chain_step;
     auto apply_continuation_plan = [&](const TurnSolver::Plan& cp)
     {
+        // MANA ORACLE (audit only): the continuation's pending actions are part of a payment frontier's
+        // identity (Hook::cont_sig). No-op unless `state` is the oracle's own copy.
+        manaoracle::NoteContinuation(state, cp);
         PlanSoulbondDeclineScope _sbd(cp.soulbond_decline);   // Plan::soulbond_decline, lockstep w/ executor
         const bool saved_canon = cont_canon_cast_section;
         cont_canon_cast_section = cp.cont_canon;

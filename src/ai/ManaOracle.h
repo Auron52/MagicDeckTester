@@ -114,6 +114,13 @@ namespace manaoracle
         // frontier identity and payment table must retain this payment context.
         int                    f_sac_spare_source = 0;
         int                    f_sac_spare_victim = 0;
+        // Every breakpoint CONTINUATION plan applied on `target` so far, in order, as one signature
+        // (NoteContinuation; 0 = none). A continuation is re-solved on the board its breakpoint saw, so two
+        // payment histories can reach the same visible board and bill while holding different pending
+        // continuation actions -- Prevent Damage s30111507 T5: Pyrohemia paid with City of Brass left
+        // Reflecting Pool for a continuation of {Pyrohemia x2 + Dina sac}, paid with the Pool it left City
+        // for {Pyrohemia x2} alone. Frozen at the frontier (no update once `ended`); part of its identity.
+        std::uint64_t          cont_sig = 0;
         int                    f_tapahead = 0;          // > 0: the frontier is a TAP-AHEAD (up to N sources)
         bool                   f_lands_only = true;     // ...of lands only (an ETB "untap N lands")
         // Every newly tapped mana source the script tapped (Card::m_number), for the unscripted-tap check.
@@ -151,6 +158,9 @@ namespace manaoracle
     };
 
     extern thread_local Hook* t_hook;
+    // A breakpoint continuation plan is being applied on `s`: fold it into the hook's cont_sig when `s` is the
+    // oracle's copy and the frontier has not been reached. No-op on every other state (every normal apply).
+    void NoteContinuation(const GameState& s, const TurnSolver::Plan& cp);
     // The human "**" sequence step being applied (TurnSolver's v2 walk: the index of the queued step,
     // the land included, that is being dispatched); -1 outside one. Written by the walk, read only by the
     // oracle's hook, so a payment can be placed where the viewer's pre-tap would have to sit.

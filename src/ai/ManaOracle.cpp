@@ -2868,6 +2868,8 @@ struct Outcome
     std::vector<int>           scaled_counted;   // Hook::scaled_counted
     std::vector<int>           top_free_casts; // Hook::top_free_casts, survives a later shuffle
     std::string                unscripted;  // a mana source the ENGINE tapped outside any payment
+    std::vector<int>           sweep_taps;  // lands the end-of-main-1 sweep tapped (g_endm1_sweep_tap_sink)
+    int                        presweep_life[2] = { 0, 0 };   // both life totals at its first tap
     int                        first_fail = -1;  // the first ENGINE step that failed (the census replay)
     // No drop reported: the engine-comparable sense (an optional payment with no option fails the same
     // way in the engine's own realisation, so such an outcome is still the engine's line).
@@ -2979,6 +2981,7 @@ struct FrontierRec
     int                    sac_victim = 0;      // Hook::f_sac_victim
     int                    sac_spare_source = 0;   // Hook::f_sac_spare_source
     int                    sac_spare_victim = 0;   // Hook::f_sac_spare_victim
+    std::uint64_t          cont_sig = 0;           // Hook::cont_sig at the frontier
     std::int32_t           dbl_combat_hold = 0; // temporarily held attacker during this payment
     ManaCost               line_unpaid;       // the apply scope has ended before enumeration
     bool                   line_opens_unseen = false;
@@ -3145,6 +3148,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                 t_hook = &h;
                 TurnSolver::ApplyPlan(copy, plan, pre);
                 t_hook = nullptr;
+                const int presweep_life[2] = { g_endm1_presweep_life[0], g_endm1_presweep_life[1] };
                 g_endm1_sweep_tap_sink    = saved_sweep_sink;
                 g_endm1_sweep_tap_target  = saved_sweep_target;
                 g_perm_ability_tap_target = saved_tap_target;
@@ -3184,6 +3188,7 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     fr.sac_victim   = h.f_sac_victim;
                     fr.sac_spare_source = h.f_sac_spare_source;
                     fr.sac_spare_victim = h.f_sac_spare_victim;
+                    fr.cont_sig = h.cont_sig;
                     fr.dbl_combat_hold = h.f_dbl_combat_hold;
                     fr.line_unpaid = h.f_line_unpaid;
                     fr.line_opens_unseen = h.f_line_opens_unseen;
@@ -3229,6 +3234,12 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                     }
                 }
                 o.st = std::move(copy);
+                if (!sweep_taps.empty())
+                {
+                    o.sweep_taps = std::move(sweep_taps);
+                    o.presweep_life[0] = presweep_life[0];
+                    o.presweep_life[1] = presweep_life[1];
+                }
                 // (An outcome resting on a mana choice the engine made on its own is no caller's hit, so it does
                 // not end the search either: a scripted payment further on may still realise the line.)
                 const bool full = stop_at_full && o.Clean() && o.unscripted.empty()
@@ -3281,6 +3292,11 @@ Realization Realize(const GameState& root, const TurnSolver::Plan& plan, bool pr
                              ^ (static_cast<std::uint64_t>(static_cast<std::uint32_t>(fronts[i].sac_spare_victim))
                                 * 0xD1A5'AC51'B11D'AB1EULL);
                 }
+                // ...and the same for a breakpoint continuation's pending ACTIONS (Hook::cont_sig): the
+                // continuation was solved on the board its breakpoint saw, which two payment histories
+                // can leave different although the frontier boards agree. Keyed only when one was applied.
+                if (fronts[i].cont_sig != 0)
+                { keys[i] ^= fronts[i].cont_sig * 0xC2B2'AE3D'27D4'EB4FULL; }
                 // The attacker is tapped only DURING a combat-step payment and released after it.
                 // Do not let a permanently tapped creature with extra float prune that frontier.
                 if (fronts[i].dbl_combat_hold != 0)
@@ -3518,7 +3534,8 @@ std::string DiffText(const GameState& e, const GameState& o)
             { add("library order differs at " + std::to_string(i)); break; }
         }
     }
-    if (e.players[1 - a].life != o.players[1 - a].life) { add("opponent life differs"); }
+    if (e.players[1 - a].life != o.players[1 - a].life)
+    { add("opponent life engine " + std::to_string(e.players[1 - a].life) + " oracle " + std::to_string(o.players[1 - a].life)); }
     if (e.spells_cast_this_turn != o.spells_cast_this_turn) { add("spells cast differs"); }
     if (e.scripted_early_ondemand_crack != o.scripted_early_ondemand_crack)
     { add(std::string("early-crack pin engine ") + (e.scripted_early_ondemand_crack ? "set" : "spent") + " oracle "
@@ -3867,6 +3884,8 @@ struct EngineReal
     GameState                st;
     std::vector<std::string> cast, act;
     std::shared_ptr<const RouteTape> route;   // a ComboRoute plan's recorded links (RouteTape)
+    std::vector<int>         sweep_taps;               // Outcome::sweep_taps, for the engine's own line
+    int                      presweep_life[2] = { 0, 0 };
     bool Full() const { return cast.empty() && act.empty(); }
 };
 bool HasComboRoute(const TurnSolver::Plan& plan)
@@ -3902,7 +3921,15 @@ EngineReal EngineApply(const GameState& root, bool pre, const TurnSolver::Plan& 
                      root.floating_mana.colorless, pre ? 1 : 0, root.spells_cast_this_turn);
         ++g_tapdbg_oracle_apply;
     }
+    // The end-of-main-1 sweep's taps on the engine's own line (Outcome::sweep_taps), for the sweep-undone cover.
+    std::vector<int>* const saved_sweep_sink   = g_endm1_sweep_tap_sink;
+    const GameState*  const saved_sweep_target = g_endm1_sweep_tap_target;
+    g_endm1_sweep_tap_sink   = &e.sweep_taps;
+    g_endm1_sweep_tap_target = &e.st;
     TurnSolver::ApplyPlan(e.st, plan, pre);
+    g_endm1_sweep_tap_sink   = saved_sweep_sink;
+    g_endm1_sweep_tap_target = saved_sweep_target;
+    if (!e.sweep_taps.empty()) { e.presweep_life[0] = g_endm1_presweep_life[0]; e.presweep_life[1] = g_endm1_presweep_life[1]; }
     if (s_tdbg)
     {
         --g_tapdbg_oracle_apply;
@@ -4465,6 +4492,30 @@ void AuditRoute(const GameState& root, bool pre, const TurnSolver::Plan& plan, c
                              .count(), std::memory_order_relaxed);
 }
 
+// A board with its END-OF-MAIN-1 SWEEP undone: the lands the sweep tapped stand untapped again and both life
+// totals are the ones its first tap found (g_endm1_presweep_life). The sweep is not a payment: it is a policy that
+// fires every leftover pain land once the plan's last payment is made, and whether a land is worth firing depends
+// on the life the payments left (TapPainSourcesIfUseful skips a tap whose damage would kill before Tamanoa's gain
+// resolves). So a payment that kept MORE life can sweep MORE and end incomparable with the engine's line even though
+// it beat it on every mana resource: Prevent Damage s30109140 T5 {Brushland, Green Sun's Zenith x3, Rolling
+// Earthquake} -- the engine's Brushland {G} left 3 life, the oracle's Reflecting Pool {G} + Brushland {C} left 4,
+// enough to sweep Tarnished Citadel (3 damage, +3 Tamanoa, 3 Vito drain), and that tapped Citadel was the only
+// thing the engine's board had more of (ORACLE-GAP x6). Only lands and life totals are restored, so any other
+// trace of the sweep (a lifegain counter, a death) keeps the boards apart: fail closed.
+GameState UnSwept(const GameState& s, const std::vector<int>& taps, const int life[2])
+{
+    GameState u = s;
+    if (taps.empty()) { return u; }
+    for (Permanent& p : u.battlefield)
+    {
+        if (std::find(taps.begin(), taps.end(), p.card.m_number) == taps.end()) { continue; }
+        p.tapped        = false;
+        p.mana_tap_mark = 0;
+    }
+    for (int i = 0; i < 2 && i < static_cast<int>(u.players.size()); ++i) { u.players[i].life = life[i]; }
+    return u;
+}
+
 void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, const EngineReal& er_in,
                const std::vector<const EngineReal*>& full_sibs,
                const std::vector<const TurnSolver::Plan*>& sib_plans)
@@ -4493,20 +4544,26 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     struct MainCost { const long long& a0; bool done = false; void Stop() { if (!done) { g_cost_main.fetch_add(t_dec_applies - a0); done = true; } } ~MainCost() { Stop(); } } _main_cost{ main_a0 };
     Realization r = Realize(root, plan, pre, /*stop_at_full=*/false, {}, false, nullptr, nullptr, &cursor);
     // ESCALATION (Fluctuator 2026-11-03), ALWAYS ON: a plan that hits the per-plan ceiling is realized again
-    // under a 200000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
+    // under a 400000-apply ceiling, so only the plans that need it pay for it. CAPPED fails the mana-clean gate
     // (USER 2026-11-03), so the checker must be able to conclude. Fluctuator's cycling turns (each cycle a
     // payment off several coloured lands) put 75 plans per 3,000 games past 2000 applies; at 20000 every one
     // sampled finished. Gods' six capped games on the 30000-34999 block need up to 100000; that ceiling
     // cleared all 46 flags for 28.4 extra oracle seconds across the six games. One new Gods game (s30035423)
     // still capped at 100000; 200000 clears its two flags for 2.6 extra batch seconds, with identical play.
+    // Prevent Damage's 107000-111999 gate (2026-11-17) left 22 CAPPED flags at 200000, all late-game plans in
+    // seeds 30111776 T8 (Manabarbs / Spellshock + Dina) and 30108897 T8 (Living Wish); at 400000 both seeds
+    // finish every retried plan (140/140 and 15/15) with zero CAPPED, ORACLE-GAP or UNMODELED. The ceiling
+    // binds only a plan that already exhausted the previous one, so the added work is bounded by
+    // (plans capped at 200000) x 200000 applies -- 4.4M against that gate's 218M. Seed 30090056 / 30090194
+    // (games 87000-91999) needed the same, 1.2M / 2.1M applies.
     // Checker-only: play never reads it.
     // MTG_MANA_ORACLE_NODES_RETRY overrides the NUMBER
     // only (a value <= 0 is ignored; it is not an off switch). Not under AuditLine's own ceiling (the viewer
     // stays interactive).
     static const int s_retry = []
     {
-        const int v = EnvInt("MTG_MANA_ORACLE_NODES_RETRY", 200000);
-        return v > 0 ? v : 200000;
+        const int v = EnvInt("MTG_MANA_ORACLE_NODES_RETRY", 400000);
+        return v > 0 ? v : 400000;
     }();
     int cap_used = NodeCap();
     if (r.capped && t_node_cap == 0 && s_retry > cap_used && !DecisionOut())
@@ -4902,6 +4959,33 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
             { covered = true; break; }
         }
     }
+    // THE SWEEP UNDONE (UnSwept): when either side's end-of-main-1 sweep tapped lands, compare the boards the
+    // payments left before it. Only a fallback, so every verdict the full boards reach stands; the class of a
+    // cover found here is read off the pre-sweep resources.
+    Res swept_er;
+    bool swept_cover = false;
+    if (!covered && !SelfHasLost(e))
+    {
+        bool any = !er_in.sweep_taps.empty();
+        for (const Outcome& o : r.outcomes) { if (!o.sweep_taps.empty()) { any = true; break; } }
+        if (any)
+        {
+            const GameState eu = UnSwept(e, er_in.sweep_taps, er_in.presweep_life);
+            const std::uint64_t euk = CoreKey(eu);
+            swept_er = Resources(eu, /*with_float=*/false);
+            for (const Outcome& o : r.outcomes)
+            {
+                if (!o.Full() || o.line != e_line || SelfHasLost(o.st)) { continue; }
+                const GameState ou = UnSwept(o.st, o.sweep_taps, o.presweep_life);
+                if (SelfHasLost(ou) || CoreKey(ou) != euk) { continue; }
+                const Res orr = Resources(ou, /*with_float=*/false);
+                bool strict = false;
+                if (!Covers(orr, swept_er, &strict)) { continue; }
+                covered = swept_cover = true;
+                if (strict && (best == nullptr || Covers(orr, best_res, nullptr))) { best = &o; best_res = orr; }
+            }
+        }
+    }
     if (!covered)
     {
         if (r.capped || !unscripted.empty()) { return; }
@@ -4953,7 +5037,7 @@ void AuditPlan(const GameState& root, bool pre, const TurnSolver::Plan& plan, co
     if (best != nullptr)
     {
         std::string what;
-        const Cls c = DominanceClass(best_res, er, pre, &what);
+        const Cls c = DominanceClass(best_res, swept_cover ? swept_er : er, pre, &what);
         Emit(c, root, pre, plan, what + " -- by paying " + ScriptText(best->script) + "; the engine ended "
                                  + BoardText(e));
     }
@@ -5165,6 +5249,16 @@ GapVerdict EnumGapPlan(const GameState& state, bool pre, const TurnSolver::Plan&
     return hidden;
 }
 } // namespace
+
+void NoteContinuation(const GameState& s, const TurnSolver::Plan& cp)
+{
+    Hook* const h = t_hook;
+    if (h == nullptr || &s != h->target || h->ended || h->safe) { return; }
+    std::uint64_t x = std::hash<std::string>{}(cp.land_decided ? "land=" + cp.land_to_play : std::string("land?"));
+    for (const Action& a : cp.actions) { x = (x ^ std::hash<std::string>{}(ActionKey(a))) * 0x100000001b3ULL; }
+    // Order-sensitive and never 0 once a continuation was noted (a FrontierRec's 0 means "none").
+    h->cont_sig = ((h->cont_sig ^ x) * 0x9E3779B97F4A7C15ULL) | 1ULL;
+}
 
 bool DecisionBudgetActive() { return t_dec_limit > 0; }
 

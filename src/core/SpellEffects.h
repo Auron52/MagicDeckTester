@@ -2360,10 +2360,18 @@ struct ScriptedSweep
 // the line). nullptr in play: a pointer test, nothing else.
 inline thread_local std::vector<int>* g_endm1_sweep_tap_sink   = nullptr;
 inline thread_local const GameState*  g_endm1_sweep_tap_target = nullptr;
+// ...and both players' life totals as the FIRST sweep tap found them (each sweep calls NoteEndM1SweepTap right after
+// it marks the land tapped and before that tap's damage / drip resolves), so the oracle can compare boards with the
+// sweep undone (ManaOracle.cpp, UnSwept). Written only when the sink is armed and empty.
+inline thread_local int g_endm1_presweep_life[2] = { 0, 0 };
 inline void NoteEndM1SweepTap(const GameState& state, const Permanent& p)
 {
     if (g_endm1_sweep_tap_sink != nullptr && &state == g_endm1_sweep_tap_target)
-    { g_endm1_sweep_tap_sink->push_back(p.card.m_number); }
+    {
+        if (g_endm1_sweep_tap_sink->empty() && state.players.size() >= 2)
+        { g_endm1_presweep_life[0] = state.players[0].life; g_endm1_presweep_life[1] = state.players[1].life; }
+        g_endm1_sweep_tap_sink->push_back(p.card.m_number);
+    }
 }
 
 inline void TapDripLandsIfUseful(GameState& state, int controller_index)
