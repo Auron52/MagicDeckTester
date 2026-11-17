@@ -1817,6 +1817,7 @@ void GoldFishRunner::StampDeckTraits(GameState& state, const Decklist& deck)
                 if (d->params.play_lands_from_library_top) { top_land = true; }
                 if (d->params.land_search_count > 0)       { land_search = true; }
                 if (d->params.etb_destroy_nonbasic_land_optional) { land_search = true; }   // White Orchid Phantom's basic search
+                if (d->params.etb_exile_library_lands_set_base_pt) { land_search = true; }   // Trench Gorger's exile search (the in-plan pin fan)
                 if (!d->params.draw_on_other_subtype_enter.empty()) { subtype_enter_draw = true; }
                 if (d->params.reconfigure_cost.has_value())   { reconfigure = true; }
                 if (d->params.equip_grants_double_strike)     { equip_ds_grant = true; }

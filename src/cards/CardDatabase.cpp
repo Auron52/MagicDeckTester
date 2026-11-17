@@ -1825,6 +1825,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.land_search_on_resolve          = params.value("land_search_on_resolve", false);
     p.land_search_on_enter_or_attack  = params.value("land_search_on_enter_or_attack", false);
     p.land_search_for_removal_controller = params.value("land_search_for_removal_controller", false);
+    p.etb_exile_library_lands_set_base_pt = params.value("etb_exile_library_lands_set_base_pt", false);
+    if (p.etb_exile_library_lands_set_base_pt && p.land_search_count > 0)
+    { throw std::runtime_error("etb_exile_library_lands_set_base_pt cannot be combined with land_search_count"); }
     if (params.contains("land_search_activation_cost"))
         p.land_search_activation_cost =
             ManaCostFromString(params["land_search_activation_cost"].get<std::string>());

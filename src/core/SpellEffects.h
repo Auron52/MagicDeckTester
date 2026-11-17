@@ -3545,6 +3545,9 @@ inline const std::vector<std::vector<std::string>>& LandSearchPicksMemo(const Ga
 inline void ApplyLandSearchActivation(GameState& state, int controller, int src_idx,
                                       const CardDefinition& def);           // LandSearch.h
 inline void FireAttackLandSearch(GameState& state, int controller, std::vector<int>& atk_idx);
+// Trench Gorger's ETB (etb_exile_library_lands_set_base_pt): search, exile any number of lands, shuffle, set base P/T.
+inline void PerformExileLibraryLands(GameState& state, int controller, int self_number, int self_controller,
+                                     const CardDefinition& def, int pin);   // LandSearch.h
 inline void FireCombatLandSearchCracks(GameState& state, int controller, std::vector<int>& atk_idx);
 
 // ---- Progenitus: "If ~ would be put into a graveyard from anywhere, reveal it and shuffle it
@@ -4390,6 +4393,16 @@ inline Card RevealedCard(const Card& c)
 {
     const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
     if (d == nullptr) { return c; }
+    // TRENCH GORGER (Sea Creatures I6): its base P/T set by the ETB lives on the permanent's Card; off the
+    // battlefield it is a new object with the printed values (CR 400.7) -- a bounced Gorger recast and declined is
+    // a 6/6 again. Gated on its own param: Figure of Destiny's identical latent case is a separate, USER-approved
+    // change (it moves GT; ledger Q11).
+    if (d->params.etb_exile_library_lands_set_base_pt)
+    {
+        Card out     = d->card;
+        out.m_number = c.m_number;
+        return out;
+    }
     if (!d->params.mdfc_front_name.empty())
     {
         const CardDefinition* f = CardDatabase::Instance().Lookup(d->params.mdfc_front_name);
@@ -14447,6 +14460,27 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
         const int self_ctl = state.battlefield[entered_index].controller_index;
         PerformLandSearch(state, controller, LandSearchSpecOf(p), def->card.m_name.str(),
                           ConsumeScriptedLandSearchPin());
+        entered_index = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        {
+            if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == self_num
+                && state.battlefield[static_cast<std::size_t>(i)].controller_index == self_ctl)
+            { entered_index = i; break; }
+        }
+        if (entered_index < 0) { return; }
+    }
+
+    // TRENCH GORGER (etb_exile_library_lands_set_base_pt; Sea Creatures I6): "you may search your library for any
+    // number of land cards, exile them, then shuffle. If you do, this creature has base power and base toughness
+    // each equal to the number of cards exiled this way." ONE body for both worlds (PerformExileLibraryLands,
+    // LandSearch.h); the plan's next in-plan land-search ordinal picks the menu entry (kLandSearchPinMask = the
+    // searched decline). Nothing on the battlefield moves (library -> exile), so the slot stays valid; it is
+    // re-found by number anyway. Param-gated -> byte-identical for every other deck.
+    if (p.etb_exile_library_lands_set_base_pt)
+    {
+        const int self_num = state.battlefield[entered_index].card.m_number;
+        const int self_ctl = state.battlefield[entered_index].controller_index;
+        PerformExileLibraryLands(state, controller, self_num, self_ctl, *def, ConsumeScriptedLandSearchPin());
         entered_index = -1;
         for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
         {

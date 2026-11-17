@@ -1018,6 +1018,294 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     looks.Run(state);
 }
 
+// =================================================================================================
+// TRENCH GORGER (Sea Creatures I6, 2026-11-17): "When this creature enters, you may search your library for any
+// number of land cards, exile them, then shuffle. If you do, this creature has base power and base toughness each
+// equal to the number of cards exiled this way." (CardParams::etb_exile_library_lands_set_base_pt.)
+//
+// ONE BODY, BOTH WORLDS: PerformExileLibraryLands, from the universal own-ETB cascade (FireOwnEtbTriggersBody,
+// beside Primeval Titan's ETB), so a cast, a Genesis Wave put and every other put reach it in the executor and in
+// the rollout alike. The resolution consumes the plan's next in-plan land-search ordinal (ConsumeScriptedLandSearch
+// Pin, unconditionally), and TurnSolver's in-plan pin fan sizes that ordinal off ExileLibraryLandsMenu.
+//
+// THE MENU (autonomous only). Classes = LandSearchClasses over every land card (copies and behaviour_identity twins
+// are one class: which physical copy stays is visible only through the post-shuffle order, i.e. clairvoyance). Each
+// entry is a KEEP vector (copies of each class left in the library); the rest are exiled and N = L - kept. Blocks,
+// in pin order: [0] keep nothing (exile ALL -- the front: rollout beyond the horizon, d0, the human preselection);
+// [1] keep one land, one entry per class in the provider's keep order; [2] EVERY keep-two (pairs and doubles);
+// [3] keep-j for j = 3 .. L-1, the provider-ordered ROUND-ROBIN prefix (one of each class in keep order, then a
+// second of each, ...) -- the count N is searched over its whole range but WHICH lands for j >= 3 is the provider's
+// (a DISCLOSED lossy shape, the Genesis Wave precedent: the full space is prod(copies+1), ~21,600 vectors here);
+// [4] keep everything (search and exile 0 -> base 0/0 -> it dies, CR 704.5f; root-pruned, MTG_UNPRUNE=gorgerzero).
+// The searched DECLINE is the pin kLandSearchPinMask (no search, no shuffle, the printed base -- ruling 1). At most
+// kExileLandsMenuCap entries: past it block 3 (then block 2) is cut from its far end, counted in `truncated`.
+// Then DecisionProvider::RestrictExileLibraryLandsMenu (a provider may only remove entries / the decline; Sea
+// Creatures' one-option "take all lands" prune lives there). An empty menu makes the decline the front.
+//
+// RESOLUTION. Pin kLandSearchPinMask = decline; else entry min(pin, size-1) (-1 = entry 0, the duplicate-not-whiff
+// clamp; the menu is rebuilt at resolution off the live library). The lands go to state.exile, then ONE shuffle
+// (also when 0 were exiled, CR 701.19b), then -- if the creature is still on the battlefield (ruling 3: the search
+// happens anyway) -- its Card's base P/T (layer 7b, Figure of Destiny's shape: counters / temp / anthems apply on
+// top) is set to N, fixed at resolution (ruling 4). N = 0 goes through the doomed-entrant queue (drained in both
+// worlds). The printed base is written back FIRST, so a stale override can never decide a decline.
+//
+// HUMAN PLAY (the choosers are null in every search / rollout / enumeration scope): a `dig` yes/no ("search?"),
+// then the `dragon` multi-pick over EVERY library land card (sorted by name, never library order), the AI's
+// default preselected; an EMPTY reply stands (exile 0 -> 0/0, it dies). Every one of the prod(copies+1) choices.
+// =================================================================================================
+struct ExileLandsMenu
+{
+    std::vector<LandSearchClass>  cls;              // name-sorted (LandSearchClasses), any land card
+    std::vector<int>              copies;           // cls[i].copies
+    std::vector<std::vector<int>> keep;             // the searched entries; entry 0 = the front
+    bool                          decline_offered = true;   // kLandSearchPinMask is a searched option
+    int                           truncated = 0;    // entries cut to fit the pin range (disclosed)
+};
+constexpr int kExileLandsMenuCap = kLandSearchPinMask;   // entries 0 .. 62; 63 is the decline
+
+inline LandSearchSpec ExileLibraryLandsSpec()
+{
+    LandSearchSpec sp;
+    sp.count = 1;   // "any number of land cards": LandSearchLegal reads only the filters, all off
+    return sp;
+}
+
+// The ENGINE menu (no provider restriction): see the header above.
+inline ExileLandsMenu ExileLibraryLandsMenuEngine(const GameState& s, int ctrl)
+{
+    ExileLandsMenu m;
+    m.cls = LandSearchClasses(s, ctrl, ExileLibraryLandsSpec());
+    const int C = static_cast<int>(m.cls.size());
+    int L = 0;
+    for (const LandSearchClass& c : m.cls) { m.copies.push_back(c.copies); L += c.copies; }
+    std::vector<const CardDefinition*> defs;
+    for (const LandSearchClass& c : m.cls) { defs.push_back(c.def); }
+    std::vector<int> ord = ResolveProvider(s).ExileLibraryLandsKeepOrder(s, ctrl, defs);
+    if (static_cast<int>(ord.size()) != C) { ord.clear(); for (int i = 0; i < C; ++i) { ord.push_back(i); } }
+    const std::vector<int> zero(static_cast<std::size_t>(C), 0);
+    auto sum_of = [](const std::vector<int>& v) { int t = 0; for (int x : v) { t += x; } return t; };
+    std::vector<std::vector<int>> b0, b1, b2, b3;
+    b0.push_back(zero);                                                     // [0] exile all
+    if (L > 1)
+    {
+        for (int r : ord) { std::vector<int> v = zero; v[static_cast<std::size_t>(r)] = 1; b1.push_back(v); }   // [1]
+    }
+    if (L > 2)
+    {
+        for (int a = 0; a < C; ++a)                                          // [2] every keep-two
+        {
+            for (int b = a; b < C; ++b)
+            {
+                const int ra = ord[static_cast<std::size_t>(a)], rb = ord[static_cast<std::size_t>(b)];
+                if (ra == rb && m.copies[static_cast<std::size_t>(ra)] < 2) { continue; }
+                std::vector<int> v = zero;
+                ++v[static_cast<std::size_t>(ra)];
+                ++v[static_cast<std::size_t>(rb)];
+                b2.push_back(v);
+            }
+        }
+    }
+    {
+        std::vector<int> seq;                                                // the round-robin keep sequence
+        int maxc = 0;
+        for (int c : m.copies) { maxc = std::max(maxc, c); }
+        for (int k = 1; k <= maxc; ++k)
+        { for (int r : ord) { if (m.copies[static_cast<std::size_t>(r)] >= k) { seq.push_back(r); } } }
+        std::vector<int> v = zero;
+        for (int j = 1; j < L; ++j)                                          // [3] keep-j, j = 3 .. L-1
+        {
+            ++v[static_cast<std::size_t>(seq[static_cast<std::size_t>(j - 1)])];
+            if (j >= 3) { b3.push_back(v); }
+        }
+    }
+    const std::size_t fixed = b0.size() + b1.size() + 1;                     // + keep-all
+    std::size_t room = kExileLandsMenuCap > static_cast<int>(fixed) ? kExileLandsMenuCap - fixed : 0;
+    if (b2.size() > room) { m.truncated += static_cast<int>(b2.size() - room); b2.resize(room); }
+    room -= b2.size();
+    if (b3.size() > room) { m.truncated += static_cast<int>(b3.size() - room); b3.resize(room); }
+    for (auto* blk : { &b0, &b1, &b2, &b3 }) { for (auto& v : *blk) { m.keep.push_back(std::move(v)); } }
+    if (L > 0) { m.keep.push_back(m.copies); }                               // [4] keep all (exile 0)
+    (void)sum_of;
+    return m;
+}
+
+// The AUTONOMOUS menu: the engine's, restricted by the provider.
+inline ExileLandsMenu ExileLibraryLandsMenu(const GameState& s, int ctrl)
+{
+    ExileLandsMenu m = ExileLibraryLandsMenuEngine(s, ctrl);
+    ResolveProvider(s).RestrictExileLibraryLandsMenu(s, ctrl, m.copies, m.keep, m.decline_offered);
+    return m;
+}
+
+// The searched pin values one Gorger resolution offers (TurnSolver's in-plan fan): 0 (the front) first.
+inline std::vector<int> ExileLibraryLandsPinValues(const GameState& s, int ctrl)
+{
+    const ExileLandsMenu m = ExileLibraryLandsMenu(s, ctrl);
+    std::vector<int> v;
+    for (int i = 0; i < std::max<int>(1, static_cast<int>(m.keep.size())); ++i) { v.push_back(i); }
+    if (m.decline_offered && !m.keep.empty()) { v.push_back(kLandSearchPinMask); }
+    return v;
+}
+
+// A diagnostic name for an entry kind (MTG_GORGER_TRACE; the =0 arm's census).
+inline std::string ExileLandsEntryKind(const std::vector<int>& keep, const std::vector<int>& copies)
+{
+    int kept = 0, lands = 0;
+    for (int x : keep) { kept += x; }
+    for (int x : copies) { lands += x; }
+    if (kept == 0) { return "exile_all"; }
+    if (kept == lands) { return "keep_all"; }
+    return "keep" + std::to_string(kept);
+}
+
+inline void PerformExileLibraryLands(GameState& state, int controller, int self_number, int self_controller,
+                                     const CardDefinition& def, int pin)
+{
+    Player& pl = state.players[static_cast<std::size_t>(controller)];
+    const std::string src = def.card.m_name.str();
+    auto refind = [&]() -> Permanent*
+    {
+        for (Permanent& q : state.battlefield)
+        { if (q.card.m_number == self_number && q.controller_index == self_controller) { return &q; } }
+        return nullptr;
+    };
+    // The printed base first: a stale override (a card that kept one across a zone change) never decides anything.
+    if (Permanent* me = refind()) { me->card.m_power = def.card.m_power; me->card.m_toughness = def.card.m_toughness; }
+    static const bool s_trace = EnvOn("MTG_GORGER_TRACE");   // diagnostic only (stderr, real resolutions)
+    const bool trace = s_trace && g_real_resolution && !g_tap_speculating;
+    int lib_lands = 0;
+    for (std::size_t i = 0; i < pl.library.size(); ++i)
+    { if (LandSearchLegal(CardDatabase::Instance().LookupCached(pl.library[i]), ExileLibraryLandsSpec())) { ++lib_lands; } }
+
+    bool decline = false;
+    std::string kind;
+    std::vector<int> take_numbers;               // human: the exact cards chosen
+    std::vector<const CardDefinition*> take_defs; // autonomous: one class definition per land to exile
+    if (g_play_dig_chooser != nullptr || g_play_dragon_chooser != nullptr)
+    {
+        const ExileLandsMenu m = ExileLibraryLandsMenu(state, controller);
+        const bool front_declines = m.keep.empty();
+        if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+        {
+            const Permanent* me = refind();
+            const std::vector<Card> shown{ me != nullptr ? me->card : def.card };
+            const int got = (*g_play_dig_chooser)(state, controller,
+                src + " (search lands?) -- search your library and exile any number of land cards? Its base power "
+                "and toughness become the number exiled; declining keeps it " + std::to_string(def.card.m_power.value_or(0))
+                + "/" + std::to_string(def.card.m_toughness.value_or(0)),
+                shown, std::vector<int>{ 0 }, front_declines ? -1 : 0);
+            decline = got < 0;
+        }
+        else { decline = front_declines; }
+        if (!decline)
+        {
+            std::vector<Card> cands;
+            for (std::size_t i = 0; i < pl.library.size(); ++i)
+            {
+                const Card& c = pl.library[i];
+                if (LandSearchLegal(CardDatabase::Instance().LookupCached(c), ExileLibraryLandsSpec())) { cands.push_back(c); }
+            }
+            std::stable_sort(cands.begin(), cands.end(), [](const Card& a, const Card& b)
+            {
+                if (a.m_name.str() != b.m_name.str()) { return a.m_name.str() < b.m_name.str(); }
+                return a.m_number < b.m_number;
+            });
+            std::vector<int> heur;   // the AI's default: exile every land (the search's front)
+            for (std::size_t i = 0; i < cands.size(); ++i) { heur.push_back(static_cast<int>(i)); }
+            std::vector<int> got = heur;
+            if (g_play_dragon_chooser != nullptr && !g_tap_speculating)
+            {
+                got = (*g_play_dragon_chooser)(state, controller,
+                    src + " (exile lands) -- exile which land cards? Its base power and toughness become the number "
+                    "exiled; exiling none makes it 0/0 and it dies",
+                    cands, static_cast<int>(cands.size()), heur);
+            }
+            for (int g : got)   // the reply REPLACES the selection; an empty reply stands
+            {
+                if (g < 0 || g >= static_cast<int>(cands.size())) { continue; }
+                const int num = cands[static_cast<std::size_t>(g)].m_number;
+                if (std::find(take_numbers.begin(), take_numbers.end(), num) == take_numbers.end())
+                { take_numbers.push_back(num); }
+            }
+            kind = "human";
+        }
+    }
+    else if (pin == kLandSearchPinMask) { decline = true; }
+    else
+    {
+        const ExileLandsMenu m = ExileLibraryLandsMenu(state, controller);
+        if (m.keep.empty()) { decline = true; }   // the provider's one option is the decline
+        else
+        {
+            const std::size_t k = pin < 0 ? 0 : std::min<std::size_t>(static_cast<std::size_t>(pin), m.keep.size() - 1);
+            const std::vector<int>& kv = m.keep[k];
+            for (std::size_t c = 0; c < m.cls.size(); ++c)
+            {
+                for (int x = kv[c]; x < m.copies[c]; ++x) { take_defs.push_back(m.cls[c].def); }
+            }
+            kind = ExileLandsEntryKind(kv, m.copies);
+        }
+    }
+    if (decline)
+    {
+        if (trace)
+        { std::fprintf(stderr, "[gorger] turn=%d lib_lands=%d entry=decline exiled=0\n", state.turn_number, lib_lands); }
+        if (g_play_event_sink && !g_tap_speculating)
+        {
+            EmitPlayEvent(state.turn_number, "trigger", "\xF0\x9F\x94\x8E " + src + " -- declined the search ("
+                          + std::to_string(def.card.m_power.value_or(0)) + "/"
+                          + std::to_string(def.card.m_toughness.value_or(0)) + ")");
+        }
+        return;
+    }
+    int n = 0;
+    std::string listing;
+    auto exile_card = [&](Card&& c)
+    {
+        if (g_play_event_sink) { listing += (listing.empty() ? "" : ", ") + c.m_name.str(); }
+        state.exile.push_back(RevealedCard(c));
+        ++n;
+    };
+    for (int num : take_numbers)
+    {
+        for (std::size_t i = 0; i < pl.library.size(); ++i)
+        {
+            if (pl.library[i].m_number != num) { continue; }
+            Card c = pl.library[i];
+            pl.library.erase(pl.library.begin() + static_cast<std::ptrdiff_t>(i));
+            exile_card(std::move(c));
+            break;
+        }
+    }
+    for (const CardDefinition* d : take_defs)
+    {
+        Card c;
+        if (TakeLandFromLibraryDef(pl, d, c)) { exile_card(std::move(c)); }
+    }
+    // "...then shuffle" -- once, also when nothing was exiled (CR 701.19b).
+    ShuffleAfterSearch(state, controller);
+    if (trace)
+    {
+        std::fprintf(stderr, "[gorger] turn=%d lib_lands=%d entry=%s exiled=%d\n", state.turn_number, lib_lands,
+                     kind.c_str(), n);
+    }
+    Permanent* me = refind();
+    if (me != nullptr)
+    {
+        me->card.m_power     = n;   // layer 7b, fixed at resolution (ruling 4)
+        me->card.m_toughness = n;
+        if (LethalToughness(*me, state) <= 0) { g_pending_zero_toughness.push_back(self_number); }
+    }
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xF0\x9F\x94\x8E " + src + " -- exiled " + std::to_string(n) + " land card"
+                      + (n == 1 ? "" : "s") + " from the library" + (listing.empty() ? "" : " (" + listing + ")")
+                      + ", then shuffled" + (me != nullptr ? "; it is now " + std::to_string(n) + "/"
+                                                              + std::to_string(n) : std::string()));
+    }
+}
+
 // The two activated land searches (PermAbilityMode::SacLandSearch / QuestSacLandSearch), called from
 // ApplyPermAbility AFTER the caller paid the mana and the {T}. The rest of the COST is paid here,
 // before the effect (CR 602.2b / 601.2h): remove the quest counters, then SACRIFICE the source --

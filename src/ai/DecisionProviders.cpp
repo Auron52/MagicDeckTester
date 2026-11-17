@@ -271,6 +271,27 @@ std::vector<std::string> SeaCreaturesProvider::CounterHarvestSearchSubsets(const
     return { pin };
 }
 
+// Trench Gorger (Sea Creatures I6): exile every land at >= 6 in the library, else decline (the class note; USER
+// 2026-11-16). Keyed on the menu the engine hands over (the class copies), never on names.
+static bool SeaGorgerAllOn()
+{
+    static const bool e = EnvOn("MTG_SEA_GORGER_ALL", true);           // DEFAULT ON (USER ruling); =0 -> searched
+    return heurarm::Flag(heurarm::SEA_GORGER_ALL, e);
+}
+constexpr int kSeaGorgerMinLands = 6;   // USER 2026-11-16: "Actually I guess less than 6."
+void SeaCreaturesProvider::RestrictExileLibraryLandsMenu(const GameState& s, int controller,
+    const std::vector<int>& copies, std::vector<std::vector<int>>& keep, bool& decline_offered) const
+{
+    DecisionProvider::RestrictExileLibraryLandsMenu(s, controller, copies, keep, decline_offered);
+    if (!SeaGorgerAllOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::SeaGorger)) { return; }
+    int lands = 0;
+    for (int c : copies) { lands += c; }
+    decline_offered = false;
+    if (lands < kSeaGorgerMinLands) { keep.clear(); return; }   // the decline is the one option (the front)
+    // Exile ALL = keep nothing. The engine's entry 0 is exactly that; rebuilt here so the rule never depends on it.
+    keep.assign(1, std::vector<int>(copies.size(), 0));
+}
+
 // ---- Kiora Bests the Sea God III: the steal list's sound folds (Sea Creatures I3, 2026-11-17) ----------------
 // A VANILLA BODY here is an opponent's scheduled spawn (GameState::kFirstOppSpawnNumber -- always an "N/M Creature"
 // with no abilities) or a definition-less token with no keywords, carrying no counters, damage, attachments or
@@ -1017,6 +1038,8 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"seabounce",  UnprunedGate::SeaBounce},
     {"sagasteal",  UnprunedGate::SagaSteal},
     {"seasin",     UnprunedGate::SeaSin},
+    {"seagorger",  UnprunedGate::SeaGorger},
+    {"gorgerzero", UnprunedGate::GorgerZero},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -3704,6 +3727,38 @@ void DecisionProvider::LandSearchFetchPickOrder(const GameState& s, int controll
     out.reserve(picks.size());
     for (std::size_t i : order) { out.push_back(std::move(picks[i])); }
     picks = std::move(out);
+}
+
+// Trench Gorger's keep order (DecisionProvider.h): the lands worth KEEPING first. A fetch is last -- after an
+// exile-most search it is only as good as the targets left. Then untapped before tapped, more colours produced
+// first, basic before nonbasic, then name. ORDER ONLY.
+std::vector<int> DecisionProvider::ExileLibraryLandsKeepOrder(const GameState& s, int controller,
+    const std::vector<const CardDefinition*>& class_defs) const
+{
+    (void)s; (void)controller;
+    std::vector<int> order(class_defs.size());
+    for (std::size_t i = 0; i < order.size(); ++i) { order[i] = static_cast<int>(i); }
+    auto key = [&](int i)
+    {
+        const CardDefinition* d = class_defs[static_cast<std::size_t>(i)];
+        const bool fetch = d != nullptr && (!d->params.fetch_land_types.empty() || d->params.land_search_count > 0);
+        const bool tapped = d != nullptr && d->params.enters_tapped;
+        const int colours = d != nullptr ? static_cast<int>(d->params.produces.size()) : 0;
+        const bool basic = d != nullptr && IsBasicLandCard(*d);
+        return std::make_tuple(fetch ? 1 : 0, tapped ? 1 : 0, -colours, basic ? 0 : 1,
+                               d != nullptr ? d->card.m_name.str() : std::string());
+    };
+    std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return key(a) < key(b); });
+    return order;
+}
+// The root prune of the "search and exile 0" entry (DecisionProvider.h): AUTONOMOUS only (the human path never
+// reads the menu). Every other entry stands.
+void DecisionProvider::RestrictExileLibraryLandsMenu(const GameState& s, int controller, const std::vector<int>& copies,
+                                                     std::vector<std::vector<int>>& keep, bool& decline_offered) const
+{
+    (void)s; (void)controller; (void)decline_offered;
+    if (DecisionUnpruned(UnprunedGate::GorgerZero)) { return; }
+    keep.erase(std::remove(keep.begin(), keep.end(), copies), keep.end());
 }
 
 void DecisionProvider::LandSearchPickOrder(const GameState& s, int controller, int count, int to_hand,

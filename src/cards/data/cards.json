@@ -17821,6 +17821,26 @@
    "parameters": {
     "as_enters_harvest_counters": 2
    }
+  },
+  {
+   "name": "Trench Gorger",
+   "mana_cost": "{6}{U}{U}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Leviathan"
+   ],
+   "keywords": [
+    "Trample"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "Trample\nWhen this creature enters, you may search your library for any number of land cards, exile them, then shuffle. If you do, this creature has base power and base toughness each equal to the number of cards exiled this way. [MODEL: etb_exile_library_lands_set_base_pt -- resolved in BOTH worlds by ONE body (PerformExileLibraryLands, LandSearch.h) from the universal own-ETB cascade (FireOwnEtbTriggersBody, beside Primeval Titan's ETB), so a cast and every put reach it. DECLINE = no search, no shuffle, it stays 6/6 (ruling). SEARCH = exile the chosen library land cards to exile, then ONE shuffle (also when 0 are exiled, CR 701.19b), then -- if it is still on the battlefield (ruling: the search happens anyway) -- its base power and toughness (layer 7b, the Figure of Destiny shape; counters / anthems / temporary pumps apply on top) become the number exiled, fixed at resolution (ruling: exiled cards leaving exile change nothing). 0 exiled -> 0/0 -> it dies (CR 704.5f, the doomed-entrant queue, both worlds). WHICH lands is SEARCHED: the cast holds one in-plan land-search ordinal (Plan::land_search_pins) indexing a provider-restricted menu over the library's land classes (copies and behavioural twins folded): exile all (the front: the playout beyond the horizon, the d0 runner), keep one land of each class, every keep-two, then keep-j for j = 3 .. L-1 as ONE provider-ordered (round-robin) set per count [DISCLOSED LOSSY SHAPE: for 3 or more kept lands only the count is searched, WHICH lands is the provider's], plus the searched decline. 'Search and exile 0' is offered to a HUMAN only (root prune, MTG_UNPRUNE=gorgerzero). Sea Creatures' provider prunes the menu to ONE option (USER 2026-11-16): exile every library land when the library holds >= 6, else decline (MTG_SEA_GORGER_ALL=0 restores the searched menu; MTG_UNPRUNE=seagorger). Human play: a dig yes/no (search?) then the dragon multi-pick over EVERY library land card, sorted by name, default all; an empty reply stands. The base P/T override is dropped when it leaves the battlefield (CR 400.7, RevealedCard), so a bounced Gorger recast and declined is 6/6.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_exile_library_lands_set_base_pt": true
+   }
   }
  ]
 }

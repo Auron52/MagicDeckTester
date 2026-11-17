@@ -2871,6 +2871,16 @@ struct CardParams
     // (PROVISIONAL, see Path's bracket note). Also opens the removal's SELF-target cast variants.
     // NOT land_search_on_resolve: that fires for the CASTER at every resolution, whatever the target.
     bool land_search_for_removal_controller = false;
+    // ---- "WHEN THIS ENTERS, YOU MAY SEARCH YOUR LIBRARY FOR ANY NUMBER OF LAND CARDS, EXILE THEM, THEN
+    // SHUFFLE. IF YOU DO, THIS CREATURE HAS BASE POWER AND BASE TOUGHNESS EACH EQUAL TO THE NUMBER OF CARDS
+    // EXILED THIS WAY" (Trench Gorger; Sea Creatures I6, 2026-11-17) ----------------------------------------
+    // A different search from land_search_count (exile, any number, a layer-7b base SET), so the two never share
+    // a card (the loader throws). Resolved in BOTH worlds by ONE body, PerformExileLibraryLands (LandSearch.h),
+    // from the universal own-ETB cascade (FireOwnEtbTriggersBody, beside Primeval Titan's ETB). WHICH lands is
+    // the in-plan land-search pin over ExileLibraryLandsMenu (kLandSearchPinMask = the searched DECLINE: no
+    // search, no shuffle, it stays at its printed base). The base it sets lives on the permanent's Card and is
+    // dropped when the card leaves the battlefield (RevealedCard, CR 400.7). false -> byte-identical.
+    bool etb_exile_library_lands_set_base_pt = false;
     // An ACTIVATED land search on a permanent (Evolving Wilds, Terramorphic Expanse, Myriad Landscape,
     // Khalni Heart Expedition). The cost arms it: "" = an all-zero ManaCost (the Wellwisher {T}-only
     // precedent), "{2}" = Myriad. taps -> PermAbilityMode::SacLandSearch ({T} in the cost);

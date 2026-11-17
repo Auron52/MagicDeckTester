@@ -748,6 +748,11 @@ MANIFEST = {
     # executor+rollout), one Card per counter-bearing candidate (either side), the pin / provider default
     # preselected, an EMPTY reply stands. Asked only when a candidate exists.
     "as_enters_harvest_counters":  ("dragon", positive),
+    # Trench Gorger (Sea Creatures I6): "you may search your library for any number of land cards, exile them" -- a
+    # `dig` yes/no ("(search lands?)", added in expected_for_card) then the generic `dragon` multi-pick ("(exile
+    # lands)") over every library land card, at PerformExileLibraryLands (shared executor+rollout). An EMPTY reply
+    # stands (exile 0 -> 0/0).
+    "etb_exile_library_lands_set_base_pt": ("dragon", truthy),
     # ---- Unpredictable Cyclone phase 3 (2026-10-27) ----
     # Unpredictable Cyclone's replaced cycling draw: "You may cast that card without paying its mana cost"
     # -- the shared `free_cast` decision at the human-play dig (TurnSolver's cyclone_replaced_draw), source
@@ -2143,6 +2148,12 @@ STATE_GATED_TYPES = {
         "battlefield as it enters (in Sea Creatures: a Saga mid-chapter); a short forward sweep can cast the 7-drop "
         "onto a counterless board. Pinned by test/unit/test_sea_sin.cpp 'human play -- the dragon multi-pick, "
         "default preselected; an empty reply stands'.",
+    ("etb_exile_library_lands_set_base_pt", "dig"):
+        "Trench Gorger is an 8-mana one-of: a short forward sweep rarely resolves it. Pinned by "
+        "test/unit/test_sea_gorger.cpp 'human play -- dig yes/no then the dragon multi-pick over every library land'.",
+    ("etb_exile_library_lands_set_base_pt", "dragon"):
+        "Trench Gorger is an 8-mana one-of: a short forward sweep rarely resolves it. Pinned by "
+        "test/unit/test_sea_gorger.cpp 'human play -- dig yes/no then the dragon multi-pick over every library land'.",
     ("loyalty_abilities", "free_cast"): "Chandra's first +1 needs a payable nonland on top; deterministic paid/decline/unpayable fixtures cover the branches",
     ("loyalty_abilities", "target"): "Chandra -3 needs a creature and the emblem needs seven loyalty; dedicated unit fixtures exercise both target paths",
 
@@ -2229,6 +2240,9 @@ def expected_for_card(card, deck_cards=None):
     # surfaces the `face_up` board prompt (one flip per answer, -1 = done).
     if p.get("morph_cost") or p.get("megamorph_cost"):
         exp.add("face_up")
+    # Trench Gorger: the "may search" yes/no asked before the dragon exile pick.
+    if p.get("etb_exile_library_lands_set_base_pt"):
+        exp.add("dig")
     # Incandescent Soulstoke (agent F, 2026-11-14): beside the main-phase put (verb:sfput), the opponent-end-step
     # window surfaces the `eot_put` modal (one put per answer, -1 = done) -- a creature put only (Stoneforge's
     # Equipment put stays sorcery-timed).
@@ -2430,6 +2444,8 @@ def modeled_tokens(card):
         t.add("search")
     # The land-search cluster: every "search your library for ... land" is the tutor_etb prompts.
     if p.get("land_search_count", 0) > 0:
+        t.add("search")
+    if p.get("etb_exile_library_lands_set_base_pt"):   # Trench Gorger (Sea I6): the dig yes/no + dragon exile pick
         t.add("search")
     # Rick, Steadfast Leader's "choose two abilities from among ..." IS the choose_abilities
     # decision (verified end-to-end 2026-10-04). Brutal Cathar's "exile target creature an

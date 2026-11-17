@@ -3664,6 +3664,11 @@ static std::string BoardSignature(const GameState& s)
         if (p.destroy_at_end_if_attacked) { e += "/xb"; } // Berserked: destroyed at end step if it attacked
         if (p.return_at_end_step) { e += "/xr"; } // Ilharg put body, returned to hand at end step
         if (p.unearthed) { e += "/xu"; }   // unearthed: exiled at end step / on leaving
+        // Trench Gorger's base P/T (set by its ETB; Sea Creatures I6): param-gated, so every other deck keeps
+        // the EXACT prior signature.
+        if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+            gd != nullptr && gd->params.etb_exile_library_lands_set_base_pt)
+        { e += "/bp" + std::to_string(p.card.m_power.value_or(0)) + "," + std::to_string(p.card.m_toughness.value_or(0)); }
         e += "/d" + std::to_string(p.damage);
         e += "/a" + std::to_string(p.aura_attached_to);
         e += "/o" + std::to_string(p.controller_index);
@@ -19772,6 +19777,10 @@ static bool PermIsPlainForFoldImpl(const GameState& state, const Permanent& p, i
     // A copy effect can make two same-named permanents differ, and a token is never plain above.
     why = foldcensus::kCopyName;
     if (!static_cast<const std::string&>(p.copy_printed_name).empty()) { return false; }
+    // Trench Gorger: a base P/T set away from the printed one (its ETB) makes two same-name copies differ.
+    if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+        gd != nullptr && gd->params.etb_exile_library_lands_set_base_pt
+        && (p.card.m_power != gd->card.m_power || p.card.m_toughness != gd->card.m_toughness)) { return false; }
     // ...and nothing ATTACHED TO it. This is the "land auras" case: the attachment lives on the
     // OTHER permanent, so it cannot be seen from p's own fields.
     why = foldcensus::kAttachedScan;
@@ -28771,6 +28780,7 @@ static bool PbCastLibraryBlind(const Action& a)
         || pp.counters_target_spell_to_hand || pp.etb_dig_count > 0 || pp.etb_reveal_count > 0
         || pp.etb_tutor_hand_count > 0 || pp.etb_exile_until_nonland || pp.etb_return_gy_to_hand
         || pp.land_search_on_resolve || pp.land_search_on_enter_or_attack || pp.cascade_max_mv > 0
+        || pp.etb_exile_library_lands_set_base_pt   // Trench Gorger: exiles library cards and shuffles
         || pp.stages_cards || pp.expressive_iteration
         || d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawX || d->tmpl == CardTemplate::DrawUntilNonland)
     { return false; }
@@ -88779,6 +88789,9 @@ static bool ActionReadsLibraryTop(const Action& a)
     if (p.tutor_library_position > 1) { return true; }
     if (p.etb_self_draw > 0 || p.etb_dig_count > 0 || p.etb_reveal_count > 0
         || p.look_top_put_creature_count > 0) { return true; }
+    // Trench Gorger (Sea Creatures I6): its ETB exiles library lands and shuffles -- a crack after an exile-all
+    // whiffs, one before it finds a land and the Gorger is a land smaller.
+    if (p.etb_exile_library_lands_set_base_pt) { return true; }
     if (cast && (d->tmpl == CardTemplate::DrawSpell || d->tmpl == CardTemplate::DrawUntilNonland
                  || p.draw > 0 || p.cast_draw > 0)) { return true; }
     return false;
@@ -97447,6 +97460,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         if (state.deck_has_land_search && !BpFrontOnlyHere())
         {
             std::vector<TurnSolver::Plan> extra;
+            bool gorger_known = false;          // Trench Gorger's pin values: one menu per node (the state is fixed)
+            std::vector<int> gorger_vals;
             for (const TurnSolver::Plan& p : all)
             {
                 if (!base_plan(p)) { continue; }
@@ -97465,6 +97480,11 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 {
                     if (!hl_known) { hl = PlanMayHoldLandAtBounce(state, p, /*own_searches=*/1); hl_known = true; }
                     return hl;
+                };
+                auto gorger_values = [&]() -> const std::vector<int>&
+                {
+                    if (!gorger_known) { gorger_vals = ExileLibraryLandsPinValues(state, me); gorger_known = true; }
+                    return gorger_vals;
                 };
                 for (const Action& a : p.actions)
                 {
@@ -97503,6 +97523,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                                 && rd->params.land_search_count > 0 && rd->card.IsCreature()
                                 && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
                             { ++n_cast; union_into(v_cast, values_of(rd, nullptr, hand_land)); }
+                            else if (rd != nullptr && rd->params.etb_exile_library_lands_set_base_pt
+                                     && rd->card.IsCreature() && rd->card.m_mana_cost.ManaValue() <= a.chosen_x)
+                            { ++n_cast; union_into(v_cast, gorger_values()); }   // a put Trench Gorger
                         }
                         continue;
                     }
@@ -97521,6 +97544,12 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                         union_into(v_cast, wv);
                         continue;
                     }
+                    // Trench Gorger (Sea Creatures I6): its ETB consumes one in-plan ordinal (decline included);
+                    // the values are its menu's entries (ExileLibraryLandsPinValues, the provider-restricted menu
+                    // off the turn-start library -- one option under the Sea prune, so no fan) + the decline.
+                    if (a.kind == Action::Kind::CastFromHand && d->params.etb_exile_library_lands_set_base_pt
+                        && d->card.IsCreature())
+                    { ++n_cast; union_into(v_cast, gorger_values()); continue; }
                     if (d->params.land_search_count <= 0) { continue; }
                     // Path to Exile: only a SELF-target cast (enchant_target names our creature) holds
                     // an ordinal -- the rule both resolutions consume by (ResolveCreatureRemovalAt's
@@ -104414,6 +104443,17 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
         // without a chosen colour keeps the EXACT prior key.
         if (perm.chosen_color >= 0 && KeyChosenColorOn())
         { Fold(tk, 0xC0102C); Fold(tk, static_cast<uint64_t>(perm.chosen_color)); }
+        // TRENCH GORGER's base P/T (Sea Creatures I6): set by its ETB to the number of lands exiled, so two boards
+        // differing only in that body must not share an entry (the library / exile digests almost always separate
+        // them, but N is not a function of the board alone once a Gorger is bounced and recast). Param-gated:
+        // every other deck keeps the EXACT prior key.
+        if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(perm.card);
+            gd != nullptr && gd->params.etb_exile_library_lands_set_base_pt)
+        {
+            Fold(tk, 0x60E6E5);
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.card.m_power.value_or(-1))));
+            Fold(tk, static_cast<uint64_t>(static_cast<int64_t>(perm.card.m_toughness.value_or(-1))));
+        }
         if (bf_has_fade)
         {
             // Fade wiring (see bf_has_fade): the source's copy id and each token's link + live P/T, so
