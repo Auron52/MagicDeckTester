@@ -230,9 +230,11 @@ already authorized early Bloom cracking for a visible later cast.
 3. Separate Gods trial worktree `.claude/worktrees/codex-gods-hold-20261117` has only a dirty provider edit adding a `ready >= 3` floor to the default-off `MTG_GODS_LOAM_GREEN_HOLD`. It is unbuilt/untested. The broad green hold cleared exact seeds 30037134 and 30037273 but caused 2 later wins/0 earlier and +12.1% recorded time in 5,000 paired games. User wants a less costly fix and full mana completeness. See `docs/design/gods-loam-line-green-hold-2026-11-16.md`. Do not run its long test concurrently with Dragonstorm gates.
 4. Resume the wider queue from `python3 scripts/mana_clean.py status` and the older handoff: Pirates, Extra Turns, Jumbo, Hydras, Fungus, Shadowborn, Morph and due decks. The target is a fresh 5,000-game block for every shipping deck and every issue class repaired; stale-clean records also need fresh runs.
 
-The 02:35 UTC status snapshot has 56 decks: 31 with issues, two never run,
-and 23 stale-clean; 32 are marked DUE. This is a large open queue, not a
-completed sweep. Extra Turns and Merfolk Turns are the never-run decks.
+The 04:27 UTC status snapshot has 56 decks: 18 clean on current source,
+36 with issues, two never run, and zero stale-clean; 27 are marked DUE.
+This remains a large open queue. Extra Turns and Merfolk Turns are the
+never-run decks. Extra Turns needs an oracle cost investigation before
+its 5,000-game gate can be practical.
 
 ## User decisions and operational constraints
 
