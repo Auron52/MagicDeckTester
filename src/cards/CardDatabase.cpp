@@ -1252,6 +1252,9 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.devour           = params.value("devour", 0);
     // "This creature enters with N +1/+1 counters on it" (Mossborn Hydra) -- see CardParams.
     p.enters_with_plus_counters = params.value("enters_with_plus_counters", 0);
+    p.as_enters_harvest_counters = params.value("as_enters_harvest_counters", 0);
+    if (p.as_enters_harvest_counters < 0)
+    { throw std::runtime_error("as_enters_harvest_counters must be >= 0"); }
     p.enters_with_plus_counters_per_other_subtype =
         params.value("enters_with_plus_counters_per_other_subtype", std::string{});
     // Walking Ballista -- see CardParams.

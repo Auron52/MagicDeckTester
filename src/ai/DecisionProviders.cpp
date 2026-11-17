@@ -235,6 +235,42 @@ bool SeaCreaturesProvider::BounceTriggerDeclineOnly(const GameState& s, int cont
     return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SeaBounce);
 }
 
+// Sin, Unending Cataclysm: strip the Sagas, leave everything else (the class note; USER 2026-11-17). Keyed on the
+// param (saga_chapters), not names.
+static bool SeaSinStripSagasOn()
+{
+    static const bool e = EnvOn("MTG_SEA_SIN_STRIP_SAGAS", true);      // DEFAULT ON (USER ruling); =0 -> searched
+    return heurarm::Flag(heurarm::SEA_SIN_STRIP_SAGAS, e);
+}
+std::vector<int> SeaCreaturesProvider::CounterHarvestDefault(const GameState& s, int controller,
+                                                             const std::vector<int>& cands) const
+{
+    (void)controller;
+    std::vector<int> out;
+    for (int bi : cands)
+    {
+        if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.saga_chapters > 0 && p.lore_counters > 0) { out.push_back(bi); }
+    }
+    return out;
+}
+std::vector<std::string> SeaCreaturesProvider::CounterHarvestSearchSubsets(const GameState& s, int controller,
+    const std::vector<int>& cands, const std::vector<std::string>& all) const
+{
+    if (!SeaSinStripSagasOn() || HumanPlayActive() || DecisionUnpruned(UnprunedGate::SeaSin)) { return all; }
+    std::vector<int> nums;
+    for (int bi : CounterHarvestDefault(s, controller, cands))
+    { nums.push_back(s.battlefield[static_cast<std::size_t>(bi)].card.m_number); }
+    std::sort(nums.begin(), nums.end());
+    std::string pin = "@H";
+    for (std::size_t x = 0; x < nums.size(); ++x) { pin += (x ? "," : "") + std::to_string(nums[x]); }
+    // Every Saga is a class of its own or a whole class taken (k = m), so the pin is always one of `all`'s; the
+    // engine re-checks membership anyway.
+    return { pin };
+}
+
 // ---- Kiora Bests the Sea God III: the steal list's sound folds (Sea Creatures I3, 2026-11-17) ----------------
 // A VANILLA BODY here is an opponent's scheduled spawn (GameState::kFirstOppSpawnNumber -- always an "N/M Creature"
 // with no abilities) or a definition-less token with no keywords, carrying no counters, damage, attachments or
@@ -980,6 +1016,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"seawave",    UnprunedGate::SeaWave},
     {"seabounce",  UnprunedGate::SeaBounce},
     {"sagasteal",  UnprunedGate::SagaSteal},
+    {"seasin",     UnprunedGate::SeaSin},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -1957,6 +1994,44 @@ std::vector<int> DecisionProvider::SacOutletVictimCandidates(
         return SacExpendabilityRank(s, s.battlefield[static_cast<std::size_t>(a)], src.card.m_number, &doomed)
              < SacExpendabilityRank(s, s.battlefield[static_cast<std::size_t>(b)], src.card.m_number, &doomed);
     });
+    return out;
+}
+
+// Sin, Unending Cataclysm's unpinned harvest (see the declaration). Every candidate already carries a counter.
+// Taking an OPPOSING permanent's counters can only shrink its body and grow ours; an own Saga's lore resets it to
+// chapter I (its chapters replay; in Sea Creatures that is another Kiora Kraken / another Summon cycle); -1/-1
+// counters are a pure loss to their holder; an own +1/+1-only creature that cannot attack this turn moves c
+// power to 2c on the (also not-yet-attacking) entrant. A dedicated resource counter an own ability spends --
+// charge (Vial), storage, spore, quest, verse, ice, age, fade, hone, loyalty, depletion, coin -- is kept: what
+// that counter buys is the card's own, and this is a playout default, not a judgement the search defers to.
+std::vector<int> DecisionProvider::CounterHarvestDefault(const GameState& s, int controller,
+                                                         const std::vector<int>& cands) const
+{
+    std::vector<int> out;
+    for (int bi : cands)
+    {
+        if (bi < 0 || bi >= static_cast<int>(s.battlefield.size())) { continue; }
+        const Permanent& p = s.battlefield[static_cast<std::size_t>(bi)];
+        if (p.controller_index != controller) { out.push_back(bi); continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.saga_chapters > 0) { out.push_back(bi); continue; }
+        bool dedicated = false;
+        ForEachDedicatedCounterField(p, [&dedicated](const char*, const int& v) { if (v != 0) { dedicated = true; } });
+        if (dedicated || p.loyalty != 0) { continue; }
+        int plus = 0, minus = 0, other = 0;
+        for (const Counter& c : p.counters)
+        {
+            if      (c.type == Counter::Type::PlusOnePlusOne)   { plus  += c.count; }
+            else if (c.type == Counter::Type::MinusOneMinusOne) { minus += c.count; }
+            else                                                { other += c.count; }
+        }
+        if (other != 0) { continue; }
+        if (minus > 0 && plus == 0) { out.push_back(bi); continue; }
+        const bool creature = p.card.IsCreature() || p.is_animated;
+        if (creature && minus == 0 && plus > 0
+            && (s.phase != Phase::PreCombatMain || !CanAttackFull(p, s.battlefield, controller)))
+        { out.push_back(bi); }
+    }
     return out;
 }
 

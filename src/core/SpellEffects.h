@@ -3871,18 +3871,43 @@ inline int PlusCountersOn(const Permanent& p)
     return n;
 }
 
+// THE DEDICATED COUNTER FIELDS -- the older counter families that live as bare ints on Permanent
+// instead of in CounterList (with a display name for the viewer). ONE list, read by both TotalCountersOn (the count) and RemoveAllCounters
+// (Sin, Unending Cataclysm's removal), so a counter int added tomorrow cannot be counted by one and
+// missed by the other: add it HERE. Loyalty is deliberately NOT listed: p.loyalty is the source of
+// truth but its CounterList Loyalty entry is the display mirror, which the CounterList walk already
+// counts (RemoveAllCounters zeroes p.loyalty itself).
+template <class P, class F>
+inline void ForEachDedicatedCounterField(P& p, F&& f)
+{
+    f("charge", p.charge_counters); f("verse", p.verse_counters); f("lore", p.lore_counters);
+    f("storage", p.storage_counters); f("ice", p.ice_counters); f("age", p.age_counters);
+    f("spore", p.spore_counters); f("fade", p.fade_counters); f("quest", p.quest_counters);
+    f("hone", p.hone_counters);
+}
+
 // "Each counter on it" counts every type, not merely +1/+1. Capture this
 // before removing a dying permanent; its Card has no counter state.
 inline int TotalCountersOn(const Permanent& p)
 {
     int n = 0;
     for (const Counter& c : p.counters) { n += c.count; }
-    // Older counter families use dedicated fields instead of CounterList. Loyalty is
-    // excluded because its CounterList entry is the display mirror of p.loyalty.
-    n += p.charge_counters + p.verse_counters + p.lore_counters + p.storage_counters;
-    n += p.ice_counters + p.age_counters + p.spore_counters + p.fade_counters;
-    n += p.quest_counters + p.hone_counters;
+    ForEachDedicatedCounterField(p, [&n](const char*, const int& v) { n += v; });
     return n;
+}
+
+// "Remove all counters from it" -- every kind (the twin of TotalCountersOn: the CounterList, every
+// dedicated counter int, and the loyalty source of truth), then the counter-threshold keywords are
+// re-evaluated (Voice of the Blessed loses its granted flying). Removing counters triggers nothing by
+// itself (CR 122.8 is about MOVING; a Saga's chapter triggers only when lore is ADDED, CR 714.2c), so
+// a reset Saga simply re-fires chapter I as AdvanceSagas re-adds lore after its controller's draw step.
+// The CALLER handles the consequences that are state-based (a 0-toughness creature, CR 704.5f).
+inline void RemoveAllCounters(Permanent& p)
+{
+    p.counters.clear();
+    ForEachDedicatedCounterField(p, [](const char*, int& v) { v = 0; });
+    p.loyalty = 0;
+    RefreshCounterThresholdKeywords(p);
 }
 
 // ---- THE COUNTER-PUT CHOKEPOINT (Doubling Season's second half) ----------------------------
@@ -11554,6 +11579,180 @@ inline void OnLandEntered(GameState& state, int controller, int land_number,
     FireLandfallTriggers(state, controller, land_number, target_snapshot);
 }
 
+// ==== SIN, UNENDING CATACLYSM: THE COUNTER HARVEST (CardParams::as_enters_harvest_counters) =========
+// "As Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters
+// with X +1/+1 counters on it, where X is twice the number of counters removed this way." An AS-ENTERS
+// REPLACEMENT (CR 614.1c / 614.12) with a real choice, resolved at the universal enter cascade
+// (FireEtbWatchers, right after the face is settled), so every entry route runs it and nothing observes the
+// entrant before its counters are on. The ONE body both worlds run is ApplyCounterHarvestAsEnters.
+//
+// THE CHOICE -- which permanents -- is searched. A cast carries Action::tutor_target "@H?" (CollectActions'
+// harvest post-pass, decision space only); AppendSubdecisionAxes replays the plan prefix to Sin's entry (the
+// Life from the Loam live-probe shape: an earlier cast in the plan, or a Hullbreaker / Brinelin cast-trigger
+// bounce, changes the candidate set) and fans one plan per subset "@H<n>,<n>" (per-copy m_numbers; "@H" =
+// none), identical permanents folded to k-of-m (CounterHarvestSubsets). The pin reaches the entry through
+// CounterHarvestPinScope, KEYED ON THE ENTRANT's per-copy number, so a nested entry inside Sin's cascade can
+// never consume it. A named permanent that left the battlefield meanwhile is skipped (a deterministic outcome
+// of the variant, not a pick). An unpinned / unresolved entry takes DecisionProvider::CounterHarvestDefault
+// (the playout beyond the horizon and every non-cast route). Human play: the `dragon` multi-pick at the
+// entry, pin or default preselected; an empty reply STANDS.
+//
+// NOT TARGETED: ward (Summon: Leviathan, Koma) and hexproof (Kiora's Kraken) do not apply, and nothing here
+// reads them. Lore removal resets a Saga (AdvanceSagas re-fires chapter I as lore climbs again).
+// SIMPLIFICATION (disclosed): in a SIMULTANEOUS multi-put (Genesis Wave) a co-entrant that is already on the
+// battlefield is a candidate; by CR 614.12 Sin should not see it. No list pairs Sin with a multi-put.
+struct CounterHarvestPin { int entrant = 0; const std::string* pin = nullptr; };
+inline thread_local CounterHarvestPin g_counter_harvest_pin;
+struct CounterHarvestPinScope
+{
+    CounterHarvestPin prev;
+    CounterHarvestPinScope(int entrant_number, const std::string* pin) : prev(g_counter_harvest_pin)
+    { g_counter_harvest_pin = CounterHarvestPin{ pin != nullptr ? entrant_number : 0, pin }; }
+    ~CounterHarvestPinScope() { g_counter_harvest_pin = prev; }
+    CounterHarvestPinScope(const CounterHarvestPinScope&)            = delete;
+    CounterHarvestPinScope& operator=(const CounterHarvestPinScope&) = delete;
+};
+inline constexpr const char* kCounterHarvestUnresolved = "@H?";
+inline bool IsCounterHarvestPin(const std::string& t) { return t.size() >= 2 && t[0] == '@' && t[1] == 'H'; }
+
+// The candidates: battlefield indices, battlefield order, of every artifact / creature / enchantment (an
+// animated land counts: it IS a creature) that carries at least one counter, ANY controller, the entrant
+// excluded. A counterless permanent is not offered -- choosing it removes nothing (identity fold).
+inline std::vector<int> CounterHarvestCandidates(const GameState& state, int entrant_number)
+{
+    std::vector<int> out;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.m_number == entrant_number) { continue; }
+        if (!(q.card.HasType(CardType::Artifact) || q.card.IsCreature() || q.card.IsEnchantment()
+              || q.is_animated)) { continue; }
+        if (TotalCountersOn(q) > 0) { out.push_back(i); }
+    }
+    return out;
+}
+
+// "@H<n>,<n>" -> the per-copy numbers it names (empty for "@H", and for the unresolved "@H?").
+inline std::vector<int> ParseCounterHarvestPin(const std::string& t)
+{
+    std::vector<int> out;
+    if (!IsCounterHarvestPin(t)) { return out; }
+    std::size_t pos = 2;
+    while (pos < t.size())
+    {
+        const std::size_t end = t.find(',', pos);
+        const std::size_t stop = end == std::string::npos ? t.size() : end;
+        int number = 0;
+        const auto r = std::from_chars(t.data() + pos, t.data() + stop, number);
+        if (r.ec == std::errc{} && r.ptr == t.data() + stop) { out.push_back(number); }
+        if (end == std::string::npos) { break; }
+        pos = end + 1;
+    }
+    return out;
+}
+
+inline std::string DescribeCountersOn(const Permanent& p)
+{
+    std::string out;
+    auto add = [&out](int n, const char* what)
+    { if (n <= 0) { return; } out += (out.empty() ? "" : ", ") + std::to_string(n) + " " + what; };
+    for (const Counter& c : p.counters)
+    {
+        switch (c.type)
+        {
+            case Counter::Type::PlusOnePlusOne:   add(c.count, "+1/+1");    break;
+            case Counter::Type::MinusOneMinusOne: add(c.count, "-1/-1");    break;
+            case Counter::Type::Loyalty:          add(c.count, "loyalty");  break;
+            case Counter::Type::Poison:           add(c.count, "poison");   break;
+            case Counter::Type::Depletion:        add(c.count, "depletion"); break;
+            default:                              add(c.count, "other");    break;
+        }
+    }
+    ForEachDedicatedCounterField(p, [&add](const char* name, const int& v) { add(v, name); });
+    return out;
+}
+
+// THE ONE BODY (executor and rollout, via FireEtbWatchers). Returns the counters removed.
+inline int ApplyCounterHarvestAsEnters(GameState& state, int controller, int entered_index,
+                                       const CardDefinition& def)
+{
+    const int mult = def.params.as_enters_harvest_counters;
+    if (mult <= 0 || entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size()))
+    { return 0; }
+    const int self = state.battlefield[static_cast<std::size_t>(entered_index)].card.m_number;
+    const std::vector<int> cands = CounterHarvestCandidates(state, self);
+    std::vector<int> chosen;   // battlefield indices, a subset of cands
+    const std::string* pin = g_counter_harvest_pin.entrant == self ? g_counter_harvest_pin.pin : nullptr;
+    const bool pinned = pin != nullptr && IsCounterHarvestPin(*pin) && *pin != kCounterHarvestUnresolved;
+    if (pinned)
+    {
+        const std::vector<int> nums = ParseCounterHarvestPin(*pin);
+        for (int bi : cands)
+        {
+            if (std::find(nums.begin(), nums.end(), state.battlefield[static_cast<std::size_t>(bi)].card.m_number)
+                != nums.end()) { chosen.push_back(bi); }
+        }
+    }
+    else if (!cands.empty())
+    { chosen = ResolveProvider(state).CounterHarvestDefault(state, controller, cands); }
+    if (g_play_dragon_chooser && !g_tap_speculating && !cands.empty())
+    {
+        std::vector<Card> shown;
+        std::vector<int> heur;
+        std::string listing;
+        for (std::size_t k = 0; k < cands.size(); ++k)
+        {
+            const Permanent& q = state.battlefield[static_cast<std::size_t>(cands[k])];
+            shown.push_back(q.card);
+            if (std::find(chosen.begin(), chosen.end(), cands[k]) != chosen.end())
+            { heur.push_back(static_cast<int>(k)); }
+            listing += (listing.empty() ? "" : "; ") + std::to_string(k + 1) + ": " + q.card.m_name.str()
+                     + (q.controller_index != controller ? " (opponent's)" : "") + ", " + DescribeCountersOn(q);
+        }
+        const std::vector<int> got = (*g_play_dragon_chooser)(
+            state, controller,
+            def.card.m_name.str() + " \xE2\x80\x94 remove all counters from any number of (" + listing
+                + "). It enters with " + std::to_string(mult) + "x that many +1/+1 counters",
+            shown, static_cast<int>(shown.size()), heur);
+        chosen.clear();   // the reply REPLACES the selection; an empty reply stands
+        for (int g : got)
+        {
+            if (g >= 0 && g < static_cast<int>(cands.size())
+                && std::find(chosen.begin(), chosen.end(), cands[static_cast<std::size_t>(g)]) == chosen.end())
+            { chosen.push_back(cands[static_cast<std::size_t>(g)]); }
+        }
+        std::sort(chosen.begin(), chosen.end());
+    }
+    int removed = 0;
+    std::string narration;
+    for (int bi : chosen)
+    {
+        Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        const int n = TotalCountersOn(q);
+        if (n <= 0) { continue; }
+        if (g_play_event_sink && !g_tap_speculating)
+        { narration += (narration.empty() ? "" : ", ") + DescribeCountersOn(q) + " (" + q.card.m_name.str() + ")"; }
+        removed += n;
+        RemoveAllCounters(q);
+        // A creature whose toughness was its counters (a printed 0/0 Hydra) dies to the toughness SBA
+        // (CR 704.5f) -- through the doomed-entrant queue, drained in both worlds at the safe points.
+        if ((q.card.IsCreature() || q.is_animated) && LethalToughness(q, state) <= 0)
+        { g_pending_zero_toughness.push_back(q.card.m_number); }
+    }
+    Permanent& e = state.battlefield[static_cast<std::size_t>(entered_index)];
+    PutPlusCounters(state, e, mult * removed);
+    AnnihilateCounters(e);   // CR 704.5r -- a no-op unless the entrant already carried -1/-1
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "etb",
+                      removed > 0
+                      ? e.card.m_name.str() + ": removed " + narration + " -> enters with "
+                        + std::to_string(PlusCountersOn(e)) + " +1/+1 counter" + (PlusCountersOn(e) == 1 ? "" : "s")
+                      : e.card.m_name.str() + " removes no counters");
+    }
+    return removed;
+}
+
 inline void FireEtbWatchers(GameState& state, int controller, int entered_index, bool fire_landfall)
 {
     if (entered_index < 0 || entered_index >= static_cast<int>(state.battlefield.size())) { return; }
@@ -11563,6 +11762,13 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     // as a Human/Soldier for Champion of the Parish / Thalia's Lieutenant's watchers). Param-gated
     // inside (one cached lookup) -> byte-identical for every other deck.
     ApplyDayboundOnEnter(state, entered_index);
+    // SIN, UNENDING CATACLYSM's counter harvest -- the as-enters replacement with a choice (see
+    // ApplyCounterHarvestAsEnters above). Here, before every other enters-with and every watcher, so the
+    // board the choice reads is the one the entrant meets and nothing below sees a 5/5. Param-gated: one
+    // cached lookup + one int test for every other entrant.
+    if (const CardDefinition* hd = CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
+        hd != nullptr && hd->params.as_enters_harvest_counters > 0)
+    { ApplyCounterHarvestAsEnters(state, controller, entered_index, *hd); }
     // "This creature enters with N +1/+1 counters on it" (CardParams::enters_with_plus_counters,
     // Mossborn Hydra) -- an AS-ENTERS REPLACEMENT (CR 614.1c), so it sits HERE, right after the face
     // is settled and before anything below can observe the entrant (every enter watcher, the landfall
@@ -55688,6 +55894,72 @@ inline std::string RemovalSelfTargetFoldKey(const GameState& s, const Permanent&
     std::sort(att.begin(), att.end());
     for (const std::string& a : att) { k += "|att:" + a; }
     return k;
+}
+
+// SIN'S HARVEST SUBSETS -- the searched list AppendSubdecisionAxes' harvest fan offers at Sin's entry, as
+// "@H<n>,<n>" pins ("@H" = remove nothing). EVERY subset of the candidates, with ONE sound identity fold:
+// candidates whose RemovalSelfTargetFoldKey (every per-permanent field, attachments, references) and
+// controller agree are interchangeable as "the copy stripped", so a class of m identical permanents offers
+// k = 0..m (the first k in battlefield order) instead of 2^m picks; the product over classes is
+// prod(m_i + 1). No truncation. ORDER is branch order only: the provider default (CounterHarvestDefault, as
+// per-class counts) first, then by counters removed, most first.
+inline std::vector<std::string> CounterHarvestSubsets(const GameState& state, int controller,
+                                                      const std::vector<int>& cands)
+{
+    std::vector<std::vector<int>> classes;   // battlefield indices per class, battlefield order
+    std::vector<std::string> keys;
+    for (int bi : cands)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(bi)];
+        const std::string k = std::to_string(q.controller_index) + "#" + RemovalSelfTargetFoldKey(state, q);
+        const auto it = std::find(keys.begin(), keys.end(), k);
+        if (it == keys.end()) { keys.push_back(k); classes.push_back({bi}); }
+        else { classes[static_cast<std::size_t>(it - keys.begin())].push_back(bi); }
+    }
+    std::vector<int> dflt_k(classes.size(), 0);
+    if (!cands.empty())
+    {
+        const std::vector<int> d = ResolveProvider(state).CounterHarvestDefault(state, controller, cands);
+        for (std::size_t c = 0; c < classes.size(); ++c)
+            for (int bi : classes[c])
+            { if (std::find(d.begin(), d.end(), bi) != d.end()) { ++dflt_k[c]; } }
+    }
+    struct Sub { std::vector<int> k; int removed; bool is_default; };
+    std::vector<Sub> subs;
+    std::vector<int> k(classes.size(), 0);
+    while (true)
+    {
+        Sub sub{k, 0, k == dflt_k};
+        for (std::size_t c = 0; c < classes.size(); ++c)
+            for (int j = 0; j < k[c]; ++j)
+            { sub.removed += TotalCountersOn(state.battlefield[static_cast<std::size_t>(classes[c][static_cast<std::size_t>(j)])]); }
+        subs.push_back(std::move(sub));
+        std::size_t c = 0;   // odometer over the per-class counts
+        while (c < classes.size() && k[c] == static_cast<int>(classes[c].size())) { k[c] = 0; ++c; }
+        if (c == classes.size()) { break; }
+        ++k[c];
+    }
+    std::stable_sort(subs.begin(), subs.end(), [](const Sub& a, const Sub& b)
+    { if (a.is_default != b.is_default) { return a.is_default; } return a.removed > b.removed; });
+    std::vector<std::string> out;
+    out.reserve(subs.size());
+    for (const Sub& sub : subs)
+    {
+        std::vector<int> nums;
+        for (std::size_t c = 0; c < classes.size(); ++c)
+            for (int j = 0; j < sub.k[c]; ++j)
+            { nums.push_back(state.battlefield[static_cast<std::size_t>(classes[c][static_cast<std::size_t>(j)])].card.m_number); }
+        std::sort(nums.begin(), nums.end());
+        std::string pin = "@H";
+        for (std::size_t x = 0; x < nums.size(); ++x) { pin += (x ? "," : "") + std::to_string(nums[x]); }
+        out.push_back(std::move(pin));
+    }
+    // The provider may RESTRICT / ORDER (never invent): an answer naming a pin outside the list is refused whole.
+    std::vector<std::string> narrowed = ResolveProvider(state).CounterHarvestSearchSubsets(state, controller, cands, out);
+    if (narrowed.empty()) { return out; }
+    for (const std::string& n : narrowed)
+    { if (std::find(out.begin(), out.end(), n) == out.end()) { return out; } }
+    return narrowed;
 }
 
 // THE resolution of a non-tuck creature removal at battlefield index `bi` (see the block above).

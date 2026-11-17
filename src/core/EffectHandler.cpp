@@ -182,6 +182,10 @@ void EffectHandler::EnterBattlefield(GameState& state, const StackEntry& entry,
         // Galvanic Alchemist's SEARCHED soulbond partner (the cast's chosen_x pin) -- lockstep with
         // TurnSolver's apply_one. 0 = no pin for every other card.
         SoulbondPartnerPinScope _spp(SoulbondPinForCast(edef->params, entry.chosen_x.value_or(0)));
+        // Sin's searched harvest subset (StackEntry::tutor_target "@H..."), read ONLY by this entry -- lockstep
+        // with TurnSolver's apply_one. Null for every other card.
+        CounterHarvestPinScope _chp(perm.card.m_number,
+                                    edef->params.as_enters_harvest_counters > 0 ? &entry.tutor_target : nullptr);
         FireEtbWatchers(state, entry.controller_index, static_cast<int>(state.battlefield.size()) - 1);
     }
     // Goblins tribal ETB cascade (self-tokens / ETB burn / Matron tutor / Muxus reveal). No-op for

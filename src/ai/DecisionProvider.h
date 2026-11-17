@@ -956,6 +956,26 @@ public:
         const GameState& s, int controller, int maximum) const
     { (void)s; (void)controller; (void)maximum; return {}; }
 
+    // CounterHarvestDefault -- Sin, Unending Cataclysm's "remove all counters from any number of artifacts,
+    // creatures, and enchantments" when NO searched pin decides it: the playout beyond the horizon, the d0
+    // runner, a non-cast entry (a put, a reanimation), and the human chooser's preselection. `cands` are the
+    // battlefield indices CounterHarvestCandidates admits (counter-bearing, any controller, the entrant
+    // excluded); the answer is a SUBSET of them. The search never reads this inside its window -- it branches
+    // every subset (AppendSubdecisionAxes' harvest fan). Base rule (DecisionProviders.cpp): every opposing
+    // candidate, every own Saga, every own permanent carrying only -1/-1 counters, and every own creature
+    // carrying only +1/+1 counters that cannot attack this turn; a resource counter an own ability spends
+    // (charge, storage, spore, quest, ...) is kept.
+    virtual std::vector<int> CounterHarvestDefault(const GameState& s, int controller,
+                                                   const std::vector<int>& cands) const;
+    // CounterHarvestSearchSubsets -- RESTRICT / ORDER the searched harvest subsets (`all`: the engine's full,
+    // identity-folded "@H<n>,<n>" list, CounterHarvestSubsets) at Sin's live probe. A provider may only return a
+    // nonempty SUBSET of `all` (a one-option prune is a subset of one); the engine keeps `all` on an empty answer
+    // or one naming a pin `all` does not hold. Never consulted in human play (no fan there). Default: `all`.
+    virtual std::vector<std::string> CounterHarvestSearchSubsets(const GameState& s, int controller,
+                                                                 const std::vector<int>& cands,
+                                                                 const std::vector<std::string>& all) const
+    { (void)s; (void)controller; (void)cands; return all; }
+
     // ENUMERATION CONTEXT the plan caches must key on: a digest of every input OTHER THAN THE STATE that this
     // provider's enumeration-time narrowing reads (a search-root board, a probe mode, ...). BuildBreakpointKey
     // folds a nonzero answer, so every memo keyed on it (the breakpoint list cache, the enum / solve memos)

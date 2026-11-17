@@ -8321,5 +8321,17 @@
     "power": "6",
     "toughness": "8",
     "type_line": "Legendary Creature — Kraken"
+  },
+  "Sin, Unending Cataclysm": {
+    "cmc": 7.0,
+    "keywords": [
+      "Flying",
+      "Trample"
+    ],
+    "mana_cost": "{5}{G}{U}",
+    "oracle_text": "Flying, trample\nAs Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters with X +1/+1 counters on it, where X is twice the number of counters removed this way.\nWhen Sin dies, put its counters on target creature you control, then shuffle this card into its owner's library.",
+    "power": "5",
+    "toughness": "5",
+    "type_line": "Legendary Creature — Leviathan Avatar"
   }
 }

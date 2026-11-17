@@ -17796,6 +17796,31 @@
     "cast_trigger_bounce_min_mv": 6,
     "etb_bounce_nonland": true
    }
+  },
+  {
+   "name": "Sin, Unending Cataclysm",
+   "mana_cost": "{5}{G}{U}",
+   "types": [
+    "Creature"
+   ],
+   "supertypes": [
+    "Legendary"
+   ],
+   "subtypes": [
+    "Leviathan",
+    "Avatar"
+   ],
+   "keywords": [
+    "Flying",
+    "Trample"
+   ],
+   "power": 5,
+   "toughness": 5,
+   "oracle_text": "Flying, trample\nAs Sin enters, remove all counters from any number of artifacts, creatures, and enchantments. Sin enters with X +1/+1 counters on it, where X is twice the number of counters removed this way.\nWhen Sin dies, put its counters on target creature you control, then shuffle this card into its owner's library. [MODEL: as_enters_harvest_counters 2 -- an AS-ENTERS REPLACEMENT (CR 614.1c / 614.12), resolved in the universal enter cascade (FireEtbWatchers -> ApplyCounterHarvestAsEnters, before anything observes the entrant) for EVERY entry route: remove ALL counters of EVERY kind (the CounterList and every dedicated counter int, one shared field list with TotalCountersOn) from the CHOSEN subset of artifacts / creatures / enchantments, ANY controller, Sin excluded, then PutPlusCounters(2 x removed) on Sin (a put, so a doubler doubles it). NOT TARGETED: ward (Summon: Leviathan, Koma) and hexproof (Kiora's Kraken) do not apply. A permanent with no counters is not offered (identity fold). Removing a Saga's lore resets it: AdvanceSagas re-fires chapter I as lore is re-added after the draw step (CR 714.2c). WHICH SUBSET is SEARCHED: the cast carries the sentinel '@H?'; AppendSubdecisionAxes replays the plan to Sin's entry (the Life from the Loam live-probe shape, so an earlier same-plan Saga cast and a Hullbreaker / Brinelin cast-trigger bounce are both seen) and fans one plan per live subset '@H<n>,<n>' (per-copy numbers; '@H' = none), identical permanents folded to k-of-m; no truncation. The pin is read ONLY by Sin's own entry (keyed on its per-copy number) in both worlds; a named permanent that left meanwhile is skipped. Beyond the horizon, on non-cast entries and in the d0 runner the provider default (CounterHarvestDefault: every opposing candidate, every own Saga, own -1/-1-only permanents, own +1/+1-only creatures that cannot attack this turn) decides. A creature left at 0 toughness dies through the doomed-entrant queue in both worlds. Human play: the 'dragon' multi-pick at the entry, the pin or default preselected; an empty reply stands. [PARTIAL, PROVISIONAL (user sign-off, ledger Q9): the DIES trigger ('put its counters on target creature you control, then shuffle this card into its owner's library') is NOT modelled; Sin stays in the graveyard and its counters are lost. Unreachable in Sea Creatures: the goldfish opponent never blocks, attacks or removes; the list has no sacrifice outlet, no -1/-1 source, no destroy effect and one Sin (no legend rule); Whelming Wave and Summon: Leviathan chapter I exempt Leviathans; Hullbreaker Horror and Brinelin BOUNCE (to hand, not the graveyard). Becomes LIVE with an interactive opponent, a sac outlet, a board wipe, or a second Sin.] [SIMPLIFICATION: in a SIMULTANEOUS multi-put (Genesis Wave) Sin should not see its co-entrants; not reachable in this list.]]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "as_enters_harvest_counters": 2
+   }
   }
  ]
 }
