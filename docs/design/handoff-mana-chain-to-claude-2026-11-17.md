@@ -2,9 +2,25 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status (Claude), updated 12:40 UTC
+## Live status (Claude), updated 16:50 UTC
 
-**PUSHED 12:21 UTC** (`687062e15..71c72cb17`, next shared-branch push not before 16:21 UTC), rebased onto origin's P18i /
+**PUSHED 16:44 UTC** (`f4ca329c9..8c99d110b`, next shared-branch push not before 20:44 UTC). It is rebased onto
+origin's Sea Creatures integration; the only conflict was HeuristicArm.h appends, with both kept and the order
+verified. After the rebase:
+- unit 3,462/3,462 and gt_logs consistent;
+- smoke 46 failed, the same rows as before the rebase; the one value change is Creature Giving d0
+  5.4990 -> 5.4980, from origin's land-Aura change;
+- references safe.
+
+The pushed fixes are the painland float, `MTG_CONT_UNSEEN_PENDING`, `MTG_ONDEMAND_VISIBLE_CONTRIB` and
+`MTG_LEFTOVER_LINE_SWAP`. The Windows CI watch runs in the background (REST API poll).
+
+**IN FLIGHT (16:47 UTC): fresh Dragonstorm gate** `claude-dragonstorm-swap-20261117` (5,000 games; console
+`build/scratch/claude_gate/ds_gate.out`, pid in `ds_gate.pid`). Next: read the report, then reproduce and fix the
+leading signatures (s30072022 known, low priority), commit the gate record. Then the PD CAPPED fold, then the deck
+queue.
+
+**(earlier) PUSHED 12:21 UTC** (`687062e15..71c72cb17`, next shared-branch push not before 16:21 UTC), rebased onto origin's P18i /
 site-9 commits: `7a289ca75` oracle repairs (Prevent Damage 30 flags explained), `e6ffcefd7` Karoo plain-`{C}` float
 (`MTG_KAROO_FLOAT_RESTRICTED_C`), the gate record, `d85bc8c5a` Karoo line-colour float
 (`MTG_KAROO_FLOAT_LINE_COLOUR`), and the checkpoints (hashes above are pre-rebase). After the rebase: gt_logs
