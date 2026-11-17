@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:30 UTC
 
+The next due **Creature Giving** PGO mana-clean gate is active as the
+only simulation batch, exec session 11439:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run creature_giving --games 5000 --name codex-creature-giving-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/creature_giving_fresh_gate.out`.
+Read `logs/mana_clean/codex-creature-giving-fresh-20261117/report.md` on
+completion, update this handoff, and commit `test/mana_clean.json`.
+
 **Mill fresh gate complete:** indices 10,000–14,999 at PGO source
 `fcb9352608ea` yielded 131 ENUM-GAP flags across 51 signatures, with
 zero other issue class or cap and byte-identical oracle-on/off play.
