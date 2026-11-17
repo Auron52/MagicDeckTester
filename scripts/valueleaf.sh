@@ -873,7 +873,7 @@ phase_freeze() {
     leaf_fingerprint > "$VLQ/freeze.leaf"
     log "FROZEN at $(cat "$VLQ/freeze.commit")  src-tree $(cut -c1-12 "$VLQ/freeze.src")"
     log "decklist(s) $(wc -l < "$VLQ/freeze.decks" | tr -d ' ') stamped -> $VLQ/freeze.decks"
-    bash build.sh >> "$VLQ/build.log" 2>&1 || { log "ABORT: build failed, see $VLQ/build.log"; return 1; }
+    bash build.sh release -- --target mtg >> "$VLQ/build.log" 2>&1 || { log "ABORT: build failed, see $VLQ/build.log"; return 1; }
     log "build OK"
     # Stamp the PLAY fingerprint alongside the src one, so a later src move can be judged on whether
     # it changed play rather than on whether it touched a file. Recorded AFTER the build so it
