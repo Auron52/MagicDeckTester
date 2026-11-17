@@ -66,6 +66,22 @@ documents prior terminal-loss and Dina-sacrifice oracle repairs; do not
 assume the fresh flags have the same cause. The current audit retries
 capped plans at 200,000 applies by default (`MTG_MANA_ORACLE_NODES_RETRY`).
 
+**Minotaur read-only repro after Spirits gate:** seed `30284922` T5 still
+has two APPLY-DROP flags on the current Release binary. Exact command is
+in `logs/mana_clean/codex-clean-refresh-two-20261117/report.md`;
+the full trace is
+`build/scratch/spirits_shock_pair_5k/minotaur_30284922.out`. The outer
+plan lists only Slaughter-Priest of Mogis; its continuation tries
+Deathbellow Raider, which the plan did **not declare**. The first
+payment can use Rakdos Carnarium's B plus Unclaimed Territory's C,
+leaving Secluded Courtyard to pay Raider's R. The engine instead pays the
+first spell in a way that loses Raider. Forced `MTG_PAY_ROLLBACK` does
+not rescue this because the continuation was not in the outer plan.
+The user permits narrow, non-searched visible line-opening options, so
+a later visible Raider in hand may justify a payment hold. Diagnose the
+exact engine assignment and add a focused rollout/executor test before
+changing the payer. This case has no code fix yet.
+
 **Prior completed status (chronological history follows):**
 
 **Smoke + strict viewer validation complete:**
