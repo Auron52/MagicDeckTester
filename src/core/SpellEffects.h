@@ -6767,9 +6767,13 @@ inline thread_local int g_cast_trigger_mana_spent_probe = -1;
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
                                                  const std::string& src_name, bool untap_pump,
                                                  int rank_override);                           // defined below
-inline int UntapPumpRankFor(const GameState& state, int ahead = 0);                              // defined below
+inline int CastTargetTriggerRankFor(const GameState& state, int ahead = 0);                              // defined below
 inline void ResolveUntapPumpTarget(GameState& state, int controller, const std::string& src_name, int number,
                                    int power, int tough);                                       // defined below
+// Hullbreaker Horror / Brinelin (Sea Creatures I4): ONE trigger INSTANCE of the optional nonland bounce, chosen and
+// resolved in place (defined with ReturnPermanentToOwnersHand below; see FireBounceTriggerInstance's note).
+inline void FireBounceTriggerInstance(GameState& state, int controller, const CardDefinition& src,
+                                      const char* which);                                       // defined below
 inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def, int mana_spent)
 {
     g_cast_trigger_mana_spent_probe = mana_spent;
@@ -6823,6 +6827,9 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     // Raggadragga's untap + pump triggers (Boars I3b), deferred past the loop like to_create: the untap and the
     // pump change the battlefield the loop walks. Each entry is the source's definition (one per Raggadragga).
     std::vector<const CardDefinition*> untap_pumps;
+    // Hullbreaker Horror / Brinelin's cast-trigger bounces (Sea Creatures I4), deferred past the loop: a bounce ERASES
+    // a battlefield permanent. One entry per source permanent whose trigger fires.
+    std::vector<const CardDefinition*> bounces;
 
     int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -6945,6 +6952,13 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
         if (def->params.cast_trigger_untap_pump_target_min_spent > 0 && p.controller_index == active
             && mana_spent >= def->params.cast_trigger_untap_pump_target_min_spent)
         { untap_pumps.push_back(def); }
+        // Hullbreaker Horror ("Whenever you cast a spell, choose up to one -- ...") and Brinelin ("... whenever you cast
+        // a spell with mana value 6 or greater, you may return target nonland permanent ..."). The PRINTED mana value
+        // (`mv`, the Herald precedent: a reduction never changes MV). Each is on the stack during its own cast, so
+        // it never sees itself; Brinelin #2's cast does trigger Brinelin #1 (MV 8).
+        if (def->params.cast_trigger_bounce_nonland && p.controller_index == active
+            && mv >= def->params.cast_trigger_bounce_min_mv)
+        { bounces.push_back(def); }
 
         if (def->params.creature_cast_trigger_plus_counters > 0 && cast_def.card.IsCreature()
             && p.controller_index == active)
@@ -7096,18 +7110,26 @@ inline void FireOnCastTriggers(GameState& state, const CardDefinition& cast_def,
     // controller's (CR 603.3b) and inert: pumps and counters commute and the untap is independent of both, so a
     // fixed order is a sound identity. After the tokens above, which are then legal targets (a superset).
     // PER-INSTANCE target (Boars I4c, risk 3): each trigger instance reads ITS OWN digit of the searched rank
-    // (UntapPumpRankFor: the instance ordinal GameState::cast_untap_pump_ordinal, relative to the pin's install), then
+    // (CastTargetTriggerRankFor: the instance ordinal GameState::cast_target_trigger_ordinal, relative to the pin's install), then
     // advances the ordinal -- so two qualifying casts in one turn take independent targets.
     for (const CardDefinition* rd : untap_pumps)
     {
-        const int rank = UntapPumpRankFor(state);
-        state.cast_untap_pump_ordinal = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal + 1);
+        const int rank = CastTargetTriggerRankFor(state);
+        state.cast_target_trigger_ordinal = static_cast<std::uint8_t>(state.cast_target_trigger_ordinal + 1);
         const std::vector<int> nums = ChooseCastTriggerTargets(state, active, 1, /*destroy=*/false,
                                                                rd->card.m_name.str(), /*untap_pump=*/true, rank);
         if (nums.empty()) { continue; }   // no legal target (every creature shrouded): removed (CR 603.3d)
         ResolveUntapPumpTarget(state, active, rd->card.m_name.str(), nums.front(),
                                rd->params.cast_trigger_untap_pump_power, rd->params.cast_trigger_untap_pump_tough);
     }
+    // Hullbreaker / Brinelin bounces (Sea Creatures I4): after the untap-pumps, in battlefield order. The order of
+    // simultaneous cast triggers is the controller's (CR 603.3b); fixed here (untap-pumps first, then bounces) in
+    // both worlds -- no list holds both kinds today. Each instance chooses its own target (or none) and resolves
+    // before the spell, exactly the real stack order (nothing can respond in a goldfish). Erases: the hand-cast
+    // callers (the executor's CastSpellFromHand, the rollout's apply_one) hold no battlefield index across this
+    // call. [OWED: the nested free-cast callers (cascade / suspend / ripple / Remand) are not audited for held
+    // battlefield indices -- no list with a free cast holds a bounce source.]
+    for (const CardDefinition* bd : bounces) { FireBounceTriggerInstance(state, active, *bd, "cast trigger"); }
     // Every cast trigger above has resolved (they sit above the spell); the draw triggers of any card
     // one of them drew (Parun, Kor Spiritdancer, Sram) resolve now, still before the spell -- the Niv
     // loop. One bool test for every deck without it. Shared by every cast site in both worlds.
@@ -10747,6 +10769,12 @@ inline int CountControlledDragons(const GameState& state, int controller)
 // drained by DrainPendingSelfBounces (defined after the walk helpers; see its comment).
 struct PendingSelfBounce { int controller; int perm_number; };
 inline thread_local std::vector<PendingSelfBounce> g_pending_self_bounces;
+// Pending ENTER bounces (Brinelin, the Moon Kraken: "When Brinelin enters ..., you may return target nonland permanent
+// to its owner's hand"; Sea Creatures I4) -- recorded by FireOwnEtbTriggersBody, drained by DrainPendingEtbBounces
+// (defined with ReturnPermanentToOwnersHand) AFTER the legend rule in both worlds. `src_number` = the entrant's
+// m_number; `src` = its definition (the trigger resolves even if the legend rule removed it).
+struct PendingEtbBounce { int controller; int src_number; const CardDefinition* src; };
+inline thread_local std::vector<PendingEtbBounce> g_pending_etb_bounces;
 
 // Marit Lage's Slumber clause 1: "Whenever Marit Lage's Slumber or another snow permanent you
 // control enters, scry 1." A watcher on the enter cascade, fired once PER COPY per entering snow
@@ -13105,6 +13133,16 @@ inline void FireOwnEtbTriggersBody(GameState& state, int controller, int entered
     {
         Permanent& me = state.battlefield[entered_index];
         me.cond_haste = state.players[1 - me.controller_index].life <= p.haste_if_opp_life_at_most;
+    }
+
+    // Brinelin's enter bounce (Sea Creatures I4): RECORDED, not resolved -- the bounce erases a permanent (possibly
+    // Brinelin itself) and this cascade's callers hold saved slot indices; and the CR order puts the trigger on the
+    // stack after the state-based actions (CR 704.3 / 603.3), i.e. after the legend rule, where each world drains it
+    // (DrainPendingEtbBounces). Param-gated -> byte-identical for every deck without it.
+    if (p.etb_bounce_nonland)
+    {
+        g_pending_etb_bounces.push_back(
+            PendingEtbBounce{ controller, state.battlefield[entered_index].card.m_number, def });
     }
 
     // SAGA (CR 714.2a): record the enter so the first lore counter -- and therefore chapter I --
@@ -19261,8 +19299,8 @@ inline void ResolveEtbDestroyMandatory(GameState& state, int controller, int sou
 //     creature dies through OnCreatureDies (+ FireOppCreatureDies for the opponent's).
 inline thread_local int g_cast_trigger_target_pin      = -1;
 inline thread_local int g_cast_trigger_target_pin_turn = -1;
-// The Raggadragga instance ordinal (GameState::cast_untap_pump_ordinal) when the live pin was installed: the pin's
-// digit j belongs to the j-th untap-pump trigger AFTER the install (Boars I4c). Read only by UntapPumpRankFor.
+// The Raggadragga instance ordinal (GameState::cast_target_trigger_ordinal) when the live pin was installed: the pin's
+// digit j belongs to the j-th untap-pump trigger AFTER the install (Boars I4c). Read only by CastTargetTriggerRankFor.
 inline thread_local int g_cast_trigger_target_pin_base = 0;
 struct ScriptedCastTriggerTarget
 {
@@ -19294,7 +19332,7 @@ inline int CastTriggerTargetPinFor(const GameState& state)
 // TUPLE of per-instance ranks, packed self-describing in Plan::cast_trigger_target_choice:
 //     0                         = every instance takes rank 0 (the provider's front) -- the base plan;
 //     (payload << 4) | B, B>=1  = instance j takes digit j = (payload >> (B*j)) & (2^B - 1).
-// Instance j = the j-th untap-pump trigger since the pin was INSTALLED (GameState::cast_untap_pump_ordinal minus the
+// Instance j = the j-th untap-pump trigger since the pin was INSTALLED (GameState::cast_target_trigger_ordinal minus the
 // ordinal saved at install), so a breakpoint re-solve's own pin starts at its own digit 0, and a continuation that
 // installs nothing inherits the outer pin's remaining digits -- the same lockstep both worlds already keep for the
 // pin itself (ApplyPlanDirect's _sctt, AIEngine's cast_trigger_target_exec, each installed with the state's ordinal).
@@ -19310,11 +19348,11 @@ inline int UntapPumpRankDigit(int k, int j)
     return ((k >> 4) >> (b * j)) & ((1 << b) - 1);
 }
 // `ahead`: the instance that many triggers after the next one (the axis reads the base plan's inherited digits).
-inline int UntapPumpRankFor(const GameState& state, int ahead)
+inline int CastTargetTriggerRankFor(const GameState& state, int ahead)
 {
     const int k = CastTriggerTargetPinFor(state);
     if (k <= 0) { return k; }
-    const int j = static_cast<std::uint8_t>(state.cast_untap_pump_ordinal
+    const int j = static_cast<std::uint8_t>(state.cast_target_trigger_ordinal
                                             - static_cast<std::uint8_t>(g_cast_trigger_target_pin_base));
     return UntapPumpRankDigit(k, j + ahead);
 }
@@ -19445,7 +19483,7 @@ inline std::vector<int> CastTriggerTargetOption(const std::vector<std::vector<in
 }
 // THE SHARED CHOOSER. Returns the chosen permanents' m_numbers (n of them), or empty = the trigger is
 // removed (fewer than n legal targets). `src_name` / `destroy` word the human prompt.
-// `rank_override` >= -1: use it instead of the live pin (Raggadragga's per-instance digit, UntapPumpRankFor); -2 = the pin.
+// `rank_override` >= -1: use it instead of the live pin (Raggadragga's per-instance digit, CastTargetTriggerRankFor); -2 = the pin.
 inline std::vector<int> ChooseCastTriggerTargets(const GameState& state, int controller, int n, bool destroy,
                                                  const std::string& src_name, bool untap_pump = false,
                                                  int rank_override = -2)
@@ -55118,6 +55156,169 @@ inline void BounceTargetSpellAt(GameState& state, int index)
     state.stack.erase(state.stack.begin() + index);
     if (!target.is_copy)
     { ReturnCounteredSpellToHand(state, target.controller_index, target.source); }
+}
+
+// =====================================================================================================================
+// HULLBREAKER HORROR / BRINELIN, THE MOON KRAKEN -- the optional targeted bounce trigger (Sea Creatures I4).
+//   Hullbreaker: "Whenever you cast a spell, choose up to one -- * Return target spell you don't control to its owner's
+//   hand. * Return target nonland permanent to its owner's hand."  Brinelin: "When Brinelin enters and whenever you
+//   cast a spell with mana value 6 or greater, you may return target nonland permanent to its owner's hand."
+// Both collapse to ONE decision per trigger instance: a target, or NONE ("choose up to one" with zero modes; "you
+// may" with the target chosen as the trigger is put on the stack -- declining at resolution is the same outcome).
+//   * LEGAL SET: every nonland permanent on the battlefield, EITHER side (ours included: a Saga, a tapped Sol Ring,
+//     a land Aura, the source itself), SpellCanTargetPermanent-legal (shroud; hexproof only against the opponent's
+//     side), minus a DoomedEntrant (a legend-rule loser / a 0-toughness entrant is gone before the trigger is put on
+//     the stack, CR 704.3); plus, for Hullbreaker's mode 1 (cast_trigger_bounce_spell_opponent), each spell on the
+//     stack we do not control (ALWAYS EMPTY against the goldfish: the opponent never casts).
+//   * SEARCH (no human chooser): the legal set is identity-folded (CastTriggerTargetFoldKey, the sound "identical in
+//     all state" fold) and the OPPONENT's permanents are dropped -- a SOUND weak dominance, not a prune: decline is
+//     always an option, and bouncing a passive opponent's permanent (it never attacks, blocks or casts; a spawn
+//     ceases to exist) changes nothing it does and can only shrink our own options (Kiora III's steal list).
+//     Options = DECLINE + one per class, in DecisionProvider::BounceTriggerTargetOrder (DECLINE first by default);
+//     the per-instance rank digit (CastTargetTriggerRankFor, the Raggadragga I4c machinery: one digit per searched
+//     instance, packed in Plan::cast_trigger_target_choice) picks one, clamped. No pin = rank 0 = the front.
+//   * PROVIDER PRUNE: DecisionProvider::BounceTriggerDeclineOnly (Sea Creatures: always, USER 2026-11-16) makes the
+//     instance a one-option DECLINE that takes NO digit (the ordinal is not bumped). Never consulted in human play.
+//   * HUMAN PLAY: the board-click `target` decision (g_play_target_chooser) over the FULL legal set, min 0 targets,
+//     so "(no target)" declines; the default is the engine's option.
+//   * RESOLUTION re-finds the target by m_number (CR 608.2b: gone, or now a land -> nothing happens), then the
+//     shared ReturnPermanentToOwnersHand and ONE orphaned-Aura sweep (CR 704.5m; safe: every caller of an instance
+//     holds no battlefield index). A spell pick goes through BounceTargetSpellAt.
+// Pick encoding: 0 = decline, > 0 = a permanent's m_number, < 0 = -(stack index + 1).
+// =====================================================================================================================
+inline void BounceTriggerLegal(const GameState& state, int controller, const CardDefinition& src, bool fold,
+                               std::vector<int>& reps)
+{
+    reps.clear();
+    reps.push_back(-1);   // DECLINE
+    std::vector<int> linked;
+    if (fold) { LandfallTargetLinks(state, linked); }
+    std::vector<std::uint64_t> keys;   // parallel to reps[1..]; 0 = singleton
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (q.card.IsLand() || !SpellCanTargetPermanent(state, controller, q) || DoomedEntrant(q, state)) { continue; }
+        if (fold && q.controller_index != controller) { continue; }   // the sound opponent-side fold (search only)
+        std::uint64_t k = 0;
+        const bool foldable = fold && CastTriggerTargetFoldKey(state, q, k, &linked);
+        bool placed = false;
+        if (foldable && k != 0)
+        {
+            for (std::size_t c = 0; c < keys.size(); ++c) { if (keys[c] == k) { placed = true; break; } }
+        }
+        if (!placed) { reps.push_back(i); keys.push_back(foldable ? k : 0); }
+    }
+    if (src.params.cast_trigger_bounce_spell_opponent)
+    {
+        for (int si = 0; si < static_cast<int>(state.stack.size()); ++si)
+        {
+            const StackEntry& e = state.stack[static_cast<std::size_t>(si)];
+            if (e.type == StackEntry::EntryType::Spell && e.controller_index != controller) { reps.push_back(-(si + 2)); }
+        }
+    }
+}
+// The engine's option for this instance: rank `rank` (clamped) into the provider-ordered folded list. Returns the
+// pick encoding above.
+inline int BounceTriggerEnginePick(const GameState& state, int controller, const CardDefinition& src, int rank)
+{
+    std::vector<int> reps;
+    BounceTriggerLegal(state, controller, src, /*fold=*/true, reps);
+    if (reps.size() > 1)
+    {
+        std::vector<int> ordered = reps;
+        ResolveProvider(state).BounceTriggerTargetOrder(state, controller, src, ordered);
+        std::vector<int> a = reps, b = ordered;
+        std::sort(a.begin(), a.end());
+        std::sort(b.begin(), b.end());
+        if (a == b) { reps.swap(ordered); }   // a provider must not add or drop here
+    }
+    const int r = std::min<int>(std::max(0, rank), static_cast<int>(reps.size()) - 1);
+    const int rep = reps[static_cast<std::size_t>(r)];
+    if (rep == -1) { return 0; }
+    if (rep >= 0) { return state.battlefield[static_cast<std::size_t>(rep)].card.m_number; }
+    return -(-rep - 2) - 1;   // stack index si -> -(si + 1)
+}
+inline void ResolveBounceTrigger(GameState& state, const std::string& src_name, int pick)
+{
+    if (pick == 0)
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no target chosen -- nothing is returned"); }
+        return;
+    }
+    if (pick < 0) { BounceTargetSpellAt(state, -pick - 1); return; }
+    int bi = -1;
+    for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+    { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == pick) { bi = i; break; } }
+    if (bi < 0 || state.battlefield[static_cast<std::size_t>(bi)].card.IsLand()) { return; }   // CR 608.2b
+    if (ReturnPermanentToOwnersHand(state, bi, src_name)) { SweepOrphanedAuras(state); }
+}
+// ONE trigger INSTANCE, chosen and resolved (both worlds; the cast trigger from FireOnCastTriggers, Brinelin's ETB from
+// DrainPendingEtbBounces). `which` words the human prompt's event line.
+inline void FireBounceTriggerInstance(GameState& state, int controller, const CardDefinition& src, const char* which)
+{
+    const std::string name = src.card.m_name.str();
+    if (g_play_target_chooser == nullptr && ResolveProvider(state).BounceTriggerDeclineOnly(state, controller, src))
+    { ResolveBounceTrigger(state, name, 0); return; }   // the provider's one-option prune: no digit
+    const int rank = CastTargetTriggerRankFor(state);
+    state.cast_target_trigger_ordinal = static_cast<std::uint8_t>(state.cast_target_trigger_ordinal + 1);
+    int pick = BounceTriggerEnginePick(state, controller, src, rank);
+    if (g_play_target_chooser)
+    {
+        // HUMAN PLAY: the FULL legal set (both sides, no folds), "(no target)" = decline (min 0, the chooser's
+        // bounce-trigger branch). The default is the engine's option.
+        std::vector<int> all;
+        BounceTriggerLegal(state, controller, src, /*fold=*/false, all);
+        if (all.size() > 1)
+        {
+            std::vector<ChosenTarget> heur;
+            if (pick > 0)
+            {
+                for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+                { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == pick) { heur.push_back({ 1, i, 0 }); break; } }
+            }
+            else if (pick < 0) { heur.push_back({ 2, -pick - 1, 0 }); }
+            if (g_play_event_sink && !g_tap_speculating)
+            { EmitPlayEvent(state.turn_number, "trigger", name + " (" + which + "): choose a target, or none"); }
+            const std::vector<ChosenTarget> got = (*g_play_target_chooser)(state, src, controller, 1, 0, heur);
+            pick = 0;
+            if (!got.empty())
+            {
+                const ChosenTarget& c = got.front();
+                if (c.kind == 1 && c.index >= 0 && c.index < static_cast<int>(state.battlefield.size()))
+                { pick = state.battlefield[static_cast<std::size_t>(c.index)].card.m_number; }
+                else if (c.kind == 2 && c.index >= 0 && c.index < static_cast<int>(state.stack.size()))
+                { pick = -(c.index + 1); }
+            }
+        }
+    }
+    ResolveBounceTrigger(state, name, pick);
+}
+// Brinelin's ENTER bounce (Sea Creatures I4), drained AFTER the legend rule at each world's post-resolution point
+// (executor: EffectHandler::Resolve's tail; rollout: apply_one right after its EnforceLegendRule; both turn-start
+// safety nets). A record resolves when its source is on the battlefield or -- removed by the legend rule -- in its
+// controller's graveyard (it triggered on entering, CR 603.6a); any other record is stale (a projection that never
+// drained) and is dropped. One instance per source per drain (a duplicate record is dropped).
+inline void DrainPendingEtbBounces(GameState& state)
+{
+    if (g_pending_etb_bounces.empty()) { return; }
+    std::vector<PendingEtbBounce> pend;
+    pend.swap(g_pending_etb_bounces);
+    std::vector<int> done;
+    for (const PendingEtbBounce& b : pend)
+    {
+        if (b.src == nullptr || std::find(done.begin(), done.end(), b.src_number) != done.end()) { continue; }
+        bool live = false;
+        for (const Permanent& q : state.battlefield) { if (q.card.m_number == b.src_number) { live = true; break; } }
+        if (!live && b.controller >= 0 && b.controller < static_cast<int>(state.players.size()))
+        {
+            for (const Card& c : state.players[static_cast<std::size_t>(b.controller)].graveyard)
+            { if (c.m_number == b.src_number) { live = true; break; } }
+        }
+        if (!live) { continue; }
+        done.push_back(b.src_number);
+        FireBounceTriggerInstance(state, b.controller, *b.src, "enters");
+    }
 }
 
 inline bool FreeCastHasLegalTargets(const GameState& s, int controller, const CardDefinition& d)

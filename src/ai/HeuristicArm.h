@@ -964,6 +964,8 @@ enum Slot : int
     SEA_SPRAWL_BLUE,          // MTG_SEA_SPRAWL_BLUE  Sea Creatures (USER 2026-11-16 "we should try a prune to always use blue"): Utopia Sprawl's colour axis is {U}. Default ON; =0 -> the sound {U, G} fold, searched
     SEA_SPRAWL_GREEN_NEED,    // MTG_SEA_SPRAWL_GREEN_NEED  Sea Creatures exception E1 (proposed, pending the USER): admit G as a second searched Sprawl branch when we have <= 1 green source and the hand holds 2+ other {G} pips. Default OFF
     SEA_WAVE_NEVER,           // MTG_SEA_WAVE_NEVER  Sea Creatures (USER 2026-11-16 "I would heuristically skip Whelming Wave"): SeaCreaturesProvider::NeverCast never offers a bounce_all_creatures spell autonomously. Default ON; =0 -> the cast is searched again (human play / MTG_UNPRUNE=seawave always offer it)
+    SEA_HULLBREAKER_DECLINE,  // MTG_SEA_HULLBREAKER_DECLINE  Sea Creatures I4 (USER 2026-11-16 "Neither of Hullbreaker's abilities are useful in Goldfish, so we can opt out heuristically as well."): SeaCreaturesProvider::BounceTriggerDeclineOnly declines every Hullbreaker Horror cast trigger autonomously. Default ON; =0 -> the searched per-instance target digit (decline + every legal class)
+    SEA_BRINELIN_DECLINE,     // MTG_SEA_BRINELIN_DECLINE  Sea Creatures I4 (USER 2026-11-16 "Brinelin is the same deal. Unless you can come up with a counterexample I would prune it."): SeaCreaturesProvider::BounceTriggerDeclineOnly declines Brinelin's ETB and MV>=6 cast triggers autonomously. Default ON; =0 -> the searched per-instance target digit
     COUNT
 };
 
@@ -1872,6 +1874,8 @@ inline const char* Name(int slot)
         "MTG_SEA_SPRAWL_BLUE",
         "MTG_SEA_SPRAWL_GREEN_NEED",
         "MTG_SEA_WAVE_NEVER",
+        "MTG_SEA_HULLBREAKER_DECLINE",
+        "MTG_SEA_BRINELIN_DECLINE",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

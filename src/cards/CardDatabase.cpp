@@ -2106,6 +2106,18 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.cast_trigger_untap_pump_power = params.value("cast_trigger_untap_pump_power", 0);
     p.cast_trigger_untap_pump_tough = params.value("cast_trigger_untap_pump_tough", 0);
     p.cast_trigger_untap_pump_grants_trample = params.value("cast_trigger_untap_pump_grants_trample", false);
+    // Hullbreaker Horror / Brinelin, the Moon Kraken (Sea Creatures I4): the optional nonland bounce triggers.
+    p.cast_trigger_bounce_nonland        = params.value("cast_trigger_bounce_nonland", false);
+    p.cast_trigger_bounce_min_mv         = params.value("cast_trigger_bounce_min_mv", 0);
+    p.cast_trigger_bounce_spell_opponent = params.value("cast_trigger_bounce_spell_opponent", false);
+    p.etb_bounce_nonland                 = params.value("etb_bounce_nonland", false);
+    if (p.cast_trigger_bounce_min_mv < 0)
+        throw std::runtime_error("cast_trigger_bounce_min_mv must be >= 0");
+    if (p.cast_trigger_bounce_min_mv > 0 && !p.cast_trigger_bounce_nonland)
+        throw std::runtime_error("cast_trigger_bounce_min_mv requires cast_trigger_bounce_nonland");
+    if (p.cast_trigger_bounce_spell_opponent && !p.cast_trigger_bounce_nonland)
+        throw std::runtime_error("cast_trigger_bounce_spell_opponent requires cast_trigger_bounce_nonland "
+                                 "(Hullbreaker Horror's mode 1 rides its mode-2 trigger)");
     // Decimator of the Provinces (Boars I4): emerge + the cast-trigger team pump.
     if (params.contains("emerge_cost"))
         p.emerge_cost = ManaCostFromString(params["emerge_cost"].get<std::string>());

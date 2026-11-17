@@ -189,6 +189,7 @@ enum class UnprunedGate
     ChampionMain2,   // Red Elementals: a no-haste champion card's PRE-combat hardcast restored
                      // (RedElementalsProvider::CollectedActionAllowed, the USER's Nova Chaser main-2 rule)
     SeaWave,         // Sea Creatures: Whelming Wave's cast restored (SeaCreaturesProvider::NeverCast, USER 2026-11-16)
+    SeaBounce,       // Sea Creatures: Hullbreaker Horror's / Brinelin's bounce-trigger targets restored (SeaCreaturesProvider::BounceTriggerDeclineOnly, USER 2026-11-16)
     SagaSteal,       // Kiora Bests the Sea God III: the full steal-target list (DecisionProvider::RestrictSagaStealCandidates' sound folds lifted)
     _Count
 };
@@ -638,6 +639,14 @@ public:
 //     so the bounce only removes opponent spawns (payoff <= 0) and its one upside, a cast for Hullbreaker
 //     Horror's trigger, is itself declined. MTG_SEA_WAVE_NEVER=0 searches the cast again; human play and
 //     MTG_UNPRUNE=seawave always offer it.
+//   * HULLBREAKER HORROR'S AND BRINELIN'S BOUNCE TRIGGERS ARE ALWAYS DECLINED (I4; USER 2026-11-16: "Neither of
+//     Hullbreaker's abilities are useful in Goldfish, so we can opt out heuristically as well." and "Brinelin is
+//     the same deal. Unless you can come up with a counterexample I would prune it."). BounceTriggerDeclineOnly is
+//     a ONE-OPTION PRUNE per source: Hullbreaker's cast trigger (both modes; mode 1's legal set is always empty)
+//     under MTG_SEA_HULLBREAKER_DECLINE, Brinelin's ETB and MV>=6 cast trigger under MTG_SEA_BRINELIN_DECLINE,
+//     each default ON; =0 restores the engine's searched per-instance target digit (decline + every legal
+//     class). The two candidate counterexamples (re-buy a tapped Sol Ring; bounce a Saga past chapter I and recast
+//     it) are the Stage 5 A/B's to find. Human play and MTG_UNPRUNE=seabounce always offer every target.
 //   * A PER-TURN POST-COMBAT MAIN ON SUMMON: LEVIATHAN'S DRAW TURNS (I3; ledger Q12, the USER owns the main-2 shape --
 //     agent default PROVISIONAL). Cards drawn at declare-attackers by Leviathan II / III (GameState::
 //     eot_attack_draw_n) are a combat-generated resource (2c-bis) castable only after combat. Instead of a deck-wide
@@ -677,6 +686,8 @@ public:
                                          const CardDefinition& def) const override;
     int EtbChosenColor(const GameState& s, int controller, const CardDefinition& def) const override;
     bool NeverCast(const CardDefinition& def) const override;
+    // Hullbreaker Horror / Brinelin: every bounce trigger declined autonomously (I4; see the class note).
+    bool BounceTriggerDeclineOnly(const GameState& s, int controller, const CardDefinition& src) const override;
     // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }

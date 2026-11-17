@@ -206,7 +206,7 @@ TEST_CASE("Raggadragga: the cast trigger reads the mana SPENT (intervening if) a
         {
             GameState s = board();
             // Boars I4c: the untap-pump rank is a per-instance tuple (UntapPumpRankPack); one digit here.
-            ScriptedCastTriggerTarget pin(UntapPumpRankPack({ k }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
+            ScriptedCastTriggerTarget pin(UntapPumpRankPack({ k }, 2), s.TurnSeq(), s.cast_target_trigger_ordinal);
             FireOnCastTriggers(s, er, 8);
             for (const Permanent& p : s.battlefield) { if (p.temp_power_bonus == 7) { pumped.push_back(p.card.m_number); } }
         }
@@ -328,10 +328,10 @@ TEST_CASE("Raggadragga I4c: two qualifying casts in one turn take independent ta
             for (int d1 = 0; d1 < 3; ++d1)
             {
                 GameState s = board();
-                ScriptedCastTriggerTarget pin(UntapPumpRankPack({ d0, d1 }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
+                ScriptedCastTriggerTarget pin(UntapPumpRankPack({ d0, d1 }, 2), s.TurnSeq(), s.cast_target_trigger_ordinal);
                 FireOnCastTriggers(s, er, 8);
                 FireOnCastTriggers(s, er, 8);
-                CHECK(s.cast_untap_pump_ordinal == 2);
+                CHECK(s.cast_target_trigger_ordinal == 2);
                 outcomes.insert({ RNum(s, 10).temp_power_bonus, RNum(s, 11).temp_power_bonus, RNum(s, 12).temp_power_bonus });
             }
         }
@@ -349,9 +349,9 @@ TEST_CASE("Raggadragga I4c: two qualifying casts in one turn take independent ta
         FireOnCastTriggers(s, er, 8);   // no pin: rank 0 -> the tapped Sage
         CHECK(RNum(s, 11).temp_power_bonus == 7);
         // A re-solve installs (2nd digit = Raggadragga) at the current ordinal: its digit 0 is the NEXT trigger.
-        ScriptedCastTriggerTarget pin(UntapPumpRankPack({ 0, 1 }, 2), s.TurnSeq(), s.cast_untap_pump_ordinal);
-        CHECK(UntapPumpRankFor(s) == 0);
-        CHECK(UntapPumpRankFor(s, 1) == 1);
+        ScriptedCastTriggerTarget pin(UntapPumpRankPack({ 0, 1 }, 2), s.TurnSeq(), s.cast_target_trigger_ordinal);
+        CHECK(CastTargetTriggerRankFor(s) == 0);
+        CHECK(CastTargetTriggerRankFor(s, 1) == 1);
     }
 }
 
@@ -379,7 +379,7 @@ TEST_CASE("Raggadragga I4c: the search untaps two different creatures with two q
         GameState s = board();
         const TurnSolver::Plan pick = TurnSolver::SolveWithLookahead(s, /*is_pre_combat=*/true, /*depth=*/2);
         TurnSolver::ApplyPlan(s, pick, /*is_pre_combat=*/true);
-        CHECK(s.cast_untap_pump_ordinal == 2);
+        CHECK(s.cast_target_trigger_ordinal == 2);
         CHECK_FALSE(RNum(s, 11).tapped);
         CHECK_FALSE(RNum(s, 12).tapped);
         CHECK(RNum(s, 11).temp_power_bonus == 7);

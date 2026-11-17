@@ -215,6 +215,26 @@ bool SeaCreaturesProvider::NeverCast(const CardDefinition& def) const
     return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SeaWave);
 }
 
+// Hullbreaker Horror / Brinelin bounce triggers: declined autonomously (the class note; USER 2026-11-16). Keyed on the
+// params: Brinelin is the ETB / MV-gated source, Hullbreaker the ungated one.
+static bool SeaHullbreakerDeclineOn()
+{
+    static const bool e = EnvOn("MTG_SEA_HULLBREAKER_DECLINE", true);  // DEFAULT ON (USER ruling); =0 -> searched
+    return heurarm::Flag(heurarm::SEA_HULLBREAKER_DECLINE, e);
+}
+static bool SeaBrinelinDeclineOn()
+{
+    static const bool e = EnvOn("MTG_SEA_BRINELIN_DECLINE", true);     // DEFAULT ON (USER ruling); =0 -> searched
+    return heurarm::Flag(heurarm::SEA_BRINELIN_DECLINE, e);
+}
+bool SeaCreaturesProvider::BounceTriggerDeclineOnly(const GameState& s, int controller, const CardDefinition& src) const
+{
+    (void)s; (void)controller;
+    const bool brinelin = src.params.etb_bounce_nonland || src.params.cast_trigger_bounce_min_mv > 0;
+    if (!(brinelin ? SeaBrinelinDeclineOn() : SeaHullbreakerDeclineOn())) { return false; }
+    return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SeaBounce);
+}
+
 // ---- Kiora Bests the Sea God III: the steal list's sound folds (Sea Creatures I3, 2026-11-17) ----------------
 // A VANILLA BODY here is an opponent's scheduled spawn (GameState::kFirstOppSpawnNumber -- always an "N/M Creature"
 // with no abilities) or a definition-less token with no keywords, carrying no counters, damage, attachments or
@@ -958,6 +978,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"champion", UnprunedGate::Champion},
     {"championmain2", UnprunedGate::ChampionMain2},
     {"seawave",    UnprunedGate::SeaWave},
+    {"seabounce",  UnprunedGate::SeaBounce},
     {"sagasteal",  UnprunedGate::SagaSteal},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
