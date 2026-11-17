@@ -17847,6 +17847,66 @@ void DragonstormProvider::ArrangeCastOrder(const GameState& s, const std::vector
     }
     build(best_slots);
     order = trial;
+
+    // The exact order projection can overvalue Ruby-first when its {2} is
+    // paid by a red battery that the following rituals need (s30064556 T3).
+    // This is one deterministic funding fallback, not another searched
+    // ordering: only when both real prepay and sequential payment reject the
+    // arranged order, try the same cheap rituals before the first expensive
+    // cast, and keep Ruby at the earliest slot that actually pays the line.
+    static const bool s_funding = EnvOn("MTG_DRAGONSTORM_RUBY_FUNDING", true); // DEFAULT ON; =0 control
+    if (!s_funding || meds.size() != 1 || order.size() > 7
+        || best_reach >= static_cast<int>(order.size())) { return; }
+    const auto is_cheap = [&](int i)
+    {
+        const CardDefinition* d = def_of(i);
+        return is_cast(i) && acts[i].splice_count == 0 && d != nullptr
+            && IsManaRitual(*d) && d->card.m_mana_cost.ManaValue() <= 2;
+    };
+    int prefix = 0;
+    std::vector<int> rituals;
+    for (; prefix < static_cast<int>(order.size()); ++prefix)
+    {
+        const int i = order[static_cast<std::size_t>(prefix)];
+        if (i == meds[0]) { continue; }
+        if (!is_cheap(i)) { break; }
+        rituals.push_back(i);
+    }
+    if (prefix < 3 || rituals.size() < 2
+        || std::find(order.begin(), order.begin() + prefix, meds[0]) == order.begin() + prefix
+        || !std::any_of(order.begin() + prefix, order.end(), [&](int i)
+           { const CardDefinition* d = def_of(i); return d != nullptr && d->card.IsCreature(); })
+        || TurnSolver::OrderPrepaysWholeTurn(s, acts, order)
+        || TurnSolver::OrderPaysSequentially(s, acts, order)) { return; }
+
+    std::vector<std::vector<int>> perms;
+    std::vector<int> perm(rituals.size());
+    for (int i = 0; i < static_cast<int>(perm.size()); ++i) { perm[static_cast<std::size_t>(i)] = i; }
+    do { perms.push_back(perm); } while (std::next_permutation(perm.begin(), perm.end()));
+    const auto inversions = [](const std::vector<int>& p)
+    {
+        int n = 0;
+        for (int i = 0; i < static_cast<int>(p.size()); ++i)
+        { for (int j = i + 1; j < static_cast<int>(p.size()); ++j) { n += p[i] > p[j]; } }
+        return n;
+    };
+    std::stable_sort(perms.begin(), perms.end(), [&](const auto& a, const auto& b)
+    { return inversions(a) < inversions(b); });
+    for (int ruby_slot = 0; ruby_slot < prefix; ++ruby_slot)
+    {
+        for (const std::vector<int>& p : perms)
+        {
+            std::vector<int> candidate(order);
+            int r = 0;
+            for (int k = 0; k < prefix; ++k)
+            {
+                candidate[static_cast<std::size_t>(k)] = k == ruby_slot ? meds[0]
+                    : rituals[static_cast<std::size_t>(p[static_cast<std::size_t>(r++)])];
+            }
+            if (candidate != order && TurnSolver::OrderPaysSequentially(s, acts, candidate))
+            { order = std::move(candidate); return; }
+        }
+    }
 }
 
 // The searched orderings under the USER's order. Replaces the engine's targeted generator, which
