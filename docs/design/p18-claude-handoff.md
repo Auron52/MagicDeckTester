@@ -63,3 +63,28 @@ priced; `_pqf` heur's real-cost admission after an exact pass binds; `_pqk` keep
 rationale: Gods 312's "proven T4" exact line actually won T8; it reverses mode 2's one gain).
 Repro T2 (12 games): `_pqg` repairs 6 (Dragonstorm 149, Gods 51/58/250, Merfolk Turns 317, Mill 197); `_pqh` repairs
 Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `_pqg_pqf_pqr`, then a 56-deck screen.
+
+### P18i results so far (2026-11-17)
+- R1 (56 decks x 400, F2 seeds, `mtg_i1`): m2 reproduces F2 exactly (1/9). `_pqg_pqf_pqr(_pqz)` repairs the 11 targeted
+  games but is 1.011-1.015x CPU and shows new Gods / Alchemist losses: repair-by-guard on the priced gate costs more
+  than mode 2 saves. Abandoned as the main line.
+- O1 ORACLE CEILING, all 56 decks (60 games, seeds 9,000,000+; `MTG_P16_ORACLE` from C1's heur trace): keep-1 0.925x CPU
+  overall with 0 later games; on rollout-heavy decks 0.36-0.60x (Breaching Dragonstorm, Angels, White Knights, Critter,
+  Burn, Knights, Slivers, Red Elementals). Mode 2 captures under a fifth of it: on Angels T1 it runs passes 1-3 exactly.
+- Heur's K on those decks is set by an IN-WINDOW WIN in 80-100% of decisions (C1), which a leafless pass proves exactly.
+  New shape `_pll` LEAFLESS LOOKAHEAD: leafless passes 1..depth, commit the first in-window win, else heur's own ladder
+  from pass 1 with the lookahead spend credited. L1 (60 games): Critter 0.31x, Breaching 0.34x, Angels 0.34x, Slivers
+  0.37x, Kithkin 0.46x, Soldiers 0.47x, Knights 0.50x CPU, but interior-heavy decks blow up (Vampires 2.2x) and 11
+  later games. L1T traces: (a) leafless walks shared the main TT and changed the fallback ladder's result (Alchemist
+  9000035 T1: H1 T4 -> T5); (b) the lookahead walked passes heur never runs (W3 17.5k of an 18k budget).
+  Fixes `_pllt` (scratch TT) and `_pllg<pct>` (predictive stop on the leafless growth extrapolation). L2 screens them.
+- L2/L3 (100 games/deck, seeds 9,500,000+): the predictive stop `_pllg` and the scratch TT `_pllt` are REJECTED (the stop
+  forfeits the cheap deep commits; the scratch TT costs CPU and did not fix quality). Root cause of the lookahead's later
+  games: a lookahead commit is a VERIFIED line, which AIEngine replays across later turns with no re-search; heur, whose
+  budget never reached that depth, re-searches each turn (Alchemist 9500073: T1 W5 proved T5 and was replayed; heur
+  found T4 at T2). `_pllr` (TurnSolver::TakeNoReplay) keeps a lookahead commit to the current turn. With it, ~30 decks
+  are 0.31-0.80x heur CPU with zero later games in 100; every remaining later game is on an interior-heavy or gate-bound
+  deck (Mill, Cyclone, Gods, Landfall, Hinata, Melira, Shadowborn) where the lookahead also costs more than heur.
+- No per-decision stop rule found (simllx.py): pass-1 rollout/leafless ratio does not separate the decks, and leafless
+  growth extrapolation stops before cheap deep commits. Shipping model: per-deck opt-in on measurement.
+- H1 (running): 56 decks x 400 games, seeds 10,000,000+, arms heur / `m2_pll_pllr` / live shipped shape (all at d5/b20).

@@ -108200,6 +108200,8 @@ inline thread_local long long g_vleaf_min_est = LLONG_MAX;
 void      TurnSolver::ResetLeafEstimate() { g_vleaf_min_est = LLONG_MAX; }
 long long TurnSolver::MinLeafEstimate()   { return g_vleaf_min_est; }
 unsigned long long TurnSolver::TruncEvents() { return g_fs_trunc_events; }
+namespace p18 { inline thread_local bool t_noreplay = false; }
+bool TurnSolver::TakeNoReplay() { const bool v = p18::t_noreplay; p18::t_noreplay = false; return v; }
 
 // K-predictor state (MTG_ESC_PREDICT). The PROBE ladders d1..committed for free (cheap value leaf) and, per
 // depth, reveals the leaf count -- the quantity the escalation's dominant rollout cost scales with. The
@@ -108358,7 +108360,7 @@ namespace p18
     inline thread_local Sampler* t_smp = nullptr;
     struct Knob { double z = kZ, cvf = kCvFloor, f = 0.0; bool actual_rem = false, noasp = false, nobound = false, verify = false,
                          nocredit = false, asym = false, rx = false, b1 = false, b2 = false, b3 = false, lcap = false, rr = false, rx2 = false, fx = false,
-                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
+                         rr2 = false, ul = false, nr = false, cr = false, hx = false, fd = false, ua = false, zn = false, ne = false, qg = false, qh = false, qk = false, qf = false, qr = false, qz = false, ll = false, llt = false, llr = false; double llf = 1.0, llg = 0.0; int bk = 8, hxd = 3, mid = INT_MAX, wn = 0, hw = 0; double hxf = 1.0, lean = 1.0, mr = 2.0, ppr = 0.0, fr = 0.0, us = 0.0, mi = 0.0, af = 0.0, a1 = 0.0, b3r = 0.0, ag = 0.0; };
     // Mode 2 is the measured fast shape. Keep mode 1 as the original raw sampler for reproducible
     // research; arm-key suffixes below remain diagnostic overrides of either starting shape.
     inline Knob Knobs()
@@ -108530,6 +108532,26 @@ namespace p18
         // heur's leafless-equivalent H3 warmed H4 to 7 units and kept T4; mode 2's cold H4 found T5). Continue the
         // ordinary ladder from pass k; its real cost gates pass k+1.
         o.qz = k.find("_pqz") != std::string::npos;
+        // _pll (screen only, P18i): LEAFLESS LOOKAHEAD. Walk leafless passes 1..depth first; the first one that proves
+        // an in-window win commits it (the heuristic ladder's rollout passes below it found no in-window win, its pass k
+        // stops on the same win turn, and an in-window win is optimal). Otherwise -- no in-window win, or the lookahead
+        // spent _pllf<pct> of the decision budget -- the ordinary heuristic ladder runs from pass 1 with the lookahead's
+        // spend credited to its start gate, so every budget-bound K is the heuristic ladder's own. No pricing at all.
+        // C1/O1 (2026-11-17): on the decks with the largest superseded-rollout ceilings 80-100% of heur's decisions
+        // end on an in-window win.
+        { const std::size_t p = k.find("_pll"); if (p != std::string::npos) { o.ll = true;
+            const std::size_t q = k.find("_pllf"); if (q != std::string::npos) { o.llf = std::atof(k.c_str() + q + 5) / 100.0; } } }
+        // _pllt: the lookahead's leafless walks use a SCRATCH transposition table, so the fallback ladder runs on exactly
+        // the heuristic ladder's search state (L1T: a shared table changed the fallback's pass-1 result, T4 -> T5).
+        o.llt = k.find("_pllt") != std::string::npos;
+        // _pllr: a lookahead commit is not replayed past the current turn (TurnSolver::TakeNoReplay): its verified
+        // depth may be one the heuristic ladder never searches, and a verified line locks the plan in (L2 Alchemist
+        // 9500073: a T1 leafless W5 proved T5 and was replayed; heur re-searched at T2 and won T4).
+        o.llr = k.find("_pllr") != std::string::npos;
+        // _pllg<pct>: PREDICTIVE stop -- before leafless pass k, its cost is extrapolated as the heuristic ladder's gate
+        // extrapolates (l_{k-1}^2 / l_{k-2}; pass 2 = l_1 x bootstrap growth); a pass predicted above pct% of the decision
+        // budget is not started (a walk cut short is wasted). 0 = off.
+        { const std::size_t q = k.find("_pllg"); if (q != std::string::npos) { o.llg = std::atof(k.c_str() + q + 5) / 100.0; } }
         // _paf<pct> (screen only, with _pb2): when the exact depth-two pass spends too little of its work in
         // rollouts, a leafless walk at the next depth is unlikely to save enough to pay for itself. Continue the
         // ordinary ladder from depth three, using the two exact costs already measured; no sampled pass was run.
@@ -117628,6 +117650,7 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
     {
         const p18::Knob kn = p18::Knobs();
         p18_qg = kn.qg; p18_qk = kn.qk;
+        p18::t_noreplay = false;   // _pllr: set only by this decision's own lookahead commit
         std::vector<long long> p18_lf(static_cast<std::size_t>(depth) + 2, -1);   // _pqg: leaf units of exact passes
         // _pqg: c_k x growth, the growth c_k / c_{k-1} replaced by the bootstrap growth when pass k-1 rolled out no
         // leaf (answered from cache) and the observed ratio exceeds it.
@@ -117659,7 +117682,54 @@ TurnSolver::SearchLine TurnSolver::FullSearchLine(const GameState& state, int de
         bool p18_k3_complete = false;   // _pb3: same for pass 3
         int p18_k3_gap = INT_MAX;        // exact pass-three rollout win minus its searched horizon
         long long p18_n1 = 0, p18_n2 = 0; // _pus: leaf counts of the last two leafless passes
-        for (int k = 1; k <= depth; ++k)
+        bool p18_ll_done = false;         // _pll: the lookahead decided this decision (commit or ladder fallback)
+        if (kn.ll && !kn.verify)
+        {
+            const long long u0 = budget ? budget->Used() : 0;
+            const long long ol_saved = budget ? budget->OverrunLimit() : 0;
+            long long cap_abs = 0;
+            if (!unl && budget != nullptr)
+            {
+                cap_abs = u0 + std::max(1LL, static_cast<long long>(kn.llf * rem0));
+                const long long ceil_abs = s_overrun_prop ? SearchBudget::SatAdd(u0, SearchBudget::SatMulD(kOverrunBudgetMult, budget->EffectiveLimit()))
+                                                          : u0 + std::max(static_cast<long long>(kOverrunBeta * static_cast<double>(budget->Limit())), kOverrunFloor);
+                cap_abs = std::min(cap_abs, ceil_abs);
+                if (ol_saved > 0) { cap_abs = std::min(cap_abs, ol_saved); }
+            }
+            TranspositionTable* const ltt = kn.llt ? &p18_vtt : tt;
+            double l1 = 0.0, l2 = 0.0;   // the last two leafless walk costs (k-1, k-2)
+            for (int k = 1; k <= depth; ++k)
+            {
+                if (kn.llg > 0.0 && !unl && k >= 2)
+                {
+                    const double pred = (k >= 3 && l2 > 0.0) ? l1 * l1 / l2 : l1 * kDefaultGrowth;
+                    if (pred > kn.llg * rem0) { p16::Rec('W', k, 0, 0, 5, max_turns + 1, 0); break; }
+                }
+                const long long w0 = budget ? budget->Used() : 0;
+                if (cap_abs > 0) { budget->SetOverrunLimit(cap_abs); }
+                SearchLine pr;
+                {
+                    ForceConstantLeafGuard _a(true); ConstantLeafPassGuard _b(true);
+                    pr = FSLineWin(state, k, max_turns, root_cut, second_main, ltt, &p18_leafless_cache, budget);
+                }
+                l2 = l1; l1 = static_cast<double>((budget ? budget->Used() : 0) - w0);
+                const bool hit = cap_abs > 0 && budget->Used() >= cap_abs;
+                if (cap_abs > 0) { budget->SetOverrunLimit(ol_saved); }
+                const long long lu = (budget ? budget->Used() : 0) - w0;
+                p16::Rec('W', k, lu, 0, hit ? 3 : 0, pr.win_turn, 0);
+                if (hit || pr.truncated) { break; }
+                if (pr.win_turn <= state.turn_number + k - 1)
+                { line = pr; committed_depth = k; prev_line = line; prev_committed = k; p18_done = true;
+                  if (kn.llr) { p18::t_noreplay = true; } break; }
+            }
+            p18_ll_done = true;
+            if (!p18_done)
+            {
+                p18_K = 0; p18_wb = 0;   // the ordinary heuristic ladder from pass 1, its gate credited with the lookahead
+                if (!unl && budget != nullptr) { p18_credit = static_cast<double>(budget->Used() - u0); }
+            }
+        }
+        for (int k = 1; !p18_ll_done && k <= depth; ++k)
         {
             if (k == 1 && kn.b1 && !unl && !kn.verify)
             {

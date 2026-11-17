@@ -4791,8 +4791,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     }
                     static const bool s_fd_always_research =
                         EnvOn("MTG_FD_ALWAYS_RESEARCH");
+                    const bool p18_noreplay = TurnSolver::TakeNoReplay();   // P18i _pllr (screen only)
                     const bool verified_win =
-                        !s_fd_always_research && !blindsearch::NoReplay()
+                        !s_fd_always_research && !blindsearch::NoReplay() && !p18_noreplay
                         && line.win_turn <= state.turn_number + searched_depth - 1;
                     if (s_fd_trace)
                     {

@@ -4237,6 +4237,10 @@ public:
     // it -- the precondition for treating its no-win as a full-coverage REFUTATION rather than
     // "I ran out" (see MTG_REFUTED_FOLLOW in AIEngine).
     static unsigned long long TruncEvents();
+    // P18i _pllr (screen only): the last top-level search committed a leafless-lookahead in-window win that must not be
+    // replayed past the current turn (the next turn re-searches, as the heuristic ladder does for a depth it would not
+    // have reached). Cleared by the read.
+    static bool TakeNoReplay();
 
     // Per-deck SEARCH-LEAF fidelity for the commit-the-line search's horizon rollout (see
     // MulliganProfile::search_leaf_depth). The engine opens one of these around each decision
