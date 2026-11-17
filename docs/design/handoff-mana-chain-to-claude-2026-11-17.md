@@ -14,6 +14,15 @@ positive life**; the report's nearest terminal-loss outcome is only the
 nearest key, not evidence that all scripts die. The exact mismatch among
 those surviving scripts still needs isolation. No source edits or
 top-level simulation batch are active.
+The second signature, seed `30111507` T5, was also replayed at level 3:
+`build/scratch/spirits_shock_pair_5k/pd_30111507_t5.out`. It has two
+ORACLE-GAP flags, no caps/unmodeled. The engine ends with Pyrohemia,
+a new tapped Ancient Tomb, `{C}` float, Dina pumped, and Tamanoa gone;
+the nearest oracle outcome retains Tamanoa and says a third payment
+does not exist. Several frontier traces show Pyrohemia activations and
+Dina sacrifice/pump continuations. Compare their choice scopes with the
+earlier `PaySacSpareScope` repair before deciding whether this is payment
+enumeration or a lost sacrifice choice.
 
 **Spirits 30040647 T4 correction complete, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
