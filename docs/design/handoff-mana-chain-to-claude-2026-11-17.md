@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:19 UTC
+## Live status, updated 06:28 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -15,7 +15,8 @@ has **15 clean, 39 issues, two never-run, zero stale-clean** at the prior
 source. Extra Turns and Merfolk Turns are never-run. No gate is active;
 the PGO build described below includes its own training batch.
 
-Windows CI `44025173062` was still in its Release build at 06:07 UTC;
+Windows CI `44025173062` passed its Release build by 06:27 UTC and its
+unit tests were running;
 the watcher output is
 `build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
 Keep the CI check asynchronous. The focused Dragonstorm test **failed on
@@ -36,9 +37,20 @@ The fix is committed as `eec786b06`, with
 `HEAD:src=7ecf53121b172fb2cbf078f7e5f554086b7b28fe`. A PGO+LTO
 build is active in exec session `36997`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_bloom_afterpay.out`.
-Wait for it and verify `build/PGO/SRC_TREE`, then run a same-binary
+Its 275-job/7,447-game training batch finished, and the final PGO
+compile was at 32/36 objects at 06:28. Wait for it and verify
+`build/PGO/SRC_TREE`, then run a same-binary
 paired A/B over held-out Dragonstorm games. Then
 check Breaching Dragonstorm's two ENUM-GAP seeds. The queue remains open.
+
+The paired A/B manifest and runner are prepared under
+`build/scratch/dragonstorm_visible_lump_ab/afterpay_wild_5k/`:
+50 jobs of 100 games, Dragonstorm indices 77,000–81,999, same PGO
+binary and seeds in both arms, old arm with
+`MTG_ONDEMAND_VISIBLE_AFTERPAY_WILD=0`. After verifying the PGO stamp,
+run `bash build/scratch/dragonstorm_visible_lump_ab/afterpay_wild_5k/run.sh`.
+Inspect per-game `.wins`, aggregate turns and search work before accepting
+the fix.
 
 A focused unit case for seed 30074224's payment shape has been added to
 `test/unit/test_dragonstorm_followups.cpp`, immediately after the existing
