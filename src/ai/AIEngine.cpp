@@ -6140,6 +6140,9 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
               // ...and its searched Karoo bounce (Plan::bounce_choice), as ApplyPlanDirect's
               // bp_play_searched_land installs it. -1 = the front.
               ScriptedBounceChoice _rsbc(rec_bounce); rec_bounce = -1;
+              // ...and the continuation's own cast bill for a float its ETB makes (stamped by bp_play_and_record_land
+              // as rec_line_hold on a land-first continuation land; absent on every other recorded land).
+              LandFloatDemandScope _rlfd(a.rec_line_hold ? &a.rec_line_hold->unpaid : nullptr);
               // Replay the land the SEARCH played, not just a land with the same name. Passing
               // only the name here replayed an MDFC as its FRONT face and a fetchland with no
               // target, so a recorded cast that depended on the searched face's colour stranded
@@ -6474,6 +6477,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (!exec_cont_land_defer(rdb_land, extra))
                     { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                       if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                      LandFloatDemandScope _lfd(&_lfd_c);
                       TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                 }
             }
@@ -6523,6 +6528,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                 && !exec_cont_land_defer(rdb_land, extra))   // a positioned land waits for its slot
             { std::optional<ScriptedTopChoice> _cstc;
               if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+              const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+              LandFloatDemandScope _lfd(&_lfd_c);
               TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
             bp_searched_here = true;
         }
@@ -6615,6 +6622,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                     if (!exec_cont_land_defer(rdb_land, extra))
                     { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                       if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                      LandFloatDemandScope _lfd(&_lfd_c);
                       TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                 }
             }
@@ -7209,6 +7218,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                                 && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                             { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                  LandFloatDemandScope _lfd(&_lfd_c);
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                         }
                     }
@@ -7231,6 +7242,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                         { std::optional<ScriptedTopChoice> _cstc;
                           if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                          const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                          LandFloatDemandScope _lfd(&_lfd_c);
                           TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                     }
                     if (!pod_bp_searched)
@@ -7277,6 +7290,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                             && !exec_cont_land_defer(pod_land, extra))   // a positioned land waits
                         { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                   if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                  const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                  LandFloatDemandScope _lfd(&_lfd_c);
                   TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                     }
                     // Precasts (SacForMana / Suspend / convoke taps) exactly as
@@ -9245,6 +9260,8 @@ bool AIEngine::TakeTurn(GameState& state, bool is_pre_combat_main,
                         && !exec_cont_land_defer(pe_land, extra))   // a positioned land waits for its slot
                     { std::optional<ScriptedTopChoice> _cstc;   // the continuation land's own scry pin (ContPins)
                       if (extra.scry_choice >= 0) { _cstc.emplace(extra.scry_choice); }
+                      const ManaCost _lfd_c = LineCastCostTotal(extra.actions);   // twin of bp_play_searched_land (g_land_float_demand)
+                      LandFloatDemandScope _lfd(&_lfd_c);
                       TryPlaySpecificLand(state, extra.land_to_play, extra.fetch_target, extra.land_face, -1, extra.land_from_top); }
                 }
             }

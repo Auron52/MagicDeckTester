@@ -50747,6 +50747,62 @@ inline bool FloatKarooBouncedLand(GameState& state, int controller, int idx)
 // while paying a cost, you may always tap the land first, and floating mana has no downside in this
 // engine (no mana burn), so "sacrifice an untapped land" is always "tap it, then sacrifice it" -- a
 // sound fold that also makes a victim's tapped-ness irrelevant this phase. Returns true iff it tapped.
+// THE LAND DROP'S OWN LINE, for a float its ETB makes (FloatLineOwedColour). A breakpoint continuation plays its
+// land-first drop BEFORE its cast section binds the line hold, so g_line_unpaid_cost there still reads the INVOKING
+// line -- already paid. The continuation's land play binds the continuation's own cast bill here instead
+// (LineCastCostTotal(cp.actions)): ApplyPlanDirect's bp_play_searched_land, AIEngine's live continuation land
+// plays, and the committed-line replay (stamped on the recorded PlayLand as Action::rec_line_hold). nullptr
+// everywhere else: a positioned land plays inside its cast section and reads the live hold.
+inline thread_local const ManaCost* g_land_float_demand = nullptr;
+struct LandFloatDemandScope
+{
+    const ManaCost* prev;
+    explicit LandFloatDemandScope(const ManaCost* c) : prev(g_land_float_demand) { g_land_float_demand = c; }
+    ~LandFloatDemandScope() { g_land_float_demand = prev; }
+    LandFloatDemandScope(const LandFloatDemandScope&)            = delete;
+    LandFloatDemandScope& operator=(const LandFloatDemandScope&) = delete;
+};
+
+// MTG_KAROO_FLOAT_LINE_COLOUR (EngineFlags.h): a one-mana source with a choice of colours, tapped in response, commits
+// the colour the rest of the applying line still owes (g_land_float_demand when a land drop binds one, else the live
+// hold), net of the float, ties in list order. Returns false -- the caller keeps FloatSourceTapCommitted's commit --
+// when the lever is off, the source is not a one-mana partial choice, or the line owes none of its colours beyond
+// what already floats.
+inline bool FloatLineOwedColour(GameState& state, int controller, const CardDefinition& d, const Permanent& p)
+{
+    if (!KarooFloatLineColourOn() || ManaProducedPerTap(d) != 1) { return false; }
+    const std::vector<Color>& prod = EffectiveProducesFor(state, controller, d, &p);
+    if (prod.size() < 2 || prod.size() >= 5) { return false; }
+    int owed[5];
+    if (const ManaCost* dem = g_land_float_demand)
+    {
+        owed[0] = dem->white; owed[1] = dem->blue; owed[2] = dem->black; owed[3] = dem->red; owed[4] = dem->green;
+    }
+    else { LineOwedAfterOwnPips(owed); }
+    const ManaPool& fl = state.floating_mana;
+    const int have[5] = { fl.white, fl.blue, fl.black, fl.red, fl.green };
+    int best = -1, best_need = 0;
+    for (Color c : prod)
+    {
+        int k = -1;
+        switch (c)
+        {
+            case Color::White: k = 0; break;
+            case Color::Blue:  k = 1; break;
+            case Color::Black: k = 2; break;
+            case Color::Red:   k = 3; break;
+            case Color::Green: k = 4; break;
+            default: break;
+        }
+        if (k < 0) { continue; }
+        const int need = owed[k] - have[k];
+        if (need > best_need) { best_need = need; best = static_cast<int>(c); }
+    }
+    if (best < 0) { return false; }
+    state.floating_mana.Add(static_cast<Color>(best), 1);
+    return true;
+}
+
 inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, const char* why)
 {
     if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return false; }
@@ -50771,7 +50827,8 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     const ManaPool before = state.floating_mana;
     if (pinned)       { state.floating_mana.Add(static_cast<Color>(pin), 1); }
     else if (plain_c) { state.floating_mana.Add(Color::Colorless, 1); }
-    else              { FloatSourceTapCommitted(state, controller, *d, &p); }
+    else if (!FloatLineOwedColour(state, controller, *d, p))
+    { FloatSourceTapCommitted(state, controller, *d, &p); }
     if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     if (g_play_event_sink)   // nulled by RevealLogPause for search/rollout -> real play only
     {

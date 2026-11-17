@@ -71288,7 +71288,7 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
     // the land-first play below and a positioned continuation land's deferred play (play_cont_land).
     auto bp_play_and_record_land = [&](const std::string& name, const std::string& fetch,
                                        const std::string& face, int rad, bool top, int scry, int bounce,
-                                       std::vector<Action>* sink)
+                                       std::vector<Action>* sink, const ManaCost* float_demand)
     {
         // The continuation's OWN land scry/surveil pin (Plan::scry_choice), exactly as the outer
         // plan's land play installs its own -- a continuation land used to scry by heuristic.
@@ -71297,12 +71297,18 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // ...and its own searched Karoo bounce (Plan::bounce_choice), replayed by the executor from
         // the continuation's ContPins exactly like the scry pin.
         ScriptedBounceChoice sbc(bounce);
+        // ...and the continuation's own cast bill for a float the land's ETB makes (g_land_float_demand,
+        // MTG_KAROO_FLOAT_LINE_COLOUR); nullptr for a positioned land, which plays under the live hold.
+        LandFloatDemandScope lfd(float_demand);
         if (!PlayLandByName(state, name, fetch, true, face, rad, top)) { return; }
         if (out_breakpoint != nullptr && sink != nullptr)
         {
             Action la;
             la.kind      = Action::Kind::PlayLand;
             la.card_name = name;
+            // The replay binds the same demand around the recorded land (AIEngine replay_recorded).
+            if (float_demand != nullptr)
+            { la.rec_line_hold = std::make_shared<const LineHoldStamp>(LineHoldStamp{ *float_demand, false }); }
             // Record the SAME triple we just played with. Recording only the name made the
             // replayed land a different land from the searched one whenever any of these was
             // non-default -- an MDFC back face, a fetchland target, a rad mode. See the field
@@ -71339,15 +71345,16 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             cont_land.owner   = &sp;
             return;
         }
+        const ManaCost float_demand = LineCastCostTotal(sp.actions);
         bp_play_and_record_land(sp.land_to_play, sp.fetch_target, sp.land_face, sp.rad_mode,
-                                sp.land_from_top, sp.scry_choice, sp.bounce_choice, sink);
+                                sp.land_from_top, sp.scry_choice, sp.bounce_choice, sink, &float_demand);
     };
     // Play a pending positioned continuation land NOW (its slot came, or its section ended).
     play_cont_land = [&]()
     {
         const ContSectionLand l = cont_land;
         cont_land = ContSectionLand{};   // cleared first: the land's own ETBs may re-enter the apply
-        bp_play_and_record_land(l.name, l.fetch, l.face, l.rad, l.top, l.scry, l.bounce, l.sink);
+        bp_play_and_record_land(l.name, l.fetch, l.face, l.rad, l.top, l.scry, l.bounce, l.sink, nullptr);
     };
     // Apply (and RECORD) a continuation's SacForMana / Suspend actions BEFORE its casts, exactly as
     // the top-level ApplyPlanDirect / TakeTurn pre-pass does. apply_plan_actions handles only

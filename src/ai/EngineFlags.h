@@ -1081,6 +1081,20 @@ inline bool KarooFloatRestrictedCOn()
     return heurarm::Flag(heurarm::KAROO_FLOAT_RESTRICTED_C, env_on);
 }
 
+// MTG_KAROO_FLOAT_LINE_COLOUR -- DEFAULT ON; =0 restores the first-listed-colour commit. A land tapped in response to its
+// own bounce or sacrifice (FloatLandBeforeSacrifice, SpellEffects.h) floats REAL mana, so a source with a choice of
+// colours must commit one (a bare wild would launder the choice into a colour it cannot make). With the placeholder
+// pip read off, FloatSourceTapCommitted always took the first listed colour. On: the colour the REST OF THE APPLYING
+// LINE still owes (LineOwedAfterOwnPips over g_line_unpaid_cost, net of what already floats in that colour), ties in
+// list order; nothing owed -> the old commit. Minotaur mana-clean s30289322 T4 (APPLY-DROP x2): Rakdos Carnarium #46
+// returned Blood Crypt, which floated {B}, and the continuation's Boros Reckoner ({R/W}{R/W} after Ragemonger) was
+// dropped on {B}{R}; the oracle's line has the Crypt's {R}. The ritual tap-ahead does not read it (it has no line).
+inline bool KarooFloatLineColourOn()
+{
+    static const bool env_on = EnvOn("MTG_KAROO_FLOAT_LINE_COLOUR", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::KAROO_FLOAT_LINE_COLOUR, env_on);
+}
+
 // MTG_BOUNCE_SEARCH -- DEFAULT ON (ADOPTED 2026-10-08 with the lever above). The Karoo bounce as a SEARCHED plan dimension (USER 2026-10-08: "The Karoo
 // decision should also be searched with heuristics. However, we may want to heuristic it more often
 // than not, since the decision is usually an easy one."). BounceKarooLand used to take

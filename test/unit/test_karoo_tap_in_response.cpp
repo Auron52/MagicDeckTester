@@ -17,6 +17,8 @@
 //     old rank against a tapped tapland, and if it must be returned anyway nothing floats.
 //  6. A choice-of-two land commits its float NEED-AWARE (the shared real-float colour rule): Spirebluff
 //     Canal floats {R} for a hand holding Lightning Bolt, and its first colour ({U}) for an empty hand.
+//  7. MTG_KAROO_FLOAT_RESTRICTED_C: a creature-only-colour land floats its plain {C}, never a colour.
+//  8. MTG_KAROO_FLOAT_LINE_COLOUR: a choice land commits the colour the rest of the applying line owes.
 #include <doctest/doctest.h>
 
 #include "cards/CardDatabase.h"
@@ -26,6 +28,7 @@
 #include "ai/DecisionProviders.h"
 #include "ai/EngineFlags.h"
 #include "ai/HeuristicArm.h"
+#include "ai/ManaPayment.h"           // LineUnpaidCostScope (the line-colour float test)
 
 #include <string>
 #include <vector>
@@ -295,4 +298,49 @@ TEST_CASE("Karoo tap-in-response: restricted-{C} lever OFF returns Unclaimed Ter
 
     CHECK(InHand(s, "Unclaimed Territory"));
     CHECK(s.floating_mana.Total() == 0);
+}
+
+// MTG_KAROO_FLOAT_LINE_COLOUR (heurarm KAROO_FLOAT_LINE_COLOUR). Minotaur mana-clean s30289322 T4: Rakdos Carnarium #46
+// returned Blood Crypt, which floated its first listed colour {B}, and the continuation's Boros Reckoner ({R}{R} after
+// Ragemonger) was dropped on {B}{R}. The float now commits the colour the REST OF THE APPLYING LINE owes, net of the
+// float; with nothing owed it keeps the old commit.
+TEST_CASE("Karoo tap-in-response: a choice land commits the colour the applying line still owes")
+{
+    EnsureCardsLoaded();
+    LeverArm on(true);
+    ManaCost owed_rr; owed_rr.red = 2;
+    {
+        SlotArm c(heurarm::KAROO_FLOAT_LINE_COLOUR, true);
+        LineUnpaidCostScope luc(owed_rr);
+        GameState s = Fresh();
+        Put(s, "Blood Crypt", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(InHand(s, "Blood Crypt"));
+        CHECK(s.floating_mana.red == 1);
+        CHECK(s.floating_mana.Total() == 1);
+    }
+    {
+        // Net of the float: the line owes one {R} and one already floats -> nothing more owed -> first listed {B}.
+        SlotArm c(heurarm::KAROO_FLOAT_LINE_COLOUR, true);
+        ManaCost owed_r; owed_r.red = 1;
+        LineUnpaidCostScope luc(owed_r);
+        GameState s = Fresh();
+        s.floating_mana.Add(Color::Red, 1);
+        Put(s, "Blood Crypt", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(s.floating_mana.black == 1);
+        CHECK(s.floating_mana.red == 1);
+    }
+    {
+        SlotArm c(heurarm::KAROO_FLOAT_LINE_COLOUR, false);   // lever OFF -> the first listed colour
+        LineUnpaidCostScope luc(owed_rr);
+        GameState s = Fresh();
+        Put(s, "Blood Crypt", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(s.floating_mana.black == 1);
+        CHECK(s.floating_mana.Total() == 1);
+    }
 }
