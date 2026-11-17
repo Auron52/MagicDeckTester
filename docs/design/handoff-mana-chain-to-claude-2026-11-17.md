@@ -33,6 +33,10 @@ still matches the PGO binary. `python3 test/check_gt_logs.py` passed:
 earlier than 05:09 UTC; rerun the reference check if new reference work
 appears before that push. Because GT changed on rebase, run the smoke
 gate once the current simulation batch finishes, before the push.
+The eight-worker oracle arm is Selesnya-heavy: its 56-game chunks have
+used about 180-360 core seconds each, with RSS around 21-24 GB. This
+run is much longer than the initial cost estimate, but the completed
+chunks are retained. At 04:58 UTC it had completed five new chunks.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
 Commit the updated `test/mana_clean.json` and this handoff after it finishes.
