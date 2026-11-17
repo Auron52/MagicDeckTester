@@ -77,7 +77,7 @@ implementer agent per step, serial.
 | 10 | StuffyDollProvider + ExtraLethalDamage | DONE 6d6454d53 (unit 3453, scen 577/577, smoke 0/219 moved vs 9; routes first, signature = §8 params; F2/F3 reflection folds; ExtraLethalDamage; d0 50 games: 44 won avg 5.386 vs 5.591 on the old ModernRwBurn misroute; FIXED step-2 Act discount counting the Doll ping as an ETB, FIXED step-9 pull encoding crash on opp spawn numbers >= 2^17; opp-Spirit prune built OFF (MTG_STUFFY_OPP_CREATURE_PRUNE) pending A/B; cast order = generic (Q-U5)) |
 | 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35); provider GC-host PRUNE (1 host, 2 in the split case) + Loran's target PRUNE to the GC'd creature (USER 20:40-21:14) | IN PROGRESS (~21:30 UTC) |
 | 9c | searched attack-vs-hold for GC-enchanted non-indestructible creatures; cast order GC before Loran's (USER 20:50) | pending (after 9b) |
-| 11 | second main (Q-U4) | pending |
+| 11 | second main ON (USER 21:45): sweepers main 2; 'everything but the combo in main 2' authored + measured | pending (after 9c) |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
 provider pick (existing engine-wide cast_scry practice); second main ON subject to measurement;
@@ -175,6 +175,12 @@ deferrals provisional.
   USER (~21:40, verbatim): "It should be a creature that reflects damage also." => the no-GC target is our
   highest-power damage-REFLECTING creature other than Stuffy Doll (Reckoner, Nemesis, Mogg Maniac, Slivers under a
   Spiteful grant); if none, the scry-only no-effect target.
+- USER (~21:45, verbatim, MAIN SPLIT — answers Q-U4): "Probably sweepers should be cast main 2. Arguably everything
+  but the combo should be." => step 11: second main ON for this deck; Blasphemous Act / Chain Reaction are cast in
+  MAIN 2 (after combat, so attackers deal damage before the sweep). Candidate rule, to be authored and MEASURED
+  before adoption: everything except the combo is cast in main 2, where "the combo" = the pieces that must be in
+  place before combat this turn (Guilty Conscience on an attacker, Loran's Escape on the GC'd creature, a starter
+  for this turn's loop). Report the measurement; never drop the USER's rule silently.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
