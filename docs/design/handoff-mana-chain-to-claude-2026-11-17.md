@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:30 UTC
+## Live status, updated 07:33 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -41,14 +41,16 @@ wins, zero changed play digests at the same score; loss-penalized score
 sum is 23,111 in both arms. New work 204,827,597 versus old 204,827,599
 units (two fewer); recorded job ms 4,924,122 versus 4,955,036. Outputs
 and the parser are under `build/scratch/spirits_shock_pair_5k/`.
-The fresh PGO Spirits mana-clean gate is now active in exec session
+The fresh PGO Spirits mana-clean gate passed in exec session
 `78520`: `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run spirits
 --games 5000 --name codex-spirits-shock-pair-20261117`, console
 `build/scratch/spirits_shock_pair_5k/mana_clean.out`. It covers indices
-45,000–49,999 (the next due block, also used by the paired A/B). After
-the oracle-on arm finished all 52 chunks, and the oracle-off arm is now
-active. After it completes, inspect its report and commit
-`test/mana_clean.json`; then
+45,000–49,999 (the next due block, also used by the paired A/B):
+**Spirits clean, zero issue flags**, 41,221 decisions and 342,409 plans,
+oracle-on/off play byte-identical. Report:
+`logs/mana_clean/codex-spirits-shock-pair-20261117/report.md`.
+`test/mana_clean.json` was committed as `133a723c0`. Next inspect the
+small Minotaur APPLY-DROP and Prevent Damage issues; then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 

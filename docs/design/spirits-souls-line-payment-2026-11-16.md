@@ -142,5 +142,9 @@ or later wins and zero play-digest changes at the same score. Both arms
 scored 23,111 loss-penalized turn-games. New work was 204,827,597 units
 versus 204,827,599 old (two fewer); recorded job ms was 4,924,122
 versus 4,955,036. Artifacts are under
-`build/scratch/spirits_shock_pair_5k/`. A fresh mana-clean gate is next;
-consult the live Claude handoff for its status.
+`build/scratch/spirits_shock_pair_5k/`. The fresh PGO mana-clean gate on
+the same 5,000-game block passed **clean with zero issue flags** over
+41,221 decisions and 342,409 plans; oracle-on/off play was byte-identical.
+The report is
+`logs/mana_clean/codex-spirits-shock-pair-20261117/report.md`, and the
+record in `test/mana_clean.json` was committed as `133a723c0`.
