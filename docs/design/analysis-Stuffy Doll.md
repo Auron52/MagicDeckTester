@@ -63,9 +63,9 @@ implementer agent per step, serial.
 
 | step | content | status |
 |---|---|---|
-| 1 | pipeline core, no cards | pending |
-| 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | pending |
-| 3 | searched reflection-target axis (Incinerator precedent) | pending |
+| 1 | pipeline core, no cards | DONE 773bfef4b (unit 3403/3403, scen 561/561) |
+| 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | DONE 2a3d5db13 (scen 563/563; smoke pending at 14:30; cost audit re-run + full field --update owed, Scryfall 429). Deviations: design §14. Handoff: logs/stuffy/impl-step1-2-handoff.md |
+| 3 | searched reflection-target axis (Incinerator precedent) | IN PROGRESS (fresh Opus implementer, ~14:35 UTC) |
 | 4 | Stuffy Doll (choose player, {T} self-ping) | pending |
 | 5 | Guilty Conscience (+ combat damage hook, loops) | pending |
 | 6 | Spiteful Sliver | pending |
@@ -92,5 +92,9 @@ deferrals provisional.
 - Q-U5 cast-order rules: USER-owned; none proposed, order is searched.
 - Rules check before step 8: is an en-Kor shield consumed when its redirect target has left the
   battlefield? (default: not consumed — it simply doesn't apply).
+- Step-2 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike; planeswalkers not offered as reflection
+  targets (Maniac/Reckoner/Nemesis); Nemesis lifegain lock modelled but goldfish-inert.
+- Side finding (step 2): executor SBA and CounterPingKillAt put dead cards in the CONTROLLER's graveyard, not the
+  owner's (CR 400.3); pipeline uses the owner. Inert while we never control opponent's creatures.
 - Side finding R7: two rollout-only kill paths (TurnSolver.cpp ~73041/~73148) ignore indestructible
   and skip death triggers — not on this deck's paths; separate fix.
