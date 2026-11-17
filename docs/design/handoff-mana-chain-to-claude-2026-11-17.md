@@ -13,6 +13,8 @@ source; compare its per-game `.wins` with the archived pre-Boars smoke
 directory `build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins`.
 If byte-identical, the upstream Boars source change is smoke-neutral and
 the 39 previously documented GT failures remain preexisting drift.
+That smoke is now active, exec session `71911`, console
+`build/scratch/dragonstorm_visible_lump_ab/post_boars_rebase_smoke.out`.
 
 **Active build:** `MTG_RSS_CAP_GB=40 ./build.sh pgo` for source
 `f7cce0693b6a16d779df5ac756af16100e3b677d`, exec session
