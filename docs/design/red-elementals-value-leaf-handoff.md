@@ -1,6 +1,6 @@
 # Red Elementals value-leaf handoff — 2026-11-17
 
-> **CLOSED 2026-11-17 (Claude).** The run completed and the sidecar shipped (`nlfit`, d6/b20). Red GT was accepted after attribution. The build-target change was kept (`de8284806`). Results: `analysis-Red Elementals.md`, "Value leaf and play setting (2026-11-17)". What follows is the historical handoff.
+> **CLOSED 2026-11-17 (Claude).** The run completed and the sidecar shipped (`nlfit`, d6/b20; moved to d6/b30 by the USER the same day). Red GT was accepted after attribution. The build-target change was kept (`de8284806`). Results: `analysis-Red Elementals.md`, "Value leaf and play setting (2026-11-17)". What follows is the historical handoff.
 
 The mulligan profile is shipped. This note hands the in-progress value-leaf run to a Claude agent in **this primary checkout**. Read `CLAUDE.md`, `.claude/skills/value-leaf.md`, and the older `docs/design/red-elementals-analysis-checkpoint.md` before shipping. The old checkpoint contains superseded running-job notes; this file describes the current run.
 

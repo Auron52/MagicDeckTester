@@ -7,8 +7,8 @@
   "mull_gen_budget_ms": 3,
   "expected_buckets": 13,
   "target_depth": 6,
-  "budget_ms": 20,
+  "budget_ms": 30,
   "enabled": true,
-  "note": "E.7 play-setting stage 2026-11-17: d6b20 adopted over the built-in default (no enabled block) (d5/20); the cheapest of 2 passing arm(s) (0.99x vs live, delta +0.00000)"
+  "note": "E.7 play-setting stage 2026-11-17 (nlfit leafless shape): d6b30 adopted by the USER over the pipeline's pick d6b20 (the cheapest passing arm); d6b30 also passed: 1.000x units vs the d5/20 default, delta -0.00062 (t -3.42), 8 seeds x 1000 paired games"
  }
 }

@@ -546,7 +546,7 @@ SMOKE_CASES=(
   # redelem2hg: a small searched canary. No card in the list reads heads or opponents: no "each opponent" effect,
   # no attack_tokens_per_opponent, no life-total gate (Sunspine Lynx's ETB hits "each player" per NONBASIC land,
   # inert vs the land-less goldfish; Lightning Bolt is "any target"). Only the 30-life clock moves.
-  "redelem2hg 5  1001    25 20"
+  "redelem2hg 5  1001    25 30"
   # pd2hg: a RELEVANT deck, not a canary -- Dina ("each opponent loses 1"), Rolling Earthquake /
   # Pyrohemia ("each player") and Vito ("target opponent") all read heads / life. See the pd rows.
   "pd2hg      5  1001    25 20"
@@ -746,7 +746,7 @@ SMOKE_CASES=(
   # No value_play block (play = d5 b20), no value leaf and no keep table yet, so GT WILL move when they land.
   "redelem 0 1001 1000 0"
   "redelem    3  1001    50 10"
-  "redelem    5  1001   100 20"
+  "redelem    5  1001   100 30"
   # Spirits: pre-keep-table ENTRY set on the Merfolk template (d5/b20 play setting, no value_play block).
   # spirits2hg is the small searched 2HG canary (no card scales with opponents or reads starting life).
   "spirits     0 1001 1000 0"
@@ -1238,8 +1238,8 @@ REGRESSION_CASES=(
   # redelem: see the SMOKE block.
   "redelem 0 2002 1000 0"
   "redelem    3  2002    50 10"
-  "redelem    5  2002   150 20"
-  "redelem    5  3003   150 20"
+  "redelem    5  2002   150 30"
+  "redelem    5  3003   150 30"
   # Spirits: pre-keep-table ENTRY set on the Merfolk template; most searched games use play settings.
   "spirits 0 2002 1000 0"
   "spirits 3 2002   75 10"
@@ -2158,17 +2158,17 @@ OVERNIGHT_CASES=(
   "martyr2hg  5  5005   75 20"
   "martyr2hg  5  6006   75 20"
   "martyr2hg  5  7007   75 20"
-  # redelem: keep-table FULL set; d5 play rows meet Hinata's 425-game floor at shipped b20.
+  # redelem: keep-table FULL set; d5 play rows meet Hinata's 425-game floor at shipped b30 (d6/b30 sidecar, USER 2026-11-17).
   # No redelem2hg overnight rows: the deck reads no heads/opponents (see the smoke canary note).
   "redelem 0  4004 2000 0"
   "redelem 0  6006 2000 0"
   "redelem 0  8008 2000 0"
   "redelem 0 10010 2000 0"
   "redelem    3  4004  125 10"
-  "redelem    5  4004  425 20"
-  "redelem    5  5005  425 20"
-  "redelem    5  6006  425 20"
-  "redelem    5  7007  425 20"
+  "redelem    5  4004  425 30"
+  "redelem    5  5005  425 30"
+  "redelem    5  6006  425 30"
+  "redelem    5  7007  425 30"
   # Spirits: pre-keep-table overnight ENTRY set on the Merfolk template.
   "spirits 0  4004 2000 0"
   "spirits 0  6006 2000 0"

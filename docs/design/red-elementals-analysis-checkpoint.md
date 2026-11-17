@@ -8,12 +8,14 @@ Last updated: 2026-11-17 (Claude; value-leaf stage complete).
 ## Value-leaf stage COMPLETE (2026-11-17, current)
 
 - The `valueleaf.sh` run on frozen `24949783a` finished. It shipped the leafless final-depth single
-  pass (`nlfit`) at **d6/b20**; the learned model stays staged and unshipped. Red's smoke and regular GT
+  pass (`nlfit`), first at d6/b20 and now **d6/b30** (USER); the learned model stays staged and unshipped. Red's smoke and regular GT
   were accepted after sidecar-off attribution (0 slower, 1 faster, 21 same-score line changes).
   Overnight rows are left to the periodic run. Details: the ledger section "Value leaf and play setting
   (2026-11-17)". The handoff `red-elementals-value-leaf-handoff.md` is closed.
-- Open for the USER: d6/b30 (1.000x, -0.00062 t -3.42) is a near-free quality trade the driver did not
-  take; the staged learned model is available if wanted.
+- USER 2026-11-17: adopt **d6/b30** (1.000x, -0.00062 t -3.42), the near-free trade the driver did not
+  take. The sidecar now ships `budget_ms 30` and Red's d5 suite play rows run at b30 (fleet convention);
+  the scoped smoke and regular gate was byte-identical at b30. The staged learned model is still available
+  if wanted (`logs/eval/Red Elementals.value.STAGED.json`).
 
 ## Final mulligan adoption progress (2026-11-15)
 

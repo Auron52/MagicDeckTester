@@ -895,9 +895,22 @@ better trades at 1.01-1.02x. E.7b had nothing to recheck (no trust candidate on 
 E.6 found no ladder escalations in 1,200 games, so the skip allowance is the fleet default R=0.
 `value_trust_depth` is unset, so no overnight tier was owed.
 
-Shipped `decks/Red Elementals/Red Elementals.value.json`:
+Shipped `decks/Red Elementals/Red Elementals.value.json` (as first committed in `ac857d69f`):
 `value_play {ladder: single, leaf: none, alpha: relaxed, target_depth 6, budget_ms 20,
 mull_gen_depth 1, mull_gen_budget_ms 3, expected_buckets 13}`.
+
+**USER ruling 2026-11-17: d6/b30 replaces d6/b20.** The USER took the near-free E.7 trade above (`nlfit` at
+d6/b30: 1.000x units vs the d5/20 default, delta -0.00062, t -3.42, 8 seeds x 1000 paired games), so the
+sidecar now ships `budget_ms 30`. Red's eight d5 play rows in `test/regression_cases.sh` (smoke, the
+2HG canary, regression, overnight) moved from b20 to b30, following the fleet convention that a deck's
+d5 play rows run at its shipped budget (the d6/b20 commit had left them at b20; the suite pins d5, so
+neither the sidecar's depth nor its budget reaches the suite on its own). The scoped smoke and regular run
+at b30 was **byte-identical** on every row (0 slower, 0 faster, 0 play changes; 864 references, 0 drift;
+561 scenarios). Search work rose (smoke d5 387k -> 411k units, 2HG canary 485k -> 540k), so the budget
+does engage; on these seeds the extra search changes no decision. The accept refreshed only `job_cost.tsv`.
+Trust plays no part: it was accepted at d5 for the staged learned model only, and `nlfit` (single
+ladder, no leaf) has no escalation for trust to skip. Red's four overnight d5 rows (now b30) are left to the
+periodic overnight run, as before.
 
 **Shipping gate.** A scoped smoke and regular run (`--deck=redelem,redelem2hg`) found 0 slower games,
 1 faster (regression d5 s3003, 4.3267 -> 4.3200), and 21 searched games whose play changed at the same
