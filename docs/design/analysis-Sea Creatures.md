@@ -268,6 +268,28 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   audit (a single cast forces nothing; the prompt needs a second, differing copy beside the first); fixed to
   NOT_FORCED in `scripts/audit_viewer_decisions.py`.
 
+## Main-1 land-Aura fix + Q12 re-measure (2026-11-17)
+
+* **Engine fix** `MTG_PO_LAND_AURA_DOMAIN` (default ON, heurarm slot; doc `docs/design/land-aura-main1-line.md`;
+  branch `sea-landaura-fix` e631ddc22 + a007e7711, cherry-picked here as 5a5daf55f + 4b74ffb20). One cause for
+  both modes: a plan's casts were tried in ONE order that could not pay (Powerstone before Sprawl tapped the host;
+  Overgrowth before Sprawl in the subset walk), and the payable-order decider ignored land Auras. Split hosts
+  (two Auras on different lands) fixed under the same flag. Units 3432/3432.
+* **Footprint:** smoke at `=0` byte-identical to base; ON moves only land-Aura cases (Sea d0/d3/d5/2HG, Alchemist
+  d0/d5/2HG, EDF d0, Jumbo d0).
+* **Held-out paired A/B** (350 g/deck, play settings): Sea -16 turns (16 faster / 0 slower, units 0.999);
+  Accomplished Alchemist, Bruna, EDF, Fungus, Jumbo Cactuar 0 / 0.
+* **Correction:** the Stage 5 note that "Sprawl + Overgrowth" was legal at gi75 is wrong (a ManaOracle
+  `--validate-line` false positive): the Forest is the only {G} source AND Sprawl's only host. The fixed engine
+  finds Wild Growth + Overgrowth on one Island instead (T8 -> T7).
+* **Q12 re-measure with the fix** (`build/scratch/sea/m2re/`, d5 b20, main 2 every turn vs CONDITIONAL, paired):
+  the Stage 5 seeds 8810001..8840001 (400 g, where every-turn was 11 faster) -> **0 / 0**; 400 fresh held-out from
+  9300001 -> **0 / 0**; every-turn costs +8..16% units. All 11 earlier games were the main-1 defect. Q12 stays the
+  USER's call; the measurement now favours keeping the CONDITIONAL main 2.
+* **Not Sea's:** 39 smoke GT rows on 14 non-land-Aura decks (e.g. Mill d3/d5 82d21bf5) do not reproduce on this
+  branch's BASE binary (8cd0bbf23, no Sea code); the GT was set at 669873949, 148 shared commits earlier. Verdict
+  per row at the push-time rebase smoke; not accepted blind.
+
 ## Approved deferrals
 
 (none yet)
