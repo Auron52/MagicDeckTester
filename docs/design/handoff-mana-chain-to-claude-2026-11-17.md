@@ -26,6 +26,16 @@ s30083167 T7 x14, s30086717 T4 x12, s30083522 T6 x10, s30086338 T6 x10 (replays 
 and partly s30086717 (12 -> 8). The held-out A/B is byte-identical on every deck except Cyclone: 5,000 pairs, 1
 later game (gi 560506, a T1 butterfly that recovers at d8 b0), net +1. A trade-off, so the USER decides; the
 agent recommends adopting. `docs/design/unseen-keep-scarce-2026-11-17.md`.
+USER asked (20:2x UTC) WHY Cyclone loses a turn. "Butterfly" was a label, not a trace. OWED after the moderate gate:
+trace gi 560506 T1 (both arms): root scores of Brainstorm vs Ponder, and every lookahead node where
+`UnseenScarceNamedMask` != 0 (needs a TAPDBG print), to tell a better/worse lookahead payment from a budget-cut shift.
+Note: in Cyclone every cantrip is a `ParamKeyedDrawClass` opener, so the lever is live in most of its lines.
+gi 560506: lever ON casts Brainstorm T1 (wins T5); OFF casts Ponder T1 (wins T4). USER: "Ponder should be cast
+earlier because Brainstorm is more useful later. T1 is the worst time to cast Brainstorm typically." So the flip went
+to the worse play: the search scores T1 Brainstorm ~= Ponder (pre-existing weakness). OWED too: count T1 Brainstorm-
+with-Ponder-in-hand across a Cyclone sample (game logs), check the d8 b0 choice, then propose to the USER a fix shape
+(provider root ORDER Ponder-first = legal; a hold-Brainstorm prune = lossy, needs A/B + USER). Related open USER
+question B in `docs/design/cyclone-cast-order.md`.
 
 **Found defect (pre-existing, diagnosed, deferred):** Merfolk Turns game 560698 (seed 30560698) drives one process
 past 42 GB RSS on turn 6. Cause: the Wanderwine Prophets CHAMPION axis is still materialised eagerly (540 -> 154,635
