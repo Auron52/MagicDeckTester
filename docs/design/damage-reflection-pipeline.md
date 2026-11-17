@@ -1466,3 +1466,60 @@ Where the code departs from the sections above, and why. Each entry names the sy
 * **Unit-test notes.** `GameState::deck_has_spell_target_watch` defaults TRUE (unstamped-conservative), so a
   hand-built test board must stamp it false or the no-effect fold correctly refuses to fold the Doll; an untapped
   Mind Stone is a sac-draw DIG source whose dig twins the test executor does not realise.
+
+### Step 8 (Nomads en-Kor shields)
+
+* **The oracle, verified against Scryfall** (`build/scratch/stuffy/scry/`): Nomads en-Kor {W}, Creature -- Kor Nomad
+  Soldier 1/1 (not "Human Nomad"); Shaman en-Kor {1}{W} Kor Cleric Shaman 1/2. Both carry "{0}: The next 1 damage that
+  would be dealt to this creature this turn is dealt to target creature you control instead." One shared param,
+  `redirect_shield_cost` (only `"{0}"` is accepted by the loader: the rider has no bill), arms `reflect_armed`.
+  Shaman en-Kor is added with the shield only; its `{1}{W}` pull is step 9 (disclosed in its oracle note).
+* **No `GameState::redirect_shields` list: the shields ride the EVENT** (`dmgrx::Batch::shields`, `dmgrx::Shield`).
+  Section 2.3 planned a per-turn list cleared at the three cleanup sites and folded into the keys. Every shield the
+  engine or the viewer creates is created for the sweep it rides and allocates at most the damage the en-Kor is
+  about to be dealt, to creatures on the battlefield at that moment, so it is always spent inside that event and a
+  per-turn list would always be empty again before anything reads it. Hence no new GameState field, no cleanup
+  sites, no sim-key / dominance fold, and `sizeof(GameState)` is unchanged. A persistent list becomes necessary only
+  with an activation window outside the sweeper rider (USER Q-U1).
+* **The rider is a PIN, not an Action field** (`dmgrx::AddShieldRider`, called by `dmgrx::Sweep` in both worlds).
+  Section 10 planned `RedirectRider` on `Action` / `CastRiders` / `StackEntry` and in the plan signatures. The timing
+  fold (4.2: nothing happens between our sorcery-speed cast and its resolution) makes "activate in response" the
+  same as "activate as it resolves", so the allocation is made AT the sweep as a choice on the step-3 pin stream
+  (`dmgrx::PinnedChoice`, factored out of `ResolveTrig`): ordinals in resolution order, BEFORE the sweep's own
+  reflection choices; fanned by `AppendSubdecisionAxes`' main-phase probe (its pre-check now also counts an en-Kor on
+  the battlefield or in the plan as a chooser, `dmgrx::DefOffersShieldChoice`); replayed by the executor from
+  `Plan::reflect_targets`. Every plan-fold site of step 3 already folds that vector, so no plan signature, fold
+  site or lockstep checker changed. It composes with step 7's sweeper/setup order expansion for free (the pins are
+  read at resolution, in whatever order the casts resolve). Option ids: `kShieldPinBase - (dest * 1024 + amount)`.
+* **The replacement** (`ApplyOne` step 1): shields apply in list order, one point each, repeated passes until none
+  applies (a point moved onto an en-Kor with its own shields moves again; each shield is spent at most once);
+  the moved point keeps its source and combat flag (ruling) and then aggregates with the target's own damage into
+  ONE "dealt N" (one reflection trigger for the total).
+* **Q-R1 (USER question; DEFAULT TAKEN): a shield whose target has left the battlefield is NOT spent.** CR 614.9: "If
+  either creature ... is no longer on the battlefield when the damage would be redirected, or is no longer a
+  creature ..., the effect does nothing." An effect that does nothing has not replaced the damage, so "the next 1
+  damage" it watches for was not used by it (the damage is dealt to the en-Kor normally). With rider-only hosting the
+  case cannot arise in play (targets are on the battlefield when the shields are made); it is unit-tested on a
+  hand-built batch.
+* **The option set** (`dmgrx::ShieldOptions`; block note in DamageReflection.h). F4 as designed, with the TIE fold
+  narrowed to what is provably identity: face-only reflectors (every instance can only hit the opponent's face: Mogg
+  Maniac, a Doll that chose the opponent, a granted "target player" under F1, no Guilty Conscience attached) fold to
+  ONE representative of the highest multiplicity; every other sink reflector class (a target choice -- Reckoner,
+  Nemesis --, a GC'd reflector, a Doll that chose us) stays a separate option, identity-folded by name / multiplicity /
+  indestructible / chosen player / GC count. Section 4.2's "ties between equal-mult R's -> identity fold" is not
+  identity across those (a Reckoner's 26 can be aimed; a Doll's cannot), so they are branched. Without a sink
+  reflector: the design's landmarks ({0}; per reflector class all / keep-E-alive / the most R survives) plus "all onto
+  one doomed or indestructible NON-reflector, non-en-Kor creature" when that keeps E alive (such sinks are
+  interchangeable). The permutation fold over identical en-Kors applies under F4 only (there the lists are
+  independent of earlier allocations): a non-decreasing option index.
+* **Disclosed limits (landmark bound, as designed).** Autonomous play never redirects onto a LIVE non-reflector
+  (another en-Kor included) -- e.g. two Nomads under an Act with no reflector at all cannot save one by feeding the
+  other; human play gets the full allocation. Shields are offered only against our own SWEEPER (`dmgrx::Sweep`):
+  not against a reflection aimed at an en-Kor (dominated, F2: aim it at the shield's target directly), and not
+  against a Guilty Conscience on an en-Kor (not dominated by anything, but needs an en-Kor carrying GC and attacking;
+  part of the PROVISIONAL Q-U1 deferral). "Doomed" is predicted with the SBA's own `LethalToughness` before the event.
+* **Viewer.** `divide` (main.cpp target-chooser branch keyed on `dmgrx::t_viewer_shield` + the param): the en-Kor
+  first ("keep: not redirected"), then every other creature we control, sum = d, default = the engine's allocation;
+  `WriteDivideDecisionJson` gained a `note_override`. DECISIONS.md row + note; the auditor maps
+  `redirect_shield_cost -> divide` (and `target`, the oracle's "target creature you control").
+* **Provider.** Not consulted (no hook); ordering the landmarks is the step-10 provider's.

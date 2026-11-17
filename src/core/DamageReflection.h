@@ -13,7 +13,7 @@
 //
 // ONE CALL = ONE DAMAGE EVENT (CR 120.3; the Reckoner / Nemesis / Sliver rulings: "if it is dealt damage
 // by multiple sources at once, its ability triggers once"). DealDamageBatch runs, in order:
-//   1. replacement (en-Kor redirection shields -- design step 8; empty until then);
+//   1. replacement (en-Kor redirection shields, Batch::shields -- CR 614.9; see AddShieldRider);
 //   2. aggregation per recipient (13 + 13 redirected onto one creature = ONE "dealt 26");
 //   3. the trigger SNAPSHOT, taken before anything changes (last-known information, CR 603.10a: a
 //      reflector killed by this very event still triggers);
@@ -91,11 +91,25 @@ struct DmgAssign
     bool      lock_life = false;   // Screaming Nemesis: a player dealt damage this way can't gain life
 };
 
+// An en-Kor redirection shield (Nomads / Shaman en-Kor's {0}, CardParams::redirect_shield): "the next 1
+// damage that would be dealt to [on] this turn is dealt to [to] instead". Both are Card::m_number ids.
+struct Shield
+{
+    int on = 0;   // the en-Kor
+    int to = 0;   // the target creature we control
+};
+
 // ONE simultaneous damage event: its sources and its assignments.
 struct Batch
 {
     std::vector<SourceRef> src;
     std::vector<DmgAssign> hits;
+    // Redirection shields that apply to THIS event (design 2.2 step 1 / 2.3). Hosted as a rider on our own
+    // creature sweeper (AddShieldRider), so every shield is created for, and lives only inside, the event it
+    // rides: the allocation never exceeds the damage the en-Kor is about to be dealt, so no shield is ever
+    // left over for later damage this turn and no per-turn GameState list is needed (design section 14,
+    // step 8). Empty on every other event.
+    std::vector<Shield> shields;
 };
 
 // A trigger raised by an event and not yet resolved. Everything is held by value (LKI).
@@ -298,7 +312,49 @@ inline void RaiseAuraHostDamageBack(const GameState& s, int host, int amount, st
 inline BatchResult ApplyOne(GameState& s, const Batch& b)
 {
     BatchResult r;
-    // 1. Replacement (en-Kor redirection shields): design step 8. Nothing replaces damage yet.
+    // 1. Replacement: the en-Kor redirection shields (CR 614.9 redirection effects; the order among them is
+    //    ours to choose, CR 616.1, and we apply them in list order). Each shield moves ONE point of damage
+    //    from its en-Kor onto its target and is then spent (CR 614.5: a replacement applies once to an event).
+    //    The redirected point keeps its SOURCE and its combat flag (en-Kor ruling: redirected combat damage is
+    //    still combat damage). A point moved onto a creature that carries its own shields can be moved again
+    //    by a DIFFERENT shield (the passes repeat until none applies; each shield is spent at most once, so
+    //    this terminates). CR 614.9: if either creature is no longer on the battlefield, or no longer a
+    //    creature, when the damage would be redirected, the effect does nothing -- and (Q-R1, USER question,
+    //    default) the shield is NOT spent: it simply did not apply, and the damage stays on the en-Kor.
+    std::vector<DmgAssign> redirected;
+    const std::vector<DmgAssign>* hits = &b.hits;
+    if (!b.shields.empty())
+    {
+        redirected = b.hits;
+        std::vector<char> spent(b.shields.size(), 0);
+        for (bool moved = true; moved; )
+        {
+            moved = false;
+            for (std::size_t i = 0; i < b.shields.size(); ++i)
+            {
+                if (spent[i]) { continue; }
+                const Shield& sh = b.shields[i];
+                const Permanent* e = FindPerm(s, sh.on);
+                const Permanent* t = FindPerm(s, sh.to);
+                if (e == nullptr || !e->card.IsCreature() || t == nullptr || !t->card.IsCreature()) { continue; }
+                std::size_t at = redirected.size();
+                for (std::size_t k = 0; k < redirected.size(); ++k)
+                {
+                    const DmgAssign& a = redirected[k];
+                    if (!a.to.player && a.to.id == sh.on && a.amount > 0) { at = k; break; }
+                }
+                if (at == redirected.size()) { continue; }   // no damage would be dealt to it (yet)
+                DmgAssign moved_pt = redirected[at];
+                --redirected[at].amount;
+                moved_pt.to     = Recipient{ false, sh.to };
+                moved_pt.amount = 1;
+                redirected.push_back(moved_pt);
+                spent[i] = 1;
+                moved = true;
+            }
+        }
+        hits = &redirected;
+    }
 
     // 2. Aggregate per recipient. Creature recipients keep first-appearance order; a recipient that
     //    is no longer a creature on the battlefield is dropped (damage to "that creature" does nothing).
@@ -313,7 +369,7 @@ inline BatchResult ApplyOne(GameState& s, const Batch& b)
     {
         for (const SourceRef& r0 : b.src) { if (r0.is_creature) { src_dealt.assign(b.src.size(), 0); break; } }
     }
-    for (const DmgAssign& a : b.hits)
+    for (const DmgAssign& a : *hits)
     {
         if (a.amount <= 0) { continue; }
         if (a.to.player)
@@ -483,6 +539,9 @@ inline BatchResult DealDamageBatch(GameState& s, const Batch& b)
     return r;
 }
 
+// The en-Kor shield rider on our own sweeper (defined below, after the pin machinery it uses).
+inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b);
+
 // A symmetric "N damage to each creature" sweep (Pyroclasm's damage_all_creatures; Blasphemous Act,
 // Chain Reaction) as ONE event from the spell (a noncreature source). The armed body of
 // PerformDamageAllCreatures, which keeps its legacy body for every unarmed deck.
@@ -496,6 +555,7 @@ inline void Sweep(GameState& s, int controller, const CardDefinition& def, int d
         if (!q.card.IsCreature()) { continue; }
         b.hits.push_back({ 0, { false, q.card.m_number }, dmg, false, false });
     }
+    AddShieldRider(s, controller, dmg, b);   // en-Kor shields (design 4.2); no-op without an en-Kor of ours
     const BatchResult r = DealDamageBatch(s, b);
     if (r.creatures_hit > 0 && g_play_event_sink)   // the legacy sweep's event, same text
     {
@@ -685,6 +745,25 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
     // only a granter on the battlefield or in the plan can raise one -- so testing the granter suffices.
     return choice(d.params.reflect_dealt_damage) || choice(d.params.grants_reflect_to_subtype);
 }
+// Does `d` raise an en-Kor shield CHOICE (AddShieldRider) when our own sweeper hits it? The main-phase fan's
+// pre-check counts it as a chooser on the battlefield or in the plan, beside DefReflectsWithChoice.
+inline bool DefOffersShieldChoice(const CardDefinition& d) { return d.params.redirect_shield; }
+
+// ONE searched choice on the pin stream (a list of more than one option): takes the next ordinal, reports the
+// list to the fan's probe, and returns the plan's pin for that ordinal when it is legal, else the FRONT (the
+// permitted one-shot policy; see the axis note above). Shared by the reflection targets and the en-Kor shields.
+inline int PinnedChoice(const std::vector<int>& legal)
+{
+    int pick = legal.front();
+    const std::size_t ordinal = t_pin_cursor++;
+    if (t_probe) { (*t_probe)(legal); }
+    if (t_pins && ordinal < t_pins_n)   // the main-phase prefix only (never the combat suffix)
+    {
+        const int pin = (*t_pins)[ordinal];
+        if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { pick = pin; }
+    }
+    return pick;
+}
 
 inline void ResolveTrig(GameState& s, const PendingTrig& t)
 {
@@ -730,13 +809,7 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
     int pick = legal.front();
     if (legal.size() > 1)   // a CHOICE: searched (the pin), probed (the fan), or asked (the viewer)
     {
-        const std::size_t ordinal = t_pin_cursor++;
-        if (t_probe) { (*t_probe)(legal); }
-        if (t_pins && ordinal < t_pins_n)   // the main-phase prefix only (never the combat suffix)
-        {
-            const int pin = (*t_pins)[ordinal];
-            if (std::find(legal.begin(), legal.end(), pin) != legal.end()) { pick = pin; }
-        }
+        pick = PinnedChoice(legal);
         if (g_play_target_chooser)
         {
             const CardDefinition* def = CardDatabase::Instance().LookupCached(t.src.card);
@@ -913,6 +986,304 @@ inline void EtbChoosePlayer(GameState& s, int controller, int entered_index, con
     {
         EmitPlayEvent(s.turn_number, "choose_player",
                       def.card.m_name.str() + " -- chose " + (pick == controller ? "you" : "the opponent"));
+    }
+}
+
+// ---- EN-KOR SHIELDS: the rider on our own sweeper (design 4.2 / step 8) ---------------------------------
+// "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you
+// control instead" (Nomads en-Kor; Shaman en-Kor's first ability). Free and unlimited, so the decision is an
+// ALLOCATION: how many of the d points our sweeper is about to deal the en-Kor E move, and onto what.
+//
+// HOSTING (timing fold, design 4.2). Shields last "this turn", and nothing can happen between our sorcery-
+// speed cast and the sweeper's resolution, so activating them in response to our own sweeper is the same as
+// activating them just before it resolves. The allocation is therefore made AT the sweep (dmgrx::Sweep, both
+// worlds) as a choice on the shared pin stream (PinnedChoice): ordinals in resolution order, BEFORE the
+// sweep's reflection choices, fanned by AppendSubdecisionAxes' main-phase probe exactly like a reflection
+// target, replayed by the executor from Plan::reflect_targets. Shields against other damage (a reflection
+// aimed at an en-Kor, a Guilty Conscience on an en-Kor) are not offered: the reflection can be aimed at the
+// shield's target directly (F2). PROVISIONAL deferral pending the USER (Q-U1), disclosed on the cards.
+//
+// THE OPTION SET (design 4.2), per en-Kor E of the caster's with d > 0, in battlefield order:
+//   F4 (SOUND fold): when E carries no reflection of its own and some creature R we control is a SINK
+//     (indestructible, or doomed: the damage already marked plus what this event deals it reaches its
+//     lethal toughness) with >= 1 reflection instance, "all d onto such an R" weakly dominates every other
+//     allocation for E: each point on R reaches a player through R's reflection(s), a point left on E (or
+//     on a non-reflector) reaches nothing, E dealt 0 survives at least as well, R's own survival does not
+//     change, and nothing else differs. Partial splits between two sinks are dominated by the better end
+//     (the amounts are additive). Among sinks, the FACE-ONLY ones (every instance can only hit the
+//     opponent's face: Mogg Maniac, a Doll that chose the opponent, a granted "target player" under F1, no
+//     Guilty Conscience attached) are interchangeable up to their multiplicity, so ONE representative with the
+//     highest multiplicity is offered; every other sink class (a choice of target, a GC'd reflector, a Doll
+//     that chose us) is offered separately (identity-folded). Options: {all d -> each such class}.
+//   otherwise (no sink reflector, or E reflects itself) the design's LANDMARKS: {0}; per reflector class R,
+//     {all d -> R}, {just enough to keep E alive -> R}, {the most R survives -> R}; and {all d -> one non-en-
+//     Kor sink with no reflection} when that keeps E alive (such sinks are interchangeable: the points change
+//     nothing but E's survival). Redirecting onto a LIVE non-reflector (another en-Kor included) is not
+//     offered autonomously (the design's landmark bound, disclosed); human play gets the full allocation.
+//   SYMMETRY: under F4 consecutive interchangeable en-Kors with the same list choose a non-decreasing option
+//     index (the plan carries a multiset; swapping two identical en-Kors' allocations is the same end state).
+// The FRONT is the default where nothing pins (beyond the horizon, the d0 runner, speculative applies):
+// under F4 the highest-multiplicity sink, otherwise {0} (no shield, the legacy outcome).
+//
+// Option ids on the pin stream: kShieldPinBase - (dest * 1024 + amount), dest = the target's m_number (0 for
+// {0}). Below every player id (-1/-2), above kCombatPinMark, never a card id.
+inline constexpr int kShieldPinBase = -0x10000000;
+inline int ShieldCode(int dest, int amount)
+{
+    if (dest < 0 || dest >= (1 << 17) || amount < 0 || amount >= 1024)
+    {
+        std::fprintf(stderr, "[rfx] FATAL: en-Kor shield option (dest %d, amount %d) cannot be encoded\n", dest, amount);
+        std::abort();
+    }
+    return kShieldPinBase - (dest * 1024 + amount);
+}
+inline std::pair<int, int> ShieldDecode(int code)   // {dest, amount}
+{
+    const int v = kShieldPinBase - code;
+    return { v / 1024, v % 1024 };
+}
+
+// The human-play `divide` prompt for one en-Kor (read by main.cpp's target chooser while it builds it):
+// E's d points divided among E itself (= not redirected) and every other creature its controller controls.
+struct ShieldPrompt
+{
+    int enkor = -1;                 // battlefield index of E
+    int total = 0;                  // d
+    std::vector<int> legal;         // battlefield indices, E first
+    std::vector<int> defaults;      // the engine's allocation, aligned to legal
+};
+inline thread_local const ShieldPrompt* t_viewer_shield = nullptr;
+
+// How many reflection instances creature q carries now (its own + one per covering granter): mult(q).
+inline int ReflectInstances(const GameState& s, const Permanent& q)
+{
+    const CardDefinition* d = Def(q);
+    const int own = (d != nullptr && d->params.reflect_dealt_damage != CardParams::ReflectTo::None) ? 1 : 0;
+    return own + GrantedInstances(s, q);
+}
+inline int AuraHostDamageBackOn(const GameState& s, int number)
+{
+    int n = 0;
+    for (const Permanent& a : s.battlefield)
+    {
+        if (a.aura_attached_to != number) { continue; }
+        const CardDefinition* d = Def(a);
+        if (d != nullptr && d->params.aura_host_damage_back) { ++n; }
+    }
+    return n;
+}
+// Is every reflection instance on q (controlled by `ctrl`) able to hit ONLY the opponent's face right now?
+inline bool ReflectsFaceOnly(const GameState& s, const Permanent& q)
+{
+    using RT = CardParams::ReflectTo;
+    if (AuraHostDamageBackOn(s, q.card.m_number) > 0) { return false; }
+    const int ctrl = q.controller_index, opp = 1 - ctrl;
+    const CardDefinition* d = Def(q);
+    const RT own = d != nullptr ? d->params.reflect_dealt_damage : RT::None;
+    if (own == RT::AnyTarget || own == RT::AnyOtherTarget || own == RT::TargetPlayer) { return false; }
+    if (own == RT::ChosenPlayer && q.chosen_player >= 0 && q.chosen_player != opp) { return false; }
+    PendingTrig probe;
+    probe.src = SourceRef{ q.card, ctrl, true };
+    for (const Permanent* g : Granters(s))
+    {
+        if (!GrantCovers(*g, q)) { continue; }
+        const RT k = Def(*g)->params.grants_reflect_to_subtype;
+        if (k == RT::TargetOpponent) { continue; }
+        if (k == RT::TargetPlayer && OwnFaceDominated(s, probe)) { continue; }   // F1: {opponent}
+        return false;
+    }
+    return true;
+}
+
+struct ShieldOpt { int dest = 0; int amount = 0; };
+
+// The option list for en-Kor E under a sweep of `dmg` to each creature (see the block note). `extra` holds
+// what earlier en-Kors of this rider already moved onto each destination (m_number, amount). `f4` reports
+// whether the F4 fold produced the list.
+inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent& e, int dmg,
+                                            const std::vector<std::pair<int, int>>& extra, bool& f4)
+{
+    f4 = false;
+    std::vector<ShieldOpt> out;
+    const int d = dmg;
+    if (d <= 0) { return out; }
+    auto extra_on = [&](int num) { int n = 0; for (const auto& x : extra) { if (x.first == num) { n += x.second; } } return n; };
+    auto is_enkor = [&](const Permanent& q) { const CardDefinition* qd = Def(q); return qd != nullptr && qd->params.redirect_shield; };
+    struct Cand { const Permanent* q; int mult; bool sink; bool face_only; int lt; int room; };
+    std::vector<Cand> cands;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (!q.card.IsCreature() || q.controller_index != e.controller_index || q.card.m_number == e.card.m_number) { continue; }
+        const int lt = LethalToughness(q, s);
+        const bool indes = q.HasKeyword(Keyword::Indestructible);
+        const int incoming = q.damage + d + extra_on(q.card.m_number);
+        const bool sink = indes || lt <= 0 || incoming >= lt;
+        const int mult = ReflectInstances(s, q);
+        cands.push_back({ &q, mult, sink, mult > 0 && ReflectsFaceOnly(s, q), lt, indes ? 1 << 20 : lt - 1 - incoming });
+    }
+    // Identity class of a candidate (two candidates with equal keys give the same end state).
+    auto same_class = [&](const Cand& a, const Cand& b) {
+        const CardDefinition* da = Def(*a.q);
+        const CardDefinition* db = Def(*b.q);
+        return a.q->card.m_name == b.q->card.m_name && da == db && a.mult == b.mult && a.sink == b.sink
+            && a.q->HasKeyword(Keyword::Indestructible) == b.q->HasKeyword(Keyword::Indestructible)
+            && a.q->chosen_player == b.q->chosen_player
+            && AuraHostDamageBackOn(s, a.q->card.m_number) == AuraHostDamageBackOn(s, b.q->card.m_number)
+            && (a.sink || (a.lt == b.lt && a.room == b.room));
+    };
+    auto push = [&](int dest, int amount) {
+        for (const ShieldOpt& o : out) { if (o.dest == dest && o.amount == amount) { return; } }
+        out.push_back({ dest, amount });
+    };
+    const int mult_e = ReflectInstances(s, e);
+    bool any_sink_reflector = false;
+    for (const Cand& c : cands) { if (c.sink && c.mult > 0) { any_sink_reflector = true; break; } }
+    if (mult_e == 0 && any_sink_reflector)
+    {
+        f4 = true;
+        // the face-only representative: the highest multiplicity, first in battlefield order
+        const Cand* face = nullptr;
+        for (const Cand& c : cands)
+        { if (c.sink && c.mult > 0 && c.face_only && (face == nullptr || c.mult > face->mult)) { face = &c; } }
+        std::vector<const Cand*> picks;
+        if (face != nullptr) { picks.push_back(face); }
+        for (const Cand& c : cands)
+        {
+            if (!c.sink || c.mult <= 0 || c.face_only) { continue; }
+            bool dup = false;
+            for (const Cand* p : picks) { if (!p->face_only && same_class(*p, c)) { dup = true; break; } }
+            if (!dup) { picks.push_back(&c); }
+        }
+        std::stable_sort(picks.begin(), picks.end(), [](const Cand* a, const Cand* b) { return a->mult > b->mult; });
+        for (const Cand* p : picks) { push(p->q->card.m_number, d); }
+        return out;
+    }
+    // Landmarks.
+    push(0, 0);
+    const int lt_e = LethalToughness(e, s);
+    const bool e_dies = !e.HasKeyword(Keyword::Indestructible) && (lt_e <= 0 || e.damage + d >= lt_e);
+    // points that must leave E for it to survive: e.damage + (d - k) < lt_e  <=>  k >= e.damage + d - lt_e + 1
+    const int keep_e = e_dies && lt_e > 0 ? std::max(1, e.damage + d - lt_e + 1) : 0;
+    std::vector<const Cand*> seen;
+    for (const Cand& c : cands)
+    {
+        if (c.mult <= 0) { continue; }
+        bool dup = false;
+        for (const Cand* p : seen) { if (same_class(*p, c)) { dup = true; break; } }
+        if (dup) { continue; }
+        seen.push_back(&c);
+        const int num = c.q->card.m_number;
+        push(num, d);
+        if (keep_e > 0 && keep_e < d) { push(num, keep_e); }
+        if (!c.sink && c.room > 0 && c.room < d) { push(num, c.room); }
+    }
+    if (e_dies)
+    {
+        for (const Cand& c : cands)
+        {
+            if (c.mult == 0 && c.sink && !is_enkor(*c.q)) { push(c.q->card.m_number, d); break; }
+        }
+    }
+    return out;
+}
+
+inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
+{
+    if (dmg <= 0) { return; }
+    std::vector<int> enkors;   // battlefield indices, battlefield order
+    for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+    {
+        const Permanent& q = s.battlefield[i];
+        if (!q.card.IsCreature() || q.controller_index != controller) { continue; }
+        const CardDefinition* d = Def(q);
+        if (d != nullptr && d->params.redirect_shield) { enkors.push_back(static_cast<int>(i)); }
+    }
+    if (enkors.empty()) { return; }
+    const bool ask = g_play_target_chooser != nullptr && !TapSpeculatingNow();   // the viewer (EtbChoosePlayer's test)
+    std::vector<std::pair<int, int>> moved;   // (dest m_number, amount) so far
+    std::vector<ShieldOpt> prev_opts;
+    const Permanent* prev = nullptr;
+    std::size_t prev_pos = 0;
+    bool prev_f4 = false;
+    for (int ei : enkors)
+    {
+        const Permanent& e = s.battlefield[static_cast<std::size_t>(ei)];
+        bool f4 = false;
+        const std::vector<ShieldOpt> opts = ShieldOptions(s, e, dmg, moved, f4);
+        if (opts.empty()) { continue; }
+        // SYMMETRY (F4 only): an interchangeable en-Kor right after one with the same list starts at its pick.
+        std::size_t from = 0;
+        if (f4 && prev_f4 && prev != nullptr && prev->card.m_name == e.card.m_name && prev->damage == e.damage
+            && LethalToughness(*prev, s) == LethalToughness(e, s)
+            && prev->HasKeyword(Keyword::Indestructible) == e.HasKeyword(Keyword::Indestructible)
+            && AuraHostDamageBackOn(s, prev->card.m_number) == AuraHostDamageBackOn(s, e.card.m_number)
+            && prev_opts.size() == opts.size()
+            && std::equal(opts.begin(), opts.end(), prev_opts.begin(),
+                          [](const ShieldOpt& a, const ShieldOpt& c) { return a.dest == c.dest && a.amount == c.amount; }))
+        { from = prev_pos; }
+        std::vector<int> legal;
+        for (std::size_t k = from; k < opts.size(); ++k) { legal.push_back(ShieldCode(opts[k].dest, opts[k].amount)); }
+        int pick = legal.front();
+        if (legal.size() > 1) { pick = PinnedChoice(legal); }   // the viewer, if asking, defaults to it
+        const auto [pdest, pamt] = ShieldDecode(pick);
+        std::size_t pos = from;
+        for (std::size_t k = from; k < opts.size(); ++k) { if (opts[k].dest == pdest && opts[k].amount == pamt) { pos = k; break; } }
+        std::vector<std::pair<int, int>> alloc;   // this en-Kor's (dest, amount)
+        if (pamt > 0) { alloc.push_back({ pdest, pamt }); }
+        if (ask)   // human play: the full allocation through the viewer's `divide` prompt
+        {
+            ShieldPrompt pr;
+            pr.enkor = ei;
+            pr.total = dmg;
+            pr.legal.push_back(ei);
+            for (std::size_t i = 0; i < s.battlefield.size(); ++i)
+            {
+                const Permanent& q = s.battlefield[i];
+                if (static_cast<int>(i) != ei && q.card.IsCreature() && q.controller_index == e.controller_index)
+                { pr.legal.push_back(static_cast<int>(i)); }
+            }
+            pr.defaults.assign(pr.legal.size(), 0);
+            pr.defaults[0] = dmg - pamt;
+            for (std::size_t k = 1; k < pr.legal.size(); ++k)
+            { if (s.battlefield[static_cast<std::size_t>(pr.legal[k])].card.m_number == pdest) { pr.defaults[k] = pamt; } }
+            const CardDefinition* ed = Def(e);
+            if (pr.legal.size() > 1 && ed != nullptr)
+            {
+                std::vector<ChosenTarget> dflt;
+                for (std::size_t k = 0; k < pr.legal.size(); ++k)
+                { if (pr.defaults[k] > 0) { dflt.push_back({ 1, pr.legal[k], pr.defaults[k] }); } }
+                const ShieldPrompt* saved = t_viewer_shield;
+                t_viewer_shield = &pr;
+                const auto chosen = (*g_play_target_chooser)(s, *ed, controller, 0, dmg, dflt);
+                t_viewer_shield = saved;
+                int sum = 0;
+                std::vector<std::pair<int, int>> got;
+                bool ok = true;
+                for (const ChosenTarget& c : chosen)
+                {
+                    if (c.kind != 1 || c.amount < 0) { ok = false; break; }
+                    if (std::find(pr.legal.begin(), pr.legal.end(), c.index) == pr.legal.end()) { ok = false; break; }
+                    sum += c.amount;
+                    if (c.index != ei && c.amount > 0)
+                    { got.push_back({ s.battlefield[static_cast<std::size_t>(c.index)].card.m_number, c.amount }); }
+                }
+                if (ok && sum == dmg) { alloc = got; }
+            }
+        }
+        for (const auto& [dest, amt] : alloc)
+        {
+            for (int k = 0; k < amt; ++k) { b.shields.push_back({ e.card.m_number, dest }); }
+            moved.push_back({ dest, amt });
+            if (g_play_event_sink != nullptr && !TapSpeculatingNow())
+            {
+                const Permanent* t = FindPerm(s, dest);
+                EmitPlayEvent(s.turn_number, "redirect",
+                              "\xE2\x86\xAA " + e.card.m_name.str() + " {0} x" + std::to_string(amt) + ": the next "
+                              + std::to_string(amt) + " damage to it is dealt to "
+                              + (t != nullptr ? t->card.m_name.str() : std::string("a creature")) + " instead");
+            }
+        }
+        prev = &e; prev_opts = opts; prev_pos = pos; prev_f4 = f4;
     }
 }
 

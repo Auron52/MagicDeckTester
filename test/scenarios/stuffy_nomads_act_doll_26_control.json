@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "CONTROL for stuffy_nomads_act_doll_26: the Nomads replaced by a vanilla 1/1 of ours (no shields). The Act",
+    "reflects only 13 and the Doll pings once a turn after: no win by turn 6, so the shields make that kill.",
+    "Nomads en-Kor shields, design step 8 (docs/design/damage-reflection-pipeline.md 4.2 / 10). Nomads en-Kor +",
+    "Stuffy Doll (chosen the opponent) + four opponent Spirits = 6 creatures, so Blasphemous Act costs {2}{R}.",
+    "The Act deals 13 to each creature; Nomads' free {0} shields (activated in response to our own sweeper --",
+    "the rider, searched on the damage pipeline's pin stream) move all 13 of ITS damage onto the Doll. The",
+    "Doll's own 13 and the redirected 13 are ONE damage event (one reflection trigger for the total, rulings),",
+    "so the Doll reflects 26 -- exactly the opponent's life. The plain Act reflects only 13, and pinging once",
+    "a turn afterwards cannot reach 26 by turn 6."
+  ],
+  "deck": "decks/Stuffy Doll/Stuffy Doll.cod",
+  "turn": 4, "on_the_play": false, "active_life": 20, "opponent_life": 26,
+  "battlefield": [
+    { "name": "Mountain" },
+    { "name": "Mountain" },
+    { "name": "Plains" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Soldier"], "controller": 0 },
+    { "name": "Stuffy Doll" },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 },
+    { "token": true, "power": 1, "toughness": 1, "subtypes": ["Spirit"], "controller": 1 }
+  ],
+  "hand": [ "Blasphemous Act" ],
+  "library_filler": "Plains", "library_size": 40,
+  "depth": 3, "budget_ms": 50, "max_turns": 6,
+  "expect_no_win": true
+}

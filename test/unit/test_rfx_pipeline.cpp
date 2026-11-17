@@ -1292,3 +1292,188 @@ TEST_CASE("rfx step 7: Guilty Conscience on the Doll BEFORE the Act is a reachab
     CHECK(before >= 1);
     CHECK(after >= 1);
 }
+
+// ---- STEP 8: Nomads en-Kor redirection shields (design 2.2 step 1, 4.2, 10 step 8) ---------------------
+
+namespace
+{
+// Nomads en-Kor(s) #2001.. + Stuffy Doll #2010 (chosen the opponent) + four opponent Spirits; opponent at `opp`.
+GameState NomadsBoard(int nomads, int opp)
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    s.players[1].life = opp;
+    for (int i = 0; i < nomads; ++i) { PutRfx(s, "Nomads en-Kor", 2001 + i); }
+    PutRfx(s, "Stuffy Doll", 2010).chosen_player = 1;
+    for (int i = 0; i < 4; ++i) { TokenRfx(s, 2020 + i, 1, 1, 1, "Spirit"); }
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 8: en-Kor card data (the shared {0} shield param; a chooser, not a damage route)")
+{
+    for (const char* n : { "Nomads en-Kor", "Shaman en-Kor" })
+    {
+        const CardDefinition& d = DefRfx(n);
+        CHECK(d.params.redirect_shield);
+        CHECK(dmgrx::DefOffersShieldChoice(d));
+        CHECK_FALSE(dmgrx::DefCanDamageCreatures(d));
+        CHECK_FALSE(dmgrx::DefReflectsWithChoice(d));
+    }
+    CHECK(DefRfx("Nomads en-Kor").card.m_power == 1);
+    CHECK(DefRfx("Shaman en-Kor").card.m_toughness == 2);
+}
+
+TEST_CASE("rfx step 8: Act + Nomads + Doll -- the shields move the Nomads' 13 onto the Doll: ONE event of 26")
+{
+    GameState s = NomadsBoard(1, 40);
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    REQUIRE(Find(s, 2010) != nullptr);
+    CHECK(Find(s, 2010)->damage == 26);
+    REQUIRE(Find(s, 2001) != nullptr);              // the Nomads survives: every point moved off it (F4)
+    CHECK(Find(s, 2001)->damage == 0);
+    CHECK(s.players[1].life == 40 - 26);            // ONE reflection for the total ...
+    CHECK(dmgrx::t_last_drain.resolutions == 1);     // ... not 13 + 13
+    for (int i = 0; i < 4; ++i) { CHECK(Find(s, 2020 + i) == nullptr); }
+    // Two Nomads: 13 + 13 + 13 onto the Doll, still one trigger; identical en-Kors fold to one line.
+    GameState t = NomadsBoard(2, 40);
+    PerformDamageAllCreatures(t, 0, DefRfx("Blasphemous Act"), 13);
+    CHECK(Find(t, 2010)->damage == 39);
+    CHECK(t.players[1].life == 1);
+    CHECK(dmgrx::t_last_drain.resolutions == 1);
+    CHECK(Find(t, 2001) != nullptr);
+    CHECK(Find(t, 2002) != nullptr);
+}
+
+TEST_CASE("rfx step 8: a shield whose target has left the battlefield does nothing and is not spent (Q-R1)")
+{
+    GameState s = NomadsBoard(1, 20);
+    dmgrx::Batch b;
+    b.src.push_back({ DefRfx("Blasphemous Act").card, 0, false });
+    b.hits.push_back({ 0, { false, 2001 }, 1, false, false });
+    b.shields.push_back({ 2001, 2099 });             // #2099 is not on the battlefield
+    dmgrx::DealDamageBatch(s, b);
+    CHECK(Find(s, 2001) == nullptr);                 // the 1 stayed on the 1/1 Nomads
+    CHECK(s.players[1].life == 20);
+    // The same shield list with a live target after the dead one: the dead one is skipped, the live one moves it.
+    GameState t = NomadsBoard(1, 20);
+    b.shields.push_back({ 2001, 2010 });
+    dmgrx::DealDamageBatch(t, b);
+    REQUIRE(Find(t, 2001) != nullptr);
+    CHECK(Find(t, 2010)->damage == 1);
+    CHECK(t.players[1].life == 19);
+}
+
+TEST_CASE("rfx step 8: chained shields (E1 -> E2 -> Doll) spend each shield once; the point keeps its source")
+{
+    GameState s = NomadsBoard(2, 20);
+    dmgrx::Batch b;
+    b.src.push_back({ DefRfx("Blasphemous Act").card, 0, false });
+    b.hits.push_back({ 0, { false, 2001 }, 1, false, false });
+    b.shields.push_back({ 2002, 2010 });             // listed FIRST: applies only on the second pass
+    b.shields.push_back({ 2001, 2002 });
+    b.shields.push_back({ 2002, 2010 });             // a second E2 shield: nothing left for it to move
+    dmgrx::DealDamageBatch(s, b);
+    REQUIRE(Find(s, 2001) != nullptr);
+    REQUIRE(Find(s, 2002) != nullptr);
+    CHECK(Find(s, 2001)->damage == 0);
+    CHECK(Find(s, 2002)->damage == 0);
+    CHECK(Find(s, 2010)->damage == 1);
+    CHECK(s.players[1].life == 19);
+}
+
+TEST_CASE("rfx step 8: the shield allocation is SEARCHED -- Doll vs Reckoner branch, and each replays in the executor")
+{
+    // Nomads + Doll + a summoning-sick Boros Reckoner ("any target": its own sink class, not folded into the
+    // Doll's face-only one) + 4 Spirits = 7 creatures: the Act costs {1}{R}. Opponent at 60 (no kill: every
+    // line is played to its end state).
+    GameState s = NomadsBoard(1, 60);
+    PutRfx(s, "Boros Reckoner", 2011).entered_this_turn = true;
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 2010) { p.tapped = true; } }   // no ping line
+    for (Permanent& p : s.battlefield) { if (p.card.m_number == 2001) { p.entered_this_turn = true; } }   // no attack
+    for (int i = 0; i < 2; ++i) { PutRfx(s, "Mountain", 2030 + i); }
+    Card act = DefRfx("Blasphemous Act").card; act.m_number = 2040;
+    s.players[0].hand.push_back(act);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 2050 + i; s.players[0].library.push_back(m); }
+    const auto plans = TurnSolver::EnumerateMainPlans(s, true);
+    const int to_doll = dmgrx::ShieldCode(2010, 13), to_reck = dmgrx::ShieldCode(2011, 13);
+    std::set<int> first_pins;
+    for (const auto& p : plans)
+    {
+        const bool casts = std::any_of(p.actions.begin(), p.actions.end(), [](const Action& a)
+            { return a.card_name.str() == "Blasphemous Act"; });
+        if (!casts) { continue; }
+        REQUIRE_FALSE(p.reflect_targets.empty());
+        const int pin = p.reflect_targets.front();   // the shield choice resolves BEFORE the reflections
+        first_pins.insert(pin);
+        GameState roll = s;
+        TurnSolver::ApplyPlan(roll, p, true);
+        const int dest = pin == to_doll ? 2010 : 2011;
+        INFO("shield dest ", dest);
+        // (the Nomads keeps none of the Act's 13, but the Reckoner's reflection may still be aimed at it)
+        if (p.reflect_targets.size() >= 2 && p.reflect_targets[1] == dmgrx::PlayerId(1)) { CHECK(Find(roll, 2001) != nullptr); }
+        // (the Reckoner's own reflection is a further searched target -- it may hit the Doll too)
+        if (dest == 2010) { CHECK(Find(roll, 2010)->damage >= 26); }
+        else { CHECK(Find(roll, 2011) == nullptr); CHECK(Find(roll, 2010)->damage >= 13); }
+        GameState exec = s;
+        AIEngine eng(MulliganProfile::DefaultProfile(), 3, 20);
+        MtgTestSeam::CommitPhasePlan(eng, p, true);
+        eng.TakeTurn(exec, true, ResolveStackRfx);
+        CHECK(exec.players[1].life == roll.players[1].life);
+        REQUIRE(Find(exec, 2010) != nullptr);
+        CHECK(Find(exec, 2010)->damage == Find(roll, 2010)->damage);
+        CHECK((Find(exec, 2001) != nullptr) == (Find(roll, 2001) != nullptr));
+    }
+    CHECK(first_pins == std::set<int>{ to_doll, to_reck });
+}
+
+TEST_CASE("rfx step 8: no sink reflector -> the landmarks, {0} first (the legacy outcome where nothing pins)")
+{
+    // Nomads + a LIVE Boros Reckoner (3/3) under a 1-damage sweep: no sink with a reflection, so F4 does not hold.
+    GameState s = ArmedState();
+    PutRfx(s, "Nomads en-Kor", 2101);
+    PutRfx(s, "Boros Reckoner", 2102);
+    bool f4 = true;
+    const auto opts = dmgrx::ShieldOptions(s, *Find(s, 2101), 1, {}, f4);
+    CHECK_FALSE(f4);
+    REQUIRE(opts.size() == 2);
+    CHECK((opts[0].dest == 0 && opts[0].amount == 0));
+    CHECK((opts[1].dest == 2102 && opts[1].amount == 1));
+    // Unpinned (no plan): the front -- no shield; the Nomads dies, the Reckoner reflects only its own 1.
+    const CardDefinition& pyro = DefRfx("Blasphemous Act");
+    PerformDamageAllCreatures(s, 0, pyro, 1);
+    CHECK(Find(s, 2101) == nullptr);
+    REQUIRE(Find(s, 2102) != nullptr);
+    CHECK(Find(s, 2102)->damage == 1);
+}
+
+TEST_CASE("rfx step 8: human play is ASKED a divide over the en-Kor and our other creatures")
+{
+    GameState s = NomadsBoard(1, 40);
+    int asked = 0;
+    std::vector<int> seen_legal;
+    int seen_total = 0;
+    TargetChooser chooser = [&](const GameState&, const CardDefinition& def, int, int, int per,
+                                const std::vector<ChosenTarget>&) -> std::vector<ChosenTarget>
+    {
+        ++asked;
+        CHECK(def.params.redirect_shield);
+        REQUIRE(dmgrx::t_viewer_shield != nullptr);
+        seen_legal = dmgrx::t_viewer_shield->legal;
+        CHECK(dmgrx::t_viewer_shield->defaults == std::vector<int>{ 0, 13 });   // the engine's F4 pick
+        seen_total = per;
+        // the human keeps 5 on the Nomads and moves 8 onto the Doll
+        return { ChosenTarget{ 1, seen_legal[0], 5 }, ChosenTarget{ 1, seen_legal[1], 8 } };
+    };
+    TargetChooser* saved = g_play_target_chooser;
+    g_play_target_chooser = &chooser;
+    PerformDamageAllCreatures(s, 0, DefRfx("Blasphemous Act"), 13);
+    g_play_target_chooser = saved;
+    CHECK(asked == 1);
+    CHECK(seen_total == 13);
+    CHECK(seen_legal.size() == 2);                  // the Nomads itself, then the Doll (the Spirits are not ours)
+    CHECK(Find(s, 2001) == nullptr);                 // 5 on a 1/1
+    CHECK(Find(s, 2010)->damage == 21);
+    CHECK(s.players[1].life == 40 - 21);
+}

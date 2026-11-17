@@ -894,6 +894,12 @@ struct CardParams
     // whole cost; the ModeSpec tables key on optional<ManaCost>::has_value() -- Wellwisher's shape).
     int self_ping_damage = 0;
     std::optional<ManaCost> self_ping_cost;
+    // Nomads en-Kor / Shaman en-Kor: "{0}: The next 1 damage that would be dealt to this creature this turn
+    // is dealt to target creature you control instead." A REDIRECTION shield (CR 614.9), activatable any
+    // number of times. JSON `redirect_shield_cost` (only "{0}" is accepted: the shields are offered as a
+    // free rider on our own creature sweeper, which carries no bill -- design 4.2 / section 14 step 8).
+    // Read by dmgrx::Sweep (the rider) and dmgrx::ApplyOne step 1 (the replacement); arms reflect_armed.
+    bool redirect_shield = false;
     // Screaming Nemesis's rider on its reflection: "If a player is dealt damage this way, they can't
     // gain life for the rest of the game." Sets GameState::cant_gain_life_rest_of_game_mask for each
     // player its reflection actually deals damage to (the bit outlives the creature, rulings).

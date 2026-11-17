@@ -17547,6 +17547,46 @@
    }
   },
   {
+   "name": "Nomads en-Kor",
+   "mana_cost": "{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kor",
+    "Nomad",
+    "Soldier"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 1,
+   "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead. [redirect_shield_cost {0}: a REDIRECTION shield (CR 614.9), activatable any number of times. Hosted as a free RIDER on our own creature sweeper (dmgrx::AddShieldRider, design 4.2): nothing can happen between our sorcery-speed cast and its resolution, so activating in response is the same as activating as it resolves. The allocation -- how many of the d points the sweeper deals this creature move, and onto which creature we control -- is SEARCHED on the damage pipeline's pin stream (the reflection-target axis), with the SOUND fold F4 (all d onto an indestructible or doomed reflector weakly dominates; face-only reflectors folded to the highest multiplicity) and otherwise the design's landmarks ({0}, all / keep-alive / survivable amounts onto each reflector class, all onto a doomed non-reflector to keep this creature alive); identical en-Kors fold by permutation. Redirected damage keeps its source (and combat flag, ruling) and combines with the sweeper's own damage to the target into ONE damage event per creature (one reflection trigger for the total). A shield whose target has left the battlefield does nothing and is NOT spent (CR 614.9; USER question Q-R1, default). Human play: the viewer's `divide` prompt with the full allocation. PROVISIONAL (USER Q-U1): no other activation window is offered -- shields against a reflection trigger aimed at this creature are dominated by aiming it at the shield's target directly (F2), and shields against a Guilty Conscience on this creature are not offered; no shield is left over for later damage this turn.]",
+   "template": "custom",
+   "parameters": {
+    "redirect_shield_cost": "{0}"
+   }
+  },
+  {
+   "name": "Shaman en-Kor",
+   "mana_cost": "{1}{W}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Kor",
+    "Cleric",
+    "Shaman"
+   ],
+   "keywords": [],
+   "power": 1,
+   "toughness": 2,
+   "oracle_text": "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you control instead. {1}{W}: The next time a source of your choice would deal damage to target creature this turn, that damage is dealt to this creature instead. [First ability: redirect_shield_cost {0}: a REDIRECTION shield (CR 614.9), activatable any number of times. Hosted as a free RIDER on our own creature sweeper (dmgrx::AddShieldRider, design 4.2): nothing can happen between our sorcery-speed cast and its resolution, so activating in response is the same as activating as it resolves. The allocation -- how many of the d points the sweeper deals this creature move, and onto which creature we control -- is SEARCHED on the damage pipeline's pin stream (the reflection-target axis), with the SOUND fold F4 (all d onto an indestructible or doomed reflector weakly dominates; face-only reflectors folded to the highest multiplicity) and otherwise the design's landmarks ({0}, all / keep-alive / survivable amounts onto each reflector class, all onto a doomed non-reflector to keep this creature alive); identical en-Kors fold by permutation. Redirected damage keeps its source (and combat flag, ruling) and combines with the sweeper's own damage to the target into ONE damage event per creature (one reflection trigger for the total). A shield whose target has left the battlefield does nothing and is NOT spent (CR 614.9; USER question Q-R1, default). Human play: the viewer's `divide` prompt with the full allocation. PROVISIONAL (USER Q-U1): no other activation window is offered -- shields against a reflection trigger aimed at this creature are dominated by aiming it at the shield's target directly (F2), and shields against a Guilty Conscience on this creature are not offered; no shield is left over for later damage this turn. Second ability ({1}{W} source pull): NOT YET MODELLED (design step 9) -- the card currently plays as a 1/2 with the {0} shield only.]",
+   "template": "custom",
+   "parameters": {
+    "redirect_shield_cost": "{0}"
+   }
+  },
+  {
    "name": "Stuffy Doll",
    "mana_cost": "{5}",
    "types": [

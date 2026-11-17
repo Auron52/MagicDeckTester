@@ -4218,7 +4218,7 @@ static std::vector<TargetOption> EnumerateTargetSets(const std::vector<ChosenTar
 static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const std::string& source,
                                     const std::vector<ChosenTarget>& legal, const std::vector<std::string>& legal_labels,
                                     int total, const std::vector<int>& default_amounts, int decision_index,
-                                    bool allow_none = false)
+                                    bool allow_none = false, const std::string& note_override = std::string())
 {
     DecisionJson d(os, decision_index);
     d.Type("divide").Source(source).Turn(s).Int("total_damage", total).Board(s);
@@ -4232,7 +4232,8 @@ static void WriteDivideDecisionJson(std::ostream& os, const GameState& s, const 
            << "\", \"index\": " << legal[i].index << ", \"label\": "; JsonStr(os, legal_labels[i]);
         os << ", \"default\": " << (i < default_amounts.size() ? default_amounts[i] : 0) << " }";
     });
-    if (allow_none)
+    if (!note_override.empty()) { d.Note(note_override); }   // the en-Kor shield divide (main.cpp target chooser)
+    else if (allow_none)
     {
         d.Note("reply one integer per legal target (in this order), each >= 0, summing to "
                + std::to_string(total) + " -- or ALL ZERO for no targets (no damage). Default = the "
@@ -7567,6 +7568,60 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
         [this](const GameState& s, const CardDefinition& def, int controller, int max_targets,
             int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
+            // en-Kor shields (Nomads / Shaman en-Kor's {0}, dmgrx::AddShieldRider): our sweeper is about to
+            // deal `per_target_damage` to the en-Kor; the player divides it between the en-Kor itself (= no
+            // shield) and the other creatures they control (one {0} activation per point moved). The
+            // `divide` decision over dmgrx::t_viewer_shield's legal set (the en-Kor FIRST), the reply one
+            // integer per legal creature summing to the total. Default = the engine's allocation.
+            if (dmgrx::t_viewer_shield != nullptr && def.params.redirect_shield)
+            {
+                const dmgrx::ShieldPrompt& pr = *dmgrx::t_viewer_shield;
+                std::vector<ChosenTarget> legal; std::vector<std::string> legal_labels;
+                for (std::size_t k = 0; k < pr.legal.size(); ++k)
+                {
+                    const Permanent& p = s.battlefield[static_cast<std::size_t>(pr.legal[k])];
+                    legal.push_back({ 1, pr.legal[k], 0 });
+                    legal_labels.push_back(ProtocolPTLabel(p, s) + (k == 0 ? " (keep: not redirected)" : ""));
+                }
+                const int total = pr.total;
+                const int need  = static_cast<int>(legal.size());
+                const std::vector<int>& defaults = pr.defaults;
+                const std::string note = "reply one integer per creature (in this order), each >= 0, summing to "
+                    + std::to_string(total) + ": how much of the " + std::to_string(total) + " damage about to be "
+                    "dealt to " + def.card.m_name.str() + " stays on it (the first entry) or is redirected onto "
+                    "each other creature you control (one {0} activation per point). Default = the engine's allocation.";
+                int di = static_cast<int>(cursor);
+            claude_retry_shield:  // --interactive: new picks arrived on stdin; re-test the consume branch
+                if (cursor + need <= static_cast<int>(choices.size()))
+                {
+                    std::vector<int> amts(need);
+                    int sum = 0;
+                    for (int i = 0; i < need; ++i) { int a = choices[cursor++]; if (a < 0) { a = 0; } amts[i] = a; sum += a; }
+                    ++decisions_made;
+                    std::vector<ChosenTarget> built;
+                    for (int i = 0; i < need; ++i)
+                    { if (amts[i] > 0) { ChosenTarget c = legal[i]; c.amount = amts[i]; built.push_back(c); } }
+                    if (!log_dir.empty())
+                    {
+                        std::ostringstream ss;
+                        ss << "{ \"chosen\": [";
+                        for (int i = 0; i < need; ++i) { if (i) ss << ", "; ss << amts[i]; }
+                        ss << "], \"decision\": ";
+                        WriteDivideDecisionJson(ss, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
+                                                /*allow_none=*/false, note);
+                        ss << "}";
+                        trace.push_back(ss.str());
+                    }
+                    return sum == total ? built : heuristic;
+                }
+                std::cout << "<<<CLAUDE_DECISION>>>\n";
+                WriteDivideDecisionJson(std::cout, s, def.card.m_name.str(), legal, legal_labels, total, defaults, di,
+                                        /*allow_none=*/false, note);
+                std::cout << "<<<END_DECISION>>>\n";
+                std::cout.flush();
+                if (AwaitMoreChoices()) { goto claude_retry_shield; }
+                std::exit(70);
+            }
             // Fury's ETB (etb_damage_divided_creatures): "N damage divided as you choose among any
             // number of target creatures and/or planeswalkers". The `divide` decision with the
             // resolver's OWN legal set (DividedCreatureDamageTargets -- creatures of both sides, no

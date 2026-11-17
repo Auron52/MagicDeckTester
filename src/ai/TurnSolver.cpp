@@ -99630,7 +99630,8 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         for (const Permanent& q : state.battlefield)
         {
             const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
-            if (d && dmgrx::DefReflectsWithChoice(*d)) { chooser_on_board = true; break; }
+            // + an en-Kor of ours: our sweeper's shield allocation is a choice on the same pin stream (step 8)
+            if (d && (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d))) { chooser_on_board = true; break; }
         }
         auto plan_may_choose = [&](const TurnSolver::Plan& p) {
             bool damages = false, chooser = chooser_on_board;
@@ -99638,7 +99639,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 const CardDefinition* d = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
                 if (!d) { return; }
                 if (dmgrx::DefCanDamageCreatures(*d)) { damages = true; }
-                if (dmgrx::DefReflectsWithChoice(*d)) { chooser = true; }
+                if (dmgrx::DefReflectsWithChoice(*d) || dmgrx::DefOffersShieldChoice(*d)) { chooser = true; }
             };
             for (const Action& a : p.actions)
             {
