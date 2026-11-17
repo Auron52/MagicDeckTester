@@ -53,8 +53,44 @@ tap timing is load-bearing), Mind Stone, Arid Mesa (fetch hold modelled), shocks
 Scryfall JSONs: `build/scratch/stuffy/scry/` (primary build volume).
 
 ## Stage 2 — cards (in progress)
-Design phase: one unified engine design for the shared damage-event pipeline (all 11 cards hang off
-it), written to `docs/design/damage-reflection-pipeline.md`, then serial integration.
+Design DONE 2026-11-17: `docs/design/damage-reflection-pipeline.md` (Opus architect). One shared
+`src/core/DamageReflection.h` pipeline (shields -> aggregate per creature -> snapshot triggers ->
+SBA -> LIFO trigger resolution; executor AND rollout call it), armed per deck via
+`GameState::reflect_armed` so other decks stay byte-identical. Loops iterate for real under a 65,536
+resolution cap + 64-step no-progress rule (proved unable to cut a lethal loop, life <= 30 / 2HG).
+Implementation = §10 steps 1-11 (12 optional speed cert; 13/14 only on USER request), one fresh
+implementer agent per step, serial.
+
+| step | content | status |
+|---|---|---|
+| 1 | pipeline core, no cards | pending |
+| 2 | Maniac, Reckoner, Nemesis, Act (per-creature cost reducer), Chain Reaction; target fold + in-window ABORT tripwire | pending |
+| 3 | searched reflection-target axis (Incinerator precedent) | pending |
+| 4 | Stuffy Doll (choose player, {T} self-ping) | pending |
+| 5 | Guilty Conscience (+ combat damage hook, loops) | pending |
+| 6 | Spiteful Sliver | pending |
+| 7 | Loran's Escape | pending |
+| 8 | Nomads en-Kor shields (sweeper rider) | pending |
+| 9 | Shaman en-Kor {1}{W} pull | pending |
+| 10 | StuffyDollProvider + ExtraLethalDamage | pending |
+| 11 | second main (Q-U4) | pending |
+
+Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
+provider pick (existing engine-wide cast_scry practice); second main ON subject to measurement;
+deferrals provisional.
 
 ## Open questions for the USER (surfaced, not blocking)
-(none yet)
+- Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
+  Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
+  source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
+  order (design §4.7 proof).
+- Q-U2 Forbidden Orchard: keep turn-start Spirit model (default; equals the legal "tap every Orchard
+  at main-1 start" line, never worse here) or build tap-time Spirits (moves Hinata/Creature Giving).
+- Q-U3 Loran's Escape scry 1: provider pick like every other spell scry today (default), or searched?
+  Note the provider pick is an in-window single pick — the NO-GREEDY rule may want it purged engine-wide.
+- Q-U4 second main for this deck: recommend ON, measured before adoption.
+- Q-U5 cast-order rules: USER-owned; none proposed, order is searched.
+- Rules check before step 8: is an en-Kor shield consumed when its redirect target has left the
+  battlefield? (default: not consumed — it simply doesn't apply).
+- Side finding R7: two rollout-only kill paths (TurnSolver.cpp ~73041/~73148) ignore indestructible
+  and skip death triggers — not on this deck's paths; separate fix.
