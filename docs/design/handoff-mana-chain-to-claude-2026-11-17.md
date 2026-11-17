@@ -2,15 +2,38 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:13 UTC
+## Current state, updated 05:17 UTC
 
-**Current simulation:** due-four mana gate resumed at eight workers
-after smoke, exec session `46978`, console
+**Active build:** `MTG_RSS_CAP_GB=40 ./build.sh pgo` for source
+`f7cce0693b6a16d779df5ac756af16100e3b677d`, exec session
+`97680`, console
+`build/scratch/dragonstorm_visible_lump_ab/rebased_pgo_build.out`.
+Check its exit and PGO source stamp before any fresh mana gate. A
+second reference safety scan is also running (session `70825`, output
+`build/scratch/dragonstorm_visible_lump_ab/reference_check_pre_push.out`)
+but the push now waits on this new source validation.
+
+**Upstream source integration supersedes the active gate:** at 05:15
+UTC, `origin/phase-1-2-deck-analyzer` gained three Boars label-memory
+commits (`37eebd3ab`, `2d56d1716`, `596ae188e`), including
+`src/ai/TurnSolver.cpp`. I stopped the old-source due-four gate after
+three additional attempt-3 chunks and rebased all 51 local commits
+cleanly. The new `HEAD:src` is
+`f7cce0693b6a16d779df5ac756af16100e3b677d`; old PGO stamp
+`fcb9352608ea` is stale. The due-four run was planned at that old
+source and **must not be resumed after this rebase**. Its completed
+Bruna 5,000-game record remains valid only for the old source; the
+other three are incomplete. Run `./build.sh pgo` for the new tree,
+then start fresh due records under new run names. The failed smoke
+analysis below remains a baseline issue; the new upstream source also
+requires a post-rebase smoke before the shared push. No push yet.
+
+**Historical old-source gate:** due-four mana gate had resumed at eight
+workers after the first smoke, exec session `46978`, console
 `build/scratch/dragonstorm_visible_lump_ab/due_four_resume8_after_smoke.out`.
-It continues attempt 3 from finished chunks in the same run. Do not
-launch a second top-level simulation batch while it runs. On completion
-read `logs/mana_clean/codex-due-four-20261117/report.md`, update
-`test/mana_clean.json`, and commit the result with this handoff.
+It was stopped for the new upstream source integration above. Its
+completed chunks remain archived, but its run plan cannot resume under
+the new source hash. No simulation batch is active until the new build.
 
 **Push temporarily held by smoke failure:** the full post-rebase
 `bash test/regression.sh --smoke` finished with 180 passed, 39 failed,
@@ -21,14 +44,11 @@ Unpredictable Cyclone, Creature Giving, Five Colour, Critter Lifegain,
 Heliod, Melira, Minotaur, Selesnya, Prevent Damage, Galadriel, and
 Vampires. Full output:
 `build/scratch/dragonstorm_visible_lump_ab/rebase_smoke.out`.
-The source hash is unchanged by the rebase, and the remote's three new
-commits touched only the Red Elementals value sidecar and its GT; this
-is not automatically attributable to the rebase. Classify the 15
-searched slower games before accepting GT or pushing; use
-`bash test/classify_turn_later.sh smoke`, investigate any persistent
-regressions, then rerun smoke/accept only with evidence. The due-four
-mana gate remains paused at completed chunks and can resume after the
-smoke investigation. The 05:09 push window is open, but no push yet.
+At the time of this **first** rebase, the source hash was unchanged and
+the remote's three commits touched only the Red Elementals value sidecar
+and its GT. These failures are not attributable to that rebase. The
+newer Boars source rebase above is a separate event and needs its own
+smoke. The 05:09 push window is open, but no push yet.
 The smoke audit's searched rows are 15 slower, 13 faster, 345 changed
 at the same score; over 14,515 searched games the net loss-penalized
 delta is **+4 turn-games** (+0.000276 per game). d0 is 248 slower and
@@ -42,10 +62,10 @@ the **same T5** on both, though committed `.wins` says old T4 in each;
 the baseline snapshot is `logs/snapshots/smoke-baseline` (built from
 f2156d4e6 with dirty state). Investigate this GT/snapshot mismatch
 before accepting, and review the same-score changes by affected deck.
-No GT acceptance or push has occurred. The mana gate can resume in
-parallel with read-only GT analysis, one simulation batch at a time.
-Source scope check at 05:15 UTC: the only four unpushed source commits
-since `origin/phase-1-2-deck-analyzer` are Dragonstorm Ruby and Apex
+No GT acceptance or push has occurred. The old-source mana gate is
+archived; start a new run after rebuilding the new source.
+Source scope check before the Boars rebase: the only four local source
+commits since the then-current origin were Dragonstorm Ruby and Apex
 provider/solver changes plus the storage-land backtracker repair.
 `cards.json` marks only Dwarven Hold and Mercadian Bazaar as
 `storage_land`, and `rg` finds those only in the Dragonstorm shipping
