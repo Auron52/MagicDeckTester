@@ -13,12 +13,13 @@
 //  4. Provider order: lever OFF returns the tapped Mystic Monastery; lever ON returns the untapped
 //     Forbidden Orchard (USER: "the monastery will come into play tapped again"), floating one unit of
 //     its free colour choice and creating NO second Spirit.
-//  5. An untapped land whose tap has a cost (Brushland, pain) is NOT floatable: the lever keeps the
+//  5. An untapped land whose tap has a cost (Brushland, pain) is NOT a no-loss bounce: the lever keeps the
 //     old rank against a tapped tapland, and if it must be returned anyway nothing floats.
 //  6. A choice-of-two land commits its float NEED-AWARE (the shared real-float colour rule): Spirebluff
 //     Canal floats {R} for a hand holding Lightning Bolt, and its first colour ({U}) for an empty hand.
 //  7. MTG_KAROO_FLOAT_RESTRICTED_C: a creature-only-colour land floats its plain {C}, never a colour.
 //  8. MTG_KAROO_FLOAT_LINE_COLOUR: a choice land commits the colour the rest of the applying line owes.
+//  9. MTG_KAROO_FLOAT_PAINLAND_C / _OWED: a painland floats its painless {C}, or the owed colour for its damage.
 #include <doctest/doctest.h>
 
 #include "cards/CardDatabase.h"
@@ -200,6 +201,16 @@ TEST_CASE("Karoo bounce order: lever OFF returns the tapped Monastery, lever ON 
     }
 }
 
+namespace
+{
+struct SlotArm
+{
+    int slot; std::int8_t prev;
+    SlotArm(int sl, bool on) : slot(sl), prev(heurarm::t_arm[sl]) { heurarm::t_arm[sl] = on ? 1 : 0; }
+    ~SlotArm() { heurarm::t_arm[slot] = prev; }
+};
+}   // namespace
+
 TEST_CASE("Karoo tap-in-response: a land whose tap has a cost (painland) is not floatable")
 {
     EnsureCardsLoaded();
@@ -217,6 +228,8 @@ TEST_CASE("Karoo tap-in-response: a land whose tap has a cost (painland) is not 
         CHECK(ranked.front() == mon);
     }
     {
+        // MTG_KAROO_FLOAT_PAINLAND_C off: the old refusal, nothing floats.
+        SlotArm pc(heurarm::KAROO_FLOAT_PAINLAND_C, false);
         GameState s = Fresh();
         Put(s, "Brushland", 1, /*tapped=*/false);   // the only other land: it must go
         const int k = PlayKaroo(s, 2);
@@ -224,6 +237,62 @@ TEST_CASE("Karoo tap-in-response: a land whose tap has a cost (painland) is not 
         CHECK(InHand(s, "Brushland"));
         CHECK(s.floating_mana.Total() == 0);
         CHECK(s.players[0].life == 20);             // no pain was paid for a tap that never happened
+    }
+}
+
+// MTG_KAROO_FLOAT_PAINLAND_C / _OWED (heurarm KAROO_FLOAT_PAINLAND_C, KAROO_FLOAT_PAINLAND_OWED). A painland's
+// "{T}: Add {C}" is a separate painless ability, so the bounce floats it; when the rest of the line owes a colour the
+// land makes, the coloured mode (and its damage) is taken instead.
+TEST_CASE("Karoo tap-in-response: a returned painland floats its painless {C}, or the owed colour for pain")
+{
+    EnsureCardsLoaded();
+    LeverArm on(true);
+    SlotArm pc(heurarm::KAROO_FLOAT_PAINLAND_C, true);
+    SlotArm lc(heurarm::KAROO_FLOAT_LINE_COLOUR, true);
+    {
+        SlotArm po(heurarm::KAROO_FLOAT_PAINLAND_OWED, true);
+        GameState s = Fresh();                      // nothing owed -> the free {C}
+        Put(s, "Brushland", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(InHand(s, "Brushland"));
+        CHECK(s.floating_mana.colorless == 1);
+        CHECK(s.floating_mana.Total() == 1);
+        CHECK(s.players[0].life == 20);
+    }
+    ManaCost owed_g; owed_g.green = 1;
+    {
+        SlotArm po(heurarm::KAROO_FLOAT_PAINLAND_OWED, true);
+        LineUnpaidCostScope luc(owed_g);
+        GameState s = Fresh();                      // the line owes {G} -> {G}, 1 damage
+        Put(s, "Brushland", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(s.floating_mana.green == 1);
+        CHECK(s.floating_mana.Total() == 1);
+        CHECK(s.players[0].life == 19);
+    }
+    {
+        SlotArm po(heurarm::KAROO_FLOAT_PAINLAND_OWED, false);
+        LineUnpaidCostScope luc(owed_g);
+        GameState s = Fresh();                      // owed lever off -> always the free {C}
+        Put(s, "Brushland", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(s.floating_mana.colorless == 1);
+        CHECK(s.floating_mana.Total() == 1);
+        CHECK(s.players[0].life == 20);
+    }
+    {
+        SlotArm po(heurarm::KAROO_FLOAT_PAINLAND_OWED, true);
+        LineUnpaidCostScope luc(owed_g);
+        GameState s = Fresh();                      // a creature-only pain land (Voldaren Estate) never floats a colour
+        Put(s, "Voldaren Estate", 1, /*tapped=*/false);
+        const int k = PlayKaroo(s, 2);
+        BounceKarooLand(s, 0, k);
+        CHECK(s.floating_mana.colorless == 1);
+        CHECK(s.floating_mana.Total() == 1);
+        CHECK(s.players[0].life == 20);
     }
 }
 
@@ -256,15 +325,6 @@ TEST_CASE("Karoo tap-in-response: a choice-of-two land commits its float need-aw
 // returned an untapped Unclaimed Territory with nothing floated (colour-for-creatures-only lands were not floatable),
 // and the continuation's Deathbellow Raider {1}{R} was one short. The Territory's "{T}: Add {C}" is unrestricted, so
 // it floats exactly {C} -- never a colour, which would launder the creature-only restriction.
-namespace
-{
-struct SlotArm
-{
-    int slot; std::int8_t prev;
-    SlotArm(int sl, bool on) : slot(sl), prev(heurarm::t_arm[sl]) { heurarm::t_arm[sl] = on ? 1 : 0; }
-    ~SlotArm() { heurarm::t_arm[slot] = prev; }
-};
-}   // namespace
 
 TEST_CASE("Karoo tap-in-response: a returned Unclaimed Territory floats its plain {C}, never a colour")
 {

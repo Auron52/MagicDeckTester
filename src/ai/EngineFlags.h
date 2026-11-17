@@ -1095,6 +1095,29 @@ inline bool KarooFloatLineColourOn()
     return heurarm::Flag(heurarm::KAROO_FLOAT_LINE_COLOUR, env_on);
 }
 
+// MTG_KAROO_FLOAT_PAINLAND_C -- DEFAULT ON; =0 restores the old refusal. A painland's "{T}: Add {C}" is a separate,
+// painless ability (the DripLandAnyPipColor / tap_source reading), but KarooBounceFloatable refused every
+// tap_self_damage land, so a Karoo bounce or a sacrifice of an untapped Llanowar Wastes floated nothing. On: it floats
+// exactly that {C}, never a colour (a coloured float costs life and is a choice). Read only by the float itself
+// (FloatLandBeforeSacrifice): the bounce ranking and the USER-rule candidate filters are unchanged.
+inline bool KarooFloatPainlandCOn()
+{
+    static const bool env_on = EnvOn("MTG_KAROO_FLOAT_PAINLAND_C", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::KAROO_FLOAT_PAINLAND_C, env_on);
+}
+
+// MTG_KAROO_FLOAT_PAINLAND_OWED -- DEFAULT ON; =0 floats the painless {C} always. With MTG_KAROO_FLOAT_PAINLAND_C, a
+// floated painland whose colour the rest of the applying line still owes (FloatLineOwedColour: the land drop's bound
+// demand, else the live hold, net of what floats) takes that coloured mode and pays its damage; otherwise {C}. A
+// dropped cast outweighs 1 life in almost every deck. The read is a bill, not an order: another untapped source may
+// have covered that colour, and then the life was spent for nothing. USER 2026-11-17: "The bigger question is
+// whether to float colourless or something else?" -- A/B'd both ways.
+inline bool KarooFloatPainlandOwedOn()
+{
+    static const bool env_on = EnvOn("MTG_KAROO_FLOAT_PAINLAND_OWED", true);   // DEFAULT ON; =0 -> always {C}
+    return heurarm::Flag(heurarm::KAROO_FLOAT_PAINLAND_OWED, env_on);
+}
+
 // MTG_BOUNCE_SEARCH -- DEFAULT ON (ADOPTED 2026-10-08 with the lever above). The Karoo bounce as a SEARCHED plan dimension (USER 2026-10-08: "The Karoo
 // decision should also be searched with heuristics. However, we may want to heuristic it more often
 // than not, since the decision is usually an easy one."). BounceKarooLand used to take

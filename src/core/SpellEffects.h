@@ -50877,10 +50877,12 @@ void ResolveExpressiveIteration(GameState& state);
 // Forbidden Orchard IS floatable: its Spirit is already modelled as one per turn in play (the tap is
 // assumed every turn), so this tap adds no second Spirit. A land Aura's extra mana rides the tap
 // (Wild Growth triggers on the tap, CR 605.1b), booked exactly as every real tap books it.
-// A colour-for-creatures-only land with an unrestricted {C} mode: the float is that {C}.
+// A colour-for-creatures-only land with an unrestricted {C} mode, or a PAINLAND whose {C} ability is separate and
+// painless (Llanowar Wastes, Caves of Koilos, Tarnished Citadel; the DripLandAnyPipColor reading): the float is that {C}.
 inline bool KarooFloatsPlainC(const CardDefinition& d)
 {
-    if (!d.params.colored_creature_only || ManaProducedPerTap(d) != 1) { return false; }
+    const bool painless_c = d.params.tap_self_damage > 0 && !d.params.tap_self_damage_any_mode;
+    if (!(d.params.colored_creature_only || painless_c) || ManaProducedPerTap(d) != 1) { return false; }
     for (Color c : d.params.produces) { if (c == Color::Colorless) { return true; } }
     return false;
 }
@@ -50897,7 +50899,8 @@ inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, con
     const CardParams& q = d.params;
     if (IsManaConversionSource(q) || IsPaySacSource(d) || IsScaledManaLand(d)
         || q.storage_land || q.domain_mana || q.gy_land_exile_mana
-        || q.tap_self_damage > 0 || q.tap_self_damage_any_mode || q.tap_opponent_lifegain > 0
+        || (q.tap_self_damage > 0 && !(plain_c && KarooFloatPainlandCOn() && KarooFloatsPlainC(d)))
+        || q.tap_self_damage_any_mode || q.tap_opponent_lifegain > 0
         || q.energy_per_colored_tap > 0
         || q.creature_mana_only
         || q.mana_only_spell_min_mv > 0 || q.mana_only_spell_or_x
@@ -51159,8 +51162,12 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     if (p.controller_index != controller) { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
     // A colour-for-creatures-only land (KarooFloatsPlainC) floats {C} and nothing else: its coloured mana is
-    // spend-restricted and the float is not (MTG_KAROO_FLOAT_RESTRICTED_C).
-    const bool plain_c = d != nullptr && d->params.colored_creature_only && KarooFloatRestrictedCOn();
+    // spend-restricted and the float is not (MTG_KAROO_FLOAT_RESTRICTED_C). A painland floats its painless {C}
+    // (MTG_KAROO_FLOAT_PAINLAND_C): one more mana than the old refusal, at no life; a coloured float for pain
+    // would be a choice, and is not made here.
+    const bool plain_c = d != nullptr
+        && ((d->params.colored_creature_only && KarooFloatRestrictedCOn())
+            || (d->params.tap_self_damage > 0 && KarooFloatPainlandCOn()));
     if (d == nullptr || !KarooBounceFloatable(state, p, *d, plain_c)) { return false; }
     const int pin = t_sac_victim_float_pin.color;
     t_sac_victim_float_pin.color = -1;
@@ -51174,7 +51181,16 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     t_sac_victim_float_pin.applied = pinned;
     p.tapped = true;
     const ManaPool before = state.floating_mana;
+    // A painland (not a creature-only one: its colour would launder the restriction) whose colour the rest of the
+    // line still owes takes the coloured mode and its damage (MTG_KAROO_FLOAT_PAINLAND_OWED); otherwise the free {C}.
+    const bool pain_land = plain_c && d->params.tap_self_damage > 0 && !d->params.colored_creature_only;
+    int pain_paid = 0;
     if (pinned)       { state.floating_mana.Add(static_cast<Color>(pin), 1); }
+    else if (pain_land && KarooFloatPainlandOwedOn() && FloatLineOwedColour(state, controller, *d, p))
+    {
+        pain_paid = d->params.tap_self_damage;   // KarooBounceFloatable refused an armed damage-event board
+        state.players[controller].life -= pain_paid;
+    }
     else if (plain_c) { state.floating_mana.Add(Color::Colorless, 1); }
     else if (!FloatLineOwedColour(state, controller, *d, p))
     { FloatSourceTapCommitted(state, controller, *d, &p); }
@@ -51190,7 +51206,8 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
         put(a.wild - before.wild, "{any}");
         EmitPlayEvent(state.turn_number, "ability",
                       p.card.m_name.str() + " -- tapped for " + got
-                      + " " + why + " (floating until the phase ends)");
+                      + " " + why + " (floating until the phase ends)"
+                      + (pain_paid > 0 ? " -- " + std::to_string(pain_paid) + " damage to you" : std::string()));
     }
     return true;
 }

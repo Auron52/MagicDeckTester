@@ -969,6 +969,8 @@ enum Slot : int
     SEA_SIN_STRIP_SAGAS,      // MTG_SEA_SIN_STRIP_SAGAS  Sea Creatures I5 (USER 2026-11-17 "We should search in the engine for sin, but heuristically prune so that it strips sagas. I don't think there are any other counters in the deck, but if anything else shows up I guess we can leave it?"): SeaCreaturesProvider::CounterHarvestSearchSubsets offers ONE subset -- every Saga with lore, no non-Saga permanent. Default ON; =0 -> every searched subset (human play / MTG_UNPRUNE=seasin always see every candidate)
     SEA_GORGER_ALL,           // MTG_SEA_GORGER_ALL  Sea Creatures I6 (USER 2026-11-16 "Trench Gorger is likely a "take all lands" type of effect since it is at the top of the curve, but we'll have to do some testing." / "Actually I guess less than 6."): SeaCreaturesProvider::RestrictExileLibraryLandsMenu offers ONE option -- exile every library land when the library holds >= 6, else decline (stay 6/6). Default ON; =0 -> the engine's searched menu (human play / MTG_UNPRUNE=seagorger always see every choice)
     PO_LAND_AURA_DOMAIN,      // MTG_PO_LAND_AURA_DOMAIN  the payable-order decider (PayableCastOrderCoreImpl, apply site: executor AND rollout) admits an order holding a land-Aura cast whose host is an untapped land we control (PoLandAuraHoldFor finds it), so the walk with the host held back can find the order that pays when the given one does not. A plan {Utopia Sprawl -> Breeding Pool, Worn Powerstone} admitted by the enumeration was realised Powerstone first (CastOrderLess), which tapped the host and dropped the Aura (Sea Creatures s8810001 gi64 T2). The ENUMERATION site too (SubsetPayableSequential's payable-order retry): an aura-only subset {Utopia Sprawl, Overgrowth} was walked in rank order only (Overgrowth first, unpayable) and refused (s8820001 gi39, s8830001 gi75). SPLIT HOSTS too: PoLandAuraHoldFor holds every distinct host (each released on its own, every release order tried) instead of refusing two, so {Sprawl -> Pool, Overgrowth -> Forest} on the gi39 board is admitted. A correctness fix of the apply and the enumeration. DEFAULT ON; =0 -> land Auras do not admit an order (byte-identical to before)
+    KAROO_FLOAT_PAINLAND_C,   // MTG_KAROO_FLOAT_PAINLAND_C  a land tapped in response to its own bounce / sacrifice (FloatLandBeforeSacrifice) that is a painland with a separate painless {C} ability (Llanowar Wastes, Caves of Koilos, Tarnished Citadel) floats that {C} instead of nothing (KarooFloatPainlandCOn, EngineFlags.h). Default ON; =0 -> not floatable, byte-identical to before
+    KAROO_FLOAT_PAINLAND_OWED,// MTG_KAROO_FLOAT_PAINLAND_OWED  with KAROO_FLOAT_PAINLAND_C: a floated painland takes the COLOURED mode (and its damage) when the rest of the applying line still owes a colour it makes (FloatLineOwedColour), else the free {C}. Default ON; =0 -> always {C}
     COUNT
 };
 
@@ -1882,6 +1884,8 @@ inline const char* Name(int slot)
         "MTG_SEA_SIN_STRIP_SAGAS",
         "MTG_SEA_GORGER_ALL",
         "MTG_PO_LAND_AURA_DOMAIN",
+        "MTG_KAROO_FLOAT_PAINLAND_C",
+        "MTG_KAROO_FLOAT_PAINLAND_OWED",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

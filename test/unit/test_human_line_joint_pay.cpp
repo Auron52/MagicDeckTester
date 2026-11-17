@@ -9,6 +9,7 @@
 // siblings; HumanPlayActive() is a process static a unit test cannot switch, so this drives the solve directly.
 #include <doctest/doctest.h>
 
+#include "ai/ManaPayment.h"          // LineUnpaidCostScope: the joint pay adds its activation hold to the line bill
 #include "ai/TurnSolver.h"
 #include "cards/CardDatabase.h"
 #include "core/GameSetup.h"
@@ -106,6 +107,9 @@ TEST_CASE("human line joint pay: the whole bill floats pinned, and every step dr
 {
     GameState s = BoardHljp(true);
     const TurnSolver::Plan plan = LineHljp();
+    // In play the plan apply's own scope restores the line hold the joint pay adds to; called bare, bind one
+    // here, or the activation hold leaks into every later test on this thread.
+    LineUnpaidCostScope luc(ManaCost{});
     REQUIRE(TurnSolver::HumanLineJointPrepay(s, plan));
     CHECK(UntappedHljp(s) == 0);
     CHECK(s.floating_mana.green == 3);
