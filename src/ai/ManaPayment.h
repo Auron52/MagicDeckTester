@@ -1021,6 +1021,25 @@ ManaCost ContinuationLineOwed(const GameState& state, const ManaCost& outer,
                               const std::vector<Action>* invoker, const std::vector<Action>& cont);
 // One action of it (a hand / graveyard cast of a ParamKeyedDrawClass card). No flag gate: callers gate.
 bool CastOpensUnseen(const GameState& state, const Action& a);
+// Whether the CURRENT section's g_line_opens_unseen was inherited from an outer line's still-pending opener (as
+// opposed to read off the section's own casts). Bound only by the continuation bindings (ContinuationOpensUnseen),
+// restored on exit; false elsewhere. Sticky: a section that inherited keeps passing it on.
+extern thread_local bool g_line_unseen_carried;
+// The opener flag a breakpoint CONTINUATION's cast section binds (cont_line_armed / ExecBindContinuationLine). The
+// continuation's own casts count as before. The invoking line's flag is inherited only while one of ITS openers is
+// still uncast (a copy in hand / graveyard: MTG_CONT_UNSEEN_PENDING), or when the invoker's flag was itself
+// inherited; the opener that invoked this continuation has resolved, and its reveal is what the continuation was
+// solved on. `carried` receives the inherited part, for the section's LineUnseenCarriedScope.
+bool ContinuationOpensUnseen(const GameState& state, const std::vector<Action>* invoker,
+                             const std::vector<Action>& cont, bool& carried);
+struct LineUnseenCarriedScope
+{
+    bool prev;
+    explicit LineUnseenCarriedScope(bool v) : prev(g_line_unseen_carried) { g_line_unseen_carried = v; }
+    ~LineUnseenCarriedScope() { g_line_unseen_carried = prev; }
+    LineUnseenCarriedScope(const LineUnseenCarriedScope&)            = delete;
+    LineUnseenCarriedScope& operator=(const LineUnseenCarriedScope&) = delete;
+};
 
 // RAII for g_line_opens_unseen, the LineUnpaidCostScope contract: a nested apply (a breakpoint
 // continuation) binds its own value and restores the outer one on exit.

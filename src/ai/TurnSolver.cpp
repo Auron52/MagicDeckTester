@@ -68283,6 +68283,53 @@ bool LineOpensUnseenCasts(const GameState& state, const std::vector<Action>& act
     return false;
 }
 
+// A CONTINUATION INHERITS THE OPENER FLAG ONLY WHILE AN OUTER OPENER IS STILL TO COME (MTG_CONT_UNSEEN_PENDING).
+// Dragonstorm gate codex-dragonstorm-ruby-song-20261117, seed 30075408 T4 (APPLY-DROP x6): {Rite, Desperate, Seething
+// Song, Apex of Power} cracks Lotus Bloom for {B}{B}{B}; Apex's continuation casts Ruby Medallion then Dragonlord
+// Kolaghan {4}{B}{R}. The continuation inherited the invoking line's flag (it casts Apex), so the line-aware generic
+// order stood down and the float drain's historical WUBRG order paid Ruby's {2} with the {B}s: Kolaghan was dropped
+// with ten {R} floating. Apex had already resolved -- its reveal is what the continuation was solved on -- so the
+// continuation's own list IS the rest of the turn unless an outer opener is still uncast. Pending = an opener cast of
+// the invoking list whose card is still in hand (graveyard, for a graveyard cast) AND whose share is still in the
+// invoking line's unpaid bill: a second Apex, the second Treasure Hunt of the TreasureHunt s3003 gi96 line. The bill
+// test is what tells the line's own copy from a spare one (s30075408 holds a second, unnamed Apex). A section whose own flag was
+// inherited passes it on unread (g_line_unseen_carried): its invoker's list is not the outermost one.
+bool ContinuationOpensUnseen(const GameState& state, const std::vector<Action>* invoker,
+                             const std::vector<Action>& cont, bool& carried)
+{
+    bool outer = g_line_opens_unseen;
+    if (outer && invoker != nullptr && !g_line_unseen_carried && ContUnseenPendingOn())
+    {
+        const Player& ap = state.players[state.active_player_index];
+        auto holds = [](const std::vector<Card>& zone, const std::string& n)
+        {
+            for (const Card& c : zone) { if (c.m_name.str() == n) { return true; } }
+            return false;
+        };
+        // ...and the invoking line's remaining bill (g_line_unpaid_cost: the outer hold, decremented as its casts
+        // pay) still carries that cast's pips and mana value. A spare copy in hand the line never names leaves
+        // no share of the bill. A free / alt-cost opener has no share to read, so a copy in hand keeps it pending.
+        const ManaCost& bill = g_line_unpaid_cost;
+        auto billed = [&](const Action& a)
+        {
+            if (a.free_cast || a.alt_cost) { return true; }
+            const ManaCost& c = a.cost;
+            return bill.white >= c.white && bill.blue >= c.blue && bill.black >= c.black && bill.red >= c.red
+                && bill.green >= c.green && bill.ManaValue() >= c.ManaValue();
+        };
+        outer = false;
+        for (const Action& a : *invoker)
+        {
+            if (!CastOpensUnseen(state, a)) { continue; }
+            const std::string n = a.card_name.str();
+            if (holds(a.kind == Action::Kind::CastFromGraveyard ? ap.graveyard : ap.hand, n) && billed(a))
+            { outer = true; break; }
+        }
+    }
+    carried = outer;
+    return outer || LineOpensUnseenCasts(state, cont);
+}
+
 // A CONTINUATION TAKES OVER THE CASTS IT RE-NAMES. The invoking line's hold (`outer`) still owes every cast of
 // its list it has not paid -- including the ones the continuation, re-solved with the drawn card, now casts
 // itself. Each such card is cast once (by the continuation); the invoking line's copy of the cast then finds no
@@ -75372,12 +75419,15 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
         // The continuation's own line (cont_line_armed), for the rest of this cast section.
         std::optional<LineUnpaidCostScope>  _cont_luc;
         std::optional<LineOpensUnseenScope> _cont_lou;
+        std::optional<LineUnseenCarriedScope> _cont_luk;
         if (cont_line)
         {
             const ManaCost owed = ContinuationLineOwed(state, g_line_unpaid_cost, line_section_acts, acts);
-            const bool unseen = g_line_opens_unseen || LineOpensUnseenCasts(state, acts);
+            bool carried = false;
+            const bool unseen = ContinuationOpensUnseen(state, line_section_acts, acts, carried);
             _cont_luc.emplace(owed);
             _cont_lou.emplace(unseen);
+            _cont_luk.emplace(carried);
         }
         // This section now carries the hold: a continuation it invokes takes its re-named casts off THIS list.
         struct SectionActsScope

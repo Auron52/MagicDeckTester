@@ -391,6 +391,16 @@ inline bool LineFloatUnseenGuardOn()
     return LineFloatTapFirstOn() && heurarm::Flag(heurarm::LINE_FLOAT_UNSEEN_GUARD, env_on);
 }
 
+// MTG_CONT_UNSEEN_PENDING -- DEFAULT ON; =0 -> a continuation always inherits the invoking line's opener flag. A
+// breakpoint continuation's cast section inherits g_line_opens_unseen only while an opener cast of the invoking list
+// is still uncast; the opener that invoked it has resolved. See ContinuationOpensUnseen (TurnSolver.cpp) for the
+// Dragonstorm s30075408 T4 trace.
+inline bool ContUnseenPendingOn()
+{
+    static const bool env_on = EnvOn("MTG_CONT_UNSEEN_PENDING", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::CONT_UNSEEN_PENDING, env_on);
+}
+
 // MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
 // LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
 // later pip may need it for that colour. When the reserve left after this payment's own pips already covers

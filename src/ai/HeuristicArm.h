@@ -971,6 +971,7 @@ enum Slot : int
     PO_LAND_AURA_DOMAIN,      // MTG_PO_LAND_AURA_DOMAIN  the payable-order decider (PayableCastOrderCoreImpl, apply site: executor AND rollout) admits an order holding a land-Aura cast whose host is an untapped land we control (PoLandAuraHoldFor finds it), so the walk with the host held back can find the order that pays when the given one does not. A plan {Utopia Sprawl -> Breeding Pool, Worn Powerstone} admitted by the enumeration was realised Powerstone first (CastOrderLess), which tapped the host and dropped the Aura (Sea Creatures s8810001 gi64 T2). The ENUMERATION site too (SubsetPayableSequential's payable-order retry): an aura-only subset {Utopia Sprawl, Overgrowth} was walked in rank order only (Overgrowth first, unpayable) and refused (s8820001 gi39, s8830001 gi75). SPLIT HOSTS too: PoLandAuraHoldFor holds every distinct host (each released on its own, every release order tried) instead of refusing two, so {Sprawl -> Pool, Overgrowth -> Forest} on the gi39 board is admitted. A correctness fix of the apply and the enumeration. DEFAULT ON; =0 -> land Auras do not admit an order (byte-identical to before)
     KAROO_FLOAT_PAINLAND_C,   // MTG_KAROO_FLOAT_PAINLAND_C  a land tapped in response to its own bounce / sacrifice (FloatLandBeforeSacrifice) that is a painland with a separate painless {C} ability (Llanowar Wastes, Caves of Koilos, Tarnished Citadel) floats that {C} instead of nothing (KarooFloatPainlandCOn, EngineFlags.h). Default ON; =0 -> not floatable, byte-identical to before
     KAROO_FLOAT_PAINLAND_OWED,// MTG_KAROO_FLOAT_PAINLAND_OWED  with KAROO_FLOAT_PAINLAND_C: a floated painland takes the COLOURED mode (and its damage) when the rest of the applying line still owes a colour it makes (FloatLineOwedColour), else the free {C}. Default ON; =0 -> always {C}
+    CONT_UNSEEN_PENDING,      // MTG_CONT_UNSEEN_PENDING  a breakpoint continuation inherits the invoking line's opener flag (g_line_opens_unseen) only while an opener of that line is still uncast (ContinuationOpensUnseen, TurnSolver.cpp). Dragonstorm mana-clean s30075408 T4: Apex's continuation paid Ruby Medallion's {2} with Lotus Bloom's {B}s under the WUBRG drain and dropped Dragonlord Kolaghan. Default ON; =0 -> always inherited, byte-identical to before
     COUNT
 };
 
@@ -1886,6 +1887,7 @@ inline const char* Name(int slot)
         "MTG_PO_LAND_AURA_DOMAIN",
         "MTG_KAROO_FLOAT_PAINLAND_C",
         "MTG_KAROO_FLOAT_PAINLAND_OWED",
+        "MTG_CONT_UNSEEN_PENDING",
     };
     // The enum and this table are ONE mapping split across two lists: a slot added to one and not
     // the other silently shifts every lever after it (a manifest asking for lever X would set Y).

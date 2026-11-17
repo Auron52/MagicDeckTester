@@ -8343,6 +8343,7 @@ thread_local ManaCost g_line_unpaid_cost;
 thread_local bool     g_line_hold_has_acts = false;   // see ManaPayment.h (LineUnpaidCostScope)
 thread_local bool     t_scarce_held_only = false;   // see ScarceHeldOnlyScope (ManaPayment.h)
 thread_local bool     g_line_opens_unseen = false;   // see ManaPayment.h (LineOpensUnseenScope)
+thread_local bool     g_line_unseen_carried = false; // see ManaPayment.h (LineUnseenCarriedScope)
 thread_local int      g_line_haste_takers = 0;       // see ManaPayment.h (LineHasteTakersScope)
 
 // TakeHasteFloatForCreatureSpell's condition on a bill: a {C} pip, or a non-snow generic pip.
