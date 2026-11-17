@@ -2,7 +2,17 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:57 UTC
+## Live status, updated 06:58 UTC
+
+**Active smoke + strict viewer gate:**
+`VPC_ALWAYS=1 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`
+is running in exec session `83386`, console
+`build/scratch/dragonstorm_visible_lump_ab/post_hidden_freecast_smoke.out`.
+Expect the prior 39 known GT baseline failures; compare per-game `.wins`
+to the archived pre-audit smoke under
+`build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins`
+to establish whether this audit-only source change moved play. Confirm
+the strict viewer stage passes. Then investigate Spirits seed 30040647 T4.
 
 **Breaching Dragonstorm diagnosis and audit fix complete:** The two
 fresh ENUM-GAP flags are **hidden future mana**, not a visible pre-cast
