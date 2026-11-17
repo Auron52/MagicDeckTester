@@ -52,13 +52,22 @@ colour the rest of the line owes (paying its damage), otherwise its painless `{C
 (`MTG_KAROO_FLOAT_PAINLAND_C` + `_OWED`, both ON). Three-arm A/B, EDF + Melira Pod x 5,000: no slower game in either
 arm; the owed arm has 1 earlier (EDF gi 524423). `docs/design/karoo-float-painland-2026-11-17.md`.
 
-**IN FLIGHT (13:40 UTC): Dragonstorm s30075408 T4 fix, uncommitted** (`MTG_CONT_UNSEEN_PENDING`,
-`ContinuationOpensUnseen` in TurnSolver.cpp, both continuation bindings; unit test `test_cont_unseen_pending.cpp`;
-unit 3,393/3,393). Exact seed APPLY-DROP 7 -> 1 (lever off 7); the one left is the two-Apex plan, where the first
-Apex's continuation correctly stays unseen. All-deck A/B running: `build/scratch/claude_cont_unseen_ab/` (1,200
-jobs: Dragonstorm 5,000 pairs, every other suite deck 1,000, games 530,000+; pid in `pid`; `compare.py` ready).
-Then: adopt by the bar, design note, commit, smoke before the 16:21 push, then the next Dragonstorm signatures
-(s30073082 T5 Karrthus x10, s30072155, s30074224, s30074081, s30076435).
+**DONE 14:35 UTC: Dragonstorm s30075408 continuation flag** `e720dc68d` (unpushed; `MTG_CONT_UNSEEN_PENDING`, ON).
+All-deck A/B (Dragonstorm 5,000 + every suite deck 1,000): 0 later, 1 earlier, every deck net <= 0.
+`docs/design/cont-unseen-pending-2026-11-17.md`.
+
+**Exact-seed recheck at e720dc68d** of the remaining gate signatures: s30074224 and s30076435 now replay clean;
+s30072155 APPLY-DROP 2, s30074081 1, s30072022 1 remain (outputs `build/scratch/claude_ds/s<seed>.out`).
+
+**IN FLIGHT (14:50 UTC): s30073082 T5 fix, uncommitted** (`MTG_ONDEMAND_VISIBLE_CONTRIB`, ON). At Apex's
+{6}{R}{R}{R} over seven floating {R}, the ordinary payment tapped Unclaimed Territory for {C}; Apex's continuation
+then lacked Karrthus's {G}. The Dragonstorm visible-closer lump rule (ManaPayment.cpp, on-demand payer) stood down
+because Scourge of Valkas sat in hand beside Karrthus, and never ran for the Apex-last plan (nothing owed after).
+Now only a creature that ADDS a pip counts toward "sole", and the rule also runs when the hold equals this cost.
+Exact seed APPLY-DROP 10 -> 0 (lever off 10). Unit test in `test_dragonstorm_followups.cpp`. Next: Dragonstorm-only
+A/B (the rule is provider-gated), 10,000 pairs, games 540,000+, `build/scratch/claude_visible_contrib_ab/`
+(manifest + compare.py ready); adopt by the bar, design note, commit; smoke before the 16:21 push.
+Then s30072155, s30074081, s30072022, then a fresh Dragonstorm gate.
 
 **Queue reorder (13:05 UTC):** after the painland A/B, the Dragonstorm APPLY-DROP clusters go BEFORE the PD CAPPED
 fold. The Dragonstorm flags are real engine drops (gate `codex-dragonstorm-ruby-song-20261117`: 28 APPLY-DROP, 16

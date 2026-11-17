@@ -401,6 +401,15 @@ inline bool ContUnseenPendingOn()
     return heurarm::Flag(heurarm::CONT_UNSEEN_PENDING, env_on);
 }
 
+// MTG_ONDEMAND_VISIBLE_CONTRIB -- DEFAULT ON; =0 restores the sole-hand-creature read. Dragonstorm's visible-closer
+// lump rule in the on-demand payer (ManaPayment.cpp) reads the one hand creature that ADDS a pip the line does not
+// already make, and also runs when nothing is owed after this cost. Mana-clean s30073082 T5.
+inline bool OnDemandVisibleContribOn()
+{
+    static const bool env_on = EnvOn("MTG_ONDEMAND_VISIBLE_CONTRIB", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::ONDEMAND_VISIBLE_CONTRIB, env_on);
+}
+
 // MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
 // LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
 // later pip may need it for that colour. When the reserve left after this payment's own pips already covers

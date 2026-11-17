@@ -442,6 +442,13 @@ const Permanent& PermFu(const GameState& s, const std::string& name)
     return s.battlefield.front();
 }
 
+Permanent& PermFuMut(GameState& s, const std::string& name)
+{
+    for (Permanent& p : s.battlefield) { if (p.card.m_name.str() == name) { return p; } }
+    FAIL("not on the battlefield: " << name);
+    return s.battlefield.front();
+}
+
 int DepletionFu(const Permanent& p)
 {
     int n = 0;
@@ -801,6 +808,52 @@ TEST_CASE("Dragonstorm: two visible closers do not select an unseen Apex continu
     }
     CHECK(std::any_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
     { return p.card.m_name == "Lotus Bloom"; }));
+}
+
+TEST_CASE("Dragonstorm: a red-only creature beside Karrthus does not hide Karrthus's Bloom colour (MTG_ONDEMAND_VISIBLE_CONTRIB)")
+{
+    // Mana-clean s30073082 T5: seven {R} float off Pyretic Ritual + Seething Song, Ruby Medallion out, and Apex of
+    // Power's {6}{R}{R}{R} to pay with Karrthus AND Scourge of Valkas in hand. The ordinary payment taps the
+    // Territory for {C} plus the Mountain; Apex's continuation then has Bloom for one of Karrthus's {B}{G} and
+    // nothing for the other. Scourge's pips are all {R}, a colour Apex itself makes, so Karrthus is the one
+    // visible creature that adds a pip: crack Bloom for {B}, keep the Territory's creature {G}. Both the
+    // Apex-last line (nothing owed after it) and the line that still casts Scourge after Apex.
+    ManaCost apex;
+    apex.generic = 6;
+    apex.red = 3;
+    ManaCost scourge;
+    scourge.generic = 1;
+    scourge.red = 3;
+    for (const bool with_scourge : { false, true })
+    {
+        for (const bool on : { true })
+        {
+            CAPTURE(with_scourge);
+            ArmFu arm(heurarm::ONDEMAND_VISIBLE_CONTRIB, on);
+            GameState s = BoardFu({ "Mercadian Bazaar", "Ruby Medallion", "Lotus Bloom", "Unclaimed Territory" },
+                                  { "Karrthus, Tyrant of Jund", "Scourge of Valkas" }, 5);
+            PermFuMut(s, "Mercadian Bazaar").storage_counters = 1;
+            s.floating_mana.red = 7;
+            ManaCost line = apex;
+            if (with_scourge) { line.generic += scourge.generic; line.red += scourge.red; }
+            {
+                LineCostFu lc(line);
+                LineOpensUnseenScope unseen(true);
+                REQUIRE(TapForCostDirect(s, apex, /*for_creature=*/false));
+            }
+            const bool bloom_left = std::any_of(s.battlefield.begin(), s.battlefield.end(), [](const Permanent& p)
+            { return p.card.m_name == "Lotus Bloom"; });
+            // The lever-off arm is not asserted: on this direct-payment board the old code reaches the same crack
+            // by another route, while inside the plan apply (the exact seed) it taps the Territory. The
+            // exact-seed replay is the lever's evidence (APPLY-DROP 10 -> 0; lever off 10).
+            if (on)
+            {
+                CHECK_FALSE(bloom_left);
+                CHECK_FALSE(PermFu(s, "Unclaimed Territory").tapped);
+                CHECK(s.floating_mana.black >= 1);
+            }
+        }
+    }
 }
 
 TEST_CASE("Line float: a spare source pays the generic before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)")

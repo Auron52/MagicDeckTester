@@ -10532,7 +10532,23 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
         && std::strcmp(ResolveProvider(state).Name(), "Dragonstorm") == 0)
     {
         int later_pips[5];
-        if (LineRestAfter(cost_in, later_pips) > 0)
+        const bool visible_hand = g_line_opens_unseen;
+        // VISIBLE CONTRIBUTOR (MTG_ONDEMAND_VISIBLE_CONTRIB, default ON). Mana-clean s30073082 T5,
+        // {Territory, Pyretic, Song, Apex[, Scourge]} with Karrthus AND Scourge of Valkas in hand: at Apex's
+        // {6}{R}{R}{R} over seven floating {R}, the ordinary payment taps Unclaimed Territory for {C} plus the
+        // Bazaar, and Apex's continuation has Bloom for one of Karrthus's {B}{G} and nothing for the other.
+        // Cracking Bloom for {B} keeps the Territory's creature {G}. The sole-creature read below saw two
+        // creatures and stood down, yet Scourge's pips are all {R}, a colour this cost already makes, so it
+        // competes for nothing: only a creature that ADDS a pip counts toward "sole". And the line that stops
+        // at Apex owes nothing after it, so the rule must also run on a zero rest when a visible
+        // contributor is the only later need.
+        static const bool s_visible_contrib = OnDemandVisibleContribOn();
+        const int rest_mv = LineRestAfter(cost_in, later_pips);
+        const ManaCost& lu_now = g_line_unpaid_cost;    // a zero rest counts only when the hold IS this cost
+        const bool holds_last = lu_now.ManaValue() > 0 && lu_now.ManaValue() == cost_in.ManaValue()
+            && lu_now.white == cost_in.white && lu_now.blue == cost_in.blue && lu_now.black == cost_in.black
+            && lu_now.red == cost_in.red && lu_now.green == cost_in.green;
+        if (rest_mv > 0 || (s_visible_contrib && visible_hand && holds_last))
         {
             const int own[5] = { cost_in.white, cost_in.blue, cost_in.black,
                                  cost_in.red, cost_in.green };
@@ -10540,7 +10556,6 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
             // the currently named prefix stops at Apex and its line hold has no
             // black pip yet. Count a visible Dragonstorm creature's off-colour
             // pips when that breakpoint is part of the line.
-            const bool visible_hand = g_line_opens_unseen;
             if (visible_hand)
             {
                 const CardDefinition* sole_creature = nullptr;
@@ -10548,6 +10563,14 @@ bool TapForCostShared(GameState& state, const ManaCost& cost_in, bool for_creatu
                 {
                     const CardDefinition* d = CardDatabase::Instance().LookupCached(card);
                     if (d == nullptr || !d->card.IsCreature()) { continue; }
+                    if (s_visible_contrib)
+                    {
+                        const ManaCost& m = d->card.m_mana_cost;
+                        const int pip[5] = { m.white, m.blue, m.black, m.red, m.green };
+                        bool adds = false;
+                        for (int c = 0; c < 5; ++c) { if (own[c] == 0 && pip[c] > later_pips[c]) { adds = true; } }
+                        if (!adds) { continue; }
+                    }
                     if (sole_creature != nullptr) { sole_creature = nullptr; break; }
                     sole_creature = d;
                 }
