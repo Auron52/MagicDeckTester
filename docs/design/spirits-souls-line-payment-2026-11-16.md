@@ -133,6 +133,8 @@ board and retries unrestricted if needed. The focused rollout/executor
 unit test fails on baseline and passes with the change. The exact seed now
 has zero oracle issues; the off control restores its APPLY-DROP. Release
 `./build.sh` and the full 3,385-case unit suite pass. Source and test are
-committed as `bd7c05019`. A fresh PGO build and 5,000-game same-binary
-paired comparison are in progress; consult the live Claude handoff for
-their status and results.
+committed as `bd7c05019`. The fresh PGO build passed its pooled
+7,447-game training suite and optimized link; its source stamp matches
+`72188b700b83bfbd66f13db98870583d61d5dd21`. A 5,000-game
+same-binary paired comparison is in progress; consult the live Claude
+handoff for its status and results.
