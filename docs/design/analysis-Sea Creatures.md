@@ -215,6 +215,36 @@ Subagents never push the shared branch. Scryfall JSON for the new cards:
   Kiora's lore and Kiora re-firing chapter I, Summon: Leviathan's attack draws and its chapter-III sacrifice before
   combat, Hullbreaker / Brinelin prompts (declined), the cleanup discard.
 
+## Stage 5 A/B of the USER prunes (2026-11-17)
+
+One pooled batch, per-job HeuristicArm flags, d5 b20 play settings, 4 x 100 games on held-out seeds
+8810001..8840001, `build/scratch/sea/ab5/`. Paired per game vs the default arm (loss = 9).
+
+| arm (flag) | faster / slower | mean delta | units | verdict |
+|---|---|---|---|---|
+| fetch Forest-first (`MTG_SEA_FETCH_ISLAND_FIRST=0`) | 0 / 0 | 0 | -0.0% | flag live, almost never binds |
+| fetch prune OFF (`MTG_SEA_FETCH_PRUNE=0`) | 11 / 0 | -0.0325 | +70.9% | ALL 11 CLAIRVOYANT -> keep the USER rule |
+| Sprawl {U,G} searched (`MTG_SEA_SPRAWL_BLUE=0`) | 0 / 0 | 0 | +23.9% | prune is free |
+| bounces searched (Hullbreaker + Brinelin =0) | 0 / 0 | 0 | +51.1% | prune is free |
+| Wave searched (`MTG_SEA_WAVE_NEVER=0`) | 0 / 0 | 0 | +8.0% | prune is free (lines differ, turns equal) |
+| Sin full menu (`MTG_SEA_SIN_STRIP_SAGAS=0`) | 0 / 0 | 0 | +0.1% | prune is free |
+| Gorger full menu (`MTG_SEA_GORGER_ALL=0`) | 0 / 1 | +0.0025 | +7.7% | the 1 slower game is a budget effect (identical at b40+) |
+| main 2 every turn (`MTG_FORCE_USES_M2=1`) | 11 / 0 | -0.0275 | +12.9% | exposes a MAIN-1 ENGINE DEFECT (below) |
+
+Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all reproduce).
+* **Fetch:** the per-card reshuffle is visible to the search, so the target choice picks which draw disappears
+  (top-snipe 5, deep fetch 4, Hedge Maze surveil of a known top land 2). Blind search: 24 / 20, net -0.011 (noise).
+  No Gorger land-count, Enchant-Forest, shock-life or colour effect. Keep the USER's Breeding Pool rule. Possible
+  non-clairvoyant residue: Hedge Maze's surveil ({Pool, Maze} searched pair) -- needs a blind A/B first; not built.
+* **Main 2:** no combat resource in any of the 11 games. Each is "cast Utopia Sprawl / Wild Growth in main 1, then
+  Worn Powerstone (7) / Overgrowth (4) off the enchanted land", which main 2 reaches and main 1 does not -- main 1
+  (a) does not ENUMERATE the line (gi39, gi75) or (b) enumerates it and never CHOOSES it even unbudgeted (gi64).
+  Budget-insensitive (2x / 4x / 8x); 6 of 11 survive blind search. An ENGINE fix is in flight on branch
+  `sea-landaura-fix` (worktree `.claude/worktrees/sea-landaura`), A/B on every land-aura deck. The main-2 shape (Q12)
+  stays the USER's call; re-measure every-turn vs conditional after the fix.
+* **Gorger gi57 (s8840001):** arms split on turn 1 before any Gorger exists; at b20 the extra menu re-prices the
+  lookahead; b40 / b80 / b160 play identically. Uninformative about the Gorger choice.
+
 ## Approved deferrals
 
 (none yet)
