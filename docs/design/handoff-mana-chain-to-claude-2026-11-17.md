@@ -2,18 +2,22 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:30 UTC
+## Current state, updated 03:34 UTC
 
-The next due **Creature Giving** PGO mana-clean gate is active as the
-only simulation batch, exec session 11439:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run creature_giving --games 5000 --name codex-creature-giving-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/creature_giving_fresh_gate.out`.
-Read `logs/mana_clean/codex-creature-giving-fresh-20261117/report.md` on
-completion, update this handoff, and commit `test/mana_clean.json`.
+**Creature Giving fresh gate complete:** indices 65,000–69,999 at PGO
+source `fcb9352608ea` yielded 280 issues: 276 ENUM-GAP across 249
+signatures, three APPLY-DROP, one DOMINATED-CREATURE; zero oracle gap or
+cap. Oracle-on/off play byte-identical. Report:
+`logs/mana_clean/codex-creature-giving-fresh-20261117/report.md`.
+The large cluster is same-turn Crop Rotation chains: the gate rejects
+plans that cast Crop, put an untapped mana land into play, then use it to
+pay the next Crop or creature. Exact seeds 30065017 T2 (two Crops +
+Suture Priest / War-Riders, eight flags), 30065271 T2 main two (two
+Crops, four flags), 30065289 T2 main two (three), and 30066910 T2 main
+two (three). Focus on the gate's sequential land replacement credit,
+not a broad new searched branch. Three APPLY-DROP flags are one separate
+T4 signature (see report). The `test/mana_clean.json` record is committed
+with this handoff. No batch is active after this gate.
 
 **Mill fresh gate complete:** indices 10,000–14,999 at PGO source
 `fcb9352608ea` yielded 131 ENUM-GAP flags across 51 signatures, with
