@@ -2,7 +2,35 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:35 UTC
+## Live status, updated 06:39 UTC
+
+**Active Breaching Dragonstorm diagnosis and audit-only trial:** The two
+fresh ENUM-GAP flags are **hidden future mana**, not a visible pre-cast
+source shortage. Exact repros in
+`build/scratch/dragonstorm_visible_lump_ab/breaching_gap_30222319_t6.out`
+and `breaching_gap_30221073_t7.out` show the first cast's free cascade /
+enter reveal puts Sakashima's Protege #52 into play as a copy of Mountain.
+The second cast pays with Mountain #52; it did not exist on the initial
+board. The first subset is rejected as `ef-no-interact` (10 total, only
+one visible red); the second as `ef-walk-fail` (13 total, selected sac
+actions are unmodelled by that walk). Both rejections are correct before
+the reveal. Creative Technique later shuffles the library, so the oracle's
+root/end-library order inference misses #52's top-of-library provenance
+and incorrectly labels a missing menu option as ENUM-GAP.
+
+A dirty **audit-only** source trial now records every top-of-library
+free-cast number in the oracle Hook (cascade, Breaching Dragonstorm,
+Creative Technique, ripple, Cyclone), then classifies a later tap of that
+card as HIDDEN-INFO even if the library was shuffled. Edits are in
+`src/ai/ManaOracle.h`, `src/ai/ManaOracle.cpp`, and `src/ai/TurnSolver.cpp`;
+they are unbuilt and uncommitted. An incremental Release build is active
+in exec session `40806`, console
+`build/scratch/dragonstorm_visible_lump_ab/build_hidden_freecast_oracle.out`.
+After it completes, rerun the two exact oracle commands from the report
+and require zero ENUM-GAP plus HIDDEN-INFO evidence. Then run relevant
+unit/strict viewer checks, commit the source, rebuild PGO, and run a fresh
+Breaching Dragonstorm 5,000-game gate. Do not widen the player search
+gate to exploit the future reveal.
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
