@@ -190,3 +190,8 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   The user may hold the flip until mode 4 is in its final state ("I want to see it in its final state before flipping
   it on"), so finish the residual-loser work and the ship steps first, then present the per-deck winner list for the flip.
   Still open (USER): the AA gi131 later game; Treasure Hunt -> mode 3.
+- USER ruling 2026-11-17 (where mode 4 sits in the pipeline): the bare heuristic ladder STAYS the default for new
+  decks. Mode 4 is the option turned on AFTER the value-leaf stage, for a deck where the ladder would otherwise win
+  (the leaf is not adopted and the deck ships the heur ladder). Ship-step consequence: the per-deck adoption is a
+  post-value-leaf step (heur vs m4 held-out A/B on that deck; adopt on a clear win). Whether valueleaf.sh runs that
+  A/B itself or it stays a separate step is to be proposed to the USER with the final state.
