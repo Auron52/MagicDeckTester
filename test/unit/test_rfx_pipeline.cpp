@@ -1777,3 +1777,297 @@ TEST_CASE("rfx step 10: a Shaman pull on a scheduled opponent spawn (numbered fr
     CHECK(code > dmgrx::kCombatPinMark);                      // above the combat suffix mark
     CHECK(code < -2);                                         // never a player id
 }
+
+// ---- STEP 9b: the en-Kor riders on EVERY damage event; the USER's heuristic prunes (design section 14) ----------
+namespace
+{
+const StuffyDollProvider& StuffyP() { static const StuffyDollProvider p; return p; }
+// A reflection's event, built as ResolveTrig builds it: one source (a Boros Reckoner of ours), `amount` to `to`.
+dmgrx::Batch ReflectionBatch(const GameState& s, int to, int amount)
+{
+    (void)s;
+    dmgrx::Batch b;
+    b.src.push_back({ DefRfx("Boros Reckoner").card, 0, true });
+    b.hits.push_back({ 0, { false, to }, amount, false, false });
+    b.window = dmgrx::RiderWindow::Reflection;
+    return b;
+}
+int UntappedLands9b(const GameState& s)
+{
+    int n = 0;
+    for (const Permanent& p : s.battlefield) { if (p.card.IsLand() && !p.tapped) { ++n; } }
+    return n;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9b: a reflection aimed at a Nomads en-Kor -- the ENGINE forwards its shields; the Stuffy provider "
+          "admits only our sweeper (lifted by MTG_UNPRUNE=redirectwindow)")
+{
+    // Generic provider (no deck provider attached): every window is admitted. F4: the Doll is the one sink
+    // reflector, so the Nomads' 3 go onto it (a singleton list: no choice) and reflect to the opponent.
+    {
+        GameState s = ArmedState();
+        s.players[1].life = 60;
+        PutRfx(s, "Nomads en-Kor", 3001);
+        PutRfx(s, "Stuffy Doll", 3002).chosen_player = 1;
+        dmgrx::DealDamageBatch(s, ReflectionBatch(s, 3001, 3));
+        REQUIRE(Find(s, 3001) != nullptr);
+        CHECK(Find(s, 3001)->damage == 0);
+        CHECK(Find(s, 3002)->damage == 3);
+        CHECK(s.players[1].life == 57);
+    }
+    // The deck's provider: a reflection's event is not our sweeper -> no shield (the legacy outcome), unless lifted.
+    {
+        GameState s = ArmedState();
+        s.m_provider = &StuffyP();
+        s.players[1].life = 60;
+        PutRfx(s, "Nomads en-Kor", 3001);
+        PutRfx(s, "Stuffy Doll", 3002).chosen_player = 1;
+        dmgrx::DealDamageBatch(s, ReflectionBatch(s, 3001, 3));
+        if (DecisionUnpruned(UnprunedGate::RedirectWindow))
+        {
+            CHECK(Find(s, 3001) != nullptr);
+            CHECK(s.players[1].life == 57);
+        }
+        else
+        {
+            CHECK(Find(s, 3001) == nullptr);   // the 1/1 took all 3
+            CHECK(s.players[1].life == 60);
+        }
+    }
+    // The hook itself: our sweeper only, every kind under the lifted gate.
+    const GameState s = ArmedState();
+    const bool open = DecisionUnpruned(UnprunedGate::RedirectWindow);
+    CHECK(StuffyP().RedirectWindowAdmitted(s, 0, static_cast<int>(dmgrx::RiderWindow::Sweep), 0));
+    CHECK(StuffyP().RedirectWindowAdmitted(s, 0, static_cast<int>(dmgrx::RiderWindow::Sweep), 1) == open);
+    for (dmgrx::RiderWindow w : { dmgrx::RiderWindow::Reflection, dmgrx::RiderWindow::AuraHost, dmgrx::RiderWindow::SelfPing })
+    { CHECK(StuffyP().RedirectWindowAdmitted(s, 0, static_cast<int>(w), 0) == open); }
+}
+
+TEST_CASE("rfx step 9b: a Shaman pull in a REFLECTION's event is a searched choice -- pinned, it moves the Spirit's 3 "
+          "onto the Shaman (shields on to the Doll) and pays {1}{W}; under the Stuffy provider nothing is offered")
+{
+    for (int arm = 0; arm < 2; ++arm)
+    {
+        GameState s = ShamanBoard(60, 1, 1);
+        if (arm == 1) { s.m_provider = &StuffyP(); }
+        const std::vector<int> pins{ dmgrx::PullCode(2020) };
+        std::vector<std::vector<int>> lists;
+        dmgrx::TargetProbe probe = [&](const std::vector<int>& legal) { lists.push_back(legal); };
+        {
+            dmgrx::PinScope ps(pins);
+            dmgrx::TargetProbeScope tp(probe, pins, 0);
+            dmgrx::DealDamageBatch(s, ReflectionBatch(s, 2020, 3));
+        }
+        const bool offered = arm == 0 || DecisionUnpruned(UnprunedGate::RedirectWindow);
+        INFO("arm ", arm);
+        if (offered)
+        {
+            REQUIRE_FALSE(lists.empty());
+            CHECK(lists.front().front() == dmgrx::PullCode(0));   // the FRONT is stop: no pull, no mana
+            CHECK(std::find(lists.front().begin(), lists.front().end(), dmgrx::PullCode(2020)) != lists.front().end());
+            REQUIRE(Find(s, 2020) != nullptr);
+            CHECK(Find(s, 2020)->damage == 0);
+            CHECK(Find(s, 2001)->damage == 0);    // the Shaman forwarded the 3 (F4: onto the Doll)
+            CHECK(Find(s, 2010)->damage == 3);
+            CHECK(s.players[1].life == 57);
+            CHECK(UntappedLands9b(s) == 0);       // {1}{W} paid at the event
+        }
+        else
+        {
+            CHECK(lists.empty());
+            CHECK(Find(s, 2020) == nullptr);
+            CHECK(s.players[1].life == 60);
+            CHECK(UntappedLands9b(s) == 2);
+        }
+    }
+}
+
+TEST_CASE("rfx step 9b: COMBAT -- Guilty Conscience on an attacking Nomads en-Kor: its trigger's 1 is shielded onto "
+          "the Doll (generic); the Stuffy provider keeps the legacy outcome")
+{
+    for (int arm = 0; arm < 2; ++arm)
+    {
+        GameState s = ArmedState();
+        if (arm == 1) { s.m_provider = &StuffyP(); }
+        s.players[1].life = 60;
+        PutRfx(s, "Nomads en-Kor", 3101);
+        PutRfx(s, "Stuffy Doll", 3102).chosen_player = 1;
+        AttachGc(s, 3103, 3101);
+        s.players[1].life -= 1;   // the Nomads' combat damage, applied by the combat body
+        dmgrx::CombatDamageDealt(s, { 3101 }, { 1 });
+        const bool offered = arm == 0 || DecisionUnpruned(UnprunedGate::RedirectWindow);
+        INFO("arm ", arm);
+        if (offered)
+        {
+            REQUIRE(Find(s, 3101) != nullptr);
+            CHECK(Find(s, 3101)->damage == 0);
+            CHECK(Find(s, 3102)->damage == 1);
+            CHECK(s.players[1].life == 58);   // 1 combat + 1 reflected by the Doll
+        }
+        else
+        {
+            CHECK(Find(s, 3101) == nullptr);   // GC's 1 killed the 1/1
+            CHECK(s.players[1].life == 59);
+        }
+    }
+}
+
+namespace
+{
+// Our hosts for Guilty Conscience: ids as LegalEnchantTargets would list them (battlefield order).
+std::vector<int> OwnCreatureIds(const GameState& s)
+{
+    std::vector<int> v;
+    for (const Permanent& p : s.battlefield) { if (p.controller_index == 0 && p.card.IsCreature()) { v.push_back(p.card.m_number); } }
+    return v;
+}
+std::vector<int> GcHosts(const GameState& s)
+{
+    std::vector<int> io = OwnCreatureIds(s);
+    StuffyP().DamageBackAuraHostCandidates(s, DefRfx("Guilty Conscience"), io);
+    return io;
+}
+GameState HostBoard()
+{
+    GameState s = ArmedState();
+    s.phase = Phase::PreCombatMain;
+    s.players[0].lands_played_this_turn = 1;
+    return s;
+}
+}   // namespace
+
+TEST_CASE("rfx step 9b: GC host PRUNE -- one host by default, two only in the split case (USER rulings)")
+{
+    const bool open = DecisionUnpruned(UnprunedGate::GcHost);
+    // A Doll that can tap now dominates: ONE host (the Nomads, a vanilla and a settled Reckoner are pruned).
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Nomads en-Kor", 3201);
+        PutRfx(s, "Stuffy Doll", 3202).chosen_player = 1;
+        PutRfx(s, "Boros Reckoner", 3203);
+        const std::vector<int> all = OwnCreatureIds(s);
+        CHECK(GcHosts(s) == (open ? all : std::vector<int>{ 3202 }));
+    }
+    // SPLIT: the Doll is summoning sick (no ping, no sweeper) but a settled Reckoner can attack now -> both.
+    {
+        GameState s = HostBoard();
+        Permanent& d = PutRfx(s, "Stuffy Doll", 3211); d.chosen_player = 1; d.entered_this_turn = true;
+        PutRfx(s, "Boros Reckoner", 3212);
+        PutRfx(s, "Nomads en-Kor", 3213);
+        const std::vector<int> all = OwnCreatureIds(s);
+        CHECK(GcHosts(s) == (open ? all : std::vector<int>{ 3211, 3212 }));
+    }
+    // No Doll: a settled Mogg Maniac (power 1) can go off now; a summoning-sick Reckoner (power 3) is the bigger
+    // wait-a-turn host -> both. With a sick reflector of NO greater power the go-off-now one is alone.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mogg Maniac", 3221);
+        PutRfx(s, "Boros Reckoner", 3222).entered_this_turn = true;
+        const std::vector<int> all = OwnCreatureIds(s);
+        CHECK(GcHosts(s) == (open ? all : std::vector<int>{ 3221, 3222 }));
+        GameState t = HostBoard();
+        PutRfx(t, "Boros Reckoner", 3231);
+        PutRfx(t, "Screaming Nemesis", 3232).entered_this_turn = true;   // 3/3: not bigger than the Reckoner
+        CHECK(GcHosts(t) == (open ? OwnCreatureIds(t) : std::vector<int>{ 3231 }));
+    }
+    // Nothing can go off now: ONE wait-a-turn host -- the Doll if on board, else the highest power.
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Mogg Maniac", 3241).entered_this_turn = true;
+        Permanent& d = PutRfx(s, "Stuffy Doll", 3242); d.chosen_player = 1; d.entered_this_turn = true;
+        CHECK(GcHosts(s) == (open ? OwnCreatureIds(s) : std::vector<int>{ 3242 }));
+        GameState t = HostBoard();
+        PutRfx(t, "Mogg Maniac", 3251).entered_this_turn = true;
+        PutRfx(t, "Boros Reckoner", 3252).entered_this_turn = true;
+        CHECK(GcHosts(t) == (open ? OwnCreatureIds(t) : std::vector<int>{ 3252 }));
+    }
+    // Our castable sweeper is a starter for EVERY host: a sick Doll then dominates on its own.
+    {
+        GameState s = HostBoard();
+        Permanent& d = PutRfx(s, "Stuffy Doll", 3261); d.chosen_player = 1; d.entered_this_turn = true;
+        PutRfx(s, "Boros Reckoner", 3262);
+        for (int i = 0; i < 9; ++i) { PutRfx(s, "Mountain", 3270 + i); }
+        Card act = DefRfx("Blasphemous Act").card; act.m_number = 3280; s.players[0].hand.push_back(act);
+        CHECK(GcHosts(s) == (open ? OwnCreatureIds(s) : std::vector<int>{ 3261 }));
+    }
+    // No loop-sustaining creature: the engine's list stands (never emptied).
+    {
+        GameState s = HostBoard();
+        PutRfx(s, "Nomads en-Kor", 3291);
+        TokenRfx(s, 3292, 0, 1, 1, "Soldier");
+        CHECK(GcHosts(s) == OwnCreatureIds(s));
+    }
+}
+
+TEST_CASE("rfx step 9b: GC host prune reaches the search -- CollectActions emits only the provider's host")
+{
+    GameState s = HostBoard();
+    s.m_provider = &StuffyP();
+    PutRfx(s, "Plains", 3301);
+    PutRfx(s, "Stuffy Doll", 3302).chosen_player = 1;
+    PutRfx(s, "Mogg Maniac", 3303);
+    PutRfx(s, "Nomads en-Kor", 3304);
+    Card gc = DefRfx("Guilty Conscience").card; gc.m_number = 3310; s.players[0].hand.push_back(gc);
+    for (int i = 0; i < 10; ++i) { Card m = DefRfx("Mountain").card; m.m_number = 3320 + i; s.players[0].library.push_back(m); }
+    std::set<int> hosts;
+    for (const auto& p : TurnSolver::EnumerateMainPlans(s, true))
+    { for (const Action& a : p.actions) { if (a.card_name.str() == "Guilty Conscience") { hosts.insert(a.enchant_target); } } }
+    if (DecisionUnpruned(UnprunedGate::GcHost)) { CHECK(hosts.size() == 3); }
+    else { CHECK(hosts == std::set<int>{ 3302 }); }   // the settled Doll pings now: ONE host
+}
+
+TEST_CASE("rfx step 9b: Loran's Escape target PRUNE -- the GC'd creature; else the highest-power non-Doll reflector; "
+          "else the scry-only target")
+{
+    const bool open = DecisionUnpruned(UnprunedGate::EscapeTarget);
+    const CardDefinition& lor = DefRfx("Loran's Escape");
+    auto run = [&](const GameState& s, int inert, std::vector<int> io) {
+        StuffyP().IndestructibleGrantTargetCandidates(s, lor, inert, io);
+        return io;
+    };
+    GameState s = HostBoard();
+    PutRfx(s, "Mogg Maniac", 3401);
+    PutRfx(s, "Boros Reckoner", 3402);
+    PutRfx(s, "Nomads en-Kor", 3403);
+    PutRfx(s, "Stuffy Doll", 3404).chosen_player = 1;   // the no-effect representative (printed indestructible)
+    TokenRfx(s, 3405, 1, 1, 1, "Spirit");
+    const std::vector<int> io{ 3401, 3402, 3403, 3405, 3404 };
+    // No GC: the highest-power reflector other than the Doll (Reckoner 3 > Maniac 1; the Nomads reflects nothing).
+    CHECK(run(s, 3404, io) == (open ? io : std::vector<int>{ 3402 }));
+    // GC on the Maniac: the Escape goes to it, whatever its power.
+    GameState g = s;
+    AttachGc(g, 3406, 3401);
+    CHECK(run(g, 3404, io) == (open ? io : std::vector<int>{ 3401 }));
+    // GC on the Doll (a no-effect target): the engine's no-effect representative stands for it.
+    GameState gd = s;
+    AttachGc(gd, 3407, 3404);
+    CHECK(run(gd, 3404, io) == (open ? io : std::vector<int>{ 3404 }));
+    // No reflector besides the Doll: the scry-only target (kept castable).
+    GameState n = HostBoard();
+    PutRfx(n, "Nomads en-Kor", 3411);
+    PutRfx(n, "Stuffy Doll", 3412).chosen_player = 1;
+    TokenRfx(n, 3413, 1, 1, 1, "Spirit");
+    const std::vector<int> io2{ 3411, 3413, 3412 };
+    CHECK(run(n, 3412, io2) == (open ? io2 : std::vector<int>{ 3412 }));
+    // Nothing to keep (no reflector, no no-effect target): the engine's list stands.
+    const std::vector<int> io3{ 3411, 3413 };
+    CHECK(run(n, 0, io3) == io3);
+}
+
+TEST_CASE("rfx step 9b: Loran's Escape prune reaches the search -- one target per plan set (GC on the Maniac)")
+{
+    GameState s = LoranBoard(false, false);
+    s.m_provider = &StuffyP();
+    AttachGc(s, 1907, 1902);   // Guilty Conscience on the Mogg Maniac
+    std::set<int> targets;
+    for (const auto& p : TurnSolver::EnumerateMainPlans(s, true)) { const int t = LoranTargetOf(p); if (t != 0) { targets.insert(t); } }
+    if (DecisionUnpruned(UnprunedGate::EscapeTarget)) { CHECK(targets.size() >= 4); }
+    else { CHECK(targets == std::set<int>{ 1902 }); }
+    GameState n = LoranBoard(false, false);
+    n.m_provider = &StuffyP();
+    targets.clear();
+    for (const auto& p : TurnSolver::EnumerateMainPlans(n, true)) { const int t = LoranTargetOf(p); if (t != 0) { targets.insert(t); } }
+    if (DecisionUnpruned(UnprunedGate::EscapeTarget)) { CHECK(targets.size() >= 4); }
+    else { CHECK(targets == std::set<int>{ 1901 }); }   // the Reckoner (3) over the Maniac (1)
+}

@@ -108,7 +108,23 @@ struct Pull
 {
     int on   = 0;   // the Shaman en-Kor
     int from = 0;   // the target creature (any controller)
-    int src  = 0;   // the source of our choice (our sweeper)
+    int src  = 0;   // the source of our choice (the event's source)
+};
+
+// WHICH damage event a batch is (step 9b): the en-Kor redirection rider (AddRedirectRider -- Shaman en-Kor's {1}{W}
+// pulls and the {0} shields) runs on EVERY damage event that would damage a creature, and the deck's provider may
+// restrict the autonomous search to some kinds (DecisionProvider::RedirectWindowAdmitted; StuffyDollProvider admits
+// only our own sweeper, the USER's heuristic prune). None = no rider (hand-built batches, the replacement's own
+// re-entry). There is no Combat kind: in the goldfish nothing blocks, so combat damage never reaches a creature --
+// what reaches one in combat is a Guilty Conscience trigger (AuraHost), drained by CombatDamageDealt on the combat
+// pin stream.
+enum class RiderWindow : std::uint8_t
+{
+    None = 0,
+    Sweep,        // dmgrx::Sweep: a symmetric "N to each creature" (Blasphemous Act, Chain Reaction, Pyroclasm, ...)
+    Reflection,   // a reflection trigger resolving (Reckoner, Nemesis, Maniac, a Spiteful grant, the Doll's own)
+    AuraHost,     // a Guilty Conscience trigger: "deals that much damage to that creature" (main phase or combat)
+    SelfPing,     // Stuffy Doll's "{T}: deals 1 damage to itself"
 };
 
 // ONE simultaneous damage event: its sources and its assignments.
@@ -116,15 +132,17 @@ struct Batch
 {
     std::vector<SourceRef> src;
     std::vector<DmgAssign> hits;
-    // Redirection shields that apply to THIS event (design 2.2 step 1 / 2.3). Hosted as a rider on our own
-    // creature sweeper (AddShieldRider), so every shield is created for, and lives only inside, the event it
-    // rides: the allocation never exceeds the damage the en-Kor is about to be dealt, so no shield is ever
-    // left over for later damage this turn and no per-turn GameState list is needed (design section 14,
-    // step 8). Empty on every other event.
+    // Redirection shields that apply to THIS event (design 2.2 step 1 / 2.3). Hosted as a rider on the event
+    // itself (AddRedirectRider, from DealDamageBatch), so every shield is created for, and lives only inside, the
+    // event it rides: the allocation never exceeds the damage the en-Kor is about to be dealt, so no shield is
+    // ever left over for later damage this turn and no per-turn GameState list is needed (design section 14,
+    // steps 8 / 9b). Empty on an event the rider does not touch.
     std::vector<Shield> shields;
     // Source pulls (Shaman en-Kor's {1}{W}), applied BEFORE the shields (see ApplyOne step 1). Same hosting and
-    // lifetime as `shields`: made for, paid at, and spent inside the sweep they ride (section 14, step 9).
+    // lifetime as `shields`: made for, paid at, and spent inside the event they ride (section 14, steps 9 / 9b).
     std::vector<Pull> pulls;
+    // The event's kind: DealDamageBatch runs the redirection rider for it (step 9b; None = no rider).
+    RiderWindow window = RiderWindow::None;
 };
 
 // A trigger raised by an event and not yet resolved. Everything is held by value (LKI).
@@ -558,8 +576,27 @@ inline void Drain(GameState& s, std::size_t base)
     t_last_drain = DrainStats{ resolutions, stop };
 }
 
+// The en-Kor redirection rider (step 9b: on every damage event; defined below, after the pin machinery it uses).
+// Returns true when it added a pull or a shield to `b`.
+inline bool AnyRedirector(const GameState& s);
+inline void AddRedirectRider(GameState& s, Batch& b);
+
 // THE entry point: one damage event. See the header note for the steps.
+inline BatchResult DealDamageBatchCore(GameState& s, const Batch& b);
 inline BatchResult DealDamageBatch(GameState& s, const Batch& b)
+{
+    // Step 1's replacement choices (Shaman en-Kor pulls, en-Kor {0} shields) are made HERE, for whatever event
+    // this is, before anything is applied -- in both worlds, since both call this. A batch that already carries
+    // its riders (a hand-built one) or names no window is applied as given.
+    if (b.window != RiderWindow::None && b.pulls.empty() && b.shields.empty() && AnyRedirector(s))
+    {
+        Batch rb = b;
+        AddRedirectRider(s, rb);
+        return DealDamageBatchCore(s, rb);
+    }
+    return DealDamageBatchCore(s, b);
+}
+inline BatchResult DealDamageBatchCore(GameState& s, const Batch& b)
 {
     if (t_frame.depth > 0 && t_frame.state == &s)
     {
@@ -580,9 +617,6 @@ inline BatchResult DealDamageBatch(GameState& s, const Batch& b)
     return r;
 }
 
-// The en-Kor shield rider on our own sweeper (defined below, after the pin machinery it uses).
-inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b);
-
 // A symmetric "N damage to each creature" sweep (Pyroclasm's damage_all_creatures; Blasphemous Act,
 // Chain Reaction) as ONE event from the spell (a noncreature source). The armed body of
 // PerformDamageAllCreatures, which keeps its legacy body for every unarmed deck.
@@ -596,7 +630,7 @@ inline void Sweep(GameState& s, int controller, const CardDefinition& def, int d
         if (!q.card.IsCreature()) { continue; }
         b.hits.push_back({ 0, { false, q.card.m_number }, dmg, false, false });
     }
-    AddShieldRider(s, controller, dmg, b);   // en-Kor shields (design 4.2); no-op without an en-Kor of ours
+    b.window = RiderWindow::Sweep;   // the en-Kor rider (pulls + shields, design 4.2 / 4.3) runs in DealDamageBatch
     const BatchResult r = DealDamageBatch(s, b);
     if (r.creatures_hit > 0 && g_play_event_sink)   // the legacy sweep's event, same text
     {
@@ -786,7 +820,7 @@ inline bool DefReflectsWithChoice(const CardDefinition& d)
     // only a granter on the battlefield or in the plan can raise one -- so testing the granter suffices.
     return choice(d.params.reflect_dealt_damage) || choice(d.params.grants_reflect_to_subtype);
 }
-// Does `d` raise an en-Kor shield CHOICE (AddShieldRider) when our own sweeper hits it? The main-phase fan's
+// Does `d` raise an en-Kor shield / pull CHOICE (AddRedirectRider) when an admitted damage event hits a creature? The main-phase fan's
 // pre-check counts it as a chooser on the battlefield or in the plan, beside DefReflectsWithChoice.
 inline bool DefOffersShieldChoice(const CardDefinition& d) { return d.params.redirect_shield || d.params.redirect_pull_cost.has_value(); }
 
@@ -815,6 +849,7 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
         Batch b;
         b.src.push_back(t.src);
         b.hits.push_back({ 0, { false, t.aura_host }, t.amount, false, false });
+        b.window = RiderWindow::AuraHost;
         if (g_play_event_sink != nullptr && !TapSpeculatingNow())
         {
             const Permanent* q = FindPerm(s, t.aura_host);
@@ -890,6 +925,7 @@ inline void ResolveTrig(GameState& s, const PendingTrig& t)
     a.combat    = false;   // reflection damage is never combat damage (ruling)
     a.lock_life = t.lock_life;
     b.hits.push_back(a);
+    b.window = RiderWindow::Reflection;   // a rider only if the pick is a creature (AddRedirectRider skips players)
     if (g_play_event_sink != nullptr && !TapSpeculatingNow())
     {
         std::string to;
@@ -1030,19 +1066,20 @@ inline void EtbChoosePlayer(GameState& s, int controller, int entered_index, con
     }
 }
 
-// ---- EN-KOR SHIELDS: the rider on our own sweeper (design 4.2 / step 8) ---------------------------------
+// ---- EN-KOR SHIELDS: the rider on a damage event (design 4.2 / steps 8, 9b) ------------------------------
 // "{0}: The next 1 damage that would be dealt to this creature this turn is dealt to target creature you
 // control instead" (Nomads en-Kor; Shaman en-Kor's first ability). Free and unlimited, so the decision is an
-// ALLOCATION: how many of the d points our sweeper is about to deal the en-Kor E move, and onto what.
+// ALLOCATION: how many of the d points an event is about to deal the en-Kor E move, and onto what.
 //
-// HOSTING (timing fold, design 4.2). Shields last "this turn", and nothing can happen between our sorcery-
-// speed cast and the sweeper's resolution, so activating them in response to our own sweeper is the same as
-// activating them just before it resolves. The allocation is therefore made AT the sweep (dmgrx::Sweep, both
-// worlds) as a choice on the shared pin stream (PinnedChoice): ordinals in resolution order, BEFORE the
-// sweep's reflection choices, fanned by AppendSubdecisionAxes' main-phase probe exactly like a reflection
-// target, replayed by the executor from Plan::reflect_targets. Shields against other damage (a reflection
-// aimed at an en-Kor, a Guilty Conscience on an en-Kor) are not offered: the reflection can be aimed at the
-// shield's target directly (F2). PROVISIONAL deferral pending the USER (Q-U1), disclosed on the cards.
+// HOSTING (timing fold, design 4.2). Shields last "this turn"; activating them in response to an event is the same
+// as activating them just as it happens (and an earlier activation could only be consumed by an earlier event).
+// The allocation is therefore made AT the event (AddRedirectRider, from DealDamageBatch, both worlds) as a choice
+// on the shared pin stream (PinnedChoice): ordinals in resolution order, BEFORE the event's reflection choices,
+// fanned by AppendSubdecisionAxes' main-phase probe (or its combat probe, for a Guilty Conscience trigger in
+// combat) exactly like a reflection target, replayed by the executor from Plan::reflect_targets. Step 8 offered
+// them only at our own sweeper; step 9b (USER 2026-11-17) makes EVERY event a window -- a reflection aimed at an
+// en-Kor, a Guilty Conscience on one, the Doll's ping -- and the deck's provider restricts the autonomous search
+// (DecisionProvider::RedirectWindowAdmitted; StuffyDollProvider: our own sweeper only).
 //
 // THE OPTION SET (design 4.2), per en-Kor E of the caster's with d > 0, in battlefield order:
 //   F4 (SOUND fold): when E carries no reflection of its own and some creature R we control is a SINK
@@ -1238,25 +1275,26 @@ inline std::vector<ShieldOpt> ShieldOptions(const GameState& s, const Permanent&
 
 // ---- SHAMAN EN-KOR'S SOURCE PULL: the {1}{W} half of the rider (design 4.3 / section 14 step 9) -------------
 // "{1}{W}: The next time a source of your choice would deal damage to target creature this turn, that damage is
-// dealt to this creature instead" (CardParams::redirect_pull_cost). Hosted on the same sweeper rider as the {0}
-// shields, by the same timing fold (nothing happens between our sorcery-speed cast and its resolution, so
-// activating in response is activating as it resolves), and the SOURCE OF OUR CHOICE is that sweeper (CR 609.7a:
-// a spell on the stack is a legal choice). PROVISIONAL deferral (USER Q-U1): no other source, no other window.
+// dealt to this creature instead" (CardParams::redirect_pull_cost). Hosted on the same event rider as the {0}
+// shields, by the same timing fold (activating in response is activating as the event happens), and the SOURCE OF
+// OUR CHOICE is that event's source (a sweeper on the stack, CR 609.7a; a trigger's source; the Doll; a Guilty
+// Conscience). Step 9b (USER 2026-11-17: "it should be possible to pull from any source that is damaged"): every
+// event is a window; the provider restricts the autonomous search (StuffyDollProvider: our own sweeper only).
 //
 // THE CHOICE, per puller P of the caster's (battlefield order): which creatures P pulls from, each pull one
 // activation. Made as a SEQUENCE of choices on the shared pin stream (PinnedChoice), BEFORE the shield choices
 // (the shields then see what was pulled): {stop} + one representative per target CLASS, until stop. Pulls on the
 // same target are pointless (the first takes all of that source's damage to it; the next has nothing left to
-// replace, and with rider-only hosting no later damage this turn reaches it), so each creature is pulled at most
-// once, by one puller. The FRONT is {stop}: no pull, no mana -- the legacy outcome wherever nothing pins.
-// THE MANA IS PAID AT THE SWEEP, in BOTH worlds, through TapForCostDirect (the Mihail / Arcanum Wings shape:
+// replace, and a later event is its own window), so each creature is pulled at most once per event, by one
+// puller. The FRONT is {stop}: no pull, no mana -- the legacy outcome wherever nothing pins.
+// THE MANA IS PAID AT THE EVENT, in BOTH worlds, through TapForCostDirect (the Mihail / Arcanum Wings shape:
 // lockstep by construction, the executor re-derives its pool per action): a pull is offered only while a COPY of
 // the state can pay the cumulative bill (every earlier pull of this sweep + this one, EffectiveActivationCost per
 // puller), and the whole bill is then paid at once before the damage. A plan therefore cannot overspend: what the
 // pulls tap is gone for every later action of the plan, in the search and in the executor alike.
 // SOUND FOLDS (stated in design section 14, step 9):
-//   P0  a creature the sweep deals no damage to is not offered (the pull would replace nothing; no later damage
-//       this turn under rider-only hosting) -- dominated by not paying.
+//   P0  a creature the event deals no damage to is not offered (the pull would replace nothing here; a later event
+//       that damages it is its own window, where the same pull is offered) -- dominated by not paying now.
 //   P1  our own {0}-shield en-Kor (the puller itself included) is not offered: its own free shields can move any
 //       of its points onto the puller (a creature we control) or straight on to wherever the puller would forward
 //       them -- the same end state without the mana. (Itself: "dealt to this creature instead" changes nothing.)
@@ -1304,9 +1342,9 @@ inline bool PullAffordable(const GameState& s, const ManaCost& bill)
     return TapForCostDirect(probe, bill, false);
 }
 
-// Choose (search / pin / ask) and PAY the pulls of every puller of `controller`'s on this sweep. `base` is the
-// damage the sweep deals each creature (m_number, amount) and is updated in place: a pulled creature's amount
-// moves onto its puller. Appends to b.pulls (source = b.src[0], the sweeper).
+// Choose (search / pin / ask) and PAY the pulls of every puller of `controller`'s on this event. `base` is the
+// damage the event deals each creature (m_number, amount) and is updated in place: a pulled creature's amount
+// moves onto its puller. Appends to b.pulls (source = b.src[0], the event's one source).
 inline void AddPullRider(GameState& s, int controller, Batch& b, std::vector<std::pair<int, int>>& base, bool ask)
 {
     auto base_ref = [&](int num) -> int* { for (auto& x : base) { if (x.first == num) { return &x.second; } } return nullptr; };
@@ -1476,9 +1514,8 @@ inline void AddPullRider(GameState& s, int controller, Batch& b, std::vector<std
     }
 }
 
-inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
+inline void AddShieldRider(GameState& s, int controller, Batch& b)
 {
-    if (dmg <= 0) { return; }
     std::vector<int> enkors;   // battlefield indices, battlefield order
     bool any_puller = false;
     for (std::size_t i = 0; i < s.battlefield.size(); ++i)
@@ -1493,8 +1530,17 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
     const bool ask = g_play_target_chooser != nullptr && !TapSpeculatingNow();   // the viewer (EtbChoosePlayer's test)
     // The damage this sweep deals each creature (m_number, amount), before any replacement; the pulls (step 9)
     // move whole amounts onto their pullers, and the shields below then see the result.
+    // Every batch the engine builds has ONE source (a sweeper, a trigger, the Doll's ping), so "the source of
+    // our choice" is b.src[0]; a creature hit twice in one event is one entry (its total).
     std::vector<std::pair<int, int>> base;
-    for (const DmgAssign& a : b.hits) { if (!a.to.player && a.src == 0) { base.push_back({ a.to.id, a.amount }); } }
+    for (const DmgAssign& a : b.hits)
+    {
+        if (a.to.player || a.src != 0 || a.amount <= 0) { continue; }
+        bool merged = false;
+        for (auto& x : base) { if (x.first == a.to.id) { x.second += a.amount; merged = true; break; } }
+        if (!merged) { base.push_back({ a.to.id, a.amount }); }
+    }
+    if (base.empty()) { return; }   // no creature is about to be dealt damage: nothing to replace
     if (any_puller) { AddPullRider(s, controller, b, base, ask); }
     std::vector<std::pair<int, int>> moved;   // (dest m_number, amount) so far
     std::vector<ShieldOpt> prev_opts;
@@ -1505,7 +1551,7 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
     {
         const Permanent& e = s.battlefield[static_cast<std::size_t>(ei)];
         bool f4 = false;
-        const std::vector<ShieldOpt> opts = ShieldOptions(s, e, dmg, moved, f4, &base);
+        const std::vector<ShieldOpt> opts = ShieldOptions(s, e, 0, moved, f4, &base);
         if (opts.empty()) { continue; }
         int de = 0;   // the damage about to be dealt to E (its sweep damage plus whatever was pulled onto it)
         for (const auto& x : base) { if (x.first == e.card.m_number) { de = x.second; break; } }
@@ -1585,6 +1631,57 @@ inline void AddShieldRider(GameState& s, int controller, int dmg, Batch& b)
     }
 }
 
+// Does any creature on the battlefield carry an en-Kor redirection ability ({0} shield or {1}{W} pull)? The cheap
+// pre-test DealDamageBatch runs on every event before it copies the batch for the rider.
+inline bool AnyRedirector(const GameState& s)
+{
+    for (const Permanent& q : s.battlefield)
+    {
+        if (!q.card.IsCreature()) { continue; }
+        const CardDefinition* d = Def(q);
+        if (d != nullptr && DefOffersShieldChoice(*d)) { return true; }
+    }
+    return false;
+}
+
+// May `controller`'s en-Kors act in an event of kind `w` whose source `src_controller` controls? The ENGINE models
+// every window (USER 2026-11-17: "it should be possible to pull from any source that is damaged"); the deck's
+// provider may restrict the AUTONOMOUS search (StuffyDollProvider: our own sweeper only -- "but we should
+// heuristically prune it to what you said"). Human play is never restricted: the viewer offers every legal option.
+inline bool RiderWindowAdmitted(const GameState& s, int controller, RiderWindow w, int src_controller)
+{
+    if (HumanPlayActive()) { return true; }
+    return ResolveProvider(s).RedirectWindowAdmitted(s, controller, static_cast<int>(w), src_controller);
+}
+
+// THE REDIRECTION RIDER ON EVERY EVENT (step 9b). For each player with an en-Kor (shield or pull) on the battlefield,
+// in player order, whose window the provider admits: the pulls, then the shields (AddShieldRider -> AddPullRider),
+// as choices on the shared pin stream in resolution order. The timing fold that hosted them on our sweeper (design
+// 4.2: activating in response to an event is the same as activating as it happens) holds for ANY event: shields
+// and pulls are made for the event they ride and spent inside it; making them at an earlier window can only let an
+// earlier event consume them. A trigger's event, the Doll's self-ping, a Guilty Conscience trigger (main phase or
+// combat -- in combat the choices ride the combat pin stream CombatDamageDealt installs) and our sweeper all come
+// through here. Byte-identity: an event with no en-Kor on the battlefield never reaches this (AnyRedirector), and
+// where the provider refuses a window nothing is chosen, no ordinal is taken and no mana is paid -- the legacy
+// outcome.
+inline void AddRedirectRider(GameState& s, Batch& b)
+{
+    if (b.src.empty()) { return; }
+    const int src_ctrl = b.src[0].controller;
+    for (int p = 0; p < static_cast<int>(s.players.size()); ++p)
+    {
+        bool mine = false;
+        for (const Permanent& q : s.battlefield)
+        {
+            if (!q.card.IsCreature() || q.controller_index != p) { continue; }
+            const CardDefinition* d = Def(q);
+            if (d != nullptr && DefOffersShieldChoice(*d)) { mine = true; break; }
+        }
+        if (!mine || !RiderWindowAdmitted(s, p, b.window, src_ctrl)) { continue; }
+        AddShieldRider(s, p, b);
+    }
+}
+
 // "{T}: This creature deals N damage to itself" (PermAbilityMode::SelfPing; the {T} is already paid by
 // the caller). ONE damage event, the Doll both source and recipient, through the shared pipeline, so its
 // own reflection (and any later damage watcher) sees it -- in both worlds, which share ApplyPermAbility.
@@ -1597,6 +1694,7 @@ inline void SelfPingAt(GameState& s, int controller, int idx, const CardDefiniti
     Batch b;
     b.src.push_back({ me.card, controller, me.card.IsCreature() });
     b.hits.push_back({ 0, { false, me.card.m_number }, n, false, false });
+    b.window = RiderWindow::SelfPing;
     if (g_play_event_sink != nullptr && !TapSpeculatingNow())
     {
         EmitPlayEvent(s.turn_number, "damage",

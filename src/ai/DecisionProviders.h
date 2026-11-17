@@ -197,6 +197,12 @@ enum class UnprunedGate
     ReflectTarget,   // damage reflection (core/DamageReflection.h): a reflection trigger's target set
                      // restored to every legal target -- the engine's sound own-face fold (F1) and the
                      // provider's ReflectTargetCandidates restriction both lifted
+    RedirectWindow,  // Stuffy Doll (step 9b): en-Kor pulls / {0} shields offered in EVERY damage event instead of
+                     // StuffyDollProvider::RedirectWindowAdmitted's our-sweeper-only prune (USER 2026-11-17)
+    GcHost,          // Stuffy Doll (step 9b): Guilty Conscience's host set restored to every legal host instead of
+                     // StuffyDollProvider::DamageBackAuraHostCandidates' one-host (split case: two) prune (USER)
+    EscapeTarget,    // Stuffy Doll (step 9b): Loran's Escape's target set restored to the engine's folded list
+                     // instead of StuffyDollProvider::IndestructibleGrantTargetCandidates' one-target prune (USER)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -4191,6 +4197,12 @@ class StuffyDollProvider : public DeckProvider
 public:
     void ReflectTargetCandidates(const GameState& s, int src_number, int controller, int amount, int kind,
                                  std::vector<int>& io) const override;
+    // Step 9b, USER-approved HEURISTIC prunes (restrict-only; lifted by MTG_UNPRUNE=redirectwindow / gchost /
+    // escapetarget and by human play). Rationale = the USER rulings quoted in design section 14, step 9b.
+    bool RedirectWindowAdmitted(const GameState& s, int controller, int window, int src_controller) const override;
+    void DamageBackAuraHostCandidates(const GameState& s, const CardDefinition& aura, std::vector<int>& io) const override;
+    void IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& def, int inert_rep,
+                                             std::vector<int>& io) const override;
     bool HasExtraLethalModel() const override { return true; }
     int  ExtraLethalDamage(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
     CertStance Certificate() const override

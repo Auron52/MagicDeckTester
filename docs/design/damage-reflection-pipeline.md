@@ -1645,3 +1645,83 @@ Where the code departs from the sections above, and why. Each entry names the sy
   `provider_audit.py --check` rc 0 (Stuffy Doll NOT AUDITED: no profile yet); static viewer audit rc 0. d0 sanity,
   50 games seed 1: 44 won, avg win turn 5.386 (metric avg 5.82), no abort / tripwire; the same games on the old
   ModernRwBurn routing: 44 won, 5.591 (6.00).
+
+### Step 9b (the en-Kor riders on every damage event; the USER's heuristic prunes)
+
+* **The rulings (verbatim, the spec; ledger "Open questions for the USER").**
+  * ~20:30: *"My take on the pull is that it should be possible to pull from any source that is damaged, but we
+    should heuristically prune it to what you said."*
+  * ~20:35 (the {0} shields): *"Yes, they probably should get the same treatment, but realistically there are no other
+    sources of damage that hit our creatures in goldfishing."*
+  * ~20:40 (GC host): *"Fair enough, the Guilty Conscience is something that can actually happen in practice. That
+    said, it's not a good play to put it on the en-Kor. You should always choose something that can keep the loop
+    going."* -- *"(heuristically)"*.
+  * ~20:50: *"Actually, Doll first only works consistently if it can tap this turn. If not, we might need to consider
+    one other critter that reflects damage. Similarily Loren's Escape should target a critter with Guilty Conscience
+    on it if such exists."* -- *"The idea here being that summoning sickness is an issue since we need damage to
+    start the chain."*
+  * ~20:58: *"Yes, and if there is a reflector without summoning sickness and a doll we should potentially try both.
+    The doll is better if we need to wait a turn anyway, but the other creature may be able to go off."*
+  * ~21:00: *"But we only need to try a maximum of 2 targets."* ~21:01: *"(and often just 1)"*.
+  * ~21:05: *"Hmm... Though I guess in rare cases we would win by combat damage and the conscience could be better on
+    a higher-power creature. That makes a clear order."*
+  * ~21:08: *"In rare cases we could have a lower-power attacker able to attack and a higher-power one with summoning
+    sickness. I would choose the lower-power one unless we have a good chance of lethal next turn with the other."*
+  * ~21:10: *"(in which case you can search)"* and *"I don't want an order for the most part. We should prune it."*
+  * ~21:12: *"I'm saying this is an exception to the prune."*
+  * ~21:14 (Loran's Escape): *"Yes, that sounds good regarding Loran's Escape."* Then: *"I would prune Loran's Escape
+    even when we have no guilty conscience to one creature or perhaps even not castable. It is essentially a Scry
+    1."*; *"I guess you can argue that it could allow a creature to survive a sweeper... Not great, but that is a use.
+    In that case highest power (and not stuffy) I suppose."*; *"It should be a creature that reflects damage also."*
+* **ENGINE: the riders run on EVERY damage event.** `dmgrx::Batch::window` (`RiderWindow`: Sweep, Reflection,
+  AuraHost, SelfPing) names the event; `DealDamageBatch` runs `AddRedirectRider` (pulls, then shields -- the step-8/9
+  `AddShieldRider` / `AddPullRider`, now per event and per player with an en-Kor) before applying, for top-level and
+  nested events alike, so executor and rollout stay in lockstep by construction. `dmgrx::Sweep` no longer calls the
+  rider itself (same point in the ordinal stream: before the sweep's reflection choices). The choices stay on the
+  shared pin stream (`PinnedChoice`); a Guilty Conscience trigger in combat reads the step-5b combat pin stream that
+  `CombatDamageDealt` installs, and the combat fan's pre-check counts an en-Kor as a chooser when the provider admits
+  that window. No `Combat` kind: in the goldfish nothing blocks, so combat damage never reaches a creature; what does
+  in combat is the GC trigger (AuraHost). The timing fold generalises (activating in response to an event = as it
+  happens; an earlier activation could only be consumed by an earlier event), and P0 now reads "a later event that
+  damages it is its own window". Every batch the engine builds has one source, so "the source of your choice" is
+  `b.src[0]`. Cheap guard: `AnyRedirector` (an en-Kor on the battlefield) before the batch is copied.
+* **PROVIDER (USER-approved HEURISTIC prunes, restrict-only, each lifted by its gate and never consulted under human
+  play; the viewer offers every legal option).** New hooks `RedirectWindowAdmitted`, `DamageBackAuraHostCandidates`,
+  `IndestructibleGrantTargetCandidates`; new gates `redirectwindow`, `gchost`, `escapetarget`.
+  * (a) **Windows:** the autonomous search sees the pulls/shields only at OUR OWN SWEEPER (`window == Sweep`, source
+    ours). A refused window chooses nothing, takes no ordinal and pays nothing: the step-9 outcome. The engine's sound
+    folds (P0-P3, F4 / landmarks) still shape the admitted windows. The provider's F2a-F3 reflection-target folds
+    assumed "nothing else triggers on a creature being dealt damage"; with the window prune LIFTED and an en-Kor of
+    ours out, they are now switched off (a shield or pull could carry the damage on).
+  * (b) **GC host = a PRUNE, not an order.** Candidates = loop-sustaining creatures among the engine's hosts
+    (`ReflectInstances > 0`: Doll -- unless it chose us --, Reckoner, Nemesis, Maniac, a Spiteful-granted Sliver). A
+    host has a STARTER this turn when our castable sweeper reaches it (mana count, GC's own mana value added; colours
+    not checked -- an optimistic heuristic input), the Doll's {T} (untapped, `CanTapNow`), or an attack (pre-combat,
+    `CanAttackFull`). A Doll with a starter -> ONE host. Else the best go-off-now creature (higher power, ties
+    battlefield order) and, in the SPLIT case only, the best wait-a-turn host (a Doll on board, else a starter-less
+    reflector of STRICTLY higher power) -> TWO, the search decides. Nothing can go off now -> ONE (the Doll, else the
+    highest power). No loop-sustaining host -> the engine's list (never emptied). Hooked in CollectActions' aura
+    branch after `LegalEnchantTargets`; the engine drops anything added and keeps its list on an empty result.
+  * (c) **Loran's Escape target = ONE target.** A creature of ours carrying GC -> it (every such one in the list; an
+    indestructible GC'd Doll is the no-effect line, so the engine's no-effect representative stands for it). Else our
+    highest-power damage-REFLECTING creature other than the Doll (ties: battlefield order). Else the scry-only /
+    no-effect representative. Else (none) the engine's list. Same-plan HAND creatures are not kept (DECISION TAKEN,
+    surfaced: a hand target forces its cast into the plan; the USER asked for one target that keeps the Escape
+    castable). Hooked after the step-7 folds (the emission is now collected, filtered, then emitted in the same order).
+* **Viewer.** The pull `target` and shield `divide` prompts now appear at any damage event in human play (no
+  `main.cpp` logic change: the prompts were never sweeper-specific; the pull wording now says "this event's source").
+  In a Doll + GC loop with a Shaman and spare `{1}{W}` the pull prompt repeats once per loop step (decline = no
+  creature). DECISIONS.md rows/notes updated; GC host and Loran target prompts are unchanged (full legal set).
+* **Verification.** 7 new unit cases (the reflection-event shield, generic vs Stuffy provider; a searched Shaman pull in a
+  reflection's event, pinned, paid, replayed; COMBAT: GC on an attacking Nomads, shield onto the Doll; the GC-host prune's
+  six board shapes; the host prune reaching `EnumerateMainPlans`; the Escape prune's five shapes; the Escape prune reaching
+  `EnumerateMainPlans`). Each asserts the restriction and, under its gate, that it is lifted; the step-9b cases were also run
+  under `MTG_UNPRUNE=redirectwindow,gchost,escapetarget` (7/7, 325 assertions). Unit 3460/3460, scenarios 577/577, smoke
+  219/219 job digests identical to step 10, `provider_audit.py --check` rc 0 (Stuffy Doll NOT AUDITED: no profile yet),
+  static viewer audit rc 0.
+* **d0 sanity (50 games, seed 1, as step 10):** 44 won, avg win turn 5.386 (metric avg 5.82) -- the same aggregate as step
+  10, no abort / tripwire; 11 of 50 games changed play (digest ff108cd1992a1493 vs 829f3e74fb564e5e). Fully attributed:
+  under `MTG_UNPRUNE=gchost,escapetarget` all 50 digests equal step 10's (the window prune moves nothing at d0). Two win
+  turns moved, net 0: game 15 T6 -> T7 (the Escape prune: lifting `escapetarget` alone restores T6), game 35 T7 -> T6 (the
+  GC-host prune: lifting `gchost` alone gives T7). A d0 sanity run, not a measurement: the held-out A/B of the three
+  prunes is owed (USER-approved heuristics, so measured and reported, not gated on).

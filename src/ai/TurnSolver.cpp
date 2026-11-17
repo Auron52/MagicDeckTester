@@ -42716,6 +42716,18 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             // what the 5f pruned-vs-unpruned A/B compares against.
             std::vector<int> aura_hosts =
                 LegalEnchantTargets(state, state.active_player_index, def.params);
+            // GUILTY CONSCIENCE's host (aura_host_damage_back; step 9b): the deck provider may RESTRICT the host set
+            // (StuffyDollProvider: ONE host by default, two in the USER's split case -- a USER-approved heuristic
+            // prune, lifted by MTG_UNPRUNE=gchost). Anything added is dropped; an emptied list keeps the engine's.
+            // Never under human play (the viewer asks the host from every legal creature).
+            if (def.params.aura_host_damage_back && aura_hosts.size() > 1 && !HumanPlayActive())
+            {
+                std::vector<int> r = aura_hosts;
+                ResolveProvider(state).DamageBackAuraHostCandidates(state, def, r);
+                r.erase(std::remove_if(r.begin(), r.end(), [&](int n)
+                        { return std::find(aura_hosts.begin(), aura_hosts.end(), n) == aura_hosts.end(); }), r.end());
+                if (!r.empty()) { aura_hosts.swap(r); }
+            }
             if (def.params.is_land_aura && !def.params.land_aura_can_target_opponent
                 && !HumanPlayActive()
                 && !DecisionUnpruned(UnprunedGate::LandAuraHost))
@@ -43565,8 +43577,8 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
             //     so with a battlefield representative it is the same line under a stricter subset).
             // Same-plan HAND creatures are offered (deduped by name, the SubsetHasMissingTrickTarget pairing):
             // "cast Boros Reckoner, Loran's it, then Blasphemous Act". The provider's TrickTargetCandidates is
-            // NOT consulted: it speaks own-creature ids for the pump tricks; a Loran's restriction is a hook of
-            // its own (design 4.5 / 8, step 10). Timing within the main (before / after a sweeper) is the cast
+            // NOT consulted: it speaks own-creature ids for the pump tricks; the Escape's restriction is its own
+            // hook, IndestructibleGrantTargetCandidates (step 9b, below). Timing within the main (before / after a sweeper) is the cast
             // order, not a variant here. Only this card carries the param -> every other trick is unchanged.
             if (def.params.trick_targets_artifact_or_creature)
             {
@@ -43577,6 +43589,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 int inert_own = 0, inert_opp = 0, inert_hand = 0;
                 std::string inert_hand_name;
                 std::vector<int> opp_targets;
+                std::vector<std::pair<int, std::string>> esc;   // (target id, hand name) in emission order
                 for (const Permanent& p : state.battlefield)
                 {
                     if (!ArtifactOrCreatureTrickTargetLegal(state, me, p)) { continue; }
@@ -43593,7 +43606,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (std::find(seen_keys.begin(), seen_keys.end(), k) != seen_keys.end()) { continue; }
                         seen_keys.push_back(k);
                     }
-                    if (p.controller_index == me) { emit(p.card.m_number, 0); }
+                    if (p.controller_index == me) { esc.push_back({ p.card.m_number, std::string() }); }
                     else                          { opp_targets.push_back(p.card.m_number); }
                 }
                 std::unordered_set<std::string> seen_hand;
@@ -43608,12 +43621,31 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         if (inert_hand == 0) { inert_hand = hc.m_number; inert_hand_name = hc.m_name.str(); }
                         continue;
                     }
-                    emit(hc.m_number, 0, hc.m_name.str());
+                    esc.push_back({ hc.m_number, hc.m_name.str() });
                 }
-                for (int num : opp_targets) { emit(num, 0); }
-                if (inert_own != 0)       { emit(inert_own, 0); }
-                else if (inert_opp != 0)  { emit(inert_opp, 0); }
-                else if (inert_hand != 0) { emit(inert_hand, 0, inert_hand_name); }
+                for (int num : opp_targets) { esc.push_back({ num, std::string() }); }
+                int inert_rep = 0;
+                if (inert_own != 0)       { esc.push_back({ inert_own, std::string() }); inert_rep = inert_own; }
+                else if (inert_opp != 0)  { esc.push_back({ inert_opp, std::string() }); inert_rep = inert_opp; }
+                else if (inert_hand != 0) { esc.push_back({ inert_hand, inert_hand_name }); inert_rep = inert_hand; }
+                // The deck provider's RESTRICTION (step 9b; StuffyDollProvider: ONE target, the USER's prune). It may
+                // only remove: anything it adds is dropped, and an emptied list keeps the engine's. Never under human
+                // play (the viewer offers every legal target).
+                if (esc.size() > 1 && !HumanPlayActive())
+                {
+                    std::vector<int> ids;
+                    for (const auto& t : esc) { ids.push_back(t.first); }
+                    ResolveProvider(state).IndestructibleGrantTargetCandidates(state, def, inert_rep, ids);
+                    std::vector<std::pair<int, std::string>> kept;
+                    for (const auto& t : esc)
+                    { if (std::find(ids.begin(), ids.end(), t.first) != ids.end()) { kept.push_back(t); } }
+                    if (!kept.empty()) { esc.swap(kept); }
+                }
+                for (const auto& t : esc)
+                {
+                    if (t.second.empty()) { emit(t.first, 0); }
+                    else                  { emit(t.first, 0, t.second); }
+                }
                 continue;
             }
             // Battlefield targets (+ strive counts for Twinflame), with a LOSSLESS equivalence
@@ -99716,12 +99748,18 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
         && dmgrx::t_combat_probe.probe == nullptr)
     {
         bool gc_on_board = false, chooser_on_board = false;
+        // An en-Kor (step 9b) is a combat chooser too -- its pulls / shields ride the GC trigger's event -- but only
+        // where the provider admits that window (StuffyDollProvider admits our sweeper only, so by default this adds
+        // nothing and no probe runs that did not run before).
+        const bool rider_in_combat = dmgrx::RiderWindowAdmitted(state, state.active_player_index,
+                                                                dmgrx::RiderWindow::AuraHost, state.active_player_index);
         for (const Permanent& q : state.battlefield)
         {
             const CardDefinition* d = q.def_absent ? nullptr : CardDatabase::Instance().LookupCached(q.card);
             if (!d) { continue; }
             if (d->params.aura_host_damage_back) { gc_on_board = true; }
             if (dmgrx::DefReflectsWithChoice(*d)) { chooser_on_board = true; }
+            if (rider_in_combat && dmgrx::DefOffersShieldChoice(*d)) { chooser_on_board = true; }
         }
         auto plan_may_choose_in_combat = [&](const TurnSolver::Plan& p) {
             bool gc = gc_on_board, chooser = chooser_on_board;
@@ -99730,6 +99768,7 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (!d) { return; }
                 if (d->params.aura_host_damage_back) { gc = true; }
                 if (dmgrx::DefReflectsWithChoice(*d)) { chooser = true; }
+                if (rider_in_combat && dmgrx::DefOffersShieldChoice(*d)) { chooser = true; }
             };
             for (const Action& a : p.actions)
             {

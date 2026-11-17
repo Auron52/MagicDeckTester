@@ -1409,6 +1409,32 @@ public:
     virtual void ReflectTargetCandidates(const GameState& /*s*/, int /*src_number*/, int /*controller*/,
                                          int /*amount*/, int /*kind*/, std::vector<int>& /*io*/) const {}
 
+    // RedirectWindowAdmitted -- may `controller`'s en-Kor redirection abilities (Shaman en-Kor's {1}{W} source pull,
+    // Nomads / Shaman en-Kor's {0} shields) be offered to the AUTONOMOUS search in a damage event of kind `window`
+    // (dmgrx::RiderWindow: 1 Sweep, 2 Reflection, 3 AuraHost, 4 SelfPing) whose source `src_controller` controls?
+    // The engine models the abilities in EVERY damage event (step 9b); a provider may only RESTRICT which events
+    // offer them (refusing = no pull, no shield, no mana: the legacy outcome). Never consulted under human play.
+    // DEFAULT: every window.
+    virtual bool RedirectWindowAdmitted(const GameState& /*s*/, int /*controller*/, int /*window*/,
+                                        int /*src_controller*/) const { return true; }
+
+    // DamageBackAuraHostCandidates -- the host set of a creature Aura whose host IS its effect
+    // (CardParams::aura_host_damage_back, Guilty Conscience), as CollectActions emits one cast variant per host.
+    // `io` arrives as the engine's legal hosts (LegalEnchantTargets, battlefield m_numbers). A provider may only
+    // RESTRICT it; the engine drops anything added and keeps its own list if the result is empty. Never consulted
+    // under human play. DEFAULT: unchanged.
+    virtual void DamageBackAuraHostCandidates(const GameState& /*s*/, const CardDefinition& /*aura*/,
+                                              std::vector<int>& /*io*/) const {}
+
+    // IndestructibleGrantTargetCandidates -- the target set of a "target artifact or creature gains indestructible"
+    // spell (CardParams::trick_targets_artifact_or_creature, Loran's Escape) after the engine's identity and
+    // no-effect folds: `io` holds battlefield m_numbers and same-plan hand card numbers, `inert_rep` the one
+    // no-effect (scry-only) representative the engine kept (0 when none; it is also in `io`). A provider may only
+    // RESTRICT it; the engine drops anything added and keeps its own list if the result is empty. Never consulted
+    // under human play. DEFAULT: unchanged.
+    virtual void IndestructibleGrantTargetCandidates(const GameState& /*s*/, const CardDefinition& /*def*/,
+                                                     int /*inert_rep*/, std::vector<int>& /*io*/) const {}
+
     virtual bool TakeFreeCast(const GameState& /*s*/, int /*controller*/,
                               const CardDefinition& /*found*/) const { return true; }
 

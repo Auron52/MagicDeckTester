@@ -7568,7 +7568,8 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
         [this](const GameState& s, const CardDefinition& def, int controller, int max_targets,
             int per_target_damage, const std::vector<ChosenTarget>& heuristic) -> std::vector<ChosenTarget>
         {
-            // en-Kor shields (Nomads / Shaman en-Kor's {0}, dmgrx::AddShieldRider): our sweeper is about to
+            // en-Kor shields (Nomads / Shaman en-Kor's {0}, dmgrx::AddShieldRider): a damage event (any source --
+            // a sweeper, a reflection trigger, Guilty Conscience, the Doll's ping; step 9b) is about to
             // deal `per_target_damage` to the en-Kor; the player divides it between the en-Kor itself (= no
             // shield) and the other creatures they control (one {0} activation per point moved). The
             // `divide` decision over dmgrx::t_viewer_shield's legal set (the en-Kor FIRST), the reply one
@@ -7741,11 +7742,11 @@ void ClaudePlayHarness::InstallResolutionChoosers(AIEngine& ai)
             // trick (Gold Rush / Scale the Heights) allows an EMPTY pick (untargeted cast).
             const bool trick = def.params.solo_target_trick;
             const bool activated_target = def.params.tap_target_pump_cost.has_value();
-            // Shaman en-Kor's {1}{W} source pull (dmgrx::AddPullRider, at our own sweeper): "any number" of target
+            // Shaman en-Kor's {1}{W} source pull (dmgrx::AddPullRider, at ANY damage event -- step 9b): "any number" of target
             // creatures, either side, up to what the mana affords (max_targets); min 0 = no pull.
             const bool pull_viewer = dmgrx::t_viewer_pull != nullptr && def.params.redirect_pull_cost.has_value();
             const std::string ability_desc = pull_viewer
-                ? "pulled: the damage the resolving sweeper would deal it is dealt to " + def.card.m_name.str()
+                ? "pulled: the damage this event's source would deal it is dealt to " + def.card.m_name.str()
                   + " instead (one " + def.params.redirect_pull_cost->ToString() + " activation per creature chosen; "
                   "its {0} shields can then move that damage on)"
                 : (trick && def.params.grants_temp_indestructible)

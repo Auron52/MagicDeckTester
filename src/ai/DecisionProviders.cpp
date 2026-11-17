@@ -1282,6 +1282,9 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"seagorger",  UnprunedGate::SeaGorger},
     {"gorgerzero", UnprunedGate::GorgerZero},
     {"reflecttarget", UnprunedGate::ReflectTarget},
+    {"redirectwindow", UnprunedGate::RedirectWindow},
+    {"gchost", UnprunedGate::GcHost},
+    {"escapetarget", UnprunedGate::EscapeTarget},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -2532,7 +2535,9 @@ bool RedElementalsProvider::CollectedActionAllowed(const GameState& s, const Act
 // SOUND folds (dominance proofs; the opponent's face stays, so the list can never empty):
 //   F2a  an own creature T with NO reflection instance and no Guilty Conscience on it: N dealt to T reaches
 //        nobody (in this deck nothing else triggers on a creature being dealt damage: en-Kor shields and
-//        Shaman pulls ride only our own sweeper, dmgrx::Sweep), and T keeps N marked or dies. The face takes
+//        Shaman pulls are admitted only at our own sweeper -- RedirectWindowAdmitted below; when that prune is
+//        lifted, MTG_UNPRUNE=redirectwindow, and an en-Kor of ours is out, NONE of F2a-F3 is applied, since a
+//        shield or pull can then carry the damage on), and T keeps N marked or dies. The face takes
 //        N. A death never helps here: it raises a later Act's cost and lowers a later Chain's X, and the
 //        deck has no death payoff.
 //   F2b  an own creature T with exactly ONE instance that can hit only the opponent's face (Mogg Maniac, a
@@ -2565,6 +2570,18 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
     const int opp_face = dmgrx::PlayerId(1 - controller);
     const bool face_in = std::find(io.begin(), io.end(), opp_face) != io.end();
     const bool any_gc  = dmgrx::AnyAuraHostDamageBack(s);
+    // The en-Kor riders on a reflection's event (step 9b) break F2a-F3's "N dealt to T reaches nobody else" premise;
+    // they are admitted there only when the window prune is lifted.
+    bool folds_hold = true;
+    if (RedirectWindowAdmitted(s, controller, static_cast<int>(dmgrx::RiderWindow::Reflection), controller))
+    {
+        for (const Permanent& q : s.battlefield)
+        {
+            const CardDefinition* qd = dmgrx::Def(q);
+            if (q.controller_index == controller && q.card.IsCreature() && qd != nullptr && dmgrx::DefOffersShieldChoice(*qd))
+            { folds_hold = false; break; }
+        }
+    }
     std::vector<int> front, rest;
     front.reserve(io.size());
     rest.reserve(io.size());
@@ -2582,7 +2599,7 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
         }
         const bool gc   = dmgrx::AuraHostDamageBackOn(s, id) > 0;
         const int  inst = dmgrx::ReflectInstances(s, *q);
-        if (!gc && face_in)
+        if (!gc && face_in && folds_hold)
         {
             if (inst == 0) { continue; }                                      // F2a
             if (inst == 1 && dmgrx::ReflectsFaceOnly(s, *q)) { continue; }   // F2b
@@ -2593,6 +2610,182 @@ void StuffyDollProvider::ReflectTargetCandidates(const GameState& s, int /*src_n
     }
     front.insert(front.end(), rest.begin(), rest.end());
     io.swap(front);
+}
+
+// ---- Step 9b: the USER's heuristic PRUNES (restrict-only; never a soundness claim) ---------------------------
+// Each is a USER-approved heuristic narrowing of a searched choice, lifted by its MTG_UNPRUNE gate and never
+// consulted under human play (the viewer offers every legal option). Rulings quoted in design section 14, step 9b.
+
+// (a) en-Kor pulls + {0} shields: the ENGINE offers them in every damage event that would damage a creature; this
+//     deck's search keeps only OUR OWN SWEEPER's event (USER 2026-11-17: "it should be possible to pull from any
+//     source that is damaged, but we should heuristically prune it to what you said"; on the shields: "they
+//     probably should get the same treatment, but realistically there are no other sources of damage that hit our
+//     creatures in goldfishing"). A refused window chooses nothing and pays nothing: the legacy outcome. The
+//     engine's sound folds P0-P3 (pulls) and F4 / the landmarks (shields) still shape the admitted windows.
+bool StuffyDollProvider::RedirectWindowAdmitted(const GameState& /*s*/, int controller, int window,
+                                                int src_controller) const
+{
+    if (DecisionUnpruned(UnprunedGate::RedirectWindow)) { return true; }
+    return window == static_cast<int>(dmgrx::RiderWindow::Sweep) && src_controller == controller;
+}
+
+namespace
+{
+bool StuffyIsDoll(const CardDefinition* d)
+{
+    return d != nullptr && d->params.self_ping_damage > 0
+        && d->params.reflect_dealt_damage == CardParams::ReflectTo::ChosenPlayer;
+}
+// "Keeps the loop going" (USER 2026-11-17 ~20:40): one of OUR creatures that deals damage when it is dealt damage
+// -- Stuffy Doll (unless it chose us), Boros Reckoner, Screaming Nemesis, Mogg Maniac, a Sliver under a Spiteful
+// grant (dmgrx::ReflectInstances > 0).
+bool StuffyLoopSustainer(const GameState& s, const Permanent& q, int me)
+{
+    if (q.controller_index != me || !q.card.IsCreature()) { return false; }
+    const CardDefinition* d = dmgrx::Def(q);
+    if (StuffyIsDoll(d) && q.chosen_player == me && dmgrx::GrantedInstances(s, q) == 0) { return false; }
+    return dmgrx::ReflectInstances(s, q) > 0;
+}
+// Can one of our creature sweepers in hand be cast this turn alongside `extra_mv` more mana (the Aura itself)? A
+// sweeper "reaches" every creature, so it is a starter for any host. Mana count only (colours not checked): a
+// heuristic input, optimistic like ExtraLethalDamage's.
+bool StuffySweeperCastable(const GameState& s, int me, int extra_mv)
+{
+    int creatures = 0;
+    for (const Permanent& q : s.battlefield) { if (q.card.IsCreature()) { ++creatures; } }
+    const int avail = AvailableManaPool(s).Total();
+    for (const Card& c : s.players[static_cast<std::size_t>(me)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr) { continue; }
+        const CardParams& p = d->params;
+        if (!(p.damage_all_creatures > 0 || p.damage_all_creatures_count_creatures || p.x_damage_each_creature_and_player))
+        { continue; }
+        int mv = d->card.m_mana_cost.ManaValue();
+        if (p.cost_less_per_creature_on_battlefield)
+        { mv = std::max(mv - d->card.m_mana_cost.generic, mv - creatures); }
+        if (mv + extra_mv <= avail) { return true; }
+    }
+    return false;
+}
+}   // namespace
+
+// (b) Guilty Conscience's HOST: a PRUNE, not an order (USER 2026-11-17 ~20:40-21:12, quoted in section 14 step 9b).
+//     Candidates = the loop-sustaining creatures among the engine's hosts. A host has a STARTER this turn when damage
+//     can reach it now: our castable sweeper (any host), the Doll's {T} ping (untapped, can tap now), or an attack
+//     (pre-combat, CanAttackFull). Then:
+//       * a Doll with a starter -> that ONE host (indestructible and loops now; nothing beats it);
+//       * else, with a creature that can go off now: the best of those (higher power; ties: battlefield order) --
+//         plus, in the SPLIT case only, the best wait-a-turn host (a Doll on the board, else a summoning-sick /
+//         starter-less reflector of strictly higher power); the search decides between the two;
+//       * else (nothing can go off now): ONE host -- the Doll if on board, else the highest-power reflector.
+//     No loop-sustaining host at all -> the engine's list stands (never emptied).
+void StuffyDollProvider::DamageBackAuraHostCandidates(const GameState& s, const CardDefinition& aura,
+                                                      std::vector<int>& io) const
+{
+    if (DecisionUnpruned(UnprunedGate::GcHost) || io.size() <= 1) { return; }
+    const int me = s.active_player_index;
+    struct H { int num; bool doll; bool starter; int power; };
+    std::vector<H> hs;
+    const bool sweep = StuffySweeperCastable(s, me, aura.card.m_mana_cost.ManaValue());
+    const bool can_attack_now = s.phase != Phase::PostCombatMain && s.phase != Phase::Ending;
+    for (int num : io)
+    {
+        const Permanent* q = nullptr;
+        for (const Permanent& p : s.battlefield) { if (p.card.m_number == num) { q = &p; break; } }
+        if (q == nullptr || !StuffyLoopSustainer(s, *q, me)) { continue; }
+        const bool doll = StuffyIsDoll(dmgrx::Def(*q));
+        bool starter = sweep;
+        if (!starter && doll) { starter = !q->tapped && CanTapNow(*q, s.battlefield, nullptr); }
+        if (!starter && !doll) { starter = can_attack_now && CanAttackFull(*q, s.battlefield, me); }
+        hs.push_back({ num, doll, starter, CombatPowerOf(*q, s) });
+    }
+    if (hs.empty()) { return; }
+    std::vector<int> keep;
+    const H* doll_now = nullptr;
+    const H* doll_any = nullptr;
+    const H* best_now = nullptr;
+    for (const H& h : hs)
+    {
+        if (h.doll && h.starter && doll_now == nullptr) { doll_now = &h; }
+        if (h.doll && doll_any == nullptr) { doll_any = &h; }
+        if (!h.doll && h.starter && (best_now == nullptr || h.power > best_now->power)) { best_now = &h; }
+    }
+    if (doll_now != nullptr) { keep.push_back(doll_now->num); }
+    else if (best_now != nullptr)
+    {
+        keep.push_back(best_now->num);
+        const H* wait = doll_any;
+        if (wait == nullptr)
+        {
+            for (const H& h : hs)
+            {
+                if (!h.starter && h.power > best_now->power && (wait == nullptr || h.power > wait->power)) { wait = &h; }
+            }
+        }
+        if (wait != nullptr) { keep.push_back(wait->num); }
+    }
+    else
+    {
+        const H* one = doll_any;
+        if (one == nullptr)
+        { for (const H& h : hs) { if (one == nullptr || h.power > one->power) { one = &h; } } }
+        keep.push_back(one->num);
+    }
+    std::vector<int> out;
+    for (int num : io) { if (std::find(keep.begin(), keep.end(), num) != keep.end()) { out.push_back(num); } }
+    if (!out.empty()) { io.swap(out); }
+}
+
+// (c) Loran's Escape's TARGET: a PRUNE to ONE target (USER 2026-11-17 ~21:14 and the three refinements after it).
+//       * a creature of ours carrying Guilty Conscience exists -> that creature (every such one in the list; if its
+//         grant is a no-effect line -- an indestructible Doll -- the engine's no-effect representative stands in);
+//       * else our highest-power damage-REFLECTING creature other than Stuffy Doll (Reckoner, Nemesis, Mogg Maniac,
+//         a Sliver under a Spiteful grant) on the battlefield ("it could allow a creature to survive a sweeper";
+//         "It should be a creature that reflects damage also"); ties: battlefield order;
+//       * else the scry-only / no-effect representative ("It is essentially a Scry 1"; kept castable, the scry digs);
+//       * else (no such representative) the engine's list stands.
+//     Same-plan HAND creatures are not kept: a hand target forces its cast into the same plan, and the USER asked
+//     for one target that keeps the Escape castable on its own.
+void StuffyDollProvider::IndestructibleGrantTargetCandidates(const GameState& s, const CardDefinition& /*def*/,
+                                                             int inert_rep, std::vector<int>& io) const
+{
+    if (DecisionUnpruned(UnprunedGate::EscapeTarget) || io.size() <= 1) { return; }
+    const int me = s.active_player_index;
+    auto on_bf_own = [&](int num) -> const Permanent* {
+        for (const Permanent& q : s.battlefield)
+        { if (q.card.m_number == num && q.controller_index == me && q.card.IsCreature()) { return &q; } }
+        return nullptr;
+    };
+    bool any_gc = false;
+    std::vector<int> gc_in;
+    for (const Permanent& q : s.battlefield)
+    {
+        if (q.controller_index != me || !q.card.IsCreature()) { continue; }
+        if (dmgrx::AuraHostDamageBackOn(s, q.card.m_number) <= 0) { continue; }
+        any_gc = true;
+        if (std::find(io.begin(), io.end(), q.card.m_number) != io.end()) { gc_in.push_back(q.card.m_number); }
+    }
+    std::vector<int> out;
+    if (any_gc)
+    {
+        for (int num : io) { if (std::find(gc_in.begin(), gc_in.end(), num) != gc_in.end()) { out.push_back(num); } }
+        if (out.empty() && inert_rep != 0) { out.push_back(inert_rep); }
+    }
+    else
+    {
+        const Permanent* best = nullptr;
+        for (int num : io)
+        {
+            const Permanent* q = on_bf_own(num);
+            if (q == nullptr || num == inert_rep || StuffyIsDoll(dmgrx::Def(*q)) || dmgrx::ReflectInstances(s, *q) <= 0)
+            { continue; }
+            if (best == nullptr || CombatPowerOf(*q, s) > CombatPowerOf(*best, s)) { best = q; }
+        }
+        if (best != nullptr)         { out.push_back(best->card.m_number); }
+        else if (inert_rep != 0)     { out.push_back(inert_rep); }
+    }
+    if (!out.empty()) { io.swap(out); }
 }
 
 // The lethal projection (design section 5). Optimistic by contract: it only ranks the greedy picker's
