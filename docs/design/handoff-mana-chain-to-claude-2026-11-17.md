@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:19 UTC
+## Live status, updated 07:21 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -20,10 +20,11 @@ issues**; lever-off still has APPLY-DROP=1. Outputs are
 and `_legacy.out`. Release `./build.sh` passed; the full Release unit
 suite passed **3,385/3,385**, zero failures, console
 `build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
-The PGO rebuild is running in exec session `38090`, console
+The PGO rebuild passed in exec session `38090`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_spirits_shock_pair.out`.
-Its instrumented compile and pooled 275-job/7,447-game profile training
-batch finished; the optimized compile is active (07:19 UTC).
+Its instrumented compile, pooled 275-job/7,447-game profile training,
+and optimized link all passed. `build/PGO/SRC_TREE` matches
+`HEAD:src=72188b700b83bfbd66f13db98870583d61d5dd21`.
 The paired 5,000-game manifest is ready at
 `build/scratch/spirits_shock_pair_5k/manifest.json`, indices 45,000–49,999.
 `build/scratch/spirits_shock_pair_5k/run.sh` runs the default and lever-off
@@ -32,9 +33,10 @@ fix, `mana_clean.py status` marks all 15 formerly clean decks
 **stale-clean by source hash**; that is expected and requires refresh gates.
 The paired result parser is ready at
 `build/scratch/spirits_shock_pair_5k/compare.py`; run it after both arms.
-After PGO passes and its source stamp matches `git rev-parse HEAD:src`,
-run both arms sequentially on the same binary, default versus
-`MTG_SPIRITS_SHOCK_PAIR_HOLD=0`, then
+The same-binary 5,000-game paired run is now active in exec session `6176`,
+console `build/scratch/spirits_shock_pair_5k/runner.out`. It runs default
+and `MTG_SPIRITS_SHOCK_PAIR_HOLD=0` arms sequentially. After it finishes,
+run `python3 build/scratch/spirits_shock_pair_5k/compare.py`, then
 then a fresh Spirits mana-clean gate. If the measured cost is significant,
 look for a narrower fix. Update this handoff after each milestone.
 
