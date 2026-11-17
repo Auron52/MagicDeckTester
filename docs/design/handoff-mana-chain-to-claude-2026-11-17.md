@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 04:42 UTC
+## Current state, updated 04:53 UTC
 
 **Active batch:** refreshing four older issue records at source
 `fcb9352608ea`, 5,000 games each: Anti-Lifegain, Bruna, Midrange Burn,
@@ -16,9 +16,14 @@ Original command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run anti_lifegain bruna midrange_burn selesnya_lifegain --games 5000 --name codex-due-four-20261117`.
 Resume command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run --resume codex-due-four-20261117 --threads 16`.
-Resume exec session `23177` is active; the first 16-worker attempt was
-still running at 04:51 UTC. `python3 scripts/check_references_safe.py`
-passed at 04:51 UTC after scanning 210 checkouts/worktrees. The next
+The 16-worker resume (`23177`) was terminated after RSS climbed to
+38.5 GB; it had completed three additional chunks. The next resume uses
+**eight workers**, exec session `33637`, console
+`build/scratch/dragonstorm_visible_lump_ab/due_four_resume8.out`:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run --resume codex-due-four-20261117 --threads 8`.
+Resume remains chunk-granular and source-identical. `python3
+scripts/check_references_safe.py` passed at 04:51 UTC after scanning 210
+checkouts/worktrees. The next
 shared-branch push window opens at 05:09 UTC; rerun the safety check if
 new reference work appears before that push.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
