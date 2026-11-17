@@ -22,6 +22,8 @@ suite passed **3,385/3,385**, zero failures, console
 `build/scratch/dragonstorm_visible_lump_ab/unit_spirits_shock_pair.out`.
 The PGO rebuild is running in exec session `38090`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_spirits_shock_pair.out`.
+Its instrumented compile finished and the pooled 275-job/7,447-game
+profile training batch is active (07:13 UTC); optimized link follows.
 The paired 5,000-game manifest is ready at
 `build/scratch/spirits_shock_pair_5k/manifest.json`, indices 45,000–49,999.
 `build/scratch/spirits_shock_pair_5k/run.sh` runs the default and lever-off
