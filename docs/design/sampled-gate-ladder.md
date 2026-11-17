@@ -929,3 +929,11 @@ whose file also carries its learned leaf table and mulligan-generation settings;
 surfaced to the USER, not taken here. Angels and Slivers are neutral against their shipped no-leaf shapes (H2);
 Mirrorwing and Selesnya cost more. Open: CPU well above units on Kitty / Gods / Extra Turns under the lookahead
 (unprofiled), and RSS growth with every arm at deep shipped settings (H1's abort).
+
+GT (smoke + regression, `--both`; first on the tree rebased to 1e36f852b against an exact parent build over all 565
+keys, then re-run after rebasing onto a5c156a20): only the 15 Boars/Morph/Spirits keys differ from the parent, all
+equal or better in aggregate (Boars regression d5 4.7467->4.7400 and 4.7800->4.7733, boars2hg 5.0400->5.0267, morph2hg
+4.6667->4.6000 and 4.4400->4.4000, Morph d5 s3003 4.1200->4.1067, Spirits smoke 4.6500->4.6400 and d5 s3003
+4.7000->4.6933; the rest same-score line changes), with no searched-slower game on these decks and identical results
+across the second rebase. Every other failing key fails identically on the parent (unaccepted upstream drift, not
+this change) and is left alone. Accepted with `--deck=boars,boars2hg,morph,morph2hg,spirits,spirits2hg`.

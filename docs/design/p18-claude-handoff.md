@@ -115,3 +115,6 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
   `--deck=boars,boars2hg,morph,morph2hg,spirits,spirits2hg` after auditing; any other mismatch -> parent-binary audit
   (build 1e36f852b in a separate worktree); push wip branch; shared-branch push at the 4h window; CI watch.
 - USER decision surfaced: Treasure Hunt -> mode 3 (needs a sidecar that drops the leaf-table shape; not done).
+- DONE 2026-11-17 ~06:30 UTC: rebased onto a5c156a20; smoke+regression GT accepted for the 15 Boars/Morph/Spirits keys
+  (parent-attributed; all other failing keys fail identically on the exact parent). Pushed to the shared branch.
+  Remaining: USER decision on Treasure Hunt; open profiling items above. P18i is otherwise closed.
