@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status (Claude), updated 10:00 UTC
+## Live status (Claude), updated 10:31 UTC
 
 **Prevent Damage, all 30 refresh flags explained; oracle repairs committed `7a289ca75`** (audit-only;
 `HEAD:src=b6bfdd2d261e`). Details: `docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`.
@@ -19,16 +19,18 @@ its plain `{C}`; the ranking, user-rule filters and Satyr float are unchanged. P
 Landfall Elementals 1 faster, Minotaur +4.02% units on 4,999 identical games. Note:
 `docs/design/karoo-float-restricted-c-2026-11-17.md`. Unit suite 3,387/3,387.
 
-**State at 10:30 UTC (both commits LOCAL, NOT pushed; push window is open, last push 05:35 UTC):**
+**State at 10:31 UTC (both commits LOCAL, NOT pushed; push window is open, last push 05:35 UTC):**
 1. PGO+LTO built and stamped `34fb8c52119d` (`build/scratch/claude_pd/pgo.out`).
-2. Smoke RUNNING: `VPC_ALWAYS=1 MTG_RSS_CAP_GB=40 bash test/regression.sh --smoke`, console
-   `build/scratch/claude_pd/smoke.out`. Expect the known 39 GT failures. Diff `test/logs/smoke/wins/` against
-   `build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins/`: only Minotaur / Spirits /
-   Landfall Elementals / Dragons rows may move (Spirits also has Codex's `bd7c05019`). Every other row must be
-   byte-identical, and the viewer stage must have zero play-drift / board-diverged / enum-gap.
-3. NEXT: one pooled gate, `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run prevent_damage minotaur spirits
-   <landfall elementals key> dragons --games 5000 --name claude-pd-karoo-20261117` (check keys with `status`).
-   Commit `test/mana_clean.json` and the design notes with the verdicts.
+2. Smoke DONE (`build/scratch/claude_pd/smoke.out`): 43 failed = the known 39 + the d0 rows of Dragons,
+   Landfall Elementals, Minotaur and Spirits. Against the archived pre-change `.wins`
+   (`build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins/`) only those four d0 rows move,
+   and every moved game is FASTER (Elementals 1, Minotaur 2, Spirits 2, Dragons digest-only); 0 slower. Viewer:
+   0 play-drift / 0 board-diverged / 0 enum-gap (864 refs). Smoke GT not accepted (it is not this work's to
+   accept alone; the 39 known failures belong to the pending pooled accept).
+3. RUNNING: pooled gate `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run prevent_damage minotaur spirits
+   --games 5000 --name claude-pd-karoo-20261117`, console `build/scratch/claude_pd/gate.out`. Landfall
+   Elementals (94,137 issues) and Dragons (948) were left out: they cannot come out clean and are their own
+   queue items. On finish commit `test/mana_clean.json` and the verdicts in both design notes.
 4. Then push (check_references_safe, rebase, smoke if src replays, background CI watch with `--interval 60`).
 5. Then the wider queue: the Gods trial worktree, Dragonstorm clusters, Pirates / Extra Turns / Jumbo / Hydras /
    Fungus / Shadowborn / Morph, and every stale-clean deck (all 15 clean records are stale after these commits).
