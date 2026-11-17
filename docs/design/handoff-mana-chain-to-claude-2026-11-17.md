@@ -2,18 +2,23 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:34 UTC
+## Current state, updated 03:45 UTC
 
-The next due **Fungus** PGO mana-clean gate is the only active simulation
-batch, exec session 54776:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run fungus --games 5000 --name codex-fungus-fresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/fungus_fresh_gate.out`.
-Read `logs/mana_clean/codex-fungus-fresh-20261117/report.md` on
-completion, update this handoff, and commit `test/mana_clean.json`.
+**Fungus fresh gate complete:** indices 80,000–84,999 at PGO
+source `fcb9352608ea` yielded 486 issues: 137 ENUM-GAP, 116
+DOMINATED-CREATURE, 204 ORACLE-GAP, and 29 CAPPED. There are also 102
+disclosed DOMINATED-LIFE observations, which are not issue flags.
+Oracle-on/off play byte-identical. Report:
+`logs/mana_clean/codex-fungus-fresh-20261117/report.md`.
+The enum gaps span 129 signatures, often Concordant Crossroads first
+making a just-cast mana creature usable later in the same line (seed
+30082639 T3), or Saproling Migration producing later mana fodder.
+The oracle-gap and cap clusters need separate fidelity/cost work; seed
+30080373 T5 repeatedly reaches the 200,000-apply cap, while seed
+30083140 T5 has an oracle gap with 1,328 outcomes. The on arm had a
+long tail of about nine minutes despite its old cost estimate; do not
+assume its average cost reflects those outliers. The `test/mana_clean.json`
+record is committed with this handoff. No batch is active.
 
 **Creature Giving fresh gate complete:** indices 65,000–69,999 at PGO
 source `fcb9352608ea` yielded 280 issues: 276 ENUM-GAP across 249

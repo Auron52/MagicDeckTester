@@ -3271,6 +3271,50 @@
      "seed": 30075000,
      "src": "5dbe7bb187df20442873ee8f08fae1e814e2c695",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CAPPED": 29,
+      "CONTINUATION-DIFFERS": 9789,
+      "DOMINATED-CREATURE": 116,
+      "DOMINATED-LAND": 934,
+      "DOMINATED-LIFE": 102,
+      "DROP-COVERED": 197,
+      "ENUM-GAP": 137,
+      "ORACLE-GAP": 204,
+      "PHANTOM": 1737
+     },
+     "commit": "aaf394cfe3100d6f97f52eebf9a0123f448bbdc1",
+     "date": "2026-11-17T03:44:28Z",
+     "decisions": 40188,
+     "deck": "decks/Fungus/Fungus.cod",
+     "deck_sha": "d7f17aa4ca81bdb5a5dc4cb721e9613eb68ea126",
+     "game_index": 80000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 486,
+     "life_breakpoints": [],
+     "ms_off": 553668,
+     "ms_on": 7972099,
+     "report": "logs/mana_clean/codex-fungus-fresh-20261117/report.md",
+     "run": "codex-fungus-fresh-20261117",
+     "seed": 30080000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "issues"
     }
    ]
   },
