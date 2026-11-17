@@ -149,3 +149,14 @@ Mill 197; `_pz20` repairs Gods 38; Gods 124/336 need `_pqf`. Next: T3 repro of `
 - NEXT: rebuild; repro Gods gi35 (MTG_P18_ISO variants, then perf on build/Profile); re-run S2-style 56-deck screen;
   if clean (no later game, CPU <= heur on every deck), held-out confirm, then unit tests + smoke/regression GT and
   decide default vs opt-in. Strip dead knobs (_pfp, _pwc, _paw, _pllt-with-llw, mid-walk if unused).
+- GODS gi35 ROOT-CAUSED (679c0f1f7): the walk was bounded and refunded in UNITS only. T4's leafless pass 4 cost 9404
+  units but 14.5 s (window-edge cut nodes do applies/enumeration charged nothing), tripping the per-decision PRICED
+  ceiling (MTG_DECISION_PRICED_X=100, never refunded) so the ladder's pass 1 aborted at 0 units. NoStore's
+  `++workctr::t_mute` made it worse: a mute stops priced counting AND disables the plan/mana caches -> 174 s (it also
+  skipped ManaCacheMuteEnd). The same unrefunded-real-cost effect is why CPU >> units on Kitty/Gods/Extra Turns, and
+  the walk's work is where S2's RSS growth came from (1.17 GB vs 227 MB on gi35). FIX: every walk pass and the root
+  rollout carry a priced cap (unit allowance x MTG_DECISION_PRICED_REF_NS; root rollout max(1% unit cap, 0.1 x Limit));
+  a miss refunds priced work from the decision ceiling (t_pr_start shift) and the decision unit meter; NoStore blocks
+  only rgc/gamelc/inwin (plan/mana caches charge a hit as its recompute). gi35: 8.4 s / 250 MB vs heur 8.2 s / 227 MB.
+- RUNNING: S3 = S2's manifest (same seeds, both arms re-run) on mtg_j23, trace on, `build/scratch/p18g/S3/` (DONE marker).
+  Diagnostic adds: walk records carry wall ms in the dvs field (trace only).
