@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:44 UTC
+## Live status, updated 06:50 UTC
 
 **Active Breaching Dragonstorm diagnosis and audit-only trial:** The two
 fresh ENUM-GAP flags are **hidden future mana**, not a visible pre-cast
@@ -31,6 +31,9 @@ cases passed. The source commit is `79d7b898b`, with
 `HEAD:src=342674496bfb8ddc912cee3193513f41b0388d58`. A PGO+LTO
 rebuild is **active** in exec session `88239`, console
 `build/scratch/dragonstorm_visible_lump_ab/pgo_hidden_freecast_oracle.out`.
+Its compile completed and its pooled 275-job/7,447-game training batch
+was progressing normally at 06:50. Training progress is in
+`build/pgo-work/train.log`; the final PGO compile follows.
 Verify its source stamp, run the fresh Breaching Dragonstorm 5,000-game
 gate, then strict viewer and broader regression checks. Do not widen the
 player search gate to exploit the future reveal.
