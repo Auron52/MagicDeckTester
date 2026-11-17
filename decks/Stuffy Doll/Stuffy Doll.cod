@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp>Tue Nov 17 05:19:32 2026</lastLoadedTimestamp>
+    <deckname>Stuffy</deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="2" name="Stuffy Doll"/>
+        <card number="4" name="Nomads en-Kor"/>
+        <card number="4" name="Mogg Maniac"/>
+        <card number="4" name="Blasphemous Act"/>
+        <card number="4" name="Chain Reaction"/>
+        <card number="4" name="Guilty Conscience"/>
+        <card number="2" name="Plains"/>
+        <card number="2" name="Mountain"/>
+        <card number="3" name="Boros Garrison"/>
+        <card number="2" name="Boros Reckoner"/>
+        <card number="1" name="Shaman en-Kor"/>
+        <card number="3" name="Loran's Escape"/>
+        <card number="4" name="Forbidden Orchard"/>
+        <card number="3" name="Sacred Foundry"/>
+        <card number="4" name="Screaming Nemesis"/>
+        <card number="3" name="Mind Stone"/>
+        <card number="4" name="Inspiring Vantage"/>
+        <card number="3" name="Arid Mesa"/>
+        <card number="4" name="Spiteful Sliver"/>
+    </zone>
+</cockatrice_deck>
