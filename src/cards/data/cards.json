@@ -17498,6 +17498,65 @@
     "attack_trigger_reanimate_toughness_lt_self": true,
     "attack_trigger_reanimate_sac_end_step": true
    }
+  },
+  {
+   "name": "Worn Powerstone",
+   "mana_cost": "{3}",
+   "types": [
+    "Artifact"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "This artifact enters tapped.\n{T}: Add {C}{C}. [Mana rock: the Fire Diamond enters_tapped shape (honoured on the CAST path in both worlds, EffectHandler::EnterBattlefield and the rollout's non-creature enter) with Sol Ring's two-colourless tap (produces C, produces_amount 2). The enumerator's same-turn rock-ramp credit is gated off for an enters_tapped rock, so it funds nothing until the next untap step.]",
+   "template": "custom",
+   "parameters": {
+    "mana_rock": true,
+    "produces": [
+     "C"
+    ],
+    "produces_amount": 2,
+    "enters_tapped": true
+   }
+  },
+  {
+   "name": "Flooded Grove",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "{T}: Add {C}.\n{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}. [Filter land, the Cascade Bluffs model (is_filter): fed one {G} or {U} from another source it yields two mana of {G}/{U} in any split; without a feeder it taps for {C}. Colour fixing, not ramp. It has no land type, so it is never an Enchant Forest host (Utopia Sprawl) and never a fetch target. An Enchant land Aura (Wild Growth, Overgrowth) on it adds its bonus on EVERY tap, the free {C} mode and the fed mode included (CR 106.12: either is tapping it for mana) -- in the greedy payer's free-{C} and fed-filter branches as well as the backtracker and the human pre-tap (Sea Creatures I1 fix F2).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "is_filter": true
+   }
+  },
+  {
+   "name": "Hedge Maze",
+   "mana_cost": "",
+   "types": [
+    "Land"
+   ],
+   "subtypes": [
+    "Forest",
+    "Island"
+   ],
+   "keywords": [],
+   "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.\nWhen this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.) [The Thundering Falls model: produces G/U, enters_tapped, etb_surveil 1. Its Forest and Island subtypes are read off the definition everywhere that matters: it is an Enchant Forest host for Utopia Sprawl and a legal target of Misty Rainforest, Windswept Heath (Forest) and Flooded Strand (Island). The surveil is a searched land-drop sub-decision (Plan::scry_choice) when Maze is the land drop. When it is FETCHED or otherwise searched out of the library, its surveil trigger resolves AFTER the search's 'then shuffle' (CR 603.3: the trigger is put on the stack only once the search has finished resolving, shuffle included -- Sea Creatures I1 fix F1, in PerformLandSearch, PerformFetch and the other search-and-put resolvers) and so looks at the POST-shuffle top card; that look is decided by the provider's top-disposition rule at resolution (PROVISIONAL deferral D-1: not a searched axis -- the post-shuffle card cannot be planned on honestly); human play asks (surveil).]",
+   "template": "basic_land",
+   "parameters": {
+    "produces": [
+     "G",
+     "U"
+    ],
+    "enters_tapped": true,
+    "etb_surveil": 1
+   }
   }
  ]
 }

@@ -180,6 +180,219 @@ bool BoarsProvider::LandSearchPickOrderKey(const GameState& s, int controller, s
     return cacheable;
 }
 
+// ---- SeaCreaturesProvider (Sea Creatures I1, 2026-11-16; see the class note in DecisionProviders.h) ----------
+// Flag readers: EnvOn default + a HeuristicArm slot, so a pooled --batch can flip each per job.
+static bool SeaFetchPruneOn()
+{
+    static const bool e = EnvOn("MTG_SEA_FETCH_PRUNE", true);         // DEFAULT ON (USER ruling); =0 -> every target
+    return heurarm::Flag(heurarm::SEA_FETCH_PRUNE, e);
+}
+static bool SeaFetchIslandFirstOn()
+{
+    static const bool e = EnvOn("MTG_SEA_FETCH_ISLAND_FIRST", true);  // DEFAULT ON (USER "might"); =0 -> Forest first
+    return heurarm::Flag(heurarm::SEA_FETCH_ISLAND_FIRST, e);
+}
+static bool SeaSprawlBlueOn()
+{
+    static const bool e = EnvOn("MTG_SEA_SPRAWL_BLUE", true);         // DEFAULT ON (USER ruling); =0 -> {U, G} searched
+    return heurarm::Flag(heurarm::SEA_SPRAWL_BLUE, e);
+}
+static bool SeaSprawlGreenNeedOn()
+{
+    static const bool e = EnvOn("MTG_SEA_SPRAWL_GREEN_NEED");         // DEFAULT OFF (exception E1, pending the USER)
+    return heurarm::Flag(heurarm::SEA_SPRAWL_GREEN_NEED, e);
+}
+
+// The fetch rule's rank: Breeding Pool, then Island / Forest (MTG_SEA_FETCH_ISLAND_FIRST), then Hedge Maze (Q2,
+// agent default), then anything else. Each fetch's legal set does the rest: Windswept Heath has no Island and
+// Flooded Strand no Forest, so the same rank serves all three.
+static int SeaFetchRank(const std::string& name)
+{
+    const bool island_first = SeaFetchIslandFirstOn();
+    if (name == "Breeding Pool") { return 0; }
+    if (name == "Island")        { return island_first ? 1 : 2; }
+    if (name == "Forest")        { return island_first ? 2 : 1; }
+    if (name == "Hedge Maze")    { return 3; }
+    return 4;
+}
+// A fetchland-shaped single-land pick list (one land per pick, onto the battlefield): every fetch of the list.
+static bool SeaSingleLandPicks(int count, int to_hand, bool basic_only,
+                               const std::vector<std::vector<std::string>>& picks)
+{
+    if (count != 1 || to_hand != 0 || basic_only) { return false; }
+    for (const auto& pk : picks) { if (pk.size() != 1) { return false; } }
+    return true;
+}
+// The Boars low-life rule: at <= 3 life a fetch is HELD (FetchResolvesOnPlay) and its later crack searches the
+// FULL list (a Pool fetched at 2 life could not pay to enter untapped). Unreachable in goldfish Sea Creatures
+// (its floor is 20 - 7 fetches - 4 x 2 shocks = 5), kept for the Boars semantics. Keyed (bit 7).
+static bool SeaFetchLowLife(const GameState& s, int controller)
+{ return s.players[static_cast<std::size_t>(controller)].life <= 3; }
+
+bool SeaCreaturesProvider::FetchLineRankEnabled(const GameState& s) const
+{
+    (void)s;
+    return false;   // the reviewed fetch rule owns both routes; the generic pip ranking never reorders it
+}
+
+void SeaCreaturesProvider::LandSearchFetchPickOrder(const GameState& s, int controller, int count, int to_hand,
+                                                    bool basic_only, bool share_land_type, std::uint16_t subtype,
+                                                    std::uint16_t subtype_alt,
+                                                    std::vector<std::vector<std::string>>& picks) const
+{
+    DecisionProvider::LandSearchFetchPickOrder(s, controller, count, to_hand, basic_only, share_land_type,
+                                               subtype, subtype_alt, picks);
+    if (!SeaFetchPruneOn() || picks.size() < 2 || !SeaSingleLandPicks(count, to_hand, basic_only, picks)) { return; }
+    // A TOTAL order (rank, then name): the legacy route hands this list over in LIBRARY order and the battlefield
+    // route in class order, so neither ordering ever shows.
+    std::stable_sort(picks.begin(), picks.end(), [](const std::vector<std::string>& a, const std::vector<std::string>& b)
+    {
+        const int ra = SeaFetchRank(a.front()), rb = SeaFetchRank(b.front());
+        if (ra != rb) { return ra < rb; }
+        return a.front() < b.front();
+    });
+}
+
+int SeaCreaturesProvider::LandSearchFetchPickWidth(const GameState& s, int controller, int count, int to_hand,
+    bool basic_only, bool share_land_type, std::uint16_t subtype, std::uint16_t subtype_alt,
+    const std::vector<std::vector<std::string>>& picks) const
+{
+    // THE PRUNE (battlefield route: the held / crack-first activation, the on-play land drop, d0, rollouts). Read
+    // only under LandSearchPickPruned (never in human play or under MTG_UNPRUNE=landpick).
+    if (SeaFetchPruneOn() && picks.size() >= 2 && SeaSingleLandPicks(count, to_hand, basic_only, picks)
+        && !SeaFetchLowLife(s, controller))
+    { return 1; }
+    return DecisionProvider::LandSearchFetchPickWidth(s, controller, count, to_hand, basic_only, share_land_type,
+                                                      subtype, subtype_alt, picks);
+}
+
+std::vector<std::string> SeaCreaturesProvider::FetchSearchCandidates(const GameState& s, int controller,
+    const CardParams& fetch_pp, const std::vector<std::string>& ranked) const
+{
+    // The LEGACY immediate route's prune (Misty Rainforest's model in autonomous play): `ranked` is
+    // GenericProvider::FetchCandidates, already in the rule's order (it orders through LandSearchFetchPickOrder).
+    // Engine-side, human play and MTG_UNPRUNE=fetch never reach here.
+    if (SeaFetchPruneOn() && !SeaFetchLowLife(s, controller)) { return FetchTopPickOnly(ranked); }
+    return DecisionProvider::FetchSearchCandidates(s, controller, fetch_pp, ranked);   // =0: every target
+}
+
+int SeaCreaturesProvider::OnPlayFetchWidth(const GameState& s, const CardDefinition& fetch) const
+{
+    (void)s; (void)fetch;
+    // ON: the one pick (the lists above are already width 1). =0: 0 = no extra cap, so the land drop fans EVERY
+    // legal target -- the "full searched target set" the lever restores (the base default would still cap the land
+    // drop at the top of the base order). A/B caveat: judge that arm on decoupled shuffle salts (a wide fetch fan's
+    // edge can be clairvoyance of the post-fetch shuffle).
+    return SeaFetchPruneOn() ? 1 : 0;
+}
+
+bool SeaCreaturesProvider::LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const
+{
+    // The CONTRACT (DecisionProvider.h): every state input the order / width read. The base lack mask (bits 0-4;
+    // FetchLineRankEnabled is off, so no pip bits), the two flags (a pooled batch flips them per job on one thread's
+    // memo), and the low-life rule. "A Pool remains in the library" is already the memo's legal-definition multiset.
+    const bool cacheable = DecisionProvider::LandSearchPickOrderKey(s, controller, key);
+    if (SeaFetchPruneOn())          { key |= std::uint64_t{ 1 } << 5; }
+    if (SeaFetchIslandFirstOn())    { key |= std::uint64_t{ 1 } << 6; }
+    if (SeaFetchLowLife(s, controller)) { key |= std::uint64_t{ 1 } << 7; }
+    return cacheable;
+}
+
+// The {U, G} fold's PROOF is list-specific: every coloured pip in the 60 is {U} or {G} (Flooded Grove's feed is
+// {G/U}; Sol Ring / Worn Powerstone are generic), so a W/B/R Sprawl mana can pay only generic costs, which a U or G
+// mana pays too -- U and G each dominate W/B/R (the JumboCactuar argument). Re-checked over the controller's cards
+// in every zone (the Hydras shape): a nonland card of a W, B or R colour (mana cost, hybrid included -- Card::
+// HasColor) means the list changed (a screening arm) and the fold is off. Not scanned: a W/B/R pip in a colourless
+// card's ACTIVATION cost (none in this list; extend this if one is added).
+static bool SeaListSpendsNonGU(const GameState& s, int controller)
+{
+    auto breaks = [](const CardDefinition* d)
+    {
+        if (d == nullptr || d->card.IsLand()) { return false; }
+        return d->card.HasColor(Color::White) || d->card.HasColor(Color::Black) || d->card.HasColor(Color::Red);
+    };
+    const Player& me = s.players[static_cast<std::size_t>(controller)];
+    for (const std::vector<Card>* zone : { &me.hand, &me.graveyard, &s.exile })
+    {
+        for (const Card& c : *zone) { if (breaks(CardDatabase::Instance().LookupCached(c))) { return true; } }
+    }
+    for (std::size_t i = 0; i < me.library.size(); ++i)   // RawAt: a composition scan, not a library read
+    { if (breaks(CardDatabase::Instance().LookupCached(me.library.RawAt(i)))) { return true; } }
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        if (breaks(CardDatabase::Instance().LookupCached(p.card))) { return true; }
+    }
+    return false;
+}
+
+// Exception E1 (MTG_SEA_SPRAWL_GREEN_NEED, DEFAULT OFF pending the USER, Q3): the two board shapes where only a
+// GREEN Sprawl makes a cast possible -- (a) two {G}-pip casts in one turn, or (b) Koma's {G}{G} -- both need a
+// board whose only green source is the Sprawl's own Forest host. So: at most one green-producing permanent under
+// our control, and two or more {G} pips among the hand's OTHER cards (one copy of the Sprawl being cast excluded).
+// Then green is admitted as a SECOND searched branch; the search picks, the provider does not force green.
+static bool SeaSprawlGreenNeeded(const GameState& s, int controller, const CardDefinition& sprawl)
+{
+    int green_sources = 0;
+    for (const Permanent& p : s.battlefield)
+    {
+        if (p.controller_index != controller || p.def_absent) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (d->params.etb_choose_color)   // a resolved Sprawl: the colour it LOCKED
+        { green_sources += p.chosen_color == static_cast<int>(Color::Green); continue; }
+        const std::vector<Color>& prod = d->params.is_land_aura ? d->params.land_aura_produces : d->params.produces;
+        if (std::find(prod.begin(), prod.end(), Color::Green) != prod.end()) { ++green_sources; }
+    }
+    if (green_sources > 1) { return false; }
+    int g_pips = 0;
+    bool skipped_self = false;
+    for (const Card& c : s.players[static_cast<std::size_t>(controller)].hand)
+    {
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
+        if (d == nullptr || d->card.IsLand()) { continue; }
+        if (!skipped_self && d == &sprawl) { skipped_self = true; continue; }
+        g_pips += d->card.m_mana_cost.green;
+    }
+    return g_pips >= 2;
+}
+
+std::vector<int> SeaCreaturesProvider::EtbChoiceCandidates(const GameState& s, int controller,
+                                                           const CardDefinition& def) const
+{
+    std::vector<int> out = DecisionProvider::EtbChoiceCandidates(s, controller, def);
+    if (!(def.params.is_land_aura && def.params.etb_choose_color)) { return out; }
+    if (DecisionUnpruned(UnprunedGate::EtbColor)) { return out; }   // the standing audit: every colour
+    if (SeaListSpendsNonGU(s, controller)) { return out; }           // the fold's proof broke (a screening arm)
+    const int u = static_cast<int>(Color::Blue) + 1, g = static_cast<int>(Color::Green) + 1;
+    const bool has_u = std::find(out.begin(), out.end(), u) != out.end();
+    const bool has_g = std::find(out.begin(), out.end(), g) != out.end();
+    if (SeaSprawlBlueOn() && has_u)
+    {
+        // USER: always blue -- a one-option provider prune (lossy where a green Sprawl was the only route to a
+        // cast; that is what E1 and the Stage 5 A/B are for).
+        if (has_g && SeaSprawlGreenNeedOn() && SeaSprawlGreenNeeded(s, controller, def)) { return { u, g }; }
+        return { u };
+    }
+    std::vector<int> kept;   // =0: the SOUND {U, G} fold, both searched
+    if (has_u) { kept.push_back(u); }
+    if (has_g) { kept.push_back(g); }
+    return kept.empty() ? out : kept;
+}
+
+int SeaCreaturesProvider::EtbChosenColor(const GameState& s, int controller, const CardDefinition& def) const
+{
+    // The UNPINNED entry (a rollout leaf beyond the horizon, a put, d0) agrees with the searched axis: blue under
+    // the prune. =0 (or the proof broken / the audit open): the shared demand rule.
+    if (def.params.is_land_aura && def.params.etb_choose_color && SeaSprawlBlueOn()
+        && !DecisionUnpruned(UnprunedGate::EtbColor) && !SeaListSpendsNonGU(s, controller))
+    {
+        const std::vector<Color>& menu = EtbColorMenu(def.params);
+        if (std::find(menu.begin(), menu.end(), Color::Blue) != menu.end()) { return static_cast<int>(Color::Blue); }
+    }
+    return DeckProvider::EtbChosenColor(s, controller, def);
+}
+
 uint16_t BoarsProvider::ChosenCreatureSubtypeId(const GameState& state, int controller,
                                                 const CardDefinition& entering) const
 {
@@ -25458,6 +25671,7 @@ namespace
     const KithkinProvider        g_kithkin;
     const MorphProvider          g_morph;
     const BoarsProvider          g_boars;
+    const SeaCreaturesProvider   g_sea_creatures;
     const RedElementalsProvider  g_red_elementals;
     const GodsProvider           g_gods;
     const AngelsProvider         g_angels;
@@ -28193,6 +28407,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // BOARS (R/G Boar ramp-tribal; BoarsProvider). MUST return ABOVE `anti`: the fetchlands' fetch_land_types set
     // that signature alone. Params carried by no other deck (see the class note; I2-I5 append to the OR).
     bool boars = false;
+    // SEA CREATURES (G/U land-Aura ramp into sea creatures; SeaCreaturesProvider, Sea Creatures I1 2026-11-16). MUST
+    // return ABOVE `anti`: the fetchlands' fetch_land_types set that signature alone. INTERIM signature -- see the
+    // class note (staple shapes of the I1 cards + a name-free creature param; later steps OR in Sea-only params
+    // and drop the staple terms).
+    bool sea = false;
     // RED ELEMENTALS (mono-red one-shot Elementals; RedElementalsProvider, Stage 4a 2026-11-14). MUST return
     // ABOVE `morph`: Spark / Ball Lightning / Hellspark / Firecat's endstep_sacrifice_self, Firecat's morph_cost
     // and Legion Leadership's trick_double_power each set that signature alone (the deck rode MorphProvider until
@@ -28397,6 +28616,21 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.emerge_cost.has_value() || p.cast_trigger_team_pump_power > 0   // Decimator (I4)
             || p.attack_put_creature_from_hand)   // Ilharg, the Raze-Boar (I5a)
         { boars = true; }
+        // Sea Creatures (INTERIM, I1): Worn Powerstone (an enters-tapped two-mana rock), Flooded Grove (a G/U filter
+        // land), Hedge Maze (a Forest Island surveil land), and Spawning Kraken's combat-damage watch naming Kraken
+        // (no card carries it yet). TODO(Sea integration): OR in the Sea-only creature params as they land, then
+        // DELETE the three staple terms (an enters-tapped {C}{C} rock / a filter / a surveil dual are generic).
+        {
+            const auto has_col = [&](Color c)
+            { return std::find(p.produces.begin(), p.produces.end(), c) != p.produces.end(); };
+            if ((p.mana_rock && p.enters_tapped && p.produces_amount >= 2)
+                || (def->card.IsLand() && p.is_filter && has_col(Color::Green) && has_col(Color::Blue))
+                || (def->card.IsLand() && p.etb_surveil > 0 && CardHasSubtype(def->card, "Forest")
+                    && CardHasSubtype(def->card, "Island"))
+                || std::find(p.combat_damage_watch_subtypes.begin(), p.combat_damage_watch_subtypes.end(),
+                             "Kraken") != p.combat_damage_watch_subtypes.end())
+            { sea = true; }
+        }
         if (!p.champion_subtype.empty() || p.attack_trigger_reanimate
             || (p.unearth_cost.has_value() && CardHasSubtype(def->card, "Elemental")))
         { redelem = true; }
@@ -28966,6 +29200,9 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (morph)       { return g_morph; }
     // Boars: its signature is carried by no other deck, so the position is free; it must beat `anti` (fetchlands).
     if (boars)       { return g_boars; }
+    // Sea Creatures: its (interim) signature is carried by no other deck, so the position is free; it must beat `anti`
+    // (fetchlands).
+    if (sea)         { return g_sea_creatures; }
     if (hydras)      { return g_hydras; }
     if (shadowborn)  { return g_shadowborn; }
     // Spirits: above `anti`, `goblin` and `vial && slivers` (see the flag). Its signature is carried by

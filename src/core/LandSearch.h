@@ -926,6 +926,9 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     // restarts the floor -- what matters when this search resolves INSIDE another event (a Titan a Genesis
     // Wave put: its lands are an event of their own, after the Wave's earlier tokens exist).
     LandfallSimultaneousScope lf_event(state);
+    // A put land's own scry/surveil trigger resolves AFTER the "then shuffle" below (CR 603.3; Sea Creatures I1
+    // fix F1 -- a fetched Hedge Maze looks at the POST-shuffle top card). See DeferredLandLooks.
+    DeferredLandLooks looks;
     for (int i = 0; i < bf_n; ++i)
     {
         Card lc;
@@ -933,7 +936,7 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
         if (d == nullptr) { continue; }   // unreachable: legality read the definition
         EnterLand(state, *d, lc.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true,
-                  spec.tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural);
+                  spec.tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, &looks);
         // Forbidden Orchard's on-play spawn, mirrored as Crop Rotation does -- only for an UNTAPPED
         // entry (it models "tapped for mana this turn"); a forced-tapped Orchard taps next turn and
         // the turn-start spawn covers it. Unreachable for every basic-only search.
@@ -1010,6 +1013,8 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
     }
     // "...then shuffle" -- exactly ONCE, also on a fail-to-find (CR 701.19).
     ShuffleAfterSearch(state, controller);
+    // ...and only then the put lands' look triggers (F1).
+    looks.Run(state);
 }
 
 // The two activated land searches (PermAbilityMode::SacLandSearch / QuestSacLandSearch), called from

@@ -51290,9 +51290,31 @@ inline void ResolveLandEnterEtbExtras(GameState& state, const CardDefinition& de
 // fastlands: lands entering at the same time are not taken into consideration). Found by the
 // SelesnyaLifegain v2 claude-play sweep, seed 79722.
 enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped, PreDecidedUntapped, PreDecidedTapped };
+// A SEARCHED-OUT land's own look trigger ("When this land enters, scry/surveil N": Hedge Maze, Thundering
+// Falls, a Temple) waits for the search's "...then shuffle" (Sea Creatures I1 fix F1, 2026-11-16). The look is
+// a TRIGGERED ability (CR 603.3): it goes on the stack only after the fetch / search spell has finished
+// resolving, and that resolution INCLUDES the shuffle -- so it looks at the POST-shuffle top card. EnterLand
+// used to run the look inline, before the caller shuffled, which looked at (and could bin) a card the shuffle
+// then threw away. A search-and-put caller passes one of these; EnterLand records the land's looks instead of
+// running them, and the caller Run()s them right after its ShuffleAfterSearch / WhiffShuffle. One entry per
+// entered land, in entry order. Every caller that does not search (a land drop, a look-top put, Genesis Wave)
+// passes nothing and is unchanged. Shared by both worlds: the executor and the rollout call the same resolvers.
+struct DeferredLandLooks
+{
+    std::vector<std::pair<int, int>> looks;   // (scry N, surveil N) per entered land with a look
+    void Run(GameState& state) const
+    {
+        for (const std::pair<int, int>& l : looks)
+        {
+            if (l.first > 0)  { ScryTop(state, l.first); }
+            if (l.second > 0) { SurveilTop(state, l.second); }
+        }
+    }
+};
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
                       bool resolve_full_etb = false, bool fire_landfall = true,
-                      LandEntryTap entry_tap = LandEntryTap::Natural)
+                      LandEntryTap entry_tap = LandEntryTap::Natural,
+                      DeferredLandLooks* defer_looks = nullptr)
 {
     bool tapped;
     if (entry_tap != LandEntryTap::Natural)
@@ -51344,8 +51366,13 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     // watcher exists -- the Wave's legacy order never calls it -- and the condition must see the entry
     // regardless (Player::land_entered_this_turn).
     state.players[static_cast<std::size_t>(state.active_player_index)].land_entered_this_turn = true;
-    if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
-    if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+    if (defer_looks != nullptr && (def.params.etb_scry > 0 || def.params.etb_surveil > 0))
+    { defer_looks->looks.emplace_back(def.params.etb_scry, def.params.etb_surveil); }   // after the shuffle (F1)
+    else
+    {
+        if (def.params.etb_scry > 0)    { ScryTop(state, def.params.etb_scry); }
+        if (def.params.etb_surveil > 0) { SurveilTop(state, def.params.etb_surveil); }
+    }
     // "When this land enters, you get {E}" (Aether Hub). Added here as well as in the land DROP
     // (LandPlay.cpp) because this is the separate FETCH entry path -- a fetched land skips
     // PlayLandFromHand entirely. Unreachable in this deck (no fetchlands), but the divergence is
@@ -51577,7 +51604,8 @@ inline void PerformFetch(GameState& state, int controller_index,
     Card lc = ap.library[idx];
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
-    if (def) { EnterLand(state, *def, lc.m_number); }
+    DeferredLandLooks looks;   // a fetched look-land surveils AFTER the shuffle (F1, see DeferredLandLooks)
+    if (def) { EnterLand(state, *def, lc.m_number, false, true, LandEntryTap::Natural, &looks); }
     else
     {
         // Unknown card: still put it onto the battlefield as a plain untapped land.
@@ -51594,6 +51622,7 @@ inline void PerformFetch(GameState& state, int controller_index,
     // MTG_NO_SEARCH_SHUFFLE. (There is no MTG_SEARCH_SHUFFLE opt-in; comments claiming this is
     // inert by default were stale and inverted the real default.)
     ShuffleAfterSearch(state, controller_index);
+    looks.Run(state);
 }
 
 // Sacrifice-a-land ADDITIONAL COST resolution (Shard Volley / Crop Rotation) for the
@@ -52781,9 +52810,10 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     }
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
+    DeferredLandLooks looks;   // a searched-out look-land looks AFTER the shuffle (F1, see DeferredLandLooks)
     if (def)
     {
-        EnterLand(state, *def, lc.m_number);
+        EnterLand(state, *def, lc.m_number, false, true, LandEntryTap::Natural, &looks);
         if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
     }
     else
@@ -52799,6 +52829,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
     // "...then shuffle" (CR 701.19); deterministic + lockstep. ON BY DEFAULT (opt-OUT is
     // MTG_NO_SEARCH_SHUFFLE).
     ShuffleAfterSearch(state, controller_index);
+    looks.Run(state);
 }
 
 // The land-search cluster (Rampant Growth, Search for Tomorrow, Cultivate, Evolving Wilds,
@@ -54488,14 +54519,17 @@ inline int ResolveFetchForestsTapped(GameState& s, int controller, int count)
         }
         ++i;
     }
+    DeferredLandLooks looks;   // a searched-out Forest with a look (Hedge Maze) looks AFTER the shuffle (F1)
     for (const Card& c : taken)
     {
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr)
-        { EnterLand(s, *d, c.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true, LandEntryTap::ForcedTapped); }
+        { EnterLand(s, *d, c.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true, LandEntryTap::ForcedTapped,
+                    &looks); }
     }
     if (taken.empty() && count != 0) { WhiffShuffle(s, controller, "Nissa -8 Forest search"); }
     else                             { ShuffleAfterSearch(s, controller); }
+    looks.Run(s);
     return static_cast<int>(taken.size());
 }
 
