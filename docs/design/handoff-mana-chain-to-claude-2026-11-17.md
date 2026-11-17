@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:34 UTC
 
+The next due **Fungus** PGO mana-clean gate is the only active simulation
+batch, exec session 54776:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run fungus --games 5000 --name codex-fungus-fresh-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/fungus_fresh_gate.out`.
+Read `logs/mana_clean/codex-fungus-fresh-20261117/report.md` on
+completion, update this handoff, and commit `test/mana_clean.json`.
+
 **Creature Giving fresh gate complete:** indices 65,000–69,999 at PGO
 source `fcb9352608ea` yielded 280 issues: 276 ENUM-GAP across 249
 signatures, three APPLY-DROP, one DOMINATED-CREATURE; zero oracle gap or
