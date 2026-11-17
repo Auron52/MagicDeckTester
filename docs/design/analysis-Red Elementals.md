@@ -887,8 +887,10 @@ Phase E, 8 held-out seeds x 1,000 paired games against live (no sidecar, d5/b20,
 | **no-leaf final-depth single pass (`nlfit`)** | **4.29188** | **-0.00100** | **-1.37** | **0.699x** |
 | emulation | 4.29350 | +0.00062 | +2.38 | 0.895x |
 
-E.5 adopted `nlfit`, the cheapest passing arm. The learned model stays staged at
-`logs/eval/Red Elementals.value.STAGED.json` and is not shipped. E.7 gridded d5/d6 x b20/b30/b40
+E.5 adopted `nlfit`, the cheapest passing arm. The learned model is not shipped; it is retained in the
+repository as `decks/Red Elementals/Red Elementals.value.DISABLED.json` (USER 2026-11-17; a byte copy of
+`logs/eval/Red Elementals.value.STAGED.json`, trust d5 included; the `.DISABLED` name keeps it inert, since
+sidecar presence is what activates play). E.7 gridded d5/d6 x b20/b30/b40
 for all four shapes on fresh seeds (7505000..) and adopted **d6/b20**, the cheapest passing arm (0.993x,
 delta 0.00000). d6/b30 also passed at 1.000x with delta -0.00062 (t -3.42); d5/b30 and d5/b40 are
 better trades at 1.01-1.02x. E.7b had nothing to recheck (no trust candidate on the shipped shape), and
