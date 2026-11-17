@@ -68,8 +68,8 @@ implementer agent per step, serial.
 | 3 | searched reflection-target axis (Incinerator precedent) | DONE ebfea35d5 (unit 3406/3406, scen 564/564, smoke 0/219 digests moved vs step 2; Plan +24 B for every deck, play-neutral; viewer `target` prompt wired; deviations §14) |
 | 4 | Stuffy Doll (choose player, {T} self-ping) | DONE f8dabbaea (unit 3413, scen 566/566, smoke 0/219 moved vs step 3; chosen-player fold = deck-level `!dmg_events_armed`, else branched on the ETB choice axis; viewer `choose_player` prompt + `selfping=` verb wired, 5h forced run owed; OPEN: a dropped unit check found no 'don't ping' plan on a test board — root-cause in step 5) |
 | 5 | Guilty Conscience (+ combat damage hook, loops) | DONE fffd6abd3 (unit 3419, scen 568/568, smoke 0/219 moved vs step 4; GC host searched (excluded from aura host collapses); Doll+GC loop kills from 20/30 in <=2L+1 resolutions; no-progress rule tested; FIXED in-window greedy: main-1 offered no 'hold the Doll' plan -> SelfPingHoldPending joins the face-up hold pass) |
-| 5b | combat-time reflection target pins (GC'd attacker reflects inside combat: currently front pick = no-greedy gap) + classify the 3 unclassified step-2 viewer params | IN PROGRESS (~17:00 UTC) |
-| 6 | Spiteful Sliver | pending |
+| 5b | combat-time reflection target pins (GC'd attacker reflects inside combat: currently front pick = no-greedy gap) + classify the 3 unclassified step-2 viewer params | DONE 06907847f (unit 3422, scen 568/568, smoke 0/219 moved vs step 5; combat pins after kCombatPinMark in Plan::reflect_targets -> GameState::scripted_combat_reflect (GameState 1608->1632 B, play-neutral); static viewer audit rc=0; residual: bp_pre clones inherit combat pins (Prophets-precedent gap), extra combats not probed (no such card)) |
+| 6 | Spiteful Sliver | IN PROGRESS (~17:30 UTC) |
 | 7 | Loran's Escape | pending |
 | 8 | Nomads en-Kor shields (sweeper rider) | pending |
 | 9 | Shaman en-Kor {1}{W} pull | pending |
@@ -102,6 +102,8 @@ deferrals provisional.
   selection and the hosts add a 'pass' plan only for face-up holds (now also Doll holds) — main 1 never offers
   'do nothing' while main 2 always does. Fixed only for the Doll. Should 'pass main 1' be offered for every deck?
   (Would move play broadly; needs the no-greedy adoption bar.) Default: leave other decks unchanged pending USER.
-- Viewer audit: `aura_host_damage_back` filed under no-choice params (auditor wants USER OK).
+- Viewer audit classifications needing USER OK (all filed as no-choice): `aura_host_damage_back` (GC),
+  `cost_less_per_creature_on_battlefield` (Act), `damage_all_creatures_count_creatures` (Chain X counted on
+  resolution), `reflect_player_cant_gain_life` (Nemesis rider; the recipient is already the `target` choice).
 - Side finding R7: two rollout-only kill paths (TurnSolver.cpp ~73041/~73148) ignore indestructible
   and skip death triggers — not on this deck's paths; separate fix.
