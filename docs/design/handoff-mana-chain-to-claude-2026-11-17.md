@@ -2,7 +2,29 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:42 UTC
+## Live status (Claude), updated 10:00 UTC
+
+**Prevent Damage, all 30 refresh flags explained; oracle repairs committed `7a289ca75`** (audit-only;
+`HEAD:src=b6bfdd2d261e`). Details: `docs/design/prevent-damage-continuation-sweep-oracle-2026-11-17.md`.
+(1) CAPPED x22: the retry default is now 400,000 (s30111776 140/140 and s30108897 15/15 finish clean).
+(2) Pyrohemia ORACLE-GAP x2 (s30111507): the frontier prune merged histories with different pending breakpoint
+continuations; frontiers now key `Hook::cont_sig` (`NoteContinuation`). (3) GSZ ORACLE-GAP x6 (s30109140): the
+end-of-main-1 pain sweep is life-dependent, so a healthier oracle payment swept Tarnished Citadel and the boards
+became incomparable; a fail-closed sweep-undone cover fallback (`UnSwept`) now classes it DOMINATED-LIFE. Unit suite
+3,385/3,385. A fresh PGO Prevent Damage gate is still owed.
+
+**Minotaur APPLY-DROP x2 (s30284922) root-caused and fixed, UNCOMMITTED pending A/B:** `KarooBounceFloatable`
+refused every `colored_creature_only` land, so a Karoo returned an untapped Unclaimed Territory without floating its
+plain `{C}`. New lever `MTG_KAROO_FLOAT_RESTRICTED_C` (heurarm slot, default ON) floats exactly `{C}`. Seed replay:
+zero oracle issues (lever off: APPLY-DROP=2). Two new unit tests in `test/unit/test_karoo_tap_in_response.cpp`.
+Pooled paired A/B running: `build/scratch/claude_karoo_c_ab/` (Minotaur, Spirits, Landfall Elementals, Dragons;
+games 500,000-504,999, both arms in one Release batch, PID 1862694). Then commit, PGO, and one pooled mana-clean
+gate for Prevent Damage + Minotaur + the moved decks.
+
+**Open for the USER:** painlands (`tap_self_damage > 0`) are also refused by `KarooBounceFloatable`, though their
+`{C}` mode is painless: the same shape, a wider play change, not made.
+
+## Codex status, updated 07:42 UTC
 
 **Active capped-plan diagnostic:** Prevent Damage seed `30111776` T8 is
 running with `MTG_MANA_ORACLE_NODES_RETRY=400000` (default 200,000),

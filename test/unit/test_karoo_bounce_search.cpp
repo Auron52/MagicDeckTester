@@ -210,7 +210,8 @@ TEST_CASE("Karoo bounce search: Dragons s4004 gi47 -- a floatable Mountain vs Ha
     // T4 of the held-out game: Lightning Greaves was paid by Sol Ring, so every land is untapped when
     // Gruul Turf's bounce resolves. The lever's order returns the Mountain (its {R} floats -- and dies
     // at the end of main 1 unused); Haven's mana is restricted, so it cannot float, but it is the land
-    // whose mana the rest of the turn did not need (Scourge of Valkas firebreathes with the Mountains).
+    // whose mana the rest of the turn did not need (Scourge of Valkas firebreathes with the Mountains). Since
+    // MTG_KAROO_FLOAT_RESTRICTED_C a returned Haven floats its plain {C}; the bounce RANKING is unchanged.
     GameState s = Fresh();
     Put(s, "Haven of the Spirit Dragon", 10, false);
     Put(s, "Sol Ring", 11, true);
@@ -235,7 +236,10 @@ TEST_CASE("Karoo bounce search: Dragons s4004 gi47 -- a floatable Mountain vs Ha
         ScriptedBounceChoice pin(1);
         BounceKarooLand(t, 0, static_cast<int>(t.battlefield.size()) - 1);
         CHECK(InHand(t, "Haven of the Spirit Dragon"));
-        CHECK(t.floating_mana.Total() == 0);           // Haven's mana is restricted: nothing floats
+        // Haven's COLOURED mana is restricted (Dragon creature spells), but its "{T}: Add {C}" is not: the
+        // land floats exactly {C} (MTG_KAROO_FLOAT_RESTRICTED_C, 2026-11-17; before it, nothing floated).
+        CHECK(t.floating_mana.colorless == 1);
+        CHECK(t.floating_mana.Total() == 1);
         CHECK(g_scripted_bounce_choice == -1);          // consumed by the bounce
     }
     {

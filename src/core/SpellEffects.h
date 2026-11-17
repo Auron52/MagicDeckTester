@@ -50528,7 +50528,20 @@ void ResolveExpressiveIteration(GameState& state);
 // Forbidden Orchard IS floatable: its Spirit is already modelled as one per turn in play (the tap is
 // assumed every turn), so this tap adds no second Spirit. A land Aura's extra mana rides the tap
 // (Wild Growth triggers on the tap, CR 605.1b), booked exactly as every real tap books it.
-inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, const CardDefinition& d)
+// A colour-for-creatures-only land with an unrestricted {C} mode: the float is that {C}.
+inline bool KarooFloatsPlainC(const CardDefinition& d)
+{
+    if (!d.params.colored_creature_only || ManaProducedPerTap(d) != 1) { return false; }
+    for (Color c : d.params.produces) { if (c == Color::Colorless) { return true; } }
+    return false;
+}
+// `plain_c`: the caller floats a colour-for-creatures-only land's plain {C} instead of a colour
+// (FloatLandBeforeSacrifice, under MTG_KAROO_FLOAT_RESTRICTED_C). Every other caller -- the provider's bounce
+// ranking, the USER-rule candidate filters, the human-play Satyr float -- asks the default question, and for them
+// such a land stays unfloatable: their float would be a colour, and the ranking would read a {C} float as a
+// no-loss bounce of a land whose coloured creature mana is still lost.
+inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, const CardDefinition& d,
+                                 bool plain_c = false)
 {
     if (p.tapped || !p.card.IsLand()) { return false; }
     if (state.dmg_events_armed)       { return false; }
@@ -50537,10 +50550,12 @@ inline bool KarooBounceFloatable(const GameState& state, const Permanent& p, con
         || q.storage_land || q.domain_mana || q.gy_land_exile_mana
         || q.tap_self_damage > 0 || q.tap_self_damage_any_mode || q.tap_opponent_lifegain > 0
         || q.energy_per_colored_tap > 0
-        || q.colored_creature_only || q.creature_mana_only
+        || q.creature_mana_only
         || q.mana_only_spell_min_mv > 0 || q.mana_only_spell_or_x
         || q.enters_tapped_with_depletion > 0)
     { return false; }
+    // ...a colour-for-creatures-only land floats its plain {C} (FloatLandBeforeSacrifice), when it has one.
+    if (q.colored_creature_only && !(plain_c && KarooFloatsPlainC(d))) { return false; }
     for (const Counter& c : p.counters)
     { if (c.type == Counter::Type::Depletion) { return false; } }
     if (p.card.IsCreature() && !CanTapNow(p, state.battlefield)) { return false; }
@@ -50738,7 +50753,10 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
     Permanent& p = state.battlefield[idx];
     if (p.controller_index != controller) { return false; }
     const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
-    if (d == nullptr || !KarooBounceFloatable(state, p, *d)) { return false; }
+    // A colour-for-creatures-only land (KarooFloatsPlainC) floats {C} and nothing else: its coloured mana is
+    // spend-restricted and the float is not (MTG_KAROO_FLOAT_RESTRICTED_C).
+    const bool plain_c = d != nullptr && d->params.colored_creature_only && KarooFloatRestrictedCOn();
+    if (d == nullptr || !KarooBounceFloatable(state, p, *d, plain_c)) { return false; }
     const int pin = t_sac_victim_float_pin.color;
     t_sac_victim_float_pin.color = -1;
     bool pinned = false;
@@ -50747,11 +50765,13 @@ inline bool FloatLandBeforeSacrifice(GameState& state, int controller, int idx, 
         for (Color c : EffectiveProducesFor(state, controller, *d, &p))
         { if (static_cast<int>(c) == pin) { pinned = true; break; } }
     }
+    if (plain_c && pinned && pin != static_cast<int>(Color::Colorless)) { pinned = false; }
     t_sac_victim_float_pin.applied = pinned;
     p.tapped = true;
     const ManaPool before = state.floating_mana;
-    if (pinned) { state.floating_mana.Add(static_cast<Color>(pin), 1); }
-    else        { FloatSourceTapCommitted(state, controller, *d, &p); }
+    if (pinned)       { state.floating_mana.Add(static_cast<Color>(pin), 1); }
+    else if (plain_c) { state.floating_mana.Add(Color::Colorless, 1); }
+    else              { FloatSourceTapCommitted(state, controller, *d, &p); }
     if (LandAuraBonus(state, p) > 0) { LandAuraAddToPool(state.floating_mana, state, p); }
     if (g_play_event_sink)   // nulled by RevealLogPause for search/rollout -> real play only
     {

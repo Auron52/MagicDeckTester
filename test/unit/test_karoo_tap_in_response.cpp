@@ -248,3 +248,51 @@ TEST_CASE("Karoo tap-in-response: a choice-of-two land commits its float need-aw
         CHECK(s.floating_mana.Total() == 1);
     }
 }
+
+// MTG_KAROO_FLOAT_RESTRICTED_C (heurarm KAROO_FLOAT_RESTRICTED_C). Minotaur mana-clean s30284922 T5: a second Karoo
+// returned an untapped Unclaimed Territory with nothing floated (colour-for-creatures-only lands were not floatable),
+// and the continuation's Deathbellow Raider {1}{R} was one short. The Territory's "{T}: Add {C}" is unrestricted, so
+// it floats exactly {C} -- never a colour, which would launder the creature-only restriction.
+namespace
+{
+struct SlotArm
+{
+    int slot; std::int8_t prev;
+    SlotArm(int sl, bool on) : slot(sl), prev(heurarm::t_arm[sl]) { heurarm::t_arm[sl] = on ? 1 : 0; }
+    ~SlotArm() { heurarm::t_arm[slot] = prev; }
+};
+}   // namespace
+
+TEST_CASE("Karoo tap-in-response: a returned Unclaimed Territory floats its plain {C}, never a colour")
+{
+    EnsureCardsLoaded();
+    LeverArm on(true);
+    SlotArm c(heurarm::KAROO_FLOAT_RESTRICTED_C, true);
+    REQUIRE(KarooFloatRestrictedCOn());
+    GameState s = Fresh();
+    Put(s, "Unclaimed Territory", 1, /*tapped=*/false);
+    const int k = PlayKaroo(s, 2);
+
+    BounceKarooLand(s, 0, k);
+
+    CHECK(InHand(s, "Unclaimed Territory"));
+    CHECK(s.floating_mana.colorless == 1);
+    CHECK(s.floating_mana.Total() == 1);
+    CHECK(s.floating_creature_mana.Total() == 0);
+}
+
+TEST_CASE("Karoo tap-in-response: restricted-{C} lever OFF returns Unclaimed Territory with no float")
+{
+    EnsureCardsLoaded();
+    LeverArm on(true);
+    SlotArm c(heurarm::KAROO_FLOAT_RESTRICTED_C, false);
+    REQUIRE_FALSE(KarooFloatRestrictedCOn());
+    GameState s = Fresh();
+    Put(s, "Unclaimed Territory", 1, /*tapped=*/false);
+    const int k = PlayKaroo(s, 2);
+
+    BounceKarooLand(s, 0, k);
+
+    CHECK(InHand(s, "Unclaimed Territory"));
+    CHECK(s.floating_mana.Total() == 0);
+}

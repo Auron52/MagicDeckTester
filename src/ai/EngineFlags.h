@@ -1067,6 +1067,20 @@ inline bool KarooTapInResponseOn()
     return heurarm::Flag(heurarm::BOUNCE_UNTAPPED_FIRST, env_on);
 }
 
+// MTG_KAROO_FLOAT_RESTRICTED_C -- DEFAULT ON; =0 restores the old refusal. A returned land whose COLOURED mana is
+// spend-restricted (colored_creature_only: Unclaimed Territory, Secluded Courtyard, Cavern of Souls, Sliver Hive, Haven
+// of the Spirit Dragon) still has a plain, unrestricted "{T}: Add {C}", so tapping it in response floats {C} -- never
+// a colour, which would launder the restriction (KarooBounceFloatable / FloatLandBeforeSacrifice, SpellEffects.h).
+// Minotaur mana-clean s30284922 T5 (APPLY-DROP x2): Rakdos Carnarium #46 returned an untapped Unclaimed Territory
+// with nothing floated, and the continuation's Deathbellow Raider {1}{R} was one mana short; the oracle's line taps
+// the Territory for {C} first. Read only by the float itself (FloatLandBeforeSacrifice): the bounce RANKING and the
+// USER-rule candidate filters are unchanged, since a {C} float still loses the land's coloured creature mana.
+inline bool KarooFloatRestrictedCOn()
+{
+    static const bool env_on = EnvOn("MTG_KAROO_FLOAT_RESTRICTED_C", true);   // DEFAULT ON; =0 reverts
+    return heurarm::Flag(heurarm::KAROO_FLOAT_RESTRICTED_C, env_on);
+}
+
 // MTG_BOUNCE_SEARCH -- DEFAULT ON (ADOPTED 2026-10-08 with the lever above). The Karoo bounce as a SEARCHED plan dimension (USER 2026-10-08: "The Karoo
 // decision should also be searched with heuristics. However, we may want to heuristic it more often
 // than not, since the decision is usually an easy one."). BounceKarooLand used to take
