@@ -1505,6 +1505,13 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
             for (std::size_t i = 0; i < p.card.m_subtypes.size(); ++i)
             { mfold(p.card.m_subtypes.IdAt(i)); }
         }
+        // Trench Gorger's ETB-set base P/T (Sea Creatures I6), the same shape.
+        if (const CardDefinition* gd = CardDatabase::Instance().LookupCached(p.card);
+            gd != nullptr && gd->params.etb_exile_library_lands_set_base_pt)
+        {
+            mfold(static_cast<std::uint64_t>(p.card.m_power.value_or(0)));
+            mfold(static_cast<std::uint64_t>(p.card.m_toughness.value_or(0)));
+        }
         // Once-per-turn / obligation flags. All but is_token reset at the untap that just ran for
         // OUR permanents, so they are constant across siblings there; the opponent's are not, and
         // either way they are future-determining, so they match exactly.

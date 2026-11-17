@@ -4876,6 +4876,23 @@ function digPanelHtml(d){
     });
     return h+'</div>';
   }
+  // Trench Gorger's optional ETB search ("(search lands?)" in the source; Sea Creatures I6): a yes/no on the Gorger --
+  // search (then a separate multi-pick of the lands to exile) or decline (no search, no shuffle, printed size).
+  if (/\(search lands\?\)/.test(d.source||'')) {
+    const nm=(d.examined&&d.examined[0]&&d.examined[0].name)||'It';
+    let h=`<h3>${esc(nm)} — search your library for lands to exile?</h3>`;
+    h+=`<div class="sub">${esc(d.source||'')}<br/>If you search, you choose which land cards to exile next; the library is then shuffled and its base power and toughness become the number exiled. Declining keeps it at its printed size and does not shuffle.</div>`;
+    h+=`<div class="tutgrid">`;
+    (d.examined||[]).forEach(c=>{
+      const def=c.index===d.heuristic_default;
+      h+=`<span class="cardmini tdig${def?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="Search">`+
+         `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>Search</em>`+
+         (def?`<span class="deftag">AI pick</span>`:'')+`</span>`;
+    });
+    h+=`</div><div class="pbtns" style="margin-top:10px"><span class="spacer"></span>`+
+       `<button class="${d.heuristic_default<0?'primary':'ghost'}" data-opt="-1">Decline (stay at printed size)${d.heuristic_default<0?' (the AI\'s pick)':''}</button></div>`;
+    return h;
+  }
   // Ilharg, the Raze-Boar's death "may" ("(dies to library)" in the source; Boars I5b): a yes/no on the card that
   // just died -- tuck it into the library (third from the top) or leave it in the graveyard.
   if (/\(dies to library\)/.test(d.source||'')) {
@@ -5380,6 +5397,23 @@ function dragonPanelHtml(d){
   // Initialize the selection ONCE per decision (re-renders on toggle must not wipe the user's picks).
   if (S._dragonFor !== d.decision_index){ S._dragonFor=d.decision_index; S.dragonSel=new Set(aiDragonSet(d)); }
   const sel=S.dragonSel, aiSet=new Set(aiDragonSet(d));
+  // Trench Gorger ("(exile lands)"; Sea Creatures I6): any number of library land cards, sorted by name; the
+  // body becomes the count. An empty selection stands (0/0: it dies).
+  if (/\(exile lands\)/.test(d.source||'')) {
+    const nm=(d.source||'').replace(/\s*\(exile lands\)[\s\S]*$/,'');
+    let h=`<h3>${esc(nm)} — exile which lands?</h3>`+
+      `<div class="sub">Choose any number of these library land cards to exile. ${esc(nm)}'s base power and toughness become the number exiled (none: 0/0, it dies); the library is then shuffled. The AI's picks are preselected.</div><div class="tutgrid">`;
+    (d.candidates||[]).forEach(c=>{
+      const isSel=sel.has(c.index), isAI=aiSet.has(c.index);
+      h+=`<span class="cardmini tdig${isSel?' sel':''}${isAI?' def':''}" data-opt="${c.index}" data-name="${esc(c.name)}" title="${esc(c.name)}">`+
+        `<img loading="lazy" src="${scryImg(c.name,'small')}" onerror="this.style.opacity=.15"/><em>${esc(c.name)}</em>`+
+        (isAI?'<span class="deftag">AI pick</span>':'')+'</span>';
+    });
+    h+='</div><div class="pbtns"><span class="pcount">'+sel.size+' selected &rarr; '+sel.size+'/'+sel.size+'</span>'+
+      '<button class="ghost" id="dragonai">Follow AI</button><span class="spacer"></span>'+
+      '<button id="decconfirm" class="primary">Exile selected</button></div>';
+    return h;
+  }
   if ((d.source||'').startsWith('Surgical Extraction (exile from ')) {
     const zone=(d.source||'').replace(/^Surgical Extraction \(exile from /,'').replace(/\)$/,'');
     let h=`<h3>Surgical Extraction — exile cards from ${esc(zone)}</h3>`+

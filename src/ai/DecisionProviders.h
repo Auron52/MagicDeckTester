@@ -192,6 +192,8 @@ enum class UnprunedGate
     SeaBounce,       // Sea Creatures: Hullbreaker Horror's / Brinelin's bounce-trigger targets restored (SeaCreaturesProvider::BounceTriggerDeclineOnly, USER 2026-11-16)
     SagaSteal,       // Kiora Bests the Sea God III: the full steal-target list (DecisionProvider::RestrictSagaStealCandidates' sound folds lifted)
     SeaSin,          // Sea Creatures: Sin's searched counter-harvest subsets restored (SeaCreaturesProvider::CounterHarvestSearchSubsets, USER 2026-11-17)
+    SeaGorger,       // Sea Creatures: Trench Gorger's full exile menu restored (SeaCreaturesProvider::RestrictExileLibraryLandsMenu, USER 2026-11-16)
+    GorgerZero,      // Trench Gorger: the "search and exile 0" entry restored (DecisionProvider::RestrictExileLibraryLandsMenu's 0/0 prune)
     _Count
 };
 static_assert(static_cast<int>(UnprunedGate::_Count) <= 64, "UnprunedGate masks are 64-bit");
@@ -665,6 +667,15 @@ public:
 //     no non-Saga permanent" (any other counter is left where it is), under MTG_SEA_SIN_STRIP_SAGAS, default ON;
 //     =0 restores the engine's full searched list. CounterHarvestDefault (the playout beyond the horizon, puts, the
 //     human preselection) is the same rule. Human play and MTG_UNPRUNE=seasin always offer every candidate.
+//   * TRENCH GORGER TAKES ALL THE LANDS (I6; USER 2026-11-16: "Trench Gorger is likely a "take all lands" type of
+//     effect since it is at the top of the curve, but we'll have to do some testing." / "The idea is to increase its
+//     size and also increase the chance of drawing gas." / "If we had only a few lands left (less than 7) it wouldn't
+//     be worth it, but I'm not sure how likely that is to occur." then "Actually I guess less than 6.").
+//     RestrictExileLibraryLandsMenu is a ONE-OPTION PRUNE read at resolution off the live library: >= 6 land cards ->
+//     exile every one of them; < 6 -> decline (stay the printed 6/6, no shuffle). MTG_SEA_GORGER_ALL, default ON;
+//     =0 restores the engine's searched menu (decline + the keep menu, the 0/0 entry still root-pruned). The front
+//     (the playout beyond the horizon, the d0 runner) is the same one option. Human play and MTG_UNPRUNE=seagorger
+//     always see every choice.
 // ConsiderFetchHold is NOT overridden: the root default (false, USER 2026-11-14) cracks on play, which is the
 // reviewed answer for this list (analysis ledger, fetch_hold_review).
 //
@@ -702,6 +713,9 @@ public:
     std::vector<std::string> CounterHarvestSearchSubsets(const GameState& s, int controller,
                                                          const std::vector<int>& cands,
                                                          const std::vector<std::string>& all) const override;
+    // Trench Gorger: exile ALL lands when the library holds >= 6 of them, else decline (I6; USER 2026-11-16).
+    void RestrictExileLibraryLandsMenu(const GameState& s, int controller, const std::vector<int>& copies,
+                                       std::vector<std::vector<int>>& keep, bool& decline_offered) const override;
     // The per-turn post-combat main on the turns Summon: Leviathan's attack draws are live (I3; see the class note).
     bool RestrictedSecondMainLive(const GameState& s) const override;
     bool MayOpenRestrictedSecondMain() const override { return true; }

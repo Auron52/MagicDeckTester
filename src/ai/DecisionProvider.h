@@ -4111,6 +4111,30 @@ public:
     // MTG_FETCH_RANK_PIPS also the fetch ranking's matching gains and demand (bits 22..27, 33..63, set only
     // while the lever is on, so an overriding provider's own bits 5..21 never collide).
     virtual bool LandSearchPickOrderKey(const GameState& s, int controller, std::uint64_t& key) const;
+    // ---- TRENCH GORGER's "search your library for any number of land cards, exile them" (Sea Creatures I6) --------
+    // core/LandSearch.h ExileLibraryLandsMenu builds the ENGINE menu over the library's land CLASSES (copies and
+    // behavioural twins folded, LandSearchClasses): each entry is a KEEP vector (copies of each class left in the
+    // library; the rest are exiled, base P/T = the number exiled). Its blocks: keep nothing (exile ALL, the front),
+    // keep one land of each class, EVERY keep-two, keep-j for j = 3 .. L-1 (the nested provider-ordered round-robin
+    // prefix -- a DISCLOSED lossy shape, one entry per count), then keep everything (search and exile 0 -> 0/0, it
+    // dies). The searched DECLINE (no search, no shuffle, the printed base) is the pin kLandSearchPinMask, offered
+    // while `decline_offered` holds. Human play never reads any of this (the dig yes/no + dragon multi-pick).
+    //
+    // ExileLibraryLandsKeepOrder -- ORDER ONLY: a permutation of class indices (`class_defs`, one representative
+    // definition per class, sorted by name) giving the order lands are KEPT in blocks 1 and 3. Base rule (out of
+    // line): non-fetch before fetch, untapped before tapped, more colours produced first, basic before nonbasic,
+    // then name. Deterministic and independent of library order.
+    virtual std::vector<int> ExileLibraryLandsKeepOrder(const GameState& s, int controller,
+                                                        const std::vector<const CardDefinition*>& class_defs) const;
+    // RestrictExileLibraryLandsMenu -- RESTRICT the menu the AUTONOMOUS world searches (the pin fan, the front the
+    // playout beyond the horizon and the d0 runner take). `keep` holds the engine's entries (entry 0 = the front);
+    // a provider may only REMOVE entries or clear `decline_offered`. An EMPTY `keep` makes the DECLINE the front
+    // (the only option, whatever `decline_offered` says). Base: drop the keep-everything entry (search and exile 0:
+    // the creature dies as a 0/0 and the library is reshuffled -- dominated by declining, which keeps the printed
+    // body and the library, but for the clairvoyant value of a reshuffle; no dies / graveyard payoff exists in a
+    // list that holds one today -- re-argue if one is added). MTG_UNPRUNE=gorgerzero keeps it.
+    virtual void RestrictExileLibraryLandsMenu(const GameState& s, int controller, const std::vector<int>& copies,
+                                               std::vector<std::vector<int>>& keep, bool& decline_offered) const;
     // LandSearchPickWidth -- the land-search NARROWING the contract above reserves for its own named
     // hook: how many LEADING entries of the ordered pick list the AUTONOMOUS world keeps (the search's
     // pins, the d0 runner, rollouts, the executor). core/LandSearch.h truncates the list to it, so

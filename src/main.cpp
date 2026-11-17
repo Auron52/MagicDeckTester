@@ -4747,6 +4747,15 @@ static void WriteDigDecisionJson(std::ostream& os, const GameState& s, const std
                      "listed) to put that card on top of your library BENEATH the one you just chose (it is "
                      "the second card you draw). Mandatory: -1 takes the AI's pick. Default = the AI's pick.");
     }
+    else if (source.find("(search lands?)") != std::string::npos)
+    {
+        // Trench Gorger's optional ETB search (core/LandSearch.h PerformExileLibraryLands; Sea Creatures I6) reuses
+        // this modal as a yes/no: `examined[0]` is the Gorger itself. The exile pick follows as a `dragon` decision.
+        d.Note("reply 0 to SEARCH your library: you then pick any number of land cards to exile (a separate "
+               "decision), the library is shuffled, and its base power and toughness become the number exiled "
+               "(exiling none makes it 0/0 and it dies). Reply -1 to DECLINE: no search, no shuffle, it stays at "
+               "its printed size. Default = the AI's pick.");
+    }
     else if (source.find("(dies to library)") != std::string::npos)
     {
         // Ilharg, the Raze-Boar's death "may" (SpellEffects.h ResolveDiesToLibraryPosition; Boars I5b item 3) reuses
@@ -5280,7 +5289,11 @@ static void WriteDragonDecisionJson(std::ostream& os, const GameState& s, const 
     // of creature cards") and Genesis Wave ("any number of permanent cards with mana value X or
     // less"), neither of which puts a Dragon. Display-only -- the decision JSON is protocol, not
     // play, so no digest moves.
-    if (source.find("Surgical Extraction (exile from ") == 0)
+        if (source.find("(exile lands)") != std::string::npos)
+    { d.Note("reply one 0/1 flag per candidate (1 = exile this land card from your library). Its base power and "
+             "toughness become the number exiled; exiling none makes it 0/0 and it dies. Then the library is "
+             "shuffled. Default = the AI's pick (exile all)."); }
+    else if (source.find("Surgical Extraction (exile from ") == 0)
     { d.Note("reply one 0/1 flag per candidate (1 = exile this same-name card, 0 = leave it). "
              "You may choose any number. Default = the AI's pick."); }
     else

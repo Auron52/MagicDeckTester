@@ -394,6 +394,7 @@ add_executable(mtg-test
     test/unit/test_sea_sagas.cpp
     test/unit/test_sea_bounce.cpp
     test/unit/test_sea_sin.cpp
+    test/unit/test_sea_gorger.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp
