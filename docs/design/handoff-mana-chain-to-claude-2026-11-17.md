@@ -15,6 +15,15 @@ active in exec session `25317`, output
 The shell's Git credential helper supplied the token only to the child
 process. Check the watcher asynchronously; if red, pivot to its failure.
 
+**Next mana batch:** refreshing six stale-clean decks at the new source,
+5,000 games each: Burn, Breaching Dragonstorm, Red Elementals, Slivers,
+Giants, Auras. Command:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run burn breaching_dragonstorm red_elementals slivers giants auras --games 5000 --name codex-clean-refresh-newsrc-a-20261117`.
+Report will be
+`logs/mana_clean/codex-clean-refresh-newsrc-a-20261117/report.md`;
+console `build/scratch/dragonstorm_visible_lump_ab/clean_newsrc_a.out`.
+Check the result, update this handoff, and commit the gate record locally.
+
 **Post-Boars full smoke comparison complete:** the fresh-source smoke
 run ended 180 pass, 39 fail, zero new, exactly the same known GT drift
 as before. More decisively, all **261 per-game `.wins` files are
