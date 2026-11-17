@@ -8318,6 +8318,45 @@
      "seed": 30282000,
      "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 2,
+      "DOMINATED-LAND": 1154,
+      "DROP-COVERED": 15,
+      "PHANTOM": 107
+     },
+     "commit": "472580b5744da63452b3e8d1a3900f77d3270a29",
+     "date": "2026-11-17T10:47:45Z",
+     "decisions": 43432,
+     "deck": "decks/Minotaur/Minotaur.cod",
+     "deck_sha": "7e12c6578154b7a2117d9413e67a92b07b777125",
+     "game_index": 287000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 2,
+     "life_breakpoints": [],
+     "ms_off": 268527,
+     "ms_on": 762162,
+     "report": "logs/mana_clean/claude-pd-karoo-20261117/report.md",
+     "run": "claude-pd-karoo-20261117",
+     "seed": 30287000,
+     "src": "34fb8c52119dc2ce39f5a1219cfc4814cb929379",
+     "verdict": "issues"
     }
    ]
   },
@@ -10521,6 +10560,46 @@
      "run": "codex-clean-refresh-newsrc-c-20261117",
      "seed": 30107000,
      "src": "f7cce0693b6a16d779df5ac756af16100e3b677d",
+     "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CAPPED": 9,
+      "CONTINUATION-DIFFERS": 19,
+      "DOMINATED-LAND": 9453,
+      "DOMINATED-LIFE": 16697,
+      "PHANTOM": 74
+     },
+     "commit": "472580b5744da63452b3e8d1a3900f77d3270a29",
+     "date": "2026-11-17T10:47:45Z",
+     "decisions": 49663,
+     "deck": "decks/Prevent Damage/Prevent Damage.cod",
+     "deck_sha": "2fc5f5fe998de96a2f49a0d5f8565ba1fa92a5b6",
+     "game_index": 112000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 9,
+     "life_breakpoints": [],
+     "ms_off": 3869426,
+     "ms_on": 15000824,
+     "report": "logs/mana_clean/claude-pd-karoo-20261117/report.md",
+     "run": "claude-pd-karoo-20261117",
+     "seed": 30112000,
+     "src": "34fb8c52119dc2ce39f5a1219cfc4814cb929379",
      "verdict": "issues"
     }
    ]
@@ -12791,6 +12870,45 @@
      "run": "codex-spirits-shock-pair-20261117",
      "seed": 30045000,
      "src": "72188b700b83bfbd66f13db98870583d61d5dd21",
+     "verdict": "clean"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 457,
+      "DOMINATED-LAND": 3523,
+      "DROP-COVERED": 629,
+      "PHANTOM": 3060
+     },
+     "commit": "472580b5744da63452b3e8d1a3900f77d3270a29",
+     "date": "2026-11-17T10:47:45Z",
+     "decisions": 41263,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 50000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 4536498,
+     "ms_on": 5504844,
+     "report": "logs/mana_clean/claude-pd-karoo-20261117/report.md",
+     "run": "claude-pd-karoo-20261117",
+     "seed": 30050000,
+     "src": "34fb8c52119dc2ce39f5a1219cfc4814cb929379",
      "verdict": "clean"
     }
    ]
