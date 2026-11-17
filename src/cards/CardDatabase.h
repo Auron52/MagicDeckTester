@@ -5181,6 +5181,33 @@ struct CardParams
     // Archdruid's Charm mode 3: "Exile target artifact or enchantment." A cast variant pinned to a
     // target (Action::tutor_target "AX<n>"), offered to a human; the deck provider withholds it.
     bool                     modal_exile_target_artifact_enchantment = false;
+
+    // ---- Maze's End I2 (2026-11-17): the land-entry pipeline. Every field is new and gated (false /
+    // empty / nullopt / -1 inert), so every deck without one is byte-identical. Ledger:
+    // docs/design/analysis-Maze's End.md ("I2 cards").
+    // Gond Gate: "Gates you control enter untapped." A replacement judged for the ENTERING land's
+    // controller inside LandWouldEnterTapped (every route); it also overrides a "put onto the battlefield
+    // tapped" effect (EnterLand ForcedTapped; the controller orders the replacements, CR 616.1).
+    bool                     gates_enter_untapped = false;
+    // Gond Gate: "{T}: Add one mana of any color that a Gate you control could produce." The colours are
+    // the runtime union over the controller's Gates (ControlledSubtypeColors), on top of `produces` ({C}).
+    std::string              mana_colors_of_controlled_subtype;
+    // Amulet of Vigor: "Whenever a permanent you control enters tapped, untap it." One trigger per copy,
+    // resolved by ResolveEnteredTappedUntaps at every entry route (land drop, EnterLand, FireEtbWatchers).
+    bool                     untap_own_permanent_entering_tapped = false;
+    // Gateway Plaza: "When this land enters, sacrifice it unless you pay {1}." Pay vs sacrifice is a
+    // land-entry pin (searched); unaffordable = forced sacrifice. ResolveEtbSacUnlessPay.
+    std::optional<ManaCost>  etb_sacrifice_unless_pay;
+    // The CLB Gates (Sea Gate: "choose a color other than blue ... {T}: Add {U} or one mana of the chosen
+    // color"): the printed colour (Color ordinal) that the etb_choose_color choice may NOT pick, and that the
+    // locked permanent keeps producing beside the chosen one. -1 = none (Coldsteel Heart).
+    int                      etb_choose_color_fixed = -1;
+    // DERIVED at load (never in JSON): `produces` minus etb_choose_color_fixed -- the colour MENU
+    // (EtbColorMenu). Empty when etb_choose_color_fixed is -1.
+    std::vector<Color>       etb_choose_color_menu;
+    // Thran Portal: "This land is the chosen type in addition to its other types." The basic land type
+    // whose mana ability makes the locked colour (LandHasSubtypeNow reads it off Permanent::chosen_color).
+    bool                     chosen_color_adds_basic_land_type = false;
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
     // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
     // (RefreshOppLifeHaste). 0 = no such clause.
@@ -5330,6 +5357,8 @@ inline const std::vector<Color>& EtbColorMenu(const CardParams& p)
 {
     if (p.is_land_aura) { return p.land_aura_produces; }
     if (p.land_tap_bonus > 0) { return p.land_tap_bonus_produces; }
+    // A CLB Gate ("choose a color other than blue"): the printed colour is not on the menu.
+    if (p.etb_choose_color_fixed >= 0) { return p.etb_choose_color_menu; }
     return p.produces;
 }
 

@@ -3200,6 +3200,7 @@ static int BtPainlessMode(const CardDefinition& d)
     const bool plain = !d.params.is_filter && !d.params.ramp_filter && !d.params.any_color_filter
                     && !d.params.domain_mana && !d.params.storage_land && !d.params.reflecting
                     && !d.params.mana_colors_of_graveyard_legends && !d.params.untap_creature_cost.has_value()
+                    && d.params.mana_colors_of_controlled_subtype.empty()
                     && !IsScaledManaDork(d) && !IsScaledManaLand(d);
     // The {C} mode is painless only as the painland model has it (PainlandCModeEnabled: activate()'s
     // `painless` branch) and only when the land does not hurt in every mode.
@@ -3497,9 +3498,12 @@ static bool TapFlowInfeasible(const GameState& state, const ManaCost& cost, bool
         std::vector<Color> gl_cols;
         if (def->params.mana_colors_of_graveyard_legends)
         { gl_cols = GraveyardLegendColors(state, active, *def); }
+        else if (!def->params.mana_colors_of_controlled_subtype.empty())   // Gond Gate (same shape)
+        { gl_cols = ControlledSubtypeColors(state, active, *def); }
         const std::vector<Color>& produces =
               def->params.reflecting                                  ? *rp_colors
-            : def->params.mana_colors_of_graveyard_legends            ? gl_cols
+            : (def->params.mana_colors_of_graveyard_legends
+               || !def->params.mana_colors_of_controlled_subtype.empty()) ? gl_cols
             : (def->params.etb_choose_color && EtbBtLockEnabled())
                   ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
                   : def->params.produces;
@@ -4702,9 +4706,12 @@ static bool TapForCostBacktrackWorker(GameState& state, const ManaCost& cost,
         std::vector<Color> gl_cols;
         if (def->params.mana_colors_of_graveyard_legends)
         { gl_cols = GraveyardLegendColors(state, active, *def); }
+        else if (!def->params.mana_colors_of_controlled_subtype.empty())   // Gond Gate (same shape)
+        { gl_cols = ControlledSubtypeColors(state, active, *def); }
         const std::vector<Color>& produces_base =
               def->params.reflecting                                  ? *rp_colors
-            : def->params.mana_colors_of_graveyard_legends            ? gl_cols
+            : (def->params.mana_colors_of_graveyard_legends
+               || !def->params.mana_colors_of_controlled_subtype.empty()) ? gl_cols
             : ((def->params.etb_choose_color && EtbBtLockEnabled())
                   || def->params.enters_with_mana_counters > 0)
                   ? EffectiveProducesFor(state, active, *def, &state.battlefield[i], /*in_hand=*/false)
@@ -6121,7 +6128,8 @@ inline bool ManaCacheKey(const GameState& state, const ManaCost& cost, bool for_
         // colours (state-dependent). Hash that exact effective colour set so two boards where it can
         // make different colours get different keys -> byte-identical replay.
         // (The Grey Havens' graveyard-legend colours are state-dependent the same way.)
-        if (d->params.reflecting || d->params.mana_colors_of_graveyard_legends)
+        if (d->params.reflecting || d->params.mana_colors_of_graveyard_legends
+            || !d->params.mana_colors_of_controlled_subtype.empty())
         {
             const std::vector<Color>& rc = EffectiveProduces(state, active, *d);
             smix(0xEFEC71'11ull, 0xEFEC71'22ull);

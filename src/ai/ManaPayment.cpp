@@ -8414,6 +8414,7 @@ int SeedPaySourceSig(const Permanent& p, int me)
         || q.storage_land || q.enters_tapped_with_depletion > 0
         || q.creature_mana_only || q.colored_creature_only || q.mana_only_spell_min_mv > 0
         || q.domain_mana || q.mana_colors_of_graveyard_legends || q.gy_land_exile_mana
+        || !q.mana_colors_of_controlled_subtype.empty()
         || !q.mana_requires_land_subtype.empty() || q.tap_self_damage > 0 || q.tap_opponent_lifegain > 0
         || q.tap_mana_damage_each_opponent > 0   // Zhur-Taa: its tap moves the opponent's life
         || q.energy_per_colored_tap > 0 || p.is_animated)

@@ -11637,7 +11637,17 @@ static std::string FsPlanText(const TurnSolver::Plan& p)
                                       : "(heuristic)";
     if (!p.land_face.empty()) { land += "/" + p.land_face; }
     if (p.land_from_top)      { land += "@top"; }        // Courser: the library top, not a hand copy
-    if (p.rad_mode >= 0)      { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
+    if (p.rad_mode >= 0)
+    {
+        // The land-entry pin (Maze's End I2) means what the LAND's choice is: a colour, Plaza's pay / sacrifice,
+        // else Mariposa's rad mode (the original reader).
+        const CardDefinition* ld = p.land_to_play.empty() ? nullptr : CardDatabase::Instance().Lookup(p.land_to_play);
+        if (ld != nullptr && ld->params.etb_choose_color && p.rad_mode < 5)
+        { land += std::string("[color=") + ColorName(static_cast<Color>(p.rad_mode)) + "]"; }
+        else if (ld != nullptr && ld->params.etb_sacrifice_unless_pay.has_value())
+        { land += p.rad_mode ? "[pay]" : "[sacrifice]"; }
+        else { land += p.rad_mode ? "[rad]" : "[no-rad]"; }
+    }
     if (p.bounce_choice >= 1) { land += "[bounce" + std::to_string(p.bounce_choice) + "]"; }
     if (p.scry_choice >= 0)   { land += "[scry" + std::to_string(p.scry_choice) + "]"; }
     return "land=" + land + ": " + s;
@@ -48613,7 +48623,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                 if (others.CanPay(cost))
                 {
                     std::unordered_set<std::string> seen;
-                    auto emit = [&](const std::string& target)
+                    // `entry_pin` (Maze's End I2): the fetched land's searched as-enters choice (a CLB Gate's
+                    // colour, Gateway Plaza's pay / sacrifice), carried as chosen_x = pin + 1 and installed by
+                    // both worlds' apply as the land-entry pin (LandEntryPinScope). 0 = none (Seahunter; every
+                    // target without a choice) -> byte-identical. TapTutorPut always taps, so chosen_x is
+                    // never read as a repeat count for it.
+                    auto emit = [&](const std::string& target, int entry_pin = -1)
                     {
                         Action a;
                         a.kind = Action::Kind::ActivatePermAbility;
@@ -48625,6 +48640,7 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         a.tutor_target = target;
                         a.cost = cost;
                         a.is_noncreature = true;
+                        if (entry_pin >= 0) { a.chosen_x = entry_pin + 1; }
                         actions.push_back(std::move(a));
                     };
                     std::vector<std::string> targets;
@@ -48638,7 +48654,17 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     bool narrowed = false;
                     if (!HumanPlayActive() && !DecisionUnpruned())
                     { narrowed = ResolveProvider(state).TapTutorPutCandidates(state, *sd, targets); }
-                    for (const std::string& name : targets) { emit(name); }
+                    for (const std::string& name : targets)
+                    {
+                        // One variant per admitted as-enters choice of the fetched land (autonomous only: the
+                        // viewer asks at the entry). LandEntryPinCandidates RESTRICTS/ORDERS, never picks.
+                        const CardDefinition* td = CardDatabase::Instance().Lookup(name);
+                        std::vector<int> pins;
+                        if (td != nullptr && LandHasEntryPinChoice(*td) && !HumanPlayActive())
+                        { pins = ResolveProvider(state).LandEntryPinCandidates(state, state.active_player_index, *td); }
+                        if (pins.empty()) { emit(name); continue; }
+                        for (int pin : pins) { emit(name, pin); }
+                    }
                     if (!narrowed || targets.empty())
                     { emit(kTutorDeclineTarget); }  // hidden-zone search may fail even with a match
                 }
@@ -63443,7 +63469,7 @@ bool TurnSolver::DropOpenLandEnablesCast(const GameState& state, const std::stri
         if (only_land != nullptr && nm != *only_land) { continue; }
         if (std::find(tried.begin(), tried.end(), nm) != tried.end()) { continue; }
         tried.push_back(nm);
-        if (LandWouldEnterTapped(state, *ld)) { continue; }   // adds nothing this turn
+        if (!LandUsableOnEntry(state, *ld)) { continue; }   // adds nothing this turn (an Amulet untaps it)
         GameState scratch = state;
         if (!PlayLandByName(scratch, nm)) { continue; }
         for (const Card& h : scratch.ActivePlayer().hand)
@@ -66942,6 +66968,7 @@ bool TurnSolver::BatchPrepayMainCasts(GameState& state, const std::vector<Action
                 if (i >= 64) { continue; }
                 // Colours resolved at tap time (or added by a land Aura) are never called idle.
                 if (bd->params.reflecting || bd->params.domain_mana || bd->params.mana_colors_of_graveyard_legends
+                    || !bd->params.mana_colors_of_controlled_subtype.empty()
                     || bd->params.produces_any_combination || LandAuraColorMask(state, bp) != 0)
                 { continue; }
                 const std::vector<Color>& pr = ProducesForPayment(state, active, *bd, for_crea, &bp);
@@ -76668,6 +76695,8 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             const bool tap_tutor = a.ability_mode == Action::AbilityMode::TapTutorPut;
             const SacNamedPinScope _sac_named_pin(sac_named ? a.sac_victim_id : 0,
                                                   (sac_named || tap_tutor) ? &a.tutor_target.str() : nullptr);
+            // Maze's End I2: the fetched land's searched as-enters choice (chosen_x = pin + 1). Twin in the other world.
+            const LandEntryPinScope _le_pin(tap_tutor && a.chosen_x > 0 ? a.chosen_x - 1 : -1);
             // Den Protector's searched regrowth (a turn-face-up action's tutor_target); null for every other
             // mode, and for an unpinned flip (the provider's pick). Lockstep twin in the other world.
             const FaceUpRegrowPinScope _fu_pin(
@@ -100800,20 +100829,26 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
     // land option the land-first enumeration did not have.
     // `top` is the option's SOURCE ZONE (Plan::land_from_top): a library-top land offered here is
     // re-offered after the casts from the top too, never as a hand copy.
-    struct LandOption { std::string land, fetch, face; bool top = false; };
+    struct LandOption { std::string land, fetch, face; bool top = false; int pin = -1; };
     std::vector<LandOption> offered_lands;
 
     // `from_top` (Courser of Kruphix): the land is the library TOP, not a hand copy -- its own land
     // option, stamped on every plan it yields (Plan::land_from_top). See the TOP group below.
+    // `entry_pin` (Maze's End I2): the land's SEARCHED as-enters choice (a colour, or Gateway Plaza's pay /
+    // sacrifice -- the land-entry pin, SpellEffects.h), carried on Plan::rad_mode. Each pin is its OWN land
+    // option, so the casts are enumerated on the board THAT choice makes (a Sea Gate untapped by Amulet of
+    // Vigor taps for the colour it chose; a paid Plaza leaves {1} less): enumerating once and re-pinning
+    // afterwards would leave every line that needs the other choice's mana unfindable at any budget.
+    // -1 = no pin (every land without such a choice -> byte-identical).
     auto add_for_land = [&](const std::string& land_name, const std::string& fetch_target,
                             const std::string& land_face = "", bool from_top = false,
-                            bool float_old_city = false)
+                            bool float_old_city = false, int entry_pin = -1)
     {
         PROF_INC(gamestate_copies);
         GameState copy = state;
         if (float_old_city) { SetLegendKeepNow(copy, kLegendKeepNewFloatCity); }
         if (!land_name.empty()
-            && !PlayLandByName(copy, land_name, fetch_target, true, land_face, -1, from_top)) { return; }
+            && !PlayLandByName(copy, land_name, fetch_target, true, land_face, entry_pin, from_top)) { return; }
         // Karoo (etb_bounce_land) DEFERRAL, mirroring ApplyPlanDirect / the executor: the apply
         // plays a Karoo AFTER the main casts, so the bounce returns a land that was already
         // TAPPED for this turn's casts. Folding the Karoo into `copy` up front bounced the land
@@ -100854,7 +100889,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             }
         }
         if (LandOrderMatters(state) && !land_name.empty() && !karoo_drop && !float_old_city)
-        { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top }); }
+        { offered_lands.push_back(LandOption{ land_name, fetch_target, land_face, from_top, entry_pin }); }
 
         // "Play this land, cast nothing" baseline (neutral value 0). Skipped in a group-wave
         // TRANCHE re-enumeration: the idle plan touches no group, so wave 0 already emitted it.
@@ -100867,6 +100902,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             idle.fetch_target = fetch_target;
             idle.land_face    = land_face;
             idle.land_from_top = from_top;
+            if (entry_pin >= 0) { idle.rad_mode = entry_pin; }
             if (float_old_city) { idle.legend_keep_turn = kLegendKeepNewFloatCity; }
             all.push_back(std::move(idle));
         }
@@ -100884,6 +100920,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             p.fetch_target = fetch_target;
             p.land_face    = land_face;
             p.land_from_top = from_top;
+            if (entry_pin >= 0) { p.rad_mode = entry_pin; }
             if (float_old_city) { p.legend_keep_turn = kLegendKeepNewFloatCity; }
             // The Karoo's earlier positions (see karoo_pos): one clone per counted action, r = 1..n.
             if (karoo_drop && karoo_pos_on && !p.actions.empty() && p.land_slot == 0)
@@ -101058,6 +101095,19 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (s_fetch_fan_cap_hold > 0 && static_cast<int>(cands.size()) > s_fetch_fan_cap_hold)
             { cands.resize(static_cast<std::size_t>(s_fetch_fan_cap_hold)); }
             for (const std::string& c : cands) { add_for_land(ln, c); }
+        }
+        // A land with a searched as-enters choice (Maze's End I2: a colour, Gateway Plaza's pay/sacrifice): one
+        // option per provider-admitted value (LandEntryPinCandidates -- RESTRICT/ORDER only). Human play keeps
+        // the unpinned option: the viewer asks at the entry.
+        if (ld != nullptr && LandHasEntryPinChoice(*ld) && !HumanPlayActive())
+        {
+            const std::vector<int> pins =
+                ResolveProvider(state).LandEntryPinCandidates(state, state.active_player_index, *ld);
+            if (!pins.empty())
+            {
+                for (int pin : pins) { add_for_land(ln, "", "", false, false, pin); }
+                continue;
+            }
         }
         add_for_land(ln, "");   // ordinary land, a fetch with nothing to find, or the held modern fetch
         // Three Tree City can float its free {C} immediately before a second copy enters and the
@@ -101246,6 +101296,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
                     v.land_face     = lo.face;
                     v.land_slot     = TurnSolver::kLandSlotAfterCasts;
                     v.land_from_top = lo.top;   // a top land is played after the casts FROM THE TOP
+                    if (lo.pin >= 0) { v.rad_mode = lo.pin; }   // the option's land-entry pin (I2)
                     after.push_back(std::move(v));
                 }
             }

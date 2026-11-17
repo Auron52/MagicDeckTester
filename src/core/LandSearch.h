@@ -949,7 +949,7 @@ inline void PerformLandSearch(GameState& state, int controller, const LandSearch
         const CardDefinition* d = CardDatabase::Instance().LookupCached(lc);
         if (d == nullptr) { continue; }   // unreachable: legality read the definition
         EnterLand(state, *d, lc.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true,
-                  spec.tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, &looks);
+                  spec.tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, -1, &looks);
         // Forbidden Orchard's on-play spawn, mirrored as Crop Rotation does -- only for an UNTAPPED
         // entry (it models "tapped for mana this turn"); a forced-tapped Orchard taps next turn and
         // the turn-start spawn covers it. Unreachable for every basic-only search.

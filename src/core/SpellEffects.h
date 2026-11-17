@@ -2514,6 +2514,15 @@ inline bool LandHasSubtypeNow(const GameState& state, const Permanent& land,
     const CardDefinition* def = CardDatabase::Instance().LookupCached(land.card);
     const SubtypeSet& subs = def ? def->card.m_subtypes : land.card.m_subtypes;
     for (const std::string& s : subs) { if (s == subtype) { return true; } }
+    // Thran Portal (chosen_color_adds_basic_land_type): "This land is the chosen type in addition to its
+    // other types." The chosen BASIC LAND TYPE is carried as the colour its mana ability makes
+    // (Permanent::chosen_color, locked as it enters): Plains=W, Island=U, Swamp=B, Mountain=R, Forest=G.
+    if (def != nullptr && def->params.chosen_color_adds_basic_land_type
+        && land.chosen_color >= 0 && land.chosen_color < 5)
+    {
+        static const char* const kBasic[5] = { "Plains", "Island", "Swamp", "Mountain", "Forest" };
+        if (subtype == kBasic[static_cast<int>(land.chosen_color)]) { return true; }
+    }
     // Planar Nexus (SubtypeSet::AllNonbasicLandTypes): fallback after the miss.
     return subs.AllNonbasicLandTypes() && SubtypeSet::IsNonbasicLandTypeName(subtype);
 }
@@ -4686,8 +4695,11 @@ enum class LandEntryTap : std::uint8_t { Natural, ForcedTapped, PreDecidedUntapp
 struct DeferredLandLooks;   // defined beside EnterLand (a searched-out land's look waits for the shuffle)
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number = -1,
                       bool resolve_full_etb = false, bool fire_landfall = true,
-                      LandEntryTap entry_tap = LandEntryTap::Natural,
+                      LandEntryTap entry_tap = LandEntryTap::Natural, int controller = -1,
                       DeferredLandLooks* defer_looks = nullptr);
+// Amulet of Vigor's untap triggers for the permanent at `idx` (the land-entry pipeline, defined with
+// EnterLand below). Declared here because FireEtbWatchers resolves it for an entering NONLAND.
+inline void ResolveEnteredTappedUntaps(GameState& state, int idx);
 
 inline void PerformTutorToBattlefield(GameState& state, int controller, const CardParams& pp,
                                       int max_puts,
@@ -11887,6 +11899,12 @@ inline void FireEtbWatchers(GameState& state, int controller, int entered_index,
     if (const CardDefinition* hd = CardDatabase::Instance().LookupCached(state.battlefield[entered_index].card);
         hd != nullptr && hd->params.as_enters_harvest_counters > 0)
     { ApplyCounterHarvestAsEnters(state, controller, entered_index, *hd); }
+    // AMULET OF VIGOR for an entering NONLAND that entered tapped (a land's untap is resolved by its own
+    // entry route -- PlayLandCore / EnterLand -- which also call this cascade for Three Tree City; never
+    // twice). A no-op unless the entrant is tapped and its controller controls an Amulet.
+    if (state.battlefield[static_cast<std::size_t>(entered_index)].tapped
+        && !state.battlefield[static_cast<std::size_t>(entered_index)].card.IsLand())
+    { ResolveEnteredTappedUntaps(state, entered_index); }
     // "This creature enters with N +1/+1 counters on it" (CardParams::enters_with_plus_counters,
     // Mossborn Hydra) -- an AS-ENTERS REPLACEMENT (CR 614.1c), so it sits HERE, right after the face
     // is settled and before anything below can observe the entrant (every enter watcher, the landfall
@@ -43386,6 +43404,38 @@ inline const std::vector<Color>& GraveyardLegendColors(const GameState& state, i
     return buf;
 }
 
+// GOND GATE (CardParams::mana_colors_of_controlled_subtype = "Gate"): "{T}: Add {C}." plus "{T}: Add one
+// mana of any color that a Gate you control could produce." Its static `produces` (the free {C}) plus every
+// COLOUR (W/U/B/R/G; colourless is not a colour) any permanent the controller controls with that subtype
+// COULD produce (CR 106.7: costs are ignored, so an any-colour filter -- Planar Nexus, Heap Gate -- and
+// Gateway Plaza give all five; tapped Gates count too). Each Gate's colours are read PER PERMANENT
+// (EffectiveProducesFor), so a CLB Gate reports its printed + chosen colour and Thran Portal its chosen one.
+// Another source carrying this same param is skipped (its reflected mode is circular -- the Reflecting Pool
+// convention, ReflectedColors); its {C} adds nothing new. Same thread_local buffer contract as
+// GraveyardLegendColors (consume within one source's loop).
+inline const std::vector<Color>& ControlledSubtypeColors(const GameState& state, int controller,
+                                                         const CardDefinition& def)
+{
+    static thread_local std::vector<Color> buf;
+    bool have[6] = { false, false, false, false, false, false };   // W,U,B,R,G,C
+    for (Color c : def.params.produces) { have[static_cast<int>(c)] = true; }
+    const std::uint16_t sub_id = SubtypeRegistry::Instance().Id(def.params.mana_colors_of_controlled_subtype);
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr || !d->params.mana_colors_of_controlled_subtype.empty()) { continue; }
+        if (!d->card.m_subtypes.HasId(sub_id)) { continue; }
+        for (Color c : EffectiveProducesFor(state, controller, *d, &p, /*in_hand=*/false))
+        { if (c != Color::Colorless) { have[static_cast<int>(c)] = true; } }
+    }
+    buf.clear();
+    const Color order[6] = { Color::White, Color::Blue, Color::Black,
+                             Color::Red, Color::Green, Color::Colorless };
+    for (Color c : order) { if (have[static_cast<int>(c)]) { buf.push_back(c); } }
+    return buf;
+}
+
 // ---- One-shot "lump" sac sources as PAYMENT sources (§2a) -------------------------------------
 // MTG_TREASURE_PAY_SOURCE -- DEFAULT ON, adopted 2026-08-26 (=0 disables). Routes a 1-mana sac source
 // (Treasure Token) through the mana PAYMENT solver instead of the plan enumerator's per-colour
@@ -44560,6 +44610,10 @@ inline const std::vector<Color>& EffectiveProduces(const GameState& state, int c
     // the time it is tapped, and the fixing heuristics must not count it as a colour source before then.
     if (def.params.mana_colors_of_graveyard_legends && !in_hand)
     { return GraveyardLegendColors(state, controller, def); }
+    // Gond Gate. IN HAND the static {C} only, like The Grey Havens (its colours depend on the Gates
+    // controlled when it is tapped).
+    if (!def.params.mana_colors_of_controlled_subtype.empty() && !in_hand)
+    { return ControlledSubtypeColors(state, controller, def); }
     if (!def.params.reflecting) { return def.params.produces; }
     return ReflectedColors(state, controller, in_hand);
 }
@@ -46770,6 +46824,27 @@ inline const std::vector<Color>& EffectiveProducesFor(const GameState& state, in
     // green Gauntlet reported as a {G} source here would be a phantom source to every reader that does
     // not pre-filter to lands/dorks/rocks (EtbChosenColorFrom's supply count among them).
     if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
+        && !EtbColorChoiceIsNonSource(def.params) && EtbColorLockEnabled()
+        && def.params.etb_choose_color_fixed >= 0 && def.params.etb_choose_color_fixed < 5
+        && perm->chosen_color < 5)
+    {
+        // A CLB Gate ("{T}: Add {U} or one mana of the chosen color"): the PRINTED colour FIRST (so a
+        // commit-to-first-colour tap-ahead commits the printed one), then the chosen one. One static
+        // two-colour vector per (fixed, chosen) pair -- never mutated, so the reference is stable.
+        static const std::vector<std::vector<Color>> kPairs = []
+        {
+            std::vector<std::vector<Color>> t(25);
+            for (int f = 0; f < 5; ++f)
+                for (int c = 0; c < 5; ++c)
+                {
+                    t[static_cast<std::size_t>(f * 5 + c)].push_back(static_cast<Color>(f));
+                    if (c != f) { t[static_cast<std::size_t>(f * 5 + c)].push_back(static_cast<Color>(c)); }
+                }
+            return t;
+        }();
+        return kPairs[static_cast<std::size_t>(def.params.etb_choose_color_fixed * 5 + perm->chosen_color)];
+    }
+    else if (perm != nullptr && def.params.etb_choose_color && perm->chosen_color >= 0
         && !EtbColorChoiceIsNonSource(def.params) && EtbColorLockEnabled())
     {
         static const std::vector<Color> kW{ Color::White }, kU{ Color::Blue }, kB{ Color::Black },
@@ -48517,12 +48592,23 @@ inline bool CanRevealForAdditionalCost(const GameState& state, const CardDefinit
     return false;
 }
 
-// True iff the active player's hand holds a card of a subtype this reveal land wants
+// ---- WHOSE land is entering (Maze's End I2, 2026-11-17) --------------------------------------
+// Every "enters tapped unless ..." condition below is judged for the ENTERING LAND'S CONTROLLER: "you
+// control two or fewer other lands", "if you control a Soldier", "reveal a ... card from your hand", "you
+// may pay 2 life", Gond Gate's "Gates you control". Historically every branch read the ACTIVE player,
+// which is the same player for a land drop (only the active player plays lands) and for every put this
+// engine had. Burgeoning (Maze's End I3) puts OUR land onto the battlefield on the OPPONENT's turn, so
+// the controller is now an explicit argument: `controller` < 0 (the default) keeps the active player, so
+// every existing caller is byte-identical.
+inline int LandEntryController(const GameState& state, int controller)
+{ return controller >= 0 ? controller : state.active_player_index; }
+
+// True iff the controller's hand holds a card of a subtype this reveal land wants
 // (e.g. Island/Mountain for Frostboil Snarl) -- i.e. it CAN reveal to enter untapped.
-inline bool LandCanReveal(const GameState& state, const CardDefinition& def)
+inline bool LandCanReveal(const GameState& state, const CardDefinition& def, int controller = -1)
 {
     const CardParams& pp = def.params;
-    const Player& ap = state.ActivePlayer();
+    const Player& ap = state.players[static_cast<std::size_t>(LandEntryController(state, controller))];
     for (const Card& c : ap.hand)
     {
         const CardDefinition* cdef = CardDatabase::Instance().LookupCached(c);
@@ -48535,16 +48621,17 @@ inline bool LandCanReveal(const GameState& state, const CardDefinition& def)
 }
 
 // Fortified Beachhead: "... enters tapped unless you revealed a Soldier card this way OR YOU
-// CONTROL A SOLDIER." True iff the active player controls a permanent carrying one of
+// CONTROL A SOLDIER." True iff the controller controls a permanent carrying one of
 // etb_untap_control_subtypes, read off the LIVE permanent (a transformed Moonrage Brute is a Werewolf
 // only; Soldier tokens count; an all-creature-types animation counts). Empty list -> false.
-inline bool LandControlUntapMet(const GameState& state, const CardDefinition& def)
+inline bool LandControlUntapMet(const GameState& state, const CardDefinition& def, int controller = -1)
 {
     const CardParams& pp = def.params;
     if (pp.etb_untap_control_subtypes.empty()) { return false; }
+    const int ctrl = LandEntryController(state, controller);
     for (const Permanent& p : state.battlefield)
     {
-        if (p.controller_index != state.active_player_index) { continue; }
+        if (p.controller_index != ctrl) { continue; }
         if (p.AnimatedAllTypes()) { return true; }
         for (const std::string& want : pp.etb_untap_control_subtypes)
         { if (CardHasSubtype(p.card, want)) { return true; } }
@@ -48552,39 +48639,76 @@ inline bool LandControlUntapMet(const GameState& state, const CardDefinition& de
     return false;
 }
 
+// The interned "Gate" subtype id (kNone until the database has interned it; re-read until then, so a
+// unit test that loads the DB after the first call still sees it).
+inline std::uint16_t GateSubtypeId()
+{
+    static thread_local std::uint16_t id = SubtypeRegistry::kNone;
+    if (id == SubtypeRegistry::kNone) { id = SubtypeRegistry::Instance().Id("Gate"); }
+    return id;
+}
+// Is this DEFINITION a Gate (printed subtype, or Planar Nexus's every-nonbasic-land-type bit)?
+inline bool DefIsGate(const CardDefinition& def) { return def.card.m_subtypes.HasId(GateSubtypeId()); }
+
+// GOND GATE: "Gates you control enter untapped." True iff `def` is a Gate and `controller` controls a
+// permanent with gates_enter_untapped ON THE BATTLEFIELD NOW. A Gate entering SIMULTANEOUSLY with a Gond
+// Gate is not untapped by it (CR 614.12: the replacement must exist before the event) -- a simultaneous
+// multi-put judges every land against the pre-event board (EnterLand's PreDecided* shape), so this reads
+// the battlefield as the caller hands it in. Non-Gates return at the first test (no scan), so every deck
+// without a Gate is byte-identical and pays one id compare.
+inline bool GateEntersUntappedByGond(const GameState& state, const CardDefinition& def, int controller = -1)
+{
+    if (!DefIsGate(def)) { return false; }
+    const int ctrl = LandEntryController(state, controller);
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != ctrl) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.gates_enter_untapped) { return true; }
+    }
+    return false;
+}
+
 // Pure heuristic predicate: would this land enter tapped under autonomous play? Does NOT mutate
 // state (no life payment). Call while the card is still in hand (the reveal check scans the hand).
+//   - Gond Gate: a Gate whose controller controls a Gond Gate enters untapped (checked FIRST: the
+//     controller applies that replacement, so no shock life is ever paid for a Gate under a Gond).
 //   - Shock land (etb_pay_life_to_untap): enters untapped iff the AI pays the life -- it does so
 //     whenever it can keep at least 1 life AND `allow_pay_life` (mana is actually needed this turn).
 //   - Reveal land (etb_untap_reveal_subtypes): enters untapped iff a matching card is in hand.
 //   - Otherwise: the plain enters_tapped flag.
-inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& def, bool allow_pay_life = true)
+// `controller`: the entering land's controller (see LandEntryController; < 0 = the active player).
+inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& def, bool allow_pay_life = true,
+                                 int controller = -1)
 {
     const CardParams& pp = def.params;
+    const int ctrl = LandEntryController(state, controller);
+    if (GateEntersUntappedByGond(state, def, ctrl)) { return false; }
     // The pay-the-cost-or-enter-tapped decision is provider-owned (LandEntersUntapped); the base
     // hook returns the engine answer unchanged, so this is byte-identical. It is routed through the
     // PREDICATE (not just the real land drop) because the enumeration prices a plan's mana off this
     // same function -- if the two disagreed, the plan's mana and the realised mana would diverge.
     if (pp.etb_pay_life_to_untap > 0)
     {
-        const bool heur = allow_pay_life && state.ActivePlayer().life > pp.etb_pay_life_to_untap;
+        const bool heur = allow_pay_life
+                       && state.players[static_cast<std::size_t>(ctrl)].life > pp.etb_pay_life_to_untap;
         return !ResolveProvider(state).LandEntersUntapped(state, def, heur);
     }
     // Controlling a listed subtype forces the land untapped BEFORE the provider's reveal hook: there
     // is no choice left to make, so a provider override must not be able to "decline the reveal"
     // into a tapped land the rules say enters untapped. Param-gated (empty list -> false).
-    if (LandControlUntapMet(state, def)) { return false; }
+    if (LandControlUntapMet(state, def, ctrl)) { return false; }
     if (!pp.etb_untap_reveal_subtypes.empty())
-        return !ResolveProvider(state).LandEntersUntapped(state, def, LandCanReveal(state, def));
+        return !ResolveProvider(state).LandEntersUntapped(state, def, LandCanReveal(state, def, ctrl));
     if (!pp.etb_untap_control_subtypes.empty()) { return true; }   // no reveal clause, none controlled
     if (pp.fastland_max_other_lands >= 0)
     {
-        // Fastland (Razorverge Thicket): enters untapped iff you control <= N other lands. The card
-        // being played is still in hand (not yet on the battlefield), so every battlefield land the
-        // active player controls is an "other" land.
+        // Fastland (Razorverge Thicket, Thran Portal): enters untapped iff you control <= N other lands.
+        // The card being played is still in hand (not yet on the battlefield), so every battlefield land
+        // its controller controls is an "other" land.
         int other_lands = 0;
         for (const Permanent& p : state.battlefield)
-            if (p.controller_index == state.active_player_index && p.card.IsLand()) { ++other_lands; }
+            if (p.controller_index == ctrl && p.card.IsLand()) { ++other_lands; }
         return other_lands > pp.fastland_max_other_lands;
     }
     if (!pp.checkland_subtypes.empty())
@@ -48594,7 +48718,7 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
         // predicate contract as the fastland branch: enumeration pricing and the real drop agree.
         for (const Permanent& p : state.battlefield)
         {
-            if (p.controller_index != state.active_player_index || !p.card.IsLand()) { continue; }
+            if (p.controller_index != ctrl || !p.card.IsLand()) { continue; }
             const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
             const SubtypeSet& subs = d ? d->card.m_subtypes : p.card.m_subtypes;
             for (const std::string& want : pp.checkland_subtypes)
@@ -48607,37 +48731,71 @@ inline bool LandWouldEnterTapped(const GameState& state, const CardDefinition& d
     return pp.enters_tapped;
 }
 
+// AMULET OF VIGOR: does `controller` control an "untap a permanent that enters tapped" source? Then a
+// land that enters tapped is untapped by the trigger before the controller acts again (ResolveEntered-
+// TappedUntaps), i.e. its mana is USABLE THIS TURN. Read by the pricing/projection sites that ask "does
+// this land add mana now" (LandUsableOnEntry), never by the rules predicate above (Gond Gate and the
+// trigger itself need the true enters-tapped answer).
+inline int EnteringTappedUntapperCount(const GameState& state, int controller)
+{
+    int n = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != controller) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d != nullptr && d->params.untap_own_permanent_entering_tapped) { ++n; }
+    }
+    return n;
+}
+// "Will this land's mana be usable the turn it enters?" -- !LandWouldEnterTapped, OR an Amulet of
+// Vigor will untap it. Identical to !LandWouldEnterTapped for every deck without such a source.
+inline bool LandUsableOnEntry(const GameState& state, const CardDefinition& def, bool allow_pay_life = true,
+                              int controller = -1)
+{
+    const int ctrl = LandEntryController(state, controller);
+    if (!LandWouldEnterTapped(state, def, allow_pay_life, ctrl)) { return true; }
+    return EnteringTappedUntapperCount(state, ctrl) > 0;
+}
+
 // Is there a real "enter untapped by paying a cost" CHOICE to surface for this land (human play)?
+//   - Gond Gate untaps it: no (it enters untapped whatever is paid).
 //   - Shock land: yes iff the player can afford the life (life > cost) -- the human may pay even when
 //     the mana-needed heuristic wouldn't, or decline even when it would.
 //   - Reveal land: yes iff a matching card is in hand (otherwise it is forced tapped).
-inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def)
+inline bool LandEntryHasChoice(const GameState& state, const CardDefinition& def, int controller = -1)
 {
     const CardParams& pp = def.params;
-    if (pp.etb_pay_life_to_untap > 0) return state.ActivePlayer().life > pp.etb_pay_life_to_untap;
+    const int ctrl = LandEntryController(state, controller);
+    if (GateEntersUntappedByGond(state, def, ctrl)) return false;
+    if (pp.etb_pay_life_to_untap > 0)
+        return state.players[static_cast<std::size_t>(ctrl)].life > pp.etb_pay_life_to_untap;
     // Fortified Beachhead with a Soldier already controlled: forced untapped, the reveal is moot.
-    if (LandControlUntapMet(state, def)) return false;
-    if (!pp.etb_untap_reveal_subtypes.empty()) return LandCanReveal(state, def);
+    if (LandControlUntapMet(state, def, ctrl)) return false;
+    if (!pp.etb_untap_reveal_subtypes.empty()) return LandCanReveal(state, def, ctrl);
     return false;
 }
 
 // Apply the on-entry cost for a land the controller chose to enter UNTAPPED. Only a shock land has a
 // payable cost (its life); a reveal land pays nothing (revealing is free); a plain land is a no-op.
-inline void ApplyLandUntapPayment(GameState& state, const CardDefinition& def)
+inline void ApplyLandUntapPayment(GameState& state, const CardDefinition& def, int controller = -1)
 {
     if (def.params.etb_pay_life_to_untap > 0)
-        state.ActivePlayer().life -= def.params.etb_pay_life_to_untap;
+        state.players[static_cast<std::size_t>(LandEntryController(state, controller))].life
+            -= def.params.etb_pay_life_to_untap;
 }
 
 // Decides whether a land enters tapped and applies any "as this land enters" payment (shock life).
 // The autonomous / rollout path -- takes the heuristic (LandWouldEnterTapped) and pays the cost when
 // it enters untapped. Human play routes the land drop through PlayLandByName, which consults the
 // g_play_land_entry_chooser at the shared call site before paying; this helper stays byte-identical
-// for the search and every other caller. Returns true if the land enters tapped.
-inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool allow_pay_life = true)
+// for the search and every other caller. Returns true if the land enters tapped. A Gate under a Gond
+// Gate enters untapped with NOTHING paid (the predicate's first branch; no shock life).
+inline bool LandEntersTapped(GameState& state, const CardDefinition& def, bool allow_pay_life = true,
+                             int controller = -1)
 {
-    bool tapped = LandWouldEnterTapped(state, def, allow_pay_life);
-    if (!tapped) { ApplyLandUntapPayment(state, def); }
+    const int ctrl = LandEntryController(state, controller);
+    bool tapped = LandWouldEnterTapped(state, def, allow_pay_life, ctrl);
+    if (!tapped && !GateEntersUntappedByGond(state, def, ctrl)) { ApplyLandUntapPayment(state, def, ctrl); }
     return tapped;
 }
 
@@ -52187,6 +52345,224 @@ inline void AdvanceSagas(GameState& state)
     }
 }
 
+// ==== THE LAND-ENTRY PIPELINE (Maze's End I2, 2026-11-17) =======================================
+// One post-entry sequence shared by the land DROP (PlayLandCore) and every effect PUT (EnterLand):
+//   (1) as-enters replacements: tapped / untapped (LandWouldEnterTapped: Gond Gate first), the chosen
+//       colour (LockEtbChosenColor: the CLB Gates, Thran Portal) -- nothing can observe the land before;
+//   (2) Amulet of Vigor's untap triggers (ResolveEnteredTappedUntaps);
+//   (3) the land's own "sacrifice unless you pay" trigger (ResolveEtbSacUnlessPay: Gateway Plaza);
+//   (4) the other enter triggers (scry, Karoo bounce, Guild Summit's draw, landfall).
+// (2) before (3) is the controller's trigger ORDER (CR 603.3b), and it is a sound dominance, not a
+// choice: untapping first gives every option the other order has plus "pay {1} with the land itself".
+//
+// THE LAND-ENTRY PIN. A land with an as-enters CHOICE carries it as ONE int whose meaning is the land's:
+//   * a colour chooser (etb_choose_color land): the Color ordinal (0..4) to lock;
+//   * Gateway Plaza (etb_sacrifice_unless_pay): 1 = pay, 0 = sacrifice;
+//   * Mariposa Military Base (etb_optional_tapped_rad): 1 = rad, 0 = no rad (the original user).
+// No land carries two of these, so the land drop's LandPlayOptions::rad_mode / Plan::rad_mode carry the
+// searched pin through every land route that already threads them (deferred, Karoo, breakpoint
+// continuation, executor); an effect PUT reads g_land_entry_pin (set by the putting action's apply --
+// Maze's End's fetch: Action::chosen_x = pin + 1 -- consumed by the FIRST land with a choice that
+// enters, so it cannot leak). -1 = unpinned: the provider's default (LandEntryPinCandidates' front;
+// for a colour, EtbChosenColor first) -- a rollout leaf beyond the horizon, the d0 runner, or a put
+// route that carries no pin (see the ledger's I2 decisions).
+inline thread_local int g_land_entry_pin = -1;
+struct LandEntryPinScope
+{
+    int prev;
+    explicit LandEntryPinScope(int pin) : prev(g_land_entry_pin) { g_land_entry_pin = pin; }
+    ~LandEntryPinScope() { g_land_entry_pin = prev; }
+    LandEntryPinScope(const LandEntryPinScope&)            = delete;
+    LandEntryPinScope& operator=(const LandEntryPinScope&) = delete;
+};
+// Does this land make an as-enters CHOICE that the land-entry pin carries (a colour or pay/sacrifice)?
+// Mariposa's rad choice is NOT included: it keeps its own Plan::rad_mode post-pass and default.
+inline bool LandHasEntryPinChoice(const CardDefinition& def)
+{
+    if (!def.card.IsLand()) { return false; }
+    const CardParams& p = def.params;
+    return (p.etb_choose_color && !EtbColorChoiceIsNonSource(p)) || p.etb_sacrifice_unless_pay.has_value();
+}
+inline int TakeLandEntryPin(const CardDefinition& def)
+{
+    if (!LandHasEntryPinChoice(def)) { return -1; }
+    const int pin = g_land_entry_pin;
+    g_land_entry_pin = -1;
+    return pin;
+}
+// Suppress the multi-Amulet FLOAT (not the untap) for an entry outside a main phase of its controller --
+// set by a put route that runs on the opponent's turn or in an end step (Burgeoning, Manabond: I3). Mana
+// floated there would empty before it could be spent, but the engine does not empty the pool at every
+// step boundary, so the float must not be made at all.
+inline thread_local int g_land_entry_no_float = 0;
+struct LandEntryNoFloatScope
+{
+    LandEntryNoFloatScope()  { ++g_land_entry_no_float; }
+    ~LandEntryNoFloatScope() { --g_land_entry_no_float; }
+    LandEntryNoFloatScope(const LandEntryNoFloatScope&)            = delete;
+    LandEntryNoFloatScope& operator=(const LandEntryNoFloatScope&) = delete;
+};
+
+// "As this land enters, choose a color [other than <X>]" / "choose a basic land type" (the five CLB Gates,
+// Thran Portal). A REPLACEMENT (CR 614.12), locked into Permanent::chosen_color once per object -- the
+// land counterpart of FireOwnEtbTriggersBody's Coldsteel Heart block, which land entries never reach (a
+// land drop and EnterLand bypass the own-ETB cascade). `pin` = a searched colour (see the land-entry pin);
+// outside the menu or -1 -> the provider's EtbChosenColor, else the provider's first admitted candidate,
+// else the menu's first colour (choosing is MANDATORY: a Gate must lock a colour even with an empty hand).
+// The HUMAN picks in the viewer (g_play_etb_color_chooser, nulled in every search scope). No-op for a land
+// without the param or already locked.
+inline void LockEtbChosenColor(GameState& state, int controller, int idx, int pin)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    Permanent& perm = state.battlefield[static_cast<std::size_t>(idx)];
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(perm.card);
+    if (def == nullptr || !def->card.IsLand() || !def->params.etb_choose_color
+        || EtbColorChoiceIsNonSource(def->params) || !EtbColorLockEnabled() || perm.chosen_color >= 0)
+    { return; }
+    const std::vector<Color>& menu = EtbColorMenu(def->params);
+    if (menu.empty()) { return; }
+    auto on_menu = [&menu](int c)
+    {
+        for (Color m : menu) { if (static_cast<int>(m) == c) { return true; } }
+        return false;
+    };
+    int pick = on_menu(pin) ? pin : -1;
+    if (pick < 0)
+    {
+        const int pv = ResolveProvider(state).EtbChosenColor(state, controller, *def);
+        if (on_menu(pv)) { pick = pv; }
+    }
+    if (pick < 0)
+    {
+        const std::vector<int> cands = ResolveProvider(state).LandEntryPinCandidates(state, controller, *def);
+        if (!cands.empty() && on_menu(cands.front())) { pick = cands.front(); }
+    }
+    if (pick < 0) { pick = static_cast<int>(menu.front()); }
+    if (g_play_etb_color_chooser && !g_tap_speculating)
+    {
+        std::vector<int> m;
+        for (Color c : menu) { m.push_back(static_cast<int>(c)); }
+        const int human = (*g_play_etb_color_chooser)(state, controller, def->card.m_name.str(), m, pick);
+        if (on_menu(human)) { pick = human; }
+    }
+    state.battlefield[static_cast<std::size_t>(idx)].chosen_color = static_cast<int8_t>(pick);
+    etbcolorstats::g_chosen[pick < 6 ? pick : 5].fetch_add(1, std::memory_order_relaxed);
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        static const char* const kBasic[5] = { "Plains", "Island", "Swamp", "Mountain", "Forest" };
+        EmitPlayEvent(state.turn_number, "choose_color",
+                      def->card.m_name.str() + " -- chose "
+                      + (def->params.chosen_color_adds_basic_land_type && pick < 5
+                             ? std::string(kBasic[pick]) + " (" + ColorName(static_cast<Color>(pick)) + ")"
+                             : ColorName(static_cast<Color>(pick))));
+    }
+}
+
+// AMULET OF VIGOR: "Whenever a permanent you control enters tapped, untap it." One trigger per copy the
+// controller controls (an Amulet entering tapped sees itself: CR 603.6a). Resolved right after the
+// permanent enters, before its other enter triggers (the pipeline note above). With N >= 2 copies each
+// trigger but the last lets the land tap for mana IN RESPONSE (a mana ability needs no priority), so a
+// tapped-entering land yields N-1 floating mana and still ends untapped -- the classic Amulet line, and
+// a weak dominance (no mana burn; the land ends untapped either way), so it is taken automatically rather
+// than offered. The float commits its colour by the shared tap-first rule (FloatLandBeforeSacrifice ->
+// FloatSourceTapCommitted / the line's owed colour: the mana-payment exemption). A source that cannot
+// float freely (KarooBounceFloatable: a pain/life tap like Thran Portal's, a feed-only converter) is
+// untapped without floating. No float outside a main phase of its controller (g_land_entry_no_float) or
+// for a nonland. Idempotent per entry (the caller calls it once). No-op when nothing untaps (the common
+// case: no Amulet, or the permanent entered untapped -- Gond Gate's replacement means no trigger).
+inline void ResolveEnteredTappedUntaps(GameState& state, int idx)
+{
+    if (idx < 0 || idx >= static_cast<int>(state.battlefield.size())) { return; }
+    if (!state.battlefield[static_cast<std::size_t>(idx)].tapped) { return; }
+    const int ctrl = state.battlefield[static_cast<std::size_t>(idx)].controller_index;
+    const int n = EnteringTappedUntapperCount(state, ctrl);
+    if (n <= 0) { return; }
+    const bool can_float = g_land_entry_no_float == 0 && ctrl == state.active_player_index
+                        && state.battlefield[static_cast<std::size_t>(idx)].card.IsLand();
+    const std::string name = state.battlefield[static_cast<std::size_t>(idx)].card.m_name.str();
+    int floated = 0;
+    for (int k = 0; k < n; ++k)
+    {
+        state.battlefield[static_cast<std::size_t>(idx)].tapped = false;
+        if (k + 1 < n && can_float
+            && FloatLandBeforeSacrifice(state, ctrl, idx, "in response to Amulet of Vigor"))
+        { ++floated; }
+    }
+    state.battlefield[static_cast<std::size_t>(idx)].tapped = false;
+    if (g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "ability",
+                      "Amulet of Vigor x" + std::to_string(n) + " -- untaps " + name
+                      + (floated > 0 ? " (tapped for mana " + std::to_string(floated) + "x in between)" : ""));
+    }
+}
+
+// GATEWAY PLAZA: "When this land enters, sacrifice it unless you pay {1}." `pin`: 1 = pay, 0 = sacrifice,
+// -1 = the provider's default (LandEntryPinCandidates' front; base: pay). Paying is offered only when the
+// cost is affordable on the board NOW (a probe payment on a copy) -- unaffordable = the forced sacrifice,
+// no choice. Paid through the shared payer (TapForCostDirect, both worlds: the Mihail precedent), which
+// may tap the Plaza itself once Amulet of Vigor / Gond Gate has it untapped. The HUMAN decides at the
+// `dig` chooser (one examined card, 0 = pay, -1 = sacrifice; the Mihail "pay {1}" shape). Returns true iff
+// the land stayed.
+inline bool ResolveEtbSacUnlessPay(GameState& state, int controller, int card_number, int pin)
+{
+    int idx = -1;
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!q.is_token && q.card.m_number == card_number && q.controller_index == controller) { idx = i; break; }
+    }
+    if (idx < 0) { return false; }
+    const CardDefinition* def = CardDatabase::Instance().LookupCached(state.battlefield[static_cast<std::size_t>(idx)].card);
+    if (def == nullptr || !def->params.etb_sacrifice_unless_pay.has_value()) { return true; }
+    const ManaCost& cost = *def->params.etb_sacrifice_unless_pay;
+    bool affordable;
+    {
+        GameState probe = state;
+        affordable = TapForCostDirect(probe, cost, /*for_creature=*/false);
+    }
+    bool pay = false;
+    if (affordable)
+    {
+        if (pin == 0 || pin == 1) { pay = (pin == 1); }
+        else
+        {
+            const std::vector<int> c = ResolveProvider(state).LandEntryPinCandidates(state, controller, *def);
+            pay = c.empty() || c.front() == 1;
+        }
+        if (g_play_dig_chooser != nullptr && !g_tap_speculating)
+        {
+            const std::vector<Card> examined{ state.battlefield[static_cast<std::size_t>(idx)].card };
+            const std::vector<int>  legal{ 0 };
+            pay = (*g_play_dig_chooser)(state, controller,
+                                        def->card.m_name.str() + " (pay " + cost.ToString()
+                                        + " or sacrifice it)", examined, legal, pay ? 0 : -1) == 0;
+        }
+    }
+    if (pay && TapForCostDirect(state, cost, /*for_creature=*/false))
+    {
+        if (g_play_event_sink && !g_tap_speculating)
+        { EmitPlayEvent(state.turn_number, "ability", def->card.m_name.str() + " -- paid " + cost.ToString()); }
+        return true;
+    }
+    // Re-find (the payment cannot move it, but be exact): sacrificed to its owner's graveyard.
+    for (int i = static_cast<int>(state.battlefield.size()) - 1; i >= 0; --i)
+    {
+        const Permanent& q = state.battlefield[static_cast<std::size_t>(i)];
+        if (!q.is_token && q.card.m_number == card_number && q.controller_index == controller)
+        {
+            if (g_play_event_sink && !g_tap_speculating)
+            {
+                EmitPlayEvent(state.turn_number, "sacrifice",
+                              def->card.m_name.str() + " -- sacrificed (did not pay " + cost.ToString() + ")");
+            }
+            SacrificeLandAt(state, controller, i);
+            break;
+        }
+    }
+    return false;
+}
+
 // ---- The land-entry ETBs the FETCH/PUT path historically dropped ------------------------------
 //
 // EnterLand resolves enters-tapped / depletion / scry / surveil / energy but NOT etb_bounce_land
@@ -52276,35 +52652,47 @@ struct DeferredLandLooks
 // (LandEntryTap, the DeferredLandLooks forward declaration and EnterLand's default arguments are declared above
 // PerformTutorToBattlefield.)
 inline void EnterLand(GameState& state, const CardDefinition& def, int card_number,
-                      bool resolve_full_etb, bool fire_landfall, LandEntryTap entry_tap,
+                      bool resolve_full_etb, bool fire_landfall, LandEntryTap entry_tap, int controller,
                       DeferredLandLooks* defer_looks)
 {
+    // The entering land's CONTROLLER (Maze's End I2): every enters-tapped condition is judged for it, and
+    // the permanent is created under it. < 0 = the active player -- every caller before I3's Burgeoning.
+    const int ctrl = LandEntryController(state, controller);
     bool tapped;
-    if (entry_tap != LandEntryTap::Natural)
+    if (entry_tap == LandEntryTap::ForcedTapped && GateEntersUntappedByGond(state, def, ctrl))
+    {
+        // GOND GATE vs "put it onto the battlefield TAPPED" (Archdruid's Charm): both are replacement
+        // effects on the same entry and the controller orders them (CR 616.1) -- applying the effect's
+        // "tapped" first and Gond's "enter untapped" last leaves the Gate untapped. Ledger decision 5.
+        tapped = false;
+    }
+    else if (entry_tap != LandEntryTap::Natural)
     {
         // The putting effect (or an already-paid simultaneous-entry pass) owns this decision.
         // A forced-tapped shock cannot buy untapped entry by paying its own optional cost.
         tapped = entry_tap != LandEntryTap::PreDecidedUntapped;
     }
-    else if (g_play_land_entry_chooser != nullptr && !g_tap_speculating && LandEntryHasChoice(state, def))
+    else if (g_play_land_entry_chooser != nullptr && !g_tap_speculating && LandEntryHasChoice(state, def, ctrl))
     {
         // A fetched shock still has its own "as it enters" choice (Cyclone oracle seed1900008).
         // The hand-drop chooser is downstream of its fetch early-return, so it never sees this
         // entry. Reuse that chooser/payment contract here. RevealLogPause nulls the hook in every
         // search/preview scope; with no live hook the old autonomous path below is unchanged.
-        const bool heuristic_untapped = !LandWouldEnterTapped(state, def);
+        const bool heuristic_untapped = !LandWouldEnterTapped(state, def, true, ctrl);
         const bool untapped = (*g_play_land_entry_chooser)(
-            state, state.active_player_index, def.card.m_name.str(),
+            state, ctrl, def.card.m_name.str(),
             def.params.etb_pay_life_to_untap, def.params.etb_untap_reveal_subtypes, heuristic_untapped);
-        if (untapped) { ApplyLandUntapPayment(state, def); }
+        if (untapped) { ApplyLandUntapPayment(state, def, ctrl); }
         tapped = !untapped;
     }
-    else { tapped = LandEntersTapped(state, def); }
+    else { tapped = LandEntersTapped(state, def, true, ctrl); }
+    // The land-entry pin (colour / pay) for THIS entry, taken before anything below can enter another land.
+    const int entry_pin = TakeLandEntryPin(def);
     Permanent perm;
     perm.card              = def.card;
     if (card_number >= 0) { perm.card.m_number = card_number; }
-    perm.controller_index  = state.active_player_index;
-    perm.owner_index       = state.active_player_index;
+    perm.controller_index  = ctrl;
+    perm.owner_index       = ctrl;
     perm.entered_this_turn = true;
     perm.tapped            = tapped;
     if (def.params.enters_tapped_with_depletion > 0)
@@ -52322,13 +52710,19 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     // A chosen creature type is an as-enters choice, so resolve it before scry,
     // landfall, or any later trigger can inspect this land.
     if (ChoosesCreatureTypeOnEnter(def.params))
-    { FireEtbWatchers(state, state.active_player_index,
+    { FireEtbWatchers(state, ctrl,
                       static_cast<int>(state.battlefield.size()) - 1, false); }
+    // THE LAND-ENTRY PIPELINE (see above): the chosen colour (an as-enters replacement), then Amulet of
+    // Vigor's untaps, before every other enter trigger. Both are no-ops for a land without the param /
+    // a controller without an Amulet, so every other deck is byte-identical.
+    if (def.params.etb_choose_color)
+    { LockEtbChosenColor(state, ctrl, static_cast<int>(state.battlefield.size()) - 1, entry_pin); }
+    if (tapped) { ResolveEnteredTappedUntaps(state, static_cast<int>(state.battlefield.size()) - 1); }
     // The landfall HISTORY bit, set HERE and not only in OnLandEntered, because a put with
     // fire_landfall=false (Genesis Wave's simultaneous batch) reaches OnLandEntered only when a landfall
     // watcher exists -- the Wave's legacy order never calls it -- and the condition must see the entry
     // regardless (Player::land_entered_this_turn).
-    state.players[static_cast<std::size_t>(state.active_player_index)].land_entered_this_turn = true;
+    state.players[static_cast<std::size_t>(ctrl)].land_entered_this_turn = true;
     if (defer_looks != nullptr && (def.params.etb_scry > 0 || def.params.etb_surveil > 0))
     { defer_looks->looks.emplace_back(def.params.etb_scry, def.params.etb_surveil); }   // after the shuffle (F1)
     else
@@ -52342,11 +52736,16 @@ inline void EnterLand(GameState& state, const CardDefinition& def, int card_numb
     // real and pre-existing for etb_lifegain / etb_bounce_land / the rad mode, so at least do not
     // grow it.
     if (def.params.etb_energy > 0)
-    { state.players[state.active_player_index].energy_counters += def.params.etb_energy; }
+    { state.players[static_cast<std::size_t>(ctrl)].energy_counters += def.params.etb_energy; }
     if (resolve_full_etb)
     {
         ResolveLandEnterEtbExtras(state, def, static_cast<int>(state.battlefield.size()) - 1);
     }
+    // Gateway Plaza's "sacrifice it unless you pay {1}" (pipeline step 3). Resolved for every SINGLE put
+    // (fire_landfall); a SIMULTANEOUS multi-put (fire_landfall = false: Genesis Wave, Manabond's dump)
+    // must resolve it in its own second pass, after every land is on the battlefield (I3).
+    if (fire_landfall && def.params.etb_sacrifice_unless_pay.has_value())
+    { (void)ResolveEtbSacUnlessPay(state, ctrl, perm.card.m_number, entry_pin); }
     // Landfall (route 2). Captured by number, not by slot: a bounce extra above may already have
     // moved or returned the land, and landfall still triggered on the entry.
     if (fire_landfall) { OnLandEntered(state, perm.controller_index, perm.card.m_number); }
@@ -52570,7 +52969,7 @@ inline void PerformFetch(GameState& state, int controller_index,
     ap.library.erase(ap.library.begin() + idx);
     const CardDefinition* def = CardDatabase::Instance().LookupCached(lc);
     DeferredLandLooks looks;   // a fetched look-land surveils AFTER the shuffle (F1, see DeferredLandLooks)
-    if (def) { EnterLand(state, *def, lc.m_number, false, true, LandEntryTap::Natural, &looks); }
+    if (def) { EnterLand(state, *def, lc.m_number, false, true, LandEntryTap::Natural, -1, &looks); }
     else
     {
         // Unknown card: still put it onto the battlefield as a plain untapped land.
@@ -53839,7 +54238,7 @@ inline void PerformLandTutorToBattlefield(GameState& state, int controller_index
         // Archdruid's Charm: "onto the battlefield tapped" is the EFFECT's, so the land's own
         // enters-tapped rule is not consulted (LandEntryTap::ForcedTapped). Crop Rotation: Natural.
         EnterLand(state, *def, lc.m_number, false, true,
-                  pp.tutor_land_enters_tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, &looks);
+                  pp.tutor_land_enters_tapped ? LandEntryTap::ForcedTapped : LandEntryTap::Natural, -1, &looks);
         if (IsForbiddenOrchard(def)) { SpawnOpponentSpirit(state); }
     }
     else
@@ -54435,7 +54834,8 @@ inline void SourceColorCapLive(const GameState& state, const Permanent& pp, cons
         return;
     }
     if (dd.params.reflecting || dd.params.domain_mana || IsScaledManaLand(dd)
-        || dd.params.untap_creature_cost.has_value() || dd.params.mana_colors_of_graveyard_legends)
+        || dd.params.untap_creature_cost.has_value() || dd.params.mana_colors_of_graveyard_legends
+        || !dd.params.mana_colors_of_controlled_subtype.empty())
     { mask = kAll; return; }
     // KAROO / BUNDLE, exact amount (BundleExactEnabled): the DFS's bundle_src branch adds ONE unit
     // per `produces` entry and has no single-colour branch, so the most of any one colour a tap can
@@ -55551,7 +55951,7 @@ inline int ResolveFetchForestsTapped(GameState& s, int controller, int count)
         const CardDefinition* d = CardDatabase::Instance().LookupCached(c);
         if (d != nullptr)
         { EnterLand(s, *d, c.m_number, /*resolve_full_etb=*/false, /*fire_landfall=*/true, LandEntryTap::ForcedTapped,
-                    &looks); }
+                    -1, &looks); }
     }
     if (taken.empty() && count != 0) { WhiffShuffle(s, controller, "Nissa -8 Forest search"); }
     else                             { ShuffleAfterSearch(s, controller); }

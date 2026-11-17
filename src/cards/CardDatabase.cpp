@@ -2512,6 +2512,19 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.etb_tap_subtype_draw           = params.value("etb_tap_subtype_draw", std::string{});
     p.damage_all_creatures_x_per_subtype = params.value("damage_all_creatures_x_per_subtype", std::string{});
     p.tutor_land_enters_tapped       = params.value("tutor_land_enters_tapped", false);
+    // Maze's End I2: the land-entry pipeline (see CardDatabase.h).
+    p.gates_enter_untapped              = params.value("gates_enter_untapped", false);
+    p.mana_colors_of_controlled_subtype = params.value("mana_colors_of_controlled_subtype", std::string{});
+    p.untap_own_permanent_entering_tapped = params.value("untap_own_permanent_entering_tapped", false);
+    if (params.contains("etb_sacrifice_unless_pay"))
+        p.etb_sacrifice_unless_pay = ManaCostFromString(params["etb_sacrifice_unless_pay"].get<std::string>());
+    p.chosen_color_adds_basic_land_type = params.value("chosen_color_adds_basic_land_type", false);
+    if (params.contains("etb_choose_color_fixed"))
+    {
+        const Color fixed = ColorFromString(params["etb_choose_color_fixed"].get<std::string>());
+        p.etb_choose_color_fixed = static_cast<int>(fixed);
+        for (Color c : p.produces) { if (c != fixed) { p.etb_choose_color_menu.push_back(c); } }
+    }
     p.tutor_nonland_to_hand          = params.value("tutor_nonland_to_hand", false);
     p.modal_exile_target_artifact_enchantment =
         params.value("modal_exile_target_artifact_enchantment", false);

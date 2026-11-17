@@ -43,7 +43,7 @@ Integration phases (serial, one integrator agent each, handoff file between them
 | Phase | Scope | Status |
 |---|---|---|
 | I1 | Gate infrastructure (Planar Nexus nonbasic-types bit, `IsGate`, `CountDistinctNamedGates`, name-distinct land folds), `won_by_effect` alternate win, Maze's End (generalised TapTutorPut + return-self cost + win check), 10 Guildgates, Planar Nexus, Guild Summit, Gates Ablaze, Archdruid's Charm, the deck's own `MazesEndProvider` (tutor ordering/width, TapTutorPut win fold, `ProjectsAlternateWin`) | DONE `187054fba` (wip/maze-end); unit suite 3402/3402; smoke byte-identical to the base (0 of 219 case digests differ) |
-| I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + `land_color` axis, The Black Gate | pending |
+| I2 | Land-entry pipeline: controller-aware enters-tapped predicate, Gond Gate, Amulet of Vigor (single + multi-copy float), Thran Portal, Gateway Plaza, the five chosen-colour CLB Gates + the land-entry pin axis, The Black Gate | IN PROGRESS |
 | I3 | Exploration (static drops + multi-drop search route), Burgeoning (opponent-turn crossing fan), Manabond (end-step axis) | pending |
 | I4 | Heap Gate, Baldur's Gate, Basilisk Gate, Talon Gates of Madara | pending |
 
@@ -104,6 +104,44 @@ the base (src commits after the last smoke accept, 09:03 UTC) -- not ours to acc
 Viewer audit (I1b): `draw_on_other_subtype_enter` (Kili's and Guild Summit's mandatory draw trigger) was
 unclassified; classified INERT (no 'may', no target). Sign-off collected, not blocking.
 
+### I2 cards (2026-11-17)
+
+| Card | Tier | Params | Viewer bucket |
+|---|---|---|---|
+| Gond Gate | 2 | `produces [C]`, `gates_enter_untapped`, `mana_colors_of_controlled_subtype Gate` | none (static replacement; colour per tap = mana-payment exemption) |
+| Amulet of Vigor | 2 (single) + 3 (multi-copy float) | `untap_own_permanent_entering_tapped` | none (mandatory trigger; order and float are sound dominances) |
+| Thran Portal | 2 | `produces WUBRG` (menu), `fastland_max_other_lands 2`, `etb_choose_color`, `chosen_color_adds_basic_land_type`, `tap_self_damage 1`, `tap_is_life_payment` | A: `choose_color` at entry (basic land type = colour) |
+| Gateway Plaza | 2 | `produces WUBRG`, `enters_tapped`, `etb_sacrifice_unless_pay {1}` | A: `dig` (pay = 0 / sacrifice = -1), only when affordable |
+| Sea Gate / Manor Gate / Cliffgate / Citadel Gate / Black Dragon Gate | 2 | `produces [printed + other four]`, `enters_tapped`, `etb_choose_color`, `etb_choose_color_fixed <U/G/R/W/B>` | A: `choose_color` at entry (menu excludes the printed colour) |
+| The Black Gate | 1 | Legendary; `produces [B]`, `etb_pay_life_to_untap 3`, `tap_target_pump_cost {1}{B}`, `tap_target_pump_grants_unblockable` | A: `land_entry` (pay 3 life), not asked under Gond Gate |
+
+Oracle text and mana cost of every I2 card are pasted verbatim from `build/scratch/maze/oracle.jsonl`
+(Scryfall, 2026-11-17), with the modelling commentary in the bracket note.
+
+Shared infrastructure landed in I2 (the LAND-ENTRY PIPELINE, `core/SpellEffects.h`):
+- **Controller-aware predicate.** `LandWouldEnterTapped` / `LandEntryHasChoice` / `LandEntersTapped` /
+  `ApplyLandUntapPayment` / `LandCanReveal` / `LandControlUntapMet` take the entering land's controller
+  (`LandEntryController`, default = the active player, so every existing caller is byte-identical); `EnterLand`
+  takes a trailing `controller` and creates the permanent under it. I3's Burgeoning passes the controller.
+- **Gond Gate** is the predicate's FIRST branch (`GateEntersUntappedByGond`, a Gate test then a battlefield scan;
+  non-Gates pay one id compare), so no shock life is paid for a Gate under it; it also overrides a
+  `LandEntryTap::ForcedTapped` put (decision 5). Its mana is The Grey Havens' dynamic-colour shape
+  (`ControlledSubtypeColors`, wired at every Havens site).
+- **One post-entry sequence** for the drop (`PlayLandCore`) and every put (`EnterLand`): (1) as-enters
+  replacements (tapped-ness, `LockEtbChosenColor`), (2) Amulet of Vigor (`ResolveEnteredTappedUntaps`; also from
+  `FireEtbWatchers` for a nonland), (3) Gateway Plaza (`ResolveEtbSacUnlessPay`), (4) the other enter triggers
+  and landfall. `LandUsableOnEntry` (= not tapped, or an Amulet will untap it) replaces the "adds mana now"
+  projections (the land-draw breakpoint pre-filter, the greedy land picker).
+- **The land-entry pin.** One int whose meaning is the land's (a colour ordinal; Plaza 1 = pay / 0 = sacrifice;
+  Mariposa's rad mode), carried on `Plan::rad_mode` / `LandPlayOptions::rad_mode` for a land drop (every land
+  route already threads it) and on `g_land_entry_pin` for an effect put (Maze's End's fetch: `chosen_x` = pin+1,
+  installed by both worlds' apply). The land enumeration offers ONE LAND OPTION PER PIN
+  (`add_for_land(..., entry_pin)`), so the casts are enumerated on the board that choice makes (an
+  Amulet-untapped Cliffgate that chose G can cast Sylvan Scrying; one that chose U cannot) -- re-pinning a plan
+  enumerated once would leave the other choice's lines unfindable. `DecisionProvider::LandEntryPinCandidates`
+  (appended at the END of the class) supplies the values; `MazesEndProvider` restricts colours to those the
+  list spends (decision 1). Plan label: `[color=X]` / `[pay]` / `[sacrifice]`.
+
 ## Decisions and provisional deferrals (USER sign-off pending)
 
 Defaults taken so the work can proceed (raised to the user; none blocks anything):
@@ -138,6 +176,39 @@ Defaults taken so the work can proceed (raised to the user; none blocks anything
 13. **Archdruid's Charm mode 3 is offered only in human play** (and `DecisionUnpruned`); autonomously the
    provider withholds it (every legal target is our own permanent). Executor and rollout share one
    resolver.
+
+14. **The land-entry pin rides `Plan::rad_mode` / `LandPlayOptions::rad_mode`** (I2) rather than a new plan
+   field: its meaning is the land's (a colour; Plaza pay/sacrifice; Mariposa's rad mode) and no land carries two
+   such choices, so every land route that already threads the rad pin (deferred land, Karoo, breakpoint
+   continuation, executor) carries it unchanged. An implementation choice, recorded for review.
+15. **PROVISIONAL (USER sign-off pending): an effect put that carries no pin takes the provider's choice.**
+   Archdruid's Charm's tapped put of a CLB Gate / Thran Portal locks the provider's colour (`EtbChosenColor`:
+   fewest sources among the colours the hand demands, else the admitted menu's first), and a Charm-fetched
+   Gateway Plaza pays when it can. The Charm's find rides the resolution tutor axis (`Plan::tutor_choice`),
+   which has no slot for the found land's entry choice, so inside the search window this is an UNSEARCHED pick
+   (a no-greedy gap, small: one Charm in the list, and the colour only matters this turn under Amulet / Gond).
+   Proposed fix: fan the tutor axis per (land, admitted pin). Maze's End's fetch and the land drop ARE searched.
+   I3's put routes (Burgeoning, Manabond) must carry a pin of their own or inherit this gap.
+16. **Gateway Plaza's pay-or-sacrifice uses the `dig` chooser (Mihail's "pay {1}" shape), not `echo`**
+   (supersedes decision 4's wording): the echo chooser is AIEngine's upkeep hook and cannot be reached from the
+   shared land-entry code; the dig shape is the existing core-level pay-or-not precedent. Asked only when the
+   {1} is affordable. USER sign-off pending.
+17. **Gateway Plaza's trigger resolves before Guild Summit's draw / landfall** (the land's own triggers before
+   the watchers). A real controller may order Summit's draw first and see the card before paying; the searched
+   pin is fixed by the plan before either, so only a human loses that peek. Disclosed.
+18. **Multi-Amulet float is automatic** (weakly dominant: no mana burn, the land ends untapped either way); its
+   colour follows the shared tap-first commit (the line's owed colour, else `FloatSourceTapCommitted`: the
+   mana-payment exemption). No float for a land whose tap has a side effect (Thran Portal's 1 life -- a small
+   loss under 2+ Amulets, disclosed), a feed-only converter (Planar Nexus, Heap Gate: they never enter tapped
+   anyway), a nonland, or an entry outside its controller's main phase (`LandEntryNoFloatScope`, which I3's
+   opponent-turn / end-step puts must set).
+19. **The Black Gate under an Amulet of Vigor declines the 3 life** (`MazesEndProvider::LandEntersUntapped`: it
+   enters tapped and is untapped -- the same land, life kept; a sound dominance). Under a Gond Gate it enters
+   untapped and nothing is paid (the predicate's first branch).
+20. **Spendable-colour restriction premise** (decision 1's prune): the colours are read from the MANA COSTS of the
+   nonland cards in the controller's zones (G/U/R for this list); activated-ability pips are ignored because the
+   only one in the list (The Black Gate's {1}{B}) needs a creature target and the list has none. Re-check if the
+   list changes (the restriction is recomputed at runtime, the premise is not).
 
 ## Approved deferrals
 

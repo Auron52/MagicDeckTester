@@ -195,6 +195,14 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     if (ChoosesCreatureTypeOnEnter(fdef.params))
     { FireEtbWatchers(state, state.active_player_index,
                       static_cast<int>(state.battlefield.size()) - 1, false); }
+    // "As this land enters, choose a color / a basic land type" (the CLB Gates, Thran Portal): an as-enters
+    // REPLACEMENT, locked before anything can observe the land. The pin is the searched land-entry choice
+    // (LandPlayOptions::rad_mode carries it -- see the land-entry pipeline in SpellEffects.h). Param-gated.
+    if (fdef.params.etb_choose_color && fdef.card.IsLand())
+    {
+        LockEtbChosenColor(state, state.active_player_index,
+                           static_cast<int>(state.battlefield.size()) - 1, opts.rad_mode);
+    }
     // ASCEND (Ocelot Pride): a land drop raises the permanent count, and land drops deliberately do
     // NOT route through FireEtbWatchers (see the snow-watcher note below), so the city's-blessing
     // state trigger is checked here too. Placed on the RISE -- before the ETBs below -- so a Karoo
@@ -213,6 +221,22 @@ static bool PlayLandCore(GameState& state, const Card& card, const CardDefinitio
     // is THE land drop for all three callers (the executor's searched drop, its greedy drop, and
     // the rollout), so one edit covers both worlds.
     if (fdef.params.etb_energy > 0) { ap.energy_counters += fdef.params.etb_energy; }
+    // THE LAND-ENTRY PIPELINE, steps 2-3 (SpellEffects.h): Amulet of Vigor's untaps, then Gateway Plaza's
+    // "sacrifice it unless you pay {1}" (pin: opts.rad_mode, 1 = pay / 0 = sacrifice / -1 = provider), both
+    // before the land's other enter triggers. Re-found by number (the as-enters steps above cannot move it,
+    // but be exact). Param-gated / no-op without an Amulet -> byte-identical for every other deck.
+    if (tapped)
+    {
+        for (int li = static_cast<int>(state.battlefield.size()) - 1; li >= 0; --li)
+        {
+            const Permanent& lp = state.battlefield[static_cast<std::size_t>(li)];
+            if (!lp.is_token && lp.card.m_number == perm.card.m_number
+                && lp.controller_index == state.active_player_index)
+            { ResolveEnteredTappedUntaps(state, li); break; }
+        }
+    }
+    if (fdef.params.etb_sacrifice_unless_pay.has_value())
+    { (void)ResolveEtbSacUnlessPay(state, state.active_player_index, perm.card.m_number, opts.rad_mode); }
 
     // ETB effects, after the land is on the battlefield (face definition; see fdef above).
     if (fdef.params.etb_scry > 0)
@@ -337,8 +361,9 @@ static bool FirstDropManaWouldSitIdle(const GameState& state, bool hold_top_cons
         // not a candidate here at all -- matching the four-pass scan's own skip.
         if (def->params.etb_bounce_land) { continue; }
         if (!def->params.etb_replace_sacrifice_land_subtype.empty()) { continue; }   // Lake: no victim yet
+        // !LandUsableOnEntry: a land Amulet of Vigor will untap is mana NOW (== LandWouldEnterTapped without one).
         const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
-                                                    : LandWouldEnterTapped(state, *def);
+                                                    : !LandUsableOnEntry(state, *def);
         if (is_tapped) { has_tapped = true; continue; }
         // DEFERRING MUST KEEP THE UNTAPPED-NESS, or the trade this rule is built on does not hold.
         // A fastland enters untapped only while few other lands are out, and a reveal-untap land
@@ -556,8 +581,9 @@ static GreedyLandPick GreedyLandRank(const GameState& state, const Card* top, bo
             // shock/reveal land all carry enters_tapped == false yet enter TAPPED depending on
             // board/life/hand. LandWouldEnterTapped is the pure predicate; LandEntersTapped must NOT
             // be used here, it PAYS the shock life as a side effect.
+            // !LandUsableOnEntry: an Amulet of Vigor untaps a tapped entrant (== LandWouldEnterTapped without one).
             const bool is_tapped = LegacyStaticTapped() ? def->params.enters_tapped
-                                                        : LandWouldEnterTapped(state, *def);
+                                                        : !LandUsableOnEntry(state, *def);
             // NOT UnconditionalProduces here, and the measurement is why. Semantically an
             // any-colour filter is not a fixing land on its own -- but this test feeds the
             // greedy's multi-colour PASS, and from turn two on Capital City really is the best
