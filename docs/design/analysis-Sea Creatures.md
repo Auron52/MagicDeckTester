@@ -290,6 +290,21 @@ Root cause: `logs/sea-research/ab-rootcause.md` (45 single-game replays, all rep
   branch's BASE binary (8cd0bbf23, no Sea code); the GT was set at 669873949, 148 shared commits earlier. Verdict
   per row at the push-time rebase smoke; not accepted blind.
 
+## Hedge Maze fetch, `MTG_SEA_FETCH_MAZE` (2026-11-17, default OFF -> USER)
+
+* **USER rule:** "Hedge maze is a maybe if we absolutely do not need it for mana." / "(if we do not need it for
+  mana this turn it is possible, otherwise not)"; Triomes "have a similar disposition".
+* **What it does:** under the one-option fetch prune, Hedge Maze is offered as a SECOND searched target, right
+  after the untapped pick. That happens only when one more mana of the pick's colours casts nothing more this turn
+  (Five Colour's RULE 6 solo + sequence test, `SeaFetchManaNeeded`). It is never a forced pick. Cross-deck note
+  (Five Colour already applies the rule; Unpredictable Cyclone always searches Xander's Lounge):
+  `docs/design/fetch-tapped-typed-land.md`.
+* **Held-out paired A/B** (d5 b20, `build/scratch/sea/maze/`): std 1000 g -0.0050 t (se 0.0022), 2HG 300 g
+  -0.0033 t. **6 faster / 0 slower**, units within 1%. Repro std gi223: the on-arm's Windswept Heath fetches Hedge
+  Maze on T3 while its mana is idle (mechanism confirmed). The arms already diverge at T1, so draw order is mixed
+  into the per-game gain.
+* **Status:** commit `4147878d2` (branch `sea-maze-fetch`), cherry-picked here. Adopt as default ON? USER Q.
+
 ## Approved deferrals
 
 (none yet)
