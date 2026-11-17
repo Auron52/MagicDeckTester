@@ -1192,6 +1192,19 @@ struct GameState
     // its own; it stays 0 forever on a deck that is stamped false. int16_t in the bool padding before
     // casts_remaining_this_turn, so sizeof(GameState) does not move (measured).
     std::int16_t             draw_trigger_mark               = 0;
+    // SUMMON: LEVIATHAN II / III (Sea Creatures I3): "Until end of turn, whenever a Kraken, Leviathan, Merfolk,
+    // Octopus, or Serpent attacks, draw a card." The number of live until-end-of-turn INSTANCES (one per resolved
+    // chapter carrying CardParams::saga_eot_attack_draw_chapter_mask; two Leviathans give two, and each declared
+    // attacker of a listed subtype draws once per instance). The subtype filter is NOT stored: it is the one
+    // definition in the card pool carrying the param (EotAttackDrawFilterDef, SpellEffects.h, which aborts if a
+    // second definition with a different list ever appears). Set by FireSagaChapter at the draw step (AdvanceSagas,
+    // both worlds), read at declare-attackers (ApplyAttackDrawTriggers, both worlds), cleared at the next untap in
+    // BOTH worlds (GameEngine::UntapStep / SimulateEndAndStartNextTurn -- equivalent to "until end of turn" here,
+    // the passive opponent's turn has no attackers). FUTURE-DETERMINING within the turn: folded value-gated (only
+    // when nonzero) into the dominance key, the sim key and the plan-cache scalar key, so every other deck's keys are
+    // byte-identical. Also opens this turn's post-combat main (SeaCreaturesProvider::RestrictedSecondMainLive). In the
+    // 2-byte hole after draw_trigger_mark (sizeof(GameState) unchanged).
+    std::uint8_t             eot_attack_draw_n = 0;
     // "You can cast only one more spell this turn" (Irencrag Feat, CardParams::max_casts_after) enforced
     // at EXECUTION time: -1 = no restrictor active (unlimited); otherwise the number of ADDITIONAL spells
     // still castable this turn. Installed when a max_casts_after spell is cast, decremented at every later

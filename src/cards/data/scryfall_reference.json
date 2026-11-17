@@ -8279,5 +8279,25 @@
     "power": null,
     "toughness": null,
     "type_line": "Sorcery"
+  },
+  "Kiora Bests the Sea God": {
+    "cmc": 7.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}{U}",
+    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Create an 8/8 blue Kraken creature token with hexproof.\nII — Tap all nonland permanents target opponent controls. They don't untap during their controller's next untap step.\nIII — Gain control of target permanent an opponent controls. Untap it.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Enchantment — Saga"
+  },
+  "Summon: Leviathan": {
+    "cmc": 6.0,
+    "keywords": [
+      "Ward"
+    ],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Return each creature that isn't a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner's hand.\nII, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card.\nWard {2}",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Enchantment Creature — Saga Leviathan"
   }
 }

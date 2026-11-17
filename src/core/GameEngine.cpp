@@ -412,6 +412,7 @@ void GameEngine::UntapStep(GameState& state)
     state.scripted_prophets_sac.clear();
     state.scripted_prophets_sac_cursor = 0;
     state.scripted_fling_victim = -1;   // searched Flinger victim is per-turn (same lockstep)
+    state.eot_attack_draw_n = 0;        // Summon: Leviathan's until-EOT attack draws end with the turn (same lockstep)
     state.scripted_tectonic_mode = -1;  // searched Tectonic mode is per-turn (same lockstep)
     state.scripted_grace_choice = -1;   // searched Abiding Grace pin is per-turn (same lockstep)
     state.scripted_athreos_coin = -1;   // searched Shroud-Veiled end-step target is per-turn

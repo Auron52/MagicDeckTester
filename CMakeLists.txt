@@ -391,6 +391,7 @@ add_executable(mtg-test
     test/unit/test_boars_fetch_rank.cpp
     test/unit/test_sea_creatures_mana.cpp
     test/unit/test_sea_combat.cpp
+    test/unit/test_sea_sagas.cpp
     test/unit/test_keep_table.cpp
     test/unit/test_angels_tribal.cpp
     test/unit/test_game_work_meter.cpp

@@ -3998,6 +3998,31 @@ struct CardParams
     // occurs -- the same disclosure Craterhoof's trample grant carries).
     bool saga_ch3_double_pt_target = false;
 
+    // ---- Sea Creatures I3 (2026-11-17): Kiora Bests the Sea God + Summon: Leviathan ----------
+    // Chapter I token (Kiora: "Create an 8/8 blue Kraken creature token with hexproof."): one token
+    // through the shared CreateToken chokepoint (Doubling Season-aware). power 0 = no chapter-I token.
+    // The flat per-trigger token-spec convention of landfall_token_* / attack_token_*.
+    int                      saga_ch1_token_power = 0;
+    int                      saga_ch1_token_toughness = 0;
+    std::vector<std::string> saga_ch1_token_subtypes;
+    std::string              saga_ch1_token_color;          // colour-letter string (BuildTokenProto)
+    std::vector<std::string> saga_ch1_token_keywords;       // token-legal subset (BuildTokenProto)
+    // Chapter I mass bounce (Summon: Leviathan: "Return each creature that isn't a Kraken, Leviathan,
+    // Merfolk, Octopus, or Serpent to its owner's hand."): the shared PerformBounceAllCreaturesExcept
+    // (Whelming Wave's body) with THIS list as the exception. Non-empty = the chapter bounces.
+    std::vector<std::string> saga_ch1_bounce_creatures_except_subtypes;
+    // Chapter II (Kiora): "Tap all nonland permanents target opponent controls." The "they don't untap
+    // during their controller's next untap step" rider is a PROVISIONAL deferral (ledger Q13).
+    bool                     saga_ch2_tap_opp_nonland = false;
+    // Chapter III (Kiora): "Gain control of target permanent an opponent controls. Untap it." Searched
+    // target via the chapter-target rank pin (GameState::scripted_saga_target).
+    bool                     saga_ch3_gain_control_opp_permanent = false;
+    // Summon: Leviathan II, III: "Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or
+    // Serpent attacks, draw a card." Bit n set = chapter n creates one until-end-of-turn INSTANCE
+    // (GameState::eot_attack_draw_n). JSON: saga_eot_attack_draw_chapters, a list of chapter numbers.
+    std::uint8_t             saga_eot_attack_draw_chapter_mask = 0;
+    std::vector<std::string> saga_eot_attack_draw_subtypes;
+
     // Vaultborn Tyrant: "Whenever this creature or another creature you control with power 4 or
     // greater enters, you gain 3 life and draw a card." Extends the own_creature_enters_lifegain
     // watcher with a minimum-power filter (effective power incl. counters/lords), a draw rider,

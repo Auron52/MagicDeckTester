@@ -215,6 +215,69 @@ bool SeaCreaturesProvider::NeverCast(const CardDefinition& def) const
     return !HumanPlayActive() && !DecisionUnpruned(UnprunedGate::SeaWave);
 }
 
+// ---- Kiora Bests the Sea God III: the steal list's sound folds (Sea Creatures I3, 2026-11-17) ----------------
+// A VANILLA BODY here is an opponent's scheduled spawn (GameState::kFirstOppSpawnNumber -- always an "N/M Creature"
+// with no abilities) or a definition-less token with no keywords, carrying no counters, damage, attachments or
+// temporary bonuses. Two folds, both SOUND (default ON; human play and MTG_UNPRUNE=sagasteal keep the full list):
+//   (a) IDENTITY: two vanilla bodies of equal power and toughness are interchangeable once stolen (the same
+//       attacker from the same turn, CR 302.6 applying to either) -- keep the first.
+//   (b) DOMINANCE: a vanilla body B is dropped when another vanilla candidate A has power >= and toughness >= B.
+//       Proof: the stolen body has no abilities, so its whole future is attacking (from next turn) and being a
+//       body; A deals at least B's damage on every attack, and nothing a list of this engine holds rewards a
+//       SMALLER stolen body (Sin counts counters -- none here --, Trench Gorger counts lands, every bounce returns
+//       either to its owner). A non-vanilla candidate is never dropped and never drops anything.
+// The list is in SagaStealCandidates' order (creatures, power desc, toughness desc), so the front is never dropped.
+static bool SagaStealVanilla(const Permanent& p)
+{
+    if (!(p.card.IsCreature() || p.is_animated) || p.is_animated) { return false; }
+    const bool spawn = p.card.m_number >= GameState::kFirstOppSpawnNumber;
+    const bool plain_token = p.is_token && p.def_absent && p.card.m_keyword_mask == 0;
+    if (!spawn && !plain_token) { return false; }
+    return TotalCountersOn(p) == 0 && p.damage == 0 && p.temp_power_bonus == 0 && p.temp_tough_bonus == 0;
+}
+void DecisionProvider::RestrictSagaStealCandidates(const GameState& s, int controller, std::vector<int>& cands) const
+{
+    (void)controller;
+    if (cands.size() < 2 || HumanPlayActive() || DecisionUnpruned(UnprunedGate::SagaSteal)) { return; }
+    auto attached = [&](const Permanent& p)
+    {
+        for (const Permanent& q : s.battlefield)
+        { if (q.aura_attached_to == p.card.m_number || q.equipped_to == p.card.m_number) { return true; } }
+        return false;
+    };
+    std::vector<int> kept;
+    for (const int ci : cands)
+    {
+        const Permanent& b = s.battlefield[static_cast<std::size_t>(ci)];
+        bool drop = false;
+        if (SagaStealVanilla(b) && !attached(b))
+        {
+            for (const int ai : cands)
+            {
+                if (ai == ci) { continue; }
+                const Permanent& a = s.battlefield[static_cast<std::size_t>(ai)];
+                if (!SagaStealVanilla(a) || attached(a)) { continue; }
+                const int ap = a.EffectivePower(), at = a.EffectiveToughness();
+                const int bp = b.EffectivePower(), bt = b.EffectiveToughness();
+                if (ap < bp || at < bt) { continue; }
+                // Equal on both: the identity fold keeps the EARLIER one in the list; strictly better: drop B.
+                const bool equal = ap == bp && at == bt;
+                if (!equal || std::find(cands.begin(), cands.end(), ai) < std::find(cands.begin(), cands.end(), ci))
+                { drop = true; break; }
+            }
+        }
+        if (!drop) { kept.push_back(ci); }
+    }
+    cands.swap(kept);
+}
+
+// Summon: Leviathan's draw turns open a full post-combat main (the class note). Pure state; read only through
+// ProviderSecondMainLive, which never fires on a deck that already plays a full second main.
+bool SeaCreaturesProvider::RestrictedSecondMainLive(const GameState& s) const
+{
+    return s.eot_attack_draw_n != 0;
+}
+
 // The fetch rule's rank: Breeding Pool, then Island / Forest (MTG_SEA_FETCH_ISLAND_FIRST), then Hedge Maze (Q2,
 // agent default), then anything else. Each fetch's legal set does the rest: Windswept Heath has no Island and
 // Flooded Strand no Forest, so the same rank serves all three.
@@ -895,6 +958,7 @@ static const std::pair<const char*, UnprunedGate> kGateNames[] = {
     {"champion", UnprunedGate::Champion},
     {"championmain2", UnprunedGate::ChampionMain2},
     {"seawave",    UnprunedGate::SeaWave},
+    {"sagasteal",  UnprunedGate::SagaSteal},
     {"fireblastpair", UnprunedGate::FireblastPair},
     {"fireblastpaid", UnprunedGate::FireblastPaid},
     {"lavamancerfuel", UnprunedGate::LavamancerFuel},
@@ -28635,19 +28699,15 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
         // Sea Creatures (INTERIM, I1): Worn Powerstone (an enters-tapped two-mana rock), Flooded Grove (a G/U filter
         // land), Hedge Maze (a Forest Island surveil land), and Spawning Kraken's combat-damage watch naming Kraken
         // (Spawning Kraken, I2). I2 also ORs Koma's self-scoped Serpent tokens and Whelming Wave's Kraken-sparing
-        // bounce. TODO(Sea integration): OR in Summon: Leviathan's / Hullbreaker's / Brinelin's / Trench Gorger's
-        // Sea-only params as they land, then DELETE the three staple terms (an enters-tapped {C}{C} rock / a filter /
-        // a surveil dual are generic). Kept through I2: three Sea-only cards (one of them the never-cast Wave, an
-        // easy deckbuilding cut) is not yet the several-card OR the Pirates precedent asks for.
+        // bounce. I3: Summon: Leviathan's chapter-I bounce / until-EOT attack draw and Kiora's chapter-III steal; the
+        // three I1 staple terms (an enters-tapped {C}{C} rock / a G/U filter / a Forest Island surveil dual -- generic
+        // shapes) are DELETED now that five Sea-only cards carry the signature.
         {
-            const auto has_col = [&](Color c)
-            { return std::find(p.produces.begin(), p.produces.end(), c) != p.produces.end(); };
-            if ((p.mana_rock && p.enters_tapped && p.produces_amount >= 2)
-                || (def->card.IsLand() && p.is_filter && has_col(Color::Green) && has_col(Color::Blue))
-                || (def->card.IsLand() && p.etb_surveil > 0 && CardHasSubtype(def->card, "Forest")
-                    && CardHasSubtype(def->card, "Island"))
-                || std::find(p.combat_damage_watch_subtypes.begin(), p.combat_damage_watch_subtypes.end(),
-                             "Kraken") != p.combat_damage_watch_subtypes.end()
+            if (std::find(p.combat_damage_watch_subtypes.begin(), p.combat_damage_watch_subtypes.end(),
+                          "Kraken") != p.combat_damage_watch_subtypes.end()
+                || p.saga_eot_attack_draw_chapter_mask != 0
+                || !p.saga_ch1_bounce_creatures_except_subtypes.empty()
+                || p.saga_ch3_gain_control_opp_permanent
                 // I2: Koma's self-scoped combat-damage Serpent tokens, Whelming Wave's mass bounce sparing Krakens.
                 || (p.combat_damage_watch_self
                     && std::find(p.combat_damage_token_subtypes.begin(), p.combat_damage_token_subtypes.end(),

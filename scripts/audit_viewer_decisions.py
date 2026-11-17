@@ -776,6 +776,17 @@ MANIFEST = {
     # US a tapped basic through the same PerformLandSearch prompts (-1 on the first declines, no
     # shuffle). WHICH creature is exiled rides `targeting` -> target (both sides offered).
     "land_search_for_removal_controller": ("tutor_etb", truthy),
+    # ---- Saga chapters (World War Hulk 2026-09-17; Sea Creatures I3 2026-11-17) ----
+    # Every chapter target rides the shared `target` board-click (g_play_loyalty_chooser) through
+    # ChooseSagaChapterTargetIndex / ChooseSagaChapterTargetFrom over the FULL rules-legal set, the
+    # searched pick preselected, a forced pick not prompted. WWH I's free cast is the hand-zone
+    # free_cast prompt (PerformSagaFreeCast). Kiora Bests the Sea God III: "gain control of target
+    # permanent an opponent controls" (PerformSagaSteal -> ChooseSagaChapterTargetFrom, every
+    # targetable opposing permanent, not the provider's folded steal list).
+    "saga_ch1_free_cast_creature_colors": ("free_cast", truthy),
+    "saga_ch2_counters_on_target":        ("target",    positive),
+    "saga_ch3_double_pt_target":          ("target",    truthy),
+    "saga_ch3_gain_control_opp_permanent": ("target",   truthy),
     # Soulfire own-target selection is name/logic-driven (no param); handled by NAME_CHOICES.
 }
 
@@ -1925,6 +1936,17 @@ INERT_PARAMS = {
     "transform_front_name": "Lord of Lineage's front face -- the card it becomes OFF the battlefield (CR 712.8a), no choice",
     "transform_min_controlled_subtype": "Bloodline Keeper's activation restriction detail (rides transform_cost -> verb:transform)",
     "transform_min_controlled_count": "Bloodline Keeper's activation restriction detail (rides transform_cost -> verb:transform)",
+    # ---- Sagas (World War Hulk 2026-09-17; Sea Creatures I3 2026-11-17) ----
+    "saga_chapters": "a Saga's final chapter number -- lore counters are added automatically (CR 714.3b) and the sacrifice is a state-based action (CR 714.4), no choice",
+    "saga_ch1_token_power": "Kiora Bests the Sea God I's printed token (8/8) -- fixed characteristic, no choice",
+    "saga_ch1_token_toughness": "Kiora Bests the Sea God I's printed token (8/8) -- fixed characteristic, no choice",
+    "saga_ch1_token_subtypes": "Kiora Bests the Sea God I's printed token (Kraken) -- fixed characteristic, no choice",
+    "saga_ch1_token_color": "Kiora Bests the Sea God I's printed token (blue) -- fixed characteristic, no choice",
+    "saga_ch1_token_keywords": "Kiora Bests the Sea God I's printed token (hexproof) -- fixed characteristic, no choice",
+    "saga_ch2_tap_opp_nonland": "Kiora Bests the Sea God II taps ALL nonland permanents of the target opponent -- one opposing player in goldfish, so the target is forced (2HG head choice unmodeled: every opposing permanent is tapped)",
+    "saga_ch1_bounce_creatures_except_subtypes": "Summon: Leviathan I returns EACH non-Kraken/Leviathan/Merfolk/Octopus/Serpent creature to its owner's hand -- mandatory sweep, no choice",
+    "saga_eot_attack_draw_chapters": "Summon: Leviathan II/III 'until end of turn, whenever a sea creature you control attacks, draw a card' -- mandatory draws, no choice",
+    "saga_eot_attack_draw_subtypes": "Summon: Leviathan II/III's qualifying attacker types -- fixed, no choice",
 }
 
 # Decisions the human makes by picking among main_phase PLAN VARIANTS or a board-click

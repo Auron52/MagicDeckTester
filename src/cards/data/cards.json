@@ -17683,6 +17683,73 @@
      "Serpent"
     ]
    }
+  },
+  {
+   "name": "Kiora Bests the Sea God",
+   "mana_cost": "{5}{U}{U}",
+   "types": [
+    "Enchantment"
+   ],
+   "subtypes": [
+    "Saga"
+   ],
+   "keywords": [],
+   "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Create an 8/8 blue Kraken creature token with hexproof.\nII — Tap all nonland permanents target opponent controls. They don't untap during their controller's next untap step.\nIII — Gain control of target permanent an opponent controls. Untap it. [SAGA (CR 714) on the shared scheduling (Permanent::lore_counters; AdvanceSagas after the draw step in BOTH worlds; sacrificed once lore >= III). CHAPTER I: saga_ch1_token_* -> one 8/8 blue Kraken token with Hexproof through the CreateToken chokepoint (Doubling Season-aware; summoning-sick; subtype Kraken, so Spawning Kraken and Summon: Leviathan see it). CHAPTER II: saga_ch2_tap_opp_nonland taps every nonland permanent the opponent controls (the target is the PLAYER, so hexproof does not stop it; one opponent, forced). Payoff 0: no engine path reads an opponent permanent's tapped state, except chapter III's untap. [PARTIAL/PROVISIONAL (user sign-off, ledger Q13): the 'they don't untap during their controller's next untap step' rider is NOT modelled -- the passive opponent never runs an untap step in this engine, so there is no step to skip (the Abominable Treefolk precedent). Permanent::skip_next_untap is deliberately NOT set: a permanent later stolen by chapter III would carry it into OUR untap step and wrongly stay tapped.] CHAPTER III: saga_ch3_gain_control_opp_permanent -- target permanent an opponent controls (SpellCanTargetPermanent legality); control changes permanently (no duration), the OWNER is unchanged (a bounce returns it to the opponent; a spawn ceases), gained_control_this_turn is set (CR 302.6: taken at the start of our main 1, it attacks from the next turn), and it is untapped (GainControlOfPermanent). WHICH permanent is SEARCHED: the chapter-target rank pin (Plan::saga_target_choice -> GameState::scripted_saga_target, set by the previous turn's plan, read at this draw step; the axis opens only when the NEXT chapter is a targeting one), over a list the engine ORDERS (creatures first, power then toughness descending, lowest index) and the root provider RESTRICTS by sound folds only (equal vanilla bodies are one class; a vanilla body another vanilla candidate beats on both power and toughness is dropped; MTG_UNPRUNE=sagasteal restores the full list); with no pin, the list's front. Human play clicks the target on the board over the full legal list (g_play_loyalty_chooser). No opponent permanent -> no legal target, the chapter does nothing (CR 603.3d), Kiora is still sacrificed.]",
+   "template": "custom",
+   "parameters": {
+    "saga_chapters": 3,
+    "saga_ch1_token_power": 8,
+    "saga_ch1_token_toughness": 8,
+    "saga_ch1_token_subtypes": [
+     "Kraken"
+    ],
+    "saga_ch1_token_color": "U",
+    "saga_ch1_token_keywords": [
+     "Hexproof"
+    ],
+    "saga_ch2_tap_opp_nonland": true,
+    "saga_ch3_gain_control_opp_permanent": true
+   }
+  },
+  {
+   "name": "Summon: Leviathan",
+   "mana_cost": "{4}{U}{U}",
+   "types": [
+    "Enchantment",
+    "Creature"
+   ],
+   "subtypes": [
+    "Saga",
+    "Leviathan"
+   ],
+   "keywords": [
+    "Ward"
+   ],
+   "power": 6,
+   "toughness": 6,
+   "oracle_text": "(As this Saga enters and after your draw step, add a lore counter. Sacrifice after III.)\nI — Return each creature that isn't a Kraken, Leviathan, Merfolk, Octopus, or Serpent to its owner's hand.\nII, III — Until end of turn, whenever a Kraken, Leviathan, Merfolk, Octopus, or Serpent attacks, draw a card.\nWard {2} [SAGA CREATURE (CR 714) on the shared scheduling. TIMING, load-bearing: the lore counter is added after the draw step, so chapter III resolves and the Saga is SACRIFICED (CR 714.4) BEFORE COMBAT -- without haste it attacks exactly ONCE, on its chapter-II turn (cast T, sick; T+1 chapter II, attacks; T+2 chapter III, sacrificed pre-combat). The sacrifice goes through the creature death path (SacrificeSagaAt -> SacrificePermanentAt: attachments fall off, sacrifice and dies watchers fire, the owner's graveyard). CHAPTER I: saga_ch1_bounce_creatures_except_subtypes -> the shared simultaneous mass bounce PerformBounceAllCreaturesExcept (Whelming Wave's body, with Merfolk in this card's list; each through ReturnPermanentToOwnersHand, one orphaned-Aura sweep at the end): every creature not of those subtypes goes to its OWNER's hand, so in this list only opponent spawns (which cease to exist) and a creature Kiora III stole (back to the opponent) are hit. Payoff ~0; it can remove a later Kiora III target. CHAPTERS II and III: saga_eot_attack_draw_chapters [2, 3] + saga_eot_attack_draw_subtypes -- each resolution adds one INSTANCE of an until-end-of-turn trigger (GameState::eot_attack_draw_n, cleared at the next untap in both worlds; two instances = two cards per attacker). At declare-attackers, inside the shared ApplyAttackDrawTriggers (executor combat and rollout combat), each DECLARED attacker we control of a listed subtype draws one card per instance (CR 508.4: a creature put onto the battlefield attacking did not 'attack'). The instance outlives the Saga, so the chapter-III turn still draws for every other sea attacker. Drawing from an empty library loses (player_lost_on_draw). The drawn cards are a combat-generated resource (2c-bis): the deck plays a post-combat main on exactly the turns an instance is live (SeaCreaturesProvider::RestrictedSecondMainLive, full menu; PROVISIONAL, the USER owns the main-2 shape -- ledger Q12; MTG_FORCE_USES_M2=1 is the every-turn arm). The search sees the draws exactly: the library order is the real one in every searched or rolled-out combat. Ward {2}: the inert Ward keyword tag (the passive opponent never targets).]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "saga_chapters": 3,
+    "saga_ch1_bounce_creatures_except_subtypes": [
+     "Kraken",
+     "Leviathan",
+     "Merfolk",
+     "Octopus",
+     "Serpent"
+    ],
+    "saga_eot_attack_draw_chapters": [
+     2,
+     3
+    ],
+    "saga_eot_attack_draw_subtypes": [
+     "Kraken",
+     "Leviathan",
+     "Merfolk",
+     "Octopus",
+     "Serpent"
+    ]
+   }
   }
  ]
 }
