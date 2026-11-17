@@ -12753,6 +12753,45 @@
      "seed": 30040000,
      "src": "f7cce0693b6a16d779df5ac756af16100e3b677d",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "CONTINUATION-DIFFERS": 597,
+      "DOMINATED-LAND": 3519,
+      "DROP-COVERED": 630,
+      "PHANTOM": 3200
+     },
+     "commit": "b77797c8c9a4bc322fb3ef2761ea861df5f38186",
+     "date": "2026-11-17T07:33:07Z",
+     "decisions": 41221,
+     "deck": "decks/Spirits/Spirits.cod",
+     "deck_sha": "f86dc91c5df33e2047671b3ec020dcf5f3a7664e",
+     "game_index": 45000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 0,
+     "life_breakpoints": [],
+     "ms_off": 5056954,
+     "ms_on": 6029243,
+     "report": "logs/mana_clean/codex-spirits-shock-pair-20261117/report.md",
+     "run": "codex-spirits-shock-pair-20261117",
+     "seed": 30045000,
+     "src": "72188b700b83bfbd66f13db98870583d61d5dd21",
+     "verdict": "clean"
     }
    ]
   },
