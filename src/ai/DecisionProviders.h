@@ -4830,6 +4830,42 @@ public:
                                      const CardDefinition& entering) const override;
 };
 
+// MAZE'S END (onboarding 2026-11-17, docs/design/analysis-Maze's End.md). DERIVES FROM DeckProvider (the
+// archetype-neutral default). Routed at the TOP of the chain by its own signature (DetectDecisionProvider's
+// `mazes_end`: Maze's End's distinct-names alternate win, Guild Summit's tap-Gates draw, Gates Ablaze's
+// per-Gate X -- params no other card carries), so a later card's archetype-neutral param cannot capture it.
+//
+// Hooks held (everything else inherits DeckProvider byte-for-byte):
+//   * Certificate -- NotAssessed (see the body).
+//   * TutorCandidates / TutorSearchWidth -- the LAND tutors (Sylvan Scrying, Archdruid's Charm) see EVERY
+//     distinct legal name (width 64 -- a coverage fix: the generic list is shuffle order under width 6, so
+//     the shuffle decided which Gate names no budget could reach), ORDERED: Maze's End first while we hold
+//     none, then Gate names we do not control yet, then everything else, Gates we already control last.
+//     Ordering only -- nothing is dropped.
+//   * TapTutorPutCandidates -- Maze's End's fetch: when the activation WINS whatever it finds (ten distinct
+//     Gate names already, or nine and the find is a new name), every winning target and the fail-to-find
+//     reach the same terminal state, so the menu collapses to ONE winning target (a sound identity fold).
+//     Otherwise new names first, duplicates last, every name kept, the fail-to-find kept.
+//   * HasExtraLethalModel / ProjectsAlternateWin -- the projection sees a Maze's End activation that wins.
+//   * NeverCast -- Gates Ablaze is outcome-inert in a goldfish (no creature of ours, the passive opponent's
+//     never fight); dominated by not casting. Human play still offers it.
+class MazesEndProvider : public DeckProvider
+{
+public:
+    CertStance Certificate() const override
+    { return { CertState::NotAssessed, "NOT ASSESSED. A sound certificate must prove no line reaches ten Gate names this turn: count distinct Gate names reachable through land drops (Exploration/Burgeoning extra drops), Maze's End bounce-replay-activate loops (Amulet untaps), Guild Summit/tutor digs and the mana for each {3} activation." }; }
+    const char* Name() const override { return "MazesEnd"; }
+    std::vector<std::string> TutorCandidates(const GameState& s, int controller, const CardParams& pp) const override;
+    int TutorSearchWidth() const override { return 64; }
+    bool TapTutorPutCandidates(const GameState& s, const CardDefinition& source,
+                               std::vector<std::string>& names) const override;
+    bool HasExtraLethalModel() const override { return true; }
+    int  ExtraLethalDamage(const GameState&, const std::vector<const CardDefinition*>&) const override { return 0; }
+    bool ProjectsAlternateWin(const GameState& s, const std::vector<const CardDefinition*>& casting) const override;
+    bool NeverCast(const CardDefinition& def) const override;
+    bool OffersModalExileArtEnch(const GameState& s, const CardDefinition& def) const override;
+};
+
 // SHADOWBORN APOSTLE (mono-B Apostle / ripple / Demon fetch; onboarding 2026-11-03,
 // docs/design/analysis-Shadowborn Apostle.md). DERIVES FROM DeckProvider -- the archetype-neutral
 // default -- NOT from a provider the list would trip by accident: Demonic Tutor's / Diabolic

@@ -100,7 +100,19 @@ inline bool LandDefsShareLandType(const CardDefinition* a, const CardDefinition*
     const SubtypeSet& sa = a->card.m_subtypes;
     for (std::size_t i = 0; i < sa.size(); ++i)
     {
-        if (b->card.m_subtypes.HasId(sa.IdAt(i))) { return true; }
+        if (b->card.m_subtypes.HasId(sa.IdAt(i))) { return true; }   // HasId honours b's Planar Nexus bit
+    }
+    // Planar Nexus on `a` (every NONBASIC land type, no printed ids): shares a type with another Nexus,
+    // or with any land that has a nonbasic land type. A fallback after the miss -- false for every
+    // land without the bit.
+    if (sa.AllNonbasicLandTypes())
+    {
+        const SubtypeSet& sb = b->card.m_subtypes;
+        if (sb.AllNonbasicLandTypes()) { return true; }
+        for (std::size_t i = 0; i < sb.size(); ++i)
+        {
+            if (SubtypeSet::IsNonbasicLandTypeName(SubtypeRegistry::Instance().Name(sb.IdAt(i)))) { return true; }
+        }
     }
     return false;
 }

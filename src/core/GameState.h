@@ -442,6 +442,13 @@ struct GameState
     // turn number and not the next one: their simplified turn has no player-controlled main phase,
     // so on the user's instruction (2026-09-02) the game is over as of our last turn.
     bool                     opponent_decked              = false;
+    // ALTERNATE WIN BY EFFECT (CR 104.2b: "an effect may state that a player wins the game"):
+    // Maze's End's "If you control ten or more Gates with different names, you win the game." Set
+    // at the resolution that wins; folded into OpponentHasLost / dmgev::OpponentLostRaw (so the
+    // executor, the plan loops and the rollout see the same win), into dominance::Build and
+    // BuildSimKey (a won state never merges with an unwon one), and printed as "alt_win" in the
+    // game JSON. Win turn = the turn it resolves (our turn). False for every deck without such a card.
+    bool                     won_by_effect                = false;
     bool                     players_cant_gain_life_this_turn = false;
     bool                     damage_cant_be_prevented_this_turn = false;
     // SEARCHED DEMON-TRIGGER PIN (Plan::demon_trigger_choice; Shadowborn INT-2), in the 2-byte hole
@@ -2017,7 +2024,7 @@ inline bool OpponentHasLost(const GameState& s)
     // win, only a separately-reported marker + search tiebreak (see the field's comment), so the
     // game plays on until the actual kill. Because every consumer -- search projection, executor,
     // fd-oracle -- reads this one predicate, removing it here reverts all of them at once.
-    const bool raw = s.Opponent().HasLost() || s.opponent_decked;
+    const bool raw = s.Opponent().HasLost() || s.opponent_decked || s.won_by_effect;
     // OWN DEATH (Prevent Damage, 2026-09-27; see own_death_live). A game in which we have ALREADY
     // lost, or in which both players lost at the same state-based-action check (CR 104.4a, a
     // DRAW), is not a win. Why reading OUR life here is exact rather than a guess about ordering:

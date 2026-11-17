@@ -5157,6 +5157,30 @@ struct CardParams
     bool                     tap_target_pump_taps_target_land = false;
     bool                     tap_target_pump_sets_island = false;
     std::optional<ManaCost>  tap_tutor_put_cost;
+    // ---- Maze's End deck (2026-11-17, docs/design/analysis-Maze's End.md) ----
+    // Maze's End: "{3}, {T}, Return this land to its owner's hand: Search your library for a Gate
+    // card, put it onto the battlefield, then shuffle." The return is part of the COST of the
+    // TapTutorPut activation (paid at resolution here -- nothing can respond in a goldfish).
+    bool                     tap_tutor_put_return_self = false;
+    // "If you control ten or more Gates with different names, you win the game." Checked after the
+    // activation's put (and on a fail-to-find). Sets GameState::won_by_effect. Empty / 0 = none.
+    std::string              alt_win_distinct_named_subtype;
+    int                      alt_win_distinct_named_count = 0;
+    // Planar Nexus: "This land is every nonbasic land type." Copied onto Card::m_subtypes at load
+    // (SubtypeSet::SetAllNonbasicLandTypes), which is where every reader sees it.
+    bool                     all_nonbasic_land_types = false;
+    // Guild Summit's ETB: "you may tap any number of untapped <subtype>s you control. Draw a card for
+    // each <subtype> tapped this way." The count is the searched ETB-choice axis.
+    std::string              etb_tap_subtype_draw;
+    // Gates Ablaze: "deals X damage to each creature, where X is the number of <subtype>s you control."
+    std::string              damage_all_creatures_x_per_subtype;
+    // Archdruid's Charm mode 1 on the Crop Rotation route (tutor_land_to_battlefield): the land enters
+    // TAPPED (the effect's own "tapped"), and a NONLAND find goes to hand instead of whiffing.
+    bool                     tutor_land_enters_tapped = false;
+    bool                     tutor_nonland_to_hand = false;
+    // Archdruid's Charm mode 3: "Exile target artifact or enchantment." A cast variant pinned to a
+    // target (Action::tutor_target "AX<n>"), offered to a human; the deck provider withholds it.
+    bool                     modal_exile_target_artifact_enchantment = false;
     // Bloodghast: "This creature has haste as long as an opponent has 10 or less life." A DERIVED
     // Permanent::cond_haste bit, refreshed at entry and at the beginning of combat in both worlds
     // (RefreshOppLifeHaste). 0 = no such clause.

@@ -15230,6 +15230,7 @@ static int BorosMode3ExtraStrike(const GameState& state, bool is_pre_combat,
                 || b.enchant_target == target
                 || b.sac_source_id == target || b.sac_victim_id == target
                 || (b.def && (b.def->params.damage_all_creatures > 0
+                              || !b.def->params.damage_all_creatures_x_per_subtype.empty()
                               || b.def->params.x_damage_each_creature_and_player)))
             { may_leave_or_tap = true; break; }
         }
@@ -37566,6 +37567,7 @@ static bool CastCarriesEtbChoice(const CardDefinition& d)
 {
     return EtbColorChoiceIsNonSource(d.params)   // Utopia Sprawl; Gauntlet of Power (land_tap_bonus)
         || (d.params.etb_modal_self_counters > 0 && d.params.etb_modal_lifegain > 0)
+        || !d.params.etb_tap_subtype_draw.empty()    // Guild Summit: how many Gates to tap
         // Galvanic Alchemist: the soulbond PARTNER (an ability-granting pair) -- SoulbondPinForCast.
         || (d.params.soulbond && d.params.soulbond_grants_untap_self_cost.has_value());
 }
@@ -48630,12 +48632,12 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                     {
                         const CardDefinition* ld = CardDatabase::Instance().LookupCached(lc);
                         const Card& card = ld ? ld->card : lc;
-                        if (SeahunterLibraryCandidate(card) && seen.insert(lc.m_name.str()).second)
+                        if (TapTutorPutLibraryCandidate(sd->params, card) && seen.insert(lc.m_name.str()).second)
                         { targets.push_back(lc.m_name.str()); }
                     }
                     bool narrowed = false;
                     if (!HumanPlayActive() && !DecisionUnpruned())
-                    { narrowed = ResolveProvider(state).SeahunterCandidates(state, targets); }
+                    { narrowed = ResolveProvider(state).TapTutorPutCandidates(state, *sd, targets); }
                     for (const std::string& name : targets) { emit(name); }
                     if (!narrowed || targets.empty())
                     { emit(kTutorDeclineTarget); }  // hidden-zone search may fail even with a match
@@ -53065,6 +53067,33 @@ static std::vector<Action> CollectActions(const GameState& state, bool is_pre_co
                         actions.push_back(std::move(v));
                     }
                 }
+            }
+        }
+    }
+
+    // ARCHDRUID'S CHARM MODE 3 post-pass (Maze's End I1, 2026-11-17): "Exile target artifact or enchantment"
+    // is a different MODE of the same cast, so each legal target is a mutually-exclusive cast variant (same
+    // hand_index) pinned on tutor_target "AX<n>" (#AX in both plan signatures keeps the dedup lossless). The
+    // base cast is mode 1 (the land search). The provider may withhold the mode (OffersModalExileArtEnch:
+    // MazesEndProvider does outside human play -- its only targets are our own permanents). Param-gated.
+    {
+        const std::size_t mx_n = actions.size();
+        std::vector<int> mx_seen;
+        for (std::size_t i = 0; i < mx_n; ++i)
+        {
+            if (actions[i].kind != Action::Kind::CastFromHand || actions[i].def == nullptr
+                || !actions[i].def->params.modal_exile_target_artifact_enchantment) { continue; }
+            // ONE base per hand card: human play emits a named mode-1 variant per land (each carries a
+            // tutor_target), autonomous play one unpinned cast -- the first of them seeds the mode-3 fan.
+            if (std::find(mx_seen.begin(), mx_seen.end(), actions[i].hand_index) != mx_seen.end()) { continue; }
+            mx_seen.push_back(actions[i].hand_index);
+            if (!ResolveProvider(state).OffersModalExileArtEnch(state, *actions[i].def)) { continue; }
+            for (const Permanent& q : state.battlefield)
+            {
+                if (q.card.m_number == 0 || !ModalExileArtEnchLegal(q)) { continue; }
+                Action v = actions[i];               // copy BEFORE push_back (reallocation)
+                v.tutor_target = ModalExileArtEnchPin(q.card.m_number);
+                actions.push_back(std::move(v));
             }
         }
     }
@@ -73860,6 +73889,14 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             PerformBounceAllCreaturesExcept(state, def.card.m_name.str(),
                                             def.params.bounce_all_creatures_except_subtypes);
         }
+        else if (!def.params.damage_all_creatures_x_per_subtype.empty())
+        {
+            // Gates Ablaze (shared helper -- executor twin in EffectHandler's Custom-spell resolution,
+            // lockstep): X to each creature, X = the Gates we control at resolution.
+            const int x = CountControlledLandsWithSubtype(state, state.active_player_index,
+                                                          def.params.damage_all_creatures_x_per_subtype);
+            if (x > 0) { PerformDamageAllCreatures(state, state.active_player_index, def, x); }
+        }
         else if (def.params.x_damage_each_creature_and_player)
         {
             // Rolling Earthquake (shared helper -- executor twin in EffectHandler's Custom-spell
@@ -81127,6 +81164,18 @@ static bool DiesTuckTagLive(const std::vector<Action>& acts, const Action& act)
     return false;
 }
 
+// Does a TapTutorPut activation's TARGET ride the plan signatures? Only for a return-self fetch (Maze's End),
+// where every Gate name and the fail-to-find are distinct plans. Seahunter's activation does not carry it
+// (byte-identity for Merfolk Turns; whether its untagged targets fold is an open question in the Maze's End
+// ledger). Shared by both signature builders.
+static bool TapTutorPutTargetTagged(const Action& act)
+{
+    if (act.kind != Action::Kind::ActivatePermAbility || act.ability_mode != Action::AbilityMode::TapTutorPut)
+    { return false; }
+    const CardDefinition* d = act.def ? act.def : CardDatabase::Instance().LookupInterned(act.card_name);
+    return d != nullptr && d->params.tap_tutor_put_return_self;
+}
+
 static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_bestow_sig, bool host_sig,
                                      bool cre_host_sig, bool rep_sig)
 {
@@ -81213,6 +81262,7 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 if (d && d->params.x_damage_each_creature_and_player) { w.Put("#Q"); w.Int(act.chosen_x); }
                 if (d && d->params.enters_with_x_plus_counters) { w.Put("#BX"); w.Int(act.chosen_x); }   // Walking Ballista's X
                 if (d && d->params.etb_modal_fight_opp_creature) { w.Put("#VM"); w.Put(act.tutor_target); }   // Voracious mode
+                if (d && d->params.modal_exile_target_artifact_enchantment) { w.Put("#AX"); w.Put(act.tutor_target); }   // Archdruid's Charm mode
                 if (d && d->params.evoke_cost.has_value()) { w.Put(act.evoke ? "#E1" : "#E0"); }
                 if (d && d->params.emerge_cost.has_value()) { w.Put(act.emerge ? "#EM1" : "#EM0"); }   // Decimator (I4)
                 if (DiesTuckTagLive(p.actions, act)) { w.Put((act.dies_tuck & 1) ? "#DT1" : "#DT2"); }   // Ilharg's death (I5b)
@@ -81391,6 +81441,10 @@ static std::string PlanSignatureFast(const TurnSolver::Plan& p, bool legacy_best
                 // plans (the Gamble lesson). Lockstep with the legacy builder. Every other ability: no tag.
                 if (act.ability_mode == Action::AbilityMode::SacNamedTutorPut)
                 { w.Put("#N"); w.Int(act.sac_victim_id); w.Put("#F"); w.Put(act.tutor_target); }
+                // Maze's End's fetch: WHICH Gate (and the fail-to-find) are distinct plans -- without the tag
+                // every target folded onto the first library name. Gated on the return-self param so every
+                // other TapTutorPut (Seahunter) keeps its signature (see the ledger's open question).
+                if (TapTutorPutTargetTagged(act)) { w.Put("#F"); w.Put(act.tutor_target); }
                 w.End(); break;
         }
     }
@@ -86716,6 +86770,8 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                         if (cd && cd->params.enters_with_x_plus_counters) { k += "#BX"; k += std::to_string(act.chosen_x); }
                         // Voracious Hydra: double vs fight <target> are DISTINCT plans (the #G precedent).
                         if (cd && cd->params.etb_modal_fight_opp_creature) { k += "#VM"; k += act.tutor_target.str(); }
+                        // Archdruid's Charm: mode 1 vs exile <target> are DISTINCT plans (the #VM precedent).
+                        if (cd && cd->params.modal_exile_target_artifact_enchantment) { k += "#AX"; k += act.tutor_target.str(); }
                         // Evoke (Reveillark): the evoke cast and the hard cast are two different
                         // spells sharing a name (different cost, the body self-sacs) -- the
                         // bestow lesson. Gated on the param, so no existing deck moves.
@@ -86990,7 +87046,9 @@ static std::vector<TurnSolver::Plan> EnumeratePlansCore(const GameState& state, 
                                   // Shadowborn Apostle: the readiness-count code and the Demon (writer twin).
                                   + (act.ability_mode != Action::AbilityMode::SacNamedTutorPut
                                      ? std::string() : "#N" + std::to_string(act.sac_victim_id)
-                                                       + "#F" + act.tutor_target.str()));
+                                                       + "#F" + act.tutor_target.str())
+                                  // Maze's End's fetch target (writer twin; gated, see TapTutorPutTargetTagged).
+                                  + (TapTutorPutTargetTagged(act) ? "#F" + act.tutor_target.str() : std::string()));
                     break;
             }
         }
@@ -93151,6 +93209,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
+                // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
+                if (d->params.modal_exile_target_artifact_enchantment
+                    && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
                 if (put_tutor
                     && !(d->card.IsCreature() && !d->params.tutor_types.empty()
                          && (d->params.tutor_to_hand || d->params.tutor_to_top)
@@ -93286,6 +93347,9 @@ static void AppendSubdecisionAxes(const GameState& state, bool is_pre_combat,
                 if (d == nullptr || !(IsLibraryTutor(d->params)
                                       || d->params.tutor_land_to_battlefield
                                       || d->params.tutor_to_battlefield_single)) { continue; }
+                // Archdruid's Charm mode 3 (an AX<n> exile pin) searches nothing: no tutor variants.
+                if (d->params.modal_exile_target_artifact_enchantment
+                    && ModalExileArtEnchPinTarget(act.tutor_target.str()) > 0) { continue; }
                 // The plan this candidate list is FOR -- see PlanContext.h. Providers that ignore it
                 // (all of them today) are byte-identical; the point is that the state mismatch above
                 // is only half the missing information, and the other half is "what else does this
@@ -100397,6 +100461,16 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
         // doubles the land branch for no new line and measured +61% instructions on slivers_vial.
         return s;
     };
+    // A GATE keeps its NAME in the signature: Maze's End counts "Gates with different names", so two
+    // otherwise-identical Gates (Guildgates of different names, the chosen-colour CLB Gates) are NOT
+    // interchangeable land drops -- the one already on the battlefield adds nothing to the count.
+    // Every deck without a Gate keeps the exact signature above.
+    auto land_sig_named = [&land_sig](const CardDefinition* d) -> std::string
+    {
+        std::string s = land_sig(d->params);
+        if (CardHasSubtype(d->card, "Gate")) { s += "|N"; s += d->card.m_name.str(); }
+        return s;
+    };
 
     // Strictly-OPTIONAL extra activated abilities on an otherwise signature-identical land. A land
     // carrying one DOMINATES a land without it: same mana, same ETB, and every line the plainer land
@@ -100522,7 +100596,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             const CardDefinition* front = CardDatabase::Instance().LookupCached(c);
             const CardDefinition* def = LandFaceDefOf(front);
             if (!def) { continue; }
-            const std::string sg = land_sig((front && front->card.IsLand() ? def : front)->params);
+            const std::string sg = land_sig_named(front && front->card.IsLand() ? def : front);
             auto it = predraw_urgency.find(sg);
             const int u = land_urgency(c);
             if (it == predraw_urgency.end()) { predraw_urgency.emplace(sg, u); }
@@ -100569,7 +100643,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (!def) { continue; }
             if (karoo_self_bounce(def)) { continue; }
             const std::string key = s_human_play_lands ? c.m_name
-                                  : land_sig((front && front->card.IsLand() ? def : front)->params);
+                                  : land_sig_named(front && front->card.IsLand() ? def : front);
             // s_human_play_lands forces condemn_lands false, so `key` is the signature here.
             if (land_condemned(c, key)) { continue; }
             if (seen_key.insert(key).second) { land_names.push_back(c.m_name); }
@@ -100595,7 +100669,7 @@ static std::vector<TurnSolver::Plan> EnumeratePlansWithLandUncachedBody(const Ga
             if (karoo_self_bounce(def)) { continue; }
             // Signature: a real land keys on its own params; a spell//land keys on the FRONT's
             // (which carries the mdfc_back fields -> a distinct group from every real land).
-            const std::string sg = land_sig((front && front->card.IsLand() ? def : front)->params);
+            const std::string sg = land_sig_named(front && front->card.IsLand() ? def : front);
             if (land_condemned(c, sg)) { continue; }   // declined at the drop's slot (MTG_BP_CONDEMN_LAND)
             auto it = slot.find(sg);
             if (it == slot.end())
@@ -103827,6 +103901,8 @@ static TranspositionTable::Key BuildSimKeyBase(const GameState& state, int max_t
     }
     if (state.players_cant_gain_life_this_turn) { Fold(k, 0x5C011); }
     if (state.damage_cant_be_prevented_this_turn) { Fold(k, 0x5C012); }
+    // Alternate win by effect (Maze's End): terminal, never merged with an unwon state. Value-gated.
+    if (state.won_by_effect) { Fold(k, 0xA17E1Du); }
     if (state.deck_tracks_noncombat_damage)
     {
         Fold(k, 0x1C1DE); Fold(k, state.noncombat_damage_received_this_turn[0]);

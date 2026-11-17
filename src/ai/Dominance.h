@@ -913,6 +913,9 @@ inline DomSnap Build(const GameState& s, const DecisionProvider& prov,
     // having an opponent library at all: an unconditional fold would shift every key for every
     // deck and give up byte-identity to record a field that is permanently false for them.
     if (s.opponent_library_dealt) { fold(s.opponent_decked ? 0xD3CDull : 0xD3CEull); }
+    // Alternate win by effect (Maze's End) is terminal: a won state never merges with an unwon one.
+    // Value-gated (folds only when set), so every deck that cannot set it keeps its keys.
+    if (s.won_by_effect) { fold(0xA17E1Dull); }
     if (s.opponent_searched_library_this_turn) { fold(0xA8C41Eull); }
     if (s.hedron_mill_trigger_ordinal != 0)
     { fold(0x4844524Eull + s.hedron_mill_trigger_ordinal); }

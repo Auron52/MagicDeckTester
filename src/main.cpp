@@ -877,6 +877,17 @@ static std::string SummarizePlan(const TurnSolver::Plan& plan, const GameState& 
                         tag += ")";
                     }
                 }
+                else if (const CardDefinition* xd = a.def ? a.def : CardDatabase::Instance().Lookup(a.card_name);
+                         xd && xd->params.modal_exile_target_artifact_enchantment
+                         && ModalExileArtEnchPinTarget(a.tutor_target.str()) > 0)
+                {
+                    // Archdruid's Charm mode 3 (the AX<n> pin): name the target, not the pin.
+                    const int tn = ModalExileArtEnchPinTarget(a.tutor_target.str());
+                    std::string nm = "permanent";
+                    for (const Permanent& q : s.battlefield)
+                    { if (q.card.m_number == tn) { nm = q.card.m_name.str(); break; } }
+                    tag += " (exile " + nm + " #" + std::to_string(tn) + ")";
+                }
                 else if (!a.tutor_target.empty())
                 {
                     tag += " \xE2\x86\x92 " + a.tutor_target.str();
@@ -1900,6 +1911,8 @@ static void WriteBoardContext(std::ostream& os, const GameState& s, int reveal_c
         }
         if (s.opponent_decked) { os << ", \"decked\": true"; }
     }
+    // Alternate win by effect (Maze's End). Emitted only when set -> every other game's JSON is unchanged.
+    if (s.won_by_effect) { os << ", \"alt_win\": true"; }
     os << " },\n";
 }
 
@@ -5604,6 +5617,16 @@ static void WriteXValueDecisionJson(std::ostream& os, const GameState& s, const 
          .Word("x_kind", "etb_destroy_k").Int("min_x", 0).Int("max_x", max_x);
         d.HeuristicDefault(default_x);
         d.Note("reply how many noncreature permanents Terastodon targets (0..max_x). Target choices follow. This is an enter-the-battlefield trigger, not a mana payment.");
+        return;
+    }
+    if (target == 5)
+    {
+        // Guild Summit's ETB: "you may tap any number of untapped Gates you control. Draw a card for each
+        // Gate tapped this way." The count; the Gates themselves follow as `target` board picks.
+        d.Type("x_value").Source(source).Turn(s).Board(s)
+         .Word("x_kind", "etb_tap_draw").Int("min_x", 0).Int("max_x", max_x);
+        d.HeuristicDefault(default_x);
+        d.Note("reply how many untapped Gates to tap (0..max_x); you draw a card for each. You then choose each Gate on the board. Tapped Gates cannot make mana this turn.");
         return;
     }
     if (target == 4)

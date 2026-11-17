@@ -130,7 +130,7 @@ inline int ManabarbsAmounts(const GameState& s, int* out, int cap)
 }
 
 inline bool OpponentLostRaw(const GameState& s)
-{ return s.Opponent().HasLost() || s.opponent_decked; }
+{ return s.Opponent().HasLost() || s.opponent_decked || s.won_by_effect; }
 
 // The won-lock (point 4): the opponent has lost and we have not -> the game is over.
 inline bool WonLocked(const GameState& s)

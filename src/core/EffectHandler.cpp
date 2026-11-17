@@ -772,6 +772,14 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformBounceAllCreaturesExcept(state, def.card.m_name.str(),
                                                     def.params.bounce_all_creatures_except_subtypes);
                 }
+                // Gates Ablaze: X to each creature, X = the Gates its controller controls AT
+                // RESOLUTION (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).
+                if (!def.params.damage_all_creatures_x_per_subtype.empty())
+                {
+                    const int x = CountControlledLandsWithSubtype(state, entry.controller_index,
+                                                                  def.params.damage_all_creatures_x_per_subtype);
+                    if (x > 0) { PerformDamageAllCreatures(state, entry.controller_index, def, x); }
+                }
                 // Rolling Earthquake: X to each creature AND each player -- one damage event
                 // (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).
                 if (def.params.x_damage_each_creature_and_player)

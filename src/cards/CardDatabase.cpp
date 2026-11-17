@@ -100,6 +100,8 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         {
             def.params = BuildParamsFromJson(entry["parameters"]);
         }
+        // Planar Nexus: the CDA lives on the card's subtype set, where every subtype reader looks.
+        if (def.params.all_nonbasic_land_types) { def.card.m_subtypes.SetAllNonbasicLandTypes(true); }
         // BEHAVIOURAL IDENTITY (see CardDefinition::behaviour_identity). Digest the WHOLE entry
         // minus the two provably non-behavioural keys, rather than digesting a hand-picked list of
         // behavioural ones. That direction is the load-bearing choice: including an irrelevant key
@@ -111,8 +113,22 @@ void CardDatabase::LoadFromJson(const std::filesystem::path& path)
         // order and the digest is canonical regardless of how cards.json happens to be written.
         {
             json ident = entry;
+            // A GATE keeps its NAME in its identity: Maze's End counts "Gates with different names"
+            // (CardParams::alt_win_distinct_named_subtype), so two Gates differing only in name are
+            // NOT interchangeable -- folding them (LandSearchClasses, the hand-cast folds) would drop
+            // the line that reaches ten names. Planar Nexus is every nonbasic type, Gate included.
+            bool name_matters = entry.contains("parameters")
+                && entry["parameters"].value("all_nonbasic_land_types", false);
+            if (entry.contains("subtypes") && entry["subtypes"].is_array())
+            {
+                for (const auto& st : entry["subtypes"])
+                { if (st.is_string() && st.get<std::string>() == "Gate") { name_matters = true; } }
+            }
             for (const char* k : { "name", "oracle_text" })
-            { if (ident.contains(k)) { ident.erase(k); } }
+            {
+                if (name_matters && std::string(k) == "name") { continue; }
+                if (ident.contains(k)) { ident.erase(k); }
+            }
             const std::string s = ident.dump();
             std::uint64_t h = 1469598103934665603ULL;            // FNV-1a 64
             for (char c : s)
@@ -2489,6 +2505,16 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
     p.tap_target_pump_sets_island = params.value("tap_target_pump_sets_island", false);
     if (params.contains("tap_tutor_put_cost"))
         p.tap_tutor_put_cost = ManaCostFromString(params["tap_tutor_put_cost"].get<std::string>());
+    p.tap_tutor_put_return_self      = params.value("tap_tutor_put_return_self", false);
+    p.alt_win_distinct_named_subtype = params.value("alt_win_distinct_named_subtype", std::string{});
+    p.alt_win_distinct_named_count   = params.value("alt_win_distinct_named_count", 0);
+    p.all_nonbasic_land_types        = params.value("all_nonbasic_land_types", false);
+    p.etb_tap_subtype_draw           = params.value("etb_tap_subtype_draw", std::string{});
+    p.damage_all_creatures_x_per_subtype = params.value("damage_all_creatures_x_per_subtype", std::string{});
+    p.tutor_land_enters_tapped       = params.value("tutor_land_enters_tapped", false);
+    p.tutor_nonland_to_hand          = params.value("tutor_nonland_to_hand", false);
+    p.modal_exile_target_artifact_enchantment =
+        params.value("modal_exile_target_artifact_enchantment", false);
     p.haste_if_opp_life_at_most      = params.value("haste_if_opp_life_at_most", 0);
     p.landfall_return_self_from_gy   = params.value("landfall_return_self_from_gy", false);
 
