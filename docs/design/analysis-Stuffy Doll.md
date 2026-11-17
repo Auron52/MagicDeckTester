@@ -82,6 +82,11 @@ provider pick (existing engine-wide cast_scry practice); second main ON subject 
 deferrals provisional.
 
 ## Open questions for the USER (surfaced, not blocking)
+- USER RULING 2026-11-17 ~20:25 UTC (verbatim): "The Shaman heuristic prune makes sense." Read as sign-off on the
+  step-9 Shaman en-Kor pull restrictions: the pull's source is only our own sweeper (no other activation window),
+  and folds P0-P3 (P1 argued against the full shield allocation). These leave PROVISIONAL status. The rest of Q-U1
+  (Reckoner first strike, Loran's hexproof, planeswalker targets, Nemesis lock, Nomads shields only as a sweeper
+  rider, canonical trigger order) is still open.
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
