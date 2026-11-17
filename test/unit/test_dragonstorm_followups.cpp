@@ -938,6 +938,34 @@ TEST_CASE("Leftover swap: Karrthus leaves the ritual's {R}{R} for Scourge, not t
     }
 }
 
+TEST_CASE("Opener line keeps a floating colour the named line owes and no untapped source makes (MTG_UNSEEN_KEEP_SCARCE)")
+{
+    // Dragonstorm gate s30083167 T7: Desperate Ritual's Bloom crack left {B}{B}{R}{R}{R} floating; the line still casts
+    // Apex of Power (an opener) and then Dragonlord Kolaghan {4}{B}{R}. Seething Song's {2}{R} drained the black first
+    // (the historical WUBRG order an opener line keeps) with red sources untapped, and Kolaghan lost its {B}.
+    ManaCost song;
+    song.generic = 2;
+    song.red = 1;
+    ManaCost line = song;
+    line.generic += 4 + 7;   // Kolaghan's {4}, Apex's {7}
+    line.black += 1;         // Kolaghan
+    line.red += 1 + 3;       // Kolaghan, Apex
+    for (const bool on : { true, false })
+    {
+        CAPTURE(on);
+        ArmFu arm(heurarm::UNSEEN_KEEP_SCARCE, on);
+        GameState s = BoardFu({ "Mountain", "Mountain" }, { "Dragonlord Kolaghan", "Apex of Power" }, 7);
+        s.floating_mana.black = 2;
+        s.floating_mana.red = 3;
+        {
+            LineCostFu lc(line);
+            LineOpensUnseenScope unseen(true);
+            REQUIRE(TapForCostDirect(s, song, /*for_creature=*/false));
+        }
+        CHECK((s.floating_mana.black >= 1) == on);
+    }
+}
+
 TEST_CASE("Line float: a spare source pays the generic before floating colour the line still owes (MTG_LINE_FLOAT_TAP_FIRST)")
 {
     // s7100081 T2's shape: an Unclaimed Territory up, {R}{R} floating off Rite of Flame, and Ruby Medallion's {2}

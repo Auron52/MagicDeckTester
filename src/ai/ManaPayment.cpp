@@ -10410,6 +10410,38 @@ static bool OnDemandTrial(const GameState& state, const std::vector<OnDemandCrac
 
 static thread_local int t_pilgrimage_pay_depth = 0;
 
+// MTG_UNSEEN_KEEP_SCARCE (reader: SpendFloatingTowardCost, SpellEffects.h). A colour qualifies when it floats, the
+// named line still owes it, at least one OTHER colour floats (so the reorder has something else to spend), and no
+// untapped permanent of `active` can make it: no mana source producing it in any mode (creature-only included --
+// conservative: a source that might make it means it is not scarce) and no pay-sac lump (Lotus Bloom, a Treasure),
+// which can make every colour. Board state only.
+int UnseenScarceNamedMask(const GameState& state, int active, const int later[5], const ManaPool& reserve)
+{
+    if (!UnseenKeepScarceOn()) { return 0; }
+    const int have[5] = { reserve.white, reserve.blue, reserve.black, reserve.red, reserve.green };
+    int kinds = 0;
+    for (int c = 0; c < 5; ++c) { if (have[c] > 0) { ++kinds; } }
+    if (kinds < 2) { return 0; }
+    int want = 0;
+    for (int c = 0; c < 5; ++c) { if (have[c] > 0 && later[c] > 0) { want |= 1 << c; } }
+    if (want == 0) { return 0; }
+    int made = 0;
+    for (const Permanent& p : state.battlefield)
+    {
+        if (p.controller_index != active || p.tapped) { continue; }
+        const CardDefinition* d = CardDatabase::Instance().LookupCached(p.card);
+        if (d == nullptr) { continue; }
+        if (PaySacSpendableNow(state, p, *d)) { return 0; }
+        if (PermanentManaYield(state, p, *d) <= 0) { continue; }
+        for (Color c : EffectiveProducesFor(state, active, *d, &p))
+        {
+            const int ci = static_cast<int>(c);
+            if (ci >= 0 && ci < 5) { made |= 1 << ci; }
+        }
+    }
+    return want & ~made;
+}
+
 // SWAP THE LEFTOVER FOR THE LINE (MTG_LEFTOVER_LINE_SWAP, default ON). The payer drains the floating reserve into a
 // cost first and then taps; a source that makes two units (a depletion land, a Lotus crack, a Sol Ring) can then
 // leave one of ITS colour floating while the drain already spent a floating unit of another colour on the generic.

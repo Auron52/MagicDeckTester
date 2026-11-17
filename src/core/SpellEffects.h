@@ -1608,6 +1608,9 @@ inline void LineOwedAfterOwnPips(int out[5])
 // Hunt} kept the second Hunt's {U} and spent the {R} on the first's generic; the first Hunt revealed Land's Edge
 // {1}{R}{R}, the kill, and the continuation could not pay it. Such a line keeps the historical order.
 extern thread_local bool g_line_opens_unseen;   // ManaPayment.cpp (see ManaPayment.h); false outside a line
+// MTG_UNSEEN_KEEP_SCARCE: bit x set = floating colour x (WUBRG) is owed by the named line (`later`) and no untapped
+// source of `active` can make it (ManaPayment.cpp; 0 when the lever is off or nothing qualifies).
+int UnseenScarceNamedMask(const GameState& state, int active, const int later[5], const ManaPool& reserve);
 inline bool LineGenericOrderLive()
 {
     return HumanPlayActive() || (AutoLineGenericOn() && !g_line_opens_unseen);
@@ -48159,6 +48162,38 @@ inline void SpendFloatingTowardCost(ManaPool& reserve, ManaCost& cost, bool keep
         for (Ent& x : e) { drain(cost.generic, *x.res); }
         if (hold_c) { drain(cost.generic, reserve.colorless); }
         return;
+    }
+    // AN OPENER LINE KEEPS A SCARCE NAMED COLOUR (MTG_UNSEEN_KEEP_SCARCE; UnseenScarceNamedMask, ManaPayment.cpp). A line
+    // that casts a breakpoint opener keeps the historical order (LineGenericOrderLive: its named casts are a lower
+    // bound, TreasureHunt s3003 gi96). But a colour the NAMED line still owes, floating, that no untapped source of
+    // the player's can make again (no land, rock or uncracked lump) is demand the line does name and supply nothing
+    // else replaces: Dragonstorm gate claude-dragonstorm-swap-20261117 s30083167 T7, {Desperate Ritual, Seething Song
+    // x2, Apex, Irencrag Feat, Dragonlord Kolaghan} -- Desperate's crack floated Lotus Bloom's {B}{B}, the first
+    // Song's {2} drained both (black before red) with five untapped red sources on the board, and Kolaghan's {B} was
+    // gone. So the generic eats every other colour first (in the order below would use), then such a colour's units
+    // beyond what the line owes, then the rest. A REORDER of floating units only: the same total is spent.
+    if (cost.generic > 0 && g_line_opens_unseen && !LineGenericOrderLive() && t_pay_hand_ctx != nullptr
+        && t_pay_hand_ctx->s != nullptr)
+    {
+        int later[5];
+        LineOwedAfterOwnPips(later);
+        const int keep = UnseenScarceNamedMask(*t_pay_hand_ctx->s, t_pay_hand_ctx->active, later, reserve);
+        if (keep != 0)
+        {
+            int* res[5] = { &reserve.white, &reserve.blue, &reserve.black, &reserve.red, &reserve.green };
+            int ord[5] = { 0, 1, 2, 3, 4 };
+            if (const int* hp = PayHandPips(reserve, -1)) { PayHandColorOrder(reserve, hp, ord); }
+            for (int x : ord) { if (((keep >> x) & 1) == 0) { drain(cost.generic, *res[x]); } }
+            for (int x : ord)
+            {
+                if (((keep >> x) & 1) == 0) { continue; }
+                int spare = std::max(0, *res[x] - later[x]);
+                while (cost.generic > 0 && spare > 0) { --cost.generic; --*res[x]; --spare; }
+            }
+            for (int x : ord) { if (((keep >> x) & 1) != 0) { drain(cost.generic, *res[x]); } }
+            if (hold_c) { drain(cost.generic, reserve.colorless); }
+            return;
+        }
     }
     // PAY HAND GENERIC (MTG_PAY_HAND_GENERIC; see PayHandPips): the colour the hand needs least pays first.
     if (cost.generic > 0)

@@ -22,24 +22,17 @@ The pushed fixes are the painland float, `MTG_CONT_UNSEEN_PENDING`, `MTG_ONDEMAN
 byte-identical. Report `logs/mana_clean/claude-dragonstorm-swap-20261117/report.md`. Top seeds (APPLY-DROP):
 s30083167 T7 x14, s30086717 T4 x12, s30083522 T6 x10, s30086338 T6 x10 (replays in `build/scratch/claude_ds2/`).
 
-**IN FLIGHT (18:10 UTC): `MTG_UNSEEN_KEEP_SCARCE`, uncommitted** (SpendFloatingTowardCost in SpellEffects.h +
-UnseenScarceNamedMask in ManaPayment.cpp). An opener line (g_line_opens_unseen) keeps the historical WUBRG generic
-order. The exception: a floating colour the named line owes, which no untapped source (and no uncracked lump) can
-make, pays generic last. s30083167: Seething Song's {2} drained Bloom's {B}{B} before red, and the plan's Kolaghan
-lost {B}. Exact seeds: s30083167 14 -> 0, s30086717 12 -> 8, s30083522 and s30086338 unchanged (other shapes).
-Unit 3,462/3,462.
+**OPEN USER DECISION (18:45 UTC): `MTG_UNSEEN_KEEP_SCARCE`, committed DEFAULT OFF.** It fixes s30083167 (14 -> 0)
+and partly s30086717 (12 -> 8). The held-out A/B is byte-identical on every deck except Cyclone: 5,000 pairs, 1
+later game (gi 560506, a T1 butterfly that recovers at d8 b0), net +1. A trade-off, so the USER decides; the
+agent recommends adopting. `docs/design/unseen-keep-scarce-2026-11-17.md`.
 
-All-deck A/B `build/scratch/claude_unseen_scarce_ab/` (games 560,000+, Sea Creatures added):
-- **So far:** one LATER game, Cyclone gi 560506 T4 -> T5 (Cyclone net +1, FAILS the bar as it stands). Root-cause
-  it next: replay with the lever on/off, then narrow the rule.
-- **Memory:** the batch aborted twice on the 40 GB RSS cap with Merfolk Turns games in flight (both arms). The
-  runner schedules expensive jobs first, so manifest order does not help. The missing 289 jobs are re-running
-  as a chain: 280 pooled at full concurrency, then Merfolk Turns' 9 jobs at 12 threads (`run_rest.sh`, DONE
-  marker `DONE`). Merfolk Turns ran fine in the 14:31 A/B (games 530,000+); whether the seed block or an upstream
-  change is behind the memory is not diagnosed.
+**Found defect (pre-existing, not yet investigated):** Merfolk Turns game 560698 (seed 30560698) drives one
+process past 42 GB RSS within a minute, on the current and the pre-rebase binary alike.
 
-Next: Cyclone gi 560506, then trace s30086338 (Apex is paid with Bloom; the oracle uses Needle + Bazaar and keeps
-Bloom for Kolaghan) and s30083522.
+**NEXT:** trace s30086338 T6 (the oracle pays Apex with Needle + Bazaar and keeps Bloom for Kolaghan; the engine
+spends Bloom) and s30083522 T6 (Karrthus beyond two Apexes). Then the Merfolk Turns RSS runaway, the PD CAPPED
+fold, and the deck queue. Next push not before 20:44 UTC.
 
 **DONE 16:15 UTC: s30072155 T5 + s30074081 T4** (`MTG_LEFTOVER_LINE_SWAP`, ON; `SwapLeftoverForLine` in
 ManaPayment.cpp). After an outermost payment, a floating colour that the payment drained into its generic is

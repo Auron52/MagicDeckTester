@@ -419,6 +419,16 @@ inline bool LeftoverLineSwapOn()
     return heurarm::Flag(heurarm::LEFTOVER_LINE_SWAP, env_on);
 }
 
+// MTG_UNSEEN_KEEP_SCARCE -- DEFAULT OFF pending the USER's call (=1 enables). See UnseenScarceNamedMask (ManaPayment.cpp),
+// its reader in SpendFloatingTowardCost (SpellEffects.h) and docs/design/unseen-keep-scarce-2026-11-17.md: it fixes the
+// oracle's Dragonstorm s30083167 drop family, but the held-out A/B is net +1 on Cyclone (one search butterfly that
+// recovers at d8 b0), which is a trade-off and not the agent's to adopt.
+inline bool UnseenKeepScarceOn()
+{
+    static const bool env_on = EnvOn("MTG_UNSEEN_KEEP_SCARCE", false);   // DEFAULT OFF (USER decision pending)
+    return heurarm::Flag(heurarm::UNSEEN_KEEP_SCARCE, env_on);
+}
+
 // MTG_LINE_FLOAT_COVERED (DEFAULT ON since 2026-10-28; =0 -> the rung's colour test always applies) -- the
 // LINE_FLOAT_TAP_FIRST rung's colour test refuses a source that makes a colour the line still owes, because a
 // later pip may need it for that colour. When the reserve left after this payment's own pips already covers
