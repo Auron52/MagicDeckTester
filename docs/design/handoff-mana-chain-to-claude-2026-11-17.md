@@ -2,7 +2,28 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:44 UTC
+## Live status, updated 05:56 UTC
+
+The final stale-clean refresh is still running in exec session `74609`:
+`martyr_lifegain prevent_damage spirits`, 5,000 games each at source
+`f7cce0693b6a`. Console:
+`build/scratch/dragonstorm_visible_lump_ab/clean_newsrc_c.out`;
+per-arm progress:
+`build/scratch/mana_clean/codex-clean-refresh-newsrc-c-20261117/on.0.out`.
+At 05:56 the on arm was progressing normally with 32 workers and about
+5.6 GB RSS. Check its report and commit `test/mana_clean.json` with this
+handoff when both arms finish. Windows CI `44025173062` was still in its
+Release build at the same time; the watcher output is
+`build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
+Keep the CI check asynchronous. Once the mana gate completes, work the
+Dragonstorm seed 30074224 T5 early Bloom payment and the Breaching
+Dragonstorm two ENUM-GAP seeds. The queue remains open.
+
+The paragraphs below are a chronological work log. Older statements
+that say a batch or build is active describe its state at that time;
+use this live-status section for the current action.
+
+## Chronological work log
 
 **Second new-source clean refresh complete:** all nine decks in
 `codex-clean-refresh-newsrc-b-20261117` are clean at source
