@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:07 UTC
+## Live status, updated 06:10 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -17,15 +17,19 @@ and Merfolk Turns are never-run. No simulation batch is active.
 Windows CI `44025173062` was still in its Release build at 06:07 UTC;
 the watcher output is
 `build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
-Keep the CI check asynchronous. Next run the focused Dragonstorm unit
-test on the current payer, then work seed 30074224 T5 early Bloom payment
+Keep the CI check asynchronous. An incremental `./build.sh` Release build
+for the focused Dragonstorm unit test is active in exec session `29259`,
+console `build/scratch/dragonstorm_visible_lump_ab/build_after_test.out`;
+at 06:10 it was compiling the large `TurnSolver.cpp` object. When it
+finishes, run the focused test on the current payer, then work seed
+30074224 T5 early Bloom payment
 and the Breaching Dragonstorm two ENUM-GAP seeds. The queue remains open.
 
 A focused unit case for seed 30074224's payment shape has been added to
 `test/unit/test_dragonstorm_followups.cpp`, immediately after the existing
 one-Territory visible-Karrthus case. It sets Mountain + two Unclaimed
 Territories + Lotus Bloom, pays Song, then credits five red and checks
-Karrthus payment. **It is not built or validated yet.** First run it against the
+Karrthus payment. **It is building but not validated yet.** First run it against the
 current payer to establish failure, then trial a scoped payer correction.
 
 The paragraphs below are a chronological work log. Older statements
