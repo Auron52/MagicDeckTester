@@ -32,15 +32,21 @@ Short resume note for the in-flight Sea Creatures `analyze-deck` run (Claude orc
   The I3->I4 move is NOT composition: missing cards are dead placeholder slots (DeckLoader::MakePlaceholder),
   so I4 turned two dead slots into castable 7-8 drops (a play change, ~1.5-2 se).
 
+## Progress 2026-11-17 (after I6)
+
+* I6 Trench Gorger DONE `ddf109ddc` + `9515c52d3` + `433409550` (=0 arm picked exile_all 4/4).
+* Stage 3 clean; Stage 4 profile `3a21f5afb`; 4-bis all three tiers + GT `b96973a0a` (cost 0.99x Hinata).
+* Claude-play sweep 16 games, 0 flags, recorded in the ledger `9420b5739`.
+* Stage 5 A/B (one pooled batch, `build/scratch/sea/ab5/`, 400 g/arm d5 b20, seeds 8810001..8840001):
+  fetchForestFirst / sprawlUG / bounceSearched / sinSearched / waveSearched = identical win turns (units +0..+51%);
+  gorgerSearched 1 game worse; fetchAll (prune OFF) 11 better 0 worse (+71% units); m2Every 11 better 0 worse
+  (+12.9% units). Root-cause agent writing `logs/sea-research/ab-rootcause.md`.
+* Queued chain `build/scratch/sea/discbound/chain.sh`: waits for leaf_tiebreak_check (`build/scratch/sea/tiebreak/`),
+  then the discard best-vs-worst bound batch, then verify_deck.py (`build/scratch/sea/verify/out`); DONE marker
+  `build/scratch/sea/discbound/DONE`.
+
 ## Next steps
 
-1. Collect I5; launch I6 (Gorger) from `logs/sea-research/gorger.md` + the ledger's #10 rulings.
-2. Stage 3 coverage re-run (must be clean); Stage 4 profile (`scripts/analyze_deck.py --no-rebuild`),
-   provider audit, 4-bis suite rows in ALL THREE tiers (3x-Hinata cost gate: `suite_gate.py --cost`).
-3. Stage 5 via `scripts/verify_deck.py`, plus the A/Bs owed to the USER: fetch Island-first vs Forest-first;
-   Sprawl always-blue vs searched {U,G}; bounce declines vs =0; Wave never vs =0; Sin strip-Sagas vs =0;
-   Gorger exile-all vs searched menu (report the entries the searched arm picks); main 2 conditional vs
-   every-turn. Claude-play sweep (5d), discard bucket policy (Whelming Wave first to shed, ledger #15),
-   leaf tie-break check (5c2).
-4. Stage 6 report, with the full open-question list from the ledger.
-5. Push the shared branch once integrated (4-hour rhythm; rebase onto origin, rebuild + smoke after).
+1. Read ab-rootcause.md; surface fetch + main-2 findings to the USER with amended-rule proposals.
+2. Read tiebreak, discard bound, verify_deck results; author the discard bucket proposal (USER approves first).
+3. Stage 6 report with the open-question list. Push (4h rhythm) after rebase + rebuild + smoke + check_gt_logs.
