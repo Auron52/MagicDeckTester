@@ -2,18 +2,23 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 03:47 UTC
+## Current state, updated 03:50 UTC
 
-A pooled fresh PGO gate for six previously stale-clean decks is active as
-the only simulation batch, exec session 85823:
-
-```
-MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run angels burn breaching_dragonstorm red_elementals slivers giants --games 5000 --name codex-clean-refresh-20261117
-```
-
-Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_gate.out`.
-On completion read `logs/mana_clean/codex-clean-refresh-20261117/report.md`,
-update this handoff, and commit `test/mana_clean.json`.
+**Six-deck fresh PGO gate complete:** all at source `fcb9352608ea`,
+5,000 games per deck, oracle-on/off play byte-identical. Burn,
+Breaching Dragonstorm, Red Elementals, Slivers, and Giants are **clean**
+with zero issues. Angels is **issues**: 11 APPLY-DROP, eight
+APPLY-DROP-ORDER, zero oracle/enum/cap. Report:
+`logs/mana_clean/codex-clean-refresh-20261117/report.md`.
+Angels' largest drop is seed 30220574 T4 (seven flags): Youthful
+Valkyrie before Serra the Benevolent; oracle spends Seraph Sanctuary's
+colorless plus Giada's Angel-only white on Valkyrie to preserve Plains,
+Sol Ring, Plains for Serra. The order drops center on Giada, Font of
+Hope with Lightning Greaves/equip; seed 30221928 T3 has two flags and
+needs Giada → equip → Resplendent Angel. Seed 30222520 T4 has both
+payment and order drops. These are distinct payment/order repairs; the
+five clean deck verdicts should be preserved. All six records are
+committed in `test/mana_clean.json`. No batch is active after this gate.
 
 **Treasure Hunt fresh gate complete:** indices 80,000–84,999 at PGO
 source `fcb9352608ea` yielded 289 issues: 20 ENUM-GAP, 217
