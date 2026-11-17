@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 07:13 UTC
+## Live status, updated 07:17 UTC
 
 **Spirits 30040647 T4 correction in progress, source and test committed as `bd7c05019`:**
 The one fresh Spirits APPLY-DROP is a visible payment order. The plan is
@@ -30,6 +30,8 @@ The paired 5,000-game manifest is ready at
 arms sequentially after checking the PGO source stamp. Since this source
 fix, `mana_clean.py status` marks all 15 formerly clean decks
 **stale-clean by source hash**; that is expected and requires refresh gates.
+The paired result parser is ready at
+`build/scratch/spirits_shock_pair_5k/compare.py`; run it after both arms.
 After PGO passes and its source stamp matches `git rev-parse HEAD:src`,
 run both arms sequentially on the same binary, default versus
 `MTG_SPIRITS_SHOCK_PAIR_HOLD=0`, then
