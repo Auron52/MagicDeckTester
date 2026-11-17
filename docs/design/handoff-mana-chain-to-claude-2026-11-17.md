@@ -17,6 +17,15 @@ previous clean verdict does not imply a regression. Commit the updated
 `test/mana_clean.json` with this handoff, then refresh the remaining
 stale-clean decks. Windows CI watch remains active separately.
 
+**Next active gate:** nine more previously clean decks, 5,000 games
+each: Colossus Hammer, Critter Lifegain, Kithkin, Knights, Lifegain
+Heliod Combo, Merfolk, Modern RW Burn, Soldiers, White Knights. Command:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run colossus_hammer critter_lifegain kithkin knights lifegain_heliod_combo merfolk modern_rw_burn soldiers white_knights --games 5000 --name codex-clean-refresh-newsrc-b-20261117`.
+Console `build/scratch/dragonstorm_visible_lump_ab/clean_newsrc_b.out`,
+report `logs/mana_clean/codex-clean-refresh-newsrc-b-20261117/report.md`.
+After it, refresh Martyr Lifegain, Prevent Damage, and Spirits; those
+are the last stale-clean records from the old source.
+
 **Shared branch pushed:** after a final fetch confirmed origin had not
 moved, `git push origin phase-1-2-deck-analyzer` published 57 local
 commits through `a5c156a20` at about 05:35 UTC. Reference safety had
