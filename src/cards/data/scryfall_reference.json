@@ -8202,5 +8202,34 @@
     "power": "5",
     "toughness": "4",
     "type_line": "Creature — Elemental Cat"
+  },
+  "Worn Powerstone": {
+    "cmc": 3.0,
+    "keywords": [],
+    "mana_cost": "{3}",
+    "oracle_text": "This artifact enters tapped.\n{T}: Add {C}{C}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Artifact"
+  },
+  "Flooded Grove": {
+    "cmc": 0.0,
+    "keywords": [],
+    "mana_cost": "",
+    "oracle_text": "{T}: Add {C}.\n{G/U}, {T}: Add {G}{G}, {G}{U}, or {U}{U}.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land"
+  },
+  "Hedge Maze": {
+    "cmc": 0.0,
+    "keywords": [
+      "Surveil"
+    ],
+    "mana_cost": "",
+    "oracle_text": "({T}: Add {G} or {U}.)\nThis land enters tapped.\nWhen this land enters, surveil 1. (Look at the top card of your library. You may put it into your graveyard.)",
+    "power": null,
+    "toughness": null,
+    "type_line": "Land — Forest Island"
   }
 }
