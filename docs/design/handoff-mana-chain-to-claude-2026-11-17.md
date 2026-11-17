@@ -2,7 +2,17 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:17 UTC
+## Current state, updated 05:29 UTC
+
+**PGO build complete:** `./build.sh pgo` finished successfully at
+`HEAD:src=f7cce0693b6a16d779df5ac756af16100e3b677d`; the stamp in
+`build/PGO/SRC_TREE` matches. Full output:
+`build/scratch/dragonstorm_visible_lump_ab/rebased_pgo_build.out`.
+The next batch is a full `bash test/regression.sh --smoke` on this new
+source; compare its per-game `.wins` with the archived pre-Boars smoke
+directory `build/scratch/dragonstorm_visible_lump_ab/rebased_current_smoke_logs/wins`.
+If byte-identical, the upstream Boars source change is smoke-neutral and
+the 39 previously documented GT failures remain preexisting drift.
 
 **Active build:** `MTG_RSS_CAP_GB=40 ./build.sh pgo` for source
 `f7cce0693b6a16d779df5ac756af16100e3b677d`, exec session
