@@ -19,5 +19,7 @@
   "hand": [],
   "library_filler": "Plains", "library_size": 40,
   "depth": 3, "budget_ms": 50, "max_turns": 6,
-  "expect_win_turn": 4
+  "expect_win_turn": 4,
+    "resume_at": "main1",
+    "lands_played_this_turn": 1
 }

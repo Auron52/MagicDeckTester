@@ -69,8 +69,9 @@ implementer agent per step, serial.
 | 4 | Stuffy Doll (choose player, {T} self-ping) | DONE f8dabbaea (unit 3413, scen 566/566, smoke 0/219 moved vs step 3; chosen-player fold = deck-level `!dmg_events_armed`, else branched on the ETB choice axis; viewer `choose_player` prompt + `selfping=` verb wired, 5h forced run owed; OPEN: a dropped unit check found no 'don't ping' plan on a test board — root-cause in step 5) |
 | 5 | Guilty Conscience (+ combat damage hook, loops) | DONE fffd6abd3 (unit 3419, scen 568/568, smoke 0/219 moved vs step 4; GC host searched (excluded from aura host collapses); Doll+GC loop kills from 20/30 in <=2L+1 resolutions; no-progress rule tested; FIXED in-window greedy: main-1 offered no 'hold the Doll' plan -> SelfPingHoldPending joins the face-up hold pass) |
 | 5b | combat-time reflection target pins (GC'd attacker reflects inside combat: currently front pick = no-greedy gap) + classify the 3 unclassified step-2 viewer params | DONE 06907847f (unit 3422, scen 568/568, smoke 0/219 moved vs step 5; combat pins after kCombatPinMark in Plan::reflect_targets -> GameState::scripted_combat_reflect (GameState 1608->1632 B, play-neutral); static viewer audit rc=0; residual: bp_pre clones inherit combat pins (Prophets-precedent gap), extra combats not probed (no such card)) |
-| 6 | Spiteful Sliver | IN PROGRESS (~17:30 UTC) |
-| 7 | Loran's Escape | pending |
+| 6 | Spiteful Sliver | DONE de3ab61d7 (unit 3428, scen 571/571, smoke 0/219 moved vs 5b; one granted instance per Spiteful Sliver, snapshot pre-apply (LKI); 2 Slivers + Act vs 52 life kills exactly; viewer prompt now keys on t_viewer_reflection (granted triggers were never prompted); Sliver TOKENS not prompted (no CardDefinition; none in pool)) |
+| 6a | fix: 5b scenario's 'sick' Doll was unsickened by untap -> add resume_at main1 so it really needs the combat fan | DONE (parent) |
+| 7 | Loran's Escape | IN PROGRESS (~18:00 UTC) |
 | 8 | Nomads en-Kor shields (sweeper rider) | pending |
 | 9 | Shaman en-Kor {1}{W} pull | pending |
 | 10 | StuffyDollProvider + ExtraLethalDamage | pending |
