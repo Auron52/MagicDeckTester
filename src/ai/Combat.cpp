@@ -412,7 +412,7 @@ static CombatDamageResult ResolveCombatDamageTwoStep(GameState& state, const std
             dealt[k] += power;
             if (power > 0)
             {
-                state.opponent_lost_life_this_turn = true;
+                state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, power);
                 step_idx.push_back(idx);
                 step_pw.push_back(power);
                 if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }
@@ -639,7 +639,7 @@ CombatDamageResult ResolveCombatDamage(GameState& state, const std::vector<int>&
         out.total_damage += power;
         if (power > 0)
         {
-            state.opponent_lost_life_this_turn = true;
+            state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(opp_idx, power);
             damaging_idx.push_back(idx);   // Goblin Lackey: dealt combat damage to a player
             damaging_pw.push_back(power);  // Shroofus Sproutsire: "create THAT MANY" tokens
             if (state.reflect_armed) { rfx_num.push_back(p.card.m_number); rfx_pw.push_back(power); }

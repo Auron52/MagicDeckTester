@@ -421,6 +421,25 @@ struct GameState
     // (and running the fallback lookahead) every remaining turn. See GameEngine::PlayOutFrom.
     bool                     proven_no_win                = false;
     bool                     opponent_lost_life_this_turn = false;
+    // NEEDLE DROP ("any target that was dealt damage this turn"): was player i DEALT DAMAGE this turn --
+    // combat or noncombat, never a bare life loss or a life payment (opponent_lost_life_this_turn above
+    // counts both, so it cannot answer this). Index 1 is the opposing TEAM in 2HG: the heads share one
+    // life pool, so a hit on either head is outcome-identical to a hit on the other. Written at every
+    // damage-to-a-player site through MarkPlayerDealtDamage (unconditionally -- a bool store), cleared at
+    // BOTH untap sites (GameEngine::UntapStep, TurnSolver::SimulateEndAndStartNextTurn; the
+    // creature_died_this_turn pattern). FUTURE-DETERMINING within the turn for a deck holding a reader
+    // (it decides Needle Drop's legal targets), so it is folded into dominance::Build and BuildSimKey
+    // when TRUE and deck_reads_damage_dealt is set; every other deck keeps its exact key.
+    std::array<bool, 2>      player_dealt_damage_this_turn{};
+    // Deck constant (StampDeckTraits): the list holds a card with
+    // CardParams::target_dealt_damage_this_turn. Gates the folds above. DEFAULT TRUE (an unstamped
+    // GameState -- the scenario harness -- keeps the fold, the only-err-true rule). Never folded.
+    bool                     deck_reads_damage_dealt = true;
+    void MarkPlayerDealtDamage(int player, int amount)
+    {
+        // A ChosenTarget's 2HG second head arrives as index 2: the same opposing team (index 1).
+        if (amount > 0 && player >= 0) { player_dealt_damage_this_turn[player == 0 ? 0 : 1] = true; }
+    }
     // Archive Trap: an opponent actually searched their own library this turn.
     // Searching the opponent's library ourselves (Surgical Extraction) does not qualify.
     bool                     opponent_searched_library_this_turn = false;

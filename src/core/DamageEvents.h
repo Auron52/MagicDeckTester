@@ -284,6 +284,7 @@ inline int DealDamageEvent(GameState& s, int src_ctrl, bool src_is_creature, boo
         else
         {
             s.players[src_ctrl].life -= to_self;
+            s.MarkPlayerDealtDamage(src_ctrl, to_self);
             dealt += to_self;
             Log(s, "lifeloss", std::string("🩸 ") + src + " deals " + std::to_string(to_self)
                                + " damage to you");
@@ -292,7 +293,7 @@ inline int DealDamageEvent(GameState& s, int src_ctrl, bool src_is_creature, boo
     if (to_opp > 0)
     {
         s.players[opp].life -= to_opp;
-        s.opponent_lost_life_this_turn = true;
+        s.opponent_lost_life_this_turn = true; s.MarkPlayerDealtDamage(opp, to_opp);
         dealt += to_opp;
     }
     if (!src_is_creature && dealt > 0)
@@ -732,6 +733,7 @@ struct PayAttemptSnap
     GameState::PrepayWildTrue pwt;   // MTG_PREPAY_WILD_TRUE record (restored with the float)
     int  life_a = 0, life_o = 0, energy = 0;
     bool oll = false;
+    std::array<bool, 2> pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
     void Take(const GameState& s, const ManaPool* available)
     {
         const int a = s.active_player_index;
@@ -741,6 +743,7 @@ struct PayAttemptSnap
         if (available) { av = *available; }
         life_a = s.players[a].life; life_o = s.players[1 - a].life;
         energy = s.players[a].energy_counters; oll = s.opponent_lost_life_this_turn;
+        pdd = s.player_dealt_damage_this_turn;
     }
     void Restore(GameState& s, ManaPool* available) const
     {
@@ -751,6 +754,7 @@ struct PayAttemptSnap
         if (available) { *available = av; }
         s.players[a].life = life_a; s.players[1 - a].life = life_o;
         s.players[a].energy_counters = energy; s.opponent_lost_life_this_turn = oll;
+        s.player_dealt_damage_this_turn = pdd;
     }
 };
 

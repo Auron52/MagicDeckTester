@@ -11027,6 +11027,7 @@ struct PayRefineSnap
     ManaPool                 av;
     int                      life = 0, opp_life = 0, energy = 0;
     bool                     oll = false;
+    std::array<bool, 2>      pdd{};   // Needle Drop's damaged-this-turn bits ride with oll
     std::size_t              gy = 0;
     PayRollbackLedger        ledger;
 
@@ -11041,7 +11042,7 @@ struct PayRefineSnap
         pwt = s.prepay_wild_true;
         av = available != nullptr ? *available : ManaPool{};
         life = s.players[a].life; opp_life = s.players[1 - a].life; energy = s.players[a].energy_counters;
-        oll = s.opponent_lost_life_this_turn;
+        oll = s.opponent_lost_life_this_turn; pdd = s.player_dealt_damage_this_turn;
         gy = s.players[a].graveyard.size();
         ledger = s.pay_ledger;
     }
@@ -11057,7 +11058,7 @@ struct PayRefineSnap
         s.prepay_wild_true = pwt;
         if (available != nullptr) { *available = av; }
         s.players[a].life = life; s.players[1 - a].life = opp_life; s.players[a].energy_counters = energy;
-        s.opponent_lost_life_this_turn = oll;
+        s.opponent_lost_life_this_turn = oll; s.player_dealt_damage_this_turn = pdd;
         s.pay_ledger = ledger;
     }
 };
@@ -13037,6 +13038,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
         const int  la  = state.players[a].life;
         const int  lo  = state.players[1 - a].life;
         const bool oll = state.opponent_lost_life_this_turn;
+        const std::array<bool, 2> pdd = state.player_dealt_damage_this_turn;   // Needle Drop's bits ride with oll
         auto restore = [&]()
         {
             RestorePayFields(state.battlefield, bf_snap);
@@ -13051,6 +13053,7 @@ static bool TapForCostSharedImpl(GameState& state, const ManaCost& cost_in, bool
             state.players[a].life              = la;
             state.players[1 - a].life          = lo;
             state.opponent_lost_life_this_turn = oll;
+            state.player_dealt_damage_this_turn = pdd;
         };
         int fodder_free_ub = 0;
         {

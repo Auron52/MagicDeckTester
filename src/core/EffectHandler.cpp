@@ -726,7 +726,7 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     if (dmg > 0)
                     {
                         state.players[1 - entry.controller_index].life -= dmg;
-                        state.opponent_lost_life_this_turn = true;
+                        state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - entry.controller_index, dmg);
                     }
                     // The opponent's share of the draw picks (clamped like the rollout's twin).
                     const int opp_picks = std::clamp(entry.modal_opp_draw_picks, 0,
@@ -887,6 +887,7 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
                                             entry.soulfire_own_targets.value_or(0), &def, "exec");
             damage = sr.face_damage;
             state.players[entry.controller_index].life -= sr.self_damage;
+            state.MarkPlayerDealtDamage(entry.controller_index, sr.self_damage);
         }
     }
 
@@ -915,6 +916,20 @@ void EffectHandler::ResolveDirectDamage(GameState& state, const StackEntry& entr
             MoveToGraveyard(state, entry);
             return;
         }
+    }
+    else if (def.params.target_dealt_damage_this_turn && !entry.targets.empty()
+             && entry.targets.front().type == Target::Type::Player
+             && !DamagedThisTurnPinLegal(state, entry.controller_index,
+                                         entry.targets.front().player_index == entry.controller_index ? -1 : 0))
+    {
+        // Needle Drop on the face-only route: its player target no longer qualifies (CR 608.2b) -- the
+        // whole spell, draw included, does not resolve. Unreachable after the pre-payment gate
+        // (DamagedTargetCastLegal); kept so resolution never deals damage to an illegal target.
+        // Lockstep twin: apply_one's face branch.
+        state.players_cant_gain_life_this_turn = prior_no_gain;
+        state.damage_cant_be_prevented_this_turn = prior_no_prevent;
+        MoveToGraveyard(state, entry);
+        return;
     }
     else for (const Target& t : entry.targets)
     {

@@ -10484,6 +10484,9 @@ void AIEngine::CastSpellFromHand(GameState& state, Card& hand_card_in, ManaPool&
     // ...and an Aura spell whose searched host is not a legal target now (CR 303.4a / 601.2c; the SHARED
     // AuraSpellCastLegal; lockstep twin of apply_one's guard).
     if (!AuraSpellCastLegal(state, state.active_player_index, *def, enchant_target)) { return; }
+    // ...and Needle Drop with no target dealt damage this turn (the SHARED DamagedTargetCastLegal;
+    // lockstep twin of apply_one's guard).
+    if (!DamagedTargetCastLegal(state, state.active_player_index, *def)) { return; }
     if (riders.awaken && AwakenLandTargetIndex(state, state.active_player_index, enchant_target) < 0)
     { return; }
     // PITCH EVOKE (Fury): the evoke's cost is a hand card (riders.pitch_name). No such card left -> the
@@ -11794,7 +11797,7 @@ void AIEngine::DoActivateLandsEdge(GameState& state, int count, int rate, bool l
     {
         DiscardCardFromHand(state, state.active_player_index, bi - fired, &mq, "Land's Edge");
         opp.life -= rate;
-        if (rate > 0) { state.opponent_lost_life_this_turn = true; }
+        if (rate > 0) { state.opponent_lost_life_this_turn = true; state.MarkPlayerDealtDamage(1 - state.active_player_index, rate); }
         // `log` is false for the trial copies in ActivateLandsEdge (those are throwaway
         // win-turn projections, not the realised game) -- logging them leaked phantom
         // ATTACK entries into the real game log. Only the final fire below logs.

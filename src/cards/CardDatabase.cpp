@@ -1930,6 +1930,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
 
     p.expressive_iteration      = params.value("expressive_iteration", false);
     p.cast_draw                 = params.value("cast_draw", 0);
+    p.target_dealt_damage_this_turn = params.value("target_dealt_damage_this_turn", false);
     p.post_draw_discard         = params.value("post_draw_discard", 0);
     p.enters_with_gy_creature_counters = params.value("enters_with_gy_creature_counters", false);
     p.return_up_to_gy_lands     = params.value("return_up_to_gy_lands", 0);
@@ -2062,6 +2063,7 @@ CardParams CardDatabase::BuildParamsFromJson(const json& params) const
         p.granted_tap_mana_subtypes.push_back(s);
     p.granted_tap_mana_color    = params.value("granted_tap_mana_color", std::string());
     p.etb_damage_each_opponent  = params.value("etb_damage_each_opponent", 0);
+    p.etb_opp_may_take_damage_to_sac = params.value("etb_opp_may_take_damage_to_sac", 0);
     p.etb_reveal_count          = params.value("etb_reveal_count", 0);
     for (const std::string& s : params.value("etb_reveal_put_subtypes", json::array()))
         p.etb_reveal_put_subtypes.push_back(s);

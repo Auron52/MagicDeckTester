@@ -18705,6 +18705,41 @@
     "any_color_filter": true,
     "hand_put_self_cost": "{4}"
    }
+  },
+  {
+   "name": "Needle Drop",
+   "mana_cost": "{R}",
+   "types": [
+    "Instant"
+   ],
+   "subtypes": [],
+   "keywords": [],
+   "oracle_text": "Needle Drop deals 1 damage to any target that was dealt damage this turn.\nDraw a card.",
+   "template": "direct_damage",
+   "parameters": {
+    "damage": 1,
+    "targeting": "any",
+    "target_dealt_damage_this_turn": true,
+    "cast_draw": 1
+   }
+  },
+  {
+   "name": "Vexing Devil",
+   "mana_cost": "{R}",
+   "types": [
+    "Creature"
+   ],
+   "subtypes": [
+    "Devil"
+   ],
+   "keywords": [],
+   "power": 4,
+   "toughness": 3,
+   "oracle_text": "When this creature enters, any opponent may have it deal 4 damage to them. If a player does, sacrifice this creature. [PROVISIONAL passive-opponent model of the opponent's choice (USER may change it; one place: VexingDevilOpponentTakesDamage in SpellEffects.h): the opponent takes the 4 damage unless it would be lethal (opponent life <= 4; the shared team life in 2HG), in which case the Devil stays as a 4/3. The choice is the OPPONENT's, so it is neither a search branch nor a viewer decision; executor and rollout apply the same rule through the shared enter cascade. Taken: 4 damage from the Devil to the opponent (noncombat damage from a red creature source -- marks the opponent dealt damage / lost life this turn) and the Devil is sacrificed to our graveyard.]",
+   "template": "vanilla_creature",
+   "parameters": {
+    "etb_opp_may_take_damage_to_sac": 4
+   }
   }
  ]
 }

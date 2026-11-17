@@ -2975,6 +2975,15 @@ struct CardParams
     // Magma Opus: a non-draw spell that ALSO draws on resolution ("draw two cards"). Drawn to
     // hand in both cast paths (executor + rollout) -- deterministic, lockstep. 0 = no draw rider.
     int  cast_draw = 0;
+    // Needle Drop: "deals N damage to ANY TARGET THAT WAS DEALT DAMAGE THIS TURN". A target restriction
+    // (CR 601.2c / 608.2b), not a cost: a player is legal only when GameState::player_dealt_damage_this_turn
+    // is set for them (DAMAGE -- combat or noncombat -- never bare life loss); a creature only when it has
+    // damage marked (Permanent::damage > 0, cleared at cleanup). With no legal target the spell cannot be
+    // cast: both apply worlds refuse it before paying (DamagedTargetCastLegal), FixedBurnCandidates filters
+    // the cast-time pin list (the viewer's `target` decision reads the same list), and the free-cast walks
+    // read FreeCastHasLegalTargets. Instant: post-combat legality (combat damage) is why
+    // GoldFishRunner::DeckUsesSecondMain detects it.
+    bool target_dealt_damage_this_turn = false;
     // Careful Study / Faithless Looting: draw, then discard this many hand cards. The
     // existing post-draw hand-choice fan (`put_back_from_hand`) searches which cards;
     // resolution sends them through the discard hook instead of back to the library.
@@ -3274,6 +3283,13 @@ struct CardParams
     // OpponentGainsLife life-loss path so the win projection sees it) AND N to each permanent the
     // opponent controls (only nonzero when the opponent has spawn tokens). > 0 gates it.
     int etb_damage_each_opponent = 0;
+    // Vexing Devil: "When this creature enters, any opponent may have it deal N damage to them. If a
+    // player does, sacrifice this creature." The choice is the OPPONENT'S, so it is an ENVIRONMENT model
+    // of the passive goldfish opponent, not a decision of ours (no search branch, no viewer decision):
+    // VexingDevilOpponentTakesDamage (SpellEffects.h) is the ONE place the policy lives. Resolved in the
+    // universal own-ETB cascade (FireOwnEtbTriggers), so every enter route, executor and rollout alike,
+    // applies the same rule. > 0 gates it; the value is N.
+    int etb_opp_may_take_damage_to_sac = 0;
 
     // ETB reveal-and-cheat (Muxus, Goblin Grandee: "reveal the top six cards; put all Goblin
     // creature cards with mana value 5 or less onto the battlefield and the rest on the bottom").

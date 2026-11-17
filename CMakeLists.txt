@@ -386,6 +386,7 @@ add_executable(mtg-test
     test/unit/test_fetch_crack_first.cpp
     test/unit/test_boars_zhurtaa.cpp
     test/unit/test_boars_herald.cpp
+    test/unit/test_needle_drop_vexing_devil.cpp
     test/unit/test_boars_endraze.cpp
     test/unit/test_boars_raggadragga.cpp
     test/unit/test_boars_decimator.cpp

@@ -399,6 +399,7 @@ void GameEngine::UntapStep(GameState& state)
     state.damage_cant_be_prevented_this_turn = false;
     state.creature_died_this_turn = false;   // morbid resets each turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.permanent_left_under_control_this_turn = false;
+    state.player_dealt_damage_this_turn = {};   // Needle Drop's damaged-this-turn (lockstep w/ SimulateEndAndStartNextTurn)
     state.combat_damage_prevented_this_turn = false;   // Kami of False Hope (lockstep w/ SimulateEndAndStartNextTurn)
     state.ripple_script = RippleScript{};    // the ripple chain script is turn-scoped (lockstep twin: SimulateEndAndStartNextTurn)
     state.noncombat_damage_received_this_turn = {};
