@@ -252,3 +252,36 @@ So the Ponder keep-vs-shuffle call is ~~**still unsearched**~~ *(2026-09-03: sea
 tutor target now uses — see `searched-action-subdecisions.md`. The land-ETB scry disposition in this
 document is unaffected: `Plan::scry_choice` variants are emitted in `EnumeratePlansWithLand` *after*
 `EnumeratePlans` returns, so they never meet the dedup.
+
+## 2026-11-17 USER ruling: EVERY scry site is searched, then pruned (engine-wide)
+
+The question came up while analyzing Stuffy Doll (Loran's Escape, `cast_scry: 1`). Today the searched
+disposition fan reaches three kinds of scry:
+- the land-ETB scry (`plan.scry_choice`);
+- the cantrip axes (Ponder / Preordain);
+- the land-triggered scry behind `MTG_SCRY_SEARCH_TRIGGERED`.
+
+Every other scry site is still decided by a single in-window provider pick (`HeuristicTopDisposition` via
+`ChooseTopDisposition`). That covers the `cast_scry` rider in `ResolveSoloTargetTrick` and any other spell or
+ability scry that resolves outside those three axes. The USER's words:
+
+> "It should be searched and typically overridden by a provider and yes, this should be engine-wide. That
+> doesn't mean we should just leave it searched in most cases, though. This is the kind of thing worth a prune."
+
+So:
+1. **Inventory every `ChooseTopDisposition` call** that a searched frame can reach without a
+   `ScriptedTopChoice` pin. Each such call is an in-window single pick; the no-greedy census should count them.
+2. **Give each one a pinned axis**, using the same `ScriptedTopChoice` + `TopDispositionCandidates` mechanism as
+   the land-ETB scry.
+3. **Prune it per deck** in the provider. `ScryVerdict` is the existing hook: a firm keep/away verdict removes
+   the alternative. The USER expects most decks to carry a prune, so "searched" must not mean "doubles every plan".
+4. **Adoption** follows the usual bar: per deck, the decks that move, held-out A/B.
+
+**First consumer:** Stuffy Doll step 9d (Loran's Escape scry 1, StuffyDollProvider verdict). The engine-wide
+rollout to the other `cast_scry` cards is a separate change, not yet scheduled.
+
+**Related future work (same session, USER):** Forbidden Orchard as written. The Spirit is created when the
+Orchard is tapped, not by the turn-start model the engine uses now:
+
+> "I guess we can keep this for now, but you are correct that we will probably want to move toward
+> supporting it as written at some point."

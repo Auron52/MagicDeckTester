@@ -77,6 +77,7 @@ implementer agent per step, serial.
 | 10 | StuffyDollProvider + ExtraLethalDamage | DONE 6d6454d53 (unit 3453, scen 577/577, smoke 0/219 moved vs 9; routes first, signature = §8 params; F2/F3 reflection folds; ExtraLethalDamage; d0 50 games: 44 won avg 5.386 vs 5.591 on the old ModernRwBurn misroute; FIXED step-2 Act discount counting the Doll ping as an ETB, FIXED step-9 pull encoding crash on opp spawn numbers >= 2^17; opp-Spirit prune built OFF (MTG_STUFFY_OPP_CREATURE_PRUNE) pending A/B; cast order = generic (Q-U5)) |
 | 9b | Shaman pull AND en-Kor {0} shields from ANY damage source in the engine; provider prunes to our sweeper (+ P0-P3 for the pull) (USER 20:30/20:35); provider GC-host PRUNE (1 host, 2 in the split case) + Loran's target PRUNE to the GC'd creature (USER 20:40-21:14) | DONE a454f7f31 (unit 3460, scen 577/577, smoke 0/219 moved vs 10; riders on every damage event (Batch kind), provider prunes MTG_UNPRUNE=redirectwindow/gchost/escapetarget; d0 50 games 44 won avg 5.386 = step 10 (11 games played differently, net 0 win turns); DECISION to confirm: Loran's prune drops same-plan HAND creatures as targets; viewer pull prompt repeats per loop step; held-out A/B of the prunes owed (measure + report)) |
 | 9c | searched attack-vs-hold for GC-enchanted non-indestructible creatures; cast order GC before Loran's (USER 20:50) | IN PROGRESS (~22:20 UTC) |
+| 9d | Loran's target prune admits a creature cast earlier in the same plan, and a same-plan GC host (line creature -> GC -> Escape -> Act) (USER 23:25); Loran's scry 1 searched + provider prune (USER 23:25, first consumer of the engine-wide searched-scry axis) | pending (after 9c) |
 | 11 | second main ON; sweepers (Act, Chain Reaction) cast in main 2 only; everything else unchanged (USER 21:45/21:48) | pending (after 9c) |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
@@ -187,6 +188,29 @@ deferrals provisional.
   else keep main-1 casting as today.
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
+- USER (~23:25, verbatim, on Q-U6): "Wait, we don't already allow doing nothing in main 1?" => answered: not
+  once any plan exists (the land drop being the usual "nothing else" line); only face-up holds and the Doll
+  hold append the pass. Proposal surfaced: append the pass engine-wide (adds a line, removes none) as its own
+  change with the no-greedy adoption bar. Default until the USER answers: other decks unchanged.
+- USER (~23:25, verbatim, answers Q-U3): "It should be searched and typically overridden by a provider and yes,
+  this should be engine-wide. That doesn't mean we should just leave it searched in most cases, though. This is
+  the kind of thing worth a prune." => scry becomes a SEARCHED axis engine-wide, with provider prunes cutting
+  it down in most cases. Engine-wide part recorded in docs/design/searched-scry-disposition.md (2026-11-17 section). Loran's Escape's scry 1
+  is searched, with a StuffyDollProvider prune.
+- USER (~23:25, verbatim, answers Q-U2): "I guess we can keep this for now, but you are correct that we will
+  probably want to move toward supporting it as written at some point." => keep the turn-start Spirit model;
+  tap-time Orchard Spirits is future work (noted in docs/design/searched-scry-disposition.md).
+- USER (~23:25, verbatim, on the step-9b Loran's prune dropping same-plan HAND targets): "That should be fixed,
+  given the potential creature -> Guilty Conscience -> Loran's Excape -> Blasphemous act line." => step 9d:
+  the Escape's target prune must admit a creature cast earlier in the SAME plan, and its "the GC'd creature"
+  clause must cover a GC cast earlier in the same plan (today the target is fixed at enumeration, before the
+  same-plan GC resolves).
+- USER (~23:25, verbatim, on the opponent-Spirit prune): "That is this prune?" => yes: MTG_STUFFY_OPP_CREATURE_PRUNE
+  drops opponent creatures (Orchard Spirits) as reflection-trigger targets. Plan: held-out A/B, adopt on the
+  USER's prune-adoption criteria (better overall + no unrecognizable lost lines + faster), report.
+- USER (~23:25, verbatim, on the stale origin smoke GT): "I'm hearing about this from at least one other agent,
+  but still have no details on what changes caused this so I would appreciate some." => attribution bisect of
+  the 44 FAIL keys on clean binaries (not ours; reported to the USER, not accepted).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
   Loran's hexproof (inert); en-Kor shields offered only as a rider on our own sweeper and Shaman's
   source = our sweeper (other windows dominated, design §4.2/4.3); canonical simultaneous-trigger
