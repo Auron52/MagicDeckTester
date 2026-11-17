@@ -160,6 +160,9 @@ deferrals provisional.
      * Everything else pruned (non-reflectors, en-Kors, lower-power duplicates of the same role).
   USER (~21:12): "I'm saying this is an exception to the prune." => the DEFAULT is ONE host; the two-host split case
   (go-off-now creature vs a wait-a-turn Doll / bigger sick reflector) is the EXCEPTION where both are searched.
+- USER (~21:14, verbatim): "Yes, that sounds good regarding Loran's Escape." => Loran's Escape target is a PRUNE:
+  when a creature carrying Guilty Conscience exists, the provider RESTRICTS the Escape's targets to it (restrict-only;
+  lifted by MTG_UNPRUNE / human play; with none, the engine's folded target list stands).
   Adopted as the USER's order for this deck's provider; measured once the deck runs and reported back
   (if it measures worse, root-cause it and propose an amendment — never silently drop it).
 - Q-U1 PROVISIONAL deferrals: Boros Reckoner {R/W} first strike (no blockers -> outcome-inert);
