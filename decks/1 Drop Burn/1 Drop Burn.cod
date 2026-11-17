@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cockatrice_deck version="1">
+    <lastLoadedTimestamp></lastLoadedTimestamp>
+    <deckname></deckname>
+    <format></format>
+    <bannerCard providerId=""></bannerCard>
+    <comments></comments>
+    <tags/>
+    <zone name="main">
+        <card number="3" name="Fireblast" setShortName="PLST" collectorNumber="VIS-79" uuid="ff45073c-5ac1-4295-833e-58b253319c9b"/>
+        <card number="14" name="Mountain" setShortName="ACR" collectorNumber="107" uuid="1a534ae1-4e6f-43ae-a8ad-89e306f11f21"/>
+        <card number="2" name="Sunbaked Canyon" setShortName="ACR" collectorNumber="111" uuid="bd5b2ce3-3cf0-47dd-9b76-940ae7eb8498"/>
+        <card number="4" name="Lightning Bolt" setShortName="CLU" collectorNumber="141" uuid="77c6fa74-5543-42ac-9ead-0e890b188e99"/>
+        <card number="2" name="Needle Drop" setShortName="PLST" collectorNumber="LRW-186" uuid="202bd41b-81bd-4824-8c6c-4fd34a6cf082"/>
+        <card number="4" name="Goblin Guide" setShortName="MB2" collectorNumber="58" uuid="1aac57a6-29c0-4ccb-b825-b1e04ae0ea3e"/>
+        <card number="3" name="Grim Lavamancer" setShortName="DMR" collectorNumber="126" uuid="1ab6ffe8-e1ad-4db9-98f7-d6038f271866"/>
+        <card number="4" name="Monastery Swiftspear" setShortName="PIO" collectorNumber="147" uuid="dc63a3f6-d105-42b1-aaf9-78a680424dfc"/>
+        <card number="4" name="Vexing Devil" setShortName="INR" collectorNumber="178" uuid="ba50e7df-9dec-4df8-94a5-5883bbedf0cb"/>
+        <card number="4" name="Boltwave" setShortName="FDN" collectorNumber="79" uuid="8d1ec351-5e70-4eb2-b590-6bff94ef8178"/>
+        <card number="4" name="Chain Lightning" setShortName="AA3" collectorNumber="12" uuid="bd9bad5a-1490-4929-8ea9-d0737720e60e"/>
+        <card number="4" name="Lava Spike" setShortName="TSR" collectorNumber="347" uuid="0852af16-f650-4293-81d8-9008882ff45a"/>
+        <card number="4" name="Rift Bolt" setShortName="PLST" collectorNumber="TSP-176" uuid="1c5cac57-5c8f-4404-894b-7b055fb19152"/>
+        <card number="4" name="Skewer the Critics" setShortName="OTP" collectorNumber="26" uuid="9f3261b6-4f5c-4cf0-a396-1d9397603602"/>
+    </zone>
+</cockatrice_deck>

@@ -8807,12 +8807,6 @@ int GenericProvider::CastOrderRank(const GameState& s, const CardDefinition& def
         && def.params.reduces_subtype_colored_cost.has_value()) { return 8; }
     if (IsManaRitual(def))                       { return 15; }
     if (def.params.verse_damage)                 { return 19; }
-    // 29 a DAMAGED-TARGET spell (Needle Drop: "any target that was dealt damage this turn"): after every
-    //    other noncreature spell (20) and the creatures (10), so a same-main burn or a Vexing Devil's ETB
-    //    has made the opponent a legal target before it is cast -- ranked with them, plan order could put
-    //    it first and its cast gate would refuse it. Before the on-cast self-damage tier (30). A pure
-    //    card-parameter test, so no deck without the card moves.
-    if (def.params.target_dealt_damage_this_turn) { return 29; }
     if (def.params.on_cast_trigger_damage > 0) { return 30; }
     // Destroy-all-enchantments (Reverent Silence) wipes our OWN Aria/Remedy, so cast it LAST --
     // after this turn's wincon casts (Aria's lethal ETB reversal) have already resolved. Casting
@@ -27158,6 +27152,7 @@ namespace
     const GaladrielProvider      g_galadriel;
     const NivMizzetComboProvider g_niv_mizzet_combo;
     const LandfallElementalsProvider g_landfall_elementals;
+    const OneDropBurnProvider    g_one_drop_burn;
     const CycloneProvider        g_cyclone;
     const HydrasProvider         g_hydras;
     const FluctuatorProvider     g_fluctuator;
@@ -29960,6 +29955,11 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     // landfall aggro list may run) and Mossborn Hydra's landfall_double_self_counters (2026-10-22: a
     // Landfall screening candidate, so it would pull a Landfall list that adopts it onto this provider).
     bool lfe = false;
+    // 1 DROP BURN (onboarding 2026-11-17): Needle Drop's target_dealt_damage_this_turn OR Vexing Devil's
+    // etb_opp_may_take_damage_to_sac -- two different cards, both params carried by no other card.
+    // Burn staples (Bolt, Goblin Guide, Swiftspear, Lava Spike, Fireblast, Lavamancer) are excluded:
+    // every red aggro list runs them.
+    bool one_drop_burn = false;
     // UNPREDICTABLE CYCLONE (cycling into Eldrazi; onboarding 2026-10-26). Signature = Unpredictable
     // Cyclone's cycling-draw replacement (cycle_draw_exile_shared_type_freecast) OR the CONJUNCTION of
     // Emrakul's cast-trigger extra turn (cast_trigger_extra_turns) and Curator of Mysteries' cycle-or-
@@ -30152,6 +30152,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
             || p.soulbond_grants_untap_self_cost.has_value()) { alchemist = true; }
         if (p.scry_reveal_land_to_battlefield || p.mana_colors_of_graveyard_legends) { galadriel = true; }
         if (p.enters_look_top_land_or_hand || p.mana_only_subtype_abilities) { lfe = true; }
+        if (p.target_dealt_damage_this_turn || p.etb_opp_may_take_damage_to_sac > 0) { one_drop_burn = true; }
         if (p.cycle_draw_exile_shared_type_freecast) { cyclone = true; }
         if (p.land_tap_bonus > 0 || p.chosen_color_pump_power != 0 || p.chosen_color_pump_tough != 0
             || p.upkeep_double_self_counters || p.enters_with_x_dice_sides > 0
@@ -30690,6 +30691,7 @@ const DecisionProvider& DetectDecisionProvider(const Decklist& deck)
     if (jumbo_cactuar) { return g_jumbo_cactuar; }
     if (cyclone)     { return g_cyclone; }
     if (lfe)         { return g_landfall_elementals; }
+    if (one_drop_burn) { return g_one_drop_burn; }
     if (niv)         { return g_niv_mizzet_combo; }
     // Vampires: its signature is carried by no other card, so the position is free (see the flag).
     if (vampires)    { return g_vampires; }
@@ -66943,6 +66945,18 @@ bool MidrangeBurnProvider::CleanupDiscardShedStable() const
 // The generic creature-first rank attempted it before the Bolts that made its {R}
 // bill payable, so a legal three-spell plan dropped its Incinerator at execution.
 // DEFAULT ON; =0 restores the common rank for the cast-order A/B.
+// ---- OneDropBurnProvider::CastOrderRank -------------------------------------------------------
+// 29 a DAMAGED-TARGET spell (Needle Drop: "any target that was dealt damage this turn"): after every
+//    other noncreature spell (20) and the creatures (10), so a same-main burn or a Vexing Devil's ETB has
+//    made the opponent a legal target before it is cast -- ranked with them, plan order could put it first
+//    and its cast gate would refuse it. Before the on-cast self-damage tier (30). Everything else is the
+//    Generic order. Cast order is USER-owned: this tier was surfaced to the user at onboarding (2026-11-17).
+int OneDropBurnProvider::CastOrderRank(const GameState& s, const CardDefinition& def) const
+{
+    if (def.params.target_dealt_damage_this_turn) { return 29; }
+    return DeckProvider::CastOrderRank(s, def);
+}
+
 int MidrangeBurnProvider::CastOrderRank(const GameState& state, const CardDefinition& def) const
 {
     static const bool inc_last = EnvOn("MTG_MIDRANGE_INC_ORDER", true);

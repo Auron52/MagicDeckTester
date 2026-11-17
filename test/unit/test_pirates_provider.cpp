@@ -326,6 +326,9 @@ TEST_CASE("Pirates routing: every deck in decks/ resolves exactly as before, Pir
         // Midrange Burn is intentionally separate from the low-curve Burn provider:
         // Chandra and Incinerator need their own cast/legend ordering.
         {"Midrange Burn", "MidrangeBurn"},
+        // 1 Drop Burn (onboarding 2026-11-17, Stage 4a): an empty DeckProvider derivation routed by Needle
+        // Drop / Vexing Devil; it rode Generic before.
+        {"1 Drop Burn", "OneDropBurn"},
         {"Modern RW Burn", "ModernRwBurn"},
         // Image's copy-target policy and Tide/Seas land effects belong to Merfolk's own provider.
         {"Merfolk", "Merfolk"},
