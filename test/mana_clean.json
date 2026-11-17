@@ -1243,6 +1243,50 @@
      "seed": 30041000,
      "src": "3bda5c647e7c49dbe493bd77d1ef4a0da0a689b6",
      "verdict": "issues"
+    },
+    {
+     "binary": "PGO",
+     "by_class": {
+      "APPLY-DROP": 1742,
+      "APPLY-DROP-ORDER": 700,
+      "CONTINUATION-DIFFERS": 430,
+      "DOMINATED-CREATURE": 658,
+      "DOMINATED-LAND": 5493,
+      "DROP-COVERED": 2562,
+      "ENUM-GAP": 52,
+      "ORACLE-GAP": 66,
+      "PHANTOM": 7468
+     },
+     "commit": "b74c6610630542ad813560d7c6766f45cdb017ff",
+     "date": "2026-11-17T04:48:22Z",
+     "decisions": 43303,
+     "deck": "decks/Bruna/Bruna.cod",
+     "deck_sha": "eb3157a219bf672d84335f7dd2074a5e5f42fc37",
+     "game_index": 46000,
+     "games": 5000,
+     "identity": true,
+     "issue_classes": [
+      "ENUM-GAP",
+      "APPLY-DROP",
+      "APPLY-DROP-ORDER",
+      "DOMINATED-CREATURE",
+      "DOMINATED-ONESHOT",
+      "DOMINATED-HASTE",
+      "DOMINATED-OTHER",
+      "ORACLE-GAP",
+      "UNMODELED",
+      "CAPPED",
+      "CAPPED-DECISION"
+     ],
+     "issues": 3218,
+     "life_breakpoints": [],
+     "ms_off": 2731656,
+     "ms_on": 5956387,
+     "report": "logs/mana_clean/codex-due-four-20261117/report.md",
+     "run": "codex-due-four-20261117",
+     "seed": 30046000,
+     "src": "fcb9352608ea7e19580916d696643bc094d6ef3a",
+     "verdict": "issues"
     }
    ]
   },

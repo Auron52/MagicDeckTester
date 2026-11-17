@@ -6,9 +6,16 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 **Active batch:** refreshing four older issue records at source
 `fcb9352608ea`, 5,000 games each: Anti-Lifegain, Bruna, Midrange Burn,
-and Selesnya Lifegain. Exec session `51923`; console
-`build/scratch/dragonstorm_visible_lump_ab/due_four_gate.out`. Command:
+and Selesnya Lifegain. The first 32-worker attempt hit the 40 GB RSS cap
+(oracle-on exit 137); only Bruna finished a full 5,000-game block with
+3,218 issues, and the other three records are incomplete. Resume the same
+run at **16 workers** so completed chunks survive. First attempt console:
+`build/scratch/dragonstorm_visible_lump_ab/due_four_gate.out`; resume
+console: `build/scratch/dragonstorm_visible_lump_ab/due_four_resume.out`.
+Original command:
 `MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run anti_lifegain bruna midrange_burn selesnya_lifegain --games 5000 --name codex-due-four-20261117`.
+Resume command:
+`MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run --resume codex-due-four-20261117 --threads 16`.
 Output: `build/scratch/mana_clean/codex-due-four-20261117/` and report
 `logs/mana_clean/codex-due-four-20261117/report.md` when complete.
 Commit the updated `test/mana_clean.json` and this handoff after it finishes.
