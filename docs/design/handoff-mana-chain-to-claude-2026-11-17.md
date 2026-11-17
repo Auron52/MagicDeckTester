@@ -2,7 +2,20 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Current state, updated 05:36 UTC
+## Current state, updated 05:39 UTC
+
+**First new-source clean refresh complete:** 5,000 games each at source
+`f7cce0693b6a`, oracle-on/off play byte-identical. Burn, Red
+Elementals, Slivers, Giants, and Auras are clean; Breaching Dragonstorm
+has **two ENUM-GAP** flags, zero other issue classes. Report:
+`logs/mana_clean/codex-clean-refresh-newsrc-a-20261117/report.md`.
+The two exact repros are seed 30222319 T6 (Breaching Dragonstorm then
+Creative Technique, with Mountain land drop) and seed 30221073 T7
+(Creative Technique/Call Forth the Tempest and sacrifice lands; paying
+order casts Call Forth first). These were new seed ranges, so the
+previous clean verdict does not imply a regression. Commit the updated
+`test/mana_clean.json` with this handoff, then refresh the remaining
+stale-clean decks. Windows CI watch remains active separately.
 
 **Shared branch pushed:** after a final fetch confirmed origin had not
 moved, `git push origin phase-1-2-deck-analyzer` published 57 local
