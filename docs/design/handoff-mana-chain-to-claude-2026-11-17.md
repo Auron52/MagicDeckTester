@@ -4,6 +4,17 @@ This is the current local handoff in the **primary checkout** `/workspaces/Magic
 
 ## Current state, updated 03:50 UTC
 
+A second pooled fresh PGO gate for 13 inexpensive stale-clean decks is
+the only active simulation batch, exec session 27562:
+
+```
+MTG_RSS_CAP_GB=40 python3 scripts/mana_clean.py run auras colossus_hammer critter_lifegain fluctuator kithkin knights lifegain_heliod_combo merfolk minotaur modern_rw_burn soldiers vampires white_knights --games 5000 --name codex-clean-refresh-two-20261117
+```
+
+Console: `build/scratch/dragonstorm_visible_lump_ab/clean_refresh_two_gate.out`.
+Read `logs/mana_clean/codex-clean-refresh-two-20261117/report.md` on
+completion, update this handoff, and commit `test/mana_clean.json`.
+
 **Six-deck fresh PGO gate complete:** all at source `fcb9352608ea`,
 5,000 games per deck, oracle-on/off play byte-identical. Burn,
 Breaching Dragonstorm, Red Elementals, Slivers, and Giants are **clean**
