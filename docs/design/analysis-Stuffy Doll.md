@@ -73,8 +73,8 @@ implementer agent per step, serial.
 | 6a | fix: 5b scenario's 'sick' Doll was unsickened by untap -> add resume_at main1 so it really needs the combat fan | DONE (parent) |
 | 7 | Loran's Escape | DONE 2275bff54 + 85ed9b0a6 (two agents; unit 3434, scen 572/572, smoke 0/219 moved vs 6; oracle targets EITHER side (no 'you control'); target searched w/ identical + no-effect folds; NEW searched relative order of sweeper vs setup spell (Loran's/GC), loam_order precedent — cast-order RANKS untouched; Loran-before-Act scenario wins T4; scry = engine-wide provider pick pending Q-U3; R7 unreachable here) |
 | 8 | Nomads en-Kor shields (sweeper rider) | DONE a4f820e2a (unit 3441, scen 573/573, smoke 0/219 moved vs 7; shield allocation = pins chosen at sweep resolution (dmgrx::AddShieldRider/PinnedChoice), shields live on the damage Batch (no GameState list); tie fold narrower than §4.2 (face-only reflectors folded; Reckoner/Nemesis/GC'd/Doll-chose-us kept apart); autonomous play never redirects onto a live non-reflector (viewer `divide` still offers all); Nomads+Act+Doll = 26 kills T4, control fixture leaves opp at 8; Q-R1 default: shield to a departed target not spent (CR 614.9)) |
-| 9 | Shaman en-Kor {1}{W} pull | IN PROGRESS (~19:25 UTC) |
-| 10 | StuffyDollProvider + ExtraLethalDamage | pending |
+| 9 | Shaman en-Kor {1}{W} pull | DONE 268e96f4a (unit 3447, scen 576/576, smoke 0/219 moved vs 8; pulls on the damage Batch applied before shields (CR 616.1); count/targets searched with folds P0-P3; {1}{W} paid at sweep resolution via TapForCostDirect, offered only while affordable; Shaman pull Spirit kill from 39 T4, Nomads control no win by T6) |
+| 10 | StuffyDollProvider + ExtraLethalDamage | IN PROGRESS (~20:15 UTC) |
 | 11 | second main (Q-U4) | pending |
 
 Defaults taken while USER questions are open (see below): Orchard model kept; Loran's scry =
