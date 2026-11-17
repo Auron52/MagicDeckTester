@@ -8231,5 +8231,53 @@
     "power": null,
     "toughness": null,
     "type_line": "Land — Forest Island"
+  },
+  "Spawning Kraken": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}",
+    "oracle_text": "Whenever a Kraken, Leviathan, Octopus, or Serpent you control deals combat damage to a player, create a 9/9 blue Kraken creature token.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Creature — Kraken"
+  },
+  "Koma, World-Eater": {
+    "cmc": 7.0,
+    "keywords": [
+      "Trample",
+      "Ward"
+    ],
+    "mana_cost": "{3}{G}{G}{U}{U}",
+    "oracle_text": "This spell can't be countered.\nTrample, ward {4}\nWhenever Koma deals combat damage to a player, create four 3/3 blue Serpent creature tokens named Koma's Coil.",
+    "power": "8",
+    "toughness": "12",
+    "type_line": "Legendary Creature — Serpent"
+  },
+  "Serpent of Yawning Depths": {
+    "cmc": 6.0,
+    "keywords": [],
+    "mana_cost": "{4}{U}{U}",
+    "oracle_text": "Krakens, Leviathans, Octopuses, and Serpents you control can't be blocked except by Krakens, Leviathans, Octopuses, and Serpents.",
+    "power": "6",
+    "toughness": "6",
+    "type_line": "Enchantment Creature — Serpent"
+  },
+  "Lorthos, the Tidemaker": {
+    "cmc": 8.0,
+    "keywords": [],
+    "mana_cost": "{5}{U}{U}{U}",
+    "oracle_text": "Whenever Lorthos attacks, you may pay {8}. If you do, tap up to eight target permanents. Those permanents don't untap during their controllers' next untap steps.",
+    "power": "8",
+    "toughness": "8",
+    "type_line": "Legendary Creature — Octopus"
+  },
+  "Whelming Wave": {
+    "cmc": 4.0,
+    "keywords": [],
+    "mana_cost": "{2}{U}{U}",
+    "oracle_text": "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and Serpents.",
+    "power": null,
+    "toughness": null,
+    "type_line": "Sorcery"
   }
 }

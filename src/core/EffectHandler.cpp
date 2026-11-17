@@ -758,6 +758,13 @@ bool EffectHandler::ResolveImpl(GameState& state, const StackEntry& entry, const
                     PerformDamageAllCreatures(state, entry.controller_index, def,
                                               def.params.damage_all_creatures);
                 }
+                // Whelming Wave: return every non-excepted creature to its owner's hand -- SYMMETRIC,
+                // untargeted (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).
+                if (def.params.bounce_all_creatures)
+                {
+                    PerformBounceAllCreaturesExcept(state, def.card.m_name.str(),
+                                                    def.params.bounce_all_creatures_except_subtypes);
+                }
                 // Rolling Earthquake: X to each creature AND each player -- one damage event
                 // (shared helper; rollout twin in apply_one's sorcery dispatch, lockstep).
                 if (def.params.x_damage_each_creature_and_player)

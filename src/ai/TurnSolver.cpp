@@ -73682,6 +73682,13 @@ static void ApplyPlanDirect(GameState& state, const TurnSolver::Plan& plan, bool
             PerformDamageAllCreatures(state, state.active_player_index, def,
                                       def.params.damage_all_creatures);
         }
+        else if (def.params.bounce_all_creatures)
+        {
+            // Whelming Wave (shared helper -- executor twin in EffectHandler's Custom-spell resolution,
+            // lockstep). Omitting it would score a 4-mana sorcery that returns nothing.
+            PerformBounceAllCreaturesExcept(state, def.card.m_name.str(),
+                                            def.params.bounce_all_creatures_except_subtypes);
+        }
         else if (def.params.x_damage_each_creature_and_player)
         {
             // Rolling Earthquake (shared helper -- executor twin in EffectHandler's Custom-spell

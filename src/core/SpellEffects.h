@@ -1263,7 +1263,8 @@ inline void CreateToken(GameState&, int, int, int, const std::vector<std::string
 // the forward declaration (callers resolve above the definition). See CreateTokens below.
 inline void CreateTokens(GameState&, int, int, int, int, const std::vector<std::string>&,
                          const std::string& = std::string(),
-                         const std::vector<std::string>& = std::vector<std::string>());
+                         const std::vector<std::string>& = std::vector<std::string>(),
+                         const std::string& = std::string());   // printed token NAME (Koma's Coil); empty = generated
 // THE TWO ENTER CASCADES. Every site that puts a permanent onto the battlefield calls both, in
 // this order, and they split by WHOSE ability fires:
 //
@@ -9965,7 +9966,8 @@ inline TokenProto BuildTokenProto(int                              power,
                                   int                              toughness,
                                   const std::vector<std::string>&  subtypes,
                                   const std::string&               color,
-                                  const std::vector<std::string>&  keywords)
+                                  const std::vector<std::string>&  keywords,
+                                  const std::string&               printed_name = std::string())
 {
     TokenProto proto;
     TokenProto& token = proto;   // the body below is the original, verbatim, on the prototype
@@ -9991,6 +9993,9 @@ inline TokenProto BuildTokenProto(int                              power,
     std::string token_name = std::to_string(power) + "/" + std::to_string(toughness);
     if (!subtypes.empty()) { token_name += " " + subtypes[0]; }
     token_name            += " Token";
+    // A token the card NAMES (Koma, World-Eater's "tokens named Koma's Coil", CR 111.4: the name is the one the
+    // effect gives). Empty = the generated name above, so every existing caller is byte-identical.
+    if (!printed_name.empty()) { token_name = printed_name; }
     token.card.m_name      = token_name;   // single intern of the full token name
     token.card.RehashName();
     token.card.AddType(CardType::Creature);
@@ -10223,12 +10228,13 @@ inline void CreateTokens(
     int                              toughness,
     const std::vector<std::string>&  subtypes,
     const std::string&               color,    // defaults at the forward declaration above
-    const std::vector<std::string>&  keywords)
+    const std::vector<std::string>&  keywords,
+    const std::string&               printed_name)   // Koma's Coil; empty = the generated name
 {
     if (n <= 0) { return; }
     int shift = DoublerShift(state, controller_index, /*for_tokens=*/true);
     // One prototype for the whole event: every one of the n x 2^N bodies carries the same card.
-    const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords);
+    const TokenProto proto = BuildTokenProto(power, toughness, subtypes, color, keywords, printed_name);
     for (int k = 0; k < n; ++k)
     {
         const std::size_t bf_before  = state.battlefield.size();
@@ -23925,7 +23931,7 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
                                    const std::vector<int>& damaging_pw)
 {
     if (damaging_idx.empty()) { return; }
-    struct Spec { int n, p, t; std::vector<std::string> subs, kws; std::string color; };
+    struct Spec { int n, p, t; std::vector<std::string> subs, kws; std::string color, name; };
     std::vector<Spec> specs;
     const int bf_size = static_cast<int>(state.battlefield.size());
     for (int i = 0; i < bf_size; ++i)
@@ -23946,6 +23952,10 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
         {
             const int idx = damaging_idx[k];
             if (idx < 0 || idx >= bf_size) { continue; }
+            // "Whenever KOMA deals combat damage" (combat_damage_watch_self): only the source's OWN connection.
+            // `i` and `idx` index the SAME battlefield, which nothing mutates until every spec is gathered
+            // (requirement (a) above) -- keep this test inside the gather loop.
+            if (sdef->params.combat_damage_watch_self && idx != i) { continue; }
             const Permanent& atk = state.battlefield[static_cast<std::size_t>(idx)];
             // "another NONTOKEN Spirit" (Millicent): a connecting token never triggers it.
             if (sdef->params.combat_damage_watch_nontoken && atk.is_token) { continue; }
@@ -23964,10 +23974,11 @@ inline void FireCombatDamageTokens(GameState& state, int controller,
                           sdef->params.combat_damage_token_toughness,
                           sdef->params.combat_damage_token_subtypes,
                           sdef->params.combat_damage_token_keywords,
-                          sdef->params.combat_damage_token_color });
+                          sdef->params.combat_damage_token_color,
+                          sdef->params.combat_damage_token_name });
     }
     for (const Spec& s : specs)
-    { CreateTokens(state, controller, s.n, s.p, s.t, s.subs, s.color, s.kws); }   // bulk
+    { CreateTokens(state, controller, s.n, s.p, s.t, s.subs, s.color, s.kws, s.name); }   // bulk
 }
 
 // Drana, Liberator of Malakir (Vampires, 2026-10-18): "Whenever Drana deals combat damage to a player,
@@ -54702,13 +54713,45 @@ inline int OpponentNonlandTargetIndex(const GameState& state, int caster, int ta
     return target_number > 0 ? -1 : fallback;
 }
 
-inline void BounceOpponentNonlandAt(GameState& state, int index)
+// THE ONE "return a permanent to its owner's hand" body (Sea Creatures I2, 2026-11-17; generalised from
+// BounceOpponentNonlandAt, which is now a thin wrapper). Shared by Sink into Stupor, Whelming Wave
+// (PerformBounceAllCreaturesExcept below), and the later Sea steps: Summon: Leviathan chapter I, Hullbreaker
+// Horror's and Brinelin's bounce. Either controller. CR 400.7: the card that reaches the hand is a NEW object.
+//   * a TOKEN -- or a scheduled opponent spawn, which is a token that does not carry is_token
+//     (GameState::kFirstOppSpawnNumber; the ResolveCastTriggerTargets rule) -- ceases to exist (CR 111.7/704.5d);
+//   * any other card goes to its OWNER's hand (owner_index, never controller_index: a creature we stole goes
+//     back to the opponent), revealed (RevealedCard: an MDFC back face / a day-night face returns as its front),
+//     a copy reverting to its printed card (copy_printed_name), unstaged;
+//   * Equipment / Auras attached to it unattach (CR 301.5c). The orphaned Aura's CR 704.5m trip to the graveyard
+//     is NOT done here: SweepOrphanedAuras erases, and several callers hold battlefield indices across this call.
+//     A caller at a safe point (a spell's resolution, a trigger's resolution that re-finds by number) sweeps once
+//     after its last bounce -- PerformBounceAllCreaturesExcept does;
+//   * leaves-the-battlefield triggers fire (FireLeavesBattlefieldTriggers: champion returns, linked exiles), and
+//     revolt is armed when the active player controlled it;
+//   * devotion / reconfigure refresh.
+// `src_name` labels the sink-guarded play event; empty = no event (Sink into Stupor's historical silence).
+// Returns false if `bf_index` is out of range (nothing happens).
+inline bool ReturnPermanentToOwnersHand(GameState& state, int bf_index, const std::string& src_name)
 {
-    if (index < 0 || index >= static_cast<int>(state.battlefield.size())) { return; }
-    const Permanent p = state.battlefield[static_cast<std::size_t>(index)];
+    if (bf_index < 0 || bf_index >= static_cast<int>(state.battlefield.size())) { return false; }
+    const Permanent p = state.battlefield[static_cast<std::size_t>(bf_index)];
     const int num = p.card.m_number;
-    state.battlefield.erase(state.battlefield.begin() + index);
-    if (!p.is_token)
+    const bool ceases = p.is_token || num >= GameState::kFirstOppSpawnNumber;
+    if (!src_name.empty() && g_play_event_sink && !g_tap_speculating)
+    {
+        EmitPlayEvent(state.turn_number, "trigger",
+                      "\xE2\x86\xA9 " + src_name + ": returns "
+                      + (p.controller_index == state.active_player_index ? std::string("your ")
+                                                                         : std::string("the opponent's "))
+                      + p.card.m_name.str()
+                      + (ceases ? std::string(" (a token: it ceases to exist)")
+                                : (p.owner_index == p.controller_index ? std::string(" to hand")
+                                                                       : std::string(" to its owner's hand"))));
+    }
+    if (p.controller_index == state.active_player_index)
+    { state.permanent_left_under_control_this_turn = true; }
+    state.battlefield.erase(state.battlefield.begin() + bf_index);
+    if (!ceases)
     {
         Card returned = RevealedCard(p.card);
         if (!p.copy_printed_name.empty())
@@ -54716,6 +54759,8 @@ inline void BounceOpponentNonlandAt(GameState& state, int index)
             const CardDefinition* printed = CardDatabase::Instance().Lookup(p.copy_printed_name.str());
             if (printed) { returned = printed->card; returned.m_number = num; }
         }
+        returned.m_is_staged     = false;
+        returned.m_staged_expiry = 0;
         EnterHand(state, p.owner_index, returned, HandEntryReason::Bounce);
     }
     for (Permanent& q : state.battlefield)
@@ -54723,8 +54768,50 @@ inline void BounceOpponentNonlandAt(GameState& state, int index)
         if (q.aura_attached_to == num) { q.aura_attached_to = 0; }
         if (q.equipped_to == num) { q.equipped_to = 0; }
     }
+    FireLeavesBattlefieldTriggers(state, p.controller_index, p.card);
     RefreshDevotionCreatures(state);
     RefreshReconfigureCreatures(state);
+    return true;
+}
+
+// Sink into Stupor's opponent-nonland bounce (both worlds: EffectHandler's removal resolution, apply_one).
+inline void BounceOpponentNonlandAt(GameState& state, int index)
+{
+    ReturnPermanentToOwnersHand(state, index, std::string());
+}
+
+// Whelming Wave: "Return all creatures to their owners' hands except for Krakens, Leviathans, Octopuses, and
+// Serpents." (CardParams::bounce_all_creatures*). THE one body for the executor's Custom-spell resolution and the
+// rollout's sorcery dispatch (lockstep by construction). Simultaneous (CR 608.2): every creature is SELECTED
+// first, by card number, then each is re-found and returned, so an erase never shifts a pending index and a
+// permanent a leave trigger puts onto the battlefield mid-loop is not swept up. "Creature" = a creature card or an
+// animated land (an animated land that is not every type returns as a land card). Excepted: any creature carrying
+// one of `except` among its own card subtypes (CardHasSubtype: tokens and a Mimic-appended type count), and an
+// all-types animated land. One CR 704.5m sweep after the last return. Returns the number of permanents returned.
+inline int PerformBounceAllCreaturesExcept(GameState& state, const std::string& src_name,
+                                           const std::vector<std::string>& except)
+{
+    std::vector<int> picked;
+    for (const Permanent& q : state.battlefield)
+    {
+        if (!q.card.IsCreature() && !q.is_animated) { continue; }
+        if (q.AnimatedAllTypes()) { continue; }
+        bool keep = false;
+        for (const std::string& sub : except) { if (CardHasSubtype(q.card, sub)) { keep = true; break; } }
+        if (!keep) { picked.push_back(q.card.m_number); }
+    }
+    int n = 0;
+    for (const int num : picked)
+    {
+        int bi = -1;
+        for (int i = 0; i < static_cast<int>(state.battlefield.size()); ++i)
+        { if (state.battlefield[static_cast<std::size_t>(i)].card.m_number == num) { bi = i; break; } }
+        if (bi >= 0 && ReturnPermanentToOwnersHand(state, bi, src_name)) { ++n; }
+    }
+    if (n > 0) { SweepOrphanedAuras(state); }
+    if (n == 0 && g_play_event_sink && !g_tap_speculating)
+    { EmitPlayEvent(state.turn_number, "trigger", src_name + ": no creature to return"); }
+    return n;
 }
 
 // "...put it into its owner's hand instead of into that player's graveyard." The card is a NEW

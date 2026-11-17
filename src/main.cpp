@@ -10155,6 +10155,9 @@ static int RunScenario(const std::filesystem::path& scenario_path)
                 std::string tn = std::to_string(tp) + "/" + std::to_string(tt);
                 if (!subs.empty()) { tn += " " + subs[0]; }
                 tn += " Token";
+                // A token the card NAMES (Koma's Coil): "token_name" stages it exactly as BuildTokenProto names it.
+                const std::string named = e.value("token_name", std::string());
+                if (!named.empty()) { tn = named; }
                 p.card.m_name = tn;
                 p.card.RehashName();
                 p.card.AddType(CardType::Creature);

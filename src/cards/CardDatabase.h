@@ -830,6 +830,17 @@ struct CardParams
     // 0 = inert.
     int damage_all_creatures = 0;
 
+    // Whelming Wave (Sea Creatures I2, 2026-11-17): "Return all creatures to their owners' hands except for
+    // Krakens, Leviathans, Octopuses, and Serpents." An UNTARGETED, SYMMETRIC, simultaneous mass bounce through
+    // the shared PerformBounceAllCreaturesExcept (SpellEffects.h; the executor's Custom-spell resolution and the
+    // rollout's sorcery dispatch call it at the same point -- lockstep). Each creature that carries NONE of the
+    // excepted subtypes (read off the permanent's own card subtypes, so tokens and a Mimic-appended type count; an
+    // all-types animated land is excepted) goes to its OWNER's hand through ReturnPermanentToOwnersHand; a token
+    // (or a scheduled opponent spawn) ceases to exist. A non-empty except list implies the bool; the bool alone
+    // with an empty list is "return all creatures" (Evacuation-class). false = inert.
+    bool                     bounce_all_creatures = false;
+    std::vector<std::string> bounce_all_creatures_except_subtypes;
+
     // Breaching Dragonstorm clause 2: "When a Dragon you control enters, return this
     // enchantment to its owner's hand." Non-empty = the watched subtype ("Dragon"). Fires from
     // the universal enter cascade (FireEtbWatchers) for ANY enter route -- cast, put, token,
@@ -1430,6 +1441,22 @@ struct CardParams
     // Spirit tokens and Lingering Souls' never trigger her). Both default off -> Shroofus is unchanged.
     int                      combat_damage_tokens_per_trigger = 0;
     bool                     combat_damage_watch_nontoken     = false;
+    // Koma, World-Eater (Sea Creatures I2): "Whenever KOMA deals combat damage to a player, create four 3/3 blue
+    // Serpent creature tokens named Koma's Coil." SELF-SCOPED: the source watches ONLY its own connection (the
+    // Drana / Hystrodon scope) instead of every matching creature its controller controls -- a Coil connecting
+    // never makes Coils. Never combined with combat_damage_watch_subtypes / combat_damage_watch_nontoken (the
+    // loader throws), and needs a per-damage or per-trigger count.
+    bool                     combat_damage_watch_self         = false;
+    // The created tokens' NAME when the card prints one ("named Koma's Coil"). Empty = the engine's generated
+    // "<P>/<T> <Subtype> Token" (every other combat-damage token). Passed through CreateTokens.
+    std::string              combat_damage_token_name;
+    // Lorthos, the Tidemaker: "Whenever Lorthos attacks, you may pay {8}. If you do, tap up to eight target
+    // permanents. Those permanents don't untap during their controllers' next untap steps." RECORDED, UNREAD
+    // (the Raggadragga cast_trigger_untap_pump_grants_trample precedent): declining is a sound dominance in the
+    // goldfish (paying only spends mana; tapping / freezing never helps against the passive opponent and only
+    // costs us on our side), so the trigger is always declined and nothing executes. PROVISIONAL deferral
+    // (ledger Q5). The value is the printed amount and the target count (8).
+    int                      attack_may_pay_tap_permanents    = 0;
 
     // Firebreathing (activated pump; converts LEFTOVER combat mana -> attacker power = face
     // damage). Applied in the combat step of BOTH worlds (ApplyFirebreathing, SpellEffects.h) so
