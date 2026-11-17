@@ -2,7 +2,7 @@
 
 This is the current local handoff in the **primary checkout** `/workspaces/MagicDeckTester`, branch `phase-1-2-deck-analyzer`. Continue the mana-clean queue autonomously until the queue is empty or a real user tradeoff remains. Read root `CLAUDE.md`, `.claude/skills/regression-testing.md`, `.claude/skills/coding-conventions.md`, and `.claude/skills/mtg-ai.md` before modifying the related code. The older queue and history are in `docs/design/handoff-mana-chain-to-codex-2026-11-14.md`; this document supersedes its status paragraphs.
 
-## Live status, updated 06:16 UTC
+## Live status, updated 06:19 UTC
 
 The last stale-clean refresh `codex-clean-refresh-newsrc-c-20261117`
 finished, 5,000 games each at source `f7cce0693b6a`:
@@ -11,15 +11,16 @@ finished, 5,000 games each at source `f7cce0693b6a`:
 at depth one. Oracle-on/off play was byte-identical. Report:
 `logs/mana_clean/codex-clean-refresh-newsrc-c-20261117/report.md`.
 `test/mana_clean.json` carries all three records. The 56-deck status now
-has **15 clean, 39 issues, two never-run, zero stale-clean**. Extra Turns
-and Merfolk Turns are never-run. No simulation batch is active.
+has **15 clean, 39 issues, two never-run, zero stale-clean** at the prior
+source. Extra Turns and Merfolk Turns are never-run. No gate is active;
+the PGO build described below includes its own training batch.
 
 Windows CI `44025173062` was still in its Release build at 06:07 UTC;
 the watcher output is
 `build/scratch/dragonstorm_visible_lump_ab/windows_ci_44025173062.out`.
 Keep the CI check asynchronous. The focused Dragonstorm test **failed on
 the shipped payer** (Bloom left intact, both Territories tapped,
-Karrthus unpayable). A dirty source trial in `src/ai/ManaPayment.cpp` now
+Karrthus unpayable). The committed source fix in `src/ai/ManaPayment.cpp` now
 passes that case plus the two adjacent visible-closer cases. It removes
 the prepayment `short_with_shared` gate and compares coloured plus
 **non-lump wild** supply after trial payment: an uncracked Bloom otherwise
@@ -28,11 +29,15 @@ saved by an early crack. `MTG_ONDEMAND_VISIBLE_AFTERPAY_WILD=0` restores
 both old conditions for a paired A/B. Exact seed **30074224 T5** has
 zero oracle issues with the trial, but APPLY-DROP=1 with the legacy lever;
 outputs `build/scratch/dragonstorm_visible_lump_ab/seed_30074224_afterpay.out`
-and `seed_30074224_legacy.out`. The full Release unit suite is active in
-exec session `20045`, console
+and `seed_30074224_legacy.out`. The full Release unit suite passed:
+**3,384/3,384**, zero failures; console
 `build/scratch/dragonstorm_visible_lump_ab/unit_bloom_afterpay.out`.
-Wait for it, commit the source if green, rebuild PGO at the new source,
-and run a same-binary paired A/B over held-out Dragonstorm games. Then
+The fix is committed as `eec786b06`, with
+`HEAD:src=7ecf53121b172fb2cbf078f7e5f554086b7b28fe`. A PGO+LTO
+build is active in exec session `36997`, console
+`build/scratch/dragonstorm_visible_lump_ab/pgo_bloom_afterpay.out`.
+Wait for it and verify `build/PGO/SRC_TREE`, then run a same-binary
+paired A/B over held-out Dragonstorm games. Then
 check Breaching Dragonstorm's two ENUM-GAP seeds. The queue remains open.
 
 A focused unit case for seed 30074224's payment shape has been added to
@@ -40,7 +45,7 @@ A focused unit case for seed 30074224's payment shape has been added to
 one-Territory visible-Karrthus case. It sets Mountain + two Unclaimed
 Territories + Lotus Bloom, pays Song, then credits five red and checks
 Karrthus payment. Its baseline failure and trial success are confirmed;
-the complete unit suite and held-out A/B remain.
+the held-out A/B remains.
 
 The paragraphs below are a chronological work log. Older statements
 that say a batch or build is active describe its state at that time;
